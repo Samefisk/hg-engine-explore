@@ -393,6 +393,81 @@ static void CheckTeleportVisibility(void)
     CHECK(sample.visible == 0, "Teleport flicker is deterministic");
 }
 
+static void CheckZeroDurationTeleport(void)
+{
+    OverworldMotionIntent intent = MakeIntent(OVERWORLD_MOTION_KIND_TELEPORT, 0);
+    OverworldMotionCandidate candidate = MakeCandidate(3, -2, 0);
+    OverworldMotionPlan plan;
+    OverworldMotionState state;
+    OverworldMotionSample sample;
+    u16 flags;
+
+    intent.visibilityPolicy = OVERWORLD_MOTION_VISIBILITY_HIDDEN;
+    candidate.distance = 3;
+    OverworldMotion_Reset(&state);
+    CHECK(OverworldMotion_SelectPlan(
+              &intent, 0, 0, 0x1000, &candidate, 1, &plan, NULL)
+            == OVERWORLD_MOTION_DECISION_ACCEPTED,
+        "zero-duration Teleport plan resolves");
+    CHECK(OverworldMotion_Begin(&state, &plan)
+            == OVERWORLD_MOTION_DECISION_ACCEPTED,
+        "zero-duration Teleport uses the normal begin seam");
+    flags = OverworldMotion_Tick(&state, 7, &sample);
+    CHECK(sample.elapsed == 0
+            && sample.renderX == 0x38000
+            && sample.renderZ == -0x18000,
+        "zero-duration Teleport samples its target in the start frame");
+    CHECK((flags & (OVERWORLD_MOTION_TICK_PATH_ADVANCED
+                    | OVERWORLD_MOTION_TICK_REACHED_TARGET
+                    | OVERWORLD_MOTION_TICK_COMMIT_READY))
+            == (OVERWORLD_MOTION_TICK_PATH_ADVANCED
+                | OVERWORLD_MOTION_TICK_REACHED_TARGET
+                | OVERWORLD_MOTION_TICK_COMMIT_READY),
+        "zero-duration Teleport publishes path and commit readiness at once");
+    CHECK(state.phase == OVERWORLD_MOTION_PHASE_COMMIT_PENDING,
+        "zero-duration Teleport waits for the normal commit acknowledgement");
+    CHECK(OverworldMotion_AcknowledgeCommit(&state, 7)
+            == OVERWORLD_MOTION_DECISION_ACCEPTED,
+        "zero-duration Teleport completes through the normal acknowledgement");
+
+    intent = MakeIntent(OVERWORLD_MOTION_KIND_WALK, 0);
+    CHECK(OverworldMotion_SelectPlan(
+              &intent, 0, 0, 0, &candidate, 1, &plan, NULL)
+            == OVERWORLD_MOTION_DECISION_PROFILE,
+        "zero-duration Walk remains invalid");
+    memset(&plan, 0, sizeof(plan));
+    plan.version = OVERWORLD_MOTION_MODEL_VERSION;
+    plan.kind = OVERWORLD_MOTION_KIND_HOP;
+    CHECK(OverworldMotion_Begin(&state, &plan)
+            == OVERWORLD_MOTION_DECISION_PROFILE,
+        "zero-duration Hop remains invalid");
+}
+
+static void CheckWorldGateOwnership(void)
+{
+    CHECK(!OverworldMotion_BlocksWorldGate(
+            FALSE, TRUE, OVERWORLD_MOTION_PHASE_MOVING, 9),
+        "inactive actor cannot block a world gate");
+    CHECK(!OverworldMotion_BlocksWorldGate(
+            TRUE, FALSE, OVERWORLD_MOTION_PHASE_MOVING, 9),
+        "non-player actor cannot block a world gate");
+    CHECK(!OverworldMotion_BlocksWorldGate(
+            TRUE, TRUE, OVERWORLD_MOTION_PHASE_IDLE, 0),
+        "idle player actor leaves world gates open");
+    CHECK(OverworldMotion_BlocksWorldGate(
+            TRUE, TRUE, OVERWORLD_MOTION_PHASE_MOVING, 9),
+        "moving player actor blocks world gates");
+    CHECK(OverworldMotion_BlocksWorldGate(
+            TRUE, TRUE, OVERWORLD_MOTION_PHASE_SETTLING, 0),
+        "settling player actor blocks world gates");
+    CHECK(OverworldMotion_BlocksWorldGate(
+            TRUE, TRUE, OVERWORLD_MOTION_PHASE_IDLE, 9),
+        "player reservation blocks world gates before phase publication");
+    CHECK(!OverworldMotion_BlocksWorldGate(
+            TRUE, TRUE, OVERWORLD_MOTION_PHASE_CANCELED, 0),
+        "terminal cancel reopens world gates");
+}
+
 int main(void)
 {
     CheckCandidateOrder();
@@ -403,6 +478,8 @@ int main(void)
     CheckHopAndTransition();
     CheckCancelIsTerminal();
     CheckTeleportVisibility();
+    CheckZeroDurationTeleport();
+    CheckWorldGateOwnership();
     if (sFailures != 0) {
         return 1;
     }

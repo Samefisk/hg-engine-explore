@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "id": "spawn.appear-hop-timing",
+  "title": "Wild Clefairy Appear Hop returns control on its final restore",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "TICKETS.md#TKT-0003 and documentation/overworld-system/README.md#system-contracts",
+  "requirements": [
+    "shared.appear-hop-timing-v1"
+  ],
+  "budgets": {
+    "maxSeconds": 60,
+    "maxFrames": 30,
+    "noProgressFrames": 30,
+    "minObservedFrames": 14
+  },
+  "subjects": [
+    {
+      "id": "clefairy",
+      "species": 35,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "appear-hop-timing-v1",
+      "subject": "clefairy"
+    }
+  ],
+  "setup": [
+    {
+      "id": "route29-open-area",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 406,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "spawn-clefairy",
+      "op": "spawn",
+      "args": {
+        "species": 35,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 587,
+        "z": 406
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "bind-clefairy",
+      "op": "bind",
+      "args": {
+        "subject": "clefairy"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "finish-appear-hop",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-complete",
+          "measurement": "appear-hop-timing-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "appear-hop-timing-v1",
+      "when": "final"
+    }
+  ]
+}

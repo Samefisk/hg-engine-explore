@@ -6,6 +6,8 @@
  This repository and its assets are a [community endeavor](CREDITS.md).  By its nature, using it and subsequently profiting off of it is profiting on the backs of all of our work, all of which is intended to be used to further hobbies and for everyone to have fun.  You have my blessing to use code and assets from this repository as you please as long as there is *no money involved*, including optional donations through whichever platform to play your hack.  The creations that stem from this repository must be freely accessible and not hidden at all behind any paywall, including those that prompt the player to pay optionally (Ko-Fi's style comes to mind here).  The [Credits](CREDITS.md) should also be replicated in your hack's repository and/or the post to your hack--we all sit on the shoulders of giants here.
 
 ## Table of Contents
+
+- [Overworld tools and agent workflow](#overworld-tools-and-agent-workflow)
 - [Features](#features)
 - [Setup Instructions (Linux with apt)](#setup-instructions-linux-with-apt)
 - [Setup Instructions (Linux with apk)](#setup-instructions-linux-with-apk)
@@ -18,6 +20,24 @@
 - [Build Instructions](#build-instructions-all-platforms-continued-from-further-setup-instructions)
 - [Credits](#credits)
 
+
+## Overworld tools and agent workflow
+
+Use [Workshop Devtools](http://127.0.0.1:8766/devtools) or
+`scripts/owctl dev help --json` for live inspection, input, teleport, party and
+spawn setup, recordings and reusable recipes. Both use one disposable session;
+the user's save is not edited. Start Workshop and learn the commands in the
+[tool guide](documentation/overworld-system/devtools.md).
+
+Agents start with [AGENTS.md](AGENTS.md), then use the project skills for
+[live control](.agents/skills/overworld-devtools/SKILL.md),
+[test creation](.agents/skills/author-overworld-scenario/SKILL.md), and
+[accepted verification](.agents/skills/verify-overworld/SKILL.md).
+The [work ledger](documentation/overworld-system/roadmap-progress.md) owns the
+next task. Checked tests use the same tools, with live progress, Cancel and
+saved failure evidence. The former standalone overworld test method is removed.
+See [checked tests](documentation/overworld-system/devtools-tests.md).
+Battle tests keep their separate battle harness.
 
 ## Features:
 * Dex Expansion (through Gen 6 almost entirely implemented)

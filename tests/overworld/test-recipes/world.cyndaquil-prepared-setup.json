@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "world.cyndaquil-prepared-setup",
+  "title": "Fast checked Cyndaquil fixture for movement tests",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/devtools-tests.md#keep-the-feedback-loop-short",
+  "requirements": [],
+  "budgets": {"maxSeconds": 180, "maxFrames": 2400, "noProgressFrames": 600, "minObservedFrames": 1},
+  "subjects": [{"id": "cyndaquil", "species": 155, "role": "FOLLOWER", "acquire": "existing"}],
+  "setup": [
+    {"id": "source-pid", "op": "assert", "args": {"predicate": {"kind": "party-field", "slot": 1, "path": "personality", "operator": "eq", "value": 2046726716}}, "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "source-species", "op": "assert", "args": {"predicate": {"kind": "party-field", "slot": 1, "path": "species", "operator": "eq", "value": 155}}, "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "prepare-hp", "op": "party", "args": {"slot": 1, "hp": 21, "status": 0}, "budget": {"maxSeconds": 60, "maxFrames": 600, "noProgressFrames": 600}},
+    {"id": "hp-readback", "op": "assert", "args": {"predicate": {"kind": "party-field", "slot": 1, "path": "hp", "operator": "eq", "value": 21}}, "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "prepare-follower", "op": "spawn", "args": {"species": 155, "role": "follower", "slot": 1}, "budget": {"maxSeconds": 60, "maxFrames": 600, "noProgressFrames": 600}},
+    {"id": "follower-idle", "op": "wait", "args": {"predicate": {"kind": "actor-count", "subject": "cyndaquil", "motionPhase": "IDLE", "operator": "eq", "value": 1}}, "budget": {"maxSeconds": 30, "maxFrames": 600, "noProgressFrames": 600}},
+    {"id": "bind-cyndaquil", "op": "bind", "args": {"subject": "cyndaquil"}, "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [{"id": "post-bind-frame", "op": "step", "args": {"frames": 1, "keys": []}, "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}}],
+  "assertions": [
+    {"kind": "actor-field", "subject": "cyndaquil", "path": "identityVerified", "operator": "eq", "value": true},
+    {"kind": "party-field", "slot": 1, "path": "personality", "operator": "eq", "value": 2046726716},
+    {"kind": "party-field", "slot": 1, "path": "hp", "operator": "eq", "value": 21},
+    {"kind": "selector-field", "path": "activeFollowerPartySlot", "operator": "eq", "value": 1}
+  ]
+}

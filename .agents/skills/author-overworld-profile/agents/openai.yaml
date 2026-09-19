@@ -1,0 +1,4 @@
+interface:
+  display_name: "Author Overworld Profile"
+  short_description: "Create and safely edit behavior profiles and their uses"
+  default_prompt: "Use $author-overworld-profile to create or edit this overworld behavior profile."

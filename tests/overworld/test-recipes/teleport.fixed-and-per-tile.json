@@ -1,0 +1,647 @@
+{
+  "schemaVersion": 1,
+  "id": "teleport.fixed-and-per-tile",
+  "title": "Mounted Teleport keeps fixed and per-tile timing",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/README.md#system-contracts and tools/overworld/runtime_proof_registry.json: legacy.teleport-timing",
+  "requirements": [
+    "legacy.teleport-timing"
+  ],
+  "budgets": {
+    "maxSeconds": 180,
+    "maxFrames": 800,
+    "noProgressFrames": 120,
+    "minObservedFrames": 32
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquire": "existing"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "mounted-teleport-matrix-v1",
+      "subject": "cyndaquil"
+    }
+  ],
+  "setup": [
+    {
+      "id": "route29-open-area",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 588,
+        "z": 406,
+        "facing": 3
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-own-cyndaquil",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 10,
+        "hp": 1,
+        "status": 0
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "mount-own-cyndaquil",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "mounted",
+        "slot": 0,
+        "level": 5
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 180,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-current-mount",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "bind-cyndaquil",
+      "op": "bind",
+      "args": {
+        "subject": "cyndaquil"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "configure-fixed_visible_right",
+      "op": "mount-teleport.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "locomotion": 9,
+        "teleportTime": 7,
+        "teleportPause": 0
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "start-fixed_visible_right",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-teleport-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "finish-fixed_visible_right",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-teleport-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "configure-fixed_visible_left",
+      "op": "mount-teleport.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "locomotion": 9,
+        "teleportTime": 7,
+        "teleportPause": 0
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "start-fixed_visible_left",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-teleport-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "finish-fixed_visible_left",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-teleport-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "configure-fixed_visible_up",
+      "op": "mount-teleport.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "locomotion": 9,
+        "teleportTime": 7,
+        "teleportPause": 0
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "start-fixed_visible_up",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-teleport-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "finish-fixed_visible_up",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-teleport-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "configure-fixed_visible_down",
+      "op": "mount-teleport.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "locomotion": 9,
+        "teleportTime": 7,
+        "teleportPause": 0
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "start-fixed_visible_down",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-teleport-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "finish-fixed_visible_down",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-teleport-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "configure-fixed_flicker",
+      "op": "mount-teleport.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "locomotion": 6,
+        "teleportTime": 7,
+        "teleportPause": 0
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "start-fixed_flicker",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-teleport-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "finish-fixed_flicker",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-teleport-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "configure-per_tile_visible_left",
+      "op": "mount-teleport.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "locomotion": 11,
+        "teleportTime": 3,
+        "teleportPause": 0
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "start-per_tile_visible_left",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-teleport-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "finish-per_tile_visible_left",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-teleport-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "configure-per_tile_visible_right",
+      "op": "mount-teleport.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "locomotion": 11,
+        "teleportTime": 3,
+        "teleportPause": 0
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "start-per_tile_visible_right",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-teleport-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "finish-per_tile_visible_right",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-teleport-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "configure-per_tile_visible_up",
+      "op": "mount-teleport.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "locomotion": 11,
+        "teleportTime": 3,
+        "teleportPause": 0
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "start-per_tile_visible_up",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-teleport-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "finish-per_tile_visible_up",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-teleport-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "configure-per_tile_visible_down",
+      "op": "mount-teleport.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "locomotion": 11,
+        "teleportTime": 3,
+        "teleportPause": 0
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "start-per_tile_visible_down",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-teleport-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "finish-per_tile_visible_down",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-teleport-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "configure-per_tile_flicker",
+      "op": "mount-teleport.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "locomotion": 10,
+        "teleportTime": 3,
+        "teleportPause": 0
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "start-per_tile_flicker",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-teleport-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "finish-per_tile_flicker",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-teleport-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "mounted-teleport-matrix-v1",
+      "when": "final"
+    }
+  ]
+}

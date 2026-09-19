@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "id": "hop.mankey-visual-arc",
+  "title": "Mounted Mankey completes three cardinal Hop arcs",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "tools/overworld/runtime_proof_registry.json: legacy.mankey-hops; documentation/overworld-system/README.md#system-contracts",
+  "requirements": [
+    "legacy.mankey-hops"
+  ],
+  "budgets": {
+    "maxSeconds": 300,
+    "maxFrames": 1600,
+    "noProgressFrames": 120,
+    "minObservedFrames": 120
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "MOUNTED",
+      "acquire": "existing"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "mounted-hop-arc-v1",
+      "subject": "mankey",
+      "contract": "legacy.mankey-hops"
+    }
+  ],
+  "setup": [
+    {
+      "id": "arc-origin",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 584,
+        "z": 403,
+        "facing": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-own-mankey",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 56,
+        "level": 10,
+        "hp": 1,
+        "status": 0
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "mount-own-mankey",
+      "op": "spawn",
+      "args": {
+        "species": 56,
+        "role": "mounted",
+        "slot": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 180,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-current-mount",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "bind-mankey",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "mounted-hop-arc-v1",
+      "when": "final"
+    }
+  ],
+  "actions": [
+    {"id":"arm-hop-start-reader","op":"hop-arc.arm","args":{"subject":"mankey"},"budget":{"maxSeconds":10,"maxFrames":1,"noProgressFrames":1}},
+    {"id":"start-down","op":"step","args":{"frames":90,"keys":["DOWN"],"until":{"kind":"actor-field","subject":"mankey","path":"motionKind","operator":"eq","value":"HOP"}},"budget":{"maxSeconds":20,"maxFrames":90,"noProgressFrames":90}},
+    {"id":"finish-down","op":"step","args":{"frames":120,"keys":[],"until":{"kind":"actor-field","subject":"mankey","path":"motionPhase","operator":"eq","value":"IDLE"}},"budget":{"maxSeconds":20,"maxFrames":120,"noProgressFrames":120}},
+    {"id":"cooldown-down","op":"step","args":{"frames":16,"keys":[]},"budget":{"maxSeconds":20,"maxFrames":16,"noProgressFrames":16}},
+    {"id":"start-right","op":"step","args":{"frames":90,"keys":["RIGHT"],"until":{"kind":"actor-field","subject":"mankey","path":"motionKind","operator":"eq","value":"HOP"}},"budget":{"maxSeconds":20,"maxFrames":90,"noProgressFrames":90}},
+    {"id":"finish-right","op":"step","args":{"frames":120,"keys":[],"until":{"kind":"actor-field","subject":"mankey","path":"motionPhase","operator":"eq","value":"IDLE"}},"budget":{"maxSeconds":20,"maxFrames":120,"noProgressFrames":120}},
+    {"id":"cooldown-right","op":"step","args":{"frames":16,"keys":[]},"budget":{"maxSeconds":20,"maxFrames":16,"noProgressFrames":16}},
+    {"id":"start-left","op":"step","args":{"frames":90,"keys":["LEFT"],"until":{"kind":"actor-field","subject":"mankey","path":"motionKind","operator":"eq","value":"HOP"}},"budget":{"maxSeconds":20,"maxFrames":90,"noProgressFrames":90}},
+    {"id":"finish-left","op":"step","args":{"frames":120,"keys":[],"until":{"kind":"actor-field","subject":"mankey","path":"motionPhase","operator":"eq","value":"IDLE"}},"budget":{"maxSeconds":20,"maxFrames":120,"noProgressFrames":120}},
+    {"id":"cooldown-left","op":"step","args":{"frames":16,"keys":[]},"budget":{"maxSeconds":20,"maxFrames":16,"noProgressFrames":16}},
+    {"id":"close-hop-start-reader","op":"hop-arc.close","args":{},"budget":{"maxSeconds":10,"maxFrames":1,"noProgressFrames":1}}
+  ]
+}

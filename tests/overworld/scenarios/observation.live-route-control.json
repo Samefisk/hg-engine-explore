@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "id": "observation.live-route-control",
+  "title": "The unmounted route recorder rejects live CPU and player-motion faults",
+  "status": "active",
+  "capabilities": [
+    "actor.system"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "observer-control",
+    "expectationSource": "documentation/overworld-system/verification.md#scenario-contract",
+    "actor": "Unmounted player with a live FOLLOWER Cyndaquil (155), current generation-safe handle and attached presentation, in one fresh disposable emulator process.",
+    "trigger": "A normal-input held multi-tile route and one complete follower trace establish the positive baseline. Then add process CPU work inside one real emulator cycle, restore normal cycle transport, and freeze live player render during a new input step.",
+    "observable": "The same route collector rejects the measured CPU-cost spike and missing player progress. The baseline, exact classifier results and fault boundaries are retained. Captured samples and timestamps are never edited.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Import unchanged raw test.sav into one fresh disposable shared-devtools session. Use checked prepared HP/status and saved-follower commands for slot-1 Cyndaquil. Require native readback for the same saved personality/species and a current eligible FOLLOWER with attached presentation. Retain full command receipts and the drained event boundary before binding. No nurse/menu detour is required. Do not mount, overwrite source saves, relocate the player, rewrite profiles or reset timers. Do not recreate the emulator core in this process."
+      },
+      {
+        "phase": "during-observation",
+        "target": "observation",
+        "change": "Use the same read-only player-step callback, authenticated main-queue sampler, native trace and native-cycle cost recorder as normal unmounted travel. Seal a clean baseline with four player moves and a complete follower lifecycle before either fault. Retain the exact settled actor, native lifecycle and CPU samples for independent acceptance."
+      },
+      {
+        "phase": "during-observation",
+        "target": "observation",
+        "change": "Add process CPU work inside one actual emulator cycle call. The unchanged route collector measures and rejects the resulting cost. Restore normal cycle transport before the player-render fault. Do not edit timestamps or captured evidence."
+      },
+      {
+        "phase": "during-observation",
+        "target": "control-result",
+        "change": "Freeze live player X/Z before the unchanged coherent route sampler reads it during a normal input step. Require a start stall and failure to reach the requested target."
+      }
+    ],
+    "limits": [
+      "The shared adapter is executable. Only current controller-owned acceptedProof grants recorder proof; registration alone does not.",
+      "Prepared setup uses the shared checked party/follower commands and saved identity readback. Setup receipts and frames cannot supply positive-baseline motion evidence.",
+      "Active enables live calibration, not acceptance. A missing follower, wrong role, missing presentation, unavailable safe route, incomplete trace or failed positive baseline remains a failure, not an expected-fault pass.",
+      "Require at least four known-safe outdoor input steps and a held multi-tile segment in the first three. Release input at the actual player-step callback boundary. Read only loaded terrain to choose the path; no position, profile, counter, RNG or scene writes create the baseline.",
+      "Keep all player/follower errors, actor-frame gaps and CPU-cost samples from the baseline. Baseline requires zero errors and zero CPU hitches under the unchanged 2x median plus at least 250000 ns rule. The positive-baseline trace identifies the same live Cyndaquil used by this collector; it is not the later failed player motion.",
+      "The CPU fault checks the host process timer only, not DS CPU attribution. The delayed native cycle itself must be classified as a hitch. The live player fault must cause startStall == 1 and reachedTarget == false in the unchanged motion classifier.",
+      "This run reports only its own observed frames. It cannot contribute to normal-route or S5 frame floors. observation.live-actor-and-motion-control independently remains required for WILD Ledyba identity and render-fault detection; neither result replaces the other.",
+      "Cleanup restores normal cycle transport, releases input, removes owned taps and destroys the one disposable emulator. The player fault is not restored into continued gameplay. The original save is never overwritten. Seed 0 is provenance, not a forced RNG value."
+    ],
+    "control": {
+      "boundary": "live-runtime",
+      "fault": "Measured emulator-cycle process cost increased, then live player render frozen, one fault at a time after a good baseline.",
+      "expectedFailure": "The delayed cycle is a CPU hitch; frozen player render fails start progress and target arrival."
+    }
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Load the unchanged save in one fresh process, prepare and bind the saved Cyndaquil through checked shared party/follower setup, then establish a normal held-input route plus complete follower trace."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Present a real process-cost delay and then frozen live player render to the unchanged route recorder. Keep both exact failures and the original good baseline."
+    }
+  ],
+  "stop": {
+    "frameBudget": 6000,
+    "condition": "Good live baseline and trace succeed, then both route recorder faults fail for their declared reasons"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "Control returns after the selected motion finishes or cancels"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "observation.live-route-control",
+    "claims": ["live-actor-identity", "controlled-action"],
+    "minimumFrames": 4
+  }
+}

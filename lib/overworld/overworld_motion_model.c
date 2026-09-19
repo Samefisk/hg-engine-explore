@@ -209,7 +209,8 @@ OverworldMotionDecision OverworldMotion_SelectPlan(
     if (intent == NULL || candidates == NULL || plan == NULL
         || intent->version != OVERWORLD_MOTION_MODEL_VERSION
         || intent->kind == OVERWORLD_MOTION_KIND_NONE
-        || intent->duration == 0
+        || (intent->duration == 0
+            && intent->kind != OVERWORLD_MOTION_KIND_TELEPORT)
         || candidateCount == 0
         || candidateCount > OVERWORLD_MOTION_MAX_CANDIDATES) {
         return OVERWORLD_MOTION_DECISION_PROFILE;
@@ -274,7 +275,8 @@ OverworldMotionDecision OverworldMotion_Begin(
     if (state == NULL || plan == NULL
         || plan->version != OVERWORLD_MOTION_MODEL_VERSION
         || plan->kind == OVERWORLD_MOTION_KIND_NONE
-        || plan->duration == 0
+        || (plan->duration == 0
+            && plan->kind != OVERWORLD_MOTION_KIND_TELEPORT)
         || OverworldMotion_PathLengthForTiles(
             plan->startX,
             plan->startY,
@@ -294,18 +296,21 @@ OverworldMotionDecision OverworldMotion_Begin(
 
 static s32 OverworldMotion_Lerp(s32 start, s32 target, u16 elapsed, u16 total)
 {
-    s64 delta;
-    s64 quotient;
-    s64 remainder;
+    s32 delta;
+    s32 quotient;
+    s32 remainder;
+    u32 fractional;
 
     if (elapsed >= total || total == 0) {
         return target;
     }
-    delta = (s64)target - start;
+    delta = target - start;
     quotient = delta / total;
     remainder = delta - quotient * total;
-    return (s32)(start + quotient * elapsed
-        + remainder * elapsed / total);
+    fractional = (u32)(remainder < 0 ? -remainder : remainder)
+        * elapsed / total;
+    return start + quotient * elapsed
+        + (remainder < 0 ? -(s32)fractional : (s32)fractional);
 }
 
 static s32 OverworldMotion_Arc(const OverworldMotionPlan *plan, u16 elapsed)

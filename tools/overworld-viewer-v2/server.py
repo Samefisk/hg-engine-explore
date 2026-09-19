@@ -8,6 +8,7 @@ import gzip
 import hashlib
 import importlib.util
 import io
+import ipaddress
 import json
 import re
 import sys
@@ -17,7 +18,7 @@ from email.parser import BytesParser
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from types import ModuleType
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from PIL import Image
 
@@ -27,9 +28,48 @@ import pokemon_asset_writer
 
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from tools.overworld.devtools_contract import source_paths as devtools_source_paths
 LEGACY_VIEWER_SOURCE = ROOT / "scripts/overworld_behavior_profile_viewer.py"
 STATIC_DIR = Path(__file__).resolve().with_name("static")
 SERVER_INSTANCE_ID = uuid.uuid4().hex
+
+
+def _route_deck_payload(payload: dict) -> dict:
+    """Project only data consumed by the Route Deck."""
+
+    keys = (
+        "generatedAt",
+        "source",
+        "capabilities",
+        "routesAvailable",
+        "routeError",
+        "spawnSettingsAvailable",
+        "spawnSettingsError",
+        "speciesOptions",
+        "spawnSettings",
+        "routes",
+    )
+    projected = {key: payload[key] for key in keys if key in payload}
+    for route in projected.get("routes", []):
+        route.pop("species", None)
+        route.pop("speciesCount", None)
+        for table_key in ("pokemonTables", "slotTables", "headbuttTables"):
+            for table in route.get(table_key, []):
+                for slot in table.get("slots", []):
+                    species = slot.get("species")
+                    if isinstance(species, dict):
+                        slot["species"] = {"symbol": species.get("symbol")}
+        for swarm in route.get("swarms", []):
+            species = swarm.get("species")
+            if isinstance(species, dict):
+                swarm["species"] = {"symbol": species.get("symbol")}
+    projected["counts"] = {
+        "routes": len(projected.get("routes", [])),
+        "species": len(projected.get("speciesOptions", [])),
+    }
+    return projected
 
 
 def server_code_revision() -> str:
@@ -38,6 +78,7 @@ def server_code_revision() -> str:
         Path(__file__).resolve(),
         Path(reliability.__file__).resolve(),
         LEGACY_VIEWER_SOURCE,
+        *(ROOT / path for path in devtools_source_paths(ROOT)),
     ):
         try:
             label = source.relative_to(ROOT).as_posix()
@@ -67,7 +108,26 @@ V2_ASSETS = {
     "/v2-assets/routes-sounds.js": (STATIC_DIR / "routes-sounds.js", "application/javascript; charset=utf-8"),
     "/v2-assets/pokemon.js": (STATIC_DIR / "pokemon.js", "application/javascript; charset=utf-8"),
     "/v2-assets/pokemon.css": (STATIC_DIR / "pokemon.css", "text/css; charset=utf-8"),
+    "/v2-assets/devtools.js": (STATIC_DIR / "devtools.js", "application/javascript; charset=utf-8"),
+    "/v2-assets/devtools.css": (STATIC_DIR / "devtools.css", "text/css; charset=utf-8"),
 }
+
+
+_DEVTOOLS_SERVICE = None
+
+
+def devtools_service():
+    """One shared controller; request threads never touch the native emulator."""
+    global _DEVTOOLS_SERVICE
+    if _DEVTOOLS_SERVICE is None:
+        from tools.overworld.devtools import get_service
+        _DEVTOOLS_SERVICE = get_service(ROOT)
+    return _DEVTOOLS_SERVICE
+
+
+def stop_devtools_session() -> None:
+    if _DEVTOOLS_SERVICE is not None:
+        _DEVTOOLS_SERVICE.command({"op": "stop", "requestId": str(uuid.uuid4())})
 
 
 def load_legacy_viewer() -> ModuleType:
@@ -149,14 +209,51 @@ def parse_asset_stage_multipart(content_type: str, body: bytes) -> tuple[str, st
 class V2ViewerHandler(legacy.ViewerHandler):
     """Serve the new frontend while preserving every legacy backend endpoint."""
 
+    def devtools_request_allowed(self) -> bool:
+        """The development control surface is local even when Workshop is shared."""
+        try:
+            local = ipaddress.ip_address(self.client_address[0]).is_loopback
+        except ValueError:
+            local = False
+        origin = self.headers.get("Origin")
+        if not local or (origin and urlparse(origin).netloc != self.headers.get("Host")):
+            self.send_json({"ok": False, "error": {
+                "code": "local_session_only", "message": "Devtools requires a local, same-origin connection."
+            }}, status=403)
+            return False
+        return True
+
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         try:
+            if path in ("/devtools", "/devtools/"):
+                self.send_bytes((STATIC_DIR / "devtools.html").read_bytes(),
+                                "text/html; charset=utf-8", cache_control="no-store")
+                return
+            if path == "/api/v2/devtools/status":
+                if self.devtools_request_allowed():
+                    self.send_json(devtools_service().status())
+                return
+            if path.startswith("/api/v2/devtools/artifacts/"):
+                if self.devtools_request_allowed():
+                    relative = unquote(path.removeprefix("/api/v2/devtools/artifacts/"))
+                    body, content_type = devtools_service().artifact(relative)
+                    self.send_bytes(body, content_type, cache_control="no-store")
+                return
             if path in ("/", "/index.html"):
                 self.send_bytes(
                     (STATIC_DIR / "index.html").read_bytes(),
                     "text/html; charset=utf-8",
                     cache_control="no-store",
+                )
+                return
+            if path == "/data.json":
+                self.send_json(
+                    {
+                        "error": "The combined workspace payload is retired. Use the deck endpoints.",
+                        "code": "combined_payload_retired",
+                    },
+                    status=410,
                 )
                 return
             if path in V2_ASSETS:
@@ -231,18 +328,55 @@ class V2ViewerHandler(legacy.ViewerHandler):
                     return
                 self.send_bytes(body, "image/png", cache_control="no-cache", etag=etag)
                 return
-            if path == "/data.json":
+            if path == "/api/v2/decks/profiles":
+                reliability.require_capability(legacy, "profiles")
                 with reliability.workspace_guard(ROOT):
-                    cached, source_revision = reliability.stable_source_read(
+                    payload, source_revision = reliability.stable_source_read(
                         legacy,
                         ROOT,
-                        legacy.cached_data_json,
-                        cache_key="data-json",
-                        refresh_legacy_cache=True,
+                        legacy.build_profile_deck_data,
+                        cache_key="v2-profile-deck",
                     )
-                    payload = json.loads(cached["body"])
-                    payload["sourceRevision"] = source_revision
-                    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+                    response_payload = dict(payload)
+                    response_payload["sourceRevision"] = source_revision
+                    body = json.dumps(
+                        response_payload,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                    etag = f'"{hashlib.sha1(body).hexdigest()}"'
+                if self.headers.get("If-None-Match") == etag:
+                    self.send_not_modified(etag)
+                    return
+                accepts_gzip = "gzip" in self.headers.get("Accept-Encoding", "")
+                self.send_bytes(
+                    gzip.compress(body, compresslevel=6) if accepts_gzip else body,
+                    "application/json; charset=utf-8",
+                    cache_control="no-cache",
+                    content_encoding="gzip" if accepts_gzip else None,
+                    etag=etag,
+                    vary="Accept-Encoding",
+                )
+                return
+            if path == "/api/v2/decks/routes":
+                reliability.require_capability(legacy, "routes")
+                with reliability.workspace_guard(ROOT):
+                    payload, source_revision = reliability.stable_source_read(
+                        legacy,
+                        ROOT,
+                        lambda: _route_deck_payload(
+                            legacy.build_route_only_data(
+                                include_routes=True,
+                                include_spawn_settings=True,
+                            )
+                        ),
+                        cache_key="v2-route-deck",
+                    )
+                    response_payload = dict(payload)
+                    response_payload["sourceRevision"] = source_revision
+                    body = json.dumps(
+                        response_payload,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
                     etag = f'"{hashlib.sha1(body).hexdigest()}"'
                 if self.headers.get("If-None-Match") == etag:
                     self.send_not_modified(etag)
@@ -419,6 +553,13 @@ class V2ViewerHandler(legacy.ViewerHandler):
             if path == "/api/v2/workspace-meta":
                 with reliability.workspace_guard(ROOT):
                     payload = reliability.workspace_metadata(legacy, ROOT)
+                    payload["capabilities"] = legacy.source_capabilities()
+                    payload["profilesAvailable"] = payload["capabilities"].get(
+                        "profiles", {}
+                    ).get("available", True)
+                    payload["routesAvailable"] = payload["capabilities"].get(
+                        "routes", {}
+                    ).get("available", True)
                 self.send_json(payload)
                 return
             if path == "/api/v2/resolve":
@@ -476,7 +617,34 @@ class V2ViewerHandler(legacy.ViewerHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
+        if path == "/api/v2/devtools":
+            if not self.devtools_request_allowed():
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 1024 * 1024:
+                    raise ValueError("devtools request must contain at most 1 MiB of JSON")
+                if self.headers.get("Content-Type", "").split(";", 1)[0].strip() != "application/json":
+                    raise ValueError("devtools requests require application/json")
+                request = json.loads(self.rfile.read(length))
+                if not isinstance(request, dict):
+                    raise ValueError("devtools request must be a JSON object")
+                if server_restart_required() and request.get("op") not in (
+                        "status", "stop", "help", "record.stop", "recording.export", "scenario.draft",
+                        "test.status", "test.cancel", "test.export", "compare"):
+                    self.send_json({"ok": False, "error": {
+                        "code": "server_restart_required", "message": "Devtools code changed. Stop this session and restart Workshop."
+                    }}, status=409)
+                    return
+                result = devtools_service().command(request)
+                self.send_json(result)
+            except (ValueError, UnicodeDecodeError) as exc:
+                self.send_json({"ok": False, "error": {"code": "invalid_request", "message": str(exc)}}, status=400)
+            except Exception as exc:
+                self.send_json({"ok": False, "error": {"code": "service_error", "message": str(exc)}}, status=500)
+            return
         if path == "/restart-server":
+            stop_devtools_session()
             with reliability.workspace_guard(ROOT):
                 reliability.begin_restart()
                 result = legacy.restart_server_soon()
@@ -592,7 +760,11 @@ def serve(host: str, port: int) -> None:
     server = ThreadingHTTPServer((host, port), V2ViewerHandler)
     actual_host, actual_port = server.server_address
     print(f"Overworld viewer V2: http://{actual_host}:{actual_port}")
-    server.serve_forever()
+    try:
+        server.serve_forever()
+    finally:
+        stop_devtools_session()
+        server.server_close()
 
 
 def main(argv: list[str] | None = None) -> int:

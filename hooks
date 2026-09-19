@@ -2,6 +2,7 @@
 #include "include/debug.h"
 
 #overlay 1 is loaded in at 021E5900
+0001 OverworldGrassEffect_InitAllocationGuard 021FF1F0 1
 #overlay 2 is loaded in at 02245B80
 #overlay 12 is loaded in at 022378C0
 #mega
@@ -286,6 +287,9 @@ arm9 StoreFieldSysPtr 0203E028 1
 # sub_0203DF34: tear down the resident overworld-wild overlays before the
 # stock field-active flag at FieldSystem+0x6C is cleared.
 arm9 FieldSystem_LeaveFieldHook 0203DF34 1
+# sub_02055244: retry a deferred field teardown while the stock leave task
+# waits for the field overlay manager to finish.
+arm9 FieldSystem_WaitLeaveFieldHook 02055244 1
 
 # Replace the stock player held-movement sink. r3 is scratch and keeps this
 # total replacement within the sink's 0x18-byte footprint.

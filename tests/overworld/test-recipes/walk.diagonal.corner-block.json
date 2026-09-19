@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "walk.diagonal.corner-block",
+  "title": "Mounted diagonal side rejection and one cardinal recovery",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld_walk_frame_timing_spec.md",
+  "requirements": ["legacy.diagonal-corner-block"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 600, "noProgressFrames": 60, "minObservedFrames": 6},
+  "subjects": [{"id": "cyndaquil", "species": 155, "role": "MOUNTED", "acquire": "existing"}],
+  "measurements": [{"kind": "diagonal-corner-v1", "subject": "cyndaquil"}],
+  "setup": [
+    {"id": "corner-origin", "op": "teleport", "args": {"map": 33, "x": 588, "z": 406, "facing": 3},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "prepare-own-cyndaquil", "op": "party", "args": {"slot": 0, "species": 155, "level": 10, "hp": 1, "status": 0},
+      "budget": {"maxSeconds": 20, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "mount-own-follower", "op": "spawn", "args": {"species": 155, "role": "mounted", "slot": 0},
+      "budget": {"maxSeconds": 20, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "bind-cyndaquil", "op": "bind", "args": {"subject": "cyndaquil"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "prepared-walk-lane", "op": "mount-walk.configure", "args": {"subject": "cyndaquil", "directionMode": 1, "travelTime": 4},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "native-corner-query", "op": "walk-corner.probe", "args": {"subject": "cyndaquil"},
+      "budget": {"maxSeconds": 5, "maxFrames": 10, "noProgressFrames": 10}}
+  ],
+  "actions": [
+    {"id": "arm-corner-reader", "op": "walk-corner.arm", "args": {"subject": "cyndaquil"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "blocked-southwest", "op": "step", "args": {"frames": 8, "keys": ["DOWN", "LEFT"], "until": {"kind": "measurement-stage", "measurement": "diagonal-corner-v1", "stage": "blocked"}},
+      "budget": {"maxSeconds": 5, "maxFrames": 8, "noProgressFrames": 8}},
+    {"id": "release-diagonal", "op": "step", "args": {"frames": 1, "keys": []},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "recovery-boundary", "op": "walk-corner.recovery", "args": {},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "one-clear-side-request", "op": "step", "args": {"frames": 8, "keys": ["LEFT"], "until": {"kind": "measurement-stage", "measurement": "diagonal-corner-v1", "stage": "recovery-started"}},
+      "budget": {"maxSeconds": 5, "maxFrames": 8, "noProgressFrames": 8}},
+    {"id": "recovery-idle", "op": "wait", "args": {"predicate": {"kind": "measurement-stage", "measurement": "diagonal-corner-v1", "stage": "recovery-complete"}},
+      "budget": {"maxSeconds": 10, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "close-corner-reader", "op": "walk-corner.close", "args": {},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "assertions": [{"kind": "measurement-complete", "measurement": "diagonal-corner-v1"}]
+}

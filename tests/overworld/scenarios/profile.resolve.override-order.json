@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "profile.resolve.override-order",
   "title": "Profile layers apply once in source order",
-  "status": "planned",
+  "status": "active",
   "capabilities": ["profile.composition"],
   "proofLevel": "S1",
   "costTier": 1,
@@ -12,10 +12,14 @@
   ],
   "stop": {"frameBudget": 1, "condition": "Resolver returns one result and provenance list"},
   "expect": {
-    "requiredEvents": ["PROFILE_RESOLVED"],
+    "requiredEvents": [],
     "forbiddenEvents": [],
     "invariants": ["Each matching layer applies at most once", "Later matching layers apply after earlier layers"]
   },
   "capture": "none",
-  "adapter": null
+  "adapter": {
+    "kind": "command-sequence",
+    "commands": [["{python}", "scripts/verify_overworld_behavior_resolver.py", "--scenario", "profile.resolve.override-order"]],
+    "result": "json-passed"
+  }
 }

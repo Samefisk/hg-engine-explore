@@ -128,6 +128,15 @@ a supported authenticated build entry point. The local Workshop is a
 single-writer workflow: repository mutation concurrent with the short
 preflight-to-Make handoff is outside this verifier's trust model.
 
+For a local source-only check, use:
+
+```sh
+python3 -B scripts/verify_pokemon_move_history_capture.py --source-only
+```
+
+Do not copy the manifest generator's isolated `-I` flag to this verifier. It
+imports its sibling manifest module from `scripts/`.
+
 Post-package checks authenticate unique dense overlay/file IDs and exact
 y9/FAT metadata for overlays 12, 68, 129, and 153. Overlay 129's complete
 `IsMoveUnimplemented` body and controlling call are exact-checked. Complete

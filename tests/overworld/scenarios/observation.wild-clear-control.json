@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "observation.wild-clear-control",
+  "title": "Wild Walk clear reader detects and restores native active state",
+  "status": "active",
+  "capabilities": ["actor.system"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "observer-control",
+    "expectationSource": "documentation/overworld-system/verification.md#memory-backed-proof",
+    "actor": "Requested Wild Rattata19, its own native spawn identity and landing point, current handle and engine object.",
+    "trigger": "Observe one natural four-frame Walk and actual Local clear; while paused change only the current active byte from0 to1, read through the same reader, then restore.",
+    "observable": "The unchanged clear checker rejects the changed byte. Exact state, registers and clocks are restored. The reader and private session close.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {"phase": "before-observation", "target": "fixture", "change": "Disposable test.sav, checked teleport and native Rattata request. Match its finalized identity and own spawn point, wait idle. No profile, timer or movement intent edits."},
+      {"phase": "during-observation", "target": "observation", "change": "After a real Walk clear, change only the current active byte while the guest is paused, restore in finally, and check exact readback. Failed restore stops the private core."}
+    ],
+    "limits": ["Reader calibration only; this session grants no natural movement, spawning, terrain or soak credit."],
+    "control": {"boundary": "live-runtime", "fault": "Current cleared Wild active byte reads1 instead of0.", "expectedFailure": "The unchanged checker rejects the bad read and accepts exact restoration before guest execution resumes."}
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "rattata", "species": 19, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [{"at": 0, "kind": "setup", "value": "Bind only the requested Rattata at its own spawn point."}, {"at": 1, "kind": "lifecycle", "value": "Complete natural Walk, real clear, same-reader fault, exact restoration and close."}],
+  "stop": {"frameBudget": 1200, "condition": "One real Walk clear and one restored reader fault, then clean private session close."},
+  "expect": {"requiredEvents": [], "forbiddenEvents": ["MOTION_CANCELED"], "invariants": ["Every active actor has an attached presentation"]},
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "observation.wild-clear-control", "claims": ["live-actor-identity", "controlled-action"], "minimumFrames": 4}
+}

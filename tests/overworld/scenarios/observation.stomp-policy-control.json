@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "id": "observation.stomp-policy-control",
+  "title": "Native stomp reader rejects a threshold fault and restores exact state",
+  "status": "active",
+  "capabilities": [
+    "actor.system"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "observer-control",
+    "expectationSource": "documentation/overworld-system/verification.md#memory-backed-proof",
+    "actor": "Current mounted Cyndaquil155 with its own follower identity and player anchor.",
+    "trigger": "Complete Walks at travel times2 and3 with threshold2, then set only the threshold byte to255 through the stopped reader and restore.",
+    "observable": "Both feedback cases complete; the same reader rejects255, then all184 state bytes, poses, bindings, input, registers and clocks match the clean read. Failure stays latched and game execution is forbidden afterward.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Private test.sav; checked teleport, party and own follower mounting. Set idle Owner travel time2 and threshold2; disable acceleration."
+      },
+      {
+        "phase": "during-observation",
+        "target": "observation",
+        "change": "After first completed move, change idle travel time to3. After second, change only threshold byte78 to255, read with the same native checker, restore in finally and close."
+      }
+    ],
+    "limits": [
+      "Threshold reader fault control, not an injected missing-sound or missing-dust game fault.",
+      "Controlled lane setup does not prove authored-profile timing or audible speaker output."
+    ],
+    "control": {
+      "boundary": "live-runtime",
+      "fault": "Invalid native threshold byte255.",
+      "expectedFailure": "The unchanged reader rejects255; exact state is restored without guest execution and the expected failure remains latched."
+    }
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Bind the current mounted follower and configure threshold2."
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Complete LEFT at time2 and RIGHT at time3."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Run terminal threshold calibration and close."
+    }
+  ],
+  "stop": {
+    "frameBudget": 600,
+    "condition": "Two feedback cases and exact reader restoration complete"
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Every active actor has an attached presentation"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "observation.stomp-policy-control",
+    "claims": [
+      "live-actor-identity",
+      "controlled-action"
+    ],
+    "minimumFrames": 5
+  }
+}

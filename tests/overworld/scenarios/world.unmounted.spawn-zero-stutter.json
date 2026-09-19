@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "id": "world.unmounted.spawn-zero-stutter",
+  "title": "Unmounted spawn work has zero extra game frames",
+  "status": "active",
+  "capabilities": [
+    "actor.system",
+    "walk.exact",
+    "spawn",
+    "population"
+  ],
+  "proofLevel": "S3",
+  "costTier": 4,
+  "verification": {
+    "kind": "normal-play",
+    "expectationSource": "documentation/overworld-system/verification.md#spawn-work-budget-and-proof-freshness",
+    "actor": "The unmounted player and the existing FOLLOWER Mankey from test.sav.",
+    "trigger": "Use the sealed 673-step Route 30 and Cherrygrove route that previously produced the spawn-linked hitch.",
+    "observable": "After the fixed Cherrygrove anchor, read every stock main-loop return. Fail if one update uses more than two native cycles, advances more than two scheduler frames, exceeds the bounded two-cycle clock margin, or holds the player render position during active travel. Bind the current Mankey profile and require one explicit destination scan within 21 frames.",
+    "setupAudit": "complete",
+    "setupMutations": [],
+    "limits": [
+      "Route 30 travel and the map seam are warm-up. The strict zero-stutter window starts at Cherrygrove (565,398), after the seam has completed.",
+      "The strict window contains at least 2600 continuous frames and 1800 moving frames.",
+      "At least one normal destination search and finalizer must join on attempt, finalization, slot, and map identity. A no-spawn-work route cannot pass.",
+      "The saved Mankey's source-bound base profile must supply hopPause 5 and hopMaxDistance 6. Terrain can select a conditional profile during the route; Movement scenarios own separate Hop and chain timing checks.",
+      "One explicit destination attempt must finish in at most 21 frames. Population-count behavior remains in the separate D5 population scenarios.",
+      "The result uses melonDS scheduler and native-cycle memory data. Screenshots, video, host CPU time, and human judgement are not proof.",
+      "Any missing pacing sample fails. One extra game frame fails. There is no allowed hitch count.",
+      "Prepared setup does not earn movement or pacing credit. The source save is not changed."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Load the save without changes and bind its existing Mankey follower at the fixed Route 30 start."
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Follow the sealed route into Cherrygrove and around the fixed rectangle until step 673."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Require continuous two-cycle main-loop pacing, the current Mankey profile binding, and normal 21-frame destination work after the Cherrygrove anchor."
+    }
+  ],
+  "stop": {
+    "frameBudget": 4000,
+    "condition": "Step 673 is settled with at least 2600 strict pacing frames, 1800 moving frames, the current Mankey profile binding, natural spawn work, and zero late updates"
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "The player stays unmounted",
+      "The current follower remains the save's existing Mankey",
+      "The source-bound base profile remains verified for the same Mankey follower while terrain can select conditional profile fingerprints",
+      "Every strict pacing interval uses at most two native cycles",
+      "Joined normal spawn search/finalizer work occurs during the strict window",
+      "An explicit destination scan completes within 21 frames"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "world.unmounted.spawn-zero-stutter",
+    "claims": [
+      "live-actor-identity",
+      "natural-input",
+      "population-bounds",
+      "frame-pacing"
+    ],
+    "minimumFrames": 2600
+  }
+}

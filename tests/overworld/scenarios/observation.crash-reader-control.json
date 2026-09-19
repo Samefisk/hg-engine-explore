@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "id": "observation.crash-reader-control",
+  "title": "Native Crash reader rejects invalid mode and restores exact state",
+  "status": "active",
+  "capabilities": ["actor.system"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "observer-control",
+    "expectationSource": "documentation/overworld-system/verification.md#memory-backed-proof",
+    "actor": "Current mounted Cyndaquil155, its own follower identity and player anchor.",
+    "trigger": "Complete one stationary wall Crash and rightward recovery, then set only native motion mode to255 through the paused reader and restore.",
+    "observable": "The original six Crash rows pass before calibration. The same reader rejects mode255. All184 state bytes, poses, bindings, input, registers and clocks are restored without guest execution. Failure remains latched and execution is forbidden afterward.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {"phase": "before-observation", "target": "fixture", "change": "Private test.sav; restore current slot1 HP/status; teleport to map33 tile577/397; mount that slot's Cyndaquil at its own follower site. Set idle cardinal mode, locked turning and wall-hit sound only. Keep current travel time and acceleration."},
+      {"phase": "during-observation", "target": "observation", "change": "After Crash and recovery finish, write only motion mode255, read through the same checker, restore in finally and close. Exactly two byte writes and zero guest execution."}
+    ],
+    "limits": ["Mode-reader control, not an injected missing-sound or missing-shake game fault.", "Prepared fixture does not prove all authored profiles or audible speaker output."],
+    "control": {"boundary": "live-runtime", "fault": "Invalid native motion mode255.", "expectedFailure": "The unchanged reader rejects invalid mode; exact state is restored with no guest execution and the reader failure stays latched."}
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "cyndaquil", "species": 155, "role": "MOUNTED", "acquisition": "mount", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Bind current mounted Cyndaquil at checked wall and configure locked turning and sound."},
+    {"at": 1, "kind": "input", "value": "Hit north wall, finish Crash and complete one rightward recovery Walk."},
+    {"at": 2, "kind": "lifecycle", "value": "Run terminal mode calibration and close without further execution."}
+  ],
+  "stop": {"frameBudget": 600, "condition": "Crash, recovery and exact reader restoration complete"},
+  "expect": {"requiredEvents": [], "forbiddenEvents": ["MOTION_CANCELED"], "invariants": ["Every active actor has an attached presentation"]},
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "observation.crash-reader-control", "claims": ["live-actor-identity", "controlled-action"], "minimumFrames": 64}
+}

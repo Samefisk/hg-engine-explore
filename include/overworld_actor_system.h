@@ -1,9 +1,20 @@
 #ifndef OVERWORLD_ACTOR_SYSTEM_H
 #define OVERWORLD_ACTOR_SYSTEM_H
 
+#ifdef OVERWORLD_ACTOR_SYSTEM_HOST
+#include <stddef.h>
+#include <stdint.h>
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef int16_t s16;
+typedef int32_t s32;
+#else
 #include "types.h"
+#endif
 
 #define OVERWORLD_ACTOR_SYSTEM_OVERLAY_ID 158
+#define OVERWORLD_ACTOR_SYSTEM_OVERLAY_LOAD_ADDR 0x023B6B00
 #define OVERWORLD_ACTOR_SYSTEM_OVERLAY_BASE 0x023B6B00
 #define OVERWORLD_ACTOR_SYSTEM_OVERLAY_END 0x023BAB00
 #define OVERWORLD_ACTOR_SYSTEM_OVERLAY_SIZE 0x4000
@@ -19,11 +30,14 @@
 #define OVERWORLD_ACTOR_SYSTEM_STATE_MAGIC 0x5353574F /* OWSS */
 #define OVERWORLD_ACTOR_TRACE_MAGIC 0x5254574F /* OWTR */
 #define OVERWORLD_ACTOR_SYSTEM_ABI_VERSION 1
+#define OVERWORLD_ACTOR_SYSTEM_COMPAT_VERSION 3
 #define OVERWORLD_ACTOR_SYSTEM_DEBUG_VERSION 1
-#define OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS 12
-#define OVERWORLD_ACTOR_SYSTEM_COMMAND_CAPACITY 8
-#define OVERWORLD_ACTOR_SYSTEM_ACK_CAPACITY 8
-#define OVERWORLD_ACTOR_SYSTEM_TRACE_CAPACITY 32
+#define OVERWORLD_ACTOR_TRANSITION_CALL_VERSION 2
+#define OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS 10
+#define OVERWORLD_ACTOR_SYSTEM_FOLLOWER_SLOT 7
+#define OVERWORLD_ACTOR_SYSTEM_COMMAND_CAPACITY 2
+#define OVERWORLD_ACTOR_SYSTEM_ACK_CAPACITY 2
+#define OVERWORLD_ACTOR_SYSTEM_TRACE_CAPACITY 16
 #define OVERWORLD_ACTOR_INVALID_SLOT 0xFFFF
 #define OVERWORLD_ACTOR_TRACE_ALL_SLOTS 0xFFFF
 
@@ -65,6 +79,29 @@ typedef enum OverworldActorReason {
     OVERWORLD_ACTOR_REASON_STALE_SEQUENCE = 20,
 } OverworldActorReason;
 
+typedef enum OverworldActorTransitionDisposition {
+    OVERWORLD_ACTOR_TRANSITION_DISPOSITION_NONE = 0,
+    OVERWORLD_ACTOR_TRANSITION_DISPOSITION_PRESERVE = 1,
+    OVERWORLD_ACTOR_TRANSITION_DISPOSITION_DISCARD = 2,
+} OverworldActorTransitionDisposition;
+
+typedef enum OverworldActorTransitionWork {
+    OVERWORLD_ACTOR_TRANSITION_WORK_NONE = 0,
+    OVERWORLD_ACTOR_TRANSITION_WORK_CANONICALIZE = 1,
+    OVERWORLD_ACTOR_TRANSITION_WORK_REBIND = 2,
+    OVERWORLD_ACTOR_TRANSITION_WORK_RESUME = 3,
+    OVERWORLD_ACTOR_TRANSITION_WORK_DISCARD = 4,
+    OVERWORLD_ACTOR_TRANSITION_WORK_COMPLETE = 5,
+} OverworldActorTransitionWork;
+
+#define OVERWORLD_ACTOR_TRANSITION_ACK_ENGINE_CANONICALIZED (1u << 0)
+#define OVERWORLD_ACTOR_TRANSITION_ACK_PRESENTATIONS_REBOUND (1u << 1)
+#define OVERWORLD_ACTOR_TRANSITION_ACK_FINALIZED             (1u << 2)
+#define OVERWORLD_ACTOR_TRANSITION_ACK_ALL                   \
+    (OVERWORLD_ACTOR_TRANSITION_ACK_ENGINE_CANONICALIZED     \
+        | OVERWORLD_ACTOR_TRANSITION_ACK_PRESENTATIONS_REBOUND \
+        | OVERWORLD_ACTOR_TRANSITION_ACK_FINALIZED)
+
 typedef enum OverworldActorRole {
     OVERWORLD_ACTOR_ROLE_NONE = 0,
     OVERWORLD_ACTOR_ROLE_WILD = 1,
@@ -105,6 +142,11 @@ typedef enum OverworldActorWorldEffect {
     OVERWORLD_ACTOR_WORLD_EFFECT_CRASH = 3,
 } OverworldActorWorldEffect;
 
+typedef enum OverworldActorWorldGate {
+    OVERWORLD_ACTOR_WORLD_GATE_WARP = 0,
+    OVERWORLD_ACTOR_WORLD_GATE_BATTLE = 1,
+} OverworldActorWorldGate;
+
 typedef enum OverworldActorEvent {
     OVERWORLD_ACTOR_EVENT_NONE = 0,
     OVERWORLD_ACTOR_EVENT_ACTOR_ATTACHED = 1,
@@ -127,6 +169,8 @@ typedef enum OverworldActorEvent {
     OVERWORLD_ACTOR_EVENT_CONTEXT_CHANGED = 18,
     OVERWORLD_ACTOR_EVENT_ACTOR_REBOUND = 19,
     OVERWORLD_ACTOR_EVENT_CONTROL_RETURNED = 20,
+    OVERWORLD_ACTOR_EVENT_MOUNT_PRESENTATION_POSITION = 21,
+    OVERWORLD_ACTOR_EVENT_MOUNT_PRESENTATION_STATE = 22,
 } OverworldActorEvent;
 
 typedef enum OverworldActorCommandKind {
@@ -136,7 +180,6 @@ typedef enum OverworldActorCommandKind {
     OVERWORLD_ACTOR_COMMAND_REBIND_ROLE = 3,
     OVERWORLD_ACTOR_COMMAND_TRACE_CONFIGURE = 4,
     OVERWORLD_ACTOR_COMMAND_TRACE_CLEAR = 5,
-    OVERWORLD_ACTOR_COMMAND_FIELD_EPOCH_ADVANCE = 6,
 } OverworldActorCommandKind;
 
 typedef enum OverworldActorInspectKind {
@@ -145,6 +188,8 @@ typedef enum OverworldActorInspectKind {
     OVERWORLD_ACTOR_INSPECT_ACTOR_INDEX = 2,
     OVERWORLD_ACTOR_INSPECT_TRACE_HEADER = 3,
     OVERWORLD_ACTOR_INSPECT_TRACE_EVENT = 4,
+    OVERWORLD_ACTOR_INSPECT_POPULATION = 5,
+    OVERWORLD_ACTOR_INSPECT_WORLD_GATE = 6,
 } OverworldActorInspectKind;
 
 typedef struct OverworldActorHandle {
@@ -155,6 +200,47 @@ typedef struct OverworldActorHandle {
     u16 encounterGeneration;
     u16 reserved;
 } OverworldActorHandle;
+
+/* Agent-facing binary layouts. The debug descriptor generator reads these
+ * exact formats from the public ABI header instead of owning a second copy. */
+#define OVERWORLD_ACTOR_DEBUG_HANDLE_FORMAT "<6H"
+#define OVERWORLD_ACTOR_DEBUG_STATE_FORMAT "<HH6H8I8h4H16B"
+
+/*
+ * One idempotent field-transition exchange. Callers begin with no
+ * acknowledgements, execute the returned work, then repeat the same sequence
+ * with cumulative acknowledgement bits. The actor system is the only owner of
+ * field-epoch and map-generation advancement.
+ */
+typedef struct OverworldActorTransitionCall {
+    u16 version;
+    u16 size;
+    u32 sequence;
+    __extension__ union {
+        __extension__ struct {
+            u16 previousMapId;
+            u16 currentMapId;
+        };
+        u32 mapIdentity;
+    };
+    __extension__ union {
+        __extension__ struct {
+            u16 expectedFieldEpoch;
+            u16 previousMapGeneration;
+        };
+        u32 previousFieldContext;
+    };
+    u8 disposition;
+    u8 acknowledgements;
+    u8 work;
+    u8 reserved;
+    u16 nextFieldEpoch;
+    u16 nextMapGeneration;
+    u16 retainedActorMask;
+    u16 resumeMotionMask;
+    u16 discardActorMask;
+    u16 reason;
+} OverworldActorTransitionCall;
 
 typedef struct OverworldActorCommand {
     u16 version;
@@ -185,6 +271,16 @@ typedef struct OverworldActorFrame {
     u16 expectedFieldEpoch;
     u16 flags;
 } OverworldActorFrame;
+
+enum {
+    OVERWORLD_ACTOR_PRESENTATION_ACTIVE = 1 << 0,
+    OVERWORLD_ACTOR_PRESENTATION_VISIBLE = 1 << 1,
+    OVERWORLD_ACTOR_PRESENTATION_CURRENT_MANAGER = 1 << 2,
+    OVERWORLD_ACTOR_PRESENTATION_READY =
+        OVERWORLD_ACTOR_PRESENTATION_ACTIVE
+        | OVERWORLD_ACTOR_PRESENTATION_VISIBLE
+        | OVERWORLD_ACTOR_PRESENTATION_CURRENT_MANAGER,
+};
 
 typedef struct OverworldActorStateSnapshot {
     u16 version;
@@ -224,7 +320,7 @@ typedef struct OverworldActorStateSnapshot {
     u8 lastCancelReason;
     u8 active;
     u8 presentationAttached;
-    u8 reserved0;
+    u8 presentationState;
     u8 reserved1;
 } OverworldActorStateSnapshot;
 
@@ -256,6 +352,21 @@ typedef struct OverworldActorTraceEvent {
     u32 valueB;
 } OverworldActorTraceEvent;
 
+typedef struct OverworldActorPopulationSnapshot {
+    u16 version;
+    u16 size;
+    u32 lastWorldEventSequence;
+    s16 centerX;
+    s16 centerY;
+    u16 fieldEpoch;
+    u16 refillTimer;
+    u8 refillArmed;
+    u8 workPending;
+    u8 fieldActive;
+    u8 reserved0;
+    u32 reserved1[3];
+} OverworldActorPopulationSnapshot;
+
 typedef struct OverworldActorQuery {
     u16 version;
     u16 size;
@@ -272,7 +383,7 @@ typedef struct OverworldActorSnapshot {
     u8 kind;
     u8 hasActor;
     u8 hasTraceEvent;
-    u8 reserved;
+    u8 hasPopulation;
     u32 frame;
     u16 fieldEpoch;
     u16 actorCount;
@@ -280,7 +391,10 @@ typedef struct OverworldActorSnapshot {
     u16 lastReason;
     OverworldActorStateSnapshot actor;
     OverworldActorTraceHeader trace;
-    OverworldActorTraceEvent traceEvent;
+    __extension__ union {
+        OverworldActorTraceEvent traceEvent;
+        OverworldActorPopulationSnapshot population;
+    };
 } OverworldActorSnapshot;
 
 typedef OverworldActorResult (*OverworldActorSystemValidateFunc)(void);
@@ -308,6 +422,14 @@ typedef struct OverworldActorSystemEntry {
 
 typedef char OverworldActorHandleSizeMustRemain12Bytes[
     sizeof(OverworldActorHandle) == 12 ? 1 : -1];
+typedef char OverworldActorTransitionCallSizeMustRemain32Bytes[
+    sizeof(OverworldActorTransitionCall) == 32 ? 1 : -1];
+typedef char OverworldActorTransitionMapIdentityOffsetMustRemain8[
+    offsetof(OverworldActorTransitionCall, mapIdentity) == 8 ? 1 : -1];
+typedef char OverworldActorTransitionFieldContextOffsetMustRemain12[
+    offsetof(OverworldActorTransitionCall, previousFieldContext) == 12
+        ? 1
+        : -1];
 typedef char OverworldActorCommandSizeMustRemain32Bytes[
     sizeof(OverworldActorCommand) == 32 ? 1 : -1];
 typedef char OverworldActorReplySizeMustRemain24Bytes[
@@ -353,6 +475,9 @@ OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
 OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
     OverworldActorStateMotionElapsedOffsetMustRemain64, motionElapsed, 64);
 OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
+    OverworldActorStatePresentationStateOffsetMustRemain86,
+    presentationState, 86);
+OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
     OverworldActorStateReservationOffsetMustRemain68, reservationId, 68);
 OVERWORLD_ACTOR_STATE_OFFSET_ASSERT(
     OverworldActorStateSpeciesOffsetMustRemain70, species, 70);
@@ -373,11 +498,69 @@ typedef char OverworldActorTraceHeaderSizeMustRemain36Bytes[
     sizeof(OverworldActorTraceHeader) == 36 ? 1 : -1];
 typedef char OverworldActorTraceEventSizeMustRemain32Bytes[
     sizeof(OverworldActorTraceEvent) == 32 ? 1 : -1];
+typedef char OverworldActorPopulationSnapshotSizeMustRemain32Bytes[
+    sizeof(OverworldActorPopulationSnapshot) == 32 ? 1 : -1];
 typedef char OverworldActorQuerySizeMustRemain24Bytes[
     sizeof(OverworldActorQuery) == 24 ? 1 : -1];
 typedef char OverworldActorSnapshotSizeMustRemain176Bytes[
     sizeof(OverworldActorSnapshot) == 176 ? 1 : -1];
+/* Native Inspect probes encode queries and decode snapshots independently.
+ * Keep each decoded boundary fixed even if a reorder preserves total size. */
+#define OVERWORLD_ACTOR_QUERY_OFFSET_ASSERT(name, field, expected) \
+    typedef char name[offsetof(OverworldActorQuery, field) \
+        == (expected) ? 1 : -1]
+OVERWORLD_ACTOR_QUERY_OFFSET_ASSERT(
+    OverworldActorQueryVersionOffsetMustRemain0, version, 0);
+OVERWORLD_ACTOR_QUERY_OFFSET_ASSERT(
+    OverworldActorQuerySizeOffsetMustRemain2, size, 2);
+OVERWORLD_ACTOR_QUERY_OFFSET_ASSERT(
+    OverworldActorQueryKindOffsetMustRemain4, kind, 4);
+OVERWORLD_ACTOR_QUERY_OFFSET_ASSERT(
+    OverworldActorQueryIndexOffsetMustRemain5, index, 5);
+OVERWORLD_ACTOR_QUERY_OFFSET_ASSERT(
+    OverworldActorQueryReservedOffsetMustRemain6, reserved, 6);
+OVERWORLD_ACTOR_QUERY_OFFSET_ASSERT(
+    OverworldActorQueryActorOffsetMustRemain8, actor, 8);
+OVERWORLD_ACTOR_QUERY_OFFSET_ASSERT(
+    OverworldActorQuerySequenceOffsetMustRemain20, sequence, 20);
+#undef OVERWORLD_ACTOR_QUERY_OFFSET_ASSERT
+#define OVERWORLD_ACTOR_INSPECT_OFFSET_ASSERT(name, field, expected) \
+    typedef char name[offsetof(OverworldActorSnapshot, field) \
+        == (expected) ? 1 : -1]
+OVERWORLD_ACTOR_INSPECT_OFFSET_ASSERT(
+    OverworldActorInspectVersionOffsetMustRemain0, version, 0);
+OVERWORLD_ACTOR_INSPECT_OFFSET_ASSERT(
+    OverworldActorInspectSizeOffsetMustRemain2, size, 2);
+OVERWORLD_ACTOR_INSPECT_OFFSET_ASSERT(
+    OverworldActorInspectKindOffsetMustRemain4, kind, 4);
+OVERWORLD_ACTOR_INSPECT_OFFSET_ASSERT(
+    OverworldActorInspectHasActorOffsetMustRemain5, hasActor, 5);
+OVERWORLD_ACTOR_INSPECT_OFFSET_ASSERT(
+    OverworldActorInspectHasTraceEventOffsetMustRemain6, hasTraceEvent, 6);
+OVERWORLD_ACTOR_INSPECT_OFFSET_ASSERT(
+    OverworldActorInspectHasPopulationOffsetMustRemain7, hasPopulation, 7);
+OVERWORLD_ACTOR_INSPECT_OFFSET_ASSERT(
+    OverworldActorInspectFrameOffsetMustRemain8, frame, 8);
+OVERWORLD_ACTOR_INSPECT_OFFSET_ASSERT(
+    OverworldActorInspectFieldEpochOffsetMustRemain12, fieldEpoch, 12);
+OVERWORLD_ACTOR_INSPECT_OFFSET_ASSERT(
+    OverworldActorInspectActorCountOffsetMustRemain14, actorCount, 14);
+OVERWORLD_ACTOR_INSPECT_OFFSET_ASSERT(
+    OverworldActorInspectQueueDepthOffsetMustRemain16, queueDepth, 16);
+OVERWORLD_ACTOR_INSPECT_OFFSET_ASSERT(
+    OverworldActorInspectLastReasonOffsetMustRemain18, lastReason, 18);
+OVERWORLD_ACTOR_INSPECT_OFFSET_ASSERT(
+    OverworldActorInspectActorOffsetMustRemain20, actor, 20);
+OVERWORLD_ACTOR_INSPECT_OFFSET_ASSERT(
+    OverworldActorInspectTraceOffsetMustRemain108, trace, 108);
+OVERWORLD_ACTOR_INSPECT_OFFSET_ASSERT(
+    OverworldActorInspectTraceEventOffsetMustRemain144, traceEvent, 144);
+OVERWORLD_ACTOR_INSPECT_OFFSET_ASSERT(
+    OverworldActorInspectPopulationOffsetMustRemain144, population, 144);
+#undef OVERWORLD_ACTOR_INSPECT_OFFSET_ASSERT
+#ifndef OVERWORLD_ACTOR_SYSTEM_HOST
 typedef char OverworldActorSystemEntrySizeMustRemain24Bytes[
     sizeof(OverworldActorSystemEntry) == 24 ? 1 : -1];
+#endif
 
 #endif // OVERWORLD_ACTOR_SYSTEM_H

@@ -51,12 +51,23 @@ SECTIONS {
                 KEEP(*(.pokemon_move_history_task6_diagnostic_data))
                 ASSERT(. == ORIGIN(rom) + 0xD8,
                     "task-6 diagnostic mailbox size differs");
-                KEEP(*(.overworld_wild_hop_trajectory_entry))
-                ASSERT(gOverworldWildHopTrajectoryEntry
-                        == ORIGIN(rom) + 0xD8,
-                    "overworld wild hop trajectory entry moved");
+                FILL(0x0000)
+                . = ORIGIN(rom) + 0xF0;
+                FILL(0xABCD)
                 ASSERT(. == ORIGIN(rom) + 0xF0,
-                    "overworld wild hop trajectory entry size differs");
+                    "retired Hop callback slot size differs");
+                KEEP(*(.overworld_actor_hop_planner))
+                ASSERT(OverworldActorHopPlanner_Plan
+                        == ORIGIN(rom) + 0xF0,
+                    "Actor Motion Hop planner moved");
+                ASSERT(. == ORIGIN(rom) + 0xF8,
+                    "Actor Motion Hop planner trampoline size differs");
+                KEEP(*(.overworld_actor_teleport_planner))
+                ASSERT(OverworldActorTeleportPlanner_Plan
+                        == ORIGIN(rom) + 0xF8,
+                    "Actor Motion Teleport planner moved");
+                ASSERT(. == ORIGIN(rom) + 0x100,
+                    "Actor Motion Teleport planner trampoline size differs");
                 KEEP(*(.pokemon_move_history_task6_short_branch_targets))
                 ASSERT(MoveHistoryTask6Entry_IsCanonical
                         == ORIGIN(rom) + 0x00,
@@ -101,14 +112,23 @@ SECTIONS {
                 *(.dtors)
                 *(.rodata)
                 *(.fini)
-                KEEP(*(.overworld_wild_hop_trajectory_code))
+                KEEP(*(.overworld_actor_hop_planner_code))
+                KEEP(*(.overworld_actor_teleport_planner_code))
                 *(COMMON)
 
                 __bss_start__ = . ;
                 *(.bss)
                 __bss_end__ = . ;
-                ASSERT(__bss_end__ <= ORIGIN(rom) + 0xFD8,
-                    "task-6 resident helper overlaps native-shadow policy entry");
+                ASSERT(__bss_end__ <= ORIGIN(rom) + 0xE40,
+                    "task-6 resident helper overlaps role-controller reserve");
+                . = ORIGIN(rom) + 0xE40;
+                KEEP(*(.text.OverworldRoleController_Reduce))
+                ASSERT(OverworldRoleController_Reduce
+                        == ORIGIN(rom) + 0xE40,
+                    "role-controller reducer moved");
+                KEEP(*(.overworld_actor_teleport_planner_tail))
+                ASSERT(. <= ORIGIN(rom) + 0xFD8,
+                    "role-controller reducer overlaps native-shadow policy entry");
                 . = ORIGIN(rom) + 0xFD8;
                 KEEP(*(.overworld_wild_shadow_policy_entry))
                 ASSERT(OverworldWildSpawns_SetNativeShadowSuppressedImpl

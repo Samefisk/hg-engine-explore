@@ -2,21 +2,153 @@
   "schemaVersion": 1,
   "id": "teleport.fixed-and-per-tile",
   "title": "Teleport supports fixed and per-tile duration",
-  "status": "planned",
-  "capabilities": ["teleport"],
+  "status": "active",
+  "capabilities": [
+    "teleport"
+  ],
   "proofLevel": "S4",
   "costTier": 4,
-  "fixture": {"rom": "test.nds", "save": {"path": "test.dsv", "kind": "dsv"}, "seed": 0},
-  "events": [
-    {"at": 0, "kind": "setup", "value": "Resolve one fixed-time and one per-tile Teleport profile"},
-    {"at": 1, "kind": "input", "value": "Run both Teleports with flicker disabled and enabled"}
-  ],
-  "stop": {"frameBudget": 2400, "condition": "All Teleport cases finish"},
-  "expect": {
-    "requiredEvents": ["PROFILE_RESOLVED", "MOTION_STARTED", "PATH_ADVANCED", "LOGICAL_COMMIT", "MOTION_FINISHED"],
-    "forbiddenEvents": [],
-    "invariants": ["Fixed timing is independent of distance", "Per-tile timing scales with distance", "Flicker changes visibility only", "Each Teleport commits once"]
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/README.md#system-contracts",
+    "actor": "One current mounted Cyndaquil, with the player as its engine anchor and the Cyndaquil presentation attached",
+    "trigger": "Configure only the mounted locomotion, Teleport time and pause fields, then use normal direction input for ten fixed/per-tile and visibility cases",
+    "observable": "Fixed duration stays at seven frames across distances; per-tile duration equals three times travel distance; player and mount visibility stay paired; every case has one commit, rendered travel and idle control return",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use disposable test.sav, teleport to map33 (588,406), prepare party slot0, mount and bind Cyndaquil, then change only mounted lane offsets12,23,24 with checked readback before each case. Do not change collision, motion state, target choice or input."
+      }
+    ],
+    "limits": [
+      "The checked lane fixture proves the current Teleport modes, timing and visibility policy. It does not claim an authored Cyndaquil Teleport profile.",
+      "Prepared own-party setup does not prove natural selection or population spawning.",
+      "Registration alone is not runtime acceptance; the checked shared test must pass on the current ROM."
+    ]
   },
-  "capture": "always",
-  "adapter": null
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Prepare and bind mounted Cyndaquil at map33 (588,406); verify each three-field lane change without advancing the game"
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Use normal RIGHT, LEFT, UP, DOWN and RIGHT input for fixed no-flicker/flicker, then repeat for per-tile timing"
+    }
+  ],
+  "stop": {
+    "frameBudget": 800,
+    "condition": "All ten Teleport cases finish with two distances in each timing mode"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ],
+    "orderedEvents": [
+      {
+        "id": "start",
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 3
+        }
+      },
+      {
+        "id": "commit",
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK"
+      },
+      {
+        "id": "finish",
+        "event": "MOTION_FINISHED",
+        "reason": "OK"
+      },
+      {
+        "id": "control",
+        "event": "CONTROL_RETURNED",
+        "reason": "OK"
+      }
+    ],
+    "eventCounts": [
+      {
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 3
+        },
+        "minimum": 10,
+        "maximum": 10
+      },
+      {
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "minimum": 10,
+        "maximum": 10
+      },
+      {
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "minimum": 10,
+        "maximum": 10
+      },
+      {
+        "event": "CONTROL_RETURNED",
+        "reason": "OK",
+        "minimum": 10,
+        "maximum": 10
+      }
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "teleport.fixed-and-per-tile",
+    "claims": [
+      "natural-input",
+      "live-actor-identity",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "control-release"
+    ],
+    "minimumFrames": 32
+  }
 }

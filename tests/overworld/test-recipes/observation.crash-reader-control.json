@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "id": "observation.crash-reader-control",
+  "title": "Mounted Crash native reader fault check",
+  "mode": "observer-control",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "src/overworld_mount_overlay/overworld_mount_overlay.c and include/overworld_mount_internal.h; shared Crash reader control",
+  "requirements": ["shared.crash-recorder-control-v1"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 600, "noProgressFrames": 64, "minObservedFrames": 64},
+  "subjects": [
+    {"id": "cyndaquil", "species": 155, "role": "MOUNTED", "acquire": "existing"}
+  ],
+  "measurements": [
+    {"kind": "live-crash-control-v1", "subject": "cyndaquil"}
+  ],
+  "setup": [
+    {"id": "prepare-current-cyndaquil", "op": "party", "args": {"slot": 1, "hp": 21, "status": 0},
+      "budget": {"maxSeconds": 20, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "crash-origin", "op": "teleport", "args": {"map": 33, "x": 577, "z": 397, "facing": 0},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "mount-current-cyndaquil", "op": "spawn", "args": {"species": 155, "role": "mounted", "slot": 1},
+      "budget": {"maxSeconds": 20, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "settle-current-mount", "op": "step", "args": {"frames": 16, "keys": []},
+      "budget": {"maxSeconds": 20, "maxFrames": 16, "noProgressFrames": 16}},
+    {"id": "bind-cyndaquil", "op": "bind", "args": {"subject": "cyndaquil"},
+      "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "locked-wall-crash", "op": "mount-walk.configure",
+      "args": {"subject": "cyndaquil", "directionMode": 0, "turning": "locked", "crashSound": "wall-hit"},
+      "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "arm-crash", "op": "crash.arm", "args": {"subject": "cyndaquil"},
+      "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "fresh-neutral-boundary", "op": "step", "args": {"frames": 1, "keys": []},
+      "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "hit-north-wall", "op": "step", "args": {"frames": 16, "keys": ["UP"]},
+      "budget": {"maxSeconds": 20, "maxFrames": 16, "noProgressFrames": 16}},
+    {"id": "finish-crash", "op": "step", "args": {"frames": 32, "keys": []},
+      "budget": {"maxSeconds": 40, "maxFrames": 32, "noProgressFrames": 32}},
+    {"id": "recover-right", "op": "step", "args": {"frames": 8, "keys": ["RIGHT"]},
+      "budget": {"maxSeconds": 20, "maxFrames": 8, "noProgressFrames": 8}},
+    {"id": "settle-recovery", "op": "step", "args": {"frames": 8, "keys": []},
+      "budget": {"maxSeconds": 20, "maxFrames": 8, "noProgressFrames": 8}},
+    {"id": "calibrate-crash-reader", "op": "crash.calibrate", "args": {},
+      "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "close-crash", "op": "crash.close", "args": {},
+      "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "assertions": [
+    {"kind": "measurement-complete", "measurement": "live-crash-control-v1", "when": "final"}
+  ]
+}

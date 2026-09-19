@@ -13,6 +13,7 @@ from pathlib import Path
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 from typing import Any, Mapping
@@ -25,12 +26,23 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _sources(root: Path) -> tuple[Path, ...]:
+def _sources(
+    root: Path,
+    catalog: Path,
+    source_template: Path,
+    header_template: Path,
+) -> tuple[Path, ...]:
     return (
         root / "lib/overworld/overworld_behavior_resolver.c",
         root
         / "tools/overworld-viewer-v2/native/overworld_behavior_resolver_main.c",
-        root / "data/OverworldWildBehaviorData.c",
+        catalog,
+        source_template,
+        header_template,
+        root / "scripts/generate_overworld_behavior_catalog.py",
+        root / "scripts/overworld_behavior_profile_viewer.py",
+        root / "scripts/build_overworld_wild_spawn_metadata.py",
+        root / "tools/overworld/behavior_schema.json",
         root / "data/generated/overworld_wild_roof_catalog.inc",
         root / "include/config.h",
         root / "include/constants/species.h",
@@ -39,19 +51,33 @@ def _sources(root: Path) -> tuple[Path, ...]:
         root / "include/io_reg.h",
         root / "include/types.h",
         root / "include/overworld_behavior_resolver.h",
-        root / "include/overworld_wild_behavior_data.h",
         root
         / "include/constants/generated/overworld_wild_roof_catalog_counts.h",
         Path(__file__).resolve(),
     )
 
 
-def build(root: Path | None = None, *, force: bool = False) -> Path:
+def build(
+    root: Path | None = None,
+    *,
+    force: bool = False,
+    catalog: Path | None = None,
+    source_template: Path | None = None,
+    header_template: Path | None = None,
+    output: Path | None = None,
+) -> Path:
     """Return a current host executable, compiling it when required."""
 
     root = (root or _repo_root()).resolve()
-    output = root / "build/overworld_behavior_resolver_host"
-    sources = _sources(root)
+    catalog = (catalog or root / "data/overworld_behavior_profiles.json").resolve()
+    source_template = (
+        source_template or root / "data/OverworldWildBehaviorData.c"
+    ).resolve()
+    header_template = (
+        header_template or root / "include/overworld_wild_behavior_data.h"
+    ).resolve()
+    output = (output or root / "build/overworld_behavior_resolver_host").resolve()
+    sources = _sources(root, catalog, source_template, header_template)
     missing = [source for source in sources if not source.is_file()]
     if missing:
         names = ", ".join(str(path.relative_to(root)) for path in missing)
@@ -80,30 +106,63 @@ def build(root: Path | None = None, *, force: bool = False) -> Path:
         os.close(file_descriptor)
         temporary = Path(temporary_name)
         try:
-            command = compiler + [
-                "-std=c99",
-                "-O2",
-                "-Wall",
-                "-Wextra",
-                "-DOVERWORLD_BEHAVIOR_HOST",
-                "-I",
-                str(root / "include"),
-                str(sources[0]),
-                str(sources[1]),
-                str(sources[2]),
-                "-o",
-                str(temporary),
-            ]
-            completed = subprocess.run(
-                command,
-                cwd=root,
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            if completed.returncode != 0:
-                detail = completed.stderr.strip() or completed.stdout.strip()
-                raise RuntimeError(f"could not compile resolver host: {detail}")
+            with tempfile.TemporaryDirectory(
+                prefix=f".{output.name}.catalog.",
+                dir=output.parent,
+            ) as generated_name:
+                generated_root = Path(generated_name)
+                generated_source = generated_root / "data/OverworldWildBehaviorData.c"
+                generated_header = generated_root / "include/overworld_wild_behavior_data.h"
+                generate_command = [
+                    sys.executable,
+                    str(root / "scripts/generate_overworld_behavior_catalog.py"),
+                    "--catalog",
+                    str(catalog),
+                    "--source-template",
+                    str(source_template),
+                    "--header-template",
+                    str(header_template),
+                    "--source-output",
+                    str(generated_source),
+                    "--header-output",
+                    str(generated_header),
+                ]
+                generated = subprocess.run(
+                    generate_command,
+                    cwd=root,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                if generated.returncode != 0:
+                    detail = generated.stderr.strip() or generated.stdout.strip()
+                    raise RuntimeError(f"could not generate resolver input: {detail}")
+                command = compiler + [
+                    "-std=c99",
+                    "-O2",
+                    "-Wall",
+                    "-Wextra",
+                    "-DOVERWORLD_BEHAVIOR_HOST",
+                    "-I",
+                    str(root / "include"),
+                    "-I",
+                    str(root / "data"),
+                    str(root / "lib/overworld/overworld_behavior_resolver.c"),
+                    str(root / "tools/overworld-viewer-v2/native/overworld_behavior_resolver_main.c"),
+                    str(generated_source),
+                    "-o",
+                    str(temporary),
+                ]
+                completed = subprocess.run(
+                    command,
+                    cwd=root,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                if completed.returncode != 0:
+                    detail = completed.stderr.strip() or completed.stdout.strip()
+                    raise RuntimeError(f"could not compile resolver host: {detail}")
             temporary.chmod(0o755)
             temporary.replace(output)
         finally:

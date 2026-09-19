@@ -1,0 +1,154 @@
+{
+  "schemaVersion": 1,
+  "id": "hop.mankey-visual-arc",
+  "title": "Mounted Mankey completes three cardinal Hop arcs",
+  "status": "active",
+  "capabilities": [
+    "hop"
+  ],
+  "proofLevel": "S4",
+  "costTier": 4,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/README.md#system-contracts",
+    "actor": "MOUNTED species 56 (mankey), acquired through mount; live handle and attached presentation required",
+    "trigger": "Prepare the current Mankey mount; hold DOWN, RIGHT, then LEFT for one Hop each; sample elapsed zero through landing for every arc",
+    "observable": "Each Hop has the exact actor-owned parabola from elapsed zero through duration, one logical commit, one terminal result, current live identity, and idle mounted control after landing",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Disposable test.sav, checked teleport, current party slot edit, mounted Mankey spawn, and idle settle before binding. Do not change Hop timing, arc state, collision, direction, or motion counters."
+      }
+    ],
+    "limits": [
+      "Prepared own-party setup does not prove natural selection or population spawning.",
+      "This test covers the retained DOWN, RIGHT, LEFT arc contract. Nearest diagonal selection stays in its separate requirement.",
+      "Registration alone is not runtime acceptance; the checked shared test must pass on the current ROM."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "input",
+      "value": "Prepare and bind the current mounted Mankey"
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Complete DOWN, RIGHT, and LEFT Hops with the native elapsed-zero reader and every rendered arc frame"
+    }
+  ],
+  "stop": {
+    "frameBudget": 1600,
+    "condition": "All three measured Hops land and return mounted control"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ],
+    "orderedEvents": [
+      {
+        "id": "start",
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 2
+        }
+      },
+      {
+        "id": "commit",
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 2
+        }
+      },
+      {
+        "id": "finish",
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 2
+        }
+      },
+      {
+        "id": "control",
+        "event": "CONTROL_RETURNED",
+        "reason": "OK"
+      }
+    ],
+    "eventCounts": [
+      {
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 2
+        },
+        "minimum": 3,
+        "maximum": 3
+      },
+      {
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 2
+        },
+        "minimum": 3,
+        "maximum": 3
+      },
+      {
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 2
+        },
+        "minimum": 3,
+        "maximum": 3
+      },
+      {
+        "event": "CONTROL_RETURNED",
+        "reason": "OK",
+        "minimum": 3,
+        "maximum": 3
+      }
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "hop.mankey-visual-arc", "claims": ["natural-input", "live-actor-identity", "rendered-motion", "control-release"], "minimumFrames": 120}
+}

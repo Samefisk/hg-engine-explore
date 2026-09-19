@@ -10,24 +10,35 @@ MEMORY {
         ewram   : ORIGIN = 0x023BAB00, LENGTH = 0x1D00
 }
 
+OverworldWalk_DeltaX = 0x023BF59C | 1;
+OverworldWalk_DeltaY = 0x023BF5BE | 1;
+OverworldWalk_DirectionFromKeys = 0x023BF534 | 1;
+OverworldWalk_StrictDiagonalAllowed = 0x023BF6CE | 1;
+OverworldWalk_DiagonalFacing = 0x023BF74E | 1;
+OverworldWalk_ResolveMountedDiagonal = 0x023BF780 | 1;
+OverworldWalk_StartMountedFlat = 0x023BF840 | 1;
+OverworldWalk_FilterMountedInput = 0x023BF9A0 | 1;
+
 SECTIONS {
         .text : {
                 FILL (0xABCD)
                 KEEP(*(.overworld_mount_precode))
                 KEEP(*(.overworld_mount_hop_search))
                 KEEP(*(.overworld_mount_streaming))
-                ASSERT(. <= ORIGIN(rom) + 0x304,
+                /* Private forwarding code stays inside this overlay. Its
+                 * body and the fixed public entries below do not change. */
+                KEEP(*(.overworld_mount_boundary_thunk))
+                ASSERT(. <= ORIGIN(rom) + 0x328,
                     "overworld mount precode exceeds expanded reserve");
-                . = ORIGIN(rom) + 0x304;
+                . = ORIGIN(rom) + 0x328;
                 __text_start = . ;
                 KEEP(*(.overworld_mount_motion))
-                build/thumb_help.o(.text)
                 ASSERT(. <= ORIGIN(rom) + 0xAE0,
                     "overworld mount motion exceeds audited archive gap");
                 . = ORIGIN(rom) + 0xAE0;
-                KEEP(*(.overworld_wild_movement_policy_entry))
-                ASSERT(. <= ORIGIN(rom) + 0xAF0,
-                    "overworld wild movement policy entry exceeds ABI reserve");
+                FILL (0x0000)
+                . = ORIGIN(rom) + 0xAF0;
+                FILL (0xABCD)
                 . = ORIGIN(rom) + 0xB00;
                 KEEP(*(.overworld_mount_entry))
                 ASSERT(. <= ORIGIN(rom) + 0xB20,
@@ -35,6 +46,7 @@ SECTIONS {
                 . = ORIGIN(rom) + 0xB20;
                 KEEP(*(.overworld_mount_control))
                 KEEP(*(.overworld_mount_control_tail))
+                KEEP(*(.overworld_mount_control_gap))
                 ASSERT(. <= ORIGIN(rom) + 0xBA0,
                     "overworld mount player-control wrapper exceeded reserve");
                 . = ORIGIN(rom) + 0xBA0;

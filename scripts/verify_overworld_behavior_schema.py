@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove the generated v72 behavior schema matches C and Workshop contracts."""
+"""Prove the generated v77 behavior schema matches C and Workshop contracts."""
 
 from __future__ import annotations
 
@@ -78,7 +78,16 @@ def main() -> int:
         fail("committed generated host metadata is stale")
     header_text = HEADER.read_text(encoding="utf-8")
     actual_layout = parse_c_layout(header_text, schema["compactCType"])
-    expected_layout = [(field["key"], field["cType"], field["offset"]) for field in fields]
+    # v74 through v77 each add one logical field to an existing physical
+    # byte. The schema assigns non-overlapping bit ranges to each packed pair.
+    expected_layout = []
+    seen_storage = set()
+    for field in fields:
+        storage = (field["offset"], field["cType"])
+        if storage in seen_storage:
+            continue
+        seen_storage.add(storage)
+        expected_layout.append((field["key"], field["cType"], field["offset"]))
     if actual_layout != expected_layout:
         fail("generated field order or offsets do not match the compact C layout")
 
@@ -102,7 +111,7 @@ def main() -> int:
             fail(f"generated C metadata is incomplete for {field['key']}")
 
     validator = validator_metadata(schema)
-    for word, expected in {"1": 0x07FFFFFF, "2": 0x00007FFF, "3": 0x01FFFFFF}.items():
+    for word, expected in {"1": 0x07FFFFFF, "2": 0x00007FFF, "3": 0x3FFFFFFF}.items():
         if validator["allowedOverrideMasks"][word] != expected:
             fail(f"generated allowed mask {word} is wrong")
 
@@ -145,7 +154,16 @@ def main() -> int:
         if key in viewer.NUMERIC_PROFILE_FIELD_OPTION_MAX and viewer.NUMERIC_PROFILE_FIELD_OPTION_MAX[key] != bounds["max"]:
             fail(f"Workshop maximum differs for {key}")
 
-    print("behavior schema: 67 fields match compact v72 C layout, masks, and Workshop metadata")
+    required_turn_skid_macros = (
+        "OW_WILD_BEHAVIOR_TURN_SKID_OPTIONS(tilesBeforeTurnSkid, planTurnSkidPath, stopSkid)",
+        "OW_WILD_BEHAVIOR_TILES_BEFORE_TURN_SKID(options)",
+        "OW_WILD_BEHAVIOR_PLANS_TURN_SKID_PATH(options)",
+        "OW_WILD_BEHAVIOR_STOPS_WITH_SKID(options)",
+    )
+    if any(fragment not in header_text for fragment in required_turn_skid_macros):
+        fail("C header does not publish the packed turn-skid option contract")
+
+    print("behavior schema: 72 logical fields match compact v77 C layout, masks, and Workshop metadata")
     return 0
 
 

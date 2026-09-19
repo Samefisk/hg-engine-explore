@@ -26,33 +26,34 @@ OWBD_CHILL_ACTION_OFFSET = 12
 OWBD_CHILL_ACTION_FIELD_BIT = 1 << 12
 OWBD_LOCOMOTION_MAX = 11
 OWBD_SURFACE_MODEL_SIZE = 6
-OWBD_SURFACE_INSTANCE_SIZE = 10
+OWBD_SURFACE_INSTANCE_SIZE = 8
 OWBD_SURFACE_TEMPLATE_SIZE = 2
 OWBD_MASK_ALLOWED = 0x07FFFFFF
 OWBD_MASK2_ALLOWED = 0x7FFF
-OWBD_MASK3_ALLOWED = 0x01FFFFFF
+OWBD_MASK3_ALLOWED = 0x3FFFFFFF
 OWBD_RELATIVE_MASK_ALLOWED = 0x05F101F8
 OWBD_RELATIVE_MASK2_ALLOWED = 0x1F8F
-OWBD_RELATIVE_MASK3_ALLOWED = 0x0140F8F3
+OWBD_RELATIVE_MASK3_ALLOWED = 0x0D40F8F3
 OWBD_BOUNDED_MASK_ALLOWED = 0x01C00180
 OWBD_BOUNDED_MASK2_ALLOWED = 0x1F84
-OWBD_BOUNDED_MASK3_ALLOWED = 0x0140F8F3
+OWBD_BOUNDED_MASK3_ALLOWED = 0x0D40F8F3
 # Compact data fields are stored in the same order as the mask bits.
 OWBD_OPERATOR_FIELD_PROFILE_OFFSETS = tuple(
-    index if index < 34 else index + 2 if index < 52 else index + 4
-    for index in range(67)
+    69 if index in (70, 71) else 63 if index == 69 else 64 if index == 68
+    else index if index < 34 else index + 2 if index < 52 else index + 4
+    for index in range(72)
 )
 OWBD_OPERATOR_FIELD_MAXIMUMS = (
     0, 0, 0, 255, 64, 64, 64, 32, 64, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0,
     0, 12, 12, 255, 64, 255, 0, 10, 8, 8, 32, 255, 0, 0, 0, 64, 32, 32,
     15, 64, 15, 0, 0, 32, 255, 0, 0, 255, 255, 32, 32, 0, 0, 0, 8, 8, 8, 32,
-    5, 0, 0, 0, 0, 0, 0, 255, 32, 32,
+    5, 0, 0, 0, 0, 0, 0, 255, 32, 32, 33, 32, 32, 0, 0,
 )
 OWBD_BOUNDED_FIELD_MAXIMUMS = (
     0, 0, 0, 0, 0, 0, 0, 32, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 255, 64, 255, 0, 0, 0, 0, 32, 0, 0, 0, 0, 64, 32, 32,
     15, 64, 15, 0, 0, 32, 255, 0, 0, 255, 255, 32, 32, 0, 0, 0, 8, 8, 8, 32,
-    5, 0, 0, 0, 0, 0, 0, 255, 32, 32,
+    5, 0, 0, 0, 0, 0, 0, 255, 32, 32, 0, 32, 32, 0, 0,
 )
 OWBD_OVERRIDE_PROFILE_VALUE_OFFSET = 32
 OWBD_OVERRIDE_PROFILE_COMPOUND_BOUND_OFFSET = 140
@@ -86,6 +87,13 @@ OWBD_CHAIN_REPOSITION_DUST_OFFSET = 62
 OWBD_CHAIN_REPOSITION_DUST_FIELD_BIT = 1 << 16
 OWBD_CHAIN_REPOSITION_ALLOW_CARDINAL_OFFSET = 63
 OWBD_CHAIN_REPOSITION_ALLOW_CARDINAL_FIELD_BIT = 1 << 17
+OWBD_WALK_PAUSE_VARIANCE_OFFSET = 63
+OWBD_WALK_PAUSE_VARIANCE_FIELD_BIT = 1 << 27
+OWBD_WALK_PAUSE_VARIANCE_SHIFT = 1
+OWBD_WALK_PAUSE_VARIANCE_MASK = 0xFE
+OWBD_CHAIN_PAUSE_ACTION_OFFSET = 31
+OWBD_CHAIN_PAUSE_ACTION_FIELD_BIT = 1 << 4
+OWBD_CHAIN_PAUSE_ACTION_MAX = 7
 OWBD_CHAIN_REPOSITION_ALLOW_DIAGONAL_OFFSET = 64
 OWBD_CHAIN_REPOSITION_ALLOW_DIAGONAL_FIELD_BIT = 1 << 18
 OWBD_WALK_OPTIONS_OFFSET = 65
@@ -98,16 +106,50 @@ OWBD_WALK_PAUSE_OFFSET = 68
 OWBD_WALK_PAUSE_FIELD_BIT = 1 << 22
 OWBD_TILES_BEFORE_TURN_SKID_OFFSET = 69
 OWBD_TILES_BEFORE_TURN_SKID_FIELD_BIT = 1 << 23
+OWBD_TILES_BEFORE_TURN_SKID_MASK = 0x3F
+OWBD_STOP_SKID_FIELD_BIT = 1 << 28
+OWBD_STOP_SKID_MASK = 0x80
+OWBD_PLAN_TURN_SKID_PATH_FIELD_BIT = 1 << 29
+OWBD_PLAN_TURN_SKID_PATH_MASK = 0x40
 OWBD_WALK_STOMP_TIME_OFFSET = 70
 OWBD_WALK_STOMP_TIME_FIELD_BIT = 1 << 24
-OWBD_WALK_OPTIONS_RESERVED_MASK = 0x0E
+OWBD_WALK_ACCELERATION_STEP_OFFSET = 71
+OWBD_WALK_ACCELERATION_STEP_FIELD_BIT = 1 << 25
+OWBD_WALK_TIME_VARIANCE_OFFSET = 64
+OWBD_WALK_TIME_VARIANCE_FIELD_BIT = 1 << 26
+OWBD_WALK_TIME_VARIANCE_SHIFT = 1
+OWBD_WALK_TIME_VARIANCE_MASK = 0xFE
+OWBD_WALK_SWAY_WIDTH_SHIFT = 1
+OWBD_WALK_SWAY_WIDTH_MASK = 0x0E
+OWBD_WALK_SWAY_WIDTH_MAX = 7
+OWBD_WALK_OPTIONS_RESERVED_MASK = 0x00
 OWBD_WALK_CRASH_SOUND_MASK = 0x10
 OWBD_WALK_CRASH_SOUND_SHIFT = 4
 OWBD_WALK_FACING_MASK = 0xC0
 OWBD_SPAWN_DESTINATION_OFFSET = 17
 OWBD_SPAWN_DESTINATION_MAX = 20
 OWBD_SURFACE_TYPE_FLOWERBED = 3
-OWBD_SURFACE_HEIGHT_PAGE_NATIVE_GROUND = 0xFF
+OWBD_SURFACE_TYPE_CANOPY = 4
+OWBD_SURFACE_TYPE_COUNT = 5
+OWBD_SURFACE_HEIGHT_PAGE_NATIVE_GROUND = 0x1F
+OWBD_SURFACE_CANOPY_HEIGHT_OFFSET_Q4 = 0x3158
+
+
+def owbd_operator_field_value(blob: bytes, profile_base: int, field_index: int) -> int:
+    value = blob[profile_base + OWBD_OPERATOR_FIELD_PROFILE_OFFSETS[field_index]]
+    if field_index in (59, 60):
+        return value & 1
+    if field_index == 68:
+        return (value & OWBD_WALK_TIME_VARIANCE_MASK) >> OWBD_WALK_TIME_VARIANCE_SHIFT
+    if field_index == 69:
+        return (value & OWBD_WALK_PAUSE_VARIANCE_MASK) >> OWBD_WALK_PAUSE_VARIANCE_SHIFT
+    if field_index == 65:
+        return value & OWBD_TILES_BEFORE_TURN_SKID_MASK
+    if field_index == 70:
+        return 1 if value & OWBD_STOP_SKID_MASK else 0
+    if field_index == 71:
+        return 1 if value & OWBD_PLAN_TURN_SKID_PATH_MASK else 0
+    return value
 
 OWED_MAGIC = 0x4F574544
 OWED_VERSION = 2
@@ -417,25 +459,53 @@ def validate_owbd(path: Path, source: Path) -> None:
             (OWBD_CHAIN_REPOSITION_ALLOW_CARDINAL_OFFSET, "cardinal-direction"),
             (OWBD_CHAIN_REPOSITION_ALLOW_DIAGONAL_OFFSET, "diagonal-direction"),
         ):
+            option_value = blob[profile_offset + option_offset]
+            if option_offset in (
+                OWBD_CHAIN_REPOSITION_ALLOW_CARDINAL_OFFSET,
+                OWBD_CHAIN_REPOSITION_ALLOW_DIAGONAL_OFFSET,
+            ):
+                option_value &= 1
             require(
-                blob[profile_offset + option_offset] <= 1,
+                option_value <= 1,
                 f"{path}: class profile {index} has an invalid reposition {option_name} option",
             )
         walk_options = blob[profile_offset + OWBD_WALK_OPTIONS_OFFSET]
         require(
             (walk_options & OWBD_WALK_OPTIONS_RESERVED_MASK) == 0
+            and ((walk_options & OWBD_WALK_SWAY_WIDTH_MASK)
+                 >> OWBD_WALK_SWAY_WIDTH_SHIFT) <= OWBD_WALK_SWAY_WIDTH_MAX
             and ((walk_options & OWBD_WALK_CRASH_SOUND_MASK)
                  >> OWBD_WALK_CRASH_SOUND_SHIFT) <= 1
             and (walk_options & OWBD_WALK_FACING_MASK) != OWBD_WALK_FACING_MASK,
             f"{path}: class profile {index} has invalid Walk options",
         )
         require(
-            blob[profile_offset + OWBD_TILES_BEFORE_TURN_SKID_OFFSET] <= 32,
+            (blob[profile_offset + OWBD_TILES_BEFORE_TURN_SKID_OFFSET]
+             & OWBD_TILES_BEFORE_TURN_SKID_MASK) <= 32,
             f"{path}: class profile {index} turn-skid buildup must be between 0 and 32",
         )
         require(
             blob[profile_offset + OWBD_WALK_STOMP_TIME_OFFSET] <= 32,
             f"{path}: class profile {index} stomp time must be 0 (off) or 1..32 frames",
+        )
+        require(
+            blob[profile_offset + OWBD_WALK_ACCELERATION_STEP_OFFSET] <= 33,
+            f"{path}: class profile {index} acceleration must be 0 (none), 1..32 frames, or 33 (/2)",
+        )
+        require(
+            (blob[profile_offset + OWBD_WALK_TIME_VARIANCE_OFFSET]
+             & OWBD_WALK_TIME_VARIANCE_MASK) >> OWBD_WALK_TIME_VARIANCE_SHIFT <= 32,
+            f"{path}: class profile {index} Walk time variance must be between 0 and 32 frames",
+        )
+        require(
+            (blob[profile_offset + OWBD_WALK_PAUSE_VARIANCE_OFFSET]
+             & OWBD_WALK_PAUSE_VARIANCE_MASK) >> OWBD_WALK_PAUSE_VARIANCE_SHIFT <= 32,
+            f"{path}: class profile {index} Walk pause variance must be between 0 and 32 frames",
+        )
+        require(
+            blob[profile_offset + OWBD_CHAIN_PAUSE_ACTION_OFFSET]
+                <= OWBD_CHAIN_PAUSE_ACTION_MAX,
+            f"{path}: class profile {index} chain pause action is invalid",
         )
         require(
             (struct.unpack_from("<H", blob, profile_offset + OWBD_ALLOWED_TERRAIN_VALUE_OFFSET)[0]
@@ -502,6 +572,15 @@ def validate_owbd(path: Path, source: Path) -> None:
             )
         require((mask & ~OWBD_MASK_ALLOWED) == 0, f"{path}: override profile {index} mask has undefined bits")
         require((mask2 & ~OWBD_MASK2_ALLOWED) == 0, f"{path}: override profile {index} mask2 has undefined bits")
+        if mask2 & OWBD_CHAIN_PAUSE_ACTION_FIELD_BIT:
+            require(
+                blob[
+                    profile_offset
+                    + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+                    + OWBD_CHAIN_PAUSE_ACTION_OFFSET
+                ] <= OWBD_CHAIN_PAUSE_ACTION_MAX,
+                f"{path}: override profile {index} chain pause action is invalid",
+            )
         require(
             (mask2 & OWBD_ALLOWED_TERRAIN_FIELD_BITS) in (0, OWBD_ALLOWED_TERRAIN_FIELD_BITS),
             f"{path}: override profile {index} must update both terrain-policy fields together",
@@ -556,6 +635,8 @@ def validate_owbd(path: Path, source: Path) -> None:
             ]
             require(
                 (walk_options & OWBD_WALK_OPTIONS_RESERVED_MASK) == 0
+                and ((walk_options & OWBD_WALK_SWAY_WIDTH_MASK)
+                     >> OWBD_WALK_SWAY_WIDTH_SHIFT) <= OWBD_WALK_SWAY_WIDTH_MAX
                 and ((walk_options & OWBD_WALK_CRASH_SOUND_MASK)
                      >> OWBD_WALK_CRASH_SOUND_SHIFT) <= 1
                 and (walk_options & OWBD_WALK_FACING_MASK) != OWBD_WALK_FACING_MASK,
@@ -564,11 +645,11 @@ def validate_owbd(path: Path, source: Path) -> None:
         if mask3 & OWBD_TILES_BEFORE_TURN_SKID_FIELD_BIT \
                 and not operator_mask3 & OWBD_TILES_BEFORE_TURN_SKID_FIELD_BIT:
             require(
-                blob[
+                (blob[
                     profile_offset
                     + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
                     + OWBD_TILES_BEFORE_TURN_SKID_OFFSET
-                ] <= 32,
+                ] & OWBD_TILES_BEFORE_TURN_SKID_MASK) <= 32,
                 f"{path}: override profile {index} turn-skid buildup must be between 0 and 32",
             )
         if mask3 & OWBD_WALK_STOMP_TIME_FIELD_BIT \
@@ -580,6 +661,37 @@ def validate_owbd(path: Path, source: Path) -> None:
                     + OWBD_WALK_STOMP_TIME_OFFSET
                 ] <= 32,
                 f"{path}: override profile {index} exact stomp time must be 0 (off) or 1..32 frames",
+            )
+        if mask3 & OWBD_WALK_ACCELERATION_STEP_FIELD_BIT:
+            require(
+                blob[
+                    profile_offset
+                    + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+                    + OWBD_WALK_ACCELERATION_STEP_OFFSET
+                ] <= 33,
+                f"{path}: override profile {index} exact acceleration must be 0 (none), 1..32 frames, or 33 (/2)",
+            )
+        if mask3 & OWBD_WALK_TIME_VARIANCE_FIELD_BIT \
+                and not operator_mask3 & OWBD_WALK_TIME_VARIANCE_FIELD_BIT:
+            require(
+                ((blob[
+                    profile_offset
+                    + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+                    + OWBD_WALK_TIME_VARIANCE_OFFSET
+                ] & OWBD_WALK_TIME_VARIANCE_MASK)
+                 >> OWBD_WALK_TIME_VARIANCE_SHIFT) <= 32,
+                f"{path}: override profile {index} exact Walk time variance must be between 0 and 32 frames",
+            )
+        if mask3 & OWBD_WALK_PAUSE_VARIANCE_FIELD_BIT \
+                and not operator_mask3 & OWBD_WALK_PAUSE_VARIANCE_FIELD_BIT:
+            require(
+                ((blob[
+                    profile_offset
+                    + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+                    + OWBD_WALK_PAUSE_VARIANCE_OFFSET
+                ] & OWBD_WALK_PAUSE_VARIANCE_MASK)
+                 >> OWBD_WALK_PAUSE_VARIANCE_SHIFT) <= 32,
+                f"{path}: override profile {index} exact Walk pause variance must be between 0 and 32 frames",
             )
         for chance_bit, chance_offset, chance_name in (
             (OWBD_WANDER_STRAIGHT_CHANCE_FIELD_BIT, OWBD_WANDER_STRAIGHT_CHANCE_OFFSET, "Wander straight"),
@@ -596,8 +708,16 @@ def validate_owbd(path: Path, source: Path) -> None:
             (OWBD_CHAIN_REPOSITION_ALLOW_DIAGONAL_FIELD_BIT, OWBD_CHAIN_REPOSITION_ALLOW_DIAGONAL_OFFSET, "diagonal-direction"),
         ):
             if mask3 & option_bit:
+                option_value = blob[
+                    profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + option_offset
+                ]
+                if option_bit in (
+                    OWBD_CHAIN_REPOSITION_ALLOW_CARDINAL_FIELD_BIT,
+                    OWBD_CHAIN_REPOSITION_ALLOW_DIAGONAL_FIELD_BIT,
+                ):
+                    option_value &= 1
                 require(
-                    blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + option_offset] <= 1,
+                    option_value <= 1,
                     f"{path}: override profile {index} has an invalid reposition {option_name} option",
                 )
         require(
@@ -617,11 +737,16 @@ def validate_owbd(path: Path, source: Path) -> None:
         require((relative_mask2 & ~OWBD_RELATIVE_MASK2_ALLOWED) == 0, f"{path}: override profile {index} has a non-numeric relative field in mask2")
         require((relative_mask3 & ~OWBD_RELATIVE_MASK3_ALLOWED) == 0, f"{path}: override profile {index} has a non-numeric relative field in mask3")
         field_index = 0
-        for operator_mask, width in zip((relative_mask, relative_mask2, relative_mask3), (27, 15, 25)):
+        for operator_mask, width in zip((relative_mask, relative_mask2, relative_mask3), (27, 15, 29)):
             for bit in range(width):
                 if operator_mask & (1 << bit):
-                    value_offset = profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + OWBD_OPERATOR_FIELD_PROFILE_OFFSETS[field_index]
-                    require(blob[value_offset] != 0x80, f"{path}: override profile {index} relative delta cannot be -128")
+                    value = owbd_operator_field_value(
+                        blob,
+                        profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET,
+                        field_index,
+                    )
+                    invalid_minimum = 0x40 if field_index in (68, 69) else 0x80
+                    require(value != invalid_minimum, f"{path}: override profile {index} relative delta uses its invalid minimum")
                 field_index += 1
         for operator_name, operator_masks in (
             ("at-least", (at_least_mask, at_least_mask2, at_least_mask3)),
@@ -638,7 +763,7 @@ def validate_owbd(path: Path, source: Path) -> None:
             for operator_mask, compound_word, width in zip(
                 operator_masks,
                 (relative_mask, relative_mask2, relative_mask3),
-                (27, 15, 25),
+                (27, 15, 29),
             ):
                 for bit in range(width):
                     if operator_mask & (1 << bit):
@@ -648,10 +773,14 @@ def validate_owbd(path: Path, source: Path) -> None:
                             if compound_word & (1 << bit)
                             else OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
                         )
-                        value_offset = profile_offset + value_base + OWBD_OPERATOR_FIELD_PROFILE_OFFSETS[field_index]
-                        require(blob[value_offset] <= maximum, f"{path}: override profile {index} {operator_name} threshold exceeds field maximum")
+                        value = owbd_operator_field_value(
+                            blob,
+                            profile_offset + value_base,
+                            field_index,
+                        )
+                        require(value <= maximum, f"{path}: override profile {index} {operator_name} threshold exceeds field maximum")
                         if field_index in (7, 48, 49, 53, 56, 57):
-                            require(blob[value_offset] != 0, f"{path}: override profile {index} positive field bound must be at least 1")
+                            require(value != 0, f"{path}: override profile {index} positive field bound must be at least 1")
                     field_index += 1
         for word, (relative_word, at_least_word, at_most_word) in enumerate(zip(
             (relative_mask, relative_mask2, relative_mask3),
@@ -697,17 +826,28 @@ def validate_owbd(path: Path, source: Path) -> None:
 
     instances = []
     for index in range(surface_instance_count):
-        min_x, min_y, template_id, local_surface_id, height_q4, height_page, surface_type, anchor_dx, anchor_dy = struct.unpack_from(
-            "<BBBBHBBbb",
+        min_x, min_y, template_id, local_surface_id, height_q4, packed_surface, packed_anchor = struct.unpack_from(
+            "<BBBBHBB",
             blob,
             surface_instances_offset + index * surface_instance_size,
         )
+        height_page = packed_surface & 0x1F
+        surface_type = packed_surface >> 5
+        anchor_dx = (packed_anchor & 0x0F) - (0x10 if packed_anchor & 0x08 else 0)
+        anchor_dy = (packed_anchor >> 4) - (0x10 if packed_anchor & 0x80 else 0)
         require(template_id < surface_template_count, f"{path}: surface instance {index} has an invalid template")
-        require(surface_type < 4, f"{path}: surface instance {index} has an invalid surface type")
+        require(surface_type < OWBD_SURFACE_TYPE_COUNT, f"{path}: surface instance {index} has an invalid surface type")
         if height_page == OWBD_SURFACE_HEIGHT_PAGE_NATIVE_GROUND:
             require(local_surface_id == 0, f"{path}: native-ground surface instance {index} has a local surface ID")
-            require(height_q4 == 0, f"{path}: native-ground surface instance {index} has a stored height")
-            require(surface_type == OWBD_SURFACE_TYPE_FLOWERBED, f"{path}: native-ground surface instance {index} is not Flowerbed")
+            require(surface_type in (OWBD_SURFACE_TYPE_FLOWERBED, OWBD_SURFACE_TYPE_CANOPY), f"{path}: native-ground surface instance {index} is not Flowerbed or Canopy")
+            require(
+                height_q4 == (
+                    OWBD_SURFACE_CANOPY_HEIGHT_OFFSET_Q4
+                    if surface_type == OWBD_SURFACE_TYPE_CANOPY
+                    else 0
+                ),
+                f"{path}: native-ground surface instance {index} has an invalid height offset",
+            )
             require(anchor_dx == 0 and anchor_dy == 0, f"{path}: native-ground surface instance {index} has an anchor delta")
         else:
             require(1 <= local_surface_id <= 15, f"{path}: elevated surface instance {index} local surface ID must be 1..15")

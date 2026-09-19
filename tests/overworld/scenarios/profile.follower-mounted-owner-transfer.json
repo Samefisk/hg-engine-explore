@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.follower-mounted-owner-transfer",
+  "title": "Same follower profile reaches mounted Owner without a second profile",
+  "status": "active",
+  "capabilities": ["profile.composition"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/README.md#current-invariants-to-preserve",
+    "actor": "Saved FOLLOWER Mankey56, party slot2 PID2920357538, becomes the same current MOUNTED actor.",
+    "trigger": "Prepared native mount of that current follower, with bounded read-only getter and Begin observations.",
+    "observable": "The exact current follower getter profile and primitives reach Begin; stored Owner bytes match and the same final actor owns input in the Owner lane.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {"phase": "before-observation", "target": "fixture", "change": "Copy test.nds and test.sav. Use the already healthy saved Mankey; no party edit, teleport, menu or healing route."},
+      {"phase": "before-observation", "target": "actors", "change": "Use fixed prepared spawn mounted command with slot2 and owner-transfer diagnostics. Read native getter and Begin values without changing profiles; retain all scoped receipts and cleanup."}
+    ],
+    "limits": [
+      "Prepared byte-transfer proof only. No normal Y/Select input, Hop completion, movement timing, full resolver provenance or soak claim.",
+      "One observed frame proves final identity and ownership only. The separate mount.begin-current-follower input-and-Hop requirement remains open."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "mankey", "species": 56, "role": "MOUNTED", "acquisition": "mount", "minimum": 1, "maximum": 1, "motionActor": false, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Read the saved follower identity, then mount that same subject through the prepared lifecycle."},
+    {"at": 1, "kind": "lifecycle", "value": "Compare getter output, Begin input and stored Owner; inspect one completed final mounted frame."}
+  ],
+  "stop": {"frameBudget": 600, "condition": "One complete profile transfer and final bound frame, or first missing/invalid observation."},
+  "expect": {"requiredEvents": [], "forbiddenEvents": [], "invariants": ["The mounted Owner lane comes from the current follower profile", "Every active actor handle uses the current field epoch"]},
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "profile.follower-mounted-owner-transfer", "claims": ["live-actor-identity", "profile-resolution"], "minimumFrames": 1}
+}

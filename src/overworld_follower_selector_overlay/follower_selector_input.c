@@ -7,6 +7,7 @@
 #include "../../include/map_events_internal.h"
 #include "../../include/overlay.h"
 #include "../../include/overworld_wild_helper.h"
+#include "../../include/overworld_wild_runtime.h"
 #include "../../include/overworld_wild_spawns_internal.h"
 #include "../../include/save.h"
 #include "../../include/script.h"
@@ -19,6 +20,9 @@
     OVERWORLD_FOLLOWER_TRANSITION_QUEUE_DESPAWN_COMMAND
 #define FOLLOWER_TRANSITION_COMMAND_SPAWN_BASE 1
 #define FOLLOWER_TRANSITION_RETRY_LIMIT 60
+#define FOLLOWER_TRANSITION_HEAD_ENGINE_ISSUED (1u << 0)
+#define FOLLOWER_TRANSITION_HEAD_RELEASE_ACCEPTED (1u << 1)
+#define FOLLOWER_TRANSITION_HEAD_RELEASE_REJECTED (1u << 2)
 #define FOLLOWER_SELECTOR_SYSTEM_NEW_KEYS (*(vu32 *)0x021D1154)
 #define FOLLOWER_RECALL_BALL_WHITE_TAG 231
 #define FOLLOWER_RECALL_ACTOR_RENDER_CALLBACK_OFFSET 0x50
@@ -363,7 +367,6 @@ static BOOL OverworldFollowerRecall_ObjectIsCurrent(
     }
     manager = (MapObjectMan *)fieldSystem->mapObjectMan;
     return object != NULL
-        && manager != NULL
         && manager->objects == sFollowerRecall.objects
         && object >= manager->objects
         && object < manager->objects + manager->object_count
@@ -379,7 +382,6 @@ static BOOL OverworldFollowerRecall_FollowerIsCurrent(FieldSystem *fieldSystem)
     return sFollowerRecall.phase != FOLLOWER_RECALL_PHASE_NONE
         && fieldSystem != NULL
         && fieldSystem == gFieldSysPtr
-        && fieldSystem == sFollowerSelectorFieldSystem
         && fieldSystem->location != NULL
         && fieldSystem->mapObjectMan == sFollowerRecall.manager
         && (u16)fieldSystem->location->mapId == sFollowerSelectorMapId
@@ -458,7 +460,7 @@ static s32 OverworldFollowerRecall_Lerp(s32 start, s32 target, s32 progress)
         / FOLLOWER_RECALL_PROGRESS_MAX);
 }
 
-static u8 __attribute__((noinline)) OverworldFollowerRecall_GetPullFrames(
+static u8 OverworldFollowerRecall_GetPullFrames(
     const LocalMapObject *follower,
     const LocalMapObject *player)
 {
@@ -635,8 +637,7 @@ static void OverworldFollowerRecall_Finish(
             MapObject_ClearBits(follower, BIT_VANISH);
         }
     }
-    if (fieldSystem != NULL
-        && OverworldFollowerRecall_ObjectIsCurrent(
+    if (OverworldFollowerRecall_ObjectIsCurrent(
             fieldSystem,
             ball,
             OW_WILD_PLAYER_BALL_PROJECTILE_OBJECT_ID)) {
@@ -992,7 +993,27 @@ static void OverworldFollowerTransitionQueue_Clear(void)
         (OverworldFollowerTransitionQueueStorage){ 0 };
 }
 
-static void OverworldFollowerTransitionQueue_Tick(
+static BOOL OverworldFollowerTransitionQueue_RequestRelease(void)
+{
+    static const OverworldRoleControllerInput input = {
+        OVERWORLD_ROLE_CONTROLLER_VERSION,
+        sizeof(OverworldRoleControllerInput),
+        OVERWORLD_ROLE_CONTROLLER_ROLE_FOLLOWER,
+        OVERWORLD_ROLE_CONTROLLER_EVENT_REQUEST,
+        OVERWORLD_ROLE_CONTROLLER_INTENT_RELEASE,
+        OVERWORLD_ROLE_CONTROLLER_DIRECTION_NONE,
+        0,
+        0,
+        0,
+        0,
+    };
+    OverworldRoleControllerOutput output;
+
+    OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY->reduceRole(&input, &output);
+    return output.decision == OVERWORLD_ROLE_CONTROLLER_DECISION_INTENT;
+}
+
+static void __attribute__((noinline)) OverworldFollowerTransitionQueue_Tick(
     FieldSystem *fieldSystem)
 {
     OverworldWildSpawnState *state = &sOverworldWildSpawnState;
@@ -1017,7 +1038,18 @@ static void OverworldFollowerTransitionQueue_Tick(
     playerBallActive =
         OverworldFollowerSelectorInput_IsPlayerBallActive();
     if (command == FOLLOWER_TRANSITION_COMMAND_DESPAWN) {
-        if (OVERWORLD_FOLLOWER_TRANSITION_QUEUE->headIssued) {
+        if (OVERWORLD_FOLLOWER_TRANSITION_QUEUE->headIssued == 0) {
+            OVERWORLD_FOLLOWER_TRANSITION_QUEUE->headIssued =
+                OverworldFollowerTransitionQueue_RequestRelease()
+                    ? FOLLOWER_TRANSITION_HEAD_RELEASE_ACCEPTED
+                    : FOLLOWER_TRANSITION_HEAD_RELEASE_REJECTED;
+        }
+        if (OVERWORLD_FOLLOWER_TRANSITION_QUEUE->headIssued
+                == FOLLOWER_TRANSITION_HEAD_RELEASE_REJECTED) {
+            return;
+        }
+        if ((OVERWORLD_FOLLOWER_TRANSITION_QUEUE->headIssued
+                & FOLLOWER_TRANSITION_HEAD_ENGINE_ISSUED) != 0) {
             if (sFollowerRecall.phase != FOLLOWER_RECALL_PHASE_NONE) {
                 if (OverworldFollowerRecall_Tick(fieldSystem)) {
                     return;
@@ -1025,7 +1057,8 @@ static void OverworldFollowerTransitionQueue_Tick(
                 if (OverworldWildSpawns_GetSelectedFollowerPartySlot(
                         fieldSystem)
                         != CUSTOM_FOLLOWER_PARTY_SLOT_NONE) {
-                    OVERWORLD_FOLLOWER_TRANSITION_QUEUE->headIssued = FALSE;
+                    OVERWORLD_FOLLOWER_TRANSITION_QUEUE->headIssued =
+                        FOLLOWER_TRANSITION_HEAD_RELEASE_ACCEPTED;
                     return;
                 }
             }
@@ -1052,7 +1085,8 @@ static void OverworldFollowerTransitionQueue_Tick(
         }
         if (follower->active) {
             if (OverworldFollowerRecall_Begin(fieldSystem)) {
-                OVERWORLD_FOLLOWER_TRANSITION_QUEUE->headIssued = TRUE;
+                OVERWORLD_FOLLOWER_TRANSITION_QUEUE->headIssued |=
+                    FOLLOWER_TRANSITION_HEAD_ENGINE_ISSUED;
                 OVERWORLD_FOLLOWER_TRANSITION_QUEUE->headRetries = 0;
             } else if (++OVERWORLD_FOLLOWER_TRANSITION_QUEUE->headRetries
                     >= FOLLOWER_TRANSITION_RETRY_LIMIT) {
@@ -1072,7 +1106,8 @@ static void OverworldFollowerTransitionQueue_Tick(
     }
 
     partySlot = command - FOLLOWER_TRANSITION_COMMAND_SPAWN_BASE;
-    if (OVERWORLD_FOLLOWER_TRANSITION_QUEUE->headIssued) {
+    if ((OVERWORLD_FOLLOWER_TRANSITION_QUEUE->headIssued
+            & FOLLOWER_TRANSITION_HEAD_ENGINE_ISSUED) != 0) {
         if (releaseState == OW_WILD_FOLLOWER_RELEASE_FAILED
             && !playerBallActive) {
             (void)OverworldWildSpawns_SelectFollowerPartySlot(
@@ -1107,7 +1142,8 @@ static void OverworldFollowerTransitionQueue_Tick(
     if (OverworldWildSpawns_SelectFollowerPartySlot(
             fieldSystem,
             partySlot)) {
-        OVERWORLD_FOLLOWER_TRANSITION_QUEUE->headIssued = TRUE;
+        OVERWORLD_FOLLOWER_TRANSITION_QUEUE->headIssued |=
+            FOLLOWER_TRANSITION_HEAD_ENGINE_ISSUED;
     }
 }
 

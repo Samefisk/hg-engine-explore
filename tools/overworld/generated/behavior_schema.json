@@ -1,6 +1,6 @@
 {
   "editor": {
-    "blobVersion": 72,
+    "blobVersion": 77,
     "boundedOverrideOperatorFieldKeys": [
       "chillSpeed",
       "range",
@@ -26,7 +26,9 @@
       "chainRepositionSpeed",
       "chainRepositionDistance",
       "walkPause",
-      "walkStompTime"
+      "walkStompTime",
+      "walkTimeVariance",
+      "walkPauseVariance"
     ],
     "fields": [
       {
@@ -350,7 +352,7 @@
         "key": "hopAllowNonCardinal",
         "label": "Allowed movement directions",
         "lane": "owner",
-        "max": 255,
+        "max": 2,
         "min": 0,
         "numeric": false,
         "operators": [
@@ -790,7 +792,7 @@
         "featureId": "profile.composition",
         "id": 44,
         "key": "activeProfile",
-        "label": "Active override profile",
+        "label": "Active application",
         "lane": "active",
         "max": 255,
         "min": 0,
@@ -799,14 +801,14 @@
           "replace"
         ],
         "path": "profile.composition.activeProfile",
-        "semanticUnit": "profileId",
+        "semanticUnit": "application",
         "unit": ""
       },
       {
         "featureId": "profile.composition",
         "id": 45,
         "key": "tiredProfile",
-        "label": "Tired override profile",
+        "label": "Tired application",
         "lane": "tired",
         "max": 255,
         "min": 0,
@@ -815,7 +817,7 @@
           "replace"
         ],
         "path": "profile.composition.tiredProfile",
-        "semanticUnit": "profileId",
+        "semanticUnit": "application",
         "unit": ""
       },
       {
@@ -1186,6 +1188,92 @@
         "path": "profile.lanes.owner.feedback.walk.stompAtTravelFrames",
         "semanticUnit": "frames",
         "unit": "frames"
+      },
+      {
+        "featureId": "walk.momentum",
+        "id": 67,
+        "key": "walkAccelerationStep",
+        "label": "Acceleration amount",
+        "lane": "owner",
+        "max": 33,
+        "min": 0,
+        "numeric": true,
+        "operators": [
+          "replace"
+        ],
+        "path": "profile.lanes.owner.momentum.framesPerStep",
+        "semanticUnit": "frames",
+        "unit": "frames"
+      },
+      {
+        "featureId": "walk",
+        "id": 68,
+        "key": "walkTimeVariance",
+        "label": "Walk time variance",
+        "lane": "owner",
+        "max": 32,
+        "min": 0,
+        "numeric": true,
+        "operators": [
+          "replace",
+          "relative",
+          "atLeast",
+          "atMost"
+        ],
+        "path": "profile.lanes.owner.locomotion.walk.travelFrameVariance",
+        "semanticUnit": "frames",
+        "unit": "frames"
+      },
+      {
+        "featureId": "walk",
+        "id": 69,
+        "key": "walkPauseVariance",
+        "label": "Pause variance",
+        "lane": "owner",
+        "max": 32,
+        "min": 0,
+        "numeric": true,
+        "operators": [
+          "replace",
+          "relative",
+          "atLeast",
+          "atMost"
+        ],
+        "path": "profile.lanes.owner.locomotion.walk.pauseFrameVariance",
+        "semanticUnit": "frames",
+        "unit": "frames"
+      },
+      {
+        "featureId": "walk.momentum",
+        "id": 70,
+        "key": "stopSkid",
+        "label": "Skid when stopping",
+        "lane": "owner",
+        "max": 1,
+        "min": 0,
+        "numeric": false,
+        "operators": [
+          "replace"
+        ],
+        "path": "profile.lanes.owner.momentum.stopSkid",
+        "semanticUnit": "boolean",
+        "unit": ""
+      },
+      {
+        "featureId": "walk.momentum",
+        "id": 71,
+        "key": "planTurnSkidPath",
+        "label": "Plan turn-skid path",
+        "lane": "owner",
+        "max": 1,
+        "min": 0,
+        "numeric": false,
+        "operators": [
+          "replace"
+        ],
+        "path": "profile.lanes.owner.momentum.turnSkid.planPath",
+        "semanticUnit": "boolean",
+        "unit": ""
       }
     ],
     "numericProfileFieldKeys": [
@@ -1234,7 +1322,10 @@
       "chainPauseActionChance",
       "walkPause",
       "tilesBeforeTurnSkid",
-      "walkStompTime"
+      "walkStompTime",
+      "walkAccelerationStep",
+      "walkTimeVariance",
+      "walkPauseVariance"
     ],
     "overrideFieldKeys": [
       "chillState",
@@ -1303,7 +1394,12 @@
       "chainPauseActionChance",
       "walkPause",
       "tilesBeforeTurnSkid",
-      "walkStompTime"
+      "walkStompTime",
+      "walkAccelerationStep",
+      "walkTimeVariance",
+      "walkPauseVariance",
+      "stopSkid",
+      "planTurnSkidPath"
     ],
     "relativeOverrideFieldKeys": [
       "alertTime",
@@ -1341,17 +1437,54 @@
       "chainRepositionSpeed",
       "chainRepositionDistance",
       "walkPause",
-      "walkStompTime"
+      "walkStompTime",
+      "walkTimeVariance",
+      "walkPauseVariance"
     ],
     "schemaVersion": 1
   },
   "generatedFrom": "tools/overworld/behavior_schema.json",
   "migration": {
-    "currentBlobVersion": 72,
+    "currentBlobVersion": 77,
     "v71ToV72": {
       "changes": [
         "Walk speed tiers become exact travel-frame values.",
         "walkStompTime uses byte 70 and no longer shares packed Walk options."
+      ],
+      "preservesCompactSize": true
+    },
+    "v72ToV73": {
+      "changes": [
+        "walkAccelerationStep uses the former tail-padding byte.",
+        "Zero disables acceleration; 1 through 32 remove frames; 33 preserves v72's ceil-half rule."
+      ],
+      "preservesCompactSize": true
+    },
+    "v73ToV74": {
+      "changes": [
+        "walkTimeVariance uses the seven unused high bits of the chain Reposition diagonal-option byte.",
+        "The direction mode and Walk variance remain independent override fields."
+      ],
+      "preservesCompactSize": true
+    },
+    "v74ToV75": {
+      "changes": [
+        "walkPauseVariance uses the seven unused high bits of the chain Reposition cardinal-option byte.",
+        "The cardinal option and Walk pause variance remain independent override fields."
+      ],
+      "preservesCompactSize": true
+    },
+    "v75ToV76": {
+      "changes": [
+        "stopSkid uses the high bit of the turn-skid buildup byte.",
+        "The turn-skid threshold and stop-skid option remain independent override fields."
+      ],
+      "preservesCompactSize": true
+    },
+    "v76ToV77": {
+      "changes": [
+        "planTurnSkidPath uses bit 6 of the turn-skid options byte.",
+        "The turn-skid threshold, path-planning option, and stop-skid option remain independent override fields."
       ],
       "preservesCompactSize": true
     },
@@ -2083,10 +2216,385 @@
           "walkStompTime"
         ],
         "version": 72
+      },
+      {
+        "fieldKeys": [
+          "chillState",
+          "alertState",
+          "alertEmote",
+          "alertTime",
+          "alertness",
+          "stamina",
+          "restTime",
+          "chillSpeed",
+          "range",
+          "jumpLevel",
+          "profileId",
+          "spawnState",
+          "chillAction",
+          "chillTarget",
+          "alertRange",
+          "playerAdjacentDirectionMasks",
+          "alertChance",
+          "spawnDestination",
+          "battleTrigger",
+          "hopAllowNonCardinal",
+          "hopMinDistance",
+          "hopMaxDistance",
+          "hopPause",
+          "teleportTime",
+          "teleportPause",
+          "alertSpecialAction",
+          "overworldLimit",
+          "spawnDestinationMinDistance",
+          "spawnDestinationMaxDistance",
+          "ramAccelerationSteps",
+          "ramMaxSpeed",
+          "chainPauseAction",
+          "chillAllowedTerrainMask",
+          "chillAllowedTerrainOverrideMask",
+          "hopTime",
+          "chaseBoostDistance",
+          "chaseBoostSpeed",
+          "hopSpinSpeed",
+          "spawnHopTime",
+          "circleRadius",
+          "continueWhenArrived",
+          "avoidPreviousTile",
+          "chainMovementVariance",
+          "chainPauseVariance",
+          "activeProfile",
+          "tiredProfile",
+          "hopElevationTimeScale",
+          "hopElevationArcScale",
+          "tilesToAccelerate",
+          "maxWalkSpeed",
+          "spawnDestinationMask",
+          "spawnDestinationOverrideMask",
+          "hopAllowVerticalObstacles",
+          "chainRepositionJumpCount",
+          "hopSwayWidth",
+          "spawnHopSwayWidth",
+          "chainRepositionSpeed",
+          "chainRepositionDistance",
+          "chainRepositionDust",
+          "chainRepositionAllowCardinal",
+          "chainRepositionAllowDiagonal",
+          "walkOptions",
+          "wanderStraightChance",
+          "chainPauseActionChance",
+          "walkPause",
+          "tilesBeforeTurnSkid",
+          "walkStompTime",
+          "walkAccelerationStep"
+        ],
+        "version": 73
+      },
+      {
+        "fieldKeys": [
+          "chillState",
+          "alertState",
+          "alertEmote",
+          "alertTime",
+          "alertness",
+          "stamina",
+          "restTime",
+          "chillSpeed",
+          "range",
+          "jumpLevel",
+          "profileId",
+          "spawnState",
+          "chillAction",
+          "chillTarget",
+          "alertRange",
+          "playerAdjacentDirectionMasks",
+          "alertChance",
+          "spawnDestination",
+          "battleTrigger",
+          "hopAllowNonCardinal",
+          "hopMinDistance",
+          "hopMaxDistance",
+          "hopPause",
+          "teleportTime",
+          "teleportPause",
+          "alertSpecialAction",
+          "overworldLimit",
+          "spawnDestinationMinDistance",
+          "spawnDestinationMaxDistance",
+          "ramAccelerationSteps",
+          "ramMaxSpeed",
+          "chainPauseAction",
+          "chillAllowedTerrainMask",
+          "chillAllowedTerrainOverrideMask",
+          "hopTime",
+          "chaseBoostDistance",
+          "chaseBoostSpeed",
+          "hopSpinSpeed",
+          "spawnHopTime",
+          "circleRadius",
+          "continueWhenArrived",
+          "avoidPreviousTile",
+          "chainMovementVariance",
+          "chainPauseVariance",
+          "activeProfile",
+          "tiredProfile",
+          "hopElevationTimeScale",
+          "hopElevationArcScale",
+          "tilesToAccelerate",
+          "maxWalkSpeed",
+          "spawnDestinationMask",
+          "spawnDestinationOverrideMask",
+          "hopAllowVerticalObstacles",
+          "chainRepositionJumpCount",
+          "hopSwayWidth",
+          "spawnHopSwayWidth",
+          "chainRepositionSpeed",
+          "chainRepositionDistance",
+          "chainRepositionDust",
+          "chainRepositionAllowCardinal",
+          "chainRepositionAllowDiagonal",
+          "walkOptions",
+          "wanderStraightChance",
+          "chainPauseActionChance",
+          "walkPause",
+          "tilesBeforeTurnSkid",
+          "walkStompTime",
+          "walkAccelerationStep",
+          "walkTimeVariance"
+        ],
+        "version": 74
+      },
+      {
+        "fieldKeys": [
+          "chillState",
+          "alertState",
+          "alertEmote",
+          "alertTime",
+          "alertness",
+          "stamina",
+          "restTime",
+          "chillSpeed",
+          "range",
+          "jumpLevel",
+          "profileId",
+          "spawnState",
+          "chillAction",
+          "chillTarget",
+          "alertRange",
+          "playerAdjacentDirectionMasks",
+          "alertChance",
+          "spawnDestination",
+          "battleTrigger",
+          "hopAllowNonCardinal",
+          "hopMinDistance",
+          "hopMaxDistance",
+          "hopPause",
+          "teleportTime",
+          "teleportPause",
+          "alertSpecialAction",
+          "overworldLimit",
+          "spawnDestinationMinDistance",
+          "spawnDestinationMaxDistance",
+          "ramAccelerationSteps",
+          "ramMaxSpeed",
+          "chainPauseAction",
+          "chillAllowedTerrainMask",
+          "chillAllowedTerrainOverrideMask",
+          "hopTime",
+          "chaseBoostDistance",
+          "chaseBoostSpeed",
+          "hopSpinSpeed",
+          "spawnHopTime",
+          "circleRadius",
+          "continueWhenArrived",
+          "avoidPreviousTile",
+          "chainMovementVariance",
+          "chainPauseVariance",
+          "activeProfile",
+          "tiredProfile",
+          "hopElevationTimeScale",
+          "hopElevationArcScale",
+          "tilesToAccelerate",
+          "maxWalkSpeed",
+          "spawnDestinationMask",
+          "spawnDestinationOverrideMask",
+          "hopAllowVerticalObstacles",
+          "chainRepositionJumpCount",
+          "hopSwayWidth",
+          "spawnHopSwayWidth",
+          "chainRepositionSpeed",
+          "chainRepositionDistance",
+          "chainRepositionDust",
+          "chainRepositionAllowCardinal",
+          "chainRepositionAllowDiagonal",
+          "walkOptions",
+          "wanderStraightChance",
+          "chainPauseActionChance",
+          "walkPause",
+          "tilesBeforeTurnSkid",
+          "walkStompTime",
+          "walkAccelerationStep",
+          "walkTimeVariance",
+          "walkPauseVariance"
+        ],
+        "version": 75
+      },
+      {
+        "fieldKeys": [
+          "chillState",
+          "alertState",
+          "alertEmote",
+          "alertTime",
+          "alertness",
+          "stamina",
+          "restTime",
+          "chillSpeed",
+          "range",
+          "jumpLevel",
+          "profileId",
+          "spawnState",
+          "chillAction",
+          "chillTarget",
+          "alertRange",
+          "playerAdjacentDirectionMasks",
+          "alertChance",
+          "spawnDestination",
+          "battleTrigger",
+          "hopAllowNonCardinal",
+          "hopMinDistance",
+          "hopMaxDistance",
+          "hopPause",
+          "teleportTime",
+          "teleportPause",
+          "alertSpecialAction",
+          "overworldLimit",
+          "spawnDestinationMinDistance",
+          "spawnDestinationMaxDistance",
+          "ramAccelerationSteps",
+          "ramMaxSpeed",
+          "chainPauseAction",
+          "chillAllowedTerrainMask",
+          "chillAllowedTerrainOverrideMask",
+          "hopTime",
+          "chaseBoostDistance",
+          "chaseBoostSpeed",
+          "hopSpinSpeed",
+          "spawnHopTime",
+          "circleRadius",
+          "continueWhenArrived",
+          "avoidPreviousTile",
+          "chainMovementVariance",
+          "chainPauseVariance",
+          "activeProfile",
+          "tiredProfile",
+          "hopElevationTimeScale",
+          "hopElevationArcScale",
+          "tilesToAccelerate",
+          "maxWalkSpeed",
+          "spawnDestinationMask",
+          "spawnDestinationOverrideMask",
+          "hopAllowVerticalObstacles",
+          "chainRepositionJumpCount",
+          "hopSwayWidth",
+          "spawnHopSwayWidth",
+          "chainRepositionSpeed",
+          "chainRepositionDistance",
+          "chainRepositionDust",
+          "chainRepositionAllowCardinal",
+          "chainRepositionAllowDiagonal",
+          "walkOptions",
+          "wanderStraightChance",
+          "chainPauseActionChance",
+          "walkPause",
+          "tilesBeforeTurnSkid",
+          "walkStompTime",
+          "walkAccelerationStep",
+          "walkTimeVariance",
+          "walkPauseVariance",
+          "stopSkid"
+        ],
+        "version": 76
+      },
+      {
+        "fieldKeys": [
+          "chillState",
+          "alertState",
+          "alertEmote",
+          "alertTime",
+          "alertness",
+          "stamina",
+          "restTime",
+          "chillSpeed",
+          "range",
+          "jumpLevel",
+          "profileId",
+          "spawnState",
+          "chillAction",
+          "chillTarget",
+          "alertRange",
+          "playerAdjacentDirectionMasks",
+          "alertChance",
+          "spawnDestination",
+          "battleTrigger",
+          "hopAllowNonCardinal",
+          "hopMinDistance",
+          "hopMaxDistance",
+          "hopPause",
+          "teleportTime",
+          "teleportPause",
+          "alertSpecialAction",
+          "overworldLimit",
+          "spawnDestinationMinDistance",
+          "spawnDestinationMaxDistance",
+          "ramAccelerationSteps",
+          "ramMaxSpeed",
+          "chainPauseAction",
+          "chillAllowedTerrainMask",
+          "chillAllowedTerrainOverrideMask",
+          "hopTime",
+          "chaseBoostDistance",
+          "chaseBoostSpeed",
+          "hopSpinSpeed",
+          "spawnHopTime",
+          "circleRadius",
+          "continueWhenArrived",
+          "avoidPreviousTile",
+          "chainMovementVariance",
+          "chainPauseVariance",
+          "activeProfile",
+          "tiredProfile",
+          "hopElevationTimeScale",
+          "hopElevationArcScale",
+          "tilesToAccelerate",
+          "maxWalkSpeed",
+          "spawnDestinationMask",
+          "spawnDestinationOverrideMask",
+          "hopAllowVerticalObstacles",
+          "chainRepositionJumpCount",
+          "hopSwayWidth",
+          "spawnHopSwayWidth",
+          "chainRepositionSpeed",
+          "chainRepositionDistance",
+          "chainRepositionDust",
+          "chainRepositionAllowCardinal",
+          "chainRepositionAllowDiagonal",
+          "walkOptions",
+          "wanderStraightChance",
+          "chainPauseActionChance",
+          "walkPause",
+          "tilesBeforeTurnSkid",
+          "walkStompTime",
+          "walkAccelerationStep",
+          "walkTimeVariance",
+          "walkPauseVariance",
+          "stopSkid",
+          "planTurnSkidPath"
+        ],
+        "version": 77
       }
     ]
   },
-  "sourceSha256": "bfc4c71095df99b6ef3e332964151ea337dc57025f86a3b64d3ca9d08af186b6",
+  "sourceSha256": "cda6c7777abe793a87bf458498bae951c09132abc248da259ac11a9e4fcf80a2",
   "trace": {
     "labels": [
       {
@@ -2401,14 +2909,14 @@
         "featureId": "profile.composition",
         "fieldId": 44,
         "key": "activeProfile",
-        "label": "Active override profile",
+        "label": "Active application",
         "path": "profile.composition.activeProfile"
       },
       {
         "featureId": "profile.composition",
         "fieldId": 45,
         "key": "tiredProfile",
-        "label": "Tired override profile",
+        "label": "Tired application",
         "path": "profile.composition.tiredProfile"
       },
       {
@@ -2557,6 +3065,41 @@
         "key": "walkStompTime",
         "label": "Stomp at time",
         "path": "profile.lanes.owner.feedback.walk.stompAtTravelFrames"
+      },
+      {
+        "featureId": "walk.momentum",
+        "fieldId": 67,
+        "key": "walkAccelerationStep",
+        "label": "Acceleration amount",
+        "path": "profile.lanes.owner.momentum.framesPerStep"
+      },
+      {
+        "featureId": "walk",
+        "fieldId": 68,
+        "key": "walkTimeVariance",
+        "label": "Walk time variance",
+        "path": "profile.lanes.owner.locomotion.walk.travelFrameVariance"
+      },
+      {
+        "featureId": "walk",
+        "fieldId": 69,
+        "key": "walkPauseVariance",
+        "label": "Pause variance",
+        "path": "profile.lanes.owner.locomotion.walk.pauseFrameVariance"
+      },
+      {
+        "featureId": "walk.momentum",
+        "fieldId": 70,
+        "key": "stopSkid",
+        "label": "Skid when stopping",
+        "path": "profile.lanes.owner.momentum.stopSkid"
+      },
+      {
+        "featureId": "walk.momentum",
+        "fieldId": 71,
+        "key": "planTurnSkidPath",
+        "label": "Plan turn-skid path",
+        "path": "profile.lanes.owner.momentum.turnSkid.planPath"
       }
     ],
     "schemaVersion": 1
@@ -2574,20 +3117,22 @@
         "relative": 8079
       },
       "3": {
-        "atLeast": 21035251,
-        "atMost": 21035251,
-        "relative": 21035251
+        "atLeast": 222361843,
+        "atMost": 222361843,
+        "relative": 222361843
       }
     },
     "allowedOverrideMasks": {
       "1": 134217727,
       "2": 32767,
-      "3": 33554431
+      "3": 1073741823
     },
     "compactCType": "OverworldWildBehaviorProfileData",
     "compactSize": 72,
     "fields": [
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 0,
         "key": "chillState",
@@ -2599,6 +3144,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 1,
         "key": "alertState",
@@ -2610,6 +3157,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 2,
         "key": "alertEmote",
@@ -2621,6 +3170,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 3,
         "key": "alertTime",
@@ -2632,6 +3183,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 4,
         "key": "alertness",
@@ -2643,6 +3196,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 5,
         "key": "stamina",
@@ -2654,6 +3209,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 6,
         "key": "restTime",
@@ -2665,6 +3222,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 7,
         "key": "chillSpeed",
@@ -2676,6 +3235,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 8,
         "key": "range",
@@ -2687,6 +3248,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 9,
         "key": "jumpLevel",
@@ -2698,6 +3261,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 10,
         "key": "profileId",
@@ -2709,6 +3274,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 11,
         "key": "spawnState",
@@ -2720,6 +3287,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 12,
         "key": "chillAction",
@@ -2731,6 +3300,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 13,
         "key": "chillTarget",
@@ -2742,6 +3313,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 14,
         "key": "alertRange",
@@ -2753,6 +3326,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 15,
         "key": "playerAdjacentDirectionMasks",
@@ -2764,6 +3339,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 16,
         "key": "alertChance",
@@ -2775,6 +3352,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 17,
         "key": "spawnDestination",
@@ -2786,6 +3365,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 18,
         "key": "battleTrigger",
@@ -2797,17 +3378,21 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 19,
         "key": "hopAllowNonCardinal",
         "maskBit": 19,
         "maskWord": 1,
-        "max": 255,
+        "max": 2,
         "min": 0,
         "offset": 19,
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 20,
         "key": "hopMinDistance",
@@ -2819,6 +3404,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 21,
         "key": "hopMaxDistance",
@@ -2830,6 +3417,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 22,
         "key": "hopPause",
@@ -2841,6 +3430,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 23,
         "key": "teleportTime",
@@ -2852,6 +3443,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 24,
         "key": "teleportPause",
@@ -2863,6 +3456,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 25,
         "key": "alertSpecialAction",
@@ -2874,6 +3469,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 26,
         "key": "overworldLimit",
@@ -2885,6 +3482,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 27,
         "key": "spawnDestinationMinDistance",
@@ -2896,6 +3495,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 28,
         "key": "spawnDestinationMaxDistance",
@@ -2907,6 +3508,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 29,
         "key": "ramAccelerationSteps",
@@ -2918,6 +3521,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 30,
         "key": "ramMaxSpeed",
@@ -2929,6 +3534,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 31,
         "key": "chainPauseAction",
@@ -2940,6 +3547,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 16,
         "cType": "u16",
         "id": 32,
         "key": "chillAllowedTerrainMask",
@@ -2951,6 +3560,8 @@
         "size": 2
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 16,
         "cType": "u16",
         "id": 33,
         "key": "chillAllowedTerrainOverrideMask",
@@ -2962,6 +3573,8 @@
         "size": 2
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 34,
         "key": "hopTime",
@@ -2973,6 +3586,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 35,
         "key": "chaseBoostDistance",
@@ -2984,6 +3599,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 36,
         "key": "chaseBoostSpeed",
@@ -2995,6 +3612,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 37,
         "key": "hopSpinSpeed",
@@ -3006,6 +3625,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 38,
         "key": "spawnHopTime",
@@ -3017,6 +3638,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 39,
         "key": "circleRadius",
@@ -3028,6 +3651,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 40,
         "key": "continueWhenArrived",
@@ -3039,6 +3664,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 41,
         "key": "avoidPreviousTile",
@@ -3050,6 +3677,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 42,
         "key": "chainMovementVariance",
@@ -3061,6 +3690,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 43,
         "key": "chainPauseVariance",
@@ -3072,6 +3703,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 44,
         "key": "activeProfile",
@@ -3083,6 +3716,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 45,
         "key": "tiredProfile",
@@ -3094,6 +3729,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 46,
         "key": "hopElevationTimeScale",
@@ -3105,6 +3742,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 47,
         "key": "hopElevationArcScale",
@@ -3116,6 +3755,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 48,
         "key": "tilesToAccelerate",
@@ -3127,6 +3768,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 49,
         "key": "maxWalkSpeed",
@@ -3138,6 +3781,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 16,
         "cType": "u16",
         "id": 50,
         "key": "spawnDestinationMask",
@@ -3149,6 +3794,8 @@
         "size": 2
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 16,
         "cType": "u16",
         "id": 51,
         "key": "spawnDestinationOverrideMask",
@@ -3160,6 +3807,8 @@
         "size": 2
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 52,
         "key": "hopAllowVerticalObstacles",
@@ -3171,6 +3820,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 53,
         "key": "chainRepositionJumpCount",
@@ -3182,6 +3833,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 54,
         "key": "hopSwayWidth",
@@ -3193,6 +3846,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 55,
         "key": "spawnHopSwayWidth",
@@ -3204,6 +3859,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 56,
         "key": "chainRepositionSpeed",
@@ -3215,6 +3872,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 57,
         "key": "chainRepositionDistance",
@@ -3226,6 +3885,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 58,
         "key": "chainRepositionDust",
@@ -3237,6 +3898,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 1,
         "cType": "u8",
         "id": 59,
         "key": "chainRepositionAllowCardinal",
@@ -3248,6 +3911,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 1,
         "cType": "u8",
         "id": 60,
         "key": "chainRepositionAllowDiagonal",
@@ -3259,6 +3924,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 61,
         "key": "walkOptions",
@@ -3270,6 +3937,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 62,
         "key": "wanderStraightChance",
@@ -3281,6 +3950,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 63,
         "key": "chainPauseActionChance",
@@ -3292,6 +3963,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 64,
         "key": "walkPause",
@@ -3303,6 +3976,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 6,
         "cType": "u8",
         "id": 65,
         "key": "tilesBeforeTurnSkid",
@@ -3314,6 +3989,8 @@
         "size": 1
       },
       {
+        "bitOffset": 0,
+        "bitWidth": 8,
         "cType": "u8",
         "id": 66,
         "key": "walkStompTime",
@@ -3323,8 +4000,73 @@
         "min": 0,
         "offset": 70,
         "size": 1
+      },
+      {
+        "bitOffset": 0,
+        "bitWidth": 8,
+        "cType": "u8",
+        "id": 67,
+        "key": "walkAccelerationStep",
+        "maskBit": 25,
+        "maskWord": 3,
+        "max": 33,
+        "min": 0,
+        "offset": 71,
+        "size": 1
+      },
+      {
+        "bitOffset": 1,
+        "bitWidth": 7,
+        "cType": "u8",
+        "id": 68,
+        "key": "walkTimeVariance",
+        "maskBit": 26,
+        "maskWord": 3,
+        "max": 32,
+        "min": 0,
+        "offset": 64,
+        "size": 1
+      },
+      {
+        "bitOffset": 1,
+        "bitWidth": 7,
+        "cType": "u8",
+        "id": 69,
+        "key": "walkPauseVariance",
+        "maskBit": 27,
+        "maskWord": 3,
+        "max": 32,
+        "min": 0,
+        "offset": 63,
+        "size": 1
+      },
+      {
+        "bitOffset": 7,
+        "bitWidth": 1,
+        "cType": "u8",
+        "id": 70,
+        "key": "stopSkid",
+        "maskBit": 28,
+        "maskWord": 3,
+        "max": 1,
+        "min": 0,
+        "offset": 69,
+        "size": 1
+      },
+      {
+        "bitOffset": 6,
+        "bitWidth": 1,
+        "cType": "u8",
+        "id": 71,
+        "key": "planTurnSkidPath",
+        "maskBit": 29,
+        "maskWord": 3,
+        "max": 1,
+        "min": 0,
+        "offset": 69,
+        "size": 1
       }
     ],
-    "tailPadding": 1
+    "tailPadding": 0
   }
 }

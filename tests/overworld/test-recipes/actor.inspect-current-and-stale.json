@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "actor.inspect-current-and-stale",
+  "title": "Packaged actor Inspect accepts current and rejects stale handle",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "tests/overworld/scenarios/actor.inspect-current-and-stale.json",
+  "requirements": ["shared.actor-inspect-handle-v1"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 120, "noProgressFrames": 120, "minObservedFrames": 1},
+  "subjects": [{"id": "mankey", "species": 56, "role": "FOLLOWER", "acquire": "existing"}],
+  "setup": [{"id": "bind-mankey", "op": "bind", "args": {"subject": "mankey"},
+             "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}],
+  "actions": [{"id": "inspect-current-and-stale", "op": "actor-inspect.probe", "args": {"subject": "mankey"},
+               "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}}],
+  "assertions": [{"kind": "measurement-complete", "measurement": "actor-inspect-handle-v1", "when": "final"}],
+  "measurements": [{"kind": "actor-inspect-handle-v1", "subject": "mankey"}]
+}

@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "id": "world.transition.follower-rebind",
+  "title": "A field transition rebinds the current unmounted Cyndaquil follower",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/architecture.md#field-transition-protocol and tools/overworld/runtime_proof_registry.json: legacy.follower-transition",
+  "requirements": ["legacy.follower-transition"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 840, "noProgressFrames": 120, "minObservedFrames": 16},
+  "subjects": [{"id": "cyndaquil", "species": 155, "role": "FOLLOWER", "acquire": "existing"}],
+  "measurements": [{"kind": "follower-transition-rebind-v1", "subject": "cyndaquil"}],
+  "setup": [
+    {"id": "prepare-cyndaquil", "op": "party", "args": {"slot": 1, "hp": 21, "status": 0},
+      "budget": {"maxSeconds": 15, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "spawn-cyndaquil-follower", "op": "spawn", "args": {"species": 155, "role": "follower", "slot": 1},
+      "budget": {"maxSeconds": 30, "maxFrames": 600, "noProgressFrames": 120}},
+    {"id": "bind-cyndaquil-follower", "op": "bind", "args": {"subject": "cyndaquil"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "route-north", "op": "step", "args": {"frames": 64, "keys": ["UP"], "until": {"kind": "player-step-count", "operator": "eq", "value": 6}},
+      "budget": {"maxSeconds": 20, "maxFrames": 64, "noProgressFrames": 32}},
+    {"id": "route-north-settle", "op": "wait", "args": {"predicate": {"kind": "player-settled-at", "map": 33, "x": 585, "z": 400}},
+      "budget": {"maxSeconds": 15, "maxFrames": 16, "noProgressFrames": 16}},
+    {"id": "follower-motion-complete", "op": "wait", "args": {"predicate": {"kind": "measurement-stage", "measurement": "follower-transition-rebind-v1", "stage": "natural-motion-complete", "when": "final"}},
+      "budget": {"maxSeconds": 20, "maxFrames": 64, "noProgressFrames": 64}},
+    {"id": "route-west", "op": "step", "args": {"frames": 96, "keys": ["LEFT"], "until": {"kind": "player-step-count", "operator": "eq", "value": 15}},
+      "budget": {"maxSeconds": 30, "maxFrames": 96, "noProgressFrames": 32}},
+    {"id": "route-west-settle", "op": "wait", "args": {"predicate": {"kind": "player-settled-at", "map": 33, "x": 576, "z": 400}},
+      "budget": {"maxSeconds": 15, "maxFrames": 16, "noProgressFrames": 16}},
+    {"id": "boundary-ready", "op": "step", "args": {"frames": 1, "keys": [], "until": {"kind": "player-step-count", "operator": "eq", "value": 15}},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "boundary-ready-settle", "op": "wait", "args": {"predicate": {"kind": "player-settled-at", "map": 33, "x": 576, "z": 400}},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "cross-boundary", "op": "step", "args": {"frames": 16, "keys": ["LEFT"], "until": {"kind": "player-step-count", "operator": "eq", "value": 16}},
+      "budget": {"maxSeconds": 20, "maxFrames": 16, "noProgressFrames": 16}},
+    {"id": "transition-arrival", "op": "wait", "args": {"predicate": {"kind": "player-settled-at", "map": 67, "x": 575, "z": 400}},
+      "budget": {"maxSeconds": 20, "maxFrames": 32, "noProgressFrames": 32}},
+    {"id": "recovery-step", "op": "step", "args": {"frames": 16, "keys": ["LEFT"], "until": {"kind": "player-step-count", "operator": "eq", "value": 17}},
+      "budget": {"maxSeconds": 20, "maxFrames": 16, "noProgressFrames": 16}},
+    {"id": "recovery-settle", "op": "wait", "args": {"predicate": {"kind": "player-settled-at", "map": 67, "x": 574, "z": 400}},
+      "budget": {"maxSeconds": 20, "maxFrames": 24, "noProgressFrames": 24}}
+  ],
+  "assertions": [
+    {"kind": "measurement-complete", "measurement": "follower-transition-rebind-v1", "when": "final"},
+    {"kind": "player-settled-at", "map": 67, "x": 574, "z": 400, "when": "final"}
+  ]
+}

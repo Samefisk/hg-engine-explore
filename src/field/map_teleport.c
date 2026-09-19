@@ -1,4 +1,5 @@
 #include "../../include/map_teleport.h"
+#include "../../include/overworld_field_terrain_internal.h"
 
 #include "../../include/constants/buttons.h"
 #include "../../include/constants/file.h"
@@ -9,15 +10,147 @@
 #include "../../include/map_events_internal.h"
 #include "../../include/overlay.h"
 #include "../../include/overworld_follower_selector.h"
+#include "../../include/overworld_actor_system_internal.h"
+#include "../../include/overworld_mount_internal.h"
+#include "../../include/overworld_walk_module.h"
 #include "../../include/overworld_wild_helper.h"
 #include "../../include/overworld_wild_spawns_internal.h"
 
+/* Preserve Thumb metadata for the direct resident helper imports. */
+__asm__(
+    ".thumb\n"
+    ".thumb_func\n.thumb_set OverworldWalk_DeltaX, 0x023BF59C\n"
+    ".thumb_func\n.thumb_set OverworldWalk_DeltaY, 0x023BF5BE\n"
+    ".thumb_func\n.thumb_set OverworldFieldTerrainStream_Apply, 0x023BFC60\n");
+
 volatile u8 gOverworldFollowerSelectorStateStorage
     __attribute__((section(".overworld_follower_selector_state"), used));
+typedef struct OverworldFieldPrivateFlags {
+    u8 followerSelectorYWasDown;
+    u8 wildPlayerFrameServiceActive;
+} OverworldFieldPrivateFlags;
+static volatile OverworldFieldPrivateFlags sOverworldFieldPrivateFlags
+    __attribute__((section(".overworld_field_private_flags"), used));
+#define sOverworldFollowerSelectorYWasDown \
+    sOverworldFieldPrivateFlags.followerSelectorYWasDown
+#define sOverworldWildPlayerFrameServiceActive \
+    sOverworldFieldPrivateFlags.wildPlayerFrameServiceActive
 volatile OverworldFollowerTransitionQueueStorage
     gOverworldFollowerTransitionQueueStorage
     __attribute__((section(".overworld_follower_transition_queue"), used));
-static u8 sOverworldFollowerSelectorYWasDown;
+
+typedef struct OverworldFieldTransitionRuntime {
+    FieldSystem *fieldSystem;
+    MapObjectMan *manager;
+    u32 sequence;
+    u16 previousMapId;
+    u16 currentMapId;
+    u8 disposition;
+    u8 acknowledgements;
+    u8 active;
+    u8 reserved;
+} OverworldFieldTransitionRuntime;
+
+#ifndef OVERWORLD_ACTOR_SYSTEM_HOST
+typedef char OverworldFieldTransitionPreviousMapOffsetMustRemain12[
+    offsetof(OverworldFieldTransitionRuntime, previousMapId) == 12 ? 1 : -1];
+typedef char OverworldFieldTransitionCurrentMapOffsetMustRemain14[
+    offsetof(OverworldFieldTransitionRuntime, currentMapId) == 14 ? 1 : -1];
+typedef char OverworldFieldTransitionDispositionOffsetMustRemain16[
+    offsetof(OverworldFieldTransitionRuntime, disposition) == 16 ? 1 : -1];
+typedef char OverworldFieldTransitionActiveOffsetMustRemain18[
+    offsetof(OverworldFieldTransitionRuntime, active) == 18 ? 1 : -1];
+#endif
+
+static OverworldFieldTransitionRuntime sOverworldFieldTransition;
+
+static OverworldFieldTerrainStreamRuntime sOverworldFieldTerrainStream;
+
+__asm__(
+    ".global OverworldFieldTransitionRuntimeStorage\n"
+    ".set OverworldFieldTransitionRuntimeStorage, sOverworldFieldTransition\n");
+
+BOOL OverworldFieldService_FinishPendingTransition(void);
+
+#define OVERWORLD_FIELD_MOUNT_RIDER_HEIGHT_FX32 0x8000
+#define OVERWORLD_FIELD_MOUNT_IDLE_COOLDOWN 0xFF
+
+static BOOL OverworldFieldService_SyncMountedPresentation(
+    OverworldFieldMountPresentationCall *call)
+{
+    OverworldMountRuntimeState *mount;
+    LocalMapObject *follower;
+    LocalMapObject *player;
+    s32 mountedArc;
+
+    mount = call->mount;
+    player = call->player;
+    follower = call->follower;
+    if (mount->snapshot.motionMode == OVERWORLD_MOUNT_MOTION_NONE) {
+        if (player->faceVec[1] != mount->lastAppliedPlayerFaceY) {
+            mount->playerBaseFaceY = player->faceVec[1];
+        }
+        if (player->unk88[1] != mount->lastAppliedPlayerUnk88Y) {
+            mount->playerBaseUnk88Y = player->unk88[1];
+        }
+    }
+    mountedArc = mount->snapshot.motionMode == OVERWORLD_MOUNT_MOTION_HOP
+        ? (s32)mount->lastAppliedPlayerFaceY
+            - (s32)mount->playerBaseFaceY
+            - OVERWORLD_FIELD_MOUNT_RIDER_HEIGHT_FX32
+        : 0;
+    memcpy(follower->posVec, player->posVec, sizeof(follower->posVec));
+    memcpy(&follower->xPrev, &player->xPrev, 6 * sizeof(int));
+    follower->flags &= ~MAPOBJECTFLAG_UNK7;
+    follower->faceVec[0] = 0;
+    follower->faceVec[1] = (u32)(mountedArc + (s32)mount->playerBaseFaceY);
+    follower->faceVec[2] = 0;
+    follower->unk88[0] = 0;
+    follower->unk88[1] = mount->playerBaseUnk88Y;
+    follower->unk88[2] = 0;
+    if (mount->snapshot.motionMode == OVERWORLD_MOUNT_MOTION_HOP) {
+        follower->unk94[1] = 0;
+    }
+    follower->flags |= MAPOBJECTFLAG_UNK18 | MAPOBJECTFLAG_UNK31;
+    if (mount->snapshot.motionMode != OVERWORLD_MOUNT_MOTION_TELEPORT) {
+        follower->flags &= ~BIT_VANISH;
+    }
+    player->faceVec[1] = follower->faceVec[1]
+        + OVERWORLD_FIELD_MOUNT_RIDER_HEIGHT_FX32;
+    player->unk88[1] = follower->unk88[1];
+    if (mount->snapshot.motionMode == OVERWORLD_MOUNT_MOTION_HOP) {
+        player->unk94[1] = 0;
+    }
+    player->faceVec[0] = (u32)(-
+        OverworldWalk_DeltaX(player->curFacing) << 15);
+    player->faceVec[2] = (u32)(-
+        OverworldWalk_DeltaY(player->curFacing) << 15);
+    mount->lastAppliedPlayerFaceY = player->faceVec[1];
+    mount->lastAppliedPlayerUnk88Y = player->unk88[1];
+    player->flags |= MAPOBJECTFLAG_UNK20;
+    call->wild->movementCooldowns[OW_WILD_FOLLOWER_SLOT] =
+        OVERWORLD_FIELD_MOUNT_IDLE_COOLDOWN;
+    call->wild->movementCrashShakeTimers[OW_WILD_FOLLOWER_SLOT] = 0;
+    return TRUE;
+}
+
+OverworldFieldTerrainStreamResult
+__attribute__((section(".overworld_field_terrain_stream"), used))
+OverworldFieldService_TerrainStream(
+    const OverworldFieldTerrainStreamCall *call)
+{
+    return OverworldFieldTerrainStream_Apply(call, &sOverworldFieldTerrainStream);
+}
+
+const OverworldFieldMountPresentationEntry
+    gOverworldFieldMountPresentationEntry
+    __attribute__((section(".overworld_field_mount_presentation_entry"), used)) = {
+        OVERWORLD_FIELD_MOUNT_PRESENTATION_MAGIC,
+        OVERWORLD_FIELD_MOUNT_PRESENTATION_VERSION,
+        sizeof(OverworldFieldMountPresentationEntry),
+        OverworldFieldService_SyncMountedPresentation,
+        OverworldFieldService_TerrainStream,
+    };
 
 BOOL __attribute__((section(".overworld_follower_transition_queue_append"), used))
 OverworldFollowerTransitionQueue_AppendResident(u8 command)
@@ -153,8 +286,6 @@ OverworldFollowerSelector_TaskPoll(FieldSystem *fieldSystem)
     }
 }
 
-static u8 sOverworldWildPlayerFrameServiceActive;
-
 static BOOL OverworldFieldService_TryGetEncounterDataIdForMapImpl(
     u16 mapId,
     int *encounterDataId)
@@ -192,41 +323,6 @@ static BOOL OverworldFieldService_TryGetEncounterDataIdForMapImpl(
     return FALSE;
 }
 
-static BOOL OverworldFieldService_IsCurrentPrimaryObject(
-    MapObjectMan *manager,
-    const OverworldWildSpawn *spawn,
-    int slot,
-    u16 previousMapId)
-{
-    LocalMapObject *object;
-    u32 objectAddress;
-    u32 objectsStart;
-    u32 objectsEnd;
-
-    if (!spawn->active) {
-        return TRUE;
-    }
-    object = spawn->object;
-    if (object == NULL || manager == NULL || manager->objects == NULL) {
-        return FALSE;
-    }
-
-    objectAddress = (u32)object;
-    objectsStart = (u32)manager->objects;
-    objectsEnd = objectsStart
-        + manager->object_count * sizeof(LocalMapObject);
-    return objectAddress >= objectsStart
-        && objectAddress < objectsEnd
-        && (objectAddress - objectsStart) % sizeof(LocalMapObject) == 0
-        && spawn->mapId == previousMapId
-        && spawn->objectId == OW_WILD_OBJECT_ID_START + slot
-        && (object->flags & MAPOBJECTFLAG_ACTIVE) != 0
-        && (object->flags & MAPOBJECTFLAG_KEEP) != 0
-        && object->id == OW_WILD_OBJECT_ID_START + slot
-        && object->scriptId == OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT
-        && object->unkC == previousMapId;
-}
-
 static BOOL OverworldFieldService_IsEnabledMap(u16 mapId)
 {
     int encounterDataId;
@@ -236,130 +332,56 @@ static BOOL OverworldFieldService_IsEnabledMap(u16 mapId)
      * validation is unavailable, preservation fails closed and the resident
      * caller takes its destructive transition fallback. The resolver's owned-
      * behavior validation authenticates the complete helper ABI, including
-     * normalizeThrowPresentation used later by the transition path.
+     * the typed presentation command used later by the transition path.
      */
-    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)
-        || !IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)) {
-        return FALSE;
-    }
-
     return OverworldFieldService_TryGetEncounterDataIdForMap(
         mapId,
         &encounterDataId);
 }
 
-static BOOL OverworldFieldService_PrepareMapHeaderChange(
-    OverworldWildSpawnState *state,
-    OverworldWildMapHeaderChangeMode mode)
+static BOOL OverworldFieldService_EnsureTransitionAdapters(void)
 {
-    const OverworldWildSpawnsOverlayEntry *entry;
-
     if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)
-        || !OverworldFollowerSelector_IsDirectLoaded()) {
+        && !HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION, 0)) {
         return FALSE;
     }
-    entry = OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY;
-    if (entry->prepareMapHeaderChange == NULL) {
+    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)
+        && !HandleLoadOverlay(OVERLAY_OVERWORLD_WILD_HELPER, 0)) {
         return FALSE;
     }
-    entry->prepareMapHeaderChange(state, mode);
+    if (!OverworldFollowerSelector_IsDirectLoaded()
+        && !HandleLoadOverlay(OVERLAY_OVERWORLD_FOLLOWER_SELECTOR, 0)) {
+        return FALSE;
+    }
     return TRUE;
 }
 
-static void OverworldFieldService_TransitionPlayerBall(
-    FieldSystem *fieldSystem,
-    OverworldWildSpawnState *state,
-    int command)
+static u8 OverworldFieldService_AcknowledgementForWork(u8 work)
 {
-    const OverworldWildHelperOverlayEntry *entry;
-
-    if (!IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_HELPER)) {
-        return;
+    if (work == OVERWORLD_ACTOR_TRANSITION_WORK_CANONICALIZE) {
+        return OVERWORLD_ACTOR_TRANSITION_ACK_ENGINE_CANONICALIZED;
     }
-    entry = OVERWORLD_WILD_HELPER_OVERLAY_ENTRY;
-    if (entry->magic == OVERWORLD_WILD_HELPER_OVERLAY_MAGIC
-        && entry->version == OVERWORLD_WILD_HELPER_OVERLAY_VERSION
-        && entry->size == sizeof(*entry)
-        && entry->normalizeThrowPresentation != NULL) {
-        entry->normalizeThrowPresentation(fieldSystem, state, command);
+    if (work == OVERWORLD_ACTOR_TRANSITION_WORK_REBIND) {
+        return OVERWORLD_ACTOR_TRANSITION_ACK_PRESENTATIONS_REBOUND;
     }
+    return OVERWORLD_ACTOR_TRANSITION_ACK_FINALIZED;
 }
 
-static void OverworldFieldService_DiscardRetainedPrimaries(
-    MapObjectMan *manager,
-    OverworldWildSpawnState *state)
+static BOOL OverworldFieldService_ApplyTransitionWork(
+    FieldSystem *fieldSystem,
+    OverworldWildSpawnState *state,
+    const OverworldActorTransitionCall *call)
 {
-    LocalMapObject *object;
-    u32 objectIndex;
-    int slot;
-    BOOL overlayPrepared;
-
-    overlayPrepared = OverworldFieldService_PrepareMapHeaderChange(
+    /* The resident field driver owns transition order. Mount consumes the
+     * typed actor command directly before wild objects are canonicalized or
+     * rebound; the wild adapter no longer proxies mount lifecycle work. */
+    if (!OVERWORLD_MOUNT_OVERLAY_ENTRY->transition(call)) {
+        return FALSE;
+    }
+    return OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->applyTransitionWork(
+        fieldSystem,
         state,
-        OW_WILD_MAP_HEADER_CHANGE_DISCARD);
-    if (!overlayPrepared) {
-        OverworldFieldService_TransitionPlayerBall(
-            gFieldSysPtr,
-            state,
-            OW_WILD_HELPER_THROW_PRESENTATION_TRANSITION_DISCARD);
-    }
-
-    /*
-     * Scan the authenticated manager instead of trusting a possibly stale
-     * logical pointer. The high object IDs and script ID are owned by this
-     * system, so this also removes a duplicated retained presentation.
-     */
-    if (manager != NULL && manager->objects != NULL) {
-        for (objectIndex = 0; objectIndex < manager->object_count; objectIndex++) {
-            object = &manager->objects[objectIndex];
-            if ((object->flags & MAPOBJECTFLAG_ACTIVE) != 0
-                && object->id >= OW_WILD_OBJECT_ID_START
-                && object->id < OW_WILD_OBJECT_ID_START + OW_WILD_MAX_SPAWNS
-                && object->scriptId == OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT
-                && (object->flags & MAPOBJECTFLAG_KEEP) != 0) {
-                DeleteMapObject(object);
-            }
-        }
-    }
-
-    if (state == NULL) {
-        return;
-    }
-    /* Map-header reconciliation already fences one full field frame. Do not
-     * turn the refill request into a 90-frame input stall. */
-    state->battleGraceSteps = 0;
-    gOverworldWildFieldIdleRearmPending |=
-        OW_WILD_FIELD_IDLE_REARM_PENDING
-        | OW_WILD_FIELD_IDLE_ZERO_REFILL_PENDING;
-    if (!overlayPrepared) {
-        /*
-         * Keep encounter records until overlay 149 next runs its ordinary
-         * map-change clear; that path reserves and persists loaded shinies.
-         */
-        for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
-            state->spawns[slot].object = NULL;
-        }
-    } else {
-        memset(state->spawns, 0, sizeof(state->spawns));
-        state->mapGeneration++;
-        if (state->mapGeneration == 0) {
-            state->mapGeneration = 1;
-        }
-        state->mapObjectMan = NULL;
-        state->mapObjects = NULL;
-        state->movementFieldSystem = NULL;
-        state->pendingPersonality = 0;
-    }
-    state->mapId = MAP_NOTHING;
-    state->pendingSlot = -1;
-    state->movementQueuedBattleSlot = -1;
-    state->pendingSpecies = SPECIES_NONE;
-    state->pendingLevel = 0;
-    state->pendingShiny = FALSE;
-    state->pendingMapGeneration = 0;
-    state->pendingEncounterGeneration = 0;
-    state->captureTargetMask = 0;
-    state->presentationRestorePending = FALSE;
+        call);
 }
 
 static OverworldFieldMapHeaderChangeResult OverworldFieldService_OnMapHeaderChangedImpl(
@@ -368,11 +390,12 @@ static OverworldFieldMapHeaderChangeResult OverworldFieldService_OnMapHeaderChan
     u16 previousMapId,
     u16 currentMapId)
 {
-    const OverworldWildHelperOverlayEntry *helperEntry;
-    LocalMapObject *object;
+    OverworldActorTransitionCall call;
+    OverworldActorResult result;
+    OverworldActorFieldContext context;
     MapObjectMan *manager;
-    u32 objectIndex;
-    int slot;
+    BOOL preserve = TRUE;
+    int exchange;
 
     if (fieldSystem == NULL
         || state == NULL
@@ -381,112 +404,92 @@ static OverworldFieldMapHeaderChangeResult OverworldFieldService_OnMapHeaderChan
         return OVERWORLD_FIELD_MAP_HEADER_CHANGE_UNAVAILABLE;
     }
 
+    if (!OverworldFieldService_EnsureTransitionAdapters()) {
+        return OVERWORLD_FIELD_MAP_HEADER_CHANGE_UNAVAILABLE;
+    }
     manager = (MapObjectMan *)fieldSystem->mapObjectMan;
-    if (fieldSystem->location->mapId != currentMapId
-        || fieldSystem->playerAvatar == NULL
-        || !IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)
-        || OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->prepareMapHeaderChange == NULL
-        || manager == NULL
-        || manager->objects == NULL
-        || state->mapId != previousMapId
-        || state->mapObjectMan != manager
-        || state->mapObjects != manager->objects) {
-        OverworldFieldService_DiscardRetainedPrimaries(
-            manager,
-            state);
-        return OVERWORLD_FIELD_MAP_HEADER_CHANGE_CLEARED;
+
+    if (!sOverworldFieldTransition.active) {
+        preserve = fieldSystem->location->mapId == currentMapId
+            && fieldSystem->playerAvatar != NULL
+            && manager != NULL
+            && manager->objects != NULL
+            && state->mapId == previousMapId
+            && state->mapObjectMan == manager
+            && state->mapObjects == manager->objects
+            && OverworldFieldService_IsEnabledMap(currentMapId);
+        /* The typed wild adapter canonicalizes or clears each retained slot.
+         * Do not repeat that object walk in the driver before the actor has
+         * established the transition epoch. */
+        memset(&sOverworldFieldTransition, 0, sizeof(sOverworldFieldTransition));
+        /* Actor context survives this overlay being unloaded. Both 16-bit
+         * generations advance together, so the packed value also preserves
+         * sequence ordering when they wrap and skip zero. Keep it for retries. */
+        context = OVERWORLD_ACTOR_SYSTEM_COMPAT_ENTRY->getContext();
+        sOverworldFieldTransition.sequence = context;
+        sOverworldFieldTransition.fieldSystem = fieldSystem;
+        sOverworldFieldTransition.manager = manager;
+        sOverworldFieldTransition.previousMapId = previousMapId;
+        sOverworldFieldTransition.currentMapId = currentMapId;
+        sOverworldFieldTransition.disposition = preserve
+            ? OVERWORLD_ACTOR_TRANSITION_DISPOSITION_PRESERVE
+            : OVERWORLD_ACTOR_TRANSITION_DISPOSITION_DISCARD;
+        sOverworldFieldTransition.active = TRUE;
+    } else if (sOverworldFieldTransition.fieldSystem != fieldSystem
+        || sOverworldFieldTransition.manager != manager
+        || sOverworldFieldTransition.previousMapId != previousMapId
+        || sOverworldFieldTransition.currentMapId != currentMapId) {
+        return OVERWORLD_FIELD_MAP_HEADER_CHANGE_UNAVAILABLE;
     }
 
-    if (!OverworldFieldService_IsEnabledMap(currentMapId)) {
-        OverworldFieldService_DiscardRetainedPrimaries(
-            manager,
-            state);
-        return OVERWORLD_FIELD_MAP_HEADER_CHANGE_CLEARED;
-    }
-    helperEntry = OVERWORLD_WILD_HELPER_OVERLAY_ENTRY;
-
-    for (objectIndex = 0; objectIndex < manager->object_count; objectIndex++) {
-        object = &manager->objects[objectIndex];
-        if ((object->flags & (MAPOBJECTFLAG_ACTIVE | MAPOBJECTFLAG_KEEP))
-                != (MAPOBJECTFLAG_ACTIVE | MAPOBJECTFLAG_KEEP)
-            || object->id < OW_WILD_OBJECT_ID_START
-            || object->id >= OW_WILD_OBJECT_ID_START + OW_WILD_MAX_SPAWNS
-            || object->scriptId != OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT) {
-            continue;
+    for (exchange = 0; exchange < 4; exchange++) {
+        memset(&call, 0, sizeof(call));
+        call.version = OVERWORLD_ACTOR_TRANSITION_CALL_VERSION;
+        call.size = sizeof(call);
+        call.sequence = sOverworldFieldTransition.sequence;
+        call.previousFieldContext = sOverworldFieldTransition.sequence;
+        call.previousMapId = sOverworldFieldTransition.previousMapId;
+        call.currentMapId = sOverworldFieldTransition.currentMapId;
+        call.disposition = sOverworldFieldTransition.disposition;
+        call.acknowledgements = sOverworldFieldTransition.acknowledgements;
+        result = OVERWORLD_ACTOR_SYSTEM_COMPAT_ENTRY->transition(&call);
+        if (result != OVERWORLD_ACTOR_RESULT_OK) {
+            return OVERWORLD_FIELD_MAP_HEADER_CHANGE_UNAVAILABLE;
         }
-        slot = object->id - OW_WILD_OBJECT_ID_START;
-        if (!state->spawns[slot].active
-            || state->spawns[slot].object != object) {
-            OverworldFieldService_DiscardRetainedPrimaries(
-                manager,
-                state);
-            return OVERWORLD_FIELD_MAP_HEADER_CHANGE_CLEARED;
+        if (call.work == OVERWORLD_ACTOR_TRANSITION_WORK_COMPLETE) {
+            preserve = sOverworldFieldTransition.disposition
+                == OVERWORLD_ACTOR_TRANSITION_DISPOSITION_PRESERVE;
+            memset(&sOverworldFieldTransition, 0, sizeof(sOverworldFieldTransition));
+            sOverworldWildPlayerFrameServiceActive = TRUE;
+            return preserve
+                ? OVERWORLD_FIELD_MAP_HEADER_CHANGE_PRESERVED
+                : OVERWORLD_FIELD_MAP_HEADER_CHANGE_CLEARED;
         }
-    }
-
-    for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
-        if (!OverworldFieldService_IsCurrentPrimaryObject(
-                manager,
-                &state->spawns[slot],
-                slot,
-                previousMapId)) {
-            OverworldFieldService_DiscardRetainedPrimaries(
-                manager,
-                state);
-            return OVERWORLD_FIELD_MAP_HEADER_CHANGE_CLEARED;
+        sOverworldFieldTransition.disposition = call.disposition;
+        if (!OverworldFieldService_ApplyTransitionWork(
+                fieldSystem,
+                state,
+                &call)) {
+            if (call.work == OVERWORLD_ACTOR_TRANSITION_WORK_REBIND
+                && sOverworldFieldTransition.disposition
+                    == OVERWORLD_ACTOR_TRANSITION_DISPOSITION_PRESERVE) {
+                sOverworldFieldTransition.disposition =
+                    OVERWORLD_ACTOR_TRANSITION_DISPOSITION_DISCARD;
+                continue;
+            }
+            return OVERWORLD_FIELD_MAP_HEADER_CHANGE_UNAVAILABLE;
         }
+        sOverworldFieldTransition.acknowledgements |=
+            OverworldFieldService_AcknowledgementForWork(call.work);
     }
-
-    /* The overlay owns transient task/effect cleanup and far-sample reset. */
-    (void)OverworldFieldService_PrepareMapHeaderChange(
-        state,
-        OW_WILD_MAP_HEADER_CHANGE_PRESERVE);
-
-    state->mapGeneration++;
-    if (state->mapGeneration == 0) {
-        state->mapGeneration = 1;
-    }
-    for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
-        OverworldWildSpawn *spawn = &state->spawns[slot];
-
-        if (!spawn->active) {
-            continue;
-        }
-        spawn->mapId = currentMapId;
-        spawn->object->unkC = currentMapId;
-    }
-
-    state->mapId = currentMapId;
-    state->mapObjectMan = manager;
-    state->mapObjects = manager->objects;
-    state->movementFieldSystem = fieldSystem;
-    state->pendingSlot = -1;
-    state->movementQueuedBattleSlot = -1;
-    state->pendingMapGeneration = 0;
-    state->pendingEncounterGeneration = 0;
-    state->battleGraceSteps = 0;
-    state->presentationRestorePending = FALSE;
-    (void)OverworldFieldService_PrepareMapHeaderChange(
-        state,
-        OW_WILD_MAP_HEADER_CHANGE_CANONICALIZE);
-    for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
-        if (!state->spawns[slot].active) {
-            continue;
-        }
-        if (state->movementBehaviorClasses[slot]
-            == OW_WILD_BEHAVIOR_CLASS_PICKED_UP) {
-            state->movementBehaviorClasses[slot] =
-                OW_WILD_BEHAVIOR_CLASS_DEFAULT;
-        }
-        helperEntry->normalizeThrowPresentation(fieldSystem, state, slot);
-    }
-    helperEntry->normalizeThrowPresentation(
-        fieldSystem,
-        state,
-        OW_WILD_HELPER_THROW_PRESENTATION_TRANSITION_RESUME);
-    sOverworldWildPlayerFrameServiceActive = TRUE;
-    return OVERWORLD_FIELD_MAP_HEADER_CHANGE_PRESERVED;
+    return OVERWORLD_FIELD_MAP_HEADER_CHANGE_UNAVAILABLE;
 }
+
+__asm__(
+    ".global OverworldFieldService_OnMapHeaderChangedResident\n"
+    ".thumb_func\n"
+    ".thumb_set OverworldFieldService_OnMapHeaderChangedResident, "
+    "OverworldFieldService_OnMapHeaderChangedImpl\n");
 
 /*
  * Preserve the old field-overlay frame pump: R, Y, or Select wakes the linked
@@ -498,6 +501,11 @@ static BOOL OverworldFieldService_PollFrameImpl(FieldSystem *fieldSystem)
     const OverworldWildSpawnsOverlayEntry *entry;
 
     if (fieldSystem == NULL) {
+        /* A trainer task stops the idle field task that normally retries a
+         * transition. The resident helper finishes it as DISCARD first. */
+        if (!OverworldFieldService_FinishPendingTransition()) {
+            return FALSE;
+        }
         if (!OverworldFollowerSelector_ForceDirectUnload(NULL)) {
             return FALSE;
         }

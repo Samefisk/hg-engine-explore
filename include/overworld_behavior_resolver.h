@@ -85,7 +85,7 @@ typedef struct BehaviorClassSelection {
 } BehaviorClassSelection;
 
 /*
- * Resolve one immutable behavior value from the compact v72 blob.
+ * Resolve one immutable behavior value from the compact v76 blob.
  *
  * The function has no engine dependency, performs no allocation, and accepts
  * no Nintendo DS pointers. The blob bytes must stay alive only for this call.

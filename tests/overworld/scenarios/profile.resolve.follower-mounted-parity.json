@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "profile.resolve.follower-mounted-parity",
   "title": "Mounted Owner lane matches forced follower resolution",
-  "status": "planned",
+  "status": "active",
   "capabilities": ["profile.composition", "mount.lifecycle"],
   "proofLevel": "S1",
   "costTier": 1,
@@ -12,10 +12,14 @@
   ],
   "stop": {"frameBudget": 1, "condition": "Both projections return resolved Owner lanes"},
   "expect": {
-    "requiredEvents": ["PROFILE_RESOLVED"],
+    "requiredEvents": [],
     "forbiddenEvents": [],
     "invariants": ["Follower and mounted Owner fingerprints match", "Mounted control does not create a profile role"]
   },
   "capture": "none",
-  "adapter": null
+  "adapter": {
+    "kind": "command-sequence",
+    "commands": [["{python}", "scripts/verify_overworld_behavior_resolver.py", "--scenario", "profile.resolve.follower-mounted-parity"]],
+    "result": "json-passed"
+  }
 }

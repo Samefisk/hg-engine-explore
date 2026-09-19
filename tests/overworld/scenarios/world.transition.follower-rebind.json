@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "id": "world.transition.follower-rebind",
+  "title": "A field transition rebinds the current unmounted follower",
+  "status": "active",
+  "capabilities": ["world.transition"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md#field-transition-protocol",
+    "actor": "One prepared FOLLOWER Cyndaquil with a verified live handle and attached presentation",
+    "trigger": "Use normal player input to complete one follower Walk, cross from Route29 into Cherrygrove, and take one recovery step",
+    "observable": "The actor owner advances field epoch and map generation once, emits CONTEXT_CHANGED then ACTOR_REBOUND, preserves the follower lifetime and current engine identity, and returns normal player control",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Restore the saved slot-1 Cyndaquil and select it through the shared follower setup. This gives no motion, route, transition, or recovery credit."
+      }
+    ],
+    "limits": [
+      "Covers one unmounted follower and one Route29-to-Cherrygrove boundary.",
+      "Does not prove mounted mid-motion rebind, indoor transitions, or long-run streaming."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {"path": "test.sav", "kind": "sav"},
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Prepare and bind the saved slot-1 Cyndaquil follower"},
+    {"at": 1, "kind": "input", "value": "Walk the short normal route and observe one complete follower Walk"},
+    {"at": 2, "kind": "input", "value": "Cross the Cherrygrove field boundary and complete one recovery step"},
+    {"at": 3, "kind": "lifecycle", "value": "Observe the same follower lifetime with a current field handle and engine object"}
+  ],
+  "stop": {
+    "frameBudget": 840,
+    "condition": "One map change, the follower has a current rebound handle, and the player settles one tile inside Cherrygrove"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED",
+      "CONTEXT_CHANGED",
+      "ACTOR_REBOUND"
+    ],
+    "forbiddenEvents": [],
+    "invariants": [
+      "The bound follower completes one natural Walk before the transition",
+      "The field epoch and map generation each advance exactly once",
+      "The rebound follower retains its actor lifetime and subject identity",
+      "The rebound engine object belongs to the current map and manager",
+      "Normal player control completes one recovery step"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "world.transition.follower-rebind",
+    "claims": ["natural-input", "live-actor-identity", "world-transition", "control-release"],
+    "minimumFrames": 16
+  }
+}

@@ -1,305 +1,1453 @@
 {
   "schemaVersion": 1,
-  "proofLevels": ["S0", "S1", "S2", "S3", "S4", "S5"],
-  "roles": ["Wild", "Follower", "Mounted", "Scripted"],
-  "traceGroups": ["actor", "profile", "intent", "motion", "streaming", "presentation", "lifecycle", "population"],
+  "proofLevels": [
+    "S0",
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S5"
+  ],
+  "roles": [
+    "Wild",
+    "Follower",
+    "Mounted",
+    "Scripted"
+  ],
+  "traceGroups": [
+    "actor",
+    "profile",
+    "intent",
+    "motion",
+    "streaming",
+    "presentation",
+    "lifecycle",
+    "population"
+  ],
   "checks": [
+    {
+      "id": "package.wild-occupancy",
+      "title": "Verify resident occupancy reader and typed Wild callers in ROM",
+      "proofLevel": "S2",
+      "costTier": 2,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_wild_occupancy.py",
+        "--package-only",
+        "--rom",
+        "test.nds"
+      ],
+      "requires": [
+        "build",
+        "rom"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_spawns_overlay/**",
+        "src/pokemon_move_history_overlay/overworld_wild_occupancy.c",
+        "src/pokemon_move_history_overlay/linker.ld",
+        "src/pokemon_move_history_overlay/overworld_spawn_guard.c",
+        "include/overworld_spawn_guard.h",
+        "src/overworld_wild_helper_overlay/overworld_spawn_spatial.c",
+        "src/overworld_wild_helper_overlay/linker.ld",
+        "src/overworld_follower_selector_overlay/overworld_spawn_spatial.c",
+        "src/overworld_follower_selector_overlay/linker.ld",
+        "include/overworld_spawn_spatial.h",
+        "include/overworld_wild_occupancy.h",
+        "scripts/verify_overworld_wild_occupancy.py"
+      ]
+    },
+    {
+      "id": "host.wild-occupancy",
+      "title": "Native occupancy queries preserve player, object and height rules",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_wild_occupancy.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_spawns_overlay/**",
+        "src/pokemon_move_history_overlay/overworld_wild_occupancy.c",
+        "include/overworld_wild_occupancy.h",
+        "include/map_events_internal.h",
+        "scripts/verify_overworld_wild_occupancy.py",
+        "tools/overworld/test_wild_occupancy.py",
+        "tools/overworld/fixtures/*occupancy*"
+      ]
+    },
+    {
+      "id": "package.spawn-identity",
+      "title": "Verify hosted spawn lifecycle and typed native caller in ROM",
+      "proofLevel": "S2",
+      "costTier": 2,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_spawn_identity.py",
+        "--package-only",
+        "--rom",
+        "test.nds"
+      ],
+      "requires": [
+        "build",
+        "rom"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_spawns_overlay/**",
+        "src/pokemon_move_history_overlay/overworld_spawn_identity.c",
+        "src/pokemon_move_history_overlay/linker.ld",
+        "include/overworld_spawn_identity.h",
+        "scripts/verify_overworld_spawn_identity.py"
+      ]
+    },
+    {
+      "id": "host.spawn-identity",
+      "title": "Pre-create orphan cleanup preserves current and foreign objects",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_spawn_identity.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_spawns_overlay/**",
+        "src/pokemon_move_history_overlay/overworld_spawn_identity.c",
+        "include/overworld_wild_spawns_internal.h",
+        "scripts/verify_overworld_spawn_identity.py",
+        "tools/overworld/fixtures/spawn_identity_harness.c"
+      ]
+    },
+    {
+      "id": "host.actor-binding-observer",
+      "title": "Reject owner-context mismatch through the installed binding observer",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_actor_binding_observer.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/devtools_public_observation.py",
+        "tools/overworld/test_actor_binding_observer.py"
+      ]
+    },
+    {
+      "id": "host.wild-object-accessors",
+      "title": "Stock Wild object accessor equivalence",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_wild_object_accessors.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "scripts/verify_overworld_wild_object_accessors.py",
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "include/map_events_internal.h"
+      ]
+    },
     {
       "id": "host.contracts",
       "title": "Validate feature and scenario contracts",
       "proofLevel": "S0",
       "costTier": 0,
-      "command": ["{python}", "scripts/owctl", "scenario", "validate"],
-      "requires": ["source"],
-      "sourcePatterns": ["tools/overworld/**", "tests/overworld/**", "documentation/overworld-system/**"]
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "validate"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/**",
+        "tests/overworld/**",
+        "documentation/overworld-system/**",
+        "shared-devtools",
+        "scripts/verify_overworld_runtime_fixture.py"
+      ]
+    },
+    {
+      "id": "host.proof-gate",
+      "title": "Reject stale, incomplete, or self-authored runtime proof",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_proof_gate.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/**",
+        "tests/overworld/**",
+        ".agents/skills/verify-overworld/**",
+        "shared-devtools",
+        "scripts/verify_overworld_runtime_fixture.py"
+      ]
     },
     {
       "id": "host.feature-table",
       "title": "Check generated feature table freshness",
       "proofLevel": "S0",
       "costTier": 0,
-      "command": ["{python}", "scripts/generate_overworld_feature_table.py", "--check"],
-      "requires": ["source"],
-      "sourcePatterns": ["tools/overworld/system_features.yaml", "scripts/generate_overworld_feature_table.py", "documentation/overworld-system/verification.md"]
+      "command": [
+        "{python}",
+        "scripts/generate_overworld_feature_table.py",
+        "--check"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/system_features.yaml",
+        "scripts/generate_overworld_feature_table.py",
+        "documentation/overworld-system/verification.md"
+      ]
     },
     {
       "id": "host.behavior-schema",
       "title": "Verify behavior schema and generated metadata",
       "proofLevel": "S0",
       "costTier": 0,
-      "command": ["{python}", "scripts/verify_overworld_behavior_schema.py"],
-      "requires": ["source"],
-      "sourcePatterns": ["tools/overworld/behavior_schema.json", "tools/overworld/behavior_schema.py", "tools/overworld/generated/**", "include/generated/overworld_behavior_schema.h", "include/overworld_wild_behavior_data.h"]
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_behavior_schema.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/behavior_schema.json",
+        "tools/overworld/behavior_schema.py",
+        "tools/overworld/generated/**",
+        "include/generated/overworld_behavior_schema.h",
+        "include/overworld_wild_behavior_data.h"
+      ]
     },
     {
       "id": "host.behavior-catalog",
       "title": "Check named behavior authoring data and generated C compatibility output",
       "proofLevel": "S0",
       "costTier": 0,
-      "command": ["{python}", "scripts/generate_overworld_behavior_catalog.py", "--check"],
-      "requires": ["source"],
-      "sourcePatterns": ["data/overworld_behavior_profiles.json", "data/OverworldWildBehaviorData.c", "scripts/generate_overworld_behavior_catalog.py", "scripts/overworld_behavior_profile_viewer.py", "tools/overworld/schemas/behavior-authoring-v1.schema.json"]
+      "command": [
+        "{python}",
+        "scripts/generate_overworld_behavior_catalog.py",
+        "--check"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "scripts/generate_overworld_behavior_catalog.py",
+        "scripts/overworld_behavior_profile_viewer.py",
+        "tools/overworld/schemas/behavior-authoring-v2.schema.json"
+      ]
+    },
+    {
+      "id": "host.workshop-authoring",
+      "title": "Check canonical Workshop authoring and resolver input",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_workshop_authoring.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "scripts/build_overworld_wild_spawn_metadata.py",
+        "scripts/generate_overworld_behavior_catalog.py",
+        "scripts/overworld_behavior_profile_viewer.py",
+        "scripts/verify_overworld_workshop_authoring.py",
+        "tools/overworld/test_workshop_authoring.py",
+        "tools/overworld-viewer-v2/native_resolver.py",
+        "tools/overworld-viewer-v2/reliability.py"
+      ]
     },
     {
       "id": "host.behavior-resolver",
       "title": "Compile and verify the portable behavior resolver",
       "proofLevel": "S1",
       "costTier": 1,
-      "command": ["{python}", "scripts/verify_overworld_behavior_resolver.py"],
-      "requires": ["source"],
-      "sourcePatterns": ["include/overworld_behavior_resolver.h", "lib/overworld/overworld_behavior_resolver.c", "src/overworld_actor_system_overlay/overworld_actor_system_overlay.c", "overlays.mk", "tools/overworld-viewer-v2/native/**", "tools/overworld-viewer-v2/native_resolver.py", "tools/overworld/native/behavior_resolver_golden.json", "scripts/verify_overworld_behavior_resolver.py"]
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_behavior_resolver.py",
+        "--rule-removal-control"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_behavior_resolver.h",
+        "lib/overworld/overworld_behavior_resolver.c",
+        "src/overworld_actor_system_overlay/overworld_actor_system_overlay.c",
+        "overlays.mk",
+        "tools/overworld-viewer-v2/native/**",
+        "tools/overworld-viewer-v2/native_resolver.py",
+        "tools/overworld/native/behavior_resolver_golden.json",
+        "scripts/verify_overworld_behavior_resolver.py",
+        "scripts/test_verify_overworld_behavior_resolver_control.py"
+      ]
     },
     {
       "id": "host.motion-model",
       "title": "Compile and verify the portable motion model",
       "proofLevel": "S1",
       "costTier": 1,
-      "command": ["{python}", "scripts/verify_overworld_motion_model.py"],
-      "requires": ["source"],
-      "sourcePatterns": ["include/overworld_motion_model.h", "lib/overworld/overworld_motion_model.c", "tools/overworld_motion_model_harness.c"]
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_motion_model.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_motion_model.h",
+        "lib/overworld/overworld_motion_model.c",
+        "tools/overworld_motion_model_harness.c",
+        "tools/overworld_motion_world_fixture.*",
+        "tools/overworld_motion_world_harness.c"
+      ]
+    },
+    {
+      "id": "host.actor-view",
+      "title": "Preserve actor-owned state during the production engine-view refresh",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_actor_view.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_actor_system.h",
+        "src/overworld_actor_system_overlay/**",
+        "src/overworld_wild_runtime_overlay/**",
+        "scripts/verify_overworld_actor_view.py",
+        "tools/overworld/fixtures/actor_view_harness.c"
+      ]
+    },
+    {
+      "id": "host.actor-lane-projection",
+      "title": "Project native controller states into public behavior lanes",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_actor_lane_projection.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_behavior_resolver.h",
+        "include/overworld_wild_movement.h",
+        "src/overworld_actor_system_overlay/**",
+        "src/overworld_wild_runtime_overlay/**",
+        "scripts/verify_overworld_actor_lane_projection.py",
+        "scripts/verify_overworld_actor_view.py",
+        "tools/overworld/fixtures/actor_view_harness.c"
+      ]
+    },
+    {
+      "id": "host.actor-command-sequence",
+      "title": "Execute facade command replay, retry, stale context and cancel contracts",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_actor_command_sequence.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_actor_system*.h",
+        "include/overworld_motion_model.h",
+        "lib/overworld/overworld_motion_model.c",
+        "src/overworld_actor_system_overlay/**",
+        "scripts/verify_overworld_actor_command_sequence.py",
+        "scripts/verify_overworld_actor_commit_sequence.py",
+        "scripts/verify_overworld_spawn_profile_lifecycle.py",
+        "tools/overworld/fixtures/actor_facade_commands_harness.c",
+        "tools/overworld/test_actor_facade_commands.py"
+      ]
+    },
+    {
+      "id": "host.actor-commit-sequence",
+      "title": "Publish one actor-lifetime sequence value per accepted motion commit",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_actor_commit_sequence.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_actor_system.h",
+        "include/overworld_actor_system_internal.h",
+        "include/overworld_wild_movement.h",
+        "src/overworld_actor_system_overlay/**",
+        "lib/overworld/overworld_motion_model.c",
+        "include/overworld_motion_model.h",
+        "scripts/verify_overworld_actor_commit_sequence.py",
+        "scripts/verify_overworld_spawn_profile_lifecycle.py",
+        "tools/overworld/fixtures/actor_commit_sequence_harness.c",
+        "tools/overworld/test_actor_commit_sequence.py"
+      ]
+    },
+    {
+      "id": "host.spawn-profile-lifecycle",
+      "title": "Bind new actors before resolving and caching their spawn profiles",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_spawn_profile_lifecycle.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_runtime_overlay/**",
+        "src/overworld_actor_system_overlay/**",
+        "include/overworld_actor_system.h",
+        "scripts/verify_overworld_spawn_profile_lifecycle.py",
+        "tools/overworld/fixtures/spawn_profile_lifecycle_harness.c",
+        "tools/overworld/test_spawn_profile_lifecycle.py"
+      ]
+    },
+    {
+      "id": "host.appear-hop-completion",
+      "title": "Release Appear Hop when its final restore command finishes",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_appear_hop_completion.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_spawns_overlay/**",
+        "tools/overworld/test_appear_hop_completion.py"
+      ]
+    },
+    {
+      "id": "host.motion-start-transaction",
+      "title": "Reject custom motion without leaving an unowned engine command",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_motion_start_transaction.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_spawns_overlay/**",
+        "lib/overworld/overworld_motion_model.c",
+        "include/overworld_motion_model.h",
+        "scripts/verify_overworld_motion_start_transaction.py",
+        "tools/overworld/fixtures/motion_start_transaction_harness.c",
+        "tools/overworld/test_motion_start_transaction.py"
+      ]
+    },
+    {
+      "id": "host.hop-elevation-arc",
+      "title": "Keep the base Hop arc when extra elevation scaling is zero",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_hop_elevation_arc.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_behavior_data_overlay/**",
+        "include/overworld_wild_behavior_data.h",
+        "include/types.h",
+        "include/overworld_motion_model.h",
+        "lib/overworld/overworld_motion_model.c",
+        "scripts/verify_overworld_hop_elevation_arc.py",
+        "scripts/verify_overworld_spawn_profile_lifecycle.py",
+        "tools/overworld/fixtures/hop_elevation_arc_harness.c",
+        "tools/overworld/test_hop_elevation_arc.py"
+      ]
+    },
+    {
+      "id": "host.flat-reposition-clearance",
+      "title": "Plan flat repositioning with the same zero arc that executes",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_flat_reposition_clearance.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_actor_system_internal.h",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/pokemon_move_history_task6_overlay/overworld_actor_hop_planner.c",
+        "src/overworld_wild_behavior_data_overlay/**",
+        "include/overworld_wild_behavior_data.h",
+        "lib/overworld/overworld_motion_model.c",
+        "scripts/verify_overworld_flat_reposition_clearance.py",
+        "scripts/verify_overworld_motion_start_transaction.py",
+        "scripts/verify_overworld_hop_elevation_arc.py",
+        "tools/overworld/fixtures/flat_reposition_clearance_harness.c",
+        "tools/overworld/fixtures/motion_start_transaction_harness.c",
+        "tools/overworld/test_flat_reposition_clearance.py"
+      ]
+    },
+    {
+      "id": "host.field-stream",
+      "title": "Verify the Field-owned terrain watcher with the actual adapter body",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_field_stream.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/map_teleport.h",
+        "include/overworld_field_terrain_internal.h",
+        "src/field/map_teleport.c",
+        "src/pokemon_move_history_overlay/overworld_field_terrain_stream.c",
+        "scripts/verify_overworld_field_stream.py",
+        "tools/overworld/fixtures/field_stream_harness.c"
+      ]
+    },
+    {
+      "id": "host.transition-model",
+      "title": "Compile and verify the actor field-transition model",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_actor_transition.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_actor_system.h",
+        "include/overworld_actor_transition_model.h",
+        "lib/overworld/overworld_actor_transition_model.c",
+        "tools/overworld_actor_transition_harness.c",
+        "scripts/verify_overworld_actor_transition.py"
+      ]
+    },
+    {
+      "id": "host.role-controller",
+      "title": "Compile and verify the portable role-controller model",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_role_controller.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_role_controller.h",
+        "include/overworld_wild_role_control.h",
+        "include/overworld_wild_movement.h",
+        "lib/overworld/overworld_role_controller.c",
+        "tools/overworld_role_controller_harness.c",
+        "scripts/verify_overworld_role_controller.py",
+        "src/overworld_actor_system_overlay/**",
+        "src/overworld_follower_selector_overlay/**",
+        "src/overworld_wild_runtime_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_mount_overlay/**",
+        "src/pokemon_move_history_overlay/**"
+      ]
+    },
+    {
+      "id": "host.passive-chain-pause",
+      "title": "Verify passive Movement Chain pause handling",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_passive_chain_pause.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "include/overworld_wild_behavior_data.h",
+        "src/overworld_wild_runtime_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "scripts/verify_overworld_passive_chain_pause.py",
+        "tools/overworld/test_passive_chain_pause.py"
+      ]
+    },
+    {
+      "id": "host.population-model",
+      "title": "Compile and verify the actor population model",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_population_model.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_population_model.h",
+        "include/overworld_actor_system*.h",
+        "include/constants/save.h",
+        "lib/overworld/overworld_population_model.c",
+        "src/overworld_actor_system_overlay/**",
+        "src/overworld_wild_runtime_overlay/**",
+        "overlays.mk",
+        "tools/overworld_population_model_harness.c",
+        "scripts/verify_overworld_population_model.py",
+        "scripts/generate_overworld_actor_system_debug.py"
+      ]
     },
     {
       "id": "package.actor",
       "title": "Verify resident actor overlay and debug descriptor",
       "proofLevel": "S2",
       "costTier": 2,
-      "command": ["{python}", "scripts/verify_pokemon_move_history.py", "--rom", "test.nds"],
-      "requires": ["build", "rom"],
-      "sourcePatterns": ["include/overworld_actor_system*.h", "src/overworld_actor_system_overlay/**", "scripts/generate_overworld_actor_system_debug.py", "armips/asm/syntheticoverlay.s", "overlays.mk", "rom.ld"]
+      "command": [
+        "{python}",
+        "scripts/verify_pokemon_move_history.py",
+        "--rom",
+        "test.nds"
+      ],
+      "requires": [
+        "build",
+        "rom"
+      ],
+      "sourcePatterns": [
+        "include/overworld_actor_system*.h",
+        "src/overworld_actor_system_overlay/**",
+        "scripts/generate_overworld_actor_system_debug.py",
+        "armips/asm/syntheticoverlay.s",
+        "overlays.mk",
+        "rom.ld"
+      ]
+    },
+    {
+      "id": "package.legacy-owner-deletion",
+      "title": "Prove legacy overworld owners are absent from linked and packaged overlays",
+      "proofLevel": "S2",
+      "costTier": 2,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_roadmap_legacy_deletion.py",
+        "--rom",
+        "test.nds"
+      ],
+      "requires": [
+        "build",
+        "rom"
+      ],
+      "sourcePatterns": [
+        "include/overworld_actor_system*.h",
+        "include/overworld_*movement*.h",
+        "lib/overworld/**",
+        "src/overworld_actor_system_overlay/**",
+        "src/overworld_mount_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_runtime_overlay/**",
+        "src/pokemon_move_history_overlay/**",
+        "src/pokemon_move_history_task6_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "scripts/verify_overworld_roadmap_legacy_deletion.py"
+      ]
+    },
+    {
+      "id": "runtime.packaged-resolver-parity",
+      "title": "Compare the packaged ROM resolver with the Workshop resolver",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "legacy.packaged-resolver-parity"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_behavior_resolver.h",
+        "lib/overworld/overworld_behavior_resolver.c",
+        "src/overworld_actor_system_overlay/**",
+        "scripts/overworld_behavior_profile_viewer.py",
+        "tools/overworld-viewer-v2/native/**"
+      ]
     },
     {
       "id": "profile.walk-timing",
       "title": "Verify exact-frame profile schema and migration",
       "proofLevel": "S0",
       "costTier": 0,
-      "command": ["{python}", "scripts/verify_overworld_wild_walk_profile_timing.py"],
-      "requires": ["source"],
-      "sourcePatterns": ["data/OverworldWildBehaviorData.c", "include/overworld_wild_behavior_data.h", "scripts/overworld_behavior_profile_viewer.py", "tools/overworld-viewer-v2/**"]
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_wild_walk_profile_timing.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_wild_behavior_data.h",
+        "scripts/overworld_behavior_profile_viewer.py",
+        "tools/overworld-viewer-v2/**"
+      ]
     },
     {
       "id": "walk.policy",
       "title": "Compile the shared Walk timing policy",
       "proofLevel": "S1",
       "costTier": 1,
-      "command": ["{python}", "scripts/verify_overworld_walk_frame_timing.py"],
-      "requires": ["source"],
-      "sourcePatterns": ["include/overworld_walk_*policy.h", "src/pokemon_move_history_overlay/overworld_walk_module.c"]
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_walk_frame_timing.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_walk_*policy.h",
+        "src/pokemon_move_history_overlay/overworld_walk_module.c"
+      ]
     },
     {
       "id": "walk.pause",
       "title": "Verify Walk pause schema and lifecycle routing",
       "proofLevel": "S0",
       "costTier": 0,
-      "command": ["{python}", "scripts/verify_overworld_wild_walk_pause.py"],
-      "requires": ["source"],
-      "sourcePatterns": ["data/OverworldWildBehaviorData.c", "include/overworld_wild_behavior_data.h", "src/overworld_wild_spawns_overlay/**", "src/overworld_wild_runtime_overlay/**"]
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_wild_walk_pause.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_wild_behavior_data.h",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_runtime_overlay/**"
+      ]
     },
     {
       "id": "walk.momentum",
       "title": "Verify Walk ownership and momentum source contracts",
       "proofLevel": "S2",
       "costTier": 2,
-      "command": ["{python}", "scripts/verify_overworld_wild_walk_momentum.py"],
-      "requires": ["source"],
-      "sourcePatterns": ["include/overworld_wild_movement.h", "include/overworld_walk_*.h", "src/overworld_mount_overlay/**", "src/overworld_wild_spawns_overlay/**", "src/overworld_wild_runtime_overlay/**", "src/pokemon_move_history_overlay/**"]
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_wild_walk_momentum.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_wild_movement.h",
+        "include/overworld_walk_*.h",
+        "src/overworld_mount_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_runtime_overlay/**",
+        "src/pokemon_move_history_overlay/**"
+      ]
     },
     {
       "id": "walk.flying-insect",
       "title": "Verify Flying insect profile and shared movement policy",
       "proofLevel": "S1",
       "costTier": 1,
-      "command": ["{python}", "scripts/verify_overworld_wild_flying_insect_walk.py"],
-      "requires": ["source"],
-      "sourcePatterns": ["data/OverworldWildBehaviorData.c", "src/overworld_wild_helper_overlay/**", "src/pokemon_move_history_task6_overlay/**"]
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_wild_flying_insect_walk.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "data/OverworldWildBehaviorData.c",
+        "src/overworld_wild_helper_overlay/**",
+        "src/pokemon_move_history_task6_overlay/**"
+      ]
     },
     {
       "id": "hop.emote-directions",
       "title": "Verify Hop emote direction ownership",
       "proofLevel": "S2",
       "costTier": 2,
-      "command": ["{python}", "scripts/verify_overworld_wild_emote_directions.py"],
-      "requires": ["source"],
-      "sourcePatterns": ["src/overworld_wild_spawns_overlay/**"]
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_wild_emote_directions.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_spawns_overlay/**"
+      ]
+    },
+    {
+      "id": "motion.wild-ownership",
+      "title": "Check wild Hop and Teleport motion ownership",
+      "proofLevel": "S0",
+      "costTier": 0,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_wild_motion_ownership.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_wild_runtime.h",
+        "include/overworld_wild_spawns_internal.h",
+        "src/overworld_wild_runtime_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/pokemon_move_history_task6_overlay/**"
+      ]
     },
     {
       "id": "package.direction-delta",
       "title": "Verify packaged direction helpers",
       "proofLevel": "S2",
       "costTier": 2,
-      "command": ["{python}", "scripts/verify_overworld_wild_direction_delta_calls.py"],
-      "requires": ["build"],
-      "sourcePatterns": ["include/overworld_walk_module.h", "src/overworld_wild_spawns_overlay/**", "src/pokemon_move_history_overlay/**", "rom.ld"]
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_wild_direction_delta_calls.py"
+      ],
+      "requires": [
+        "build"
+      ],
+      "sourcePatterns": [
+        "include/overworld_walk_module.h",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/pokemon_move_history_overlay/**",
+        "rom.ld"
+      ]
     },
     {
       "id": "package.mount",
       "title": "Verify mount package and ABI",
       "proofLevel": "S2",
       "costTier": 2,
-      "command": ["{python}", "scripts/verify_overworld_mount.py", "--rom", "test.nds"],
-      "requires": ["build", "rom"],
-      "sourcePatterns": ["include/overworld_mount.h", "src/overworld_mount_overlay/**", "src/overworld_follower_selector_overlay/**", "src/overworld_wild_spawns.c", "src/field/map_teleport.c", "rom.ld"]
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_mount.py",
+        "--rom",
+        "test.nds"
+      ],
+      "requires": [
+        "build",
+        "rom"
+      ],
+      "sourcePatterns": [
+        "include/overworld_mount.h",
+        "src/overworld_mount_overlay/**",
+        "src/overworld_follower_selector_overlay/**",
+        "src/overworld_wild_spawns.c",
+        "src/field/map_teleport.c",
+        "rom.ld"
+      ]
     },
     {
       "id": "runtime.mounted-frames",
       "title": "Run mounted Walk frame boundaries",
       "proofLevel": "S3",
       "costTier": 3,
-      "command": ["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "mounted_frames"],
-      "requires": ["build", "rom", "dsv", "emulator"],
-      "sourcePatterns": ["src/overworld_mount_overlay/**", "src/pokemon_move_history_overlay/**"]
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "legacy.mounted-frames"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_mount_overlay/**",
+        "src/pokemon_move_history_overlay/**"
+      ]
     },
     {
       "id": "runtime.mounted-smoothness",
       "title": "Run mounted acceleration and presentation synchronization",
       "proofLevel": "S4",
       "costTier": 4,
-      "command": ["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "mounted_smoothness"],
-      "requires": ["build", "rom", "dsv", "emulator"],
-      "sourcePatterns": ["src/overworld_mount_overlay/**"]
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "legacy.mounted-smoothness"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_mount_overlay/**"
+      ]
     },
     {
       "id": "runtime.turn-skid",
       "title": "Run mounted turn-skid control release",
       "proofLevel": "S3",
       "costTier": 3,
-      "command": ["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "turn_skid"],
-      "requires": ["build", "rom", "dsv", "emulator"],
-      "sourcePatterns": ["src/overworld_mount_overlay/**", "src/pokemon_move_history_overlay/**"]
-    },
-    {
-      "id": "runtime.diagonal-turn-skid",
-      "title": "Run diagonal mounted turn skid",
-      "proofLevel": "S3",
-      "costTier": 3,
-      "command": ["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "diagonal_turn_skid"],
-      "requires": ["build", "rom", "dsv", "emulator"],
-      "sourcePatterns": ["src/overworld_mount_overlay/**", "include/overworld_walk_direction_policy.h"]
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "current.turn-deceleration"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_mount_overlay/**",
+        "src/pokemon_move_history_overlay/**"
+      ]
     },
     {
       "id": "runtime.wild-walk",
       "title": "Run wild exact-frame Walk",
       "proofLevel": "S3",
       "costTier": 3,
-      "command": ["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "wild_walk"],
-      "requires": ["build", "rom", "dsv", "emulator"],
-      "sourcePatterns": ["src/overworld_wild_spawns_overlay/**", "src/overworld_wild_runtime_overlay/**"]
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "legacy.wild-walk"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_runtime_overlay/**"
+      ]
     },
     {
       "id": "runtime.wild-ledge-hop",
       "title": "Run wild ledge Hop",
       "proofLevel": "S3",
       "costTier": 3,
-      "command": ["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "wild_ledge_hop"],
-      "requires": ["build", "rom", "dsv", "emulator"],
-      "sourcePatterns": ["src/overworld_wild_spawns_overlay/**", "src/pokemon_move_history_task6_overlay/**"]
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "legacy.wild-ledge-hop"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_spawns_overlay/**",
+        "src/pokemon_move_history_task6_overlay/**"
+      ]
     },
     {
       "id": "runtime.ledyba-chain-pause",
-      "title": "Run Ledyba semantic chain pause",
+      "title": "Run controlled Ledyba chain retry and reposition",
       "proofLevel": "S3",
       "costTier": 3,
-      "command": ["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "ledyba_chain_pause"],
-      "requires": ["build", "rom", "dsv", "emulator"],
-      "sourcePatterns": ["data/OverworldWildBehaviorData.c", "src/overworld_wild_spawns_overlay/**", "src/pokemon_move_history_task6_overlay/**"]
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "legacy.ledyba-chain-pause"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "data/OverworldWildBehaviorData.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/pokemon_move_history_task6_overlay/**"
+      ]
     },
     {
       "id": "runtime.mankey-hops",
       "title": "Run mounted Mankey Hop cases",
       "proofLevel": "S4",
       "costTier": 4,
-      "command": ["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "mankey_hops"],
-      "requires": ["build", "rom", "sav", "emulator"],
-      "sourcePatterns": ["src/overworld_mount_overlay/**", "src/pokemon_move_history_task6_overlay/**"]
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "legacy.mankey-hops"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_mount_overlay/**",
+        "src/pokemon_move_history_task6_overlay/**"
+      ]
+    },
+    {
+      "id": "runtime.wild-teleport",
+      "title": "Run a live wild Gastly Teleport lifecycle",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "legacy.wild-teleport"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_actor_system_overlay/**",
+        "src/overworld_wild_spawns_overlay/**"
+      ]
     },
     {
       "id": "runtime.mankey-control-stress",
       "title": "Run mounted Mankey control stress",
       "proofLevel": "S5",
       "costTier": 5,
-      "command": ["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "mankey_control_stress"],
-      "requires": ["build", "rom", "sav", "emulator"],
-      "sourcePatterns": ["src/overworld_mount_overlay/**", "src/pokemon_move_history_task6_overlay/**", "src/field/map_teleport.c"]
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "legacy.mankey-control-stress"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_mount_overlay/**",
+        "src/pokemon_move_history_task6_overlay/**",
+        "src/field/map_teleport.c"
+      ]
     },
     {
       "id": "runtime.mount-walk-transition",
       "title": "Run mounted Walk transition",
-      "proofLevel": "S5",
-      "costTier": 5,
-      "command": ["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "mounted_walk_transition"],
-      "requires": ["build", "rom", "dsv", "emulator"],
-      "sourcePatterns": ["src/overworld_mount_overlay/**", "src/field/map_teleport.c"]
+      "proofLevel": "S4",
+      "costTier": 4,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "legacy.mounted-walk-transition"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_mount_overlay/**",
+        "src/field/map_teleport.c"
+      ]
     },
     {
       "id": "runtime.mount-transition",
       "title": "Run mounted Hop transition",
       "proofLevel": "S5",
       "costTier": 5,
-      "command": ["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "mounted_transition"],
-      "requires": ["build", "rom", "sav", "emulator"],
-      "sourcePatterns": ["src/overworld_mount_overlay/**", "src/field/map_teleport.c", "src/pokemon_move_history_task6_overlay/**"]
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "legacy.mounted-transition"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_mount_overlay/**",
+        "src/field/map_teleport.c",
+        "src/pokemon_move_history_task6_overlay/**"
+      ]
     },
     {
       "id": "runtime.stomp",
       "title": "Run Walk stomp feedback",
-      "proofLevel": "S4",
-      "costTier": 4,
-      "command": ["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "stomp"],
-      "requires": ["build", "rom", "dsv", "emulator"],
-      "sourcePatterns": ["src/overworld_mount_overlay/**", "src/overworld_wild_runtime_overlay/**"]
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "legacy.stomp"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_mount_overlay/**",
+        "src/overworld_wild_runtime_overlay/**"
+      ]
     },
     {
       "id": "runtime.crash",
       "title": "Run Walk crash feedback",
       "proofLevel": "S4",
       "costTier": 4,
-      "command": ["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "crash"],
-      "requires": ["build", "rom", "dsv", "emulator"],
-      "sourcePatterns": ["src/overworld_mount_overlay/**", "src/overworld_wild_runtime_overlay/**"]
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "legacy.crash"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_mount_overlay/**",
+        "src/overworld_wild_runtime_overlay/**"
+      ]
     },
     {
       "id": "runtime.cyndaquil-control",
       "title": "Run mounted Cyndaquil control stress",
       "proofLevel": "S5",
       "costTier": 5,
-      "command": ["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "cyndaquil_control_stress"],
-      "requires": ["build", "rom", "dsv", "emulator"],
-      "sourcePatterns": ["src/overworld_mount_overlay/**"]
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "legacy.cyndaquil-control-stress"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_mount_overlay/**"
+      ]
     },
     {
-      "id": "runtime.cyndaquil-step-taps",
-      "title": "Run repeated mounted Walk taps",
-      "proofLevel": "S5",
-      "costTier": 5,
-      "command": ["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "cyndaquil_step_taps"],
-      "requires": ["build", "rom", "dsv", "emulator"],
-      "sourcePatterns": ["src/overworld_mount_overlay/**"]
+      "id": "runtime.mounted-streaming-path",
+      "title": "Run finite mounted diagonal path streaming",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "legacy.mounted-streaming-path"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_mount_overlay/**",
+        "src/field/**"
+      ]
     },
     {
-      "id": "runtime.cyndaquil-streaming",
-      "title": "Run cardinal mounted streaming stress",
-      "proofLevel": "S5",
-      "costTier": 5,
-      "command": ["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "cyndaquil_streaming_stress"],
-      "requires": ["build", "rom", "dsv", "emulator"],
-      "sourcePatterns": ["src/overworld_mount_overlay/**", "src/field/**"]
+      "id": "runtime.cyndaquil-streaming-stress",
+      "title": "Run held mounted cardinal field streaming",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "legacy.cyndaquil-streaming-stress"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_mount_overlay/**",
+        "src/field/**"
+      ]
     },
     {
-      "id": "runtime.mounted-diagonal-streaming",
-      "title": "Run diagonal mounted streaming stress",
-      "proofLevel": "S5",
-      "costTier": 5,
-      "command": ["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "mounted_diagonal_streaming"],
-      "requires": ["build", "rom", "dsv", "emulator"],
-      "sourcePatterns": ["src/overworld_mount_overlay/**", "src/field/**"]
+      "id": "runtime.wild-transition",
+      "title": "Run wild actor field-transition invalidation",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "legacy.wild-transition"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_actor_system_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/field/map_teleport.c"
+      ]
+    },
+    {
+      "id": "runtime.follower-transition",
+      "title": "Run follower actor field-transition rebind",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "legacy.follower-transition"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_actor_system_overlay/**",
+        "src/overworld_follower_selector_overlay/**",
+        "src/field/map_teleport.c"
+      ]
+    },
+    {
+      "id": "package.battle-capture",
+      "title": "Verify battle and capture handoff package contract",
+      "proofLevel": "S2",
+      "costTier": 2,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_mount.py",
+        "--rom",
+        "test.nds"
+      ],
+      "requires": [
+        "build",
+        "rom"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_spawns.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/script_new_cmds.c",
+        "src/overworld_wild_helper_overlay/**"
+      ]
+    },
+    {
+      "id": "runtime.battle-capture",
+      "title": "Run a live wild battle handoff",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "legacy.wild-battle-handoff"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/script_new_cmds.c"
+      ]
     },
     {
       "id": "runtime.land-surf",
       "title": "Run Cherrygrove Land and Surf separation",
       "proofLevel": "S3",
       "costTier": 3,
-      "command": ["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "cherrygrove_surf_spawn_terrain"],
-      "requires": ["build", "rom", "dsv", "emulator"],
-      "sourcePatterns": ["src/overworld_wild_spawns_overlay/**", "src/overworld_wild_helper_overlay/**", "src/overworld_mount_overlay/**"]
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "legacy.cherrygrove-surf-spawn-terrain"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/overworld_mount_overlay/**"
+      ]
+    },
+    {
+      "id": "host.canopy-surface-catalog",
+      "title": "Verify compressed Canopy topology and elevated support height",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_canopy_surface_catalog.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_wild_behavior_data.h",
+        "data/overworld_wild_roof_catalog_manifest.json",
+        "data/generated/overworld_wild_roof_catalog.*",
+        "tools/headbutt_tree_visual_model_probe.py",
+        "tools/generate_overworld_wild_roof_catalog.py",
+        "src/overworld_wild_runtime_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/pokemon_move_history_task6_overlay/**"
+      ]
+    },
+    {
+      "id": "host.spawn-refill-budget",
+      "title": "Verify legacy helper scan budget and full cursor coverage",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_spawn_refill_budget.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "tools/overworld/test_spawn_refill_budget.py"
+      ]
+    },
+    {
+      "id": "host.spawn-destination-budget",
+      "title": "Verify profile destination scan parity and per-update budget",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_spawn_destination_scan.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_wild_behavior_data.h",
+        "include/overworld_wild_spawns_internal.h",
+        "lib/overworld/overworld_population_model.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "tools/overworld/test_spawn_destination_scan.py"
+      ]
     }
   ],
   "capabilities": [
@@ -307,325 +1455,1162 @@
       "id": "actor.system",
       "title": "Resident actor facade",
       "owner": "Actor facade",
-      "roles": ["Wild", "Follower", "Mounted", "Scripted"],
-      "sourcePatterns": ["include/overworld_actor_system*.h", "src/overworld_actor_system_overlay/**", "lib/overworld/**", "scripts/generate_overworld_actor_system_debug.py", "tools/overworld/**", "tests/overworld/**", "armips/asm/syntheticoverlay.s", "overlays.mk"],
-      "checks": ["host.contracts", "host.feature-table", "host.motion-model", "package.actor"],
-      "scenarios": ["mount.begin-current-follower", "mount.detach-restores-control", "mount.transition-mid-motion"],
-      "docs": ["documentation/overworld-system/architecture.md", "documentation/overworld-system/verification.md"],
-      "traceGroups": ["actor", "motion", "lifecycle"],
-      "minimumProof": ["S0", "S1", "S2", "S3"]
+      "roles": [
+        "Wild",
+        "Follower",
+        "Mounted",
+        "Scripted"
+      ],
+      "sourcePatterns": [
+        "include/overworld_actor_system*.h",
+        "src/overworld_actor_system_overlay/**",
+        "lib/overworld/**",
+        "scripts/generate_overworld_actor_system_debug.py",
+        "tools/overworld/**",
+        "tests/overworld/**",
+        "armips/asm/syntheticoverlay.s",
+        "overlays.mk"
+      ],
+      "checks": [
+        "host.contracts",
+        "host.feature-table",
+        "host.motion-model",
+        "host.actor-view",
+        "host.actor-lane-projection",
+        "host.actor-command-sequence",
+        "host.actor-commit-sequence",
+        "host.actor-binding-observer",
+        "host.spawn-identity",
+        "host.wild-occupancy",
+        "host.transition-model",
+        "host.role-controller",
+        "package.actor",
+        "package.spawn-identity",
+        "package.wild-occupancy",
+        "package.legacy-owner-deletion"
+      ],
+      "scenarios": [
+        "devtools.actor-identity",
+        "actor.follower-direct-load",
+        "actor.binding.current-context",
+        "actor.inspect-current-and-stale",
+        "mount.begin-current-follower",
+        "mount.detach-restores-control",
+        "mount.transition-mid-motion",
+        "world.unmounted.long-travel-cadence",
+        "world.unmounted.game-cadence",
+        "world.unmounted.spawn-zero-stutter",
+        "world.unmounted.wild-soak",
+        "observation.live-actor-and-motion-control",
+        "observation.spawn-height-control",
+        "observation.live-route-control",
+        "observation.walk-policy-control",
+        "observation.mount-pose-control",
+        "observation.wild-clear-control",
+        "observation.corner-policy-control",
+        "observation.walk-matrix-state-control",
+        "observation.stomp-policy-control",
+        "observation.crash-reader-control"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md",
+        "documentation/overworld-system/verification.md"
+      ],
+      "traceGroups": [
+        "actor",
+        "motion",
+        "lifecycle"
+      ],
+      "minimumProof": [
+        "S0",
+        "S1",
+        "S2",
+        "S3"
+      ],
+      "roleProof": [
+        {
+          "proofLevel": "S5",
+          "roles": [
+            "Wild",
+            "Follower"
+          ]
+        }
+      ]
     },
     {
       "id": "profile.composition",
       "title": "Profile composition",
       "owner": "Resolver",
-      "roles": ["Wild", "Follower", "Mounted"],
-      "sourcePatterns": ["data/overworld_behavior_profiles.json", "data/OverworldWildBehaviorData.c", "include/overworld_wild_behavior_data.h", "include/overworld_behavior_resolver.h", "lib/overworld/overworld_behavior_resolver.c", "tools/overworld/behavior_schema*", "tools/overworld/generated/**", "tools/overworld/native/behavior_resolver_golden.json", "tools/overworld/schemas/behavior-authoring-v1.schema.json", "scripts/generate_overworld_behavior_catalog.py", "scripts/verify_overworld_behavior_resolver.py", "scripts/overworld_behavior_profile_viewer.py", "tools/overworld-viewer-v2/**"],
-      "checks": ["host.contracts", "host.behavior-schema", "host.behavior-catalog", "host.behavior-resolver", "host.feature-table", "profile.walk-timing", "walk.flying-insect", "package.actor"],
-      "scenarios": ["profile.resolve.override-order", "profile.resolve.follower-mounted-parity"],
-      "docs": ["documentation/overworld-system/architecture.md", "documentation/overworld-system/authoring-debugging.md"],
-      "traceGroups": ["profile"],
-      "minimumProof": ["S0", "S1"]
+      "roles": [
+        "Wild",
+        "Follower",
+        "Mounted"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_wild_behavior_data.h",
+        "include/overworld_behavior_resolver.h",
+        "lib/overworld/overworld_behavior_resolver.c",
+        "tools/overworld/behavior_schema*",
+        "tools/overworld/generated/**",
+        "tools/overworld/native/behavior_resolver_golden.json",
+        "tools/overworld/schemas/behavior-authoring-v2.schema.json",
+        "scripts/generate_overworld_behavior_catalog.py",
+        "scripts/verify_overworld_behavior_resolver.py",
+        "scripts/overworld_behavior_profile_viewer.py",
+        "tools/overworld-viewer-v2/**"
+      ],
+      "checks": [
+        "host.contracts",
+        "host.behavior-schema",
+        "host.behavior-catalog",
+        "host.behavior-resolver",
+        "host.feature-table",
+        "host.spawn-refill-budget",
+        "host.spawn-destination-budget",
+        "profile.walk-timing",
+        "walk.flying-insect",
+        "package.actor",
+        "runtime.packaged-resolver-parity"
+      ],
+      "scenarios": [
+        "profile.resolve.override-order",
+        "profile.resolve.follower-mounted-parity",
+        "profile.follower-mounted-owner-transfer",
+        "profile.resolve.packaged-rom-parity",
+        "population.spawn-work-budget",
+        "world.unmounted.long-travel-cadence"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md",
+        "documentation/overworld-system/authoring-debugging.md"
+      ],
+      "traceGroups": [
+        "profile"
+      ],
+      "minimumProof": [
+        "S0",
+        "S1",
+        "S3"
+      ]
     },
     {
       "id": "walk.exact",
       "title": "Exact Walk",
       "owner": "Motion Module",
-      "roles": ["Wild", "Mounted"],
-      "sourcePatterns": ["include/overworld_walk_*.h", "include/overworld_motion_model.h", "lib/overworld/overworld_motion_model.c", "src/overworld_actor_system_overlay/**", "src/pokemon_move_history_overlay/**", "src/overworld_wild_runtime_overlay/**", "src/overworld_wild_spawns_overlay/**", "src/overworld_mount_overlay/**"],
-      "checks": ["host.motion-model", "walk.policy", "walk.momentum", "package.actor", "runtime.wild-walk", "runtime.mounted-frames"],
-      "scenarios": ["walk.cardinal.frames-1-32"],
-      "docs": ["documentation/overworld_walk_frame_timing_spec.md"],
-      "traceGroups": ["intent", "motion"],
-      "minimumProof": ["S1", "S2", "S3"]
+      "roles": [
+        "Wild",
+        "Follower",
+        "Mounted"
+      ],
+      "sourcePatterns": [
+        "include/overworld_walk_*.h",
+        "include/overworld_motion_model.h",
+        "lib/overworld/overworld_motion_model.c",
+        "src/overworld_actor_system_overlay/**",
+        "src/pokemon_move_history_overlay/**",
+        "src/overworld_wild_runtime_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_mount_overlay/**"
+      ],
+      "checks": [
+        "host.motion-model",
+        "host.wild-object-accessors",
+        "walk.policy",
+        "walk.momentum",
+        "package.actor",
+        "runtime.wild-walk",
+        "runtime.mounted-frames"
+      ],
+      "scenarios": [
+        "walk.cardinal.frames-1-32",
+        "walk.wild.exact-frame",
+        "mount.walk-transition-mid-motion",
+        "world.unmounted.long-travel-cadence",
+        "world.unmounted.game-cadence",
+        "world.unmounted.spawn-zero-stutter",
+        "world.unmounted.wild-soak"
+      ],
+      "docs": [
+        "documentation/overworld_walk_frame_timing_spec.md"
+      ],
+      "traceGroups": [
+        "intent",
+        "motion"
+      ],
+      "minimumProof": [
+        "S1",
+        "S2",
+        "S3"
+      ],
+      "roleProof": [
+        {
+          "proofLevel": "S5",
+          "roles": [
+            "Wild",
+            "Follower"
+          ]
+        }
+      ]
     },
     {
       "id": "walk.acceleration",
       "title": "Walk acceleration",
       "owner": "Motion Policy",
-      "roles": ["Wild", "Mounted"],
-      "sourcePatterns": ["include/overworld_walk_timing_policy.h", "src/overworld_wild_runtime_overlay/**", "src/overworld_mount_overlay/**"],
-      "checks": ["walk.policy", "walk.momentum", "runtime.mounted-smoothness"],
-      "scenarios": ["walk.acceleration.mounted-parity"],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["motion", "presentation"],
-      "minimumProof": ["S1", "S3"]
+      "roles": [
+        "Wild",
+        "Mounted"
+      ],
+      "sourcePatterns": [
+        "include/overworld_walk_timing_policy.h",
+        "src/overworld_wild_runtime_overlay/**",
+        "src/overworld_mount_overlay/**"
+      ],
+      "checks": [
+        "walk.policy",
+        "walk.momentum",
+        "runtime.mounted-smoothness"
+      ],
+      "scenarios": [
+        "walk.wild.exact-frame",
+        "mount.movement.frame-pacing"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "motion",
+        "presentation"
+      ],
+      "minimumProof": [
+        "S1",
+        "S3"
+      ]
     },
     {
       "id": "walk.skid",
       "title": "Turn and stop skid",
       "owner": "Motion Policy",
-      "roles": ["Wild", "Mounted"],
-      "sourcePatterns": ["include/overworld_walk_*policy.h", "src/pokemon_move_history_overlay/**", "src/overworld_wild_runtime_overlay/**", "src/overworld_mount_overlay/**"],
-      "checks": ["walk.policy", "walk.momentum", "runtime.turn-skid", "runtime.diagonal-turn-skid"],
-      "scenarios": ["walk.turn-skid.control-release"],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["intent", "motion", "presentation"],
-      "minimumProof": ["S1", "S3", "S4"]
+      "roles": [
+        "Wild",
+        "Mounted"
+      ],
+      "sourcePatterns": [
+        "include/overworld_walk_*policy.h",
+        "src/pokemon_move_history_overlay/**",
+        "src/overworld_wild_runtime_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_mount_overlay/**"
+      ],
+      "checks": [
+        "walk.policy",
+        "walk.momentum",
+        "runtime.turn-skid"
+      ],
+      "scenarios": [
+        "walk.turn-skid.control-release",
+        "walk.wild.runner-stop-skid",
+        "walk.wild.runner-turn-runway"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "intent",
+        "motion",
+        "presentation"
+      ],
+      "minimumProof": [
+        "S1",
+        "S3"
+      ]
     },
     {
       "id": "walk.feedback",
       "title": "Stomp and crash",
       "owner": "Motion reactions",
-      "roles": ["Wild", "Mounted"],
-      "sourcePatterns": ["src/overworld_wild_runtime_overlay/**", "src/overworld_wild_spawns_overlay/**", "src/overworld_mount_overlay/**"],
-      "checks": ["walk.momentum", "runtime.stomp", "runtime.crash"],
-      "scenarios": [],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["motion", "presentation"],
-      "minimumProof": ["S1", "S3", "S4"]
+      "roles": [
+        "Wild",
+        "Mounted"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_runtime_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_mount_overlay/**"
+      ],
+      "checks": [
+        "walk.policy",
+        "walk.momentum",
+        "runtime.stomp",
+        "runtime.crash"
+      ],
+      "scenarios": [
+        "walk.stomp.feedback",
+        "walk.crash.feedback"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "motion",
+        "presentation"
+      ],
+      "minimumProof": [
+        "S1",
+        "S3",
+        "S4"
+      ]
     },
     {
       "id": "walk.diagonal",
       "title": "Diagonal Walk",
       "owner": "Motion planner",
-      "roles": ["Wild", "Mounted"],
-      "sourcePatterns": ["include/overworld_walk_direction_policy.h", "src/pokemon_move_history_overlay/**", "src/overworld_wild_spawns_overlay/**", "src/overworld_mount_overlay/**"],
-      "checks": ["walk.policy", "package.direction-delta", "runtime.mounted-frames", "runtime.mounted-diagonal-streaming"],
-      "scenarios": ["walk.diagonal.corner-block", "mount.streaming.cardinal-and-diagonal"],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["intent", "motion", "streaming"],
-      "minimumProof": ["S1", "S2", "S3"]
+      "roles": [
+        "Wild",
+        "Mounted"
+      ],
+      "sourcePatterns": [
+        "include/overworld_walk_direction_policy.h",
+        "src/pokemon_move_history_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_mount_overlay/**"
+      ],
+      "checks": [
+        "walk.policy",
+        "package.direction-delta",
+        "runtime.mounted-frames",
+        "runtime.mounted-streaming-path"
+      ],
+      "scenarios": [
+        "walk.diagonal.corner-block"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "intent",
+        "motion",
+        "streaming"
+      ],
+      "minimumProof": [
+        "S1",
+        "S2",
+        "S3"
+      ]
     },
     {
       "id": "hop",
       "title": "Hop",
       "owner": "Motion Module",
-      "roles": ["Wild", "Mounted"],
-      "sourcePatterns": ["include/overworld_motion_model.h", "lib/overworld/overworld_motion_model.c", "src/overworld_actor_system_overlay/**", "src/pokemon_move_history_task6_overlay/**", "src/overworld_wild_helper_overlay/**", "src/overworld_wild_spawns_overlay/**", "src/overworld_mount_overlay/**"],
-      "checks": ["host.motion-model", "package.actor", "hop.emote-directions", "runtime.mankey-hops", "runtime.mankey-control-stress"],
-      "scenarios": ["hop.cardinal-and-diagonal", "hop.mounted-single-motion", "mount.transition-mid-motion"],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["intent", "motion", "presentation"],
-      "minimumProof": ["S1", "S3", "S4"]
+      "roles": [
+        "Wild",
+        "Mounted"
+      ],
+      "sourcePatterns": [
+        "include/overworld_motion_model.h",
+        "lib/overworld/overworld_motion_model.c",
+        "src/overworld_actor_system_overlay/**",
+        "src/pokemon_move_history_task6_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_mount_overlay/**",
+        "tools/overworld/devtools_appear_hop_*.py"
+      ],
+      "checks": [
+        "host.motion-model",
+        "host.motion-start-transaction",
+        "host.hop-elevation-arc",
+        "host.appear-hop-completion",
+        "package.actor",
+        "hop.emote-directions",
+        "runtime.mankey-hops",
+        "runtime.mankey-control-stress"
+      ],
+      "scenarios": [
+        "hop.cardinal-and-diagonal",
+        "hop.mankey-visual-arc",
+        "hop.mounted-single-motion",
+        "spawn.appear-hop-timing",
+        "mount.transition-mid-motion",
+        "chain.runner-stantler-route31"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "intent",
+        "motion",
+        "presentation"
+      ],
+      "minimumProof": [
+        "S1",
+        "S3",
+        "S4"
+      ],
+      "roleProof": [
+        {
+          "proofLevel": "S4",
+          "roles": [
+            "Mounted"
+          ]
+        }
+      ]
     },
     {
       "id": "hop.ledge",
       "title": "Ledge Hop",
       "owner": "Motion planner",
-      "roles": ["Wild", "Mounted"],
-      "sourcePatterns": ["src/pokemon_move_history_task6_overlay/**", "src/overworld_wild_spawns_overlay/**"],
-      "checks": ["runtime.wild-ledge-hop"],
-      "scenarios": ["hop.ledge-up-and-down"],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["intent", "motion"],
-      "minimumProof": ["S1", "S3"]
+      "roles": [
+        "Wild",
+        "Mounted"
+      ],
+      "sourcePatterns": [
+        "src/pokemon_move_history_task6_overlay/**",
+        "src/overworld_wild_spawns_overlay/**"
+      ],
+      "checks": [
+        "host.motion-model",
+        "runtime.wild-ledge-hop"
+      ],
+      "scenarios": [
+        "hop.ledge-up-and-down"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "intent",
+        "motion"
+      ],
+      "minimumProof": [
+        "S1",
+        "S3"
+      ]
     },
     {
       "id": "teleport",
       "title": "Teleport",
       "owner": "Motion Module",
-      "roles": ["Wild", "Mounted"],
-      "sourcePatterns": ["include/overworld_motion_model.h", "lib/overworld/overworld_motion_model.c", "src/overworld_actor_system_overlay/**", "src/overworld_wild_spawns_overlay/**", "src/overworld_mount_overlay/**"],
-      "checks": ["host.motion-model", "package.actor", "package.mount"],
-      "scenarios": ["teleport.fixed-and-per-tile"],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["intent", "motion", "presentation"],
-      "minimumProof": ["S1", "S3", "S4"]
+      "roles": [
+        "Wild",
+        "Mounted"
+      ],
+      "sourcePatterns": [
+        "include/overworld_motion_model.h",
+        "lib/overworld/overworld_motion_model.c",
+        "src/overworld_actor_system_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_mount_overlay/**"
+      ],
+      "checks": [
+        "host.motion-model",
+        "package.actor",
+        "package.mount",
+        "runtime.wild-teleport"
+      ],
+      "scenarios": [
+        "teleport.wild-lifecycle",
+        "teleport.fixed-and-per-tile"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "intent",
+        "motion",
+        "presentation"
+      ],
+      "minimumProof": [
+        "S1",
+        "S3",
+        "S4"
+      ],
+      "roleProof": [
+        {
+          "proofLevel": "S3",
+          "roles": [
+            "Wild"
+          ]
+        }
+      ]
     },
     {
       "id": "chain.movement",
       "title": "Chain movement",
       "owner": "Role controllers",
-      "roles": ["Wild", "Follower"],
-      "sourcePatterns": ["data/OverworldWildBehaviorData.c", "src/overworld_wild_spawns_overlay/**", "src/pokemon_move_history_task6_overlay/**"],
-      "checks": ["walk.pause", "walk.flying-insect", "runtime.ledyba-chain-pause"],
-      "scenarios": ["chain.pause.counts-semantic-moves"],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["intent", "motion"],
-      "minimumProof": ["S1", "S3"]
+      "roles": [
+        "Wild",
+        "Follower"
+      ],
+      "sourcePatterns": [
+        "data/OverworldWildBehaviorData.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/pokemon_move_history_task6_overlay/**"
+      ],
+      "checks": [
+        "host.role-controller",
+        "host.passive-chain-pause",
+        "host.motion-start-transaction",
+        "host.flat-reposition-clearance",
+        "walk.pause",
+        "walk.flying-insect",
+        "runtime.ledyba-chain-pause"
+      ],
+      "scenarios": [
+        "chain.pause.counts-semantic-moves",
+        "chain.pause.ledyba-normal-profile",
+        "chain.runner-stantler-route31"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "intent",
+        "motion"
+      ],
+      "minimumProof": [
+        "S1",
+        "S3"
+      ]
     },
     {
       "id": "mount.lifecycle",
       "title": "Mount lifecycle",
       "owner": "Mounted role adapter",
-      "roles": ["Follower", "Mounted"],
-      "sourcePatterns": ["include/overworld_mount.h", "src/overworld_mount_overlay/**", "src/overworld_follower_selector_overlay/**", "src/overworld_wild_spawns.c", "src/field/map_teleport.c"],
-      "checks": ["package.mount", "runtime.cyndaquil-control", "runtime.cyndaquil-step-taps"],
-      "scenarios": ["profile.resolve.follower-mounted-parity", "mount.begin-current-follower", "mount.detach-restores-control", "mount.transition-mid-motion"],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["actor", "lifecycle"],
-      "minimumProof": ["S2", "S3", "S4"]
+      "roles": [
+        "Follower",
+        "Mounted"
+      ],
+      "sourcePatterns": [
+        "include/overworld_mount.h",
+        "src/overworld_mount_overlay/**",
+        "src/overworld_follower_selector_overlay/**",
+        "src/overworld_wild_spawns.c",
+        "src/field/map_teleport.c"
+      ],
+      "checks": [
+        "package.mount",
+        "runtime.mounted-smoothness",
+        "runtime.cyndaquil-control"
+      ],
+      "scenarios": [
+        "profile.resolve.follower-mounted-parity",
+        "mount.begin-current-follower",
+        "mount.detach-restores-control",
+        "mount.transition-mid-motion",
+        "mount.walk-transition-mid-motion",
+        "mount.movement.frame-pacing"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "actor",
+        "lifecycle"
+      ],
+      "minimumProof": [
+        "S2",
+        "S3",
+        "S4"
+      ],
+      "roleProof": [
+        {
+          "proofLevel": "S3",
+          "roles": [
+            "Follower",
+            "Mounted"
+          ]
+        },
+        {
+          "proofLevel": "S4",
+          "roles": [
+            "Mounted"
+          ]
+        }
+      ]
     },
     {
       "id": "mount.presentation",
       "title": "Mounted presentation",
       "owner": "Mounted presentation adapter",
-      "roles": ["Mounted"],
-      "sourcePatterns": ["src/overworld_mount_overlay/**", "src/field/**"],
-      "checks": ["package.mount", "runtime.mounted-smoothness", "runtime.mankey-control-stress"],
-      "scenarios": ["walk.turn-skid.control-release", "hop.mounted-single-motion"],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["presentation", "motion"],
-      "minimumProof": ["S3", "S4"]
+      "roles": [
+        "Mounted"
+      ],
+      "sourcePatterns": [
+        "src/overworld_mount_overlay/**",
+        "src/field/**"
+      ],
+      "checks": [
+        "package.mount",
+        "runtime.mounted-smoothness",
+        "runtime.mankey-control-stress"
+      ],
+      "scenarios": [
+        "walk.turn-skid.control-release",
+        "walk.stomp.feedback",
+        "walk.crash.feedback",
+        "hop.mounted-single-motion",
+        "mount.movement.frame-pacing",
+        "mount.walk-transition-mid-motion"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "presentation",
+        "motion"
+      ],
+      "minimumProof": [
+        "S3",
+        "S4"
+      ]
     },
     {
       "id": "world.streaming",
       "title": "Terrain streaming",
       "owner": "World adapter",
-      "roles": ["Mounted"],
-      "sourcePatterns": ["src/overworld_mount_overlay/**", "src/field/**"],
-      "checks": ["runtime.cyndaquil-streaming", "runtime.mounted-diagonal-streaming"],
-      "scenarios": ["mount.streaming.cardinal-and-diagonal", "population.after-fast-travel"],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["motion", "streaming"],
-      "minimumProof": ["S3", "S5"]
+      "roles": [
+        "Mounted"
+      ],
+      "sourcePatterns": [
+        "src/overworld_mount_overlay/**",
+        "src/field/**"
+      ],
+      "checks": [
+        "host.field-stream",
+        "runtime.mounted-streaming-path",
+        "runtime.cyndaquil-streaming-stress"
+      ],
+      "scenarios": [
+        "world.streaming.path-advance",
+        "world.streaming.cardinal-held-route"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "motion",
+        "streaming"
+      ],
+      "minimumProof": [
+        "S3"
+      ],
+      "roleProof": [
+        {
+          "proofLevel": "S3",
+          "roles": [
+            "Mounted"
+          ]
+        }
+      ]
     },
     {
       "id": "world.transition",
       "title": "Field transition",
       "owner": "World lifecycle",
-      "roles": ["Wild", "Follower", "Mounted"],
-      "sourcePatterns": ["src/field/map_teleport.c", "src/overworld_wild_spawns.c", "src/overworld_mount_overlay/**", "src/overworld_wild_spawns_overlay/**"],
-      "checks": ["runtime.mount-walk-transition", "runtime.mount-transition"],
-      "scenarios": ["mount.transition-mid-motion"],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["actor", "motion", "lifecycle", "streaming"],
-      "minimumProof": ["S3", "S5"]
+      "roles": [
+        "Wild",
+        "Follower",
+        "Mounted"
+      ],
+      "sourcePatterns": [
+        "src/field/map_teleport.c",
+        "src/overworld_wild_spawns.c",
+        "src/overworld_mount_overlay/**",
+        "src/overworld_wild_spawns_overlay/**"
+      ],
+      "checks": [
+        "runtime.wild-transition",
+        "runtime.follower-transition",
+        "runtime.mount-walk-transition",
+        "runtime.mount-transition"
+      ],
+      "scenarios": [
+        "world.transition.wild-invalidation",
+        "world.transition.follower-rebind",
+        "mount.transition-mid-motion",
+        "mount.walk-transition-mid-motion"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "actor",
+        "motion",
+        "lifecycle",
+        "streaming"
+      ],
+      "minimumProof": [
+        "S3",
+        "S5"
+      ],
+      "roleProof": [
+        {
+          "proofLevel": "S3",
+          "roles": [
+            "Wild",
+            "Follower"
+          ]
+        },
+        {
+          "proofLevel": "S5",
+          "roles": [
+            "Mounted"
+          ]
+        }
+      ]
     },
     {
       "id": "world.warp-gating",
       "title": "Warp gating",
       "owner": "World reactions",
-      "roles": ["Mounted"],
-      "sourcePatterns": ["src/field/map_teleport.c", "src/overworld_mount_overlay/**"],
-      "checks": ["package.mount", "runtime.mount-transition"],
-      "scenarios": ["warp.blocked-mid-motion"],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["motion", "lifecycle"],
-      "minimumProof": ["S3"]
+      "roles": [
+        "Mounted"
+      ],
+      "sourcePatterns": [
+        "src/field/map_teleport.c",
+        "src/overworld_mount_overlay/**"
+      ],
+      "checks": [
+        "package.mount",
+        "runtime.mount-transition"
+      ],
+      "scenarios": [
+        "warp.blocked-mid-motion"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "motion",
+        "lifecycle"
+      ],
+      "minimumProof": [
+        "S3"
+      ]
     },
     {
       "id": "population",
       "title": "Wild population",
       "owner": "Population module",
-      "roles": ["Wild"],
-      "sourcePatterns": ["src/overworld_actor_system_overlay/**", "src/overworld_wild_spawns_overlay/**", "src/overworld_wild_helper_overlay/**", "src/overworld_mount_overlay/**"],
-      "checks": ["package.actor", "runtime.land-surf", "runtime.cyndaquil-streaming"],
-      "scenarios": ["population.land-surf-separation", "population.after-fast-travel"],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["population", "streaming"],
-      "minimumProof": ["S1", "S3", "S5"]
+      "roles": [
+        "Wild"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_population_model.h",
+        "lib/overworld/overworld_population_model.c",
+        "src/overworld_actor_system_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/overworld_mount_overlay/**"
+      ],
+      "checks": [
+        "host.population-model",
+        "host.spawn-refill-budget",
+        "host.spawn-destination-budget",
+        "package.actor",
+        "runtime.land-surf"
+      ],
+      "scenarios": [
+        "population.land-surf-separation",
+        "spawn.ledyba-pool-site",
+        "population.spawn-work-budget",
+        "world.unmounted.spawn-zero-stutter",
+        "world.unmounted.long-travel-cadence",
+        "world.unmounted.game-cadence",
+        "world.unmounted.wild-soak"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md",
+        "documentation/overworld-system/verification.md"
+      ],
+      "traceGroups": [
+        "population",
+        "streaming"
+      ],
+      "minimumProof": [
+        "S1",
+        "S3",
+        "S5"
+      ],
+      "roleProof": [
+        {
+          "proofLevel": "S5",
+          "roles": [
+            "Wild"
+          ]
+        }
+      ]
     },
     {
       "id": "profile.state",
       "title": "Behavior state lanes",
       "owner": "Behavior Resolver",
-      "roles": ["Wild", "Follower", "Mounted"],
-      "sourcePatterns": ["tools/overworld/behavior_schema.json", "data/OverworldWildBehaviorData.c", "lib/overworld/overworld_behavior_resolver.c"],
-      "checks": ["host.behavior-schema", "host.behavior-resolver"],
-      "scenarios": [],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["profile"],
-      "minimumProof": ["S0", "S1"]
+      "roles": [
+        "Wild",
+        "Follower",
+        "Mounted"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/behavior_schema.json",
+        "data/OverworldWildBehaviorData.c",
+        "lib/overworld/overworld_behavior_resolver.c",
+        "include/overworld_wild_movement.h",
+        "src/overworld_actor_system_overlay/**",
+        "src/overworld_wild_runtime_overlay/**"
+      ],
+      "checks": [
+        "host.behavior-schema",
+        "host.behavior-resolver",
+        "host.actor-lane-projection",
+        "host.spawn-profile-lifecycle"
+      ],
+      "scenarios": [
+        "walk.wild.runner-stop-skid",
+        "walk.wild.runner-turn-runway"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "profile"
+      ],
+      "minimumProof": [
+        "S0",
+        "S1"
+      ]
     },
     {
       "id": "alert",
       "title": "Alert behavior",
       "owner": "Role controllers",
-      "roles": ["Wild", "Follower"],
-      "sourcePatterns": ["tools/overworld/behavior_schema.json", "data/OverworldWildBehaviorData.c", "src/overworld_wild_spawns_overlay/**"],
-      "checks": ["host.behavior-schema", "host.behavior-resolver"],
+      "roles": [
+        "Wild",
+        "Follower"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/behavior_schema.json",
+        "data/OverworldWildBehaviorData.c",
+        "src/overworld_wild_spawns_overlay/**"
+      ],
+      "checks": [
+        "host.behavior-schema",
+        "host.behavior-resolver"
+      ],
       "scenarios": [],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["profile", "intent"],
-      "minimumProof": ["S0", "S1"]
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "profile",
+        "intent"
+      ],
+      "minimumProof": [
+        "S0",
+        "S1"
+      ]
     },
     {
       "id": "spawn",
       "title": "Spawn policy",
       "owner": "Population module",
-      "roles": ["Wild"],
-      "sourcePatterns": ["tools/overworld/behavior_schema.json", "data/OverworldWildBehaviorData.c", "src/overworld_wild_spawns_overlay/**", "src/overworld_wild_helper_overlay/**"],
-      "checks": ["host.behavior-schema", "host.behavior-resolver", "runtime.land-surf"],
-      "scenarios": [],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["profile", "population"],
-      "minimumProof": ["S0", "S1", "S3"]
+      "roles": [
+        "Wild"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/behavior_schema.json",
+        "tools/overworld/devtools_spawn_measurement.py",
+        "tools/overworld/devtools_spawn_surface_measurement.py",
+        "tools/overworld/devtools_appear_hop_*.py",
+        "tools/overworld/test_devtools_spawn_surface*.py",
+        "tools/overworld/test_devtools_surface_contract.py",
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "lib/overworld/overworld_population_model.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**"
+      ],
+      "checks": [
+        "host.behavior-schema",
+        "host.behavior-resolver",
+        "host.spawn-refill-budget",
+        "host.spawn-destination-budget",
+        "host.appear-hop-completion",
+        "host.proof-gate",
+        "runtime.land-surf"
+      ],
+      "scenarios": [
+        "population.land-surf-separation",
+        "spawn.appear-hop-timing",
+        "spawn.ledyba-pool-site",
+        "population.spawn-work-budget",
+        "world.unmounted.spawn-zero-stutter"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "profile",
+        "population"
+      ],
+      "minimumProof": [
+        "S0",
+        "S1",
+        "S3"
+      ]
     },
     {
       "id": "battle",
       "title": "Battle profile policy",
       "owner": "World reactions",
-      "roles": ["Wild"],
-      "sourcePatterns": ["tools/overworld/behavior_schema.json", "data/OverworldWildBehaviorData.c", "src/overworld_wild_spawns_overlay/**", "src/overworld_wild_helper_overlay/**"],
-      "checks": ["host.behavior-schema", "host.behavior-resolver"],
+      "roles": [
+        "Wild"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/behavior_schema.json",
+        "data/OverworldWildBehaviorData.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**"
+      ],
+      "checks": [
+        "host.behavior-schema",
+        "host.behavior-resolver"
+      ],
       "scenarios": [],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["profile", "lifecycle"],
-      "minimumProof": ["S0", "S1"]
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "profile",
+        "lifecycle"
+      ],
+      "minimumProof": [
+        "S0",
+        "S1"
+      ]
     },
     {
       "id": "terrain",
       "title": "Terrain policy",
       "owner": "World adapter",
-      "roles": ["Wild", "Follower", "Mounted"],
-      "sourcePatterns": ["tools/overworld/behavior_schema.json", "data/OverworldWildBehaviorData.c", "src/overworld_wild_spawns_overlay/**", "src/overworld_mount_overlay/**", "src/field/**"],
-      "checks": ["host.behavior-schema", "host.behavior-resolver", "runtime.land-surf"],
-      "scenarios": [],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["profile", "streaming"],
-      "minimumProof": ["S0", "S1", "S3"]
+      "roles": [
+        "Wild",
+        "Follower",
+        "Mounted"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/behavior_schema.json",
+        "include/overworld_wild_behavior_data.h",
+        "data/overworld_wild_roof_catalog_manifest.json",
+        "data/generated/overworld_wild_roof_catalog.*",
+        "tools/generate_overworld_wild_roof_catalog.py",
+        "data/OverworldWildBehaviorData.c",
+        "src/overworld_wild_runtime_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_mount_overlay/**",
+        "src/field/**"
+      ],
+      "checks": [
+        "host.behavior-schema",
+        "host.behavior-resolver",
+        "host.canopy-surface-catalog",
+        "runtime.land-surf"
+      ],
+      "scenarios": [
+        "population.land-surf-separation"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "profile",
+        "streaming"
+      ],
+      "minimumProof": [
+        "S0",
+        "S1",
+        "S3"
+      ]
     },
     {
       "id": "walk",
       "title": "Walk profile policy",
       "owner": "Motion Module",
-      "roles": ["Wild", "Follower", "Mounted"],
-      "sourcePatterns": ["tools/overworld/behavior_schema.json", "data/OverworldWildBehaviorData.c", "include/overworld_walk_*.h", "lib/overworld/overworld_motion_model.c"],
-      "checks": ["host.behavior-schema", "host.motion-model", "walk.policy"],
+      "roles": [
+        "Wild",
+        "Follower",
+        "Mounted"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/behavior_schema.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_walk_*.h",
+        "lib/overworld/overworld_motion_model.c"
+      ],
+      "checks": [
+        "host.behavior-schema",
+        "host.motion-model",
+        "walk.policy"
+      ],
       "scenarios": [],
-      "docs": ["documentation/overworld_walk_frame_timing_spec.md"],
-      "traceGroups": ["profile", "motion"],
-      "minimumProof": ["S0", "S1"]
+      "docs": [
+        "documentation/overworld_walk_frame_timing_spec.md"
+      ],
+      "traceGroups": [
+        "profile",
+        "motion"
+      ],
+      "minimumProof": [
+        "S0",
+        "S1"
+      ]
     },
     {
       "id": "walk.momentum",
       "title": "Walk momentum profile",
       "owner": "Motion Policy",
-      "roles": ["Wild", "Mounted"],
-      "sourcePatterns": ["tools/overworld/behavior_schema.json", "data/OverworldWildBehaviorData.c", "include/overworld_walk_*policy.h", "src/overworld_wild_runtime_overlay/**", "src/overworld_mount_overlay/**"],
-      "checks": ["host.behavior-schema", "walk.policy", "walk.momentum"],
-      "scenarios": [],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["profile", "motion"],
-      "minimumProof": ["S0", "S1", "S2"]
+      "roles": [
+        "Wild",
+        "Mounted"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/behavior_schema.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_walk_*policy.h",
+        "src/overworld_wild_runtime_overlay/**",
+        "src/overworld_mount_overlay/**"
+      ],
+      "checks": [
+        "host.behavior-schema",
+        "walk.policy",
+        "walk.momentum"
+      ],
+      "scenarios": [
+        "walk.wild.runner-turn-runway"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "profile",
+        "motion"
+      ],
+      "minimumProof": [
+        "S0",
+        "S1",
+        "S2"
+      ]
     },
     {
       "id": "chain",
       "title": "Chain profile policy",
       "owner": "Role controllers",
-      "roles": ["Wild", "Follower"],
-      "sourcePatterns": ["tools/overworld/behavior_schema.json", "data/OverworldWildBehaviorData.c", "src/overworld_wild_spawns_overlay/**", "src/pokemon_move_history_task6_overlay/**"],
-      "checks": ["host.behavior-schema", "host.behavior-resolver", "walk.pause", "runtime.ledyba-chain-pause"],
-      "scenarios": [],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["profile", "intent", "motion"],
-      "minimumProof": ["S0", "S1", "S3"]
+      "roles": [
+        "Wild",
+        "Follower"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/behavior_schema.json",
+        "data/OverworldWildBehaviorData.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/pokemon_move_history_task6_overlay/**"
+      ],
+      "checks": [
+        "host.behavior-schema",
+        "host.behavior-resolver",
+        "host.passive-chain-pause",
+        "walk.pause",
+        "runtime.ledyba-chain-pause"
+      ],
+      "scenarios": [
+        "chain.pause.counts-semantic-moves",
+        "chain.pause.ledyba-normal-profile",
+        "chain.runner-stantler-route31"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "profile",
+        "intent",
+        "motion"
+      ],
+      "minimumProof": [
+        "S0",
+        "S1",
+        "S3"
+      ]
     },
     {
       "id": "chase",
       "title": "Chase profile policy",
       "owner": "Role controllers",
-      "roles": ["Wild", "Follower"],
-      "sourcePatterns": ["tools/overworld/behavior_schema.json", "data/OverworldWildBehaviorData.c", "src/overworld_wild_spawns_overlay/**"],
-      "checks": ["host.behavior-schema", "host.behavior-resolver"],
+      "roles": [
+        "Wild",
+        "Follower"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/behavior_schema.json",
+        "data/OverworldWildBehaviorData.c",
+        "src/overworld_wild_spawns_overlay/**"
+      ],
+      "checks": [
+        "host.behavior-schema",
+        "host.behavior-resolver"
+      ],
       "scenarios": [],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["profile", "intent"],
-      "minimumProof": ["S0", "S1"]
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "profile",
+        "intent"
+      ],
+      "minimumProof": [
+        "S0",
+        "S1"
+      ]
     },
     {
       "id": "battle.capture",
       "title": "Battle and capture handoff",
       "owner": "World reactions",
-      "roles": ["Wild"],
-      "sourcePatterns": ["src/overworld_wild_spawns_overlay/**", "src/overworld_wild_helper_overlay/**"],
-      "checks": ["host.contracts"],
-      "scenarios": [],
-      "docs": ["documentation/overworld-system/architecture.md"],
-      "traceGroups": ["actor", "lifecycle"],
-      "minimumProof": ["S2", "S3"]
+      "roles": [
+        "Wild"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**"
+      ],
+      "checks": [
+        "package.battle-capture",
+        "runtime.battle-capture"
+      ],
+      "scenarios": [
+        "battle.capture.wild-handoff"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md"
+      ],
+      "traceGroups": [
+        "actor",
+        "lifecycle"
+      ],
+      "minimumProof": [
+        "S2",
+        "S3"
+      ],
+      "roleProof": [
+        {
+          "proofLevel": "S3",
+          "roles": [
+            "Wild"
+          ]
+        }
+      ]
     }
   ]
 }

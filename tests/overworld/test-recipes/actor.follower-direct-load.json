@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "actor.follower-direct-load",
+  "title": "Saved follower has one current presentation after normal save load",
+  "mode": "normal",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/architecture.md#9-population-and-lifecycle",
+  "requirements": ["shared.follower-direct-load.identity-v1"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 32, "noProgressFrames": 32, "minObservedFrames": 16},
+  "subjects": [{"id": "saved-follower", "species": 56, "role": "FOLLOWER", "acquire": "existing"}],
+  "setup": [
+    {"id": "bind-saved-follower", "op": "bind", "args": {"subject": "saved-follower"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "observe-attachment", "op": "step", "args": {"frames": 16, "keys": []},
+      "budget": {"maxSeconds": 20, "maxFrames": 16, "noProgressFrames": 16}}
+  ],
+  "assertions": [
+    {"kind": "actor-field", "subject": "saved-follower", "path": "identityVerified", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "actor-field", "subject": "saved-follower", "path": "presentationAttached", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "frame-count", "operator": "gte", "value": 16}
+  ]
+}

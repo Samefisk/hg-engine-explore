@@ -1,10 +1,14 @@
 /* Overlay 158 */
 OUTPUT_ARCH(arm)
 MEMORY {
-        /* Boot-resident actor facade immediately below overlay 157. */
+        /* Boot-resident actor owner immediately below overlay 157. */
         rom     : ORIGIN = 0x023B6B00, LENGTH = 0x4000
         ewram   : ORIGIN = 0x023B6B00, LENGTH = 0x4000
 }
+
+OverworldWalk_SkidTiles = 0x023BF4D6 | 1;
+OverworldActorHopPlanner_Plan = 0x023BD4F0 | 1;
+OverworldActorTeleportPlanner_Plan = 0x023BD4F8 | 1;
 
 SECTIONS {
         .text : {
@@ -31,6 +35,11 @@ SECTIONS {
                 KEEP(*(.overworld_actor_system_movement_policy_entry))
                 ASSERT(. == ORIGIN(rom) + 0xB8,
                     "overworld actor movement policy slot ABI changed");
+                KEEP(*(.overworld_actor_lane_policy))
+                ASSERT(. == ORIGIN(rom) + 0xE0,
+                    "overworld actor lane selector ABI changed");
+                KEEP(*(.overworld_actor_population_adapter))
+                KEEP(*(.overworld_actor_mount_policy))
                 . = ALIGN(4);
                 *(.init)
                 *(.text)
@@ -42,19 +51,19 @@ SECTIONS {
                 *(.rodata.*)
                 *(.fini)
                 *(COMMON)
-                ASSERT(. <= ORIGIN(rom) + 0x3100,
+                ASSERT(. <= ORIGIN(rom) + 0x3630,
                     "overworld actor code exceeds resident code reserve");
-                /*
-                 * Portable modules and later implementations link before this
-                 * boundary. The final 0xF00 bytes are the fixed state reserve.
-                 */
-                . = ORIGIN(rom) + 0x3100;
+                . = ORIGIN(rom) + 0x3630;
+                KEEP(*(.overworld_actor_step_particle))
+                ASSERT(. <= ORIGIN(rom) + 0x3670,
+                    "overworld step-particle bridge exceeds resident code reserve");
+                . = ORIGIN(rom) + 0x3670;
                 __text_end = . ;
         } >rom = 0xff
 
         .bss (NOLOAD) : {
                 __bss_start__ = . ;
-                ASSERT(__bss_start__ == ORIGIN(rom) + 0x3100,
+                ASSERT(__bss_start__ == ORIGIN(rom) + 0x3670,
                     "overworld actor state base moved");
                 KEEP(*(.overworld_actor_system_state))
                 *(.bss)

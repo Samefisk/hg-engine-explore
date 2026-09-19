@@ -2,21 +2,167 @@
   "schemaVersion": 1,
   "id": "mount.begin-current-follower",
   "title": "Mount begin binds the current follower",
-  "status": "planned",
-  "capabilities": ["actor.system", "mount.lifecycle"],
+  "status": "active",
+  "capabilities": [
+    "actor.system",
+    "mount.lifecycle"
+  ],
   "proofLevel": "S3",
   "costTier": 3,
-  "fixture": {"rom": "test.nds", "save": {"path": "test.dsv", "kind": "dsv"}, "seed": 0},
-  "events": [
-    {"at": 0, "kind": "setup", "value": "Select a follower different from the previous follower"},
-    {"at": 1, "kind": "input", "value": "Press Select to mount"}
-  ],
-  "stop": {"frameBudget": 600, "condition": "Mount begin accepts or returns a typed rejection"},
-  "expect": {
-    "requiredEvents": ["ACTOR_ATTACHED", "PROFILE_RESOLVED", "CONTROL_REBOUND"],
-    "forbiddenEvents": [],
-    "invariants": ["The mounted actor identity equals the current follower identity", "Mount begin does not respawn a second follower", "One actor owns mounted motion"]
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/README.md#system-contracts",
+    "actor": "MOUNTED species 56 (mankey), acquired through mount; live handle and attached presentation required",
+    "trigger": "Press Select to mount; Request one Hop with the rebound current follower",
+    "observable": "Each accepted motion has exactly one terminal result; No logical commit occurs after motion cancellation; Control returns after the selected motion finishes or cancels; No active actors share a nonzero target reservation; Every active actor handle uses the current field epoch; Every active actor has an attached presentation",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Shared prepared native spawn of saved Igglybuff 174 party slot 3 as previous follower. No profile or timer writes. After record start, normal Y opens saved highlight 2 and Y confirms Mankey 56. Wait for that exact current follower to finish its selection movement and release its reservation before closed-selector Select mounts it."
+      }
+    ],
+    "limits": [
+      "Prepared previous-follower setup cannot prove natural spawning. The three native Y/Y/Select edges occur after setup with normal timers and unchanged profiles.",
+      "One full same-subject Hop proves this mount/control witness, not rendered trajectory, general movement timing or a soak.",
+      "Public producer contract: Hop motionKind is 2 for START and COMMIT/FINISH. CONTROL_RETURNED valueA is mounted inputOwnership 1, not the Wild value 0. ACTOR_REBOUND reports roles 2 to 3; CONTROL_REBOUND reports input owners 0 to 1."
+    ]
   },
-  "capture": "failure",
-  "adapter": null
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "roleProof": [
+    {
+      "role": "Follower",
+      "claim": "live-actor-identity",
+      "measurement": "mount-begin-public-role-transition"
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Select a follower different from the previous follower"
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Press Select to mount"
+    },
+    {
+      "at": 2,
+      "kind": "input",
+      "value": "Request one Hop with the rebound current follower"
+    }
+  ],
+  "stop": {
+    "frameBudget": 600,
+    "condition": "Same current follower is mounted and completes exactly one Hop, or first missing/invalid native observation"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ],
+    "orderedEvents": [
+      {
+        "id": "start",
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 2
+        }
+      },
+      {
+        "id": "commit",
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 2
+        }
+      },
+      {
+        "id": "finish",
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 2
+        }
+      },
+      {
+        "id": "control",
+        "event": "CONTROL_RETURNED",
+        "reason": "OK",
+        "valueA": {"equals": 1}
+      }
+    ],
+    "eventCounts": [
+      {
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 2
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 2
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 2
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "CONTROL_RETURNED",
+        "reason": "OK",
+        "minimum": 1,
+        "maximum": 1
+      }
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "mount.begin-current-follower", "claims": ["natural-input", "live-actor-identity", "profile-resolution", "control-release"], "minimumFrames": 1}
 }

@@ -12,7 +12,6 @@ from tools.overworld.validation import ValidationFailure, load_json_document
 
 TRACE_MAGIC = b"OWTR"
 TRACE_VERSION = 1
-TRACE_CAPACITY = 32
 HEADER = struct.Struct("<4sHHIIIIHHHHBBBB")
 RECORD = struct.Struct("<II6HHHII")
 
@@ -42,7 +41,11 @@ def _name(mapping: dict[str, str], value: int, prefix: str) -> str:
     return mapping.get(str(value), f"{prefix}_{value}")
 
 
-def _decode_binary(data: bytes, schema: dict[str, Any]) -> dict[str, Any]:
+def _decode_binary(
+    data: bytes,
+    schema: dict[str, Any],
+    capacity: int | None,
+) -> dict[str, Any]:
     if len(data) < HEADER.size:
         raise ValidationFailure("trace is shorter than its header")
     (
@@ -66,15 +69,22 @@ def _decode_binary(data: bytes, schema: dict[str, Any]) -> dict[str, Any]:
         raise ValidationFailure("trace magic or version differs")
     if header_size != HEADER.size:
         raise ValidationFailure("trace layout differs from schema")
-    if count > TRACE_CAPACITY or next_sequence < oldest_sequence:
+    payload_size = len(data) - header_size
+    if capacity is None:
+        if payload_size <= 0 or payload_size % RECORD.size != 0:
+            raise ValidationFailure("trace record window is malformed")
+        capacity = payload_size // RECORD.size
+    if capacity <= 0 or capacity > 256 or capacity & (capacity - 1) != 0:
+        raise ValidationFailure("trace capacity is invalid")
+    if count > capacity or next_sequence < oldest_sequence:
         raise ValidationFailure("trace header counters are invalid")
-    required_size = header_size + TRACE_CAPACITY * RECORD.size
+    required_size = header_size + capacity * RECORD.size
     if len(data) != required_size:
         raise ValidationFailure(
             f"trace size is {len(data)}, expected {required_size}"
         )
     records = []
-    for index in range(TRACE_CAPACITY):
+    for index in range(capacity):
         values = RECORD.unpack_from(data, header_size + index * RECORD.size)
         sequence = values[0]
         if not oldest_sequence <= sequence < next_sequence:
@@ -109,7 +119,7 @@ def _decode_binary(data: bytes, schema: dict[str, Any]) -> dict[str, Any]:
     return {
         "schemaVersion": version,
         "header": {
-            "capacity": TRACE_CAPACITY,
+            "capacity": capacity,
             "count": count,
             "oldestSequence": oldest_sequence,
             "nextSequence": next_sequence,
@@ -217,11 +227,19 @@ def _decode_json(data: bytes, schema: dict[str, Any]) -> dict[str, Any]:
     return {**document, "events": normalized}
 
 
-def decode_trace_bytes(data: bytes, schema: dict[str, Any]) -> dict[str, Any]:
+def decode_trace_bytes(
+    data: bytes,
+    schema: dict[str, Any],
+    capacity: int | None = None,
+) -> dict[str, Any]:
     """Decode one trace capture without requiring a temporary file."""
 
     stripped = data.lstrip()
-    return _decode_json(data, schema) if stripped.startswith(b"{") else _decode_binary(data, schema)
+    return (
+        _decode_json(data, schema)
+        if stripped.startswith(b"{")
+        else _decode_binary(data, schema, capacity)
+    )
 
 
 def decode_trace(path: Path, schema: dict[str, Any]) -> dict[str, Any]:

@@ -1,0 +1,209 @@
+{
+  "schemaVersion": 1,
+  "mode": "prepared",
+  "actions": [
+    {
+      "op": "party",
+      "args": {
+        "slot": 1,
+        "hp": 21,
+        "status": 0
+      }
+    },
+    {
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "follower",
+        "slot": 1,
+        "level": 5
+      }
+    },
+    {
+      "op": "step",
+      "args": {
+        "frames": 56,
+        "keys": []
+      }
+    },
+    {
+      "op": "teleport",
+      "args": {
+        "map": 67,
+        "x": 543,
+        "z": 393,
+        "facing": 1
+      }
+    },
+    {
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      }
+    },
+    {
+      "op": "step",
+      "args": {
+        "frames": 40,
+        "keys": [
+          "DOWN"
+        ]
+      }
+    },
+    {
+      "op": "step",
+      "args": {
+        "frames": 4,
+        "keys": [
+          "UP"
+        ]
+      }
+    },
+    {
+      "op": "step",
+      "args": {
+        "frames": 48,
+        "keys": [
+          "RIGHT"
+        ]
+      }
+    },
+    {
+      "op": "step",
+      "args": {
+        "frames": 36,
+        "keys": [
+          "UP"
+        ]
+      }
+    },
+    {
+      "op": "step",
+      "args": {
+        "frames": 48,
+        "keys": [
+          "LEFT"
+        ]
+      }
+    },
+    {
+      "op": "step",
+      "args": {
+        "frames": 36,
+        "keys": [
+          "DOWN"
+        ]
+      }
+    },
+    {
+      "op": "step",
+      "args": {
+        "frames": 48,
+        "keys": [
+          "RIGHT"
+        ]
+      }
+    },
+    {
+      "op": "step",
+      "args": {
+        "frames": 36,
+        "keys": [
+          "UP"
+        ]
+      }
+    },
+    {
+      "op": "step",
+      "args": {
+        "frames": 48,
+        "keys": [
+          "LEFT"
+        ]
+      }
+    },
+    {
+      "op": "step",
+      "args": {
+        "frames": 36,
+        "keys": [
+          "DOWN"
+        ]
+      }
+    },
+    {
+      "op": "step",
+      "args": {
+        "frames": 48,
+        "keys": [
+          "RIGHT"
+        ]
+      }
+    },
+    {
+      "op": "step",
+      "args": {
+        "frames": 36,
+        "keys": [
+          "UP"
+        ]
+      }
+    },
+    {
+      "op": "step",
+      "args": {
+        "frames": 48,
+        "keys": [
+          "LEFT"
+        ]
+      }
+    },
+    {
+      "op": "step",
+      "args": {
+        "frames": 36,
+        "keys": [
+          "DOWN"
+        ]
+      }
+    },
+    {
+      "op": "step",
+      "args": {
+        "frames": 48,
+        "keys": [
+          "RIGHT"
+        ]
+      }
+    },
+    {
+      "op": "step",
+      "args": {
+        "frames": 36,
+        "keys": [
+          "UP"
+        ]
+      }
+    },
+    {
+      "op": "step",
+      "args": {
+        "frames": 48,
+        "keys": [
+          "LEFT"
+        ]
+      }
+    },
+    {
+      "op": "step",
+      "args": {
+        "frames": 36,
+        "keys": [
+          "DOWN"
+        ]
+      }
+    }
+  ]
+}

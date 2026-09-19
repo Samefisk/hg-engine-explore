@@ -6,19 +6,23 @@ Make the overworld Pokémon system easy to extend and cheap to diagnose without 
 
 The migration wraps, observes, compares, switches, and deletes. It is not a full rewrite.
 
-## Delivery state
+## Scope and current state
 
-This branch implements the shared code home, portable resolver and motion
-models, resident actor facade, host control surface, and compatibility sampling
-for current movement paths. The actor is now the sole motion clock and owns the
-shared motion and policy state. Engine-boundary ownership, role-policy reducers,
-transition coordination, legacy deletion, and live exit proof remain open where
-named below. A roadmap exit gate is complete only after its required runtime
-proof passes.
+Phases 0–8 below define the full required outcome. They are not a claim that
+the current branch passes. Keep current state only in
+[`roadmap-progress.md`](roadmap-progress.md), a short resume page with one work
+table. Detailed results belong in manifests; past investigations belong in the
+linked archive, read only when needed. Neither historical notes nor this page
+replace current proof. Follow [record ownership](verification.md#progress-and-handoffs).
+The capability and proof requirements remain in
+`tools/overworld/system_features.yaml`; `scripts/owctl verify roadmap` remains
+the final completion authority.
+
+Use the finite delivery slices below to finish the existing work. Do not start
+another rewrite, discard useful code, or postpone required behavior as cleanup.
+An already satisfied requirement needs current evidence, not reimplementation.
 
 ## Phase 0 - Canonical system map
-
-Status: complete.
 
 - Define one vocabulary.
 - Define one architecture, frame order, ownership model, and invariant set.
@@ -28,9 +32,6 @@ Status: complete.
 Exit gate: a new agent can find the current owner, target owner, required roles, and proof level without reading attempt logs.
 
 ## Phase 1 - Observe current behavior
-
-Status: implemented; live diagnostic exit proof is pending. The public live
-driver can now arm, close, and capture one descriptor-driven bounded window.
 
 - Add a read-only, versioned compatibility snapshot with stable semantic fields.
   Its private storage adapter can change in later phases.
@@ -43,21 +44,18 @@ driver can now arm, close, and capture one descriptor-driven bounded window.
 - Create the machine-readable feature/impact manifest at
   `tools/overworld/system_features.yaml` and generate the human table from it.
 - Add `scripts/owctl trace`, `scenario`, `doctor`, and `verify affected` as one host facade.
+- Use Workshop `/devtools` and `scripts/owctl dev` as that facade's live control
+  surface: inspect, input, terrain, teleport/party/spawn setup, record and replay.
+  The [agent skills](README.md#read-order) connect discovery to permanent
+  scenarios and accepted proof. The former standalone drivers are removed;
+  all execution uses bounded [shared test jobs](devtools-tests.md).
 - Add descriptor-driven `scripts/owctl actor inspect`, `actor trace`, and
-  reusable semantic scenario evidence. Active legacy scenarios migrate only
-  after their public event windows cover the old assertions.
+  reusable semantic scenario evidence. Preserve every old requirement in the
+  migration map as pending until its shared-tool witness is implemented and proved.
 
 Exit gate: a control lock, wrong target, wrong speed, presentation split, or stream wait can be explained from one bounded trace without private offset hunting.
 
 ## Phase 2 - One schema and one resolver
-
-Status: implementation complete; packaged ROM parity proof remains pending.
-The ROM, V1 data projection, V2 resolve endpoint, and profile membership tools
-all call one portable C resolver. Named JSON is the authoring source and the
-positional C blob is generated compatibility output. Golden vectors cover
-class selection, ordered and forced layers, conditional replay, lane links,
-operators, primitives, fingerprints, and provenance. The verifier also proves
-that the ARM overlay and host adapter compile and publish the same C source.
 
 - Define a named Behavior Schema with field path, type, unit, bounds, lane, operators, and feature ID.
 - Generate the compact C layout, masks, editor metadata, validators, migration metadata, and trace labels.
@@ -67,12 +65,9 @@ that the ARM overlay and host adapter compile and publish the same C source.
 - Make the Workshop use the canonical resolver.
 - Keep the current binary blob as generated compatibility output.
 
-Exit gate: deleting a profile rule from the portable resolver makes both ROM and Workshop resolution fail in the same tests. No second resolver remains. The source and host sides of this gate are implemented; the named packaged-ROM parity run is still required before runtime completion is claimed.
+Exit gate: deleting a profile rule from the portable resolver makes both ROM and Workshop resolution fail in the same tests. No second resolver remains. Packaged-ROM parity is required before runtime completion is claimed.
 
 ## Phase 3 - Actor facade and compatibility views
-
-Status: implemented as a resident facade plus compatibility views; complete
-storage consolidation remains gated by later phases.
 
 - Put the existing lifecycle behind `Apply`, `Tick`, and `Inspect` without changing behavior.
 - Add `ActorView` adapters over `OverworldWildSpawnState`, its runtime sidecar,
@@ -89,13 +84,6 @@ state without exposing the underlying parallel arrays.
 
 ## Phase 4 - Motion Plan and shared Walk
 
-Status: shared clock and policy storage switched. Wild and mounted Walk sample
-one actor-owned motion timeline, and actor path advances update the public
-logical tile. Adapters still prepare targets, apply samples to engine objects,
-run separate completion reducers, stream terrain, and publish effects. Mounted
-Walk now acknowledges actor commit at the real vanilla movement-END boundary.
-Planner, reducer, engine-boundary, parity, and deletion work remains pending.
-
 - Introduce `Intent`, `Candidate`, `MotionPlan`, `Decision`, `PathAdvance`, and `Commit` around the working Walk path.
 - Add the deterministic world fixture and host executor.
 - Move wild Walk to the shared planner/executor.
@@ -109,18 +97,6 @@ Exit gate: exact Walk and all feedback pass wild/mounted parity. Only role inten
 
 ## Phase 5 - Hop and Teleport
 
-Status: shared timeline and presentation math implemented. Hop and Teleport use
-the actor state for elapsed time, arc, spin, visibility, path advances, suspend,
-rebind, resume, and terminal state. Wild and mounted adapters still choose
-candidates, apply samples, control streaming and landing, and decide when the
-engine boundary is ready to acknowledge. Live parity and adapter deletion remain
-pending.
-
-Successful wild Hop and Teleport cleanup no longer cancels the acknowledged
-shared motion. Cancel is idempotent for direct and queued callers, stale
-suspended replacement publishes its terminal cancel, and actor detach is an
-explicit terminal release.
-
 - Move Hop planning into the Motion Module.
 - Reuse the shared executor for duration, arc, streaming, commit, cancel, pause, and presentation.
 - Move Teleport through the same lifecycle with visibility policy as data.
@@ -131,12 +107,6 @@ Exit gate: Walk, Hop, and Teleport share one motion state machine and terminal e
 
 ## Phase 6 - Roles, chains, and Ram
 
-Status: policy storage and pure look, wander, and chain-pause helpers are
-implemented in the actor system. Wild and mounted Walk use the same actor policy
-slot, but their commit reducers still differ. Wild role sequencing still owns
-chain action publication and Ram crash/battle reactions. Ram is not yet an
-actor-owned controller.
-
 - Move wild, follower, chain, and player input decisions behind role controllers.
 - Keep mounted control as a rebind of the current follower actor to rider input.
 - Make chain movement consume semantic commits only.
@@ -146,12 +116,6 @@ actor-owned controller.
 Exit gate: a new role adds one controller or presentation adapter without copying motion code.
 
 ## Phase 7 - World lifecycle and population
-
-Status: field epochs, motion suspend/rebind, authoritative path-advance signals,
-public logical-tile updates, and the population timer tick have actor-owned
-entries. Terrain streaming, reservation checks, transition order, warp/battle
-gates, and bounded population maintenance still live in role or engine adapters.
-Full transition and streaming soak proof is pending.
 
 - Centralize path advances, target reservation, surface occupancy, warp gates,
   and battle gates. Streaming and distance consume path advances; terminal
@@ -164,10 +128,6 @@ Full transition and streaming soak proof is pending.
 Exit gate: no movement type has a private map-transition or terrain-streaming protocol.
 
 ## Phase 8 - Delete legacy surfaces
-
-Status: started. The duplicate runtime profile resolver was removed and its
-old ABI slots were retired. Remaining compatibility arrays and callbacks stay
-until their active ROM scenarios pass.
 
 - Consolidate migrated parallel arrays into one coherent actor slot only after
   Walk, Hop, Teleport, roles, and lifecycle ownership have moved.
@@ -191,34 +151,121 @@ Exit gate: deleting the actor system facade would reveal substantial hidden comp
 - Do not claim parity from static source checks.
 - Preserve the user's current game feel unless a separate behavior change is requested.
 
-## Remaining completion sequence
+## Finite delivery slices
 
-Overlay 158, the mount overlay, and the wild overlay have only a few bytes of
-free code. Completion must replace and delete existing paths; it cannot add a
-second orchestration layer.
+These IDs partition the existing work; they do not add product scope. A slice
+may contain small contract changes, but only one integrated behavior change is
+active at a time. Each row has one coordinator in the progress ledger. The
+feature manifest supplies exact checks, scenarios, roles, and proof levels.
 
-1. Replace the broad motion dispatcher with one request call and one engine-
-   boundary call in the same fixed service slot. The boundary owns unapplied
-   path advances, stream wait/ready, presentation acknowledgement, engine-END
-   acknowledgement, suspend/rebind/resume, and cancel. Proof: model ordering,
-   package ABI, then one focused Walk ROM scenario.
-2. Move Walk commit reduction into the actor policy service. Wild and mounted
-   adapters consume one reducer result and only publish engine effects. Delete
-   their duplicate acceleration/skid completion paths. Proof: exact timing,
-   acceleration, turn/stop skid, stomp, and crash parity scenarios.
-3. Route Hop and Teleport through the same boundary. Keep collision and terrain
-   queries in the world adapter, but pass ordered candidates and typed rejection
-   reasons to the planner. Delete adapter-local elapsed and terminal gates.
-   Proof: cardinal/diagonal, ledge, mounted-single-motion, fixed/per-tile,
-   transition, and presentation scenarios.
-4. Replace the implicit map-change sequence with one transition command:
-   suspend, canonicalize, advance epoch, rebind, then resume or discard. Feed
-   player path advances and transition events into the bounded population work
-   queue. Proof: transition, streaming, population, and long-soak scenarios.
-5. Migrate active scenarios to public actor evidence. After each public scenario
-   passes, delete the covered private arrays, fixed callbacks, source-string
-   assertions, and positional writer transforms. Keep only fixed thunks required
-   by ROM layout.
+| ID | Outcome and phase coverage | Required capability scope | Exit evidence |
+| --- | --- | --- | --- |
+| D0 | Trustworthy proof and resume state; Phase 1 workflow repair | Per-run evidence, content identity, failure records, test-design checks | Host rejection checks and evidence inspection; no gameplay claim |
+| D1 | Early buildable checkpoint before further broad cutovers; Phases 1, 4, 6 | Real Ledyba spawn/chain/pause and reported whole-engine stutter, including unmounted play | Current packaged ROM; every automatic spawn-destination scanner obeys the per-update terrain-query budget; short current-ROM spawn-work witness; normal-play witness or preserved symptom-specific failure with a bounded next investigation |
+| D2 | Schema, resolver, facade, and observation; Phases 0–3 | `actor.system`, `profile.composition`, `profile.state` | Model/ABI checks and exact packaged resolver/facade scenarios; one trace explains a real motion outcome |
+| D3 | Shared Walk, roles, chain actions, and Ram; Phases 4 and 6 | `walk.exact`, `walk.acceleration`, `walk.skid`, `walk.feedback`, `walk.diagonal`, `walk`, `walk.momentum`, `chain.movement`, `chain`, `alert`, `chase` | Exact timings, complete natural chains, direction/skid/stomp/crash and role parity; unmounted and mounted pacing measured separately |
+| D4 | Shared Hop/Teleport and mount presentation/lifecycle; Phases 3 and 5 | `hop`, `hop.ledge`, `teleport`, `mount.lifecycle`, `mount.presentation` | Cardinal/diagonal/ledge, arc/spin/pause, fixed/per-tile time, one mounted motion, detach/control scenarios |
+| D5 | One world lifecycle and bounded population; Phase 7 | `world.streaming`, `world.transition`, `world.warp-gating`, `population`, `spawn`, `battle`, `terrain`, `battle.capture` | Path/stream boundary, transition/rebind, terrain, spawn, warp, battle/capture, and relevant continuous soak scenarios |
+| D6 | Remove remaining legacy surfaces; Phase 8 | All migrated capabilities and structural ownership checks | Public replacement covers each deleted private assertion; exact linked/package bytes, overlay limits, and affected behavior still pass |
+| D7 | Frozen release candidate; all phases | Every required capability, scenario, role, and proof level | Full required proof on the sealed candidate and `scripts/owctl verify roadmap --json` reports `passed: true` |
+
+D0 precedes new accepted proof. D1 precedes more broad ownership changes;
+only code needed to get a buildable, observable checkpoint can come first.
+D2–D5 reuse existing completed work and finish one contract at a time. Delete
+each replaced path when its counterpart passes; D6 closes remaining deletion
+work, not a second wholesale migration. D7 keeps the original full exit gate.
+An early checkpoint can preserve a real failure, but that is not a passing
+behavior result. Keep its owning behavior item open and address it before the
+next broad integration.
+
+## Goal progress rules
+
+A roadmap goal delivers the selected game outcome. Tests, readers, and proof
+registration support that outcome; their count is not game progress. A goal
+continuation resumes the current source question or fix, not a new test plan.
+
+- Reuse the existing failing witness when it measures the reported symptom.
+  Inspect its retained evidence and the responsible production path first.
+  Once evidence supports a scoped correction, implement it and run the same
+  witness on the fixed build. Do not require a new test or broader coverage
+  merely because a new turn, helper, or goal continuation has started.
+- Before adding test/tool code, name the missing fact that prevents this fix
+  or its required acceptance. If current observations already answer it, return
+  to production work. Optional coverage and general tool cleanup wait until
+  the selected game outcome is delivered.
+- After two consecutive goal turns spent only on test/tool work, or at the
+  existing 30–45-minute review point, reassess before another tool edit. Inspect
+  the product cause using current evidence. Continue tool work only for a
+  concrete missing fact that still blocks the next product decision or required
+  acceptance, with one bounded correction and its return action recorded in
+  the existing work item. A renamed tool task does not reset this review.
+- Distinguish a diagnosis gap, an implementation gap, and an acceptance gap.
+  A broken acceptance checker does not prevent independent source diagnosis
+  or a scoped fix supported by an existing symptom-specific failing witness.
+  Keep the proof gap open and complete required checks before claiming a fix.
+- Report the game result or cause learned, what changed in product code, and
+  the exact remaining gap. For a tool-only turn, state the blocked fact it
+  resolved and the next product action. Reuse the current ledger; do not add a
+  separate tracking system. Never force a speculative product edit to meet a
+  turn limit, weaken a test, or mark the goal complete with required work open.
+- Treat spawn-work pacing as shared D1/D5 proof. A change to spawn search,
+  population refill, behavior profiles, destination masks, generated profile
+  data, follower Hop planning, or Hop landing validation reopens D1 until the
+  extracted-C checks and short current-ROM spawn-work witness pass again. A
+  population count or a pass from an older ROM cannot preserve this result.
+
+## Work loop and stopping rules
+
+1. Select one open contract under a slice ID. Record its owner, affected roles,
+   requirement, proof, and bounded next action in the ledger before editing.
+2. For a runtime bug, preserve a measured reproduction before the fix; an
+   existing scenario or bounded shared-devtools recipe is sufficient to start.
+   Finish durable registered proof before closure, under
+   [reproduction and acceptance](verification.md#reproduction-before-editing-acceptance-before-closure).
+   For a refactor, preserve a passing reference and compare
+   semantic results; do not invent a failing bug baseline.
+3. Check the exact production adapter and its caller, not only the portable
+   reducer. Before changing an overlay, record the current linked size, hard
+   cap, affected fixed entries, and where the change will fit. Do not grow an
+   interface first and try to find space afterward.
+4. Use narrow host/ABI checks while editing and focused ROM proof at a stable
+   contract boundary. Use the affected set at integration checkpoints; do not
+   rerun the whole branch after each patch. See the
+   [verification ladder](verification.md#verification-cost-and-checkpoints).
+   If missing observations or slow repeated work delay progress, improve the
+   shared devtools as part of the slice. Measure setup, execution and checking
+   cost before changing the path. Prefer bounded native point/event reads and
+   retained-stream replay; screenshots never supply test proof. Preserve actor
+   identity, normal triggers, failure sensitivity and required observed frames.
+   Apply the [outcome-first tool loop](devtools-tests.md#outcome-first-tool-work):
+   one real bounded sample precedes the full checker stack. Each tool task names
+   its blocked game requirement, exact next check, owner, review and return point.
+   For a spawn/profile/population change, run both extracted-C scan-budget checks
+   before the ROM. Stop on a batched candidate query. A query cap alone does not
+   prove pacing: the same automatic attempt must resolve its profile and prepare
+   metadata/class only once, then reuse that work on every resumed scan update.
+   Run the short spawn-work scenario on the current candidate and require its
+   repeated-preparation and slow-resumed-finalizer controls to fail. Keep a player-reported hitch open until
+   the user checks that exact current `test.nds`; tool evidence cannot override
+   an unresolved report. Then continue D5 work.
+5. Save the result and next action. After two attempts at the same failure
+   with no new evidence, stop patching and change the method: trace a boundary,
+   isolate a production adapter, inspect the vanilla reference, or narrow the
+   reproduction. A retry needs a new hypothesis or changed condition.
+6. Close the contract when its agreed evidence passes. Reopen it only for an
+   unmet requirement or concrete regression. Record optional improvements
+   below; they do not block this migration.
+
+Use a bounded investigation question and a review point, normally within
+30–45 minutes. That limit is a point to change method, hand off, or state an
+exact external blocker; it is not permission to abandon required work. Measure
+actual build/run cost at D1 before giving a delivery estimate. Long soaks cover
+the reported failure window and trigger conditions, not an arbitrary test count.
+
+The coordinator owns the current ledger and integrates shared code. Helpers get
+an ID, bounded question, owned files, and expected evidence. Independent
+investigation and review can run in parallel; overlapping writers cannot.
+Use the [handoff format](verification.md#progress-and-handoffs).
 
 ## Deferred ideas
 

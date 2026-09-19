@@ -1,0 +1,4 @@
+interface:
+  display_name: "Design Overworld Behavior"
+  short_description: "Design layered Pokémon overworld behavior"
+  default_prompt: "Use $design-overworld-behavior to design this Pokémon overworld behavior from reusable profile layers."

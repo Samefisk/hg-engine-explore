@@ -5,6 +5,7 @@
 
 #define OVERWORLD_WALK_TIMING_MIN 1
 #define OVERWORLD_WALK_TIMING_MAX 32
+#define OVERWORLD_WALK_ACCELERATION_DIVIDE_BY_2 33
 #define OVERWORLD_WALK_TIMING_INLINE \
     static inline __attribute__((always_inline))
 
@@ -22,23 +23,65 @@ OverworldWalkTimingPolicy_Clamp(u8 travelTime)
 
 OVERWORLD_WALK_TIMING_INLINE u8 OverworldWalkTimingPolicy_Accelerate(
     u8 currentTravelTime,
-    u8 fastestTravelTime)
+    u8 fastestTravelTime,
+    u8 accelerationStep)
 {
     u8 nextTravelTime;
 
     currentTravelTime = OverworldWalkTimingPolicy_Clamp(currentTravelTime);
     fastestTravelTime = OverworldWalkTimingPolicy_Clamp(fastestTravelTime);
-    nextTravelTime = (currentTravelTime + 1u) / 2u;
+    if (accelerationStep == 0) {
+        nextTravelTime = currentTravelTime;
+    } else if (accelerationStep == OVERWORLD_WALK_ACCELERATION_DIVIDE_BY_2) {
+        nextTravelTime = (currentTravelTime + 1u) / 2u;
+    } else {
+        nextTravelTime = currentTravelTime > accelerationStep
+            ? currentTravelTime - accelerationStep
+            : OVERWORLD_WALK_TIMING_MIN;
+    }
     return nextTravelTime < fastestTravelTime
         ? fastestTravelTime
         : nextTravelTime;
 }
 
 OVERWORLD_WALK_TIMING_INLINE u8
+OverworldWalkTimingPolicy_Decelerate(
+    u8 currentTravelTime,
+    u8 baseTravelTime,
+    u8 accelerationStep)
+{
+    u8 nextTravelTime;
+    u8 previousTravelTime;
+
+    currentTravelTime = OverworldWalkTimingPolicy_Clamp(currentTravelTime);
+    baseTravelTime = OverworldWalkTimingPolicy_Clamp(baseTravelTime);
+    if (currentTravelTime >= baseTravelTime) {
+        return baseTravelTime;
+    }
+    if (accelerationStep == 0) {
+        return currentTravelTime;
+    }
+    if (accelerationStep != OVERWORLD_WALK_ACCELERATION_DIVIDE_BY_2) {
+        nextTravelTime = currentTravelTime + accelerationStep;
+        return nextTravelTime > baseTravelTime
+            ? baseTravelTime
+            : nextTravelTime;
+    }
+
+    previousTravelTime = baseTravelTime;
+    nextTravelTime = baseTravelTime;
+    while (nextTravelTime > currentTravelTime) {
+        previousTravelTime = nextTravelTime;
+        nextTravelTime = (nextTravelTime + 1u) / 2u;
+    }
+    return previousTravelTime;
+}
+
+OVERWORLD_WALK_TIMING_INLINE u8
 OverworldWalkTimingPolicy_SkidTiles(u8 travelTime)
 {
     travelTime = OverworldWalkTimingPolicy_Clamp(travelTime);
-    if (travelTime >= 5) {
+    if (travelTime >= 7) {
         return 0;
     }
     if (travelTime >= 3) {
@@ -65,6 +108,19 @@ OVERWORLD_WALK_TIMING_INLINE BOOL OverworldWalkTimingPolicy_StompApplies(
             <= OverworldWalkTimingPolicy_Clamp(stompAtTravelTime);
 }
 
+OVERWORLD_WALK_TIMING_INLINE u8
+OverworldWalkTimingPolicy_ResumeAfterSkid(
+    u8 priorTravelTime,
+    u8 baseTravelTime,
+    u8 accelerationStep,
+    BOOL stopSkid)
+{
+    return stopSkid
+        ? OverworldWalkTimingPolicy_Clamp(baseTravelTime)
+        : OverworldWalkTimingPolicy_Decelerate(
+            priorTravelTime, baseTravelTime, accelerationStep);
+}
+
 OVERWORLD_WALK_TIMING_INLINE BOOL
 OverworldWalkTimingPolicy_ValidateExactOverrideValue(
     u8 fieldIndex,
@@ -76,6 +132,9 @@ OverworldWalkTimingPolicy_ValidateExactOverrideValue(
     }
     if (fieldIndex == 36 || fieldIndex == 66) {
         return value <= OVERWORLD_WALK_TIMING_MAX;
+    }
+    if (fieldIndex == 67) {
+        return value <= OVERWORLD_WALK_ACCELERATION_DIVIDE_BY_2;
     }
     return TRUE;
 }

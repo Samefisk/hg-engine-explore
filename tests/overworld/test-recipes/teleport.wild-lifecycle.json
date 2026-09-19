@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "teleport.wild-lifecycle",
+  "title": "Wild Gastly completes one natural Teleport",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/README.md#system-contracts and tools/overworld/runtime_proof_registry.json: legacy.wild-teleport",
+  "requirements": ["legacy.wild-teleport"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 600, "noProgressFrames": 120, "minObservedFrames": 16},
+  "subjects": [{"id": "gastly", "species": 92, "role": "WILD", "acquire": "spawn"}],
+  "measurements": [{"kind": "wild-teleport-v1", "subject": "gastly"}],
+  "setup": [
+    {"id": "route29-open-area", "op": "teleport", "args": {"map": 33, "x": 585, "z": 408, "facing": 1},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "spawn-gastly", "op": "spawn", "args": {"species": 92, "form": 0, "role": "wild", "level": 5, "x": 583, "z": 406},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "bind-gastly", "op": "bind", "args": {"subject": "gastly"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "idle-gastly", "op": "wait", "args": {"predicate": {"kind": "actor-field", "subject": "gastly", "path": "motionPhase", "operator": "eq", "value": "IDLE"}},
+      "budget": {"maxSeconds": 20, "maxFrames": 120, "noProgressFrames": 120}}
+  ],
+  "actions": [
+    {"id": "natural-teleport-complete", "op": "wait", "args": {"predicate": {"kind": "measurement-complete", "measurement": "wild-teleport-v1"}},
+      "budget": {"maxSeconds": 90, "maxFrames": 500, "noProgressFrames": 120}}
+  ],
+  "assertions": [{"kind": "measurement-complete", "measurement": "wild-teleport-v1", "when": "final"}]
+}

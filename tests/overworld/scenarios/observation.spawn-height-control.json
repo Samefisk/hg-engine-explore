@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "id": "observation.spawn-height-control",
+  "title": "Native own-target Ledyba height reader rejects a restored wrong-Y read",
+  "status": "active",
+  "capabilities": [
+    "actor.system"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "observer-control",
+    "expectationSource": "documentation/overworld-system/verification.md#memory-backed-proof",
+    "actor": "One naturally spawned WILD Ledyba (165), bound to its own prepared encounter, current native object, world and later full actor handle.",
+    "trigger": "Follow the same normal route as spawn.ledyba-pool-site. At the authenticated own-target native height-reader return, read clean state, change only this object's native Y by 4096, read through the identical reader, restore the original four bytes, and read again before any guest instruction resumes.",
+    "observable": "The complete natural spawn baseline passes the existing POOL surface checker. The same checker rejects only the measured bad preparation Y with terminal Y differs from native landing height. Exact same-actor restoration must match the original reader output. This is recorder calibration only.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Copy unchanged test.nds and test.sav. Use the same reviewed 137 normal-route setup actions. No teleport, party edit, forced spawn, borrowed destination, clock/RNG override or timer reset."
+      },
+      {
+        "phase": "before-observation",
+        "target": "observation",
+        "change": "Install shared byte-authenticated native taps before boot. After normal save load and before the route starts, arm the internal single-use spawn-height read control. The taps observe exact prepared encounter, own target, surface query, native height refresh and engine identity."
+      },
+      {
+        "phase": "during-observation",
+        "target": "actors",
+        "change": "Within one native callback only, save the selected Wild Ledyba object's four Y bytes, write Y+4096, run the same full native reader, restore the original bytes in finally and run the reader again. No emulated instruction or input runs between reads. A failed restore terminates only the disposable worker before guest execution can resume."
+      }
+    ],
+    "limits": [
+      "Requires successful native height refresh at this encounter's own legacy POOL target, loaded metatile permission, no authored surface, clean full spawn Hop and control return. Missing/changed source identity, world, target or timing fails.",
+      "One fault and two native writes only. No full-state rollback or game state healing. Recorder control cannot supply normal-play, chain, stutter, other species/role, or universal terrain proof.",
+      "Whole job capped at 6000 completed game frames and 300 seconds; final action at512 frames/60 seconds. At least16 bound-subject observation frames. Missing data, restoration or rejection fails.",
+      "Capture is off. Controller replays current retained memory data and rejects absent/stale subjects and missing/tampered native fault/restore meaning. It cannot accept copied-data mutation as live recorder calibration."
+    ],
+    "control": {
+      "boundary": "live-runtime",
+      "fault": "Temporarily change only the selected native object's Y by4096 during the same reader callback, then restore it before guest execution.",
+      "expectedFailure": "The unchanged surface checker rejects terminal Y differs from native landing height; clean and restored reads match exactly."
+    }
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "ledyba",
+      "species": 165,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Normal input route acquires the real Wild Ledyba at its own native spawn destination."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "One native callback reads clean, wrong-Y and restored state through the same complete height reader; no guest instructions run between them."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Complete the natural spawn Hop; unchanged surface checker accepts clean landing and rejects only the retained measured wrong-Y receipt."
+    }
+  ],
+  "stop": {
+    "frameBudget": 6000,
+    "condition": "Same-actor clean spawn passes and native wrong-Y read is rejected with exact restoration, or the first failure/budget stops the private job."
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "Control returns after the selected motion finishes or cancels",
+      "The same native height reader sees the controlled fault and the exact restored state"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "observation.spawn-height-control",
+    "claims": [
+      "live-actor-identity",
+      "controlled-action"
+    ],
+    "minimumFrames": 16
+  }
+}

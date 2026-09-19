@@ -51,6 +51,7 @@
 #define RESOLVER_BATTLE_TRIGGER_MAX 2
 #define RESOLVER_WALK_TIME_MIN 1
 #define RESOLVER_WALK_TIME_MAX 32
+#define RESOLVER_WALK_ACCELERATION_DIVIDE_BY_2 33
 
 #define RESOLVER_OVERRIDE_LIMIT_KEY_BASE OWBD_CLASS_PROFILE_COUNT
 
@@ -58,7 +59,7 @@ static const u8 sRelativeFieldMaximums[] = {
     0, 0, 0, 255, 64, 64, 64, 32, 64, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0,
     0, 12, 12, 255, 64, 255, 0, 10, 8, 8, 32, 255, 0, 0, 0, 64, 32, 32,
     15, 64, 15, 0, 0, 32, 255, 0, 0, 255, 255, 32, 32, 0, 0, 0, 8, 8, 8,
-    32, 5, 0, 0, 0, 0, 0, 0, 255, 32, 32,
+    32, 5, 0, 0, 0, 0, 0, 0, 255, 32, 32, 33, 32, 32, 0, 0,
 };
 
 static const u8 sSpawnLocomotion[] = {0, 3, 4, 7};
@@ -83,8 +84,8 @@ static const u8 sActiveReaction[] = {
     RESOLVER_REACTION_CONTACT,
 };
 
-typedef char BehaviorResolverRelativeFieldCountMustRemain67[
-    sizeof(sRelativeFieldMaximums) == 67 ? 1 : -1];
+typedef char BehaviorResolverRelativeFieldCountMustRemain72[
+    sizeof(sRelativeFieldMaximums) == 72 ? 1 : -1];
 typedef char BehaviorResolverProfileDataSizeMustRemain72[
     sizeof(OverworldWildBehaviorProfileData) == 72 ? 1 : -1];
 typedef char BehaviorResolverProfileSizeMustRemain216[
@@ -92,10 +93,85 @@ typedef char BehaviorResolverProfileSizeMustRemain216[
 
 static u8 BehaviorResolver_FieldOffset(u8 fieldIndex)
 {
+    if (fieldIndex == 70 || fieldIndex == 71) {
+        return 69;
+    }
+    if (fieldIndex == 69) {
+        return 63;
+    }
+    if (fieldIndex == 68) {
+        return 64;
+    }
     if (fieldIndex < 34) {
         return fieldIndex;
     }
     return fieldIndex < 52 ? fieldIndex + 2 : fieldIndex + 4;
+}
+
+static u8 BehaviorResolver_ReadFieldValue(
+    const OverworldWildBehaviorProfileData *profile,
+    u8 fieldIndex,
+    u8 offset)
+{
+    const u8 *bytes = (const u8 *)profile;
+
+    if (fieldIndex == 59) {
+        return OW_WILD_BEHAVIOR_CHAIN_REPOSITION_ALLOWS_CARDINAL(bytes[offset]);
+    }
+    if (fieldIndex == 60) {
+        return OW_WILD_BEHAVIOR_CHAIN_REPOSITION_ALLOWS_DIAGONAL(bytes[offset]);
+    }
+    if (fieldIndex == 68) {
+        return OW_WILD_BEHAVIOR_WALK_TIME_VARIANCE(bytes[offset]);
+    }
+    if (fieldIndex == 69) {
+        return OW_WILD_BEHAVIOR_WALK_PAUSE_VARIANCE(bytes[offset]);
+    }
+    if (fieldIndex == 65) {
+        return OW_WILD_BEHAVIOR_TILES_BEFORE_TURN_SKID(bytes[offset]);
+    }
+    if (fieldIndex == 70) {
+        return OW_WILD_BEHAVIOR_STOPS_WITH_SKID(bytes[offset]);
+    }
+    if (fieldIndex == 71) {
+        return OW_WILD_BEHAVIOR_PLANS_TURN_SKID_PATH(bytes[offset]);
+    }
+    return bytes[offset];
+}
+
+static void BehaviorResolver_WriteFieldValue(
+    OverworldWildBehaviorProfileData *profile,
+    u8 fieldIndex,
+    u8 offset,
+    u8 value)
+{
+    u8 *bytes = (u8 *)profile;
+
+    if (fieldIndex == 59) {
+        OW_WILD_BEHAVIOR_SET_CHAIN_REPOSITION_ALLOW_CARDINAL(bytes[offset], value);
+    } else if (fieldIndex == 60) {
+        OW_WILD_BEHAVIOR_SET_CHAIN_REPOSITION_ALLOW_DIAGONAL(bytes[offset], value);
+    } else if (fieldIndex == 68) {
+        OW_WILD_BEHAVIOR_SET_WALK_TIME_VARIANCE(bytes[offset], value);
+    } else if (fieldIndex == 69) {
+        OW_WILD_BEHAVIOR_SET_WALK_PAUSE_VARIANCE(bytes[offset], value);
+    } else if (fieldIndex == 65) {
+        OW_WILD_BEHAVIOR_SET_TILES_BEFORE_TURN_SKID(bytes[offset], value);
+    } else if (fieldIndex == 70) {
+        OW_WILD_BEHAVIOR_SET_STOP_SKID(bytes[offset], value);
+    } else if (fieldIndex == 71) {
+        OW_WILD_BEHAVIOR_SET_PLAN_TURN_SKID_PATH(bytes[offset], value);
+    } else {
+        bytes[offset] = value;
+    }
+}
+
+static int BehaviorResolver_RelativeFieldValue(u8 fieldIndex, u8 value)
+{
+    if (fieldIndex == 68 || fieldIndex == 69) {
+        return (value & 0x40) != 0 ? (int)value - 0x80 : value;
+    }
+    return (s8)value;
 }
 
 static void BehaviorResolver_Trace(
@@ -248,17 +324,17 @@ static void BehaviorResolver_ApplyMask(
     const OverworldWildBehaviorProfileData *bounds,
     u8 fieldIndex)
 {
-    u8 *profileBytes = (u8 *)profile;
-    const u8 *valueBytes = (const u8 *)values;
-    const u8 *boundBytes = (const u8 *)bounds;
-
     while (mask != 0 && fieldIndex < sizeof(sRelativeFieldMaximums)) {
         if (mask & 1u) {
             u8 offset = BehaviorResolver_FieldOffset(fieldIndex);
+            u8 current = BehaviorResolver_ReadFieldValue(
+                profile, fieldIndex, offset);
+            u8 value = BehaviorResolver_ReadFieldValue(
+                values, fieldIndex, offset);
 
             if (relativeMask & 1u) {
-                int adjusted = (int)profileBytes[offset]
-                    + (int)(s8)valueBytes[offset];
+                int adjusted = (int)current
+                    + BehaviorResolver_RelativeFieldValue(fieldIndex, value);
                 int minimum = fieldIndex == 7
                     || fieldIndex == 27
                     || fieldIndex == 28
@@ -272,21 +348,27 @@ static void BehaviorResolver_ApplyMask(
                 } else if (adjusted > maximum) {
                     adjusted = maximum;
                 }
-                profileBytes[offset] = (u8)adjusted;
+                BehaviorResolver_WriteFieldValue(
+                    profile, fieldIndex, offset, (u8)adjusted);
+                current = (u8)adjusted;
             }
             if ((atLeastMask & 1u) || (atMostMask & 1u)) {
                 u8 threshold = (relativeMask & 1u)
-                    ? boundBytes[offset]
-                    : valueBytes[offset];
+                    ? BehaviorResolver_ReadFieldValue(
+                        bounds, fieldIndex, offset)
+                    : value;
 
-                if ((atLeastMask & 1u) && profileBytes[offset] < threshold) {
-                    profileBytes[offset] = threshold;
+                if ((atLeastMask & 1u) && current < threshold) {
+                    BehaviorResolver_WriteFieldValue(
+                        profile, fieldIndex, offset, threshold);
                 } else if ((atMostMask & 1u)
-                    && profileBytes[offset] > threshold) {
-                    profileBytes[offset] = threshold;
+                    && current > threshold) {
+                    BehaviorResolver_WriteFieldValue(
+                        profile, fieldIndex, offset, threshold);
                 }
             } else if (!(relativeMask & 1u)) {
-                profileBytes[offset] = valueBytes[offset];
+                BehaviorResolver_WriteFieldValue(
+                    profile, fieldIndex, offset, value);
             }
         }
         mask >>= 1;
@@ -359,7 +441,9 @@ static void BehaviorResolver_ApplyOverride(
             BehaviorResolver_LegacySpawnDestinationMask(
                 profile->spawnDestination);
         profile->spawnDestinationOverrideMask =
-            OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL;
+            profile->spawnDestination == OW_WILD_SPAWN_DESTINATION_POOL
+                ? 0
+                : OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL;
     }
 }
 
@@ -391,6 +475,9 @@ static void BehaviorResolver_NormalizeLane(
     if (profile->walkStompTime > RESOLVER_WALK_TIME_MAX) {
         profile->walkStompTime = RESOLVER_WALK_TIME_MAX;
     }
+    if (profile->walkAccelerationStep > RESOLVER_WALK_ACCELERATION_DIVIDE_BY_2) {
+        profile->walkAccelerationStep = RESOLVER_WALK_ACCELERATION_DIVIDE_BY_2;
+    }
     if (profile->chillState > RESOLVER_BEHAVIOR_KIND_MAX) {
         profile->chillState = invalidState;
     }
@@ -400,10 +487,21 @@ static void BehaviorResolver_NormalizeLane(
     if (profile->chillTarget > RESOLVER_TARGET_MAX) {
         profile->chillTarget = RESOLVER_TARGET_NONE;
     }
-    if (profile->hopAllowNonCardinal
-        > OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_MAX) {
+    if (profile->hopAllowNonCardinal > OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_MAX) {
         profile->hopAllowNonCardinal =
             OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY;
+    }
+    if (OW_WILD_BEHAVIOR_WALK_TIME_VARIANCE(profile->chainRepositionAllowDiagonal)
+        > OW_WILD_BEHAVIOR_WALK_TIME_VARIANCE_MAX) {
+        OW_WILD_BEHAVIOR_SET_WALK_TIME_VARIANCE(
+            profile->chainRepositionAllowDiagonal,
+            OW_WILD_BEHAVIOR_WALK_TIME_VARIANCE_MAX);
+    }
+    if (OW_WILD_BEHAVIOR_WALK_PAUSE_VARIANCE(profile->chainRepositionAllowCardinal)
+        > OW_WILD_BEHAVIOR_WALK_PAUSE_VARIANCE_MAX) {
+        OW_WILD_BEHAVIOR_SET_WALK_PAUSE_VARIANCE(
+            profile->chainRepositionAllowCardinal,
+            OW_WILD_BEHAVIOR_WALK_PAUSE_VARIANCE_MAX);
     }
     if (profile->hopMaxDistance < profile->hopMinDistance) {
         profile->hopMaxDistance = profile->hopMinDistance;
@@ -421,7 +519,7 @@ static void BehaviorResolver_NormalizeLane(
         profile->tilesToAccelerate = RESOLVER_MOVEMENT_RANGE;
     }
     if (profile->chainPauseAction
-        > OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_SKIDS) {
+        > OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_FORWARD) {
         profile->chainPauseAction = OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE;
     }
     if (profile->circleRadius > RESOLVER_CIRCLE_RADIUS_MAX) {
@@ -634,7 +732,8 @@ static BOOL BehaviorResolver_BlobValid(
 {
     const OverworldWildBehaviorDataBlobHeader *header;
 
-    if (blob == NULL || blobSize < sizeof(*blob)) {
+    if (blob == NULL
+        || blobSize < sizeof(OverworldWildBehaviorDataBlobHeader)) {
         return FALSE;
     }
     header = &blob->header;

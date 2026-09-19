@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Tickets"
+  short_description: "Capture and complete bugs and tasks from chat"
+  default_prompt: "Add this as a bug or task ticket, or work through the open ticket queue."

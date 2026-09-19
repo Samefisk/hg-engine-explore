@@ -1,0 +1,4 @@
+interface:
+  display_name: "Overworld Devtools"
+  short_description: "Drive, inspect, and prepare a private game session"
+  default_prompt: "Use $overworld-devtools to inspect the live game and prepare a repeatable scenario."

@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "id": "hop.cardinal-and-diagonal",
+  "title": "Mounted Mankey chooses the nearest valid diagonal landing",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "tools/overworld/runtime_proof_registry.json: legacy.mankey-nearest-diagonal; documentation/overworld-system/README.md#system-contracts",
+  "requirements": [
+    "legacy.mankey-nearest-diagonal"
+  ],
+  "budgets": {
+    "maxSeconds": 180,
+    "maxFrames": 400,
+    "noProgressFrames": 120,
+    "minObservedFrames": 32
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "MOUNTED",
+      "acquire": "existing"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "mounted-nearest-diagonal-v1",
+      "subject": "mankey",
+      "contract": "legacy.mankey-nearest-diagonal"
+    }
+  ],
+  "setup": [
+    {
+      "id": "nearest-origin",
+      "op": "teleport",
+      "args": {"map": 67, "x": 545, "z": 392, "facing": 0},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}
+    },
+    {
+      "id": "prepare-own-mankey",
+      "op": "party",
+      "args": {"slot": 0, "species": 56, "level": 10, "hp": 1, "status": 0},
+      "budget": {"maxSeconds": 20, "maxFrames": 30, "noProgressFrames": 30}
+    },
+    {
+      "id": "mount-own-mankey",
+      "op": "spawn",
+      "args": {"species": 56, "role": "mounted", "slot": 0},
+      "budget": {"maxSeconds": 30, "maxFrames": 180, "noProgressFrames": 120}
+    },
+    {
+      "id": "settle-current-mount",
+      "op": "step",
+      "args": {"frames": 16, "keys": []},
+      "budget": {"maxSeconds": 20, "maxFrames": 16, "noProgressFrames": 16}
+    },
+    {
+      "id": "bind-mankey",
+      "op": "bind",
+      "args": {"subject": "mankey"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}
+    },
+    {
+      "id": "probe-current-candidates",
+      "op": "hop-candidate.probe",
+      "args": {"subject": "mankey"},
+      "budget": {"maxSeconds": 20, "maxFrames": 1, "noProgressFrames": 1}
+    }
+  ],
+  "assertions": [
+    {"kind": "measurement-complete", "measurement": "mounted-nearest-diagonal-v1", "when": "final"}
+  ],
+  "actions": [
+    {
+      "id": "arm-hop-reader",
+      "op": "hop-arc.arm",
+      "args": {"subject": "mankey"},
+      "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}
+    },
+    {
+      "id": "start-up",
+      "op": "step",
+      "args": {"frames": 90, "keys": ["UP"], "until": {"kind": "actor-field", "subject": "mankey", "path": "motionKind", "operator": "eq", "value": "HOP"}},
+      "budget": {"maxSeconds": 20, "maxFrames": 90, "noProgressFrames": 90}
+    },
+    {
+      "id": "finish-up",
+      "op": "step",
+      "args": {"frames": 120, "keys": [], "until": {"kind": "actor-field", "subject": "mankey", "path": "motionPhase", "operator": "eq", "value": "IDLE"}},
+      "budget": {"maxSeconds": 20, "maxFrames": 120, "noProgressFrames": 120}
+    },
+    {
+      "id": "cooldown-up",
+      "op": "step",
+      "args": {"frames": 18, "keys": []},
+      "budget": {"maxSeconds": 20, "maxFrames": 18, "noProgressFrames": 18}
+    },
+    {
+      "id": "close-hop-reader",
+      "op": "hop-arc.close",
+      "args": {},
+      "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}
+    }
+  ]
+}

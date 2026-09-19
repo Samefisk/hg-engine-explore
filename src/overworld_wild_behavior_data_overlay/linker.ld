@@ -62,15 +62,9 @@ SECTIONS {
 
                 __bss_start__ = . ;
                 *(.bss)
-                ASSERT(. <= ORIGIN(rom) + 0xF18,
-                    "overworld wild behavior BSS overlaps staged-hop task ABI");
-                . = ORIGIN(rom) + 0xF18;
-                KEEP(*(.overworld_wild_staged_hop_tasks))
-                ASSERT(sOverworldWildStagedHopMovementTasks
-                        == ORIGIN(rom) + 0xF18,
-                    "overworld wild staged-hop task ABI moved");
-                ASSERT(. == ORIGIN(rom) + 0xF40,
-                    "overworld wild staged-hop task ABI size changed");
+                ASSERT(. <= ORIGIN(rom) + 0xF40,
+                    "overworld wild behavior BSS overlaps level-up cache");
+                . = ORIGIN(rom) + 0xF40;
                 KEEP(*(.overworld_wild_levelup_cache))
                 ASSERT(. == ORIGIN(rom) + 0xFE4,
                     "overworld wild level-up cache ABI size changed");

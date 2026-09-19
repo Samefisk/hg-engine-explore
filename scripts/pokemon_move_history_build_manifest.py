@@ -135,7 +135,7 @@ if __name__ == "__main__" and not _isolated_startup_ok():
 
 
 _PINNED_STAGE_ZERO_LAUNCHER_SHA256 = (
-    "e8626576a6b204808b93aca1a3bb8bc86622c158fc37adeb4d3dc36d2e591e94"
+    "0a0e17aea389312db1d54f66a7c56df87a26fcbc2bdd9c8e6a3f59c369b24dc5"
 )
 _PINNED_STAGE_ZERO_PYTHON = {
     "darwin": {
@@ -290,7 +290,8 @@ RUNTIME_RETAINED_SOURCE_INPUTS = (
     "scripts/pokemon_move_history_build_manifest.py",
     RUNTIME_LAUNCHER_INPUT,
     "scripts/verify_summary_move_relearn_runtime.py",
-    "scripts/headless-overworld-test.py",
+    "tools/overworld/devtools_native.py",
+    "tools/overworld/melonds_backend.py",
     "scripts/verify_pokemon_move_history_party_integrity.py",
     "scripts/summary_move_relearn_protected_spawn.py",
 )
@@ -313,21 +314,31 @@ DEPENDENCY_FILES = (
     "build/pokemon_storage_system.d",
     "build/individual/GetMonEvolutionInternal.d",
     "build/field/script_commands.d",
+    "build/field/walking_friendship.d",
     "build/party_menu.d",
-    "build/overworld_wild_spawns.d",
+    "build/overworld_walk_pause_variance.d",
+    "build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.d",
     "build/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.d",
     "build/save.d",
     "build/overlay.d",
     "build/pokemon_move_history_overlay/pokemon_move_history.d",
     "build/pokemon_move_history_overlay/pokemon_move_relearn.d",
     "build/pokemon_move_history_overlay/overworld_walk_module.d",
+    "build/pokemon_move_history_overlay/overworld_field_terrain_stream.d",
+    "build/pokemon_move_history_overlay/overworld_spawn_identity.d",
+    "build/pokemon_move_history_overlay/overworld_wild_occupancy.d",
+    "build/pokemon_move_history_overlay/overworld_spawn_guard.d",
+    "build/overworld_wild_helper_overlay/overworld_spawn_spatial.d",
+    "build/overworld_follower_selector_overlay/overworld_spawn_spatial.d",
     "build/pokemon_move_history_task6_overlay/pokemon_move_history_task6.d",
-    "build/pokemon_move_history_task6_overlay/overworld_wild_hop_trajectory.d",
+    "build/pokemon_move_history_task6_overlay/overworld_actor_hop_planner.d",
+    "build/pokemon_move_history_task6_overlay/overworld_actor_teleport_planner.d",
     "build/summary_move_relearn_overlay/summary_move_relearn.d",
 )
 FIXED_INPUTS = (
     "Makefile",
     "asm/pokemon_move_history_task6_overlay/thumb_help.s",
+    "asm/field/resident_helpers.s",
     "asm/pokemon_move_history_overlay/overworld_wild_shadow_filter.s",
     "asm/pokemon_move_history_task6_overlay/native_shadow_policy.s",
     "bytereplacement",
@@ -349,13 +360,26 @@ FIXED_INPUTS = (
     "asm/summary_move_relearn_overlay/entry.s",
     "src/pokemon_move_history_overlay/linker.ld",
     "src/pokemon_move_history_overlay/overworld_walk_module.c",
+    "src/pokemon_move_history_overlay/overworld_spawn_identity.c",
+    "include/overworld_spawn_identity.h",
+    "scripts/verify_overworld_spawn_identity.py",
+    "src/pokemon_move_history_overlay/overworld_wild_occupancy.c",
+    "include/overworld_wild_occupancy.h",
+    "src/pokemon_move_history_overlay/overworld_spawn_guard.c",
+    "include/overworld_spawn_guard.h",
+    "src/overworld_wild_helper_overlay/overworld_spawn_spatial.c",
+    "src/overworld_follower_selector_overlay/overworld_spawn_spatial.c",
+    "include/overworld_spawn_spatial.h",
+    "scripts/verify_overworld_wild_occupancy.py",
     "include/overworld_walk_module.h",
     "include/overworld_walk_direction_policy.h",
     "include/overworld_walk_timing_policy.h",
     "src/pokemon_move_history_task6_overlay/linker.ld",
     "src/summary_move_relearn_overlay/linker.ld",
     "src/overworld_wild_runtime_overlay/linker.ld",
+    "scripts/generate_overworld_actor_system_debug.py",
     "src/field/linker.ld",
+    "src/field/walking_friendship.c",
     "scripts/generate_armips_symbols.py",
     "scripts/build_move_relearn_parents.py",
     "scripts/check_docker_ready.py",
@@ -371,7 +395,6 @@ FIXED_INPUTS = (
     "scripts/summary_move_relearn_protected_spawn.swift",
     "scripts/summary_move_relearn_native_inventory.txt",
     *RUNTIME_RETAINED_SOURCE_INPUTS,
-    "documentation/summary_move_relearn_task6.md",
 )
 OUTPUTS = {
     "core_linked": "build/linked.o",
@@ -380,9 +403,12 @@ OUTPUTS = {
     "pokemon_storage_object": "build/pokemon_storage_system.o",
     "evolution_object": "build/individual/GetMonEvolutionInternal.o",
     "field_script_commands_object": "build/field/script_commands.o",
+    "field_walking_friendship_object": "build/field/walking_friendship.o",
+    "field_resident_helpers_object": "build/field/resident_helpers.o",
     "field_linked": "build/field_linked.o",
     "field_binary": "build/output_field.bin",
     "party_menu_object": "build/party_menu.o",
+    "walk_pause_variance_object": "build/overworld_walk_pause_variance.o",
     "save_object": "build/save.o",
     "history_object":
         "build/pokemon_move_history_overlay/pokemon_move_history.o",
@@ -390,6 +416,15 @@ OUTPUTS = {
         "build/pokemon_move_history_overlay/pokemon_move_relearn.o",
     "walk_module_object":
         "build/pokemon_move_history_overlay/overworld_walk_module.o",
+    "field_terrain_stream_object":
+        "build/pokemon_move_history_overlay/overworld_field_terrain_stream.o",
+    "spawn_identity_object":
+        "build/pokemon_move_history_overlay/overworld_spawn_identity.o",
+    "wild_occupancy_object":
+        "build/pokemon_move_history_overlay/overworld_wild_occupancy.o",
+    "spawn_guard_object": "build/pokemon_move_history_overlay/overworld_spawn_guard.o",
+    "spawn_spatial_helper_object": "build/overworld_wild_helper_overlay/overworld_spawn_spatial.o",
+    "spawn_spatial_selector_object": "build/overworld_follower_selector_overlay/overworld_spawn_spatial.o",
     "entry_object": "build/pokemon_move_history_overlay/entry.o",
     "thumb_help_object": "build/pokemon_move_history_overlay/thumb_help.o",
     "task6_object":
@@ -416,6 +451,26 @@ OUTPUTS = {
         "build/overworld_wild_runtime_overlay_linked.o",
     "overworld_wild_runtime_binary":
         "build/output_overworld_wild_runtime_overlay.bin",
+    "actor_linked": "build/overworld_actor_system_overlay_linked.o",
+    "actor_binary": "build/output_overworld_actor_system_overlay.bin",
+    "mount_linked": "build/overworld_mount_overlay_linked.o",
+    "mount_binary": "build/output_overworld_mount_overlay.bin",
+    "overworld_wild_spawns_linked":
+        "build/overworld_wild_spawns_overlay_linked.o",
+    "overworld_wild_spawns_binary":
+        "build/output_overworld_wild_spawns_overlay.bin",
+    "follower_selector_linked":
+        "build/overworld_follower_selector_overlay_linked.o",
+    "follower_selector_binary":
+        "build/output_overworld_follower_selector_overlay.bin",
+    "wild_behavior_data_linked":
+        "build/overworld_wild_behavior_data_overlay_linked.o",
+    "wild_behavior_data_binary":
+        "build/output_overworld_wild_behavior_data_overlay.bin",
+    "overworld_wild_helper_linked":
+        "build/overworld_wild_helper_overlay_linked.o",
+    "overworld_wild_helper_binary":
+        "build/output_overworld_wild_helper_overlay.bin",
     "patched_arm9": "base/arm9.bin",
     "overlay_table": "base/overarm9.bin",
     "patched_overlay12": "base/overlay/overlay_0012.bin",
@@ -447,10 +502,7 @@ RUNTIME_OS_TRUST_ROOTS = {
     "linux": ("/lib", "/lib64", "/usr/lib", "/usr/lib64"),
 }
 RUNTIME_MODULE_RELATIVES = (
-    "desmume/__init__.py",
-    "desmume/i18n_util.py",
-    "desmume/controls.py",
-    "desmume/emulator.py",
+    "tools/overworld/melonds_backend.py",
 )
 RUNTIME_STARTUP_MODULES = (
     "abc",
@@ -650,7 +702,7 @@ def _validate_binding_modules(stdlib_root: Path) -> None:
         for relative in RUNTIME_RETAINED_SOURCE_INPUTS
     }
     package_roots = tuple(
-        _runtime_package_root(package) for package in ("desmume", "PIL")
+        _runtime_package_root(package) for package in ("PIL",)
     )
     forbidden = {"SourcelessFileLoader", "zipimporter"}
     for name, module in sorted(sys.modules.items()):
@@ -1047,20 +1099,20 @@ def capture_runtime_environment() -> dict[str, Any]:
         raise ManifestError(
             f"unsupported runtime platform for native closure: {sys.platform}"
         )
-    desmume_root = _runtime_package_root("desmume")
+    melonds_root = REPO / "build/melonds"
     pil_root = _runtime_package_root("PIL")
     module_records = {
         relative: runtime_file_record(
-            desmume_root.parent / relative,
+            REPO / relative,
             f"module {relative}",
         )
         for relative in RUNTIME_MODULE_RELATIVES
     }
-    libdesmume_name = {
-        "darwin": "libdesmume.dylib",
-        "linux": "libdesmume.so",
+    libmelonds_name = {
+        "darwin": "libow_melonds.dylib",
+        "linux": "libow_melonds.so",
     }[platform_name]
-    libdesmume = desmume_root / libdesmume_name
+    libmelonds = melonds_root / libmelonds_name
     stdlib_root = Path(sysconfig.get_path("stdlib"))
     _validate_binding_modules(stdlib_root)
     stdlib_suffixes = (".py", ".so", ".dylib", ".dll")
@@ -1068,7 +1120,7 @@ def capture_runtime_environment() -> dict[str, Any]:
     venv_root = executable_entry.parent.parent
     venv_config = venv_root / "pyvenv.cfg"
     runtime_binary = _python_runtime_binary()
-    native_roots = (desmume_root, pil_root, stdlib_root / "lib-dynload")
+    native_roots = (melonds_root, pil_root, stdlib_root / "lib-dynload")
     absent_zip_paths = sorted(
         os.path.abspath(entry)
         for entry in sys.path
@@ -1155,13 +1207,12 @@ def capture_runtime_environment() -> dict[str, Any]:
             },
         },
         "packages": {
-            "desmume": _runtime_tree_record(desmume_root, "DeSmuME package"),
             "PIL": _runtime_tree_record(pil_root, "Pillow package"),
         },
         "modules": module_records,
         "native": {
-            "libdesmume": runtime_file_record(
-                libdesmume, "libdesmume"
+            "libmelonds": runtime_file_record(
+                libmelonds, "libmelonds"
             ),
             "mutable_closure": native_records,
             "os_trust_roots": list(trust_roots),

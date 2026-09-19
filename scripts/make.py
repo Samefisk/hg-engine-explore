@@ -7,6 +7,7 @@ import struct
 import sys
 import hashlib
 from datetime import datetime
+from pathlib import Path
 import _io
 import ndspy.codeCompression
 
@@ -155,18 +156,19 @@ def GetSectionSize(section_file: str, section_name: str) -> int:
 
 def VerifyOverworldWildSpawnsOverlay(linked_path: str, output_path: str, packaged_path: str) -> None:
     entry_name = 'gOverworldWildSpawnsOverlayEntry'
-    callback_names = [
-        'OverworldWildSpawns_OverlayOnPlayerStep',
-        'OverworldWildSpawns_OverlayTryPrimeBattleFromTalk',
-        'OverworldWildSpawns_OverlayCleanupPendingBattle',
-        'OverworldWildSpawns_CleanupResidentData',
-        'OverworldWildSpawns_OverlayOnPlayerFrame',
-        'OverworldWildSpawns_OverlayOnFieldBusy',
-        'OverworldWildSpawns_PrepareMapHeaderChange',
-        'OverworldWildSpawns_IsBehaviorAllowedHopLandingTile',
-        'OverworldWildSpawns_StartPreparedCustomJumpCommand',
-        'OverworldWildSpawns_BeginMountSelectedFollower',
-    ]
+    callback_slots = (
+        (0, 'OverworldWildSpawns_OverlayOnPlayerStep'),
+        (1, 'OverworldWildSpawns_OverlayTryPrimeBattleFromTalk'),
+        (2, 'OverworldWildSpawns_OverlayCleanupPendingBattle'),
+        (3, 'OverworldWildSpawns_CleanupResidentData'),
+        (4, 'OverworldWildSpawns_OverlayOnPlayerFrame'),
+        (5, 'OverworldWildSpawns_OverlayOnFieldBusy'),
+        (6, 'OverworldWildSpawns_ApplyTransitionWork'),
+        (7, 'OverworldWildSpawns_ValidateHopLandingValue'),
+        (8, 'OverworldWildSpawns_CopyNativeShadowValue'),
+        (9, 'OverworldWildSpawns_BeginMountSelectedFollower'),
+    )
+    callback_names = [name for _, name in callback_slots]
     symbols = {}
     output = subprocess.check_output([OBJDUMP, '-t', linked_path]).decode()
     for line in output.splitlines():
@@ -181,7 +183,7 @@ def VerifyOverworldWildSpawnsOverlay(linked_path: str, output_path: str, package
         )
     entry_address, entry_size = symbols[entry_name]
     overlay_base_address = 0x023CCFD8
-    expected_entry_size = len(callback_names) * 4
+    expected_entry_size = 40
     if entry_address != 0x023CD000 or entry_size != expected_entry_size:
         raise RuntimeError(
             f'overlay 149 ABI entry changed: address=0x{entry_address:08X} '
@@ -199,15 +201,20 @@ def VerifyOverworldWildSpawnsOverlay(linked_path: str, output_path: str, package
         raise RuntimeError('overlay 149 is shorter than its exported ABI entry')
 
     actual_callbacks = struct.unpack_from(
-        f'<{len(callback_names)}I',
+        '<10I',
         overlay,
         entry_offset,
     )
-    expected_callbacks = tuple(symbols[name][0] | 1 for name in callback_names)
+    expected_callbacks_list = [0] * 10
+    for slot, name in callback_slots:
+        expected_callbacks_list[slot] = symbols[name][0] | 1
+    expected_callbacks = tuple(expected_callbacks_list)
     if actual_callbacks != expected_callbacks:
         raise RuntimeError(
             'overlay 149 exported ABI entry does not exactly match its linked callbacks'
         )
+    if actual_callbacks[8] != 0x023CD029:
+        raise RuntimeError('overlay 149 native-shadow value callback moved')
     digest = hashlib.sha256(overlay).hexdigest()
     print(
         f'overlay 149 ABI gate: entry=0x{entry_address:08X} '
@@ -217,6 +224,7 @@ def VerifyOverworldWildSpawnsOverlay(linked_path: str, output_path: str, package
 
 def VerifyOverworldFieldServiceOverlay(linked_path: str, output_path: str, packaged_path: str) -> None:
     entry_name = 'gOverworldFieldServiceEntry'
+    mount_entry_name = 'gOverworldFieldMountPresentationEntry'
     selector_hook_name = 'OverworldFollowerSelector_TaskPoll'
     selector_state_name = 'gOverworldFollowerSelectorStateStorage'
     callback_names = [
@@ -224,24 +232,32 @@ def VerifyOverworldFieldServiceOverlay(linked_path: str, output_path: str, packa
         'OverworldFieldService_PollFrameImpl',
         'OverworldFieldService_TryGetEncounterDataIdForMapImpl',
     ]
+    mount_callback_names = [
+        'OverworldFieldService_SyncMountedPresentation',
+        'OverworldFieldService_TerrainStream',
+    ]
     symbols = {}
     output = subprocess.check_output([OBJDUMP, '-t', linked_path]).decode()
     for line in output.splitlines():
         parts = line.split()
         if len(parts) >= 6 and parts[-1] in [
                 entry_name,
+                mount_entry_name,
                 selector_hook_name,
                 selector_state_name,
-                *callback_names]:
+                *callback_names,
+                *mount_callback_names]:
             symbols[parts[-1]] = (int(parts[0], 16), int(parts[-2], 16))
 
     missing = [
         name
         for name in [
                 entry_name,
+                mount_entry_name,
                 selector_hook_name,
                 selector_state_name,
-                *callback_names]
+                *callback_names,
+                *mount_callback_names]
         if name not in symbols
     ]
     if missing:
@@ -255,6 +271,13 @@ def VerifyOverworldFieldServiceOverlay(linked_path: str, output_path: str, packa
         raise RuntimeError(
             f'overlay 131 field-service ABI entry changed: address=0x{entry_address:08X} '
             f'size={entry_size}, expected address=0x023C8000 size={expected_entry_size}'
+        )
+    mount_entry_address, mount_entry_size = symbols[mount_entry_name]
+    if mount_entry_address != 0x023C8154 or mount_entry_size != 16:
+        raise RuntimeError(
+            'overlay 131 mount-presentation ABI entry changed: '
+            f'address=0x{mount_entry_address:08X} size={mount_entry_size}, '
+            'expected address=0x023C8154 size=16'
         )
     selector_hook_address, selector_hook_size = symbols[selector_hook_name]
     if selector_hook_address != 0x023C8010:
@@ -280,8 +303,8 @@ def VerifyOverworldFieldServiceOverlay(linked_path: str, output_path: str, packa
         packaged = file.read()
     if overlay != packaged:
         raise RuntimeError('packaged overlay 131 differs from its linked binary')
-    if len(overlay) < expected_entry_size:
-        raise RuntimeError('overlay 131 is shorter than its field-service ABI entry')
+    if len(overlay) < 0x164:
+        raise RuntimeError('overlay 131 is shorter than its fixed ABI entries')
 
     actual_entry = struct.unpack_from('<4I', overlay)
     expected_entry = (
@@ -292,10 +315,23 @@ def VerifyOverworldFieldServiceOverlay(linked_path: str, output_path: str, packa
         raise RuntimeError(
             'overlay 131 field-service ABI entry does not exactly match its magic and linked callbacks'
         )
+    actual_mount_entry = struct.unpack_from('<IHHII', overlay, 0x154)
+    expected_mount_entry = (
+        0x50544D57,
+        2,
+        16,
+        *(symbols[name][0] | 1 for name in mount_callback_names),
+    )
+    if actual_mount_entry != expected_mount_entry:
+        raise RuntimeError(
+            'overlay 131 mount-presentation ABI entry does not exactly match '
+            'its magic, version, size, and linked callbacks'
+        )
     digest = hashlib.sha256(overlay).hexdigest()
     print(
         f'overlay 131 field-service ABI gate: entry=0x{entry_address:08X} '
-        f'size={entry_size} sha256={digest}'
+        f'size={entry_size} terrain=0x{symbols[mount_callback_names[1]][0]:08X} '
+        f'sha256={digest}'
     )
 
 
@@ -404,26 +440,43 @@ def VerifyOverworldWildRuntimeOverlay(
         output_path: str,
         packaged_path: str) -> None:
     entry_name = 'gOverworldWildRuntimeOverlayEntry'
-    callback_names = [
-        'OverworldWildRuntime_ValidateImpl',
-        'OverworldWildRuntime_QuerySurface',
-        'OverworldWildRuntime_GetGroundBaseY',
-        'OverworldWildRuntime_WalkMomentumReset',
-        'OverworldWildRuntime_WalkMomentumStart',
-        'OverworldWildRuntime_WalkMomentumFinish',
-        'OverworldWildRuntime_PlayStepDirtParticle',
-        'OverworldWildRuntime_PlayLandingHopParticle',
-    ]
+    walk_owner_entry_name = 'gOverworldActorWalkPolicyOwnerEntry'
+    boundary_bridge_name = 'OverworldWildRuntime_ApplyMotionBoundary'
+    callback_slots = (
+        (0, 'OverworldWildRuntime_ValidateImpl'),
+        (1, 'OverworldWildRuntime_QuerySurface'),
+        (2, 'OverworldWildRuntime_GetGroundBaseY'),
+        (3, 'OverworldWildRuntime_FillActorView'),
+        (5, 'OverworldWildRuntime_RequestMotion'),
+        (6, 'OverworldRoleController_Reduce'),
+        (8, 'OverworldWildRuntime_BindActor'),
+        (9, 'OverworldWildRuntime_PlayStepDirtParticle'),
+        (10, 'OverworldWildRuntime_PlayLandingHopParticle'),
+    )
+    callback_names = [name for _, name in callback_slots]
+    walk_owner_callback = 'OverworldActorWalkPolicy_Reduce'
     symbols = {}
     output = subprocess.check_output([OBJDUMP, '-t', linked_path]).decode()
     for line in output.splitlines():
         parts = line.split()
-        if len(parts) >= 6 and parts[-1] in [entry_name, *callback_names]:
+        if len(parts) >= 5 and parts[-1] in [
+                entry_name,
+                walk_owner_entry_name,
+                boundary_bridge_name,
+                *callback_names,
+                walk_owner_callback,
+        ]:
             symbols[parts[-1]] = (int(parts[0], 16), int(parts[-2], 16))
 
     missing = [
         name
-        for name in [entry_name, *callback_names]
+        for name in [
+            entry_name,
+            walk_owner_entry_name,
+            boundary_bridge_name,
+            *callback_names,
+            walk_owner_callback,
+        ]
         if name not in symbols
     ]
     if missing:
@@ -434,7 +487,13 @@ def VerifyOverworldWildRuntimeOverlay(
 
     entry_address, entry_size = symbols[entry_name]
     expected_entry_address = 0x023BC800
-    expected_entry_size = 64
+    expected_entry_size = 52
+    walk_owner_address, walk_owner_size = symbols[walk_owner_entry_name]
+    boundary_bridge_address, boundary_bridge_size = symbols[
+        boundary_bridge_name
+    ]
+    expected_walk_owner_address = 0x023BC834
+    expected_walk_owner_size = 12
     overlay_end = 0x023BD400
     if (entry_address != expected_entry_address
             or entry_size != expected_entry_size):
@@ -443,12 +502,39 @@ def VerifyOverworldWildRuntimeOverlay(
             f'size={entry_size}, expected address=0x{expected_entry_address:08X} '
             f'size={expected_entry_size}'
         )
+    if (walk_owner_address != expected_walk_owner_address
+            or walk_owner_size != expected_walk_owner_size):
+        raise RuntimeError(
+            'overlay 156 actor Walk owner entry changed: '
+            f'address=0x{walk_owner_address:08X} size={walk_owner_size}, '
+            f'expected address=0x{expected_walk_owner_address:08X} '
+            f'size={expected_walk_owner_size}'
+        )
+    if boundary_bridge_address != 0x023BD350 \
+            or not 0 < boundary_bridge_size <= 0x9C:
+        raise RuntimeError(
+            'overlay 156 Actor Motion boundary bridge changed: '
+            f'address=0x{boundary_bridge_address:08X} '
+            f'size={boundary_bridge_size}'
+        )
 
     for name in callback_names:
         callback_address, _ = symbols[name]
-        if not expected_entry_address <= callback_address < overlay_end:
+        callback_code_address = callback_address & ~1
+        is_role_controller = name == 'OverworldRoleController_Reduce'
+        is_step_particle = (
+            name == 'OverworldWildRuntime_PlayStepDirtParticle'
+        )
+        callback_in_owner = (
+            0x023BE240 <= callback_code_address < 0x023BE3D8
+            if is_role_controller
+            else callback_code_address == 0x023BA130
+            if is_step_particle
+            else expected_entry_address <= callback_code_address < overlay_end
+        )
+        if not callback_in_owner:
             raise RuntimeError(
-                f'overlay 156 callback {name} is outside its owned range: '
+                f'overlay 156 callback {name} is outside its resident owner: '
                 f'0x{callback_address:08X}'
             )
 
@@ -458,35 +544,62 @@ def VerifyOverworldWildRuntimeOverlay(
         packaged = file.read()
     if overlay != packaged:
         raise RuntimeError('packaged overlay 156 differs from its linked binary')
-    if len(overlay) < expected_entry_size:
-        raise RuntimeError('overlay 156 is shorter than its exported ABI entry')
+    if len(overlay) < expected_walk_owner_address - expected_entry_address \
+            + expected_walk_owner_size:
+        raise RuntimeError('overlay 156 is shorter than its exported ABI entries')
 
     actual_header = struct.unpack_from('<IHH', overlay)
-    expected_header = (0x3152574F, 10, expected_entry_size)
+    expected_header = (0x3152574F, 16, expected_entry_size)
     if actual_header != expected_header:
         raise RuntimeError(
             'overlay 156 exported ABI magic/version/size does not match'
         )
-    actual_callbacks = (
-        *struct.unpack_from('<6I', overlay, 8),
-        *struct.unpack_from('<2I', overlay, 56),
-    )
-    expected_callbacks = tuple(
-        symbols[name][0] | 1
-        for name in callback_names
-    )
+    actual_callbacks = struct.unpack_from('<11I', overlay, 8)
+    expected_callbacks_list = [0] * 11
+    for slot, name in callback_slots:
+        expected_callbacks_list[slot] = symbols[name][0] | 1
+    expected_callbacks = tuple(expected_callbacks_list)
     if actual_callbacks != expected_callbacks:
         raise RuntimeError(
             'overlay 156 exported ABI does not exactly match its linked '
             'Thumb callbacks'
         )
-    if any(struct.unpack_from('<6I', overlay, 32)):
-        raise RuntimeError('overlay 156 retired resolver slots are not zero')
-    if any((pointer & 1) == 0 for pointer in actual_callbacks):
-        raise RuntimeError('overlay 156 exported a non-Thumb callback')
-    if any(not expected_entry_address <= (pointer & ~1) < overlay_end
-            for pointer in actual_callbacks):
-        raise RuntimeError('overlay 156 exported a callback outside its range')
+    if actual_callbacks[4] != 0 or actual_callbacks[7] != 0:
+        raise RuntimeError('overlay 156 retired callback slots are not zero')
+    for slot, name in callback_slots:
+        pointer = actual_callbacks[slot]
+        if (pointer & 1) == 0:
+            raise RuntimeError(
+                f'overlay 156 exported non-Thumb callback {name}'
+            )
+        callback_code_address = pointer & ~1
+        callback_in_owner = (
+            0x023BE240 <= callback_code_address < 0x023BE3D8
+            if name == 'OverworldRoleController_Reduce'
+            else callback_code_address == 0x023BA130
+            if name == 'OverworldWildRuntime_PlayStepDirtParticle'
+            else expected_entry_address <= callback_code_address < overlay_end
+        )
+        if not callback_in_owner:
+            raise RuntimeError(
+                f'overlay 156 exported callback {name} outside its resident owner'
+            )
+    actual_walk_owner_header = struct.unpack_from('<IHH', overlay, 52)
+    expected_walk_owner_header = (0x5057574F, 1, expected_walk_owner_size)
+    actual_walk_owner_callback = struct.unpack_from('<I', overlay, 60)[0]
+    expected_walk_owner_callback = symbols[walk_owner_callback][0] | 1
+    if (actual_walk_owner_header != expected_walk_owner_header
+            or actual_walk_owner_callback != expected_walk_owner_callback):
+        raise RuntimeError(
+            'overlay 156 actor Walk owner ABI does not match its linked callback'
+        )
+    if (actual_walk_owner_callback & 1) == 0:
+        raise RuntimeError('overlay 156 actor Walk owner exported non-Thumb code')
+    if not expected_entry_address <= (
+            actual_walk_owner_callback & ~1) < overlay_end:
+        raise RuntimeError(
+            'overlay 156 actor Walk owner callback is outside its resident image'
+        )
 
     digest = hashlib.sha256(overlay).hexdigest()
     print(
@@ -830,6 +943,9 @@ def writeall():
         with open("base/overarm9.bin", "rb+") as y9Table:
             overlayPath = f"base/overlay/overlay_{newOverlay:04}.bin"
             bssSize = GetSectionSize(LINKED_SECTIONS[i + 1], '.bss')
+            if newOverlay == 131:
+                from verify_pokemon_move_history_capture import current_field_overlay_metadata
+                bssSize = current_field_overlay_metadata()[2]
 
             y9Table.seek(newOverlay*0x20) # seek address
             y9Table.write(struct.pack('<I', newOverlay)) # id
@@ -881,6 +997,25 @@ def writeall():
                 "--objdump", OBJDUMP,
             ])
         #print(f"{OVERLAYS[i]} written to overlay {newOverlay}...")
+
+    # Both overlays must be written before checking this private code-host seam.
+    # Reuse the final-ROM guard so build and release cannot disagree on layout.
+    from verify_pokemon_move_history_capture import verify_field_terrain_packaging
+    field_package = Path("base/overlay/overlay_0131.bin").read_bytes()
+    terrain_host_package = Path("base/overlay/overlay_0153.bin").read_bytes()
+    if (field_package != Path("build/output_field.bin").read_bytes()
+            or terrain_host_package
+            != Path("build/output_pokemon_move_history_overlay.bin").read_bytes()):
+        raise RuntimeError("Field terrain packaged code differs from linked output")
+    verify_field_terrain_packaging(
+        Path("build/field_linked.o"),
+        Path("build/pokemon_move_history_overlay_linked.o"),
+        Path("build/pokemon_move_history_overlay/overworld_field_terrain_stream.o"),
+        field_package,
+        terrain_host_package,
+        OBJDUMP,
+    )
+    print("Field terrain package gate: resident code, Field state, Thumb arguments verified")
 
     # all of the individual overlays
     for i in range(0, len(INDIVIDUAL_OVERLAYS)):

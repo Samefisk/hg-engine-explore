@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "id": "observation.walk-matrix-state-control",
+  "title": "Native Walk state reader rejects a phase fault and restores exact state",
+  "status": "active",
+  "capabilities": [
+    "actor.system"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "observer-control",
+    "expectationSource": "documentation/overworld-system/verification.md#memory-backed-proof",
+    "actor": "Current mounted Cyndaquil155, bound by its own follower identity and player anchor.",
+    "trigger": "Complete native one- and two-frame Walk motions, then pause and set only the native phase byte to255; read with the same decoder and restore.",
+    "observable": "The same decoder rejects the bad byte, then all52 bytes, clocks, registers and ownership match the clean read.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Disposable test.sav with checked teleport, party and own mounted follower setup."
+      },
+      {
+        "phase": "during-observation",
+        "target": "observation",
+        "change": "Zero-time idle lane time1 then2; after both complete, change only native phase byte0to255 and restore in finally. No guest execution after calibration."
+      }
+    ],
+    "limits": [
+      "Phase-enum reader validation only; not an injected timing fault or full matrix gameplay proof."
+    ],
+    "control": {
+      "boundary": "live-runtime",
+      "fault": "Native Walk phase byte255.",
+      "expectedFailure": "The unchanged native decoder rejects the phase and accepts exact restoration without guest execution."
+    }
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Bind the current mounted follower and query its native corner."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Reject southwest, recover west, calibrate policy and close."
+    }
+  ],
+  "stop": {
+    "frameBudget": 600,
+    "condition": "Both native Walk motions and exact reader restoration complete"
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Every active actor has an attached presentation"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "observation.walk-matrix-state-control",
+    "claims": [
+      "live-actor-identity",
+      "controlled-action"
+    ],
+    "minimumFrames": 5
+  }
+}

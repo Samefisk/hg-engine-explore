@@ -1,9 +1,10 @@
 #include "../../include/overworld_walk_module.h"
 
 #include "../../include/constants/buttons.h"
-#include "../../include/constants/species.h"
+#include "../../include/constants/file.h"
 #include "../../include/battle.h"
 #include "../../include/map_events_internal.h"
+#include "../../include/overlay.h"
 #include "../../include/overworld_actor_system_internal.h"
 #include "../../include/overworld_mount_internal.h"
 #include "../../include/overworld_wild_spawns_internal.h"
@@ -27,146 +28,291 @@
 #define WALK_PLAYER_MOVE_STATE_NONE 0
 #define WALK_PLAYER_MOVE_STATE_END 3
 
-#define WALK_CODE __attribute__((section(".overworld_walk_module")))
-#define WALK_RODATA __attribute__((section(".overworld_walk_module_rodata")))
+#define WALK_PRIVATE_CODE __attribute__((section(".overworld_walk_module")))
+#define WALK_PUBLIC_CODE(sectionName) \
+    __attribute__((noinline, used, aligned(2), section(sectionName)))
 
 extern void *PokemonMoveHistory_OverlayMemset(
     void *destination,
     int value,
     u32 size);
 
-#define WALK_WILD_BEHAVIOR_KIND_WANDER 2
-#define WALK_WILD_BEHAVIOR_KIND_HEADBUTT_TREE_HOP 7
-#define WALK_WILD_LOCOMOTION_NONE 0
-#define WALK_WILD_LOCOMOTION_WANDER 1
-#define WALK_WILD_LOCOMOTION_RAM 5
-#define WALK_WILD_TARGET_NONE 0
-#define WALK_WILD_TARGET_RANDOM_NEARBY 1
-#define WALK_WILD_TARGET_TOWARD_PLAYER 2
-#define WALK_WILD_TARGET_AWAY_FROM_PLAYER 3
-#define WALK_WILD_TARGET_TREE_TOP 4
-#define WALK_WILD_ALERT_RANGE_NONE 0
-#define WALK_WILD_ALERT_RANGE_TERRAIN_ONLY 5
-#define WALK_WILD_REACTION_NONE 0
-#define WALK_WILD_REACTION_CONTACT 1
-#define WALK_WILD_REACTION_FLEE 2
-#define WALK_WILD_REACTION_EMOTE 4
-#define WALK_WILD_REACTION_TIRED 5
-#define WALK_WILD_GROUP_BABY (1u << 0)
-#define WALK_WILD_GROUP_GHOST (1u << 1)
-#define WALK_WILD_GROUP_TYPE_NORMAL (1u << 2)
+typedef char OverworldWalkProposeStepAsmValuesMustMatchAbi[
+    OVERWORLD_ACTOR_WALK_PENDING_PROPOSAL == 1
+        && OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP == 2
+        ? 1 : -1];
 
-static const u8 sWalkWildSpawnLocomotion[] WALK_RODATA = {
-    WALK_WILD_LOCOMOTION_NONE,
-    3,
-    4,
-    7,
-};
+static u8 WALK_PUBLIC_CODE(".overworld_walk_decelerate_time_body")
+OverworldWalk_DecelerateTimeBody(
+    u8 time,
+    u8 baseTime,
+    u8 accelerationStep)
+{
+    return OverworldWalkTimingPolicy_Decelerate(
+        time, baseTime, accelerationStep);
+}
 
-static const u8 sWalkWildDefaultTarget[] WALK_RODATA = {
-    WALK_WILD_TARGET_NONE,
-    WALK_WILD_TARGET_NONE,
-    WALK_WILD_TARGET_RANDOM_NEARBY,
-    WALK_WILD_TARGET_TOWARD_PLAYER,
-    WALK_WILD_TARGET_AWAY_FROM_PLAYER,
-    WALK_WILD_TARGET_TOWARD_PLAYER,
-    WALK_WILD_TARGET_TOWARD_PLAYER,
-    WALK_WILD_TARGET_TREE_TOP,
-};
+u8 __attribute__((naked)) WALK_PUBLIC_CODE(".overworld_walk_decelerate_time")
+OverworldWalk_DecelerateTime(
+    u8 time,
+    u8 baseTime,
+    u8 accelerationStep)
+{
+    __asm__(
+        "ldr r3, 1f\n"
+        "bx r3\n"
+        ".align 2\n"
+        "1: .word OverworldWalk_DecelerateTimeBody + 1\n");
+}
 
-static const u8 sWalkWildActiveReaction[] WALK_RODATA = {
-    WALK_WILD_REACTION_NONE,
-    WALK_WILD_REACTION_NONE,
-    WALK_WILD_REACTION_NONE,
-    WALK_WILD_REACTION_CONTACT,
-    WALK_WILD_REACTION_FLEE,
-    WALK_WILD_REACTION_EMOTE,
-    WALK_WILD_REACTION_CONTACT,
-    WALK_WILD_REACTION_CONTACT,
-};
+void __attribute__((naked)) WALK_PUBLIC_CODE(".overworld_walk_propose_step")
+OverworldWalk_ProposeStep(
+    OverworldActorPolicyState *policy,
+    OverworldActorWalkPolicyCall *call,
+    u8 direction,
+    u8 facing,
+    u8 time,
+    u8 stepFlags,
+    u8 skidTiles)
+{
+#if defined(__arm__)
+    __asm__(
+        ".syntax unified\n"
+        "push {lr}\n"
+        "strb r2, [r1, #17]\n"
+        "strb r3, [r1, #18]\n"
+        "ldr r2, [sp, #4]\n"
+        "strb r2, [r1, #19]\n"
+        "ldr r2, [sp, #8]\n"
+        "strb r2, [r1, #20]\n"
+        "ldr r2, [sp, #12]\n"
+        "strb r2, [r1, #11]\n"
+        "movs r2, #1\n"
+        "strb r2, [r0, #22]\n"
+        "movs r2, #2\n"
+        "strb r2, [r1, #16]\n"
+        "movs r2, #255\n"
+        "strb r2, [r0, #20]\n"
+        "ldrb r2, [r0, #2]\n"
+        "strb r2, [r1, #24]\n"
+        "bl OverworldWalk_MarkPlannedStopSkid\n"
+        "pop {pc}\n");
+#else
+    policy->pendingStep = OVERWORLD_ACTOR_WALK_PENDING_PROPOSAL;
+    policy->bufferedDirection = OW_WILD_WALK_DIRECTION_NONE;
+    call->decision = OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP;
+    call->stepDirection = direction;
+    call->facingDirection = facing;
+    call->travelTime = time;
+    call->stepFlags = stepFlags;
+    call->distance = skidTiles;
+    call->reserved[0] = policy->walkMomentum.speed;
+    OverworldWalk_MarkPlannedStopSkid(policy, call);
+#endif
+}
 
-static const u16 sWalkWildGroupSpecies[] WALK_RODATA = {
-    SPECIES_GASTLY,
-    SPECIES_HAUNTER,
-    SPECIES_GENGAR,
-    SPECIES_MISDREAVUS,
-    SPECIES_DUSKULL,
-    SPECIES_PICHU,
-    SPECIES_CLEFFA,
-    SPECIES_IGGLYBUFF,
-    SPECIES_TOGEPI,
-    SPECIES_TYROGUE,
-    SPECIES_SMOOCHUM,
-    SPECIES_ELEKID,
-    SPECIES_MAGBY,
-    SPECIES_AZURILL,
-    SPECIES_WYNAUT,
-    SPECIES_BUDEW,
-    SPECIES_CHINGLING,
-    SPECIES_BONSLY,
-    SPECIES_MIME_JR,
-    SPECIES_HAPPINY,
-    SPECIES_MUNCHLAX,
-    SPECIES_RIOLU,
-    SPECIES_MANTYKE,
-};
+BOOL WALK_PRIVATE_CODE OverworldWalk_CopyNativeShadowValue(
+    LocalMapObject *object,
+    u32 *shadowState,
+    s32 *baseY)
+{
+    const OverworldWildSpawnsOverlayEntry *entry;
+    OverworldWildNativeShadowValue value;
+    u32 target;
 
-static u8 WALK_CODE Walk_ClampTime(u8 time)
+    if (object == NULL || shadowState == NULL || baseY == NULL
+        || !IsOverlayLoaded(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION)) {
+        return FALSE;
+    }
+    entry = OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY;
+    target = (u32)entry->copyNativeShadowValue;
+    if (target != (OVERWORLD_WILD_SPAWNS_COPY_NATIVE_SHADOW_VALUE_ADDR | 1u)) {
+        return FALSE;
+    }
+    value.version = OVERWORLD_WILD_NATIVE_SHADOW_VALUE_VERSION;
+    value.size = sizeof(value);
+    value.baseY = 0;
+    value.slot = (u8)(object->id - OW_WILD_OBJECT_ID_START);
+    value.active = FALSE;
+    value.encounterGeneration = (u16)(*shadowState >> 16);
+    if (!entry->copyNativeShadowValue(object, &value)
+        || value.version != OVERWORLD_WILD_NATIVE_SHADOW_VALUE_VERSION
+        || value.size != sizeof(value)
+        || value.encounterGeneration == 0) {
+        return FALSE;
+    }
+    *shadowState = (*shadowState & 0xFFFF)
+        | ((u32)value.encounterGeneration << 16);
+    if (!value.active) {
+        return FALSE;
+    }
+    *baseY = value.baseY;
+    return TRUE;
+}
+
+u8 WALK_PUBLIC_CODE(".overworld_walk_clamp_time")
+OverworldWalk_ClampTime(u8 time)
 {
     return OverworldWalkTimingPolicy_Clamp(time);
 }
 
-static u8 WALK_CODE Walk_AccelerateTime(u8 time, u8 fastestTime)
+u8 __attribute__((naked)) WALK_PUBLIC_CODE(".overworld_walk_accelerate_time")
+OverworldWalk_AccelerateTime(
+    u8 time,
+    u8 fastestTime,
+    u8 accelerationStep)
 {
-    return OverworldWalkTimingPolicy_Accelerate(time, fastestTime);
+    __asm__(
+        ".syntax unified\n"
+        "cmp r0, #0\n"
+        "bne 1f\n"
+        "movs r0, #1\n"
+        "1:\n"
+        "cmp r0, #32\n"
+        "bls 2f\n"
+        "movs r0, #32\n"
+        "2:\n"
+        "cmp r1, #0\n"
+        "bne 3f\n"
+        "movs r1, #1\n"
+        "3:\n"
+        "cmp r1, #32\n"
+        "bls 4f\n"
+        "movs r1, #32\n"
+        "4:\n"
+        "cmp r2, #0\n"
+        "beq 8f\n"
+        "cmp r2, #33\n"
+        "beq 7f\n"
+        "cmp r0, r2\n"
+        "bhi 6f\n"
+        "movs r0, #1\n"
+        "b 8f\n"
+        "6:\n"
+        "subs r0, r0, r2\n"
+        "b 8f\n"
+        "7:\n"
+        "adds r0, #1\n"
+        "lsrs r0, r0, #1\n"
+        "8:\n"
+        "cmp r0, r1\n"
+        "bhs 9f\n"
+        "movs r0, r1\n"
+        "9:\n"
+        "bx lr\n");
 }
 
-static u8 WALK_CODE Walk_SkidTiles(u8 time)
+u8 WALK_PUBLIC_CODE(".overworld_walk_skid_tiles")
+OverworldWalk_SkidTiles(u8 time)
 {
     return OverworldWalkTimingPolicy_SkidTiles(time);
 }
 
-static u8 WALK_CODE Walk_SkidTime(u8 time)
+u8 WALK_PUBLIC_CODE(".overworld_walk_skid_time")
+OverworldWalk_SkidTime(u8 time)
 {
     return OverworldWalkTimingPolicy_SkidTime(time);
 }
 
-static BOOL WALK_CODE Walk_StompApplies(u8 time, u8 threshold)
+void WALK_PUBLIC_CODE(".overworld_walk_stop_skid_plan")
+OverworldWalk_MarkPlannedStopSkid(
+    const OverworldActorPolicyState *policy,
+    OverworldActorWalkPolicyCall *call)
+{
+    u8 turnSkidOptions = call->lane->tilesBeforeTurnSkid;
+    u8 skidTiles;
+
+    (void)policy;
+
+    if ((call->stepFlags & (OVERWORLD_ACTOR_WALK_STEP_SKID
+                | OVERWORLD_ACTOR_WALK_STEP_STOP_SKID
+                | OVERWORLD_ACTOR_WALK_STEP_CONTINUATION))
+            == OVERWORLD_ACTOR_WALK_STEP_SKID
+        && OW_WILD_BEHAVIOR_PLANS_TURN_SKID_PATH(
+            turnSkidOptions)) {
+        call->stepFlags |= OVERWORLD_ACTOR_WALK_STEP_PLANNED_SKID_PATH;
+        call->reserved[OVERWORLD_ACTOR_WALK_POLICY_SKID_PATH_TILES_INDEX] =
+            call->distance;
+        return;
+    }
+    if ((call->stepFlags & OVERWORLD_ACTOR_WALK_STEP_SKID) != 0) {
+        return;
+    }
+    if ((call->flags & OVERWORLD_ACTOR_WALK_POLICY_FLAG_CHAIN_ENABLED) == 0) {
+        return;
+    }
+    if ((call->stepFlags & OVERWORLD_ACTOR_WALK_STEP_CONTINUATION) != 0
+        || OW_WILD_BEHAVIOR_TILES_BEFORE_TURN_SKID(turnSkidOptions) == 0
+        || !OW_WILD_BEHAVIOR_PLANS_TURN_SKID_PATH(turnSkidOptions)) {
+        return;
+    }
+    /* Reserve enough straight runway for the fastest later turn, including
+     * the first recovery step after a turn skid. */
+    skidTiles = OverworldWalk_SkidTiles(call->lane->maxWalkSpeed);
+    if (skidTiles != 0) {
+        call->stepFlags |= OVERWORLD_ACTOR_WALK_STEP_PLANNED_SKID_PATH;
+        call->reserved[OVERWORLD_ACTOR_WALK_POLICY_SKID_PATH_TILES_INDEX] =
+            skidTiles;
+    }
+}
+
+BOOL WALK_PUBLIC_CODE(".overworld_walk_stomp_applies")
+OverworldWalk_StompApplies(u8 time, u8 threshold)
 {
     return OverworldWalkTimingPolicy_StompApplies(time, threshold);
 }
 
-static u8 WALK_CODE Walk_DirectionFromKeys(u32 keys)
+u8 WALK_PUBLIC_CODE(".overworld_walk_direction_from_keys")
+OverworldWalk_DirectionFromKeys(u32 keys)
 {
     return OverworldWalkDirectionPolicy_FromKeys(keys);
 }
 
-static u32 WALK_CODE Walk_DirectionKey(u8 direction)
+/* These fixed ABI entries are halfword-aligned. Keep their literal-bearing
+ * C bodies word-aligned; forcing an input section to alignment 2 breaks Thumb
+ * PC-relative literal loads. The tail branch preserves the caller's LR. */
+__asm__(".section .overworld_walk_direction_key,\"ax\",%progbits\n"
+        ".balign 2\n.thumb\n.global OverworldWalk_DirectionKey\n"
+        ".type OverworldWalk_DirectionKey,%function\n.thumb_func\n"
+        "OverworldWalk_DirectionKey:\n"
+        "b OverworldWalk_DirectionKeyBody\n"
+        ".size OverworldWalk_DirectionKey,.-OverworldWalk_DirectionKey\n"
+        ".previous\n");
+
+/* Keep the C name for local calls and compiler analysis; other translation
+ * units still enter through the fixed assembly symbol above. */
+u32 OverworldWalk_DirectionKey(u8 direction) __asm__("OverworldWalk_DirectionKeyBody");
+u32 WALK_PUBLIC_CODE(".overworld_walk_direction_key_body")
+OverworldWalk_DirectionKey(u8 direction)
 {
     return OverworldWalkDirectionPolicy_Key(direction);
 }
 
-static int WALK_CODE Walk_DeltaX(u8 direction)
+int WALK_PUBLIC_CODE(".overworld_walk_delta_x")
+OverworldWalk_DeltaX(u8 direction)
 {
     return OverworldWalkDirectionPolicy_DeltaX(direction);
 }
 
-static int WALK_CODE Walk_DeltaY(u8 direction)
+int WALK_PUBLIC_CODE(".overworld_walk_delta_y")
+OverworldWalk_DeltaY(u8 direction)
 {
     return OverworldWalkDirectionPolicy_DeltaY(direction);
 }
 
-static BOOL WALK_CODE Walk_IsFortyFiveDegreeTurn(u8 from, u8 to)
+BOOL WALK_PUBLIC_CODE(".overworld_walk_is_forty_five_degree_turn")
+OverworldWalk_IsFortyFiveDegreeTurn(u8 from, u8 to)
 {
     return OverworldWalkDirectionPolicy_IsFortyFiveDegreeTurn(from, to);
 }
 
-static u8 WALK_CODE Walk_DirectionFromDelta(int dx, int dy)
+u8 WALK_PUBLIC_CODE(".overworld_walk_direction_from_delta")
+OverworldWalk_DirectionFromDelta(int dx, int dy)
 {
     return OverworldWalkDirectionPolicy_FromDelta(dx, dy);
 }
 
-static void WALK_CODE Walk_GetComponents(
+static void WALK_PRIVATE_CODE Walk_GetComponents(
     u8 direction,
     u8 *vertical,
     u8 *horizontal)
@@ -179,14 +325,37 @@ static void WALK_CODE Walk_GetComponents(
         : WALK_DIRECTION_WEST;
 }
 
-static BOOL WALK_CODE Walk_CanCardinal(
+static BOOL WALK_PRIVATE_CODE Walk_CanCardinal(
     FIELD_PLAYER_AVATAR *avatar,
     u8 direction)
 {
     return WALK_COLLISION_CHECK(avatar, avatar->mapObject, direction) == 0;
 }
 
-static BOOL WALK_CODE Walk_StrictDiagonalAllowed(
+static BOOL WALK_PRIVATE_CODE __attribute__((noinline)) Walk_ValidateDiagonalLanding(
+    OverworldMountRuntimeState *state, int targetX, int targetY)
+{
+    return OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->validateHopLanding(
+        OVERWORLD_WILD_LANDING_VALUE_SERVICE_VERSION,
+        OW_WILD_FOLLOWER_SLOT,
+        state->fieldSystem,
+        state->snapshot.profile.chillAllowedTerrainMask,
+        targetX, targetY, targetX, targetY);
+}
+
+__asm__(".section .overworld_walk_strict_diagonal_allowed,\"ax\",%progbits\n"
+        ".balign 2\n.thumb\n.global OverworldWalk_StrictDiagonalAllowed\n"
+        ".type OverworldWalk_StrictDiagonalAllowed,%function\n.thumb_func\n"
+        "OverworldWalk_StrictDiagonalAllowed:\n"
+        "b OverworldWalk_StrictDiagonalAllowedBody\n"
+        ".size OverworldWalk_StrictDiagonalAllowed,.-OverworldWalk_StrictDiagonalAllowed\n"
+        ".previous\n");
+
+BOOL OverworldWalk_StrictDiagonalAllowed(
+    OverworldMountRuntimeState *state, FIELD_PLAYER_AVATAR *avatar,
+    u8 direction) __asm__("OverworldWalk_StrictDiagonalAllowedBody");
+static u16 WALK_PUBLIC_CODE(".overworld_walk_strict_diagonal_allowed_body")
+Walk_DiagonalRejection(
     OverworldMountRuntimeState *state,
     FIELD_PLAYER_AVATAR *avatar,
     u8 direction)
@@ -197,27 +366,32 @@ static BOOL WALK_CODE Walk_StrictDiagonalAllowed(
     int targetY;
 
     if (direction < 4 || direction > 7) {
-        return FALSE;
+        return OVERWORLD_MOTION_CANDIDATE_BAD_DIRECTION;
     }
     Walk_GetComponents(direction, &vertical, &horizontal);
-    targetX = avatar->mapObject->xCurr + Walk_DeltaX(direction);
-    targetY = avatar->mapObject->yCurr + Walk_DeltaY(direction);
-    return Walk_CanCardinal(avatar, vertical)
-        && Walk_CanCardinal(avatar, horizontal)
-        && targetX >= 0
-        && targetY >= 0
-        && OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->validateHopLanding(
-            &sOverworldWildSpawnState,
-            OW_WILD_FOLLOWER_SLOT,
-            state->fieldSystem,
-            state->snapshot.profile.chillAllowedTerrainMask,
-            targetX,
-            targetY,
-            targetX,
-            targetY);
+    targetX = avatar->mapObject->xCurr + OverworldWalk_DeltaX(direction);
+    targetY = avatar->mapObject->yCurr + OverworldWalk_DeltaY(direction);
+    if (!Walk_CanCardinal(avatar, vertical)
+        || !Walk_CanCardinal(avatar, horizontal)) {
+        return OVERWORLD_MOTION_CANDIDATE_SIDE_BLOCKED;
+    }
+    return targetX < 0 || targetY < 0
+            || !Walk_ValidateDiagonalLanding(state, targetX, targetY)
+        ? OVERWORLD_MOTION_CANDIDATE_BAD_TERRAIN
+        : 0;
 }
 
-static u8 WALK_CODE Walk_DiagonalFacing(
+BOOL WALK_PUBLIC_CODE(".overworld_walk_strict_diagonal_allowed_body")
+OverworldWalk_StrictDiagonalAllowed(
+    OverworldMountRuntimeState *state,
+    FIELD_PLAYER_AVATAR *avatar,
+    u8 direction)
+{
+    return Walk_DiagonalRejection(state, avatar, direction) == 0;
+}
+
+u8 WALK_PUBLIC_CODE(".overworld_walk_diagonal_facing")
+OverworldWalk_DiagonalFacing(
     LocalMapObject *player,
     u8 direction,
     u32 newKeys)
@@ -229,143 +403,108 @@ static u8 WALK_CODE Walk_DiagonalFacing(
     if (player->curFacing == vertical || player->curFacing == horizontal) {
         return (u8)player->curFacing;
     }
-    return (newKeys & Walk_DirectionKey(horizontal)) != 0
+    return (newKeys & OverworldWalk_DirectionKey(horizontal)) != 0
         ? horizontal
         : vertical;
 }
 
-static void WALK_CODE Walk_ResolveMountedDiagonal(
+/* Code host only: this private adapter uses the spare, explicitly bounded
+ * boot-resident range after Field terrain code. Actor Motion owns the reason
+ * trace and never acquires a reservation for this rejected candidate. */
+static u16 WALK_PUBLIC_CODE(".overworld_walk_candidate_rejection")
+Walk_RejectDiagonalCandidate(
+    OverworldMountRuntimeState *state,
+    FIELD_PLAYER_AVATAR *avatar,
+    u8 direction,
+    u16 rejectionFlags)
+{
+    OverworldActorMotionRequestCall call;
+    OverworldMotionIntent intent;
+    OverworldMotionCandidate candidate;
+
+    PokemonMoveHistory_OverlayMemset(&call, 0, sizeof(call));
+    PokemonMoveHistory_OverlayMemset(&intent, 0, sizeof(intent));
+    PokemonMoveHistory_OverlayMemset(&candidate, 0, sizeof(candidate));
+    intent.version = OVERWORLD_MOTION_MODEL_VERSION;
+    intent.kind = OVERWORLD_MOTION_KIND_WALK;
+    intent.facing = direction;
+    intent.fieldEpoch = OVERWORLD_ACTOR_FIELD_CONTEXT_FIELD_EPOCH(
+        OVERWORLD_ACTOR_SYSTEM_COMPAT_ENTRY->getContext());
+    intent.duration = OverworldWalkTimingPolicy_Clamp(
+        state->snapshot.profile.chillSpeed);
+    candidate.targetX = avatar->mapObject->xCurr
+        + OverworldWalk_DeltaX(direction);
+    candidate.targetY = avatar->mapObject->yCurr
+        + OverworldWalk_DeltaY(direction);
+    candidate.direction = direction;
+    candidate.distance = 1;
+    candidate.rejectionFlags = rejectionFlags;
+    call.version = OVERWORLD_ACTOR_MOTION_CALL_VERSION;
+    call.size = sizeof(call);
+    call.operation = OVERWORLD_ACTOR_MOTION_SERVICE_REQUEST;
+    call.actorSlot = OW_WILD_FOLLOWER_SLOT;
+    call.startX = avatar->mapObject->xCurr;
+    call.startY = avatar->mapObject->yCurr;
+    call.intent = &intent;
+    call.candidates = &candidate;
+    call.candidateCount = 1;
+    (void)OVERWORLD_ACTOR_SYSTEM_MOTION_ENTRY->request(&call);
+    return rejectionFlags;
+}
+
+u16 WALK_PUBLIC_CODE(".overworld_walk_resolve_mounted_diagonal")
+OverworldWalk_ResolveMountedDiagonal(
     OverworldMountRuntimeState *state,
     FIELD_PLAYER_AVATAR *avatar,
     u32 *newKeys,
     u32 *heldKeys)
 {
-    u8 direction = Walk_DirectionFromKeys(*newKeys | *heldKeys);
+    u8 direction = OverworldWalk_DirectionFromKeys(*newKeys | *heldKeys);
     u8 vertical;
     u8 horizontal;
     u8 first;
+    u16 rejectionFlags;
 
     if (direction < 4 || direction > 7) {
-        return;
+        return 0;
     }
     if (OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(
-            state->snapshot.profile.hopAllowNonCardinal)
-        && Walk_StrictDiagonalAllowed(state, avatar, direction)) {
-        return;
+            state->snapshot.profile.hopAllowNonCardinal)) {
+        /* Keep rejected input distinct from a genuine NONE/stop request.
+         * The mount adapter submits this candidate to Actor Motion, then
+         * consumes the input before it can reach Walk momentum policy. */
+        rejectionFlags = Walk_DiagonalRejection(state, avatar, direction);
+        if (rejectionFlags != 0) {
+            return Walk_RejectDiagonalCandidate(
+                state, avatar, direction, rejectionFlags);
+        }
+        return 0;
     }
     if (!OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_CARDINAL(
             state->snapshot.profile.hopAllowNonCardinal)) {
         *newKeys &= ~PAD_PLUS_KEY_MASK;
         *heldKeys &= ~PAD_PLUS_KEY_MASK;
-        return;
+        return 0;
     }
     Walk_GetComponents(direction, &vertical, &horizontal);
     first = avatar->mapObject->curFacing == vertical
             || avatar->mapObject->curFacing == horizontal
         ? (u8)avatar->mapObject->curFacing
-        : Walk_DiagonalFacing(avatar->mapObject, direction, *newKeys);
+        : OverworldWalk_DiagonalFacing(avatar->mapObject, direction, *newKeys);
     if (!Walk_CanCardinal(avatar, first)) {
         first = first == vertical ? horizontal : vertical;
         if (!Walk_CanCardinal(avatar, first)) {
             first = WALK_DIRECTION_NONE;
         }
     }
-    *newKeys = (*newKeys & ~PAD_PLUS_KEY_MASK) | Walk_DirectionKey(first);
-    *heldKeys = (*heldKeys & ~PAD_PLUS_KEY_MASK) | Walk_DirectionKey(first);
+    *newKeys = (*newKeys & ~PAD_PLUS_KEY_MASK)
+        | OverworldWalk_DirectionKey(first);
+    *heldKeys = (*heldKeys & ~PAD_PLUS_KEY_MASK)
+        | OverworldWalk_DirectionKey(first);
+    return 0;
 }
 
-static BOOL WALK_CODE Walk_ValidateProfileData(
-    const OverworldWildBehaviorProfileData *profile)
-{
-    return profile != NULL
-        && profile->chillSpeed >= OW_WILD_WALK_TRAVEL_TIME_MIN
-        && profile->chillSpeed <= OW_WILD_WALK_TRAVEL_TIME_MAX
-        && profile->maxWalkSpeed >= OW_WILD_WALK_TRAVEL_TIME_MIN
-        && profile->maxWalkSpeed <= profile->chillSpeed
-        && profile->chainRepositionSpeed >= OW_WILD_WALK_TRAVEL_TIME_MIN
-        && profile->chainRepositionSpeed <= OW_WILD_WALK_TRAVEL_TIME_MAX
-        && profile->chaseBoostSpeed <= OW_WILD_WALK_TRAVEL_TIME_MAX
-        && profile->walkStompTime <= OW_WILD_WALK_TRAVEL_TIME_MAX;
-}
-
-static BOOL WALK_CODE Walk_ValidateExactOverrideValue(
-    u8 fieldIndex,
-    u8 value)
-{
-    return OverworldWalkTimingPolicy_ValidateExactOverrideValue(
-        fieldIndex,
-        value);
-}
-
-static BOOL WALK_CODE Walk_ValidateExactOverrideProfile(
-    const OverworldWildBehaviorOverrideProfile *profile)
-{
-    u32 operatorMask;
-    u16 operatorMask2;
-    u32 operatorMask3;
-
-    if (profile == NULL) {
-        return FALSE;
-    }
-    operatorMask = profile->relativeMask | profile->atLeastMask
-        | profile->atMostMask;
-    operatorMask2 = profile->relativeMask2 | profile->atLeastMask2
-        | profile->atMostMask2;
-    operatorMask3 = profile->relativeMask3 | profile->atLeastMask3
-        | profile->atMostMask3;
-    return !((profile->mask & OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED)
-            && !(operatorMask & OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED)
-            && !Walk_ValidateExactOverrideValue(
-                7,
-                profile->profile.chillSpeed))
-        && !((profile->mask2
-                & OW_WILD_BEHAVIOR_OVERRIDE2_CHASE_BOOST_SPEED)
-            && !(operatorMask2
-                & OW_WILD_BEHAVIOR_OVERRIDE2_CHASE_BOOST_SPEED)
-            && !Walk_ValidateExactOverrideValue(
-                36,
-                profile->profile.chaseBoostSpeed))
-        && !((profile->mask3 & OW_WILD_BEHAVIOR_OVERRIDE3_MAX_WALK_SPEED)
-            && !(operatorMask3 & OW_WILD_BEHAVIOR_OVERRIDE3_MAX_WALK_SPEED)
-            && !Walk_ValidateExactOverrideValue(
-                49,
-                profile->profile.maxWalkSpeed))
-        && !((profile->mask3
-                & OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_SPEED)
-            && !(operatorMask3
-                & OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_SPEED)
-            && !Walk_ValidateExactOverrideValue(
-                56,
-                profile->profile.chainRepositionSpeed))
-        && !((profile->mask3 & OW_WILD_BEHAVIOR_OVERRIDE3_WALK_STOMP_TIME)
-            && !(operatorMask3 & OW_WILD_BEHAVIOR_OVERRIDE3_WALK_STOMP_TIME)
-            && !Walk_ValidateExactOverrideValue(
-                66,
-                profile->profile.walkStompTime));
-}
-
-static void WALK_CODE Walk_NormalizeProfileData(
-    OverworldWildBehaviorProfileData *profile)
-{
-    if (profile == NULL) {
-        return;
-    }
-    profile->chillSpeed = Walk_ClampTime(profile->chillSpeed);
-    profile->maxWalkSpeed = Walk_ClampTime(profile->maxWalkSpeed);
-    if (profile->maxWalkSpeed > profile->chillSpeed) {
-        profile->maxWalkSpeed = profile->chillSpeed;
-    }
-    profile->chainRepositionSpeed = Walk_ClampTime(
-        profile->chainRepositionSpeed);
-    if (profile->chaseBoostSpeed > OW_WILD_WALK_TRAVEL_TIME_MAX) {
-        profile->chaseBoostSpeed = OW_WILD_WALK_TRAVEL_TIME_MAX;
-    }
-    if (profile->walkStompTime > OW_WILD_WALK_TRAVEL_TIME_MAX) {
-        profile->walkStompTime = OW_WILD_WALK_TRAVEL_TIME_MAX;
-    }
-}
-
-static BOOL WALK_CODE Walk_MountCanControl(
+static BOOL WALK_PRIVATE_CODE Walk_MountCanControl(
     OverworldMountRuntimeState *state,
     FIELD_PLAYER_AVATAR *avatar)
 {
@@ -378,153 +517,117 @@ static BOOL WALK_CODE Walk_MountCanControl(
         && (avatar->unk0 & WALK_MOUNT_AVATAR_FORCED_MOVEMENT) == 0;
 }
 
-static void WALK_CODE Walk_MountForceDirection(
+static void WALK_PRIVATE_CODE Walk_MountForceDirection(
     u32 *newKeys,
     u32 *heldKeys,
     u8 direction)
 {
-    u32 key = Walk_DirectionKey(direction);
+    u32 key = OverworldWalk_DirectionKey(direction);
 
     *newKeys = (*newKeys & ~PAD_PLUS_KEY_MASK) | key;
     *heldKeys = (*heldKeys & ~PAD_PLUS_KEY_MASK) | key;
 }
 
-static void WALK_CODE Walk_MountResetMomentum(void)
-{
-    OverworldActorPolicyState *policy =
-        &OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY
-            ->states[OW_WILD_FOLLOWER_SLOT];
+static void WALK_PRIVATE_CODE Walk_MountSaveProposal(
+    OverworldMountRuntimeState *state,
+    const OverworldActorWalkPolicyCall *policyCall);
 
-    policy->walkMomentum.speed = policy->walkMomentum.baseSpeed;
-    policy->walkMomentum.direction = WALK_DIRECTION_NONE;
-    policy->walkMomentum.tileCounter = 0;
-    policy->walkMomentum.skidRemaining = 0;
-    policy->walkMomentum.turnDirection = 0;
-    policy->walkMomentum.resumeSpeed = 0;
-    policy->pendingStep = FALSE;
-    policy->pendingSkid = FALSE;
-    policy->bufferedDirection = WALK_DIRECTION_NONE;
-    policy->stopPending = FALSE;
-}
-
-static void WALK_CODE Walk_MountFilterInput(
+void WALK_PUBLIC_CODE(".overworld_walk_filter_mounted_input")
+OverworldWalk_FilterMountedInput(
     OverworldMountRuntimeState *state,
     FIELD_PLAYER_AVATAR *avatar,
     u32 *newKeys,
     u32 *heldKeys)
 {
-    OverworldActorPolicyState *policy =
-        &OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY
-            ->states[OW_WILD_FOLLOWER_SLOT];
-    OverworldWildWalkMomentumState *momentum = &policy->walkMomentum;
+    OverworldActorPolicyView policy;
+    OverworldActorWalkPolicyCall call;
+    OverworldRoleControllerInput roleInput;
+    OverworldRoleControllerOutput roleOutput;
     u8 requestedDirection;
-    u8 skidTiles;
 
-    if (!Walk_MountCanControl(state, avatar)
+    if (!OverworldActorPolicy_Inspect(OW_WILD_FOLLOWER_SLOT, &policy)
+        || !Walk_MountCanControl(state, avatar)
         || (avatar->unk14 != WALK_PLAYER_MOVE_STATE_NONE
-            && avatar->unk14 != WALK_PLAYER_MOVE_STATE_END)) {
+            && avatar->unk14 != WALK_PLAYER_MOVE_STATE_END)
+        || policy.pendingStep == OVERWORLD_ACTOR_WALK_PENDING_ACTIVE) {
         return;
     }
-    requestedDirection = Walk_DirectionFromKeys(*heldKeys | *newKeys);
-    if (requestedDirection < WALK_DIRECTION_NORTH_WEST
-        && !OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_CARDINAL(
-            state->snapshot.profile.hopAllowNonCardinal)) {
+    if (policy.pendingStep == OVERWORLD_ACTOR_WALK_PENDING_PROPOSAL) {
+        Walk_MountForceDirection(
+            newKeys, heldKeys,
+            state->reservedPolicyState[
+                OVERWORLD_MOUNT_WALK_STEP_DIRECTION_INDEX]);
+        return;
+    }
+    requestedDirection = OverworldWalk_DirectionFromKeys(*heldKeys | *newKeys);
+    if (requestedDirection != WALK_DIRECTION_NONE) {
+        PokemonMoveHistory_OverlayMemset(
+            &roleInput, 0, sizeof(roleInput));
+        roleInput.version = OVERWORLD_ROLE_CONTROLLER_VERSION;
+        roleInput.size = sizeof(roleInput);
+        roleInput.role = OVERWORLD_ROLE_CONTROLLER_ROLE_MOUNTED;
+        roleInput.event = OVERWORLD_ROLE_CONTROLLER_EVENT_REQUEST;
+        roleInput.intentKind = OVERWORLD_ROLE_CONTROLLER_INTENT_WALK;
+        roleInput.requestedDirection = requestedDirection;
+        roleInput.committedDirection = policy.walkMomentum.direction;
+        if ((state->snapshot.profile.walkOptions
+                & OW_WILD_BEHAVIOR_WALK_OPTION_LOCK_DIRECTION) != 0) {
+            roleInput.flags |= OVERWORLD_ROLE_CONTROLLER_INPUT_RAM;
+        }
+        OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY->reduceRole(
+            &roleInput, &roleOutput);
+        if (roleOutput.decision
+                != OVERWORLD_ROLE_CONTROLLER_DECISION_INTENT
+            || roleOutput.intentKind
+                != OVERWORLD_ROLE_CONTROLLER_INTENT_WALK) {
+            *newKeys &= ~PAD_PLUS_KEY_MASK;
+            *heldKeys &= ~PAD_PLUS_KEY_MASK;
+            return;
+        }
+        requestedDirection = roleOutput.direction;
+    }
+    PokemonMoveHistory_OverlayMemset(&call, 0, sizeof(call));
+    call.version = OVERWORLD_ACTOR_WALK_POLICY_VERSION;
+    call.size = sizeof(call);
+    call.lane = &state->snapshot.profile;
+    call.actorSlot = OW_WILD_FOLLOWER_SLOT;
+    call.operation = OVERWORLD_ACTOR_WALK_POLICY_INPUT;
+    call.direction = requestedDirection;
+    call.stepDirection = WALK_DIRECTION_NONE;
+    call.facingDirection = WALK_DIRECTION_NONE;
+    call.laneState = OW_WILD_SPAWNER_SPOT_STATE_CHILL;
+    call.flags = OVERWORLD_ACTOR_WALK_POLICY_FLAG_DEFER_STOP;
+    if (requestedDirection != WALK_DIRECTION_NONE
+        && (roleOutput.intentFlags
+            & OVERWORLD_ROLE_CONTROLLER_INTENT_CRASH_ON_BLOCKED) != 0) {
+        call.flags |= OVERWORLD_ACTOR_WALK_POLICY_FLAG_CRASH_ON_BLOCKED;
+    }
+    if (!OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY->policy
+            ->reduceWalk(&call)) {
+        return;
+    }
+    if ((call.stepFlags
+            & OVERWORLD_ACTOR_WALK_STEP_CLEAR_PRESENTATION) != 0) {
+        avatar->mapObject->flags &= ~MAPOBJECTFLAG_UNK7;
+    }
+    Walk_MountSaveProposal(state, &call);
+    if (call.stepDirection != WALK_DIRECTION_NONE
+        && call.decision == OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP) {
+        /* START_RESULT runs after the mounted engine request. Keep the
+         * nominal policy time so presentation variance does not become
+         * momentum and a turn can commit its one-level slowdown. */
+        state->reservedPolicyProfile[
+            OVERWORLD_MOUNT_WALK_NOMINAL_TIME_INDEX] = call.reserved[0];
+        Walk_MountForceDirection(newKeys, heldKeys, call.stepDirection);
+    } else {
         *newKeys &= ~PAD_PLUS_KEY_MASK;
         *heldKeys &= ~PAD_PLUS_KEY_MASK;
-        requestedDirection = WALK_DIRECTION_NONE;
     }
-    if (policy->bufferedDirection != WALK_DIRECTION_NONE
-        && policy->bufferedDirection != momentum->direction) {
-        if ((policy->bufferedDirection < WALK_DIRECTION_NORTH_WEST
-                && !OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_CARDINAL(
-                    state->snapshot.profile.hopAllowNonCardinal))
-            || (policy->bufferedDirection >= WALK_DIRECTION_NORTH_WEST
-                && !OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(
-                    state->snapshot.profile.hopAllowNonCardinal))) {
-            /* A queued direction cannot bypass the profile's movement mode. */
-            policy->bufferedDirection = WALK_DIRECTION_NONE;
-        } else {
-            /* The newest valid queued direction owns the next tile boundary. */
-            requestedDirection = policy->bufferedDirection;
-            Walk_MountForceDirection(
-                newKeys,
-                heldKeys,
-                requestedDirection);
-        }
-    }
-    if (momentum->skidRemaining != 0) {
-        Walk_MountForceDirection(
-            newKeys,
-            heldKeys,
-            momentum->direction);
-        return;
-    }
-    if (requestedDirection == WALK_DIRECTION_NONE) {
-        skidTiles = Walk_SkidTiles(momentum->speed);
-        if (momentum->direction != WALK_DIRECTION_NONE && skidTiles != 0) {
-            if (!policy->stopPending) {
-                /* Defer stop skid for one sample so a physical reversal can
-                 * become a turn skid on its following key state. */
-                policy->stopPending = TRUE;
-                *newKeys &= ~PAD_PLUS_KEY_MASK;
-                *heldKeys &= ~PAD_PLUS_KEY_MASK;
-                return;
-            }
-            momentum->skidRemaining = skidTiles;
-            momentum->turnDirection = WALK_DIRECTION_NONE;
-            momentum->resumeSpeed = momentum->baseSpeed;
-            policy->stopPending = FALSE;
-            momentum->speed = Walk_SkidTime(momentum->speed);
-            Walk_MountForceDirection(
-                newKeys,
-                heldKeys,
-                momentum->direction);
-        } else {
-            Walk_MountResetMomentum();
-        }
-        return;
-    }
-    policy->stopPending = FALSE;
-    if (momentum->direction == WALK_DIRECTION_NONE) {
-        momentum->direction = requestedDirection;
-        policy->bufferedDirection = WALK_DIRECTION_NONE;
-        return;
-    }
-    if (requestedDirection == momentum->direction) {
-        policy->bufferedDirection = WALK_DIRECTION_NONE;
-        return;
-    }
-    if (!OW_WILD_BEHAVIOR_WALK_ALLOWS_TURNING(state->walkOptions)) {
-        Walk_MountForceDirection(newKeys, heldKeys, momentum->direction);
-        policy->bufferedDirection = WALK_DIRECTION_NONE;
-        return;
-    }
-    momentum->tileCounter = 0;
-    if (Walk_IsFortyFiveDegreeTurn(momentum->direction, requestedDirection)) {
-        momentum->turnDirection = 0;
-        momentum->direction = requestedDirection;
-        policy->bufferedDirection = WALK_DIRECTION_NONE;
-        return;
-    }
-    skidTiles = Walk_SkidTiles(momentum->speed);
-    if (skidTiles != 0
-        && state->snapshot.profile.tilesBeforeTurnSkid != 0
-        && momentum->turnDirection
-            >= state->snapshot.profile.tilesBeforeTurnSkid) {
-        momentum->skidRemaining = skidTiles;
-        momentum->turnDirection = requestedDirection;
-        policy->bufferedDirection = WALK_DIRECTION_NONE;
-        momentum->resumeSpeed = momentum->speed;
-        momentum->speed = Walk_SkidTime(momentum->speed);
-        Walk_MountForceDirection(newKeys, heldKeys, momentum->direction);
-        return;
-    }
-    momentum->turnDirection = 0;
-    momentum->direction = requestedDirection;
-    policy->bufferedDirection = WALK_DIRECTION_NONE;
 }
 
-static void WALK_CODE Walk_SetFacing(LocalMapObject *object, u8 direction)
+static void WALK_PRIVATE_CODE Walk_SetFacing(
+    LocalMapObject *object,
+    u8 direction)
 {
     object->curFacing = direction;
     object->nextFacing = direction;
@@ -532,22 +635,16 @@ static void WALK_CODE Walk_SetFacing(LocalMapObject *object, u8 direction)
     object->nextFacingBak = direction;
 }
 
-extern void LONG_CALL ov01_021F62E8(
-    VecFx32 *position,
-    void *landDataManager);
-
-static BOOL WALK_CODE Walk_StartMountedFlatMotion(
+BOOL WALK_PUBLIC_CODE(".overworld_walk_start_mounted_flat")
+OverworldWalk_StartMountedFlat(
     OverworldMountRuntimeState *state,
     FIELD_PLAYER_AVATAR *avatar,
     LocalMapObject *follower,
-    void *landDataManager,
     u8 direction,
-    u8 facingDirection)
+    u8 facingDirection,
+    BOOL advanceFirstFrame,
+    BOOL (*beginSharedMotion)(BOOL advanceFirstFrame))
 {
-    OverworldActorPolicyState *policy =
-        &OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY
-            ->states[OW_WILD_FOLLOWER_SLOT];
-    OverworldWildWalkMomentumState *momentum = &policy->walkMomentum;
     LocalMapObject *player;
     int targetX;
     int targetY;
@@ -560,8 +657,8 @@ static BOOL WALK_CODE Walk_StartMountedFlatMotion(
         && !Walk_CanCardinal(avatar, direction)) {
         return FALSE;
     }
-    targetX = player->xCurr + Walk_DeltaX(direction);
-    targetY = player->yCurr + Walk_DeltaY(direction);
+    targetX = player->xCurr + OverworldWalk_DeltaX(direction);
+    targetY = player->yCurr + OverworldWalk_DeltaY(direction);
     state->motionStartBaseY = (s32)player->posVec[1];
     state->motionStartX = (s16)player->xCurr;
     state->motionStartY = (s16)player->yCurr;
@@ -582,10 +679,15 @@ static BOOL WALK_CODE Walk_StartMountedFlatMotion(
         (follower->flags & MAPOBJECTFLAG_UNK20) != 0;
     state->motionCooldown = 0;
     state->motionLandingPauseStarted = FALSE;
-    state->motionFrameCount = Walk_ClampTime(momentum->speed);
+    state->motionFrameCount = OverworldWalk_ClampTime(
+        state->reservedPolicyState[
+            OVERWORLD_MOUNT_WALK_TRAVEL_TIME_INDEX]);
     state->motionElapsed = 0;
-    policy->pendingStep = FALSE;
-    policy->pendingSkid = momentum->skidRemaining != 0;
+    /* Reserve the tile before any engine command or facing write. Rejection
+     * must leave the mounted pair unchanged. */
+    if (!beginSharedMotion(advanceFirstFrame)) {
+        return FALSE;
+    }
     avatar->unk8 = WALK_MOUNT_FREEZE_COMMAND;
     avatar->unk10 = 1;
     avatar->unk14 = 2;
@@ -600,236 +702,26 @@ static BOOL WALK_CODE Walk_StartMountedFlatMotion(
      * and mirrors the player every field tick. Giving it an independent stock
      * command lets that command write the previous render tile after the
      * player commits, causing a one-frame full-tile split at every boundary. */
-    /* Vanilla Walk changes one coordinate per tile. Its land streamer rejects
-     * a watched position when both X and Z change together, so serialize a
-     * mounted diagonal through the same stepped anchor used by long motion.
-     * Cardinal Walk stays live-bound to preserve its smooth streaming path. */
-    if (direction >= WALK_DIRECTION_NORTH_WEST) {
-        state->motionStreamAnchor = *(VecFx32 *)player->posVec;
-        state->motionStreamPreparing = TRUE;
-        ov01_021F62E8(&state->motionStreamAnchor, landDataManager);
-    }
     return TRUE;
 }
 
-static void WALK_CODE Walk_ApplyFacePlayerFacing(
-    OverworldWildSpawnState *state,
-    int slot,
-    u8 enabled)
+static void __attribute__((noinline)) WALK_PRIVATE_CODE Walk_MountSaveProposal(
+    OverworldMountRuntimeState *state,
+    const OverworldActorWalkPolicyCall *policyCall)
 {
-    LocalMapObject *object;
-    LocalMapObject *player;
-    int dx;
-    int dy;
-    u8 horizontal;
-    u8 vertical;
-
-    if (state == NULL || slot < 0 || slot >= OW_WILD_MAX_SPAWNS
-        || !enabled) {
+    if (policyCall->decision != OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP) {
         return;
     }
-    object = state->spawns[slot].object;
-    if (object == NULL
-        || state->movementFieldSystem == NULL
-        || state->movementFieldSystem->playerAvatar == NULL) {
-        return;
-    }
-    player = state->movementFieldSystem->playerAvatar->mapObject;
-    if (player == NULL) {
-        return;
-    }
-    dx = player->xCurr - object->xCurr;
-    dy = player->yCurr - object->yCurr;
-    horizontal = dx > 0 ? WALK_DIRECTION_EAST : WALK_DIRECTION_WEST;
-    vertical = dy > 0 ? WALK_DIRECTION_SOUTH : WALK_DIRECTION_NORTH;
-    if (dx < 0) {
-        dx = -dx;
-    }
-    if (dy < 0) {
-        dy = -dy;
-    }
-    object->curFacing = dx >= dy ? horizontal : vertical;
+    state->reservedPolicyState[OVERWORLD_MOUNT_WALK_STEP_FLAGS_INDEX] =
+        policyCall->stepFlags;
+    state->reservedPolicyState[OVERWORLD_MOUNT_WALK_STEP_DIRECTION_INDEX] =
+        policyCall->stepDirection;
+    state->reservedPolicyState[
+        OVERWORLD_MOUNT_WALK_FACING_DIRECTION_INDEX] =
+            policyCall->facingDirection;
+    state->reservedPolicyState[OVERWORLD_MOUNT_WALK_TRAVEL_TIME_INDEX] =
+        policyCall->travelTime;
 }
-
-static void WALK_CODE Walk_WildNormalizeMovementPrimitives(
-    u8 behaviorKind,
-    u8 *locomotion,
-    u8 *target)
-{
-    if (behaviorKind < WALK_WILD_BEHAVIOR_KIND_WANDER
-        || behaviorKind > WALK_WILD_BEHAVIOR_KIND_HEADBUTT_TREE_HOP) {
-        *locomotion = WALK_WILD_LOCOMOTION_NONE;
-        *target = WALK_WILD_TARGET_NONE;
-    } else if (*target == WALK_WILD_TARGET_NONE) {
-        *target = sWalkWildDefaultTarget[behaviorKind];
-    }
-}
-
-static void WALK_CODE Walk_WildResolvePrimitives(
-    const OverworldWildBehaviorProfile *profile,
-    OverworldWildBehaviorPrimitives *primitives)
-{
-    PokemonMoveHistory_OverlayMemset(
-        primitives,
-        0,
-        sizeof(*primitives));
-    if (profile == NULL) {
-        return;
-    }
-    if (profile->spawnState < NELEMS(sWalkWildSpawnLocomotion)) {
-        primitives->spawnLocomotion =
-            sWalkWildSpawnLocomotion[profile->spawnState];
-    }
-    primitives->chillLocomotion = profile->chillAction;
-    primitives->chillTarget = profile->chillTarget;
-    if (primitives->chillLocomotion == WALK_WILD_LOCOMOTION_RAM) {
-        primitives->chillLocomotion = WALK_WILD_LOCOMOTION_WANDER;
-    } else if (OW_WILD_BEHAVIOR_LOCOMOTION_IS_TELEPORT(
-                   primitives->chillLocomotion)) {
-        primitives->chillLocomotion = OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT;
-    }
-    Walk_WildNormalizeMovementPrimitives(
-        profile->chillState,
-        &primitives->chillLocomotion,
-        &primitives->chillTarget);
-
-    primitives->attentiveLocomotion = profile->movementStyle;
-    primitives->attentiveTarget = profile->targetSelector;
-    if (primitives->attentiveLocomotion == WALK_WILD_LOCOMOTION_RAM) {
-        primitives->attentiveLocomotion = WALK_WILD_LOCOMOTION_WANDER;
-    } else if (OW_WILD_BEHAVIOR_LOCOMOTION_IS_TELEPORT(
-                   primitives->attentiveLocomotion)) {
-        primitives->attentiveLocomotion = OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT;
-    }
-    if (profile->attentiveState < NELEMS(sWalkWildActiveReaction)) {
-        primitives->activeReaction =
-            sWalkWildActiveReaction[profile->attentiveState];
-        if (profile->attentiveState >= WALK_WILD_BEHAVIOR_KIND_WANDER
-            && primitives->attentiveTarget == WALK_WILD_TARGET_NONE) {
-            primitives->attentiveTarget =
-                sWalkWildDefaultTarget[profile->attentiveState];
-        }
-    }
-    if (profile->alertness != 0 && profile->alertChance != 0
-        && profile->alertRange <= WALK_WILD_ALERT_RANGE_TERRAIN_ONLY) {
-        primitives->alertLogic = profile->alertRange;
-        primitives->alertReaction =
-            profile->alertRange == WALK_WILD_ALERT_RANGE_NONE
-            ? WALK_WILD_REACTION_NONE
-            : WALK_WILD_REACTION_EMOTE;
-    }
-    primitives->tiredLocomotion = profile->tired.chillAction;
-    primitives->tiredTarget = profile->tired.chillTarget;
-    if (primitives->tiredLocomotion == WALK_WILD_LOCOMOTION_RAM) {
-        primitives->tiredLocomotion = WALK_WILD_LOCOMOTION_WANDER;
-    } else if (OW_WILD_BEHAVIOR_LOCOMOTION_IS_TELEPORT(
-                   primitives->tiredLocomotion)) {
-        primitives->tiredLocomotion = OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT;
-    }
-    Walk_WildNormalizeMovementPrimitives(
-        profile->tiredState,
-        &primitives->tiredLocomotion,
-        &primitives->tiredTarget);
-    if (profile->tiredState != 0) {
-        primitives->tiredReaction = WALK_WILD_REACTION_TIRED;
-    }
-}
-
-static u32 WALK_CODE Walk_WildGroupFlagsForTypes(
-    u16 species,
-    u8 type1,
-    u8 type2)
-{
-    u32 flags = 0;
-    u32 i;
-
-    for (i = 0; i < NELEMS(sWalkWildGroupSpecies); i++) {
-        if (species == sWalkWildGroupSpecies[i]) {
-            flags |= i < 5
-                ? WALK_WILD_GROUP_GHOST
-                : WALK_WILD_GROUP_BABY;
-            break;
-        }
-    }
-    if (species != SPECIES_NONE) {
-        if (type1 <= TYPE_STELLAR) {
-            flags |= WALK_WILD_GROUP_TYPE_NORMAL << type1;
-        }
-        if (type2 <= TYPE_STELLAR) {
-            flags |= WALK_WILD_GROUP_TYPE_NORMAL << type2;
-        }
-    }
-    return flags;
-}
-
-static u32 WALK_CODE Walk_WildSelectConditionalOverrideMask(
-    const OverworldWildBehaviorDataBlob *behaviorData,
-    const OverworldWildBehaviorContext *context,
-    u32 normalOverrideMask,
-    u8 movementSpeed)
-{
-    const OverworldWildBehaviorConditionalState *conditionalState =
-        &behaviorData->conditionalStates[0];
-    u16 explicitTerrainMask = conditionalState->terrainOverrideMask;
-    u16 acceptedTerrainMask = conditionalState->terrainMask
-        & explicitTerrainMask;
-
-    if ((normalOverrideMask & (1u << conditionalState->parentProfile)) == 0
-        || (explicitTerrainMask != 0
-            && (context->conditionTerrainMask == 0
-                || (acceptedTerrainMask != 0
-                    && (context->conditionTerrainMask & acceptedTerrainMask) == 0)
-                || (context->conditionTerrainMask
-                    & (explicitTerrainMask & ~acceptedTerrainMask)) != 0))
-        || (conditionalState->minMovementSpeed != 0
-            && movementSpeed < conditionalState->minMovementSpeed)
-        || (conditionalState->maxMovementSpeed != 0
-            && movementSpeed > conditionalState->maxMovementSpeed)) {
-        return 0;
-    }
-    return 1u << conditionalState->overrideProfile;
-}
-
-const OverworldWalkModuleEntry gOverworldWalkModuleEntry
-    __attribute__((section(".overworld_walk_module_entry"), used)) = {
-        OVERWORLD_WALK_MODULE_MAGIC,
-        OVERWORLD_WALK_MODULE_VERSION,
-        sizeof(OverworldWalkModuleEntry),
-        Walk_ClampTime,
-        Walk_AccelerateTime,
-        Walk_SkidTiles,
-        Walk_SkidTime,
-        Walk_StompApplies,
-        Walk_DirectionFromKeys,
-        Walk_DirectionKey,
-        Walk_DeltaX,
-        Walk_DeltaY,
-        Walk_IsFortyFiveDegreeTurn,
-        Walk_ResolveMountedDiagonal,
-        Walk_StrictDiagonalAllowed,
-        Walk_DiagonalFacing,
-        Walk_DirectionFromDelta,
-    };
-
-const OverworldWalkProfileModuleEntry gOverworldWalkProfileModuleEntry
-    __attribute__((section(".overworld_walk_profile_module_entry"), used)) = {
-        OVERWORLD_WALK_PROFILE_MODULE_MAGIC,
-        OVERWORLD_WALK_MODULE_VERSION,
-        sizeof(OverworldWalkProfileModuleEntry),
-        Walk_ValidateProfileData,
-        Walk_ValidateExactOverrideValue,
-        Walk_NormalizeProfileData,
-        Walk_ValidateExactOverrideProfile,
-    };
-
-const OverworldWalkMountModuleEntry gOverworldWalkMountModuleEntry
-    __attribute__((section(".overworld_walk_mount_module_entry"), used)) = {
-        OVERWORLD_WALK_MOUNT_MODULE_MAGIC,
-        OVERWORLD_WALK_MODULE_VERSION,
-        sizeof(OverworldWalkMountModuleEntry),
-        Walk_MountFilterInput,
-        Walk_StartMountedFlatMotion,
-    };
 
 /* Keep canceled custom motion on a complete tile. The mount state stores the
  * two start coordinates directly before the two target coordinates, followed
@@ -847,21 +739,3 @@ OverworldWalkMount_RebaseMotionTargetImpl(
         "str r1, [r0, #12]\n"
         "bx lr\n");
 }
-
-const OverworldWalkFaceModuleEntry gOverworldWalkFaceModuleEntry
-    __attribute__((section(".overworld_walk_face_module_entry"), used)) = {
-        OVERWORLD_WALK_FACE_MODULE_MAGIC,
-        OVERWORLD_WALK_MODULE_VERSION,
-        sizeof(OverworldWalkFaceModuleEntry),
-        Walk_ApplyFacePlayerFacing,
-    };
-
-const OverworldWalkWildPolicyModuleEntry gOverworldWalkWildPolicyModuleEntry
-    __attribute__((section(".overworld_walk_wild_policy_module_entry"), used)) = {
-        OVERWORLD_WALK_WILD_POLICY_MODULE_MAGIC,
-        OVERWORLD_WALK_MODULE_VERSION,
-        sizeof(OverworldWalkWildPolicyModuleEntry),
-        Walk_WildResolvePrimitives,
-        Walk_WildGroupFlagsForTypes,
-        Walk_WildSelectConditionalOverrideMask,
-    };

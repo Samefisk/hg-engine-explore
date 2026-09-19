@@ -55,6 +55,35 @@
         "seed": {"type": "integer", "minimum": 0, "maximum": 4294967295}
       }
     },
+    "subjects": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "species",
+          "role",
+          "acquisition",
+          "minimum",
+          "maximum",
+          "motionActor",
+          "requirePresentation"
+        ],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+          "species": {"type": "integer", "minimum": 1, "maximum": 65535},
+          "role": {"enum": ["WILD", "FOLLOWER", "MOUNTED", "SCRIPTED"]},
+          "acquisition": {"enum": ["spawn", "follower", "mount", "script"]},
+          "minimum": {"type": "integer", "minimum": 1, "maximum": 32},
+          "maximum": {"type": "integer", "minimum": 1, "maximum": 32},
+          "motionActor": {"type": "boolean"},
+          "requirePresentation": {"type": "boolean"}
+        }
+      }
+    },
     "events": {
       "type": "array",
       "items": {
@@ -84,13 +113,39 @@
       "properties": {
         "requiredEvents": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
         "forbiddenEvents": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
-        "invariants": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+        "invariants": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+        "orderedEvents": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/orderedEvent"}
+        },
+        "eventCounts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/eventCount"}
+        },
+        "frameTiming": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/frameTiming"}
+        }
       }
     },
     "capture": {"enum": ["none", "failure", "always"]},
     "adapter": {
       "oneOf": [
         {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "test", "claims"],
+          "properties": {
+            "kind": {"const": "devtools-test"},
+            "test": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"},
+            "claims": {"$ref": "#/$defs/runtimeProofClaims"},
+            "minimumFrames": {"type": "integer", "minimum": 1, "maximum": 120000}
+          }
+        },
         {
           "type": "object",
           "additionalProperties": false,
@@ -106,15 +161,45 @@
                 "items": {"type": "string", "minLength": 1}
               }
             },
-            "result": {"enum": ["exit-zero", "json-passed"]}
+            "result": {"enum": ["exit-zero", "json-passed"]},
+            "claims": {"$ref": "#/$defs/runtimeProofClaims"},
+            "minimumFrames": {"type": "integer", "minimum": 1, "maximum": 1000000},
+            "visualArtifact": {"$ref": "#/$defs/visualArtifact"}
           }
         },
         {
           "type": "object",
           "additionalProperties": false,
           "required": ["kind", "checks"],
+          "dependentRequired": {
+            "commands": ["result", "evidence"],
+            "result": ["commands", "evidence"],
+            "evidence": ["commands", "result"]
+          },
           "properties": {
             "kind": {"const": "actor-observation"},
+            "commands": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "array",
+                "minItems": 1,
+                "items": {"type": "string", "minLength": 1}
+              }
+            },
+            "result": {"enum": ["exit-zero", "json-passed"]},
+            "evidence": {
+              "type": "string",
+              "pattern": "^build/overworld-evidence/[A-Za-z0-9._/-]+\\.json$"
+            },
+            "claims": {"$ref": "#/$defs/runtimeProofClaims"},
+            "minimumFrames": {"type": "integer", "minimum": 1, "maximum": 1000000},
+            "visualArtifact": {"$ref": "#/$defs/visualArtifact"},
+            "motionWindowCount": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 32
+            },
             "checks": {
               "type": "array",
               "minItems": 1,
@@ -126,14 +211,184 @@
                   "no-commit-after-cancel",
                   "control-returned",
                   "single-motion-owner",
+                  "target-reservation-serialized",
+                  "path-advances-before-commit",
                   "field-epoch-current",
-                  "presentation-attached"
+                  "presentation-attached",
+                  "mounted-presentation-coordinates-equal",
+                  "mounted-presentation-facing-locked"
                 ]
               }
             }
           }
         }
       ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "active"}}},
+      "then": {"properties": {"adapter": {"not": {"type": "null"}}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "planned"}}},
+      "then": {"properties": {"adapter": {"type": "null"}}}
+    },
+    {
+      "if": {
+        "allOf": [
+          {"properties": {"status": {"const": "active"}}},
+          {"properties": {"proofLevel": {"enum": ["S3", "S4", "S5"]}}},
+          {"properties": {"adapter": {"type": "object"}}}
+        ]
+      },
+      "then": {
+        "properties": {
+          "adapter": {
+            "required": ["commands", "claims", "result"],
+            "properties": {"result": {"const": "json-passed"}}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "allOf": [
+          {"properties": {"proofLevel": {"const": "S4"}}},
+          {
+            "properties": {
+              "adapter": {
+                "type": "object",
+                "required": ["commands"]
+              }
+            }
+          }
+        ]
+      },
+      "then": {
+        "properties": {
+          "adapter": {
+            "required": ["visualArtifact"],
+            "properties": {
+              "claims": {
+                "contains": {
+                  "enum": ["feedback-effect", "frame-pacing", "rendered-motion"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"proofLevel": {"const": "S5"}}},
+      "then": {
+        "properties": {
+          "adapter": {
+            "required": ["minimumFrames"],
+            "properties": {"minimumFrames": {"minimum": 5000}}
+          },
+          "stop": {
+            "properties": {"frameBudget": {"minimum": 5000}}
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "runtimeProofClaims": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "collision-decision", "control-release", "engine-boundary",
+          "feedback-effect", "frame-pacing", "live-actor-identity",
+          "host-cpu-pacing",
+          "logical-commit", "natural-input", "population-bounds",
+          "profile-resolution", "rendered-motion", "streaming-path",
+          "terrain-selection", "world-transition"
+        ]
+      }
+    },
+    "visualArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resultField", "path", "minimumBytes"],
+      "properties": {
+        "resultField": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$"},
+        "path": {"type": "string", "pattern": "^build/overworld-artifacts/[A-Za-z0-9._/-]+\\.png$"},
+        "minimumBytes": {"type": "integer", "minimum": 1}
+      }
+    },
+    "semanticEvent": {
+      "enum": [
+        "ACTOR_ATTACHED", "ACTOR_DETACHED", "CONTROL_REBOUND",
+        "PROFILE_RESOLVED", "LANE_CHANGED", "INTENT_CREATED",
+        "CANDIDATE_REJECTED", "PLAN_ACCEPTED", "MOTION_STARTED",
+        "STREAM_WAITING", "STREAM_ADVANCED", "PATH_ADVANCED",
+        "LOGICAL_COMMIT", "WORLD_EFFECT", "PRESENTATION_SYNCED",
+        "MOTION_FINISHED", "MOTION_CANCELED", "CONTEXT_CHANGED",
+        "ACTOR_REBOUND", "CONTROL_RETURNED",
+        "MOUNT_PRESENTATION_POSITION", "MOUNT_PRESENTATION_STATE"
+      ]
+    },
+    "semanticReason": {
+      "enum": [
+        "OK", "RETRY_WORLD_BUSY", "REJECTED_BLOCKED",
+        "REJECTED_SIDE_TILE", "REJECTED_TERRAIN", "REJECTED_OCCUPIED",
+        "REJECTED_RESERVED", "REJECTED_DIRECTION", "REJECTED_PROFILE",
+        "UNSUPPORTED_LOCOMOTION", "MOTION_ALREADY_ACTIVE", "STALE_ACTOR",
+        "STALE_FIELD", "PRESENTATION_MISSING", "DATA_UNAVAILABLE",
+        "NO_MEMORY", "CONTEXT_LOST", "INVALID_ARGUMENT", "QUEUE_FULL",
+        "UNSUPPORTED_COMMAND", "STALE_SEQUENCE"
+      ]
+    },
+    "integerMatcher": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "equals": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "minimum": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "maximum": {"type": "integer", "minimum": 0, "maximum": 4294967295}
+      }
+    },
+    "orderedEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "event"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+        "event": {"$ref": "#/$defs/semanticEvent"},
+        "reason": {"$ref": "#/$defs/semanticReason"},
+        "valueA": {"$ref": "#/$defs/integerMatcher"},
+        "valueB": {"$ref": "#/$defs/integerMatcher"}
+      }
+    },
+    "eventCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event", "minimum", "maximum"],
+      "properties": {
+        "event": {"$ref": "#/$defs/semanticEvent"},
+        "reason": {"$ref": "#/$defs/semanticReason"},
+        "valueA": {"$ref": "#/$defs/integerMatcher"},
+        "valueB": {"$ref": "#/$defs/integerMatcher"},
+        "minimum": {"type": "integer", "minimum": 0, "maximum": 2147483647},
+        "maximum": {"type": "integer", "minimum": 0, "maximum": 2147483647}
+      }
+    },
+    "frameTiming": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "minimum", "maximum"],
+      "properties": {
+        "from": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+        "to": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+        "minimum": {"type": "integer", "minimum": 0, "maximum": 2147483647},
+        "maximum": {"type": "integer", "minimum": 0, "maximum": 2147483647}
+      }
     }
   }
 }

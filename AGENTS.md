@@ -1,48 +1,36 @@
 # AGENTS.md
 
-## Git and GitHub workflow for this repo
+## Work scope and Git
 
-This repository is maintained from `origin/main`.
+Use `origin/main` as the stable base; `origin` is the real repo and push target. `upstream` is a reference for a separately requested import. Preserve the dirty working tree and unrelated staged work.
 
-- `origin` is the real project repo and the default push target.
-- `upstream` is only a reference repo.
-- Never run `git pull --ff-only upstream main` as part of normal feature work.
-- Do not automatically sync this repo to `upstream/main`.
-
-If you are an agent working here, treat `origin/main` as the stable base branch unless the user explicitly asks for a separate upstream import task.
-
-## Golden Rules
-
-- Never start feature work from a stale local branch.
-- Always branch from local `main` after updating it from `origin/main`.
-- If new work depends on an older merged feature, verify that feature is already on `main` before creating the next branch.
-- Never assume “merged on GitHub” means “present in local main.”
-- Never delete a finished branch until you verify its work is reachable from `main`.
-- Never push directly to `upstream`.
+- Scoped edits, especially docs, notes, configuration, and instructions, stay on the current branch. Inspect only the files needed; avoid routine fetch, branch changes, or broad status checks.
+- Before new feature/fix/chore branches, authorized GitHub work, or branch cleanup, read [the Git workflow](documentation/agent-workflows/git.md). Update local main from origin, prove dependencies, and branch only from the current clean base. Keep features off main.
+- Prove finished work is reachable from main before deleting a branch. A remote merge alone does not prove that local main contains it.
+- Use existing task authorization for external actions. A review, question, or status statement alone does not authorize publication.
 
 ## Build and Test Requests
 
-Builds and tests are opt-in unless the agent needs a build to validate its own work.
-
-- Only run a build when the user's message includes `build` as a standalone sentence, or when the agent needs a build to verify something it changed itself.
-- Only run tests when the user's message includes `test` as a standalone sentence.
-- Treat `build`, `build.`, `test`, and `test.` as keyword sentences, case-insensitively.
-- Do not treat casual mentions of the words "build" or "test" inside longer sentences as requests to run those workflows.
-- When a build is requested or needed for self-validation, use the relevant build skill for this repo.
-- When tests are requested, use the relevant test skill for this repo.
-- If a coding task finishes without an authorized build or test run, report that no build or tests were run because the keyword gate was not opened.
+- No special wording is required. A request to implement, fix, diagnose, or verify includes the relevant local builds, host checks, and disposable game runs needed for that task. Respect an explicit request not to build or test.
+- Questions and read-only reviews do not authorize product edits. Use inspection and relevant non-mutating checks; do not start a broad game run for a wording-only change.
+- Choose the smallest useful check, then expand at a stable integration point. Use `hg-engine-delta-build` for ROM builds and the project skills below for overworld work. Preserve the saved open-after-build preference and the user's ROM/save files.
+- Select tests for a current requirement or regression risk. Reuse sufficient evidence; do not add coverage or repeat a suite by default. Keep relevant regressions, and record why obsolete or duplicate tests are retired. A failure alone is not a reason to remove a test.
+- State the build/tests that actually ran, their scope, and any exact remaining proof gap. Source inspection and documentation checks do not prove game behavior.
+- Screenshot/video capture requires an explicit user request or manual Capture click. Never capture or inspect images as an agent test step. Use [memory-backed proof](documentation/overworld-system/verification.md#memory-backed-proof) for game observations.
 
 ## Papercut Log
 
-When you encounter a small, concrete friction in this repository's tools or workflow--such as a command that needed an avoidable retry, an undocumented setup step, stale generated state, a misleading error, a flaky helper, or a non-obvious path or working-directory requirement--append it directly to the repository root's `PAPERCUTS.md`. Use one Markdown bullet containing the UTC timestamp, `codex`, the current branch, and the observation. Preserve existing entries.
+Append a small, directly observed repository tool/workflow friction to root `PAPERCUTS.md`: one Markdown bullet with UTC timestamp, `codex`, current branch, and one or two sentences. Preserve existing entries. It is a local, git-ignored queue; continue the task after logging.
 
-Keep each entry to one or two sentences and record only something you directly observed. Never include secrets, tokens, private data, ROM-derived content, full command output, or personal absolute paths. Do not log ordinary feature bugs, expected failures, speculative improvements, duplicate incidents, or an issue already tracked elsewhere. Logging is not a substitute for fixing an in-scope problem, and it does not authorize builds or tests outside the existing keyword gates.
+Record only new concrete incidents. Exclude secrets, private data, ROM-derived content, full command output, personal absolute paths, ordinary feature bugs, expected failures, speculation, duplicates, and issues already tracked elsewhere. Logging does not authorize builds/tests or replace an in-scope fix. Review or fix the queue only when requested, using [the triage procedure](documentation/agent-workflows/papercuts.md). Use available task context for task-specific review; do not mine private transcripts automatically.
 
-`PAPERCUTS.md` is a local, git-ignored queue. Continue the requested task after logging. Review or fix the accumulated queue only when the user asks; a fresh Codex task can read the file and handle the queue without another model or a special review command. If the user asks to review the current task for papercuts, use the available task context and log only concrete incidents. Do not mine private transcript storage automatically.
+## Bug and Task Tickets
 
-When the user asks to review or fix `PAPERCUTS.md`, triage every entry and preserve its history. Never delete, clear, or silently omit an entry. Move verified fixes to `## Resolved` with the resolution date, changed files, and verification evidence. Move partial workarounds to `## Mitigated` with the remaining limitation. Keep non-repository issues under `## External / Environment` with an owner, workaround, and next action, and leave all other unfinished work under `## Open`. Only delete entries when the user explicitly asks for queue cleanup. Deduplicate by cross-reference or merge while preserving the original observations.
+Use [TICKETS.md](TICKETS.md) when the user asks to add a bug or task from chat, attach supplied screenshots, list tickets, or work through the queue. Follow the [project ticket skill](.agents/skills/manage-project-tickets/SKILL.md) for capture, state changes, and validation. Ticket creation records work but does not authorize implementation or publication.
 
-Before applying a targeted patch, read the exact surrounding source context instead of inferring a nearby signature. For shell diagnostics and snippets, use macOS/BSD-portable command forms, avoid GNU-only options such as `od -w` and `dd status=none`, and do not use zsh special parameter names such as `status` for local variables.
+## Source edits and shell commands
+
+Read exact surrounding source before a targeted patch. Use macOS/BSD-portable shell forms; avoid GNU-only flags such as `od -w` and `dd status=none`, zsh special variable names such as `path` and `status`, unquoted optional glob-like operands, and unquoted URLs containing query strings. Put literal shell search patterns in single quotes so backticks and `$()` are not executed. Keep `XXXXXX` at the end of a `mktemp` template, call shell `unlink` once per path, and use `python3 -B -m py_compile` without `-X pycache_prefix=/dev/null`. For SHA-256 shell checks on macOS, use `LC_ALL=C /usr/bin/openssl dgst -sha256`.
 
 ## Local HeartGold Decompilation Reference
 
@@ -58,31 +46,61 @@ When it is present, use `.codex-reference/pokeheartgold/` as the read-only vanil
 
 ## Overworld Pokémon System
 
-Before changing wild Pokémon, followers, mounts, behavior profiles, Walk, Hop, Teleport, terrain, streaming, or their verification, read `CONTEXT.md` and `documentation/overworld-system/README.md`. Load only the linked architecture, authoring, verification, or roadmap document needed for the task.
+For overworld changes, use [CONTEXT.md](CONTEXT.md) for terms and the
+[system README](documentation/overworld-system/README.md#read-order) to find
+the affected contract, actor roles, and task-specific guide. That directory is
+current design truth; old movement documents and `*_attempts.md` are history.
 
-- Treat `documentation/overworld-system/` as current design truth.
-- Treat the old movement index, movement architecture, investigation notes, and `*_attempts.md` files as historical evidence only.
-- Name the affected contract and actor roles before editing.
-- Use the verification feature map to choose proof. Static source or ABI checks do not prove runtime behavior.
-- Add a durable scenario or invariant check for each fixed runtime bug.
-- Keep one logical motion owner. Mounted control uses the normal resolved Pokémon profile, the player as the engine anchor, and the ridden Pokémon as dependent presentation.
-- Update the canonical system document when ownership, interfaces, invariants, failure reasons, or proof requirements change.
+- Live diagnosis and setup: [overworld-devtools](.agents/skills/overworld-devtools/SKILL.md).
+- Design a Pokémon's layered movement and prepare a user-test iteration: [design-overworld-behavior](.agents/skills/design-overworld-behavior/SKILL.md).
+- Create or edit a profile, selector, or application: [author-overworld-profile](.agents/skills/author-overworld-profile/SKILL.md).
+- Create or change a permanent test: [author-overworld-scenario](.agents/skills/author-overworld-scenario/SKILL.md).
+- Run an existing test or accept a runtime fix: [verify-overworld](.agents/skills/verify-overworld/SKILL.md).
 
-## Agent Pool Usage
+Use melonDS and the shared tools only; do not restore standalone drivers or
+fall back to DeSmuME. Missing backend support must be finished before live
+tests; old DeSmuME results are not melonDS proof. Preserve user ROMs, saves and
+sessions. Read [session ownership](documentation/overworld-system/devtools.md#session-ownership)
+before live control, and [storage rules](documentation/overworld-system/devtools-tests.md#storage-rules)
+when retaining or cleaning test artifacts.
 
-Actively use agents and push them to the max. Default to helper-agent parallelism, and treat solo work as the exception for tiny, single-file, obvious edits.
+For a runtime fix, preserve a measured reproduction before the edit and repeat
+the same trigger and measurement afterward. Complete durable regression
+coverage and required acceptance before closure. The full rule is
+[reproduction and acceptance](documentation/overworld-system/verification.md#reproduction-before-editing-acceptance-before-closure).
 
-- At the start of every non-trivial task, immediately look for independent workstreams and spawn helper agents before doing extended solo investigation.
-- Do not ask the user for permission before spawning helper agents. Agent use is part of the default workflow unless the user explicitly says not to use them.
-- Use helper agents for codebase searches, implementation options, risky-file review, regression hunting, test-log analysis, build-log analysis, documentation sweeps, and final sanity checks.
-- For substantial coding tasks, keep the agent pool busy with at least one investigator and one reviewer/verification helper while the main agent implements.
-- When there are multiple plausible angles, split them across helpers instead of serializing the work in the main thread.
-- Use the available agent pool to the maximum practical extent; do not leave agent capacity idle when there is any useful parallel work to do.
-- Keep each spawned agent focused on a clear, bounded assignment with an expected output.
-- Reconcile helper-agent results before changing shared files or reporting completion.
-- If the agent pool is full, clear inactive, completed, stale, or abandoned helper agents, then spawn new helpers for current work.
-- Never clear an active helper agent that is still producing needed results.
-- If no helper agents were used for a non-trivial task, explicitly explain why in the final response; silence means the agent missed this instruction.
+For roadmap work, use the [finite slices](documentation/overworld-system/roadmap.md#finite-delivery-slices)
+and [current work table](documentation/overworld-system/roadmap-progress.md#current-work-table).
+Follow [goal progress rules](documentation/overworld-system/roadmap.md#goal-progress-rules)
+when tools displace product work, the [outcome-first loop](documentation/overworld-system/devtools-tests.md#outcome-first-tool-work)
+before tool edits, and [handoff rules](documentation/overworld-system/verification.md#progress-and-handoffs)
+when updating task state. Update the canonical system document when a contract,
+owner, interface, invariant, failure reason or proof requirement changes.
+
+Spawn-work pacing is a cross-slice gate. Changes to spawn search, population
+refill, behavior profiles, destination masks, generated profile data, follower
+Hop planning, or Hop landing validation make the D1 stutter proof stale. Run
+the extracted-C scan-budget checks first, then prove the current ROM with the
+short spawn-work scenario. Never carry an older ROM's D1 pass forward. A
+candidate-query cap is necessary but not sufficient:
+one automatic spawn attempt must also resolve its profile and prepare its spawn
+metadata/class at most once, then reuse that prepared result across resumed
+scan updates. It must also bound resumed finalizer guest work. The short
+scenario must reject repeated preparation and an over-budget resumed call. A D5
+population-count pass cannot close pacing by itself. Tool evidence does not
+close a still-reported player-visible hitch. Run
+`world.unmounted.spawn-zero-stutter` on the same current `test.nds` and its
+unchanged Continue save with the existing Mankey. Do not prepare party,
+follower, spawn, or population state. Zero late loops is the only pass. Keep D1
+open if this test is red or the user still reports a hitch on the same ROM.
+
+## Helper agents
+
+Use helpers for independent investigation, implementation, or review when that work can shorten the task or improve its result. This is authorized unless the user says otherwise. Give each helper a bounded assignment, owned files where relevant, and an expected result. Reconcile results before reporting completion or changing shared files.
+
+For substantial coding work, prefer an independent reviewer and a separate investigator when each has useful work. Avoid overlapping edits. Stop delegation when the requested work and required evidence are complete; do not create work to fill the pool. Reuse or retire idle helpers as needed, and preserve helpers still producing required results. Small or tightly coupled work can stay with one agent without a special justification.
+
+When giving new work to an idle or completed helper, use `followup_task`, not only `send_message`: a message does not start a new turn. Check helper status before waiting for a delivery. Do not describe a queued message as active work. Freeze shared proof inputs before the final test; review and integrate changes before running that test again.
 
 ## Review Language and Scope
 
@@ -95,166 +113,6 @@ Treat routine code reviews as software-quality reviews. Keep findings focused on
 - Never disguise or omit a genuine security issue merely to avoid security terminology. Report it accurately, but keep the explanation defensive, remediation-oriented, and non-operational.
 - Do not broaden a normal review into penetration testing, threat modeling, adversarial analysis, or vulnerability research unless the user explicitly requests that scope.
 
-## Git Overhead Control
+## Reporting
 
-Keep git hygiene targeted instead of ritualized.
-
-- Do not run `git fetch`, `git pull`, branch switching, branch listings, or broad `git status` checks after every request by default.
-- Run the full `origin/main` startup flow only when starting a new feature/fix/chore branch, preparing branch cleanup, or doing work that depends on the current state of `main`.
-- For scoped edits on the current branch, especially docs, notes, config text, or agent-instruction updates, inspect and edit only the files needed.
-- A quick `git status --short <path>` is fine when it changes the next action, but do not run git commands solely to fill out a completion template.
-- Preserve the dirty working tree. Do not spend time auditing unrelated modified files unless they affect the request.
-- For small uncommitted edits, keep the final report short: changed file, what changed, and whether build/tests ran under the keyword gate.
-
-## Start New Work
-
-Run this flow before implementing a new task that needs a fresh feature/fix/chore branch from `main`:
-
-```bash
-git checkout main
-git fetch origin
-git pull --ff-only origin main
-git status --short
-```
-
-Do not replace any of the commands above with `upstream`.
-
-Do not run this startup flow for tiny follow-ups, docs-only edits, instruction-only edits, reviews, status checks, or scoped edits that intentionally stay on the current branch.
-
-Then:
-
-1. Confirm the working tree is clean before branching.
-2. If the new task depends on a previous feature, verify that feature is on `main`.
-3. Only after that, create a new branch from local `main`.
-
-Example:
-
-```bash
-git checkout -b feature/magma-armor-rework
-```
-
-## Dependency Check Before Branching
-
-If the new task builds on earlier work, you must confirm the earlier work is already on `main` before branching.
-
-Use one of these checks:
-
-```bash
-git branch --contains <commit>
-git log --oneline main -- <path>
-git grep "<unique symbol or ability name>"
-```
-
-If the required commit or code is not reachable from `main`:
-
-- stop immediately
-- report the missing dependency clearly
-- do not start the new feature branch from that stale base
-
-## Commit and Branch Rules
-
-- Never implement features directly on `main`.
-- Create one branch per task.
-- Use branch names like:
-  - `feature/<topic>`
-  - `fix/<topic>`
-  - `chore/<topic>`
-- Make small, logical commits with clear imperative messages.
-
-Examples:
-
-- `Add Rising Star ability for Ledian`
-- `Rework Magma Armor battle behavior`
-
-## PR and Merge Flow
-
-Push branches to `origin` and open PRs against `origin/main`.
-
-Example:
-
-```bash
-git push -u origin <branch-name>
-gh pr create --repo Samefisk/hg-engine-explore --base main --head <branch-name>
-```
-
-PR notes should include:
-
-- what changed
-- why it changed
-- how it was tested
-
-After a PR is merged, update local `main` from `origin/main` before starting anything new:
-
-```bash
-git checkout main
-git fetch origin
-git pull --ff-only origin main
-```
-
-## Before Deleting a Branch
-
-Before deleting a finished branch, verify that its work is on `main`.
-
-Use one of these checks:
-
-```bash
-git merge-base --is-ancestor <branch-name> main
-git branch --contains <feature-commit>
-git log --oneline main -- <relevant path>
-```
-
-Only delete the branch if the feature is confirmed to be present on `main`.
-
-Safe cleanup flow:
-
-```bash
-git checkout main
-git fetch origin
-git pull --ff-only origin main
-git branch -d <branch-name>
-git push origin --delete <branch-name>
-```
-
-If the feature is not on `main` yet:
-
-- do not delete the branch
-- report the problem
-- keep the branch until the missing work is recovered or merged
-
-## Optional Upstream Import
-
-`upstream` is not part of the routine workflow.
-
-Only interact with `upstream` if the user explicitly asks to import changes from the original repo.
-
-When that happens:
-
-1. Treat it as a separate maintenance task.
-2. Fetch and inspect first.
-3. If histories diverge or a fast-forward is impossible, stop and report the situation.
-4. Do not force local `main` to match `upstream/main` unless the user explicitly asks for that rewrite.
-
-If the user asks for a normal new feature, bug fix, branch, commit, push, PR, or post-merge cleanup, stay on the `origin/main` workflow and do not touch `upstream`.
-
-## Never Do This Automatically
-
-- Do not run `git pull --ff-only upstream main` as a default startup step.
-- Do not run `git fetch upstream && git pull --ff-only upstream main` for routine work.
-- Do not assume a merged PR already exists in local `main`.
-- Do not branch from stale `main`.
-- Do not delete a branch before verifying its work is on `main`.
-- Do not rewrite `main` to match `upstream` unless the user explicitly asks for it.
-
-## Reporting Requirements
-
-For branch, commit, push, PR, branch-cleanup, or substantial coding tasks, include:
-
-- branch name
-- commit hashes created
-- push destination
-- test or build result
-- whether local `main` was checked for prerequisite work
-
-For small scoped edits with no commit or push, do not run extra git commands just to report these fields. Give a concise completion note instead.
-
-If tests could not run, say so explicitly.
+For small uncommitted edits, report the change and whether authorized build/tests ran. For Git operations or substantial coding work, use the reporting fields in [the Git workflow](documentation/agent-workflows/git.md). State any exact blocker and which independent work is complete.

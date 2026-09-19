@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "id": "world.unmounted.wild-soak",
+  "title": "Live wild actor remains current through a long unmounted field soak",
+  "status": "active",
+  "capabilities": [
+    "actor.system",
+    "walk.exact",
+    "population"
+  ],
+  "proofLevel": "S5",
+  "costTier": 5,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/verification.md#proof-rule",
+    "actor": "Prepared WILD species 1 (Bulbasaur), bound by its full current identity after the checked Wild spawn command",
+    "trigger": "Keep the player unmounted and observe the same live Bulbasaur for 5000 continuous completed game frames while its normal AI runs",
+    "observable": "The same Wild actor stays current, engine-bound and presentation-attached for every frame; its natural Walk lifecycle starts, commits, finishes and returns control during the window",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use checked teleport to an open Route 30 tile, request one native wild Bulbasaur, wait for its normal idle state and bind its exact live identity. Do not change its profile, AI state or timers."
+      }
+    ],
+    "limits": [
+      "Prepared placement gives no frame or motion credit.",
+      "This is one 5000-frame Wild actor and population soak on one outdoor field. The separate unmounted route scenarios own player movement, streaming cells and map transitions.",
+      "The checked run must retain all continuous frames in one melonDS session; separate boots cannot be combined."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "bulbasaur",
+      "species": 1,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Place the disposable field, spawn one Bulbasaur through the native wild path, wait idle and bind its current identity"
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Observe 5000 continuous completed frames with normal Wild AI and no prepared intervention"
+    }
+  ],
+  "stop": {
+    "frameBudget": 5200,
+    "condition": "The same live Bulbasaur completes 5000 continuous observed frames and at least one natural Walk lifecycle, or the first identity, presentation or lifecycle failure"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "world.unmounted.wild-soak",
+    "claims": [
+      "live-actor-identity"
+    ],
+    "minimumFrames": 5000
+  }
+}

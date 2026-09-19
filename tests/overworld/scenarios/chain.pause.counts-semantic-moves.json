@@ -1,26 +1,106 @@
 {
   "schemaVersion": 1,
   "id": "chain.pause.counts-semantic-moves",
-  "title": "Chain pause counts semantic movement commits",
+  "title": "Controlled Ledyba chain retry and reposition",
   "status": "active",
-  "capabilities": ["chain.movement"],
+  "capabilities": [
+    "chain.movement",
+    "chain"
+  ],
   "proofLevel": "S3",
   "costTier": 3,
-  "fixture": {"rom": "test.nds", "save": {"path": "test.dsv", "kind": "dsv"}, "seed": 0},
-  "events": [
-    {"at": 0, "kind": "setup", "value": "Select one active Ledyba with its resolved Flying insect profile"},
-    {"at": 1, "kind": "lifecycle", "value": "Observe natural movement through the next chain pause action"}
-  ],
-  "stop": {"frameBudget": 12000, "condition": "Ledyba completes the expected chain pause action"},
-  "expect": {
-    "requiredEvents": [],
-    "forbiddenEvents": [],
-    "invariants": ["Skid and reposition work do not increment the chain count", "The pause action follows the authored semantic move count", "The actor keeps movement control after the pause"]
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/README.md#current-invariants-to-preserve",
+    "actor": "WILD species 165 (ledyba), acquired through spawn; live handle and attached presentation required",
+    "trigger": "After natural spawn and normal eligible commits, reject exactly one naturally selected action-5 start before motion work; observe pending-state restoration and retry.",
+    "observable": "Same live Wild Ledyba, unchanged selected action/ticks and commit count, one full cooldown frame, then four complete profile-derived reposition legs with native boundaries and terminal control.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "during-observation",
+        "target": "control-result",
+        "change": "Return PROFILE once at the authenticated prepared-jump entry for the bound naturally selected action5. No guest RAM, RNG, cooldown, chain counter or position writes."
+      }
+    ],
+    "limits": [
+      "Controlled retry only; normal Ledyba timing has its separate accepted witness.",
+      "The obsolete forced nine-Walk/fixed-frame fixture is archived at documentation/overworld-system/archive/chain-retry-legacy-measurements.json; current expectation comes from the authenticated profile.",
+      "Copied-data controls test the evaluator; separate live reader calibration remains required."
+    ]
   },
-  "capture": "failure",
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "ledyba",
+      "species": 165,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Acquire natural Wild Ledyba at its own spawn site and observe its completed spawn Hop."
+    },
+    {
+      "at": 1,
+      "kind": "setup",
+      "value": "Bind the exact subject after normal eligible movement; arm one typed rejection."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Verify selected action/ticks and commit count survive the rejected start and full cooldown frame."
+    },
+    {
+      "at": 3,
+      "kind": "lifecycle",
+      "value": "Observe all four profile-derived reposition motions and terminal control."
+    }
+  ],
+  "stop": {
+    "frameBudget": 6000,
+    "condition": "The one retried profile-defined action completes and control returns"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "Control returns after the selected motion finishes or cancels"
+    ]
+  },
+  "capture": "none",
   "adapter": {
-    "kind": "command-sequence",
-    "commands": [["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "ledyba_chain_pause"]],
-    "result": "json-passed"
+    "kind": "devtools-test",
+    "test": "chain.ledyba-retry",
+    "claims": [
+      "controlled-action",
+      "live-actor-identity",
+      "logical-commit",
+      "engine-boundary",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumFrames": 16
   }
 }

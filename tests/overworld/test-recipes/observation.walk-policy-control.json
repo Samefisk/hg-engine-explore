@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "id": "observation.walk-policy-control",
+  "title": "One native Walk COMMIT reader fault and exact restoration",
+  "mode": "observer-control",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/devtools-tests.md#acceleration-setup-and-terminal-readings",
+  "requirements": ["shared.walk-policy-recorder-control-v1"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 360, "noProgressFrames": 90, "minObservedFrames": 1},
+  "subjects": [{"id": "mounted-onix", "species": 95, "role": "MOUNTED", "acquire": "existing"}],
+  "measurements": [{"kind": "live-walk-policy-control-v1", "subject": "mounted-onix"}],
+  "setup": [
+    {"id": "own-path", "op": "teleport", "args": {"map": 33, "x": 584, "z": 406, "facing": 0},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "own-party-data", "op": "party", "args": {"slot": 0, "species": 95, "level": 10, "hp": 1, "status": 0},
+      "budget": {"maxSeconds": 15, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "mount-own-pokemon", "op": "spawn", "args": {"species": 95, "role": "mounted", "slot": 0},
+      "budget": {"maxSeconds": 30, "maxFrames": 180, "noProgressFrames": 120}},
+    {"id": "bind-mount", "op": "bind", "args": {"subject": "mounted-onix"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "arm-same-reader", "op": "walk-policy-control.arm", "args": {"subject": "mounted-onix"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "admit-one-walk", "op": "step", "args": {"frames": 30, "keys": ["UP"],
+      "until": {"kind": "actor-field", "subject": "mounted-onix", "path": "motionKind", "operator": "eq", "value": "WALK"}},
+      "budget": {"maxSeconds": 10, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "complete-one-walk", "op": "wait", "args": {"predicate": {"kind": "measurement-complete", "measurement": "live-walk-policy-control-v1"}},
+      "budget": {"maxSeconds": 15, "maxFrames": 60, "noProgressFrames": 60}},
+    {"id": "close-same-reader", "op": "walk-policy-control.close", "args": {},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "assertions": [{"kind": "measurement-complete", "measurement": "live-walk-policy-control-v1"}]
+}

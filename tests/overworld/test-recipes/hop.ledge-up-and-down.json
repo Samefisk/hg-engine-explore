@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "hop.ledge-up-and-down",
+  "title": "Wild Clefairy crosses a ledge south and north",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/README.md#system-contracts and tools/overworld/runtime_proof_registry.json: legacy.wild-ledge-hop",
+  "requirements": ["legacy.wild-ledge-hop"],
+  "budgets": {"maxSeconds": 180, "maxFrames": 600, "noProgressFrames": 120, "minObservedFrames": 16},
+  "subjects": [{"id": "clefairy", "species": 35, "role": "WILD", "acquire": "spawn"}],
+  "measurements": [{"kind": "wild-ledge-v1", "subject": "clefairy"}],
+  "setup": [
+    {"id": "route29-ledge", "op": "teleport", "args": {"map": 33, "x": 585, "z": 400, "facing": 0},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "spawn-clefairy-at-south-ledge", "op": "spawn", "args": {"species": 35, "role": "wild", "level": 5, "x": 590, "z": 395},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "bind-clefairy", "op": "bind", "args": {"subject": "clefairy"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "idle-at-ledge", "op": "wait", "args": {"predicate": {"kind": "actor-field", "subject": "clefairy", "path": "motionPhase", "operator": "eq", "value": "IDLE"}},
+      "budget": {"maxSeconds": 20, "maxFrames": 120, "noProgressFrames": 120}}
+  ],
+  "actions": [
+    {"id": "arm-ledge-reader", "op": "wild-ledge.arm", "args": {"subject": "clefairy"},
+      "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "complete-both-ledge-decisions", "op": "wait", "args": {"predicate": {"kind": "measurement-complete", "measurement": "wild-ledge-v1"}},
+      "budget": {"maxSeconds": 90, "maxFrames": 500, "noProgressFrames": 120}},
+    {"id": "close-ledge-reader", "op": "wild-ledge.close", "args": {},
+      "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "assertions": [{"kind": "measurement-complete", "measurement": "wild-ledge-v1", "when": "final"}]
+}

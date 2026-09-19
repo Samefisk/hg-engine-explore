@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "actor.follower-direct-load",
+  "title": "Normal save load restores one current follower presentation",
+  "status": "active",
+  "capabilities": ["actor.system"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "normal-play",
+    "expectationSource": "documentation/overworld-system/architecture.md#9-population-and-lifecycle",
+    "actor": "The saved FOLLOWER Mankey (56), unchanged party identity, full current handle and native object.",
+    "trigger": "Load the copied unchanged test.sav through the normal shared boot. Do not teleport, replace party Pokemon, or explicitly spawn a follower.",
+    "observable": "Requirement shared.follower-direct-load.identity-v1: the saved follower has an attached current presentation at field readiness, and retains that exact source and engine identity for 16 complete game frames.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {"phase": "before-observation", "target": "fixture", "change": "The common worker copies test.nds and test.sav. The originals and saved party stay unchanged. No prepared operations."},
+      {"phase": "before-observation", "target": "observation", "change": "Install the shared read-only observer before boot. It retains complete game-frame snapshots and bounded native manager lookup receipts. Observation does not repair stale objects."}
+    ],
+    "limits": ["Identity and attachment only; not normal spawning, input selection, motion, chain, smoothness or long-run proof.", "A missing or detached saved follower at field readiness is the failure under test, not a reason to replace the subject. Boot errors unrelated to that observable remain setup failures."]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "saved-follower", "species": 56, "role": "FOLLOWER", "acquisition": "follower", "minimum": 1, "maximum": 1, "motionActor": false, "requirePresentation": true}],
+  "events": [{"at": 0, "kind": "setup", "value": "Load the unchanged save and bind its saved follower at field readiness."}, {"at": 1, "kind": "lifecycle", "value": "Retain 16 complete frames of that exact attached follower."}],
+  "stop": {"frameBudget": 32, "condition": "16 observed frames, first identity failure, or the 120-second boot and run bound."},
+  "expect": {"requiredEvents": [], "forbiddenEvents": [], "invariants": ["Every active actor handle uses the current field epoch", "Normal load must not retain a stale object ahead of the current follower in native ID lookup"]},
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "actor.follower-direct-load", "claims": ["live-actor-identity"], "minimumFrames": 16}
+}

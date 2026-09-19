@@ -13,10 +13,11 @@ import tempfile
 
 
 OVERLAY_ID = 158
+OVERLAY_LOAD_ADDRESS = 0x023B6B00
 OVERLAY_BASE = 0x023B6B00
 OVERLAY_END = 0x023BAB00
-FILE_SIZE = 0x3100
-STATE_ADDRESS = OVERLAY_BASE + FILE_SIZE
+STATE_ADDRESS = OVERLAY_BASE + 0x3670
+FILE_SIZE = STATE_ADDRESS - OVERLAY_LOAD_ADDRESS
 ENTRY_ADDRESS = OVERLAY_BASE
 COMPAT_ADDRESS = OVERLAY_BASE + 0x18
 DEBUG_ADDRESS = OVERLAY_BASE + 0x38
@@ -30,12 +31,12 @@ RESOLVER_CALLBACKS = (
     "BehaviorResolver_InspectClass",
 )
 MOTION_CALLBACKS = (
-    "OverworldActorSystem_MotionDispatchImpl",
-    "OverworldActorSystem_RequestWildMotion",
+    "ActorSystem_RequestMotion",
+    "ActorSystem_EngineBoundary",
 )
 POPULATION_CALLBACKS = (
     "OverworldActorSystem_PopulationFrameImpl",
-    "OverworldActorSystem_PopulationResetImpl",
+    "OverworldActorSystem_PopulationControlImpl",
 )
 MOVEMENT_POLICY_SYMBOLS = (
     "sActorMovementPolicy",
@@ -49,11 +50,11 @@ MAIN_CALLBACKS = (
 )
 COMPAT_CALLBACKS = (
     "OverworldActorSystem_CompatibilityBindImpl",
-    "OverworldActorSystem_CompatibilityUpdateImpl",
+    None,
     "OverworldActorSystem_CompatibilityUnbindImpl",
-    "OverworldActorSystem_CompatibilityAdvanceFieldEpochImpl",
+    "OverworldActorSystem_CompatibilityTransitionImpl",
     "OverworldActorSystem_CompatibilityRecordTraceImpl",
-    "OverworldActorSystem_CompatibilityGetFieldEpochImpl",
+    "OverworldActorSystem_CompatibilityGetContextImpl",
 )
 FIXED_SYMBOLS = {
     "gOverworldActorSystemEntry": (ENTRY_ADDRESS, 24),
@@ -67,11 +68,15 @@ FIXED_SYMBOLS = {
         SERVICE_DIRECTORY_ADDRESS + SERVICE_ENTRY_SIZE * 2, SERVICE_ENTRY_SIZE),
     "gOverworldActorSystemMovementPolicyServiceEntry": (
         SERVICE_DIRECTORY_ADDRESS + SERVICE_ENTRY_SIZE * 3, SERVICE_ENTRY_SIZE),
+    "OverworldActorSystem_SelectMovementLocomotion": (
+        OVERLAY_BASE + 0xB8, 0x14),
+    "OverworldActorSystem_SelectMovementTarget": (
+        OVERLAY_BASE + 0xCC, 0x14),
 }
 STATE_SYMBOL = "gOverworldActorSystemState"
-PUBLIC_LAYOUTS = {
-    "handle": {"format": "<6H", "size": 12},
-    "actorState": {"format": "<HH6H8I8h4H16B", "size": 88},
+PUBLIC_LAYOUT_MACROS = {
+    "handle": "OVERWORLD_ACTOR_DEBUG_HANDLE_FORMAT",
+    "actorState": "OVERWORLD_ACTOR_DEBUG_STATE_FORMAT",
 }
 
 
@@ -94,7 +99,7 @@ def read_symbols(objdump, linked):
     wanted = set(FIXED_SYMBOLS)
     wanted.add(STATE_SYMBOL)
     wanted.update(MAIN_CALLBACKS)
-    wanted.update(COMPAT_CALLBACKS)
+    wanted.update(symbol for symbol in COMPAT_CALLBACKS if symbol is not None)
     wanted.update(RESOLVER_CALLBACKS)
     wanted.update(MOTION_CALLBACKS)
     wanted.update(POPULATION_CALLBACKS)
@@ -139,7 +144,9 @@ def verify_pointer(pointer, symbol, symbols):
             f"ABI pointer for {symbol} is 0x{pointer:08X}; "
             f"expected 0x{expected:08X}"
         )
-    if pointer & 1 == 0 or not (OVERLAY_BASE <= (pointer & ~1) < OVERLAY_END):
+    if pointer & 1 == 0 or not (
+        OVERLAY_LOAD_ADDRESS <= (pointer & ~1) < OVERLAY_END
+    ):
         raise RuntimeError(f"ABI pointer for {symbol} is not resident Thumb code")
 
 
@@ -155,34 +162,44 @@ def verify_binary(binary, packaged, symbols):
             f"overlay 158 file size is 0x{len(image):X}; expected 0x{FILE_SIZE:X}"
         )
 
-    main = struct.unpack_from("<IHH4I", image, 0)
+    main = struct.unpack_from(
+        "<IHH4I", image, ENTRY_ADDRESS - OVERLAY_LOAD_ADDRESS)
     if main[:3] != (0x5341574F, 1, 24):
         raise RuntimeError("public actor facade header changed")
     for pointer, symbol in zip(main[3:], MAIN_CALLBACKS):
         verify_pointer(pointer, symbol, symbols)
 
-    compat = struct.unpack_from("<IHH6I", image, 0x18)
-    if compat[:3] != (0x4341574F, 1, 32):
+    compat = struct.unpack_from(
+        "<IHH6I", image, COMPAT_ADDRESS - OVERLAY_LOAD_ADDRESS)
+    if compat[:3] != (0x4341574F, 3, 32):
         raise RuntimeError("actor compatibility facade header changed")
     for pointer, symbol in zip(compat[3:], COMPAT_CALLBACKS):
-        verify_pointer(pointer, symbol, symbols)
+        if symbol is None:
+            if pointer != 0:
+                raise RuntimeError("retired compatibility update slot is not zero")
+        else:
+            verify_pointer(pointer, symbol, symbols)
 
-    debug = struct.unpack_from("<IHHIII22H", image, 0x38)
+    debug = struct.unpack_from(
+        "<IHHIII22H", image, DEBUG_ADDRESS - OVERLAY_LOAD_ADDRESS)
     if debug[:6] != (
         0x4C44574F, 1, 64, OVERLAY_BASE, OVERLAY_END, STATE_ADDRESS
     ):
         raise RuntimeError("actor debug layout header changed")
-    if debug[6:9] != (12, 8, 32):
+    if debug[6:9] != (10, 2, 16):
         raise RuntimeError("actor facade capacities changed")
     if debug[9:17] != (12, 32, 24, 24, 176, 88, 36, 32):
         raise RuntimeError("actor facade value-object sizes changed")
-    if debug[23:27] != (0x78, SERVICE_ENTRY_SIZE, 4, 0xF00):
+    if debug[23:27] != (0x78, SERVICE_ENTRY_SIZE, 4, 0x990):
         raise RuntimeError("actor private service directory layout changed")
+    if debug[27] != debug[14] + 52 + 32:
+        raise RuntimeError("actor runtime slot layout changed")
     if debug[17] != symbols[STATE_SYMBOL]["size"]:
         raise RuntimeError("debug layout state size differs from linked state symbol")
 
     services = []
-    resolver = struct.unpack_from("<IHHII", image, 0x78)
+    resolver = struct.unpack_from(
+        "<IHHII", image, SERVICE_DIRECTORY_ADDRESS - OVERLAY_LOAD_ADDRESS)
     if resolver[:3] != (SERVICE_MAGICS[0], 1, SERVICE_ENTRY_SIZE):
         raise RuntimeError("resolver service entry header changed")
     for pointer, symbol in zip(resolver[3:], RESOLVER_CALLBACKS):
@@ -200,8 +217,12 @@ def verify_binary(binary, packaged, symbols):
         },
     })
 
-    motion = struct.unpack_from("<IHHII", image, 0x88)
-    if motion[:3] != (SERVICE_MAGICS[1], 2, SERVICE_ENTRY_SIZE):
+    motion = struct.unpack_from(
+        "<IHHII",
+        image,
+        SERVICE_DIRECTORY_ADDRESS + SERVICE_ENTRY_SIZE - OVERLAY_LOAD_ADDRESS,
+    )
+    if motion[:3] != (SERVICE_MAGICS[1], 6, SERVICE_ENTRY_SIZE):
         raise RuntimeError("motion service entry header changed")
     for pointer, symbol in zip(motion[3:], MOTION_CALLBACKS):
         verify_pointer(pointer, symbol, symbols)
@@ -209,16 +230,21 @@ def verify_binary(binary, packaged, symbols):
         "name": SERVICE_NAMES[1],
         "address": SERVICE_DIRECTORY_ADDRESS + SERVICE_ENTRY_SIZE,
         "size": SERVICE_ENTRY_SIZE,
-        "version": 2,
+        "version": 6,
         "status": "available",
         "callbacks": {
             name: symbols[symbol]["address"] | 1
-            for name, symbol in zip(("dispatch", "requestWild"), MOTION_CALLBACKS)
+            for name, symbol in zip(("request", "boundary"), MOTION_CALLBACKS)
         },
     })
 
-    population = struct.unpack_from("<IHHII", image, 0x98)
-    if population[:3] != (SERVICE_MAGICS[2], 1, SERVICE_ENTRY_SIZE):
+    population = struct.unpack_from(
+        "<IHHII",
+        image,
+        SERVICE_DIRECTORY_ADDRESS + SERVICE_ENTRY_SIZE * 2
+            - OVERLAY_LOAD_ADDRESS,
+    )
+    if population[:3] != (SERVICE_MAGICS[2], 3, SERVICE_ENTRY_SIZE):
         raise RuntimeError("population service entry header changed")
     for pointer, symbol in zip(population[3:], POPULATION_CALLBACKS):
         verify_pointer(pointer, symbol, symbols)
@@ -226,34 +252,35 @@ def verify_binary(binary, packaged, symbols):
         "name": SERVICE_NAMES[2],
         "address": OVERLAY_BASE + 0x98,
         "size": SERVICE_ENTRY_SIZE,
-        "version": 1,
+        "version": 3,
         "status": "available",
         "callbacks": {
             name: symbols[symbol]["address"] | 1
-            for name, symbol in zip(("frame", "reset"), POPULATION_CALLBACKS)
+            for name, symbol in zip(("frame", "control"), POPULATION_CALLBACKS)
         },
     })
 
-    movement = struct.unpack_from("<IHHII", image, 0xA8)
-    if movement[:3] != (SERVICE_MAGICS[3], 1, SERVICE_ENTRY_SIZE):
+    movement = struct.unpack_from(
+        "<IHHII",
+        image,
+        SERVICE_DIRECTORY_ADDRESS + SERVICE_ENTRY_SIZE * 3
+            - OVERLAY_LOAD_ADDRESS,
+    )
+    if movement[:3] != (SERVICE_MAGICS[3], 4, SERVICE_ENTRY_SIZE):
         raise RuntimeError("movement-policy service entry header changed")
     expected_policy = symbols[MOVEMENT_POLICY_SYMBOLS[0]]["address"]
     if movement[3] != expected_policy:
         raise RuntimeError("movement-policy data pointer changed")
-    state_address = symbols[STATE_SYMBOL]["address"]
-    state_end = state_address + symbols[STATE_SYMBOL]["size"]
-    if not state_address <= movement[4] < state_end:
-        raise RuntimeError("movement-policy state table escaped actor state")
+    if movement[4] != 0:
+        raise RuntimeError("movement-policy service exports private state")
     services.append({
         "name": SERVICE_NAMES[3],
         "address": OVERLAY_BASE + 0xA8,
         "size": SERVICE_ENTRY_SIZE,
-        "version": 1,
+        "version": 4,
         "status": "available",
         "policy": expected_policy,
-        "stateTable": movement[4],
-        "stateSize": POLICY_STATE_SIZE,
-        "stateCapacity": 12,
+        "reserved": movement[4],
     })
     return image, debug, services
 
@@ -265,7 +292,7 @@ def verify_overlay_table(path, state_size):
     if len(row_bytes) != 0x20:
         raise RuntimeError("overlay table does not contain overlay 158")
     row = struct.unpack("<8I", row_bytes)
-    expected = (OVERLAY_ID, OVERLAY_BASE, FILE_SIZE, state_size, 0, 0,
+    expected = (OVERLAY_ID, OVERLAY_LOAD_ADDRESS, FILE_SIZE, state_size, 0, 0,
                 OVERLAY_ID, 0)
     if row != expected:
         raise RuntimeError(
@@ -300,14 +327,71 @@ def parse_enums(headers):
     return enums
 
 
-def write_descriptor(path, image, symbols, debug, services, row, enums):
+def parse_public_layouts(header):
+    with open(header, "r", encoding="utf-8") as file:
+        source = file.read()
+    layouts = {}
+    for name, macro in PUBLIC_LAYOUT_MACROS.items():
+        match = re.search(
+            rf"^#define\s+{re.escape(macro)}\s+\"([^\"]+)\"\s*$",
+            source,
+            re.MULTILINE,
+        )
+        if match is None:
+            raise RuntimeError(f"public debug layout macro is missing: {macro}")
+        layout_format = match.group(1)
+        layouts[name] = {
+            "format": layout_format,
+            "size": struct.calcsize(layout_format),
+        }
+    if layouts["handle"]["size"] != 12 or layouts["actorState"]["size"] != 88:
+        raise RuntimeError("public debug layout format sizes differ from actor ABI")
+    return layouts
+
+
+def parse_context_offsets(header):
+    with open(header, "r", encoding="utf-8") as file:
+        source = file.read()
+    match = re.search(r"^#define\s+OVERWORLD_ACTOR_DEBUG_MAP_GENERATION_OFFSET\s+(\d+)\s*$",
+                      source, re.MULTILINE)
+    if match is None:
+        raise RuntimeError("native-checked map-generation debug offset is missing")
+    offset = int(match.group(1))
+    if offset % 2 or not 0 < offset < 0x990 - 1:
+        raise RuntimeError("map-generation debug offset is outside the actor state")
+    return {"mapGeneration": offset}
+
+
+def input_record(path):
+    with open(path, "rb") as file:
+        data = file.read()
+    return {
+        "path": os.path.relpath(os.path.abspath(path), os.getcwd()),
+        "size": len(data),
+        "sha256": hashlib.sha256(data).hexdigest(),
+    }
+
+
+def write_descriptor(
+    path,
+    image,
+    symbols,
+    debug,
+    services,
+    row,
+    enums,
+    public_layouts,
+    generator_inputs,
+    context_offsets,
+):
     descriptor = {
         "formatVersion": 2,
         "overlay": {
             "id": OVERLAY_ID,
-            "base": OVERLAY_BASE,
+            "base": OVERLAY_LOAD_ADDRESS,
+            "abiBase": OVERLAY_BASE,
             "end": OVERLAY_END,
-            "capacity": OVERLAY_END - OVERLAY_BASE,
+            "capacity": OVERLAY_END - OVERLAY_LOAD_ADDRESS,
             "fileSize": len(image),
             "bssSize": row[3],
             "sha256": hashlib.sha256(image).hexdigest(),
@@ -324,13 +408,13 @@ def write_descriptor(path, image, symbols, debug, services, row, enums):
         },
         "compatibility": {
             "address": COMPAT_ADDRESS,
-            "version": 1,
+            "version": 3,
             "size": 32,
             "callbacks": {
-                name: symbols[symbol]["address"] | 1
+                name: 0 if symbol is None else symbols[symbol]["address"] | 1
                 for name, symbol in zip(
-                    ("bind", "update", "unbind", "advanceFieldEpoch",
-                     "recordTrace", "getFieldEpoch"), COMPAT_CALLBACKS)
+                    ("bind", "update", "unbind", "transition",
+                     "recordTrace", "getContext"), COMPAT_CALLBACKS)
             },
         },
         "debugLayout": {
@@ -343,7 +427,9 @@ def write_descriptor(path, image, symbols, debug, services, row, enums):
             "size": symbols[STATE_SYMBOL]["size"],
             "capacity": debug[26],
             "actorStride": debug[27],
+            "actorPolicyOffset": debug[27] - 32,
             "offsets": {
+                **context_offsets,
                 "fieldEpoch": debug[18],
                 "actors": debug[19],
                 "traceHeader": debug[20],
@@ -372,8 +458,10 @@ def write_descriptor(path, image, symbols, debug, services, row, enums):
             "motionPlan": 40,
             "motionState": 52,
             "motionSample": 36,
+            "actorPolicyState": 32,
         },
-        "publicLayouts": PUBLIC_LAYOUTS,
+        "publicLayouts": public_layouts,
+        "generatorInputs": generator_inputs,
         "privateServices": services,
         "enums": enums,
     }
@@ -403,7 +491,27 @@ def main():
         args.resolver_header,
         args.motion_header,
     ))
-    write_descriptor(args.output, image, symbols, debug, services, row, enums)
+    public_layouts = parse_public_layouts(args.header)
+    generator_inputs = {
+        "generator": input_record(os.path.abspath(__file__)),
+        "linked": input_record(args.linked),
+        "header": input_record(args.header),
+        "internalHeader": input_record(args.internal_header),
+        "resolverHeader": input_record(args.resolver_header),
+        "motionHeader": input_record(args.motion_header),
+    }
+    write_descriptor(
+        args.output,
+        image,
+        symbols,
+        debug,
+        services,
+        row,
+        enums,
+        public_layouts,
+        generator_inputs,
+        parse_context_offsets(args.internal_header),
+    )
     print(
         "overlay 158 actor ABI gate: "
         f"entry=0x{ENTRY_ADDRESS:08X} state=0x{STATE_ADDRESS:08X} "

@@ -60,8 +60,9 @@ Use frames directly:
 - `walkTravelTime`: `1..32`; larger is slower.
 - `fastestWalkTravelTime`: `1..32`; clamp it to be no slower than the base, so `fastestWalkTravelTime <= walkTravelTime`.
 - Keep `tilesToAccelerate`.
-- Add `walkAccelerationStep`: the number of frames removed after each completed acceleration interval.
-- Update with `currentTime = max(fastestWalkTravelTime, currentTime - walkAccelerationStep)`.
+- Add `walkAccelerationStep`: zero disables acceleration, values 1 through 32
+  remove that many frames after each interval, and value 33 is shown as `/2`
+  and preserves the prior half-time rule.
 - Migrate existing tiers as `1 -> 16`, `2 -> 8`, `3 -> 4`, `4 -> 2`.
 - Treat a stomp threshold as frame time: `0` disables it; otherwise stomp when `currentTime <= threshold`.
 

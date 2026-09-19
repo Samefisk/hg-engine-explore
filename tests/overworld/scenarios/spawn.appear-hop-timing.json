@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "id": "spawn.appear-hop-timing",
+  "title": "Appear Hop returns control when its final restore completes",
+  "status": "active",
+  "capabilities": [
+    "spawn",
+    "hop"
+  ],
+  "proofLevel": "S4",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "TICKETS.md#TKT-0003",
+    "actor": "One prepared WILD Clefairy (35), created by the native finalizer and bound by its full current handle with attached presentation.",
+    "trigger": "Spawn Clefairy at Route 29 (587,406) with its resolved APPEAR_HOP startup and keep input neutral.",
+    "observable": "The same actor runs jump, delay and final restore in order, draws one same-tile vertical arc, and changes from EMOTING to CHILL on the first completed frame after restore. No fixed timer tail remains.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Teleport to the loaded Route 29 test area, use the native prepared Wild spawn command for Clefairy at (587,406), then bind its exact finalized actor identity. Prepared setup gives no natural population-spawn claim."
+      }
+    ],
+    "limits": [
+      "This proves the shared APPEAR_HOP startup for one prepared Wild Clefairy. It does not prove natural population selection or other spawn locomotion modes.",
+      "The observation is limited to 30 completed game frames. Missing identity, presentation, command order, vertical arc, contiguous frames, or first-frame control return fails."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "clefairy",
+      "species": 35,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Create and bind the exact finalized Clefairy at its APPEAR_HOP startup."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Retain each completed frame through jump, delay, restore, and immediate CHILL control return."
+    }
+  ],
+  "stop": {
+    "frameBudget": 30,
+    "condition": "The same Clefairy returns control on the first completed frame after restore, or an exact failure ends the job."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "The finalized startup resolves APPEAR_HOP locomotion for the bound Clefairy.",
+      "The visible actor completes one same-tile vertical Hop.",
+      "Jump, delay, restore, and idle commands occur in order on contiguous completed frames.",
+      "Controller state returns to CHILL on the first completed idle frame after restore."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "spawn.appear-hop-timing",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "rendered-motion",
+      "frame-pacing",
+      "control-release"
+    ],
+    "minimumFrames": 14
+  }
+}

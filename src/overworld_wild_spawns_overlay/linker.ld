@@ -6,6 +6,22 @@ MEMORY {
         ewram   : ORIGIN = 0x023CCFD8, LENGTH = 0xB028
 }
 
+OverworldWalk_ClampTime = 0x023BF488 | 1;
+OverworldWalk_DirectionKey = 0x023BF586 | 1;
+OverworldWalk_DeltaX = 0x023BF59C | 1;
+OverworldWalk_DeltaY = 0x023BF5BE | 1;
+OverworldWalk_DirectionFromDelta = 0x023BF68C | 1;
+OverworldWalk_DiagonalFacing = 0x023BF74E | 1;
+OverworldWildSpawns_SelectMovementLocomotion = 0x023B6BB8 | 1;
+OverworldWildSpawns_SelectMovementTarget = 0x023B6BCC | 1;
+OverworldWildSpawns_AcknowledgeSharedMotion = 0x023BD3C4 | 1;
+OverworldWildSpawns_MovementDirectionDeltaX = 0x023BF59C | 1;
+OverworldWildSpawns_MovementDirectionDeltaY = 0x023BF5BE | 1;
+OverworldWildOccupancy_Query = 0x023C0184 | 1;
+OverworldWildSpawnGuard_Read = 0x023C025C | 1;
+OverworldWildSpawnGuard_IsNearActiveSpawn = 0x023C034C | 1;
+OverworldWildSpawnGuard_IsSurfBehavior = 0x023C03D0 | 1;
+
 SECTIONS {
         .text : {
 
@@ -18,6 +34,10 @@ SECTIONS {
                     "overworld wild spawns prefix exceeds field-overlay gap");
                 . = 0x28;
                 KEEP(*(.overworld_wild_spawns_entry))
+                __native_shadow_value_start = .;
+                KEEP(*(.overworld_wild_native_shadow_value))
+                ASSERT(ABSOLUTE(__native_shadow_value_start) == 0x023CD028,
+                    "native-shadow value callback moved");
                 . = ALIGN(4);
                 *(.init)
                 *(.text)

@@ -1,23 +1,86 @@
 {
   "schemaVersion": 1,
   "id": "hop.cardinal-and-diagonal",
-  "title": "Hop plans cardinal and nearest diagonal candidates",
-  "status": "planned",
+  "title": "Hop chooses the nearest valid diagonal landing",
+  "status": "active",
   "capabilities": ["hop"],
   "proofLevel": "S3",
   "costTier": 3,
-  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
-  "events": [
-    {"at": 0, "kind": "input", "value": "Request a clear cardinal Hop"},
-    {"at": 1, "kind": "setup", "value": "Block the straight landing but leave ordered near-diagonal landings"},
-    {"at": 2, "kind": "input", "value": "Request the same cardinal Hop"}
-  ],
-  "stop": {"frameBudget": 1600, "condition": "Both Hop decisions return terminal results"},
-  "expect": {
-    "requiredEvents": ["PLAN_ACCEPTED", "MOTION_STARTED", "PATH_ADVANCED", "LOGICAL_COMMIT"],
-    "forbiddenEvents": [],
-    "invariants": ["A clear cardinal candidate is preferred", "Fallback candidates are ordered by distance from the requested heading", "Each Hop has one terminal result"]
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/README.md#system-contracts",
+    "actor": "MOUNTED species 56 (mankey), acquired through mount; live handle and attached presentation required",
+    "trigger": "Prepare the retained map33 collision fixture; query every landing in the actual profile order; hold UP for one Hop",
+    "observable": "All straight landings are rejected, both a near and equal diagonal are valid, and the normal Hop lands on the first valid near target with its full arc and control return",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Disposable test.sav, checked teleport to Cherrygrove map67 (545,392), current party slot edit, mounted Mankey spawn, idle settle, then read-only native landing queries. Do not change collision, candidate state, Hop timing, motion state or input."
+      }
+    ],
+    "limits": [
+      "The prepared landing queries describe this retained collision fixture only.",
+      "Prepared own-party setup does not prove natural selection or population spawning.",
+      "Registration alone is not runtime acceptance; the checked shared test must pass on the current ROM."
+    ]
   },
-  "capture": "failure",
-  "adapter": null
+  "fixture": {
+    "rom": "test.nds",
+    "save": {"path": "test.sav", "kind": "sav"},
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {"at": 0, "kind": "input", "value": "Prepare and bind the current mounted Mankey at Cherrygrove map67 (545,392)"},
+    {"at": 1, "kind": "input", "value": "Query the current profile's UP candidates without advancing a frame"},
+    {"at": 2, "kind": "input", "value": "Hold UP for one normal Hop and sample elapsed zero through landing"}
+  ],
+  "stop": {
+    "frameBudget": 400,
+    "condition": "The measured Hop lands on the first valid near target and returns mounted control"
+  },
+  "expect": {
+    "requiredEvents": ["MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["MOTION_CANCELED"],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ],
+    "orderedEvents": [
+      {"id": "start", "event": "MOTION_STARTED", "reason": "OK", "valueA": {"equals": 2}},
+      {"id": "commit", "event": "LOGICAL_COMMIT", "reason": "OK", "valueB": {"equals": 2}},
+      {"id": "finish", "event": "MOTION_FINISHED", "reason": "OK", "valueB": {"equals": 2}},
+      {"id": "control", "event": "CONTROL_RETURNED", "reason": "OK"}
+    ],
+    "eventCounts": [
+      {"event": "MOTION_STARTED", "reason": "OK", "valueA": {"equals": 2}, "minimum": 1, "maximum": 1},
+      {"event": "LOGICAL_COMMIT", "reason": "OK", "valueB": {"equals": 2}, "minimum": 1, "maximum": 1},
+      {"event": "MOTION_FINISHED", "reason": "OK", "valueB": {"equals": 2}, "minimum": 1, "maximum": 1},
+      {"event": "CONTROL_RETURNED", "reason": "OK", "minimum": 1, "maximum": 1}
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "hop.cardinal-and-diagonal",
+    "claims": ["natural-input", "live-actor-identity", "rendered-motion", "control-release"],
+    "minimumFrames": 32
+  }
 }

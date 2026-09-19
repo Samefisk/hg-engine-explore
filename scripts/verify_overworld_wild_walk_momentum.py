@@ -4,19 +4,28 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
+import subprocess
 from pathlib import Path
+
+from verify_overworld_role_controller import packed_role_path_errors
 
 
 REPO = Path(__file__).resolve().parents[1]
 
 
 def function_body(source: str, name: str) -> str:
+    search_name = name.rstrip("(").rstrip()
     start = -1
     while True:
-        start = source.find(name, start + 1)
-        if start < 0:
+        match = re.search(
+            rf"\b{re.escape(search_name)}\s*\(",
+            source[start + 1:],
+        )
+        if match is None:
             raise ValueError(f"missing function body: {name}")
+        start += 1 + match.start()
         line_start = source.rfind("\n", 0, start) + 1
         declaration_prefix = source[line_start:start]
         if declaration_prefix and not any(
@@ -49,6 +58,166 @@ def reject(source: str, values: tuple[str, ...], label: str) -> None:
     found = [value for value in values if value in source]
     if found:
         raise SystemExit(f"{label} still contains: {', '.join(found)}")
+
+
+def delta_linker_errors(source: str) -> list[str]:
+    """Accept exact placement, not one GNU ld spelling of a Thumb symbol."""
+    clean = re.sub(r"/\*.*?\*/|//[^\n]*", "", source, flags=re.DOTALL)
+    errors = []
+    for axis, start, end in (("x", "119C", "11BE"), ("y", "11BE", "11E2")):
+        name = f"OverworldWalk_Delta{axis.upper()}"
+        placement = re.search(
+            rf"\.\s*=\s*ORIGIN\(rom\)\s*\+\s*0x{start}\s*;\s*"
+            rf"KEEP\(\*\(\.overworld_walk_delta_{axis}\)\)", clean,
+        )
+        if placement is None:
+            errors.append(f"{name}: exact section placement missing")
+            continue
+        tail = clean[placement.end():]
+        next_placement = re.search(r"\.\s*=\s*ORIGIN\(rom\)", tail)
+        block = tail[:next_placement.start()] if next_placement else tail
+        exact = re.search(rf"ASSERT\(\s*{name}\s*==\s*ORIGIN\(rom\)\s*\+\s*0x{start}\s*,", block)
+        thumb = re.search(rf"ASSERT\(\s*DEFINED\({name}\)\s*&&\s*\({name}\s*&\s*1\)\s*==\s*1\s*,", block)
+        bound = re.search(rf"ASSERT\(\s*\.\s*<=\s*ORIGIN\(rom\)\s*\+\s*0x{end}\s*,", block)
+        if not (exact or thumb) or bound is None:
+            errors.append(f"{name}: symbol/Thumb or end-of-slot guard missing")
+    return errors
+
+
+def verify_delta_linker_and_controls(source: str) -> None:
+    errors = delta_linker_errors(source)
+    if errors:
+        raise SystemExit("fixed direct Walk helper linker ABI: " + "; ".join(errors))
+    equivalent = source
+    for axis, start in (("X", "119C"), ("Y", "11BE")):
+        equivalent = equivalent.replace(
+            f"DEFINED(OverworldWalk_Delta{axis}) && (OverworldWalk_Delta{axis} & 1) == 1",
+            f"OverworldWalk_Delta{axis} == ORIGIN(rom) + 0x{start}")
+    if delta_linker_errors(equivalent):
+        raise SystemExit("Delta linker guard rejected equivalent exact-address assertions")
+    mutations = {
+        "moved entry": source.replace(". = ORIGIN(rom) + 0x119C;", ". = ORIGIN(rom) + 0x119E;", 1),
+        "wrong section": source.replace("KEEP(*(.overworld_walk_delta_y))", "KEEP(*(.not_walk_delta_y))", 1),
+        "missing symbol": source.replace("DEFINED(OverworldWalk_DeltaX)", "DEFINED(NotDeltaX)", 1),
+        "wrong mode": source.replace("(OverworldWalk_DeltaY & 1) == 1", "(OverworldWalk_DeltaY & 1) == 0", 1),
+        "overlapping slot": source.replace('ASSERT(. <= ORIGIN(rom) + 0x11BE,', 'ASSERT(. <= ORIGIN(rom) + 0x11C0,', 1),
+    }
+    for label, changed in mutations.items():
+        if changed == source or not delta_linker_errors(changed):
+            raise SystemExit(f"Delta linker negative control did not reject {label}")
+
+
+def verify_linked_delta_entries(path: Path) -> None:
+    """S2 check: raw ELF function values retain their Thumb bit, including ABS."""
+    command = os.environ.get("ARM_NONE_EABI_READELF", "arm-none-eabi-readelf")
+    result = subprocess.run([command, "-sW", str(path)], check=True, capture_output=True, text=True)
+    entries = {}
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if len(parts) >= 8 and parts[3] == "FUNC" and parts[-1] in ("OverworldWalk_DeltaX", "OverworldWalk_DeltaY"):
+            entries[parts[-1]] = (int(parts[1], 16), int(parts[2]))
+    for name, address, maximum in (("OverworldWalk_DeltaX", 0x023BF59D, 34),
+                                   ("OverworldWalk_DeltaY", 0x023BF5BF, 36)):
+        actual = entries.get(name)
+        if actual is None or actual[0] != address or not 0 < actual[1] <= maximum:
+            raise SystemExit(f"linked {name} ABI changed: {actual}, expected Thumb entry {address:#x}, size<= {maximum}")
+    print("linked DeltaX/DeltaY exact Thumb entry checks passed")
+
+
+def actor_chain_receipt_errors(actor_source: str, runtime_source: str) -> list[str]:
+    """A chain receipt belongs to acknowledged normal actor motion, not Walk."""
+    try:
+        body = function_body(actor_source, "ActorSystem_TryAcknowledgeMotionCommit")
+        commit = function_body(runtime_source, "OverworldActorWalkPolicy_ReduceCommit")
+    except ValueError as error:
+        return [str(error)]
+    body = re.sub(r"/\*.*?\*/|//[^\n]*", "", body, flags=re.DOTALL)
+    clean = re.sub(r"\s+", "", body)
+    receipt = "policy->pendingStep=OVERWORLD_ACTOR_WALK_PENDING_CHAIN;"
+    guard = (
+        "if(motion->plan.commitPolicy==OVERWORLD_MOTION_COMMIT_NORMAL"
+        "&&actor->role!=OVERWORLD_ACTOR_ROLE_MOUNTED"
+        "&&policy->pendingStep==OVERWORLD_ACTOR_WALK_PENDING_NONE"
+        "&&(walkPolicy==NULL||(walkPolicy->stepFlags&OVERWORLD_ACTOR_WALK_STEP_SKID)==0)){"
+        + receipt + "}"
+    )
+    ordered = (
+        "walkPolicy->operation!=OVERWORLD_ACTOR_WALK_POLICY_COMMIT",
+        "->reduceWalk(walkPolicy)",
+        "if(walkPolicy->decision!=OVERWORLD_ACTOR_WALK_POLICY_CONSUMED"
+        "&&walkPolicy->decision!=OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP){returnOVERWORLD_MOTION_DECISION_PROFILE;}",
+        "decision=OverworldMotion_AcknowledgeCommit(motion,fieldEpoch);",
+        "if(decision!=OVERWORLD_MOTION_DECISION_ACCEPTED){returndecision;}",
+        guard,
+        "actor->commitSequence++;",
+    )
+    positions = [clean.find(value) for value in ordered]
+    errors = []
+    if any(position < 0 for position in positions) or positions != sorted(positions):
+        errors.append("actor chain receipt lacks ordered policy/acknowledgement/normal-role-skid guards")
+    if clean.count(receipt) != 1:
+        errors.append("actor acknowledgement must issue one guarded chain receipt")
+    if "OVERWORLD_ACTOR_WALK_PENDING_CHAIN" in commit:
+        errors.append("Walk reducer duplicates actor-owned chain receipt")
+    return errors
+
+
+def verify_actor_chain_receipt(actor_source: str, runtime_source: str) -> None:
+    errors = actor_chain_receipt_errors(actor_source, runtime_source)
+    if errors:
+        raise SystemExit("actor chain receipt contract: " + "; ".join(errors))
+    body = function_body(actor_source, "ActorSystem_TryAcknowledgeMotionCommit")
+    # Bounded copied function fixtures avoid coupling controls to unrelated code.
+    actor = "void ActorSystem_TryAcknowledgeMotionCommit(void) {" + body + "}"
+    mutations = {
+        "mounted chain enabled": actor.replace("actor->role != OVERWORLD_ACTOR_ROLE_MOUNTED", "actor->role == OVERWORLD_ACTOR_ROLE_MOUNTED", 1),
+        "skid counts as chain": actor.replace("OVERWORLD_ACTOR_WALK_STEP_SKID) == 0", "OVERWORLD_ACTOR_WALK_STEP_SKID) != 0", 1),
+        "no-chain motion counts": actor.replace("motion->plan.commitPolicy == OVERWORLD_MOTION_COMMIT_NORMAL", "motion->plan.commitPolicy != OVERWORLD_MOTION_COMMIT_NORMAL", 1),
+        "failed acknowledgement counts": actor.replace("decision != OVERWORLD_MOTION_DECISION_ACCEPTED", "decision == OVERWORLD_MOTION_DECISION_ACCEPTED", 1),
+        "wrong terminal operation": actor.replace("walkPolicy->operation != OVERWORLD_ACTOR_WALK_POLICY_COMMIT", "walkPolicy->operation != OVERWORLD_ACTOR_WALK_POLICY_INPUT", 1),
+        "premature receipt": actor.replace("decision = OverworldMotion_AcknowledgeCommit(motion, fieldEpoch);", "policy->pendingStep = OVERWORLD_ACTOR_WALK_PENDING_CHAIN;\n    decision = OverworldMotion_AcknowledgeCommit(motion, fieldEpoch);", 1),
+        "duplicate receipt": actor.replace("actor->commitSequence++;", "policy->pendingStep = OVERWORLD_ACTOR_WALK_PENDING_CHAIN;\n    actor->commitSequence++;", 1),
+        "plan-local counter resets actor lifetime": actor.replace("actor->commitSequence++;", "actor->commitSequence = motion->commitSequence;", 1),
+    }
+    for label, changed in mutations.items():
+        if changed == actor or not actor_chain_receipt_errors(changed, runtime_source):
+            raise SystemExit(f"actor chain receipt negative control did not reject {label}")
+    changed_runtime = runtime_source.replace(
+        function_body(runtime_source, "OverworldActorWalkPolicy_ReduceCommit"),
+        "policy->pendingStep = OVERWORLD_ACTOR_WALK_PENDING_CHAIN;", 1)
+    if not actor_chain_receipt_errors(actor, changed_runtime):
+        raise SystemExit("actor chain receipt negative control accepted duplicate Walk owner")
+    print("actor-owned chain receipt checks passed; 9 known-bad copies rejected")
+
+
+def chain_trace_errors(runtime: str) -> list[str]:
+    try:
+        chain = function_body(runtime, "OverworldActorWalkPolicy_ReduceChain")
+        publish = function_body(runtime, "OverworldActorWalkPolicy_PublishEffect")
+    except ValueError as error:
+        return [str(error)]
+    clean = lambda value: re.sub(r"\s+", "", re.sub(r"/\*.*?\*/|//[^\n]*", "", value, flags=re.DOTALL))
+    expected_call = "OverworldActorWalkPolicy_PublishEffect(actor,actor->commitSequence,pauseAction)"
+    expected_publish = ("returnOVERWORLD_ACTOR_SYSTEM_COMPAT_ENTRY->recordTrace("
+                        "&actor->handle,OVERWORLD_ACTOR_EVENT_WORLD_EFFECT,"
+                        "OVERWORLD_ACTOR_REASON_OK,effect,sequence)==OVERWORLD_ACTOR_RESULT_OK;")
+    if clean(chain).count(expected_call) != 1 or clean(publish) != expected_publish:
+        return ["chain terminal does not publish its actor/commit/action through the trace helper"]
+    return []
+
+
+def verify_chain_trace(runtime: str) -> None:
+    errors = chain_trace_errors(runtime)
+    if errors:
+        raise SystemExit("chain trace routing: " + "; ".join(errors))
+    mutations = {
+        "swapped trace values": runtime.replace("actor, actor->commitSequence, pauseAction);", "actor, pauseAction, actor->commitSequence);", 1),
+        "wrong trace helper": runtime.replace("(void)OverworldActorWalkPolicy_PublishEffect(", "(void)Unrelated_PublishEffect(", 1),
+        "wrong trace event": runtime.replace("OVERWORLD_ACTOR_EVENT_WORLD_EFFECT,", "OVERWORLD_ACTOR_EVENT_LOGICAL_COMMIT,", 1),
+    }
+    for label, changed in mutations.items():
+        if changed == runtime or not chain_trace_errors(changed):
+            raise SystemExit(f"chain trace negative control did not reject {label}")
 
 
 def main() -> int:
@@ -96,6 +265,10 @@ def main() -> int:
         type=Path,
         default=REPO / "src/overworld_mount_overlay/overworld_mount_overlay.c",
     )
+    parser.add_argument(
+        "--linked-walk-module", type=Path,
+        help="also verify the linked ELF DeltaX/DeltaY Thumb addresses and slot sizes",
+    )
     args = parser.parse_args()
 
     source = args.source.read_text()
@@ -105,101 +278,119 @@ def main() -> int:
     direction_policy = args.direction_policy_header.read_text()
     module = args.walk_module_source.read_text()
     module_header = args.walk_module_header.read_text()
+    module_linker = (
+        REPO / "src/pokemon_move_history_overlay/linker.ld"
+    ).read_text()
+    behavior_header = (REPO / "include/overworld_wild_behavior_data.h").read_text()
+    helper_header = (REPO / "include/overworld_wild_helper.h").read_text()
+    metadata_generator = (
+        REPO / "scripts/build_overworld_wild_spawn_metadata.py"
+    ).read_text()
     mount_source = args.mount_source.read_text()
+    actor_source = (REPO / "src/overworld_actor_system_overlay/overworld_actor_system_overlay.c").read_text()
 
-    require(
-        module_header,
-        (
-            "#define OVERWORLD_WALK_WILD_POLICY_MODULE_ENTRY_ADDR 0x023BF474",
-            "typedef struct OverworldWalkWildPolicyModuleEntry",
-            "OverworldWalkWildPolicyModuleEntrySizeMustRemain20Bytes",
-            "resolvePrimitives",
-            "groupFlagsForTypes",
-            "selectConditionalOverrideMask",
-        ),
-        "resident wild policy ABI",
-    )
-    require(
-        module,
-        (
-            "Walk_WildResolvePrimitives(",
-            "PokemonMoveHistory_OverlayMemset(",
-            "Walk_WildGroupFlagsForTypes(",
-            "Walk_WildSelectConditionalOverrideMask(",
-            "gOverworldWalkWildPolicyModuleEntry",
-        ),
-        "resident wild policy implementation",
-    )
-    primitive_resolver = function_body(module, "Walk_WildResolvePrimitives")
-    require(
-        primitive_resolver,
-        (
-            "PokemonMoveHistory_OverlayMemset(",
-            "sizeof(*primitives)",
-        ),
-        "resident wild primitive initialization",
-    )
     reject(
-        primitive_resolver,
-        ("(OverworldWildBehaviorPrimitives){0}", "memset("),
-        "unsafe cross-overlay resident memset call",
+        module_header + module + source,
+        (
+            "OVERWORLD_WALK_WILD_POLICY_MODULE_ENTRY",
+            "OverworldWalkWildPolicyModuleEntry",
+            "Walk_WildResolvePrimitives",
+            "Walk_WildGroupFlagsForTypes",
+            "Walk_WildSelectConditionalOverrideMask",
+            "gOverworldWalkWildPolicyModuleEntry",
+            "0x023BF474",
+        ),
+        "retired resident wild-policy ABI",
     )
     require(
         source,
         (
-            "OVERWORLD_WALK_WILD_POLICY_MODULE_ENTRY->groupFlagsForTypes(",
-            "->selectConditionalOverrideMask(",
+            "OverworldWildBehaviorPrimitives primitives;",
+            "cache->primitives = *primitives;",
+            "primitives = cache->primitives;",
+            "primitives = resolution.primitives;",
+            "behaviorContext.groupFlags = metadata.groupFlags;",
+            "prepared->behaviorResolution.primitives",
         ),
-        "overlay149 resident policy routing",
+        "canonical resolved primitive and group metadata routing",
     )
-    if (
-        "OVERWORLD_WALK_WILD_POLICY_MODULE_ENTRY->resolvePrimitives(" not in source
-        and not (
-            '"1: .word 0x023BF474\\n"' in source
-            and '"ldr r2, [r2, #8]\\n"' in source
-        )
-    ):
-        raise SystemExit("overlay149 primitive-resolution ABI routing is missing")
-
-    entry = re.search(
-        r"typedef struct OverworldWalkModuleEntry \{(?P<body>.*?)"
-        r"\} OverworldWalkModuleEntry;",
-        module_header,
-        re.DOTALL,
+    require(
+        behavior_header + helper_header + metadata_generator,
+        (
+            "#define OVERWORLD_WILD_SPAWN_METADATA_VERSION 3",
+            "u32 groupFlags;",
+            "OWSM_VERSION = 3",
+            "OWSM_RECORD_SIZE = 12",
+            "OWSM_EXCEPTION_SIZE = 16",
+            "group_flags=group_flags",
+        ),
+        "generated subject-group metadata contract",
     )
-    entry_fields = (
-        "clampTime",
-        "accelerateTime",
-        "skidTiles",
-        "skidTime",
-        "stompApplies",
-        "directionFromKeys",
-        "directionKey",
-        "deltaX",
-        "deltaY",
-        "isFortyFiveDegreeTurn",
-        "resolveMountedDiagonal",
-        "strictDiagonalAllowed",
-        "diagonalFacing",
-        "directionFromDelta",
-    )
-    entry_positions = [] if entry is None else [
-        entry.group("body").find(field) for field in entry_fields
-    ]
-    if entry is None or any(position < 0 for position in entry_positions) \
-            or entry_positions != sorted(entry_positions):
-        raise SystemExit("fixed 0x40 Walk entry field order changed")
     require(
         module_header,
         (
-            "OVERWORLD_WALK_MODULE_ENTRY_ADDR 0x023BF400",
-            "OVERWORLD_WALK_PROFILE_MODULE_ENTRY_ADDR 0x023BF440",
-            "OVERWORLD_WALK_MOUNT_MODULE_ENTRY_ADDR 0x023BF458",
-            "OVERWORLD_WALK_FACE_MODULE_ENTRY_ADDR 0x023BF468",
-            "OverworldWalkModuleEntrySizeMustRemain64Bytes",
+            "OVERWORLD_WALK_DECELERATE_TIME_ADDR 0x023BF400",
+            "OVERWORLD_WALK_PROPOSE_STEP_ADDR 0x023BF45C",
+            "OVERWORLD_WALK_CLAMP_TIME_ADDR 0x023BF488",
+            "OVERWORLD_WALK_ACCELERATE_TIME_ADDR 0x023BF49E",
+            "OVERWORLD_WALK_SKID_TILES_ADDR 0x023BF4D6",
+            "OVERWORLD_WALK_SKID_TIME_ADDR 0x023BF4F0",
+            "OVERWORLD_WALK_STOMP_APPLIES_ADDR 0x023BF504",
+            "OVERWORLD_WALK_DIRECTION_FROM_KEYS_ADDR 0x023BF534",
+            "OVERWORLD_WALK_DIRECTION_KEY_ADDR 0x023BF586",
+            "OVERWORLD_WALK_DELTA_X_ADDR 0x023BF59C",
+            "OVERWORLD_WALK_DELTA_Y_ADDR 0x023BF5BE",
+            "OVERWORLD_WALK_IS_FORTY_FIVE_DEGREE_TURN_ADDR 0x023BF5E2",
+            "OVERWORLD_WALK_DIRECTION_FROM_DELTA_ADDR 0x023BF68C",
+            "OVERWORLD_WALK_STRICT_DIAGONAL_ALLOWED_ADDR 0x023BF6CE",
+            "OVERWORLD_WALK_DIAGONAL_FACING_ADDR 0x023BF74E",
+            "OVERWORLD_WALK_RESOLVE_MOUNTED_DIAGONAL_ADDR 0x023BF780",
+            "OVERWORLD_WALK_START_MOUNTED_FLAT_ADDR 0x023BF840",
+            "OVERWORLD_WALK_FILTER_MOUNTED_INPUT_ADDR 0x023BF9A0",
         ),
-        "resident Walk service ABI",
+        "direct resident Walk helper ABI",
     )
+    reject(
+        module_header + module + source + runtime + mount_source,
+        (
+            "OVERWORLD_WALK_MODULE_ENTRY",
+            "OVERWORLD_WALK_MOUNT_MODULE_ENTRY",
+            "OverworldWalkModuleEntry",
+            "OverworldWalkMountModuleEntry",
+            "gOverworldWalkModuleEntry",
+            "gOverworldWalkProfileModuleEntry",
+            "gOverworldWalkMountModuleEntry",
+            "gOverworldWalkFaceModuleEntry",
+            "Walk_ApplyFacePlayerFacing",
+            "OverworldWalkMountCall",
+        ),
+        "retired Walk tables or duplicate face-player service",
+    )
+    require(
+        module_linker,
+        (
+            ". = ORIGIN(rom) + 0x1000;",
+            "KEEP(*(.overworld_walk_decelerate_time))",
+            "OverworldWalk_DecelerateTime == ORIGIN(rom) + 0x1000",
+            "KEEP(*(.overworld_walk_propose_step))",
+            "OverworldWalk_ProposeStep == ORIGIN(rom) + 0x105C",
+            "ASSERT(. <= ORIGIN(rom) + 0x1088",
+        ),
+        "reclaimed direct Walk deceleration helper slot",
+    )
+    require(
+        module_linker,
+        (
+            "OverworldWalk_ClampTime == ORIGIN(rom) + 0x1088",
+            "OverworldWalk_AccelerateTime == ORIGIN(rom) + 0x109E",
+            "OverworldWalk_SkidTiles == ORIGIN(rom) + 0x10D6",
+            "OverworldWalk_SkidTime == ORIGIN(rom) + 0x10F0",
+            "OverworldWalk_StompApplies == ORIGIN(rom) + 0x1104",
+            "OverworldWalk_DirectionKey == ORIGIN(rom) + 0x1186",
+        ),
+        "fixed direct Walk helper linker ABI",
+    )
+    verify_delta_linker_and_controls(module_linker)
 
     require(
         header,
@@ -207,8 +398,28 @@ def main() -> int:
             "#define OW_WILD_WALK_DIRECTION_NO_TURN_SKID_FLAG 0x80",
             "#define OW_WILD_WALK_TRAVEL_TIME_MIN 1",
             "#define OW_WILD_WALK_TRAVEL_TIME_MAX 32",
+            "OVERWORLD_ACTOR_WALK_POLICY_INPUT",
+            "OVERWORLD_ACTOR_WALK_POLICY_START_RESULT",
+            "OVERWORLD_ACTOR_WALK_POLICY_COMMIT",
+            "OVERWORLD_ACTOR_WALK_POLICY_CHAIN_COMMIT",
+            "OverworldActorWalkPolicyCallSizeMustRemain28Bytes",
         ),
-        "Walk frame-time range",
+        "typed Walk request ABI",
+    )
+    policy_call_initializer = function_body(
+        source,
+        "OverworldWildSpawns_InitPolicyCall",
+    )
+    require(
+        policy_call_initializer,
+        (
+            "memset(call, 0, sizeof(*call));",
+            "call->version = OVERWORLD_ACTOR_WALK_POLICY_VERSION;",
+            "call->size = sizeof(*call);",
+            "call->actorSlot = (u8)slot;",
+            "call->operation = operation;",
+        ),
+        "wild typed Walk request initialization",
     )
     clamp = function_body(timing_policy, "OverworldWalkTimingPolicy_Clamp")
     require(
@@ -226,10 +437,30 @@ def main() -> int:
     require(
         accelerate,
         (
+            "OVERWORLD_WALK_ACCELERATION_DIVIDE_BY_2",
+            "nextTravelTime = currentTravelTime;",
             "(currentTravelTime + 1u) / 2u",
+            "accelerationStep == 0",
+            "currentTravelTime > accelerationStep",
+            "currentTravelTime - accelerationStep",
             "nextTravelTime < fastestTravelTime",
         ),
-        "Walk half-step acceleration",
+        "Walk profile acceleration amount",
+    )
+    decelerate = function_body(
+        timing_policy,
+        "OverworldWalkTimingPolicy_Decelerate",
+    )
+    require(
+        decelerate,
+        (
+            "accelerationStep == 0",
+            "currentTravelTime + accelerationStep",
+            "OVERWORLD_WALK_ACCELERATION_DIVIDE_BY_2",
+            "while (nextTravelTime > currentTravelTime)",
+            "(nextTravelTime + 1u) / 2u",
+        ),
+        "Walk turn deceleration amount",
     )
     skid_tiles = function_body(
         timing_policy,
@@ -238,7 +469,7 @@ def main() -> int:
     require(
         skid_tiles,
         (
-            "travelTime >= 5",
+            "travelTime >= 7",
             "travelTime >= 3",
             "travelTime == 2 ? 2 : 4",
         ),
@@ -254,81 +485,135 @@ def main() -> int:
         "Walk skid frame time",
     )
 
-    start = function_body(runtime, "OverworldWildRuntime_WalkMomentumStart")
+    reducer = function_body(runtime, "OverworldActorWalkPolicy_Reduce(")
     require(
-        start,
+        reducer,
         (
-            "preventTurnSkid = (requestedDirection",
-            "~OW_WILD_WALK_DIRECTION_NO_TURN_SKID_FLAG",
-            "OVERWORLD_WALK_MODULE_ENTRY->isFortyFiveDegreeTurn(",
-            "OVERWORLD_WALK_MODULE_ENTRY->skidTiles(state->speed)",
-            "OVERWORLD_WALK_MODULE_ENTRY->skidTime(state->speed)",
+            "call->version != OVERWORLD_ACTOR_WALK_POLICY_VERSION",
+            "call->size != sizeof(*call)",
+            "call->actorSlot >= OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS",
+            "OverworldActorWalkPolicy_ReduceInput(policy, call);",
+            "OverworldActorWalkPolicy_ReduceStartResult(policy, call);",
+            "OverworldActorWalkPolicy_ReduceCommit(policy, call);",
+            "OverworldActorWalkPolicy_ReduceChain(policy, actor, call);",
         ),
-        "wild Walk turn and skid rules",
+        "typed Walk reducer dispatch",
+    )
+
+    walk_input = function_body(runtime, "OverworldActorWalkPolicy_ReduceInput")
+    require(
+        walk_input,
+        (
+            "OVERWORLD_ACTOR_WALK_POLICY_FLAG_SUPPRESS_TURN_SKID",
+            "OverworldWalk_IsFortyFiveDegreeTurn(",
+            "OverworldWalk_SkidTiles(state->speed)",
+            "OverworldWalk_SkidTime(state->speed)",
+            "OVERWORLD_ACTOR_WALK_STEP_STOP_SKID",
+            "OVERWORLD_ACTOR_WALK_STEP_RESET_ACCELERATION",
+            "OverworldWalk_DecelerateTime(",
+            "OverworldWalk_ProposeStep(",
+        ),
+        "typed Walk input transition",
     )
     reject(
-        start,
+        walk_input,
         (
             "requestedDirection &= 3",
             "requestedDirection & 3",
-            "requestedDirection < OW_WILD_WALK_DIRECTION_NO_TURN_SKID_FLAG",
             "state->speed--;",
             "state->speed++;",
             "1u <<",
         ),
-        "wild Walk direction or speed-tier handling",
+        "typed Walk input speed-tier handling",
     )
-    flag_strip = start.find("~OW_WILD_WALK_DIRECTION_NO_TURN_SKID_FLAG")
-    forty_five = start.find("isFortyFiveDegreeTurn(")
-    skid_branch = start.find("skidTiles =", forty_five)
-    if not (0 <= flag_strip < forty_five < skid_branch):
-        raise SystemExit(
-            "wild Walk must strip only the 0x80 flag, accept 45-degree turns, "
-            "then test 90-degree skids"
-        )
 
-    finish = function_body(runtime, "OverworldWildRuntime_WalkMomentumFinish")
+    start_result = function_body(
+        runtime,
+        "OverworldActorWalkPolicy_ReduceStartResult",
+    )
     require(
-        finish,
+        start_result,
         (
-            "completedDistance != 1",
-            "completedDirection != state->direction",
-            "state->tileCounter >= tilesToAccelerate",
-            "OVERWORLD_WALK_MODULE_ENTRY->accelerateTime(",
-            "fastestTravelTime",
+            "policy->pendingStep != OVERWORLD_ACTOR_WALK_PENDING_PROPOSAL",
+            "call->startResult != OVERWORLD_ACTOR_WALK_POLICY_START_ACCEPTED",
+            "call->effect = OVERWORLD_ACTOR_WORLD_EFFECT_CRASH",
+            "OverworldWalkDirectionPolicy_ApplyStartResult(",
+            "policy->pendingStep = OVERWORLD_ACTOR_WALK_PENDING_ACTIVE",
+            "call->reserved[0]",
         ),
-        "wild Walk completion and acceleration",
+        "typed Walk engine START_RESULT transition",
     )
-    reject(
-        finish,
-        ("state->speed--;", "state->speed++;", "1u <<"),
-        "wild Walk completion speed-tier handling",
+    mounted_start_result = function_body(
+        actor_source,
+        "ActorSystem_FinishMountedWalk",
+    )
+    require(
+        mounted_start_result + mount_source,
+        (
+            "OVERWORLD_MOUNT_WALK_NOMINAL_TIME_INDEX",
+            "= call->reserved[0]",
+            "output->reserved[0] = state->reservedPolicyProfile[",
+        ),
+        "mounted turn keeps nominal deceleration through START_RESULT",
     )
 
-    chain_pause = function_body(
-        mount_source,
-        "OverworldWildMovementPolicy_PrepareChainPause",
+    commit = function_body(runtime, "OverworldActorWalkPolicy_ReduceCommit")
+    require(
+        commit,
+        (
+            "policy->pendingStep != OVERWORLD_ACTOR_WALK_PENDING_ACTIVE",
+            "call->distance != 1",
+            "call->direction != state->direction",
+            "OverworldWalk_StompApplies(",
+            "state->tileCounter >= call->lane->tilesToAccelerate",
+            "OverworldWalk_AccelerateTime(",
+            "call->lane->walkAccelerationStep",
+        ),
+        "typed Walk terminal COMMIT transition",
     )
+    verify_actor_chain_receipt(actor_source, runtime)
+    reject(
+        commit,
+        ("state->speed--;", "state->speed++;", "1u <<"),
+        "typed Walk completion speed-tier handling",
+    )
+
+    chain_pause = function_body(runtime, "OverworldActorWalkPolicy_ReduceChain")
     require(
         chain_pause,
         (
             "pauseAction == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE",
-            "*deferredPauseTicks = 0;",
-            "goto chain_disabled;",
-            "chain_disabled:",
-            "*stepsRemaining = 0;",
-            "*deferredPauseAction = 0;",
+            "policy->pendingStep != OVERWORLD_ACTOR_WALK_PENDING_CHAIN",
+            "OVERWORLD_ACTOR_WALK_POLICY_FLAG_CHAIN_ENABLED",
+            "policy->chainStepsRemaining = 0;",
+            "policy->deferredChainPauseAction = 0;",
+            "call->chainAction = pauseAction;",
+            "actor->commitSequence",
+            "pauseAction",
+            "call->decision = OVERWORLD_ACTOR_WALK_POLICY_CONSUMED;",
         ),
-        "disabled chain-pause cleanup",
+        "typed Walk chain eligibility and action",
     )
-    if chain_pause.find(
-        "pauseAction == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE"
-    ) < chain_pause.find(
-        "OverworldWildMovementPolicy_RecordCompletedWalkTile("
-    ):
-        raise SystemExit(
-            "completed Walk counting must precede chain-pause disable"
-        )
+    verify_chain_trace(runtime)
+
+    mount_commit = function_body(mount_source, "OverworldMount_ApplyWalkPolicy")
+    require(
+        mount_commit,
+        (
+            "->finishMountedWalk(",
+            "OverworldMount_ApplyWalkPolicyOutput(",
+            "output.decision != OVERWORLD_ACTOR_WALK_POLICY_IGNORED",
+        ),
+        "mounted actor-owned Walk START_RESULT",
+    )
+    reject(
+        mount_commit,
+        (
+            "OVERWORLD_ACTOR_WALK_POLICY_FLAG_CHAIN_ENABLED",
+            "->reduceWalk(",
+        ),
+        "mounted policy ownership",
+    )
 
     direction_from_delta = function_body(
         direction_policy,
@@ -360,15 +645,20 @@ def main() -> int:
         ),
         "45-degree dot-product rule",
     )
-    strict_diagonal = function_body(module, "Walk_StrictDiagonalAllowed")
+    strict_diagonal = function_body(module, "Walk_DiagonalRejection")
     if strict_diagonal.count("Walk_CanCardinal(avatar,") != 2:
         raise SystemExit(
             "strict diagonal movement must clear both cardinal neighbor tiles"
         )
     require(
         strict_diagonal,
-        ("targetX", "targetY", "validateHopLanding("),
+        ("targetX", "targetY", "Walk_ValidateDiagonalLanding("),
         "strict diagonal destination validation",
+    )
+    require(
+        function_body(module, "Walk_ValidateDiagonalLanding"),
+        ("validateHopLanding(", "targetX", "targetY"),
+        "strict diagonal landing service",
     )
 
     planned = function_body(
@@ -378,12 +668,13 @@ def main() -> int:
     require(
         planned,
         (
-            "OVERWORLD_WALK_MODULE_ENTRY->directionFromDelta(",
+            "OverworldWalk_DirectionFromDelta(",
             "OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_CARDINAL(",
             "OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(",
             "distance = 1;",
             "OverworldWildSpawns_TryStartAcceleratedWalkStep(",
-            "state->movementStagedHopPending[slot] = TRUE;",
+            "state->movementStagedHopPending[slot] = pendingMarker",
+            ": flatWalk ? OW_WILD_SPAWNER_STAGED_WALK_PENDING",
         ),
         "wild flat Walk planning",
     )
@@ -399,16 +690,16 @@ def main() -> int:
 
     prepared = function_body(
         source,
-        "OverworldWildSpawns_StartPreparedCustomJumpCommand",
+        "OverworldWildSpawns_StartPreparedCustomJumpCommandTimed",
     )
     require(
         prepared,
         (
-            "frameCount = runtime->movementWalkMomentum[slot].speed;",
+            "frameCount = OverworldWalk_ClampTime(walkTime);",
             "runtime->movementCustomMotionModes[slot] = flatWalk",
             "OW_WILD_CUSTOM_MOTION_WALK",
             "movementCustomJumpArcHeightsQ4[slot] = !flatWalk",
-            "OVERWORLD_WALK_MODULE_ENTRY->diagonalFacing(",
+            "OverworldWalk_DiagonalFacing(",
             "runtime->movementCustomJumpPrepActive[slot] = !flatWalk;",
             "if (chainReposition && !repositionUsesArc)",
             "(object->flags & MAPOBJECTFLAG_UNK7) != 0",
@@ -423,7 +714,7 @@ def main() -> int:
 
     landing = function_body(
         source,
-        "OverworldWildSpawns_IsBehaviorAllowedHopLandingTile",
+        "OverworldWildSpawns_ClassifyBehaviorHopLandingTile",
     )
     require(
         landing,
@@ -437,52 +728,43 @@ def main() -> int:
         "wild strict diagonal clearance",
     )
 
-    reservation = function_body(
+    reject(
         source,
-        "OverworldWildSpawns_IsTileReservedByOtherWild",
+        ("OverworldWildSpawns_IsTileReservedByOtherWild",),
+        "wild private target-reservation owner",
     )
-    guard = reservation.find(
-        "movementPendingDirections[i]\n"
-        "                <= OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT"
+    require(
+        landing,
+        (
+            "OverworldWildSpawns_IsTileOccupiedOnSurface(",
+            "targetSurface.height",
+        ),
+        "wild physical-surface occupancy",
     )
-    delta = reservation.find("OverworldWildSpawns_MovementDirectionDeltaX(")
-    if guard < 0 or delta < 0 or guard > delta:
-        raise SystemExit(
-            "diagonal pending directions can reach a stock cardinal delta helper"
-        )
-
-    gate = function_body(source, "OverworldWildWalkMomentum_GateTurnSkid")
-    require(gate, ('"add r1, r1, #128\\n"',), "wild no-skid flag assembly")
-    reject(gate, ('"add r1, r1, #4\\n"',), "old diagonal/no-skid collision")
 
     start_step = function_body(source, "OverworldWildSpawns_StartMomentumWalkStep")
     require(
         start_step,
         (
-            "movementPreviousTileLocked[stepContext->slot] += skidStep;",
+            "OVERWORLD_ACTOR_WALK_STEP_SKID",
+            "OVERWORLD_ACTOR_WALK_STEP_VALIDATE",
             "OW_WILD_SPAWNER_CUSTOM_MOTION_WALK_FLAG",
-            "OVERWORLD_WALK_MODULE_ENTRY->deltaX(direction)",
-            "OVERWORLD_WALK_MODULE_ENTRY->deltaY(direction)",
+            "OverworldWalk_DeltaX(call->stepDirection)",
+            "OverworldWalk_DeltaY(call->stepDirection)",
             "OW_WILD_SPAWNER_WALK_STRICT_DIAGONAL_MARKER",
-            "direction <= OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT",
-            "validateStep = FALSE;",
-            "if (skidStep && validateStep)",
-            "OverworldWildSpawns_PlayMovementCrashFeedback(",
+            "call->stepDirection <= OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT",
+            "OverworldWildSpawns_StartPreparedCustomJumpCommandTimed(",
+            "call->travelTime",
+            "validated_step_blocked:",
+            "return FALSE;",
         ),
-        "wild skid history isolation",
+        "wild typed Walk engine adapter",
     )
-    if start_step.count("OverworldWildSpawns_PlayMovementCrashFeedback(") != 1:
-        raise SystemExit("a blocked skid must request crash feedback exactly once")
-    blocked_label = start_step.find("validated_step_blocked:")
-    feedback = start_step.find("OverworldWildSpawns_PlayMovementCrashFeedback(")
-    validation_complete = start_step.find("validateStep = FALSE;")
-    prepared_start = start_step.find(
-        "OverworldWildSpawns_StartPreparedCustomJumpCommand("
+    reject(
+        start_step,
+        ("OverworldWildSpawns_PlayMovementCrashFeedback(",),
+        "wild adapter-owned crash reduction",
     )
-    if not (0 <= validation_complete < prepared_start < blocked_label < feedback):
-        raise SystemExit(
-            "blocked skid feedback must only run for failed collision validation"
-        )
     crash_feedback = function_body(
         source,
         "OverworldWildSpawns_PlayMovementCrashFeedback",
@@ -496,14 +778,42 @@ def main() -> int:
         ),
         "authored blocked skid crash feedback",
     )
-    effect = function_body(source, "OverworldWildSpawns_ApplyWalkMomentumEffect")
+    effect = function_body(source, "OverworldWildSpawns_ApplyWalkPolicyOutput")
     require(
         effect,
         (
-            "movementPreviousTileLocked[stepContext->slot] = FALSE;",
+            "OVERWORLD_ACTOR_WALK_STEP_CLEAR_PRESENTATION",
+            "movementPreviousTileLocked[stepContext->slot] =",
             "movementLastDistances[stepContext->slot] = 0;",
+            "OVERWORLD_ACTOR_WORLD_EFFECT_SKID_DUST",
+            "OVERWORLD_ACTOR_WORLD_EFFECT_STOMP",
+            "OVERWORLD_ACTOR_WORLD_EFFECT_CRASH",
+            "call->effect = OVERWORLD_ACTOR_WORLD_EFFECT_NONE;",
         ),
-        "wild skid completion isolation",
+        "wild typed Walk effect publication",
+    )
+    execute = function_body(source, "OverworldWildSpawns_ExecuteWalkPolicy")
+    require(
+        source,
+        (
+            '".global OverworldWildSpawns_ReduceWalk\\n.thumb_func\\n"',
+            '"OverworldWildSpawns_ReduceWalk:\\n"',
+            '"ldr r3, [r3, #8]\\n"',
+            '"ldr r3, [r3, #12]\\n"',
+        ),
+        "wild resident Walk reducer wrapper",
+    )
+    require(
+        execute,
+        (
+            "call->decision != OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP",
+            "OverworldWildSpawns_StartMomentumWalkStep(stepContext, call)",
+            "call->operation = OVERWORLD_ACTOR_WALK_POLICY_START_RESULT;",
+            "OVERWORLD_ACTOR_WALK_POLICY_START_ACCEPTED",
+            "OVERWORLD_ACTOR_WALK_POLICY_START_BLOCKED",
+            "OverworldWildSpawns_ReduceWalk(call)",
+        ),
+        "wild INPUT to START_RESULT transaction",
     )
 
     accelerated = function_body(
@@ -513,12 +823,72 @@ def main() -> int:
     require(
         accelerated,
         (
-            "movementSpawnRunActive[stepContext->slot]",
-            "? OW_WILD_SPAWNER_SPOT_STATE_ACTIVE",
-            "direction | OW_WILD_WALK_DIRECTION_NO_TURN_SKID_FLAG",
-            "OverworldWildWalkMomentum_GateTurnSkid(",
+            "u8 roleFlags = OVERWORLD_ROLE_CONTROLLER_INPUT_CHAIN_ENABLED;",
+            "u8 spotState = stepContext->state->movementSpotStates[stepContext->slot];",
+            "OverworldWildSpawns_InitPolicyCall(\n"
+            "        &call,\n"
+            "        stepContext->slot,\n"
+            "        OVERWORLD_ACTOR_WALK_POLICY_INPUT);",
+            "call.flags = 0;",
+            "OVERWORLD_ROLE_CONTROLLER_INTENT_ENABLE_CHAIN",
+            "OVERWORLD_ROLE_CONTROLLER_INTENT_CRASH_ON_BLOCKED",
+            "OverworldWildSpawns_ReduceWalk(&call)",
+            "OverworldWildSpawns_ExecuteWalkPolicy(",
         ),
-        "spawn-run fixed momentum",
+        "wild typed Walk input",
+    )
+    reject(
+        accelerated,
+        (
+            "movementSpawnRunActive[stepContext->slot]",
+            "OVERWORLD_ACTOR_WALK_POLICY_FLAG_SUPPRESS_TURN_SKID",
+        ),
+        "move-from-off-screen Walk policy exception",
+    )
+    errors = packed_role_path_errors(
+        source, "OverworldWildSpawns_TryStartAcceleratedWalkStep", "WALK")
+    if errors:
+        raise SystemExit("wild typed Walk role request: " + "; ".join(errors))
+    finished_walk = function_body(
+        source,
+        "OverworldWildSpawns_HandleFinishedWalkMovement",
+    )
+    require(
+        finished_walk,
+        (
+            "OverworldWildSpawns_InitPolicyCall(\n"
+            "        &call,\n"
+            "        slot,\n"
+            "        OVERWORLD_ACTOR_WALK_POLICY_COMMIT);",
+            "call.flags = OVERWORLD_ACTOR_WALK_POLICY_FLAG_WALK_ACTIVE\n"
+            "        | OVERWORLD_ACTOR_WALK_POLICY_FLAG_CHAIN_ENABLED;",
+            "->terminalWalk(",
+            "OVERWORLD_ACTOR_BOUNDARY_REQUIRED_ACKS",
+            "OverworldWildSpawns_ExecuteWalkPolicy(&stepContext, &call)",
+        ),
+        "wild typed Walk terminal COMMIT",
+    )
+    reject(
+        finished_walk,
+        ("movementSpawnRunActive[slot]",),
+        "move-from-off-screen Walk COMMIT exception",
+    )
+    chain_commit = function_body(
+        source,
+        "OverworldWildSpawns_ApplyUniversalChainMovementPause",
+    )
+    require(
+        chain_commit,
+        (
+            "OverworldWildSpawns_InitPolicyCall(\n"
+            "        &call,\n"
+            "        slot,\n"
+            "        OVERWORLD_ACTOR_WALK_POLICY_CHAIN_COMMIT);",
+            "call.flags = OVERWORLD_ACTOR_WALK_POLICY_FLAG_CHAIN_ENABLED;",
+            "call.decision != OVERWORLD_ACTOR_WALK_POLICY_CONSUMED",
+            "OverworldWildSpawns_CommitDeferredChainMovementPause(",
+        ),
+        "wild typed chain COMMIT and public trace",
     )
     single_step = function_body(
         source,
@@ -528,40 +898,218 @@ def main() -> int:
         single_step,
         (
             "direction <= OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT",
-            "movementSpawnRunActive[stepContext->slot]",
+            "OverworldWildSpawns_GetCurrentMovementLocomotion(",
+            "== OW_WILD_BEHAVIOR_LOCOMOTION_WANDER",
             "OverworldWildSpawns_TryStartAcceleratedWalkStep(",
         ),
-        "spawn-run exact flat-motion route",
+        "profile Walk route",
     )
     reject(
         single_step,
-        ("if (!stepContext->state->movementSpawnRunActive",),
-        "spawn-run stock command bypass",
+        ("movementSpawnRunActive[stepContext->slot]",),
+        "spawn movement must not force Walk",
     )
-    spawn_finish = function_body(
+    spawn_step = function_body(
         source,
-        "OverworldWildSpawns_HandleFinishedSpawnRunMovementCommand",
+        "OverworldWildSpawns_UpdateSpawnMoveTargetState",
     )
     require(
-        spawn_finish,
+        spawn_step,
         (
-            "customWalkWasActive",
-            "movementCustomJumpTargetX[slot]",
-            "movementCustomJumpTargetY[slot]",
+            "movementSpawnRunActive[slot] != OW_WILD_SPAWN_ENTRY_MOVE",
+            "OverworldWildSpawns_ObjectCurrentX(object)",
+            "OverworldWildSpawns_ObjectCurrentY(object)",
+            "state->movementSpotStates[slot] = OW_WILD_SPAWNER_SPOT_STATE_CHILL;",
+            "OverworldWildSpawns_ClearSpawnRunState(state, slot);",
+            "OverworldWildSpawns_EnterActiveStateFromGenericAlert(state, slot, object);",
         ),
-        "spawn-run one-tile custom Walk completion",
+        "move-from-off-screen target lifecycle",
+    )
+    if spawn_step.count("OverworldWildSpawns_SetObjectLandingTile(") != 1:
+        raise SystemExit(
+            "move-from-off-screen route can snap to the destination before arrival"
+        )
+    reject(
+        spawn_step,
+        (
+            "OverworldWildSpawns_TryStartFrameDrivenActiveMovementCommand(",
+            "OverworldWildSpawns_TryStartDirectedBehaviorHopCommand(",
+            "OverworldWildSpawns_TryStartSpawnMoveTeleport(",
+            "OverworldWildSpawns_AppendFrameDrivenChaseFallbackDirections(",
+            "OverworldWildSpawns_TryStartSpawnerMovementCommand(",
+        ),
+        "separate move-from-off-screen movement driver",
+    )
+    reject(
+        source,
+        ("OverworldWildSpawns_TryStartSpawnRunStep",),
+        "dedicated move-from-off-screen scheduler",
+    )
+    active_chase = function_body(
+        source,
+        "OverworldWildSpawns_TryStartFrameDrivenActiveMovementCommand",
+    )
+    require(
+        active_chase,
+        (
+            "throwTarget = runtime->throwState.targets[slot];",
+            "movementTarget = state->movementSpawnRunActive[slot] == OW_WILD_SPAWN_ENTRY_MOVE",
+            "? OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER",
+            "? state->movementSpawnRunTargetX[slot]",
+            "? state->movementSpawnRunTargetY[slot]",
+            "OverworldWildSpawns_AppendFrameDrivenChaseFallbackDirections(",
+        ),
+        "move-from-off-screen fixed chase target",
+    )
+    reject(
+        active_chase,
+        (
+            "? OW_WILD_SPAWNER_THROW_TARGET_NONE",
+            "(!state->movementSpawnRunActive[slot]",
+        ),
+        "move-from-off-screen Active policy exception",
+    )
+    movement_command = function_body(
+        source,
+        "OverworldWildSpawns_TryStartSpawnerMovementCommand",
+    )
+    require(
+        movement_command,
+        ("avoidPreviousTile = OverworldWildSpawns_ShouldAvoidPreviousTileForActiveProfile(",),
+        "authored backtrack policy",
+    )
+    reject(
+        movement_command,
+        ("movementSpawnRunActive[slot]",),
+        "move-from-off-screen direction policy exception",
+    )
+    spawn_origin = function_body(
+        source,
+        "OverworldWildSpawns_TryPickSpawnRunStart",
+    )
+    require(
+        source + spawn_origin,
+        (
+            "#define OW_WILD_SPAWNER_SPAWN_HOP_DISTANCE 16",
+            "#define OW_WILD_SPAWNER_OFFSCREEN_SAFE_MARGIN_TILES 4",
+            "direction = OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_UP",
+            "triedDirections",
+            "int bestVisibleTravel = state != NULL ? -0x7FFFFFFF : 0;",
+            "OverworldWildSpawns_GetSpawnHopVisibleTravelScore(",
+            "minimumCandidateDistance = state == NULL",
+            "for (candidateDistance = OW_WILD_SPAWNER_SPAWN_HOP_DISTANCE;",
+            "* candidateDistance;",
+            "entryDistance >= OW_WILD_SPAWNER_SPAWN_HOP_DISTANCE",
+            "OverworldWildSpawns_Abs(candidateX - playerX)",
+            "+ OW_WILD_SPAWNER_OFFSCREEN_SAFE_MARGIN_TILES",
+            "OverworldWildSpawns_Abs(candidateY - playerY)",
+            "GetMetatileBehaviorAt(fieldSystem, candidateX, candidateY) == 0xFF",
+            "terrain == OW_WILD_SPAWN_TERRAIN_LAND",
+            "OverworldWildSpawns_IsWalkableLandTile(",
+            "OverworldWildSpawns_IsNearActiveSpawn(",
+        ),
+        "long bounded move-from-off-screen route",
+    )
+    reject(
+        source + spawn_origin,
+        (
+            "SPAWN_RUN_LEGACY_MIN_TRAVEL_TILES",
+            "SPAWN_RUN_START_ATTEMPTS",
+            "SPAWN_RUN_OFFSCREEN_MIN_DISTANCE",
+            "SPAWN_RUN_OFFSCREEN_MAX_DISTANCE",
+            "SPAWN_RUN_LATERAL_SPREAD",
+            "Preserve the old random sequence",
+        ),
+        "unused move-from-off-screen random origin path",
+    )
+    spawn_startup = function_body(source, "OverworldWildSpawns_PrepareSpawnStartup")
+    require(
+        spawn_startup,
+        (
+            "if (!OverworldWildSpawns_TryPickSpawnRunStart(",
+            "return FALSE;",
+            "startup->locomotion = OW_WILD_BEHAVIOR_LOCOMOTION_MOVE_FROM_OFF_SCREEN;",
+        ),
+        "Move From Off Screen must reject a spawn with no off-screen A tile",
+    )
+    spawn_finalize = function_body(
+        source,
+        "OverworldWildSpawns_FinalizePreparedSpawn",
+    )
+    require(
+        source + spawn_finalize,
+        (
+            "#define OW_WILD_SPAWN_STARTUP_PENDING 0xFE",
+            "pendingStage != OW_WILD_SPAWN_STARTUP_PENDING",
+            "pendingStage == OW_WILD_PROFILE_DESTINATION_SCAN_PENDING",
+            "OW_WILD_RUNTIME(state)->refillPositionChecksRemaining =\n"
+            "                OW_WILD_SPAWN_STARTUP_PENDING;",
+        ),
+        "destination and spawn-startup work split",
+    )
+    spawn_commit = function_body(
+        source,
+        "OverworldWildSpawns_CommitQueuedSpawn",
+    )
+    require(
+        spawn_commit,
+        (
+            "runtime->refillPositionChecksRemaining >= OW_WILD_SPAWN_STARTUP_PENDING",
+            "destinationFinished = TRUE;",
+        ),
+        "queued spawn-startup continuation",
+    )
+    reject(
+        source,
+        ("OverworldWildSpawns_HandleFinishedSpawnRunMovementCommand",),
+        "dedicated move-from-off-screen completion path",
     )
     spawn_start = function_body(source, "OverworldWildSpawns_SetSpawnRunState")
+    move_start = function_body(source, "OverworldWildSpawns_StartSpawnRun")
     spawn_clear = function_body(source, "OverworldWildSpawns_ClearSpawnRunState")
     require(
         spawn_start,
-        ("walkMomentumReset(", "movementWalkMomentum[slot]"),
-        "spawn-run fixed-speed start",
+        (
+            "state->movementSpawnRunTargetX[slot] = (s16)targetX;",
+            "state->movementSpawnRunTargetY[slot] = (s16)targetY;",
+            "state->movementSpawnRunActive[slot] = entryMode;",
+        ),
+        "spawn entry target storage",
+    )
+    reject(
+        spawn_start,
+        (
+            "movementCooldowns[slot]",
+            "OverworldWildSpawns_ClearWalkMovementState",
+        ),
+        "spawn entry movement policy reset",
+    )
+    require(
+        move_start,
+        (
+            "OW_WILD_SPAWN_ENTRY_MOVE",
+            "state->movementSpotStates[slot] = OW_WILD_SPAWNER_SPOT_STATE_ACTIVE;",
+            "OverworldWildSpawns_EnterActiveStateFromGenericAlert(",
+        ),
+        "move-from-off-screen active chase lane",
     )
     require(
         spawn_clear,
-        ("movementWalkMomentum[slot].speed = 0;",),
-        "spawn-run momentum finish",
+        (
+            "state->movementSpawnRunTargetX[slot] = 0;",
+            "state->movementSpawnRunTargetY[slot] = 0;",
+            "state->movementSpawnRunActive[slot] = OW_WILD_SPAWN_ENTRY_NONE;",
+        ),
+        "spawn entry target cleanup",
+    )
+    reject(
+        spawn_clear,
+        (
+            "movementSpotStates[slot]",
+            "movementActiveSteps[slot]",
+            "OverworldWildSpawns_ClearWalkMovementState",
+        ),
+        "spawn entry cleanup policy mutation",
     )
     reject(
         source,
@@ -620,6 +1168,8 @@ def main() -> int:
         "old tier-only wild speed policy",
     )
 
+    if args.linked_walk_module is not None:
+        verify_linked_delta_entries(args.linked_walk_module)
     print(
         "wild exact-frame Walk timing, skid, diagonal, and completion rules verified"
     )

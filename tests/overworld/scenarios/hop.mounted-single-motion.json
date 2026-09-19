@@ -3,24 +3,168 @@
   "id": "hop.mounted-single-motion",
   "title": "Mounted Hop moves rider and Pokémon as one motion",
   "status": "active",
-  "capabilities": ["hop", "mount.presentation"],
+  "capabilities": [
+    "hop",
+    "mount.presentation"
+  ],
   "proofLevel": "S5",
   "costTier": 5,
-  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
-  "events": [
-    {"at": 0, "kind": "lifecycle", "value": "Mount the current Mankey follower"},
-    {"at": 1, "kind": "input", "value": "Hop repeatedly near trees, edges, and transition boundaries"}
-  ],
-  "stop": {"frameBudget": 40000, "condition": "The bounded Mankey stress route finishes and control returns"},
-  "expect": {
-    "requiredEvents": [],
-    "forbiddenEvents": [],
-    "invariants": ["The player has no second jump arc", "Rider and Pokémon share logical and rendered motion", "Every started motion returns control"]
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "tools/overworld/runtime_proof_registry.json",
+    "actor": "MOUNTED species56 Mankey prepared in party slot0, bound through its live handle and attached presentation; the same party subject detaches and remounts.",
+    "trigger": "Hold alternating RIGHT and LEFT for1000 twenty-frame actions; release movement, press and release SELECT to detach; take an unmounted RIGHT step; press and release SELECT to remount; take a mounted RIGHT recovery Hop and settle.",
+    "observable": "The unchanged legacy.mankey-control-stress measurements require completed-natural-hop-count >=200, mankey-stress-active-frame-count >=5001, mankey-stress-identity=[1,MOUNTED,56,1], actor-owned-hop-motion-count >=1, valid-mounted-hop-motion-count covering at least200 motions, and dismount-and-remount-milestones=[1,1,1,1,IDLE,0].",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Private test.sav; teleport to map33 tile584/403; prepare party slot0 as species56, level10, HP1 and status0; spawn that own party subject mounted through the checked follower lifecycle, settle16 frames and bind its current identity. No profile, timer, counter or callback changes. Observation uses only normal step input."
+      }
+    ],
+    "limits": [
+      "Prepared party and mount setup do not prove natural acquisition or the selection UI.",
+      "All original named stress and detach/remount measurements remain required. A recipe or host pass alone grants no gameplay proof.",
+      "The20000-frame route is a bounded attempt; insufficient Hops, active frames, callback coverage or control milestones fail rather than lowering the legacy thresholds."
+    ]
   },
-  "capture": "failure",
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "input",
+      "value": "Complete1000 alternating twenty-frame RIGHT/LEFT holds"
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Release movement, detach with SELECT and take an unmounted RIGHT step"
+    },
+    {
+      "at": 2,
+      "kind": "input",
+      "value": "Remount with SELECT, take one mounted RIGHT recovery Hop and settle"
+    }
+  ],
+  "stop": {
+    "frameBudget": 24000,
+    "condition": "Sustained Hop meets every original stress threshold, then detach, unmounted movement, remount and mounted recovery finish"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ],
+    "orderedEvents": [
+      {
+        "id": "start",
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 2
+        }
+      },
+      {
+        "id": "commit",
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "finish",
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "control",
+        "event": "CONTROL_RETURNED",
+        "reason": "OK"
+      }
+    ],
+    "eventCounts": [
+      {
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 2
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "CONTROL_RETURNED",
+        "reason": "OK",
+        "minimum": 1,
+        "maximum": 1
+      }
+    ]
+  },
+  "capture": "none",
   "adapter": {
-    "kind": "command-sequence",
-    "commands": [["{python}", "scripts/verify_overworld_walk_runtime.py", "--scenario", "mankey_control_stress"]],
-    "result": "json-passed"
+    "kind": "devtools-test",
+    "test": "hop.mounted-single-motion",
+    "claims": [
+      "natural-input",
+      "live-actor-identity",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumFrames": 5001
   }
 }

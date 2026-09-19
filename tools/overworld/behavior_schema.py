@@ -1,4 +1,4 @@
-"""Canonical v72 behavior schema validation and deterministic code generation."""
+"""Canonical v77 behavior schema validation and deterministic code generation."""
 
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ FIELD_KEYS = {
     "id", "key", "path", "cType", "offset", "unit", "bounds", "lane",
     "operators", "featureId", "mask", "label", "editorNumeric", "introducedIn",
 }
+PACKED_FIELD_KEYS = {"bitOffset", "bitWidth"}
 TOP_LEVEL_KEYS = {
     "schemaVersion", "name", "blobVersion", "compactCType", "compactSize",
     "tailPadding", "lanes", "operatorKinds", "featureIds", "fields",
@@ -54,22 +55,27 @@ def validate_schema(schema: dict[str, Any]) -> None:
     _require(isinstance(schema, dict), "schema root must be an object")
     _require(set(schema) == TOP_LEVEL_KEYS, "schema root keys are not exact")
     _require(schema["schemaVersion"] == 1, "unsupported schemaVersion")
-    _require(schema["blobVersion"] == 72, "schema must describe blob v72")
+    _require(schema["blobVersion"] == 77, "schema must describe blob v77")
     _require(schema["compactSize"] == 72, "compact layout must remain 72 bytes")
-    _require(schema["tailPadding"] == 1, "compact v72 must retain one tail-padding byte")
+    _require(schema["tailPadding"] == 0, "compact v77 must use all 72 bytes")
     _require(schema["compactCType"] == "OverworldWildBehaviorProfileData", "unexpected compact C type")
     fields = schema["fields"]
-    _require(isinstance(fields, list) and len(fields) == 67, "schema must contain exactly 67 fields")
+    _require(isinstance(fields, list) and len(fields) == 72, "schema must contain exactly 72 fields")
     lanes = set(schema["lanes"])
     operators = set(schema["operatorKinds"])
     features = set(schema["featureIds"])
     seen_keys: set[str] = set()
     seen_paths: set[str] = set()
     seen_masks: set[tuple[int, int]] = set()
-    occupied: set[int] = set()
+    occupied_bits: set[int] = set()
     for field_id, field in enumerate(fields):
         prefix = f"fields[{field_id}]"
-        _require(isinstance(field, dict) and set(field) == FIELD_KEYS, f"{prefix} keys are not exact")
+        field_keys = set(field) if isinstance(field, dict) else set()
+        _require(
+            field_keys == FIELD_KEYS
+            or field_keys == FIELD_KEYS | PACKED_FIELD_KEYS,
+            f"{prefix} keys are not exact",
+        )
         _require(field["id"] == field_id, f"{prefix}.id must preserve field order")
         _require(re.fullmatch(r"[a-z][A-Za-z0-9]*", field["key"]) is not None, f"{prefix}.key is invalid")
         _require(field["key"] not in seen_keys, f"duplicate field key {field['key']}")
@@ -87,7 +93,7 @@ def validate_schema(schema: dict[str, Any]) -> None:
         storage_max = (1 << (8 * TYPE_SIZES[field["cType"]])) - 1
         _require(0 <= bounds["min"] <= bounds["max"] <= storage_max, f"{prefix}.bounds exceed {field['cType']}")
         _require(isinstance(field["editorNumeric"], bool), f"{prefix}.editorNumeric must be boolean")
-        _require(isinstance(field["introducedIn"], int) and field["introducedIn"] <= 72, f"{prefix}.introducedIn is invalid")
+        _require(isinstance(field["introducedIn"], int) and field["introducedIn"] <= 77, f"{prefix}.introducedIn is invalid")
         mask = field["mask"]
         _require(set(mask) == {"word", "bit", "symbol"}, f"{prefix}.mask keys are not exact")
         _require(mask["word"] in (1, 2, 3) and 0 <= mask["bit"] < 32, f"{prefix}.mask position is invalid")
@@ -96,16 +102,35 @@ def validate_schema(schema: dict[str, Any]) -> None:
         _require(mask["symbol"].startswith(expected_prefix), f"{prefix}.mask symbol uses the wrong word")
         size = TYPE_SIZES[field["cType"]]
         _require(isinstance(field["offset"], int), f"{prefix}.offset must be an integer")
-        field_bytes = set(range(field["offset"], field["offset"] + size))
-        _require(not field_bytes & occupied, f"{prefix} overlaps an earlier field")
-        _require(max(field_bytes) < schema["compactSize"], f"{prefix} exceeds compact layout")
-        occupied |= field_bytes
+        if PACKED_FIELD_KEYS <= field_keys:
+            _require(size == 1, f"{prefix} packed fields must use u8 storage")
+            bit_offset = field["bitOffset"]
+            bit_width = field["bitWidth"]
+            _require(
+                isinstance(bit_offset, int) and isinstance(bit_width, int)
+                and 0 <= bit_offset < 8 and 1 <= bit_width <= 8 - bit_offset,
+                f"{prefix} packed bit range is invalid",
+            )
+            _require(
+                bounds["max"] < (1 << bit_width),
+                f"{prefix}.bounds exceed its packed bit width",
+            )
+        else:
+            bit_offset = 0
+            bit_width = size * 8
+        field_bits = set(range(
+            field["offset"] * 8 + bit_offset,
+            field["offset"] * 8 + bit_offset + bit_width,
+        ))
+        _require(not field_bits & occupied_bits, f"{prefix} overlaps an earlier field")
+        _require(max(field_bits) < schema["compactSize"] * 8, f"{prefix} exceeds compact layout")
+        occupied_bits |= field_bits
         seen_keys.add(field["key"])
         seen_paths.add(field["path"])
         seen_masks.add((mask["word"], mask["bit"]))
-    expected_bytes = set(range(schema["compactSize"] - schema["tailPadding"]))
-    _require(occupied == expected_bytes, "fields must cover bytes 0-70 exactly")
-    expected_mask_counts = {1: 27, 2: 15, 3: 25}
+    expected_bits = set(range((schema["compactSize"] - schema["tailPadding"]) * 8))
+    _require(occupied_bits == expected_bits, "fields must cover bytes 0-71 exactly")
+    expected_mask_counts = {1: 27, 2: 15, 3: 30}
     for word, count in expected_mask_counts.items():
         bits = sorted(bit for mask_word, bit in seen_masks if mask_word == word)
         _require(bits == list(range(count)), f"override mask word {word} must use contiguous bits 0-{count - 1}")
@@ -165,12 +190,14 @@ def validator_metadata(schema: dict[str, Any]) -> dict[str, Any]:
             "offset": field["offset"], "size": TYPE_SIZES[field["cType"]],
             "min": field["bounds"]["min"], "max": field["bounds"]["max"],
             "maskWord": field["mask"]["word"], "maskBit": field["mask"]["bit"],
+            "bitOffset": field.get("bitOffset", 0),
+            "bitWidth": field.get("bitWidth", TYPE_SIZES[field["cType"]] * 8),
         } for field in schema["fields"]],
     }
 
 
 def migration_metadata(schema: dict[str, Any]) -> dict[str, Any]:
-    versions = (57, 58, 59, 62, 63, 64, 66, 67, 68, 71, 72)
+    versions = (57, 58, 59, 62, 63, 64, 66, 67, 68, 71, 72, 73, 74, 75, 76, 77)
     return {
         "currentBlobVersion": schema["blobVersion"],
         "versions": [{
@@ -182,6 +209,41 @@ def migration_metadata(schema: dict[str, Any]) -> dict[str, Any]:
             "changes": [
                 "Walk speed tiers become exact travel-frame values.",
                 "walkStompTime uses byte 70 and no longer shares packed Walk options.",
+            ],
+        },
+        "v72ToV73": {
+            "preservesCompactSize": True,
+            "changes": [
+                "walkAccelerationStep uses the former tail-padding byte.",
+                "Zero disables acceleration; 1 through 32 remove frames; 33 preserves v72's ceil-half rule.",
+            ],
+        },
+        "v73ToV74": {
+            "preservesCompactSize": True,
+            "changes": [
+                "walkTimeVariance uses the seven unused high bits of the chain Reposition diagonal-option byte.",
+                "The direction mode and Walk variance remain independent override fields.",
+            ],
+        },
+        "v74ToV75": {
+            "preservesCompactSize": True,
+            "changes": [
+                "walkPauseVariance uses the seven unused high bits of the chain Reposition cardinal-option byte.",
+                "The cardinal option and Walk pause variance remain independent override fields.",
+            ],
+        },
+        "v75ToV76": {
+            "preservesCompactSize": True,
+            "changes": [
+                "stopSkid uses the high bit of the turn-skid buildup byte.",
+                "The turn-skid threshold and stop-skid option remain independent override fields.",
+            ],
+        },
+        "v76ToV77": {
+            "preservesCompactSize": True,
+            "changes": [
+                "planTurnSkidPath uses bit 6 of the turn-skid options byte.",
+                "The turn-skid threshold, path-planning option, and stop-skid option remain independent override fields.",
             ],
         },
     }
@@ -234,6 +296,8 @@ def render_c_header(schema: dict[str, Any]) -> str:
             f"#define OW_BEHAVIOR_FIELD_OFFSET_{name} {field['offset']}",
             f"#define OW_BEHAVIOR_FIELD_MASK_WORD_{name} {field['mask']['word']}",
             f"#define OW_BEHAVIOR_FIELD_MASK_{name} (1u << {field['mask']['bit']})",
+            f"#define OW_BEHAVIOR_FIELD_BIT_OFFSET_{name} {field.get('bitOffset', 0)}",
+            f"#define OW_BEHAVIOR_FIELD_BIT_WIDTH_{name} {field.get('bitWidth', TYPE_SIZES[field['cType']] * 8)}",
         ]
     lines += ["", "#define OW_BEHAVIOR_FIELD_LAYOUT(X) \\"]
     for index, field in enumerate(schema["fields"]):

@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "id": "world.streaming.path-advance",
+  "title": "Mounted Ledyba advances both path axes through public streaming",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/README.md#system-contracts and tools/overworld/runtime_proof_registry.json: legacy.mounted-streaming-path",
+  "requirements": ["legacy.mounted-streaming-path"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 120, "noProgressFrames": 48, "minObservedFrames": 16},
+  "subjects": [{"id": "ledyba", "species": 165, "role": "MOUNTED", "acquire": "existing"}],
+  "measurements": [{"kind": "mounted-streaming-path-v1", "subject": "ledyba"}],
+  "setup": [
+    {
+      "id": "stream-origin",
+      "op": "teleport",
+      "args": {"map": 33, "x": 594, "z": 403, "facing": 3},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}
+    },
+    {
+      "id": "prepare-own-ledyba",
+      "op": "party",
+      "args": {"slot": 0, "species": 165, "level": 10, "hp": 1, "status": 0},
+      "budget": {"maxSeconds": 20, "maxFrames": 30, "noProgressFrames": 30}
+    },
+    {
+      "id": "mount-own-ledyba",
+      "op": "spawn",
+      "args": {"species": 165, "form": 0, "role": "mounted", "slot": 0, "level": 10},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}
+    },
+    {
+      "id": "settle-current-mount",
+      "op": "step",
+      "args": {"frames": 16, "keys": []},
+      "budget": {"maxSeconds": 20, "maxFrames": 16, "noProgressFrames": 16}
+    },
+    {
+      "id": "bind-ledyba",
+      "op": "bind",
+      "args": {"subject": "ledyba"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}
+    }
+  ],
+  "actions": [
+    {
+      "id": "two-diagonal-walks",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": ["UP", "RIGHT"],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-streaming-path-v1",
+          "stage": "two-complete",
+          "when": "final"
+        }
+      },
+      "budget": {"maxSeconds": 20, "maxFrames": 24, "noProgressFrames": 24}
+    }
+  ],
+  "assertions": [
+    {"kind": "measurement-complete", "measurement": "mounted-streaming-path-v1", "when": "final"}
+  ]
+}

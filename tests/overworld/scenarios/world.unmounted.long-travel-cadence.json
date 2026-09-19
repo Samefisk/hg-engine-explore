@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "id": "world.unmounted.long-travel-cadence",
+  "title": "Unmounted engine cadence during long travel and area loading",
+  "status": "active",
+  "capabilities": [
+    "actor.system",
+    "profile.composition",
+    "walk.exact",
+    "population"
+  ],
+  "proofLevel": "S5",
+  "costTier": 5,
+  "verification": {
+    "kind": "normal-play",
+    "expectationSource": "documentation/overworld-system/verification.md#runtime-proof-claims-are-fail-closed",
+    "actor": "Unmounted player with the live FOLLOWER Cyndaquil (species 155); no MOUNTED actor may satisfy the subject.",
+    "trigger": "Use held and changed direction input along a recorded outdoor route through multiple distinct streaming cells and an area boundary for at least 5000 continuous accepted movement frames.",
+    "observable": "Measure player and follower rendered deltas, input-to-motion progress, engine frame continuity, callback count, stream crossings, field rebind, and bounded per-frame process CPU cost in the same run.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Import unchanged test.sav into one disposable shared-devtools session. Use checked prepared HP/status and saved-follower setup for slot-1 Cyndaquil. Require native party readback for the same saved personality/species and a current eligible FOLLOWER with attached presentation. Keep full command receipts and the drained event boundary before binding. Do not mount, overwrite the source save, rewrite movement profiles, reset timers or count setup frames as movement. Nurse dialogue and Y-menu input are not prerequisites for this movement claim."
+      },
+      {
+        "phase": "before-observation",
+        "target": "observation",
+        "change": "Install the read-only native player-step callback counter and end-of-frame actor/player render sampler. Read loaded terrain and warp data to select a route. The callback releases held input exactly at the last requested semantic step."
+      }
+    ],
+    "limits": [
+      "The registered shared adapter uses a prepared fixture, then measures normal movement without interventions. Only current terminal acceptedProof grants gameplay proof.",
+      "Checked native party/follower receipts establish the saved slot-1 identity before binding. The raw melonDS save must supply the required Cyndaquil and a reachable outdoor route; the current shared emulator backend is not itself melonDS.",
+      "The fixture keeps the saved slot-1 Cyndaquil. Absent or changed subjects, failed route tiles, stale party snapshots and missing native readback fail setup. Setup frames never count toward the movement floor, and source save files remain unchanged.",
+      "Route search reads only loaded collision tiles. An unknown-neighbor probe is retained when blocked and cannot count toward 5000 accepted active frames, 80 distinct tiles, three cells, or two maps. Known-safe failed motion fails the run.",
+      "Every emulated route cycle has a process CPU sample; no warmup/hitch frames are cut. This detects host process-cost spikes, not ownership of DS instruction cost.",
+      "Acceptance uses the fixed 2-frame request and render-start limits, 4-frame settle limit, and zero process-cost hitches at 2x median plus at least 250000 ns. Held multi-tile segments, held-input cell crossing, and held-input area crossing are required; all route failures and rejected unknown-neighbor probes remain in the result.",
+      "A field rebind or interrupted follower motion without exact terminal evidence fails closed until a fixture-valid transition observation is established; there is no generic transition exemption.",
+      "A two-tile bounce or separate emulator boots cannot satisfy this route or frame floor.",
+      "The shared native trace retains each follower lifecycle and exact handoff/recovery evidence across the route. It changes observation only, not case state. The full route, CPU samples, render samples, identities, and map changes are retained in the same result.",
+      "Boot, prepared party/follower commands and the initial follower spawn wait are outside the 5000 accepted-movement-frame floor. The declared seed is provenance, not a forced RNG value. No fault helper runs during measured movement. Cleanup releases input, removes owned taps, and destroys the disposable emulator without writing the source save.",
+      "Measures an unmounted route, not mounted movement or every map; keep all interrupted and failed repetitions."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Load the disposable save, prepare the saved Cyndaquil through checked party/follower commands, retain readback and bind its real FOLLOWER before measuring normal movement."
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Follow a checked long outdoor route through distinct streaming cells and an area boundary; record route milestones."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Continue for at least 5000 actual accepted player-motion frames in one emulator session and record each cadence sample and actor rebind."
+    }
+  ],
+  "stop": {
+    "frameBudget": 12000,
+    "condition": "Long-route milestones, area rebind, and 5000 continuous movement-frame cadence observations pass"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "Control returns after the selected motion finishes or cancels"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "world.unmounted.long-travel-cadence",
+    "claims": ["live-actor-identity", "natural-input", "logical-commit", "rendered-motion", "control-release", "host-cpu-pacing"],
+    "minimumFrames": 5000
+  }
+}

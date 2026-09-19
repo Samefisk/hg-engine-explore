@@ -23,22 +23,30 @@ that the ROM uses. All profile saves go through the named authoring catalog at
 `data/overworld_behavior_profiles.json`. The Workshop regenerates the compact
 C compatibility data after each save.
 
-Use the existing focused live runner after an authorized build:
+For game diagnosis, use the same Workshop's `/devtools` page or its agent CLI:
 
 ```bash
-python3 scripts/verify_overworld_walk_runtime.py --scenario mounted_diagonal_streaming
-python3 scripts/verify_overworld_walk_runtime.py --scenario mankey_control_stress
-python3 scripts/verify_overworld_mount.py --rom test.nds
+scripts/owctl dev help --json
+scripts/owctl dev status --json --summary
+scripts/owctl dev inspect --json
 ```
 
-Mankey scenarios import the raw melonDS `test.sav`. The
-`--include-mankey-save` option adds those scenarios when running
-`--scenario all`; a named Mankey scenario does not need the option. Other
-current live scenarios use the configured headless save path. These scripts
-use private symbols and offsets, so record the ROM, save, and source revision
-with the result.
+Follow [overworld-devtools](../../.agents/skills/overworld-devtools/SKILL.md)
+to start and own the session. Choose the source save explicitly and check its
+identity; the tools support raw melonDS `.sav` without changing the source.
+The former standalone runtime scripts and bootstrap helpers are removed.
+Use [checked shared-tool tests](devtools-tests.md), not another driver.
 
 ## Agent control workflow
+
+For an interactive disposable session, use the shared
+[live development tools](devtools.md). Workshop `/devtools` and `owctl dev`
+share setup, input, inspection, terrain, recording and recipes. Debug-created
+setups remain prepared; recording exports and scenario drafts are not proof.
+Use [the scenario-authoring skill](../../.agents/skills/author-overworld-scenario/SKILL.md)
+to turn a recorded failure into a permanent test. Stop the owned dev session
+before a build or accepted scenario; do not claim a requested action happened
+until the observed result confirms it.
 
 `scripts/owctl` is the host facade for readiness, scenario contracts, trace
 decoding, and affected verification.
@@ -48,19 +56,32 @@ scripts/owctl doctor
 scripts/owctl scenario list
 scripts/owctl scenario validate
 scripts/owctl scenario run mount.detach-restores-control --dry-run
+scripts/owctl scenario run mount.detach-restores-control --json
 scripts/owctl trace decode tests/overworld/traces/semantic-trace-v1.json
-scripts/owctl actor inspect build/actor-state.bin
-scripts/owctl actor trace build/actor-state.bin
-scripts/owctl actor capture build/actor-state.bin \
-  --scenario-id <scenario-id> --rom test.nds --save test.dsv --seed 0 \
-  --output build/actor-observation.json
 scripts/owctl verify affected
 scripts/owctl verify affected --run
 ```
 
+Focused C object targets use the source-directory segment, for example
+`build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o`.
+Use `make -n` first when checking a narrow overlay build.
+
 Scenario runs and affected verification write identity-bearing run manifests
 when they execute. A scenario with status `planned` is a contract only and
 cannot be reported as runtime proof.
+
+Registered `scripts/owctl scenario run` requests a shared devtools test job.
+The start receipt is not a pass. Read its live status and terminal manifest.
+Only the controller's `acceptedProof: true` grants registered claim credit.
+Offline evidence replay cannot replace a current claim-bearing run.
+
+### Adapter maintenance and offline evidence
+
+The details below are for registered adapter or decoder work, not live session
+control. Use `owctl dev inspect`, `terrain` and structured memory data for live
+observations. Image/video capture is off by default; only an explicit user
+request or manual Capture click requests an image. A devtools export is not
+interchangeable with accepted evidence.
 
 `actor-state.bin` is a raw dump that starts at the generated descriptor's
 `state.address`. Use `--base 0x02000000` for a full ARM9 memory dump. The actor
@@ -73,9 +94,11 @@ Reusable evidence is version 2 and must name the scenario, seed, and exact ROM
 and save hashes that produced it. Scenario execution rejects missing or stale
 provenance instead of assigning the current files to an old capture.
 
-The adapter selects exactly one actor and one complete motion window. Required
-events are an ordered subsequence in that window. Forbidden events are checked
-in the same window. Evidence is ambiguous when two motion windows match.
+The adapter selects exactly one actor and the declared number of complete motion
+windows. `motionWindowCount` defaults to one. Required events are an ordered
+subsequence in every selected window. Forbidden events are checked in every
+selected window. Evidence fails when the number of matching windows differs or
+when matching windows belong to different actor identities.
 
 ```json
 "adapter": {
@@ -111,32 +134,46 @@ still armed is diagnostic data, not reusable scenario proof.
 
 The generated field schema lives in `tools/overworld/behavior_schema.json`.
 Its generator emits matching ROM and host metadata. Named values live in
-`data/overworld_behavior_profiles.json`. Each class profile names every schema
-field. Each override names only the fields it changes and gives each field an
-explicit `replace`, `relative`, `atLeast`, or `atMost` operator. Targets,
-members, matches, class rules, and conditional states also use named objects.
-Conditional behavior is authored only in the top-level `conditionalStates`
-table. The obsolete per-override condition object is not part of catalog v1.
+`data/overworld_behavior_profiles.json`. This named JSON catalog is the sole
+editable behavior-profile source. Catalog v2 has one `profiles` collection.
+The root profile is complete. Every other profile has a stable ID, one parent,
+and only its local field operators. A field operator is `replace`, `relative`,
+`atLeast`, `atMost`, or a supported combined relative bound.
 
-`data/OverworldWildBehaviorData.c` is generated compatibility output. Do not
-edit its profile arrays by hand. Use the Workshop, edit the catalog, or use the
-migration/generator:
+`selectors` choose the initial profile. Ordered `applications` hold targets,
+members, and shared matches. They use profile IDs and do not define another
+profile type. Conditional links and Active/Tired references use stable
+application IDs. Names are display text and can change without breaking these
+references.
+
+`data/OverworldWildBehaviorData.c` and
+`include/overworld_wild_behavior_data.h` are generated ROM-compatibility
+outputs. Do not edit their profile arrays, indexes, or counts by hand. Use the
+Workshop or edit the named JSON catalog, then regenerate the compatibility
+files:
 
 ```bash
-# One-time import after recovering an older C-only revision.
-python3 scripts/generate_overworld_behavior_catalog.py --import-c
-
-# Generate C/header data after a catalog edit.
+# Generate C and header compatibility data from the named JSON catalog.
 python3 scripts/generate_overworld_behavior_catalog.py
 
-# Read-only synchronization check.
+# Check that generated C and header data match the named JSON catalog.
 python3 scripts/generate_overworld_behavior_catalog.py --check
 ```
 
+Generation is one-way: named JSON to C/header compatibility data. The
+generator does not import positional C data into the catalog. Workshop saves
+update the named JSON catalog and regenerate the same compatibility files.
+
 The catalog shape is documented by
-`tools/overworld/schemas/behavior-authoring-v1.schema.json`. The generator
-also validates schema field names, profile symbols, match fields, members,
-operators, and fixed-layout counts before it writes output.
+`tools/overworld/schemas/behavior-authoring-v2.schema.json`. The generator
+also validates field names, stable IDs, parent cycles, references, matches,
+members, operators, and fixed-layout counts before it writes output.
+
+The generated C still contains class snapshots and ordered override tables.
+Those are ROM compatibility layouts, not authoring profile types. Generation
+materializes selected profiles and emits only local operators for profile
+applications. This keeps overlapping and relative applications in the same
+order as the authored catalog.
 
 `lib/overworld/overworld_behavior_resolver.c` is the canonical composition
 implementation used by the ROM and `/api/v2/resolve`. It compiles for ARM and
@@ -162,7 +199,7 @@ ROM run is still required before claiming live parity.
 A resolution explanation must show:
 
 - Subject and field context.
-- Base behavior class and why it matched.
+- Selected profile and why it matched.
 - Every layer in source order.
 - Applied, skipped, and conditionally selected layers.
 - Each changed field with old value, operator, and new value.
@@ -226,9 +263,10 @@ A live driver arms one exact window with
 then calls `finish_runtime_trace(...)` before `capture_observation(...)`. The
 write callback runs only while the emulator is paused between frames. Both
 helpers use the versioned public trace header and generated descriptor; they do
-not know actor-system private offsets. The generic headless driver exposes this
-path through `--actor-evidence`, `--actor-scenario-id`,
-`--actor-event-mask`, and `--actor-trace-frames`.
+not know actor-system private offsets. The shared devtools recorder uses these
+observations through its worker. Checked tests consume that same stream.
+There is no retained standalone collector path. Missing measurement coverage
+remains pending in the migration map, not inferred from a successful tool call.
 
 ## Semantic trace
 
@@ -262,8 +300,18 @@ Core events:
 - `CONTEXT_CHANGED`
 - `ACTOR_REBOUND`
 - `CONTROL_RETURNED`
+- `MOUNT_PRESENTATION_POSITION`
+- `MOUNT_PRESENTATION_STATE`
 
 Each event stores sequence, frame, actor handle, role, event ID, reason ID, and two event-specific values. Trace filters select actors, event groups, and duration. Unarmed tracing has near-zero work.
+
+Mounted skid presentation publishes one adjacent position/state pair for each
+motion sample. `MOUNT_PRESENTATION_POSITION` stores the packed player and
+follower logical coordinates. `MOUNT_PRESENTATION_STATE` stores both objects'
+current/next facing values plus elapsed time, duration, motion kind, locked
+facing, and logical/render equality flags. Host proof rejects missing elapsed
+samples, unequal coordinates, changed facing, incomplete pairs, and a motion
+kind or duration that differs from `MOTION_STARTED`.
 
 Every trace header also stores the oldest sequence, next sequence,
 overwritten-event count, active filter, and field epoch. A scenario warns or
@@ -295,7 +343,10 @@ First divergence:
 Mounted executor did not release the movement-end boundary.
 ```
 
-This report is the normal diagnosis artifact. Screenshots and raw memory inspection are follow-up tools when the first divergence is presentation or engine integration.
+This report is the normal diagnosis artifact. For presentation or engine gaps,
+add checked native memory/event observations through shared devtools. Screenshots
+are optional human-view attachments, never test proof. Follow
+[memory-backed proof](verification.md#memory-backed-proof).
 
 ## Accretive change rule
 
@@ -316,8 +367,10 @@ Use the least expensive proof that can reject the change:
 1. Schema and source validation.
 2. Portable resolver or motion-model scenario.
 3. Package and ABI verification.
-4. One focused headless ROM scenario.
-5. melonDS visual check for rendering, input feel, or emulator-specific behavior.
+4. One focused accepted `owctl scenario run`.
+5. Fresh checked native presentation and input measurements through shared
+   melonDS tools. Screenshots are off by default and never proof. Do not take
+   over the user's separate melonDS window; use the owned disposable session.
 6. Long soak only for transitions, streaming, population, or lifecycle races.
 
 Stop at the first failed layer. Decode the semantic trace before opening broad source areas.

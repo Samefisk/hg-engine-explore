@@ -71,17 +71,19 @@ sources themselves.
 
 - Replaces the legacy information architecture with focused Profile, Route,
   and Sound decks plus a compact Utilities menu.
-- Keeps base profiles and override profiles visually distinct.
-- Keeps drag handles and keyboard move controls for override ordering.
-- Treats each override profile as one runtime layer with one explicit member
-  set and one shared target match. The profile is evaluated and applied
-  at most once for a Pokémon context.
+- Shows one profile library. The complete root is marked as the root; every
+  other named profile uses the same parent-and-local-fields model.
+- Keeps drag handles and keyboard move controls for ordered profile
+  applications.
+- Keeps profile definitions separate from their uses. Selectors choose the
+  initial profile. Each ordered application has one explicit member set and
+  one shared target match.
 - Adds member-set shortcuts for individual Pokémon, evolution families, types,
   and live encounter pools. These shortcuts materialize members in the same
   profile; they never create per-Pokémon backend rules. New override drafts
   start disabled until members or an all-Pokémon shared condition is selected.
 - Documents the resolver contract in the UI: evaluation is top to bottom and
-  the last matching override applies last.
+  the last matching application applies last.
 - Adds a source-context resolution preview for Pokémon, terrain, level, and shiny state.
   It shows matched layers, skipped-layer count, effective values, and base
   values in parentheses.
@@ -89,6 +91,8 @@ sources themselves.
   Stale editors receive a conflict instead of silently overwriting newer work.
 - Verifies the source revision before and after every full-data or resolver
   read, retrying instead of pairing stale parsed data with a newer revision.
+- Loads only the active deck. Profile, route, Pokémon, and sound reads do not
+  wait for one monolithic workspace payload.
 - Refuses resolver reads when its loaded Python sources changed on disk; restart
   V2 to load the new parser before resolving another context.
 - Replaces the legacy multi-request Save action with one all-or-nothing commit
@@ -137,6 +141,8 @@ The V2-only API surface is:
 
 - `GET /api/v2/health`
 - `GET /api/v2/workspace-meta`
+- `GET /api/v2/decks/profiles`
+- `GET /api/v2/decks/routes`
 - `GET /api/v2/resolve?species=...&terrain=...&level=...&shiny=...&conditionTerrainMask=...&forcedOverrideMask=...&behaviorClass=auto|...`
 - `POST /api/v2/commit`
 

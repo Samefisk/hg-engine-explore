@@ -45,6 +45,18 @@
     "billboard_material_names": ["yo_sp1_yo_sp1", "flower_sp", "flower_sp2"],
     "notes": "Tall grass-like flower billboards are discovered from every reused land model; low flower decals remain ordinary land and arrangement is not authored."
   },
+  "native_canopy_surface": {
+    "surface_type": "canopy",
+    "confidence": "mesh_verified",
+    "flat_material_pattern": "^(?:tree01_un(?:_lm[12])?|hu_tree01_un)$",
+    "repeat_width_tiles": 2,
+    "repeat_height_tiles": 2,
+    "surface_rows_from_bottom": 1,
+    "height_above_ground_fx32": "0x31580",
+    "matrix_ids": "all",
+    "excluded_matrix_ids": [1],
+    "notes": "Build-time extraction of the flat two-by-two tree footprint meshes. The south/bottom row is the two-tile crown support: it aligns with the high edge of the paired tree01/tree01_re billboard. The runtime offset is the common tree crown height minus its native ground plane: 0x41580 - 0x10000."
+  },
   "models": [
     {
       "model_id": 1, "model_name": "en_fs", "confidence": "mesh_verified",

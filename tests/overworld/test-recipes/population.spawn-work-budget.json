@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "id": "population.spawn-work-budget",
+  "title": "Automatic spawn work keeps zero late main loops",
+  "mode": "normal",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/verification.md#spawn-work-budget-and-proof-freshness",
+  "requirements": [
+    "shared.spawn-work-budget-v1"
+  ],
+  "budgets": {
+    "maxSeconds": 180,
+    "maxFrames": 520,
+    "noProgressFrames": 480,
+    "minObservedFrames": 120
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    }
+  ],
+  "setup": [
+    {
+      "id": "current-follower",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "actor-present",
+          "subject": "mankey"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "bind-current-field",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "move-up",
+      "op": "step",
+      "args": {
+        "frames": 96,
+        "keys": ["UP"],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 10
+        }
+      },
+      "budget": {"maxSeconds": 40, "maxFrames": 96, "noProgressFrames": 32}
+    },
+    {
+      "id": "move-left-1", "op": "step",
+      "args": {"frames": 96, "keys": ["LEFT"], "until": {
+        "kind": "player-step-count", "operator": "eq", "value": 19}},
+      "budget": {"maxSeconds": 40, "maxFrames": 96, "noProgressFrames": 32}
+    },
+    {
+      "id": "move-right-1", "op": "step",
+      "args": {"frames": 112, "keys": ["RIGHT"], "until": {
+        "kind": "player-step-count", "operator": "eq", "value": 30}},
+      "budget": {"maxSeconds": 45, "maxFrames": 112, "noProgressFrames": 32}
+    },
+    {
+      "id": "move-down-2", "op": "step",
+      "args": {"frames": 112, "keys": ["DOWN"], "until": {
+        "kind": "player-step-count", "operator": "eq", "value": 40}},
+      "budget": {"maxSeconds": 45, "maxFrames": 112, "noProgressFrames": 32}
+    },
+    {
+      "id": "move-up-3", "op": "step",
+      "args": {"frames": 112, "keys": ["UP"], "until": {
+        "kind": "player-step-count", "operator": "eq", "value": 50}},
+      "budget": {"maxSeconds": 45, "maxFrames": 112, "noProgressFrames": 32}
+    },
+    {
+      "id": "move-down-3", "op": "step",
+      "args": {"frames": 112, "keys": ["DOWN"], "until": {
+        "kind": "player-step-count", "operator": "eq", "value": 60}},
+      "budget": {"maxSeconds": 45, "maxFrames": 112, "noProgressFrames": 32}
+    },
+    {
+      "id": "move-up-4", "op": "step",
+      "args": {"frames": 112, "keys": ["UP"], "until": {
+        "kind": "player-step-count", "operator": "eq", "value": 70}},
+      "budget": {"maxSeconds": 45, "maxFrames": 112, "noProgressFrames": 32}
+    },
+    {
+      "id": "move-down-4", "op": "step",
+      "args": {"frames": 112, "keys": ["DOWN"], "until": {
+        "kind": "player-step-count", "operator": "eq", "value": 80}},
+      "budget": {"maxSeconds": 45, "maxFrames": 112, "noProgressFrames": 32}
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "spawn-work-budget-v1",
+      "when": "final"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "spawn-work-budget-v1",
+      "subject": "mankey"
+    }
+  ]
+}

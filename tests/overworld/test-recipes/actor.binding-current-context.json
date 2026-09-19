@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "actor.binding-current-context",
+  "title": "Natural Wild binding uses the public current context",
+  "mode": "normal",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/README.md#current-invariants-to-preserve",
+  "requirements": ["legacy.actor-binding-current-context"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 900, "noProgressFrames": 900, "minObservedFrames": 1},
+  "subjects": [{"id": "rattata", "species": 19, "role": "WILD", "acquire": "existing"}],
+  "measurements": [{"kind": "actor-binding-context-v1", "subject": "rattata"}],
+  "setup": [
+    {"id": "natural-rattata", "op": "wait", "args": {"predicate": {"kind": "actor-present", "subject": "rattata"}},
+      "budget": {"maxSeconds": 40, "maxFrames": 900, "noProgressFrames": 900}},
+    {"id": "bind-rattata", "op": "bind", "args": {"subject": "rattata"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "context-and-walk", "op": "wait", "args": {"predicate": {"kind": "measurement-complete", "measurement": "actor-binding-context-v1"}},
+      "budget": {"maxSeconds": 40, "maxFrames": 900, "noProgressFrames": 900}}
+  ],
+  "assertions": [
+    {"kind": "actor-field", "subject": "rattata", "path": "identityVerified", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "actor-field", "subject": "rattata", "path": "presentationAttached", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "frame-count", "operator": "gte", "value": 1}
+  ]
+}

@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.walk-transition-mid-motion",
+  "title": "Mounted Walk completes through an area transition",
+  "status": "active",
+  "capabilities": [
+    "world.transition",
+    "mount.lifecycle",
+    "mount.presentation",
+    "walk.exact"
+  ],
+  "proofLevel": "S4",
+  "costTier": 4,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/README.md#system-contracts",
+    "actor": "MOUNTED species 155 (cyndaquil), acquired through mount; live handle and attached presentation required",
+    "trigger": "Place the disposable fixture at map 33 (671,402), mount the current Cyndaquil, hold Right through the field change, release input while the rebound Walk finishes, then complete one Right recovery Walk",
+    "observable": "Map 33 changes once to map 60; the same mounted Cyndaquil lifetime rebinds to the new field context; its elapsed-zero rebound Walk completes with one commit, paired presentation and ordered lifecycle; one recovery Walk returns idle control",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use the checked teleport command to place the disposable test.sav fixture at map 33 (671,402); heal own party slot 0; mount that slot; settle and bind the current Cyndaquil before observation."
+      }
+    ],
+    "limits": [
+      "Prepared teleport and party setup give no movement or transition credit.",
+      "The case proves one Route 29 boundary and does not prove every field boundary or every mounted locomotion kind.",
+      "Registration alone is not runtime acceptance; the checked shared test must pass on the current ROM."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "lifecycle",
+      "value": "Prepare map 33 (671,402), mount own Cyndaquil, settle, and bind its current live identity"
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Hold Right until map 33 changes to map 60 and the rebound Walk starts at elapsed zero"
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Release input and require the rebound Walk to commit once with paired player and Pokemon positions"
+    },
+    {
+      "at": 3,
+      "kind": "input",
+      "value": "Tap Right once and let the same rebound mounted actor complete one recovery Walk"
+    }
+  ],
+  "stop": {
+    "frameBudget": 120,
+    "condition": "The map change, elapsed-zero rebound Walk, and one recovery Walk finish"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ],
+    "orderedEvents": [
+      {
+        "id": "start",
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "commit",
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "finish",
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "control",
+        "event": "CONTROL_RETURNED",
+        "reason": "OK"
+      }
+    ],
+    "eventCounts": [
+      {
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 1
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "CONTROL_RETURNED",
+        "reason": "OK",
+        "minimum": 1,
+        "maximum": 1
+      }
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "mount.walk-transition-mid-motion",
+    "claims": ["natural-input", "live-actor-identity", "logical-commit", "rendered-motion", "frame-pacing", "world-transition", "control-release"],
+    "minimumFrames": 24
+  }
+}

@@ -46,3 +46,13 @@ OverworldMount_PlayCrashSound equ 0x023BB740
 .endarea
 
 .close
+
+/* The field input host already requires overlay131 for this normal field
+ * loop. Only walking friendship uses the lock-once wrapper; other callers
+ * retain the stock routine and all friendship rules stay there. */
+.open "base/overlay/overlay_0001.bin", 0x021E5900
+.org 0x021E793E
+.area 4
+    bl 0x023CCF90
+.endarea
+.close

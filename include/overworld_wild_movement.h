@@ -5,6 +5,7 @@
 
 struct FieldSystem;
 struct LocalMapObject;
+struct OverworldWildBehaviorProfileData;
 struct OverworldWildSpawnState;
 
 #define OW_WILD_MOVE_CUSTOM_AI 47
@@ -29,6 +30,7 @@ struct OverworldWildSpawnState;
 #define OW_WILD_SPAWNER_SPOT_STATE_EMOTING 1
 #define OW_WILD_SPAWNER_SPOT_STATE_ACTIVE 2
 #define OW_WILD_SPAWNER_SPOT_STATE_TIRED 3
+#define OVERWORLD_ACTOR_WALK_POLICY_VERSION 1
 
 typedef struct OverworldWildWalkMomentumState {
     u8 direction;
@@ -41,17 +43,135 @@ typedef struct OverworldWildWalkMomentumState {
     u8 resumeSpeed;
 } OverworldWildWalkMomentumState;
 
-typedef BOOL (*OverworldWildWalkStartStepCallback)(
-    void *context,
-    u8 direction,
-    u8 speed,
-    u8 facingDirection,
-    BOOL validateStep,
-    BOOL skidStep);
-typedef void (*OverworldWildWalkEffectCallback)(
-    void *context,
-    u8 direction,
-    BOOL playDirt);
+typedef enum OverworldActorWalkPolicyOperation {
+    OVERWORLD_ACTOR_WALK_POLICY_RESET = 0,
+    OVERWORLD_ACTOR_WALK_POLICY_INPUT,
+    OVERWORLD_ACTOR_WALK_POLICY_START_RESULT,
+    OVERWORLD_ACTOR_WALK_POLICY_COMMIT,
+    OVERWORLD_ACTOR_WALK_POLICY_CHAIN_COMMIT,
+    OVERWORLD_ACTOR_WALK_POLICY_INSPECT,
+    OVERWORLD_ACTOR_WALK_POLICY_BIND_PROFILE,
+    OVERWORLD_ACTOR_WALK_POLICY_SAMPLE_VARIANCE,
+    OVERWORLD_ACTOR_WALK_POLICY_BUFFER_DIRECTION,
+    OVERWORLD_ACTOR_WALK_POLICY_CHAIN_TAKE_PENDING,
+    OVERWORLD_ACTOR_WALK_POLICY_CHAIN_REPOSITION_BEGIN,
+    OVERWORLD_ACTOR_WALK_POLICY_CHAIN_REPOSITION_ADVANCE,
+    OVERWORLD_ACTOR_WALK_POLICY_CHAIN_REPOSITION_FINISH,
+    OVERWORLD_ACTOR_WALK_POLICY_CHAIN_PUT_PENDING = 13,
+    OVERWORLD_ACTOR_WALK_POLICY_PUBLISH_EFFECT = 14,
+} OverworldActorWalkPolicyOperation;
+
+typedef enum OverworldActorWalkPolicyDecision {
+    OVERWORLD_ACTOR_WALK_POLICY_IGNORED = 0,
+    OVERWORLD_ACTOR_WALK_POLICY_CONSUMED,
+    OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP,
+} OverworldActorWalkPolicyDecision;
+
+typedef enum OverworldActorWalkPolicyStartResult {
+    OVERWORLD_ACTOR_WALK_POLICY_START_NONE = 0,
+    OVERWORLD_ACTOR_WALK_POLICY_START_ACCEPTED,
+    OVERWORLD_ACTOR_WALK_POLICY_START_BLOCKED,
+} OverworldActorWalkPolicyStartResult;
+
+#define OVERWORLD_ACTOR_WALK_POLICY_FLAG_DEFER_STOP 0x01
+#define OVERWORLD_ACTOR_WALK_POLICY_FLAG_SUPPRESS_TURN_SKID 0x02
+#define OVERWORLD_ACTOR_WALK_POLICY_FLAG_WALK_ACTIVE 0x04
+#define OVERWORLD_ACTOR_WALK_POLICY_FLAG_CHAIN_ENABLED 0x08
+#define OVERWORLD_ACTOR_WALK_POLICY_FLAG_CRASH_ON_BLOCKED 0x10
+
+#define OVERWORLD_ACTOR_WALK_STEP_VALIDATE 0x01
+#define OVERWORLD_ACTOR_WALK_STEP_SKID 0x02
+#define OVERWORLD_ACTOR_WALK_STEP_STOP_SKID 0x04
+#define OVERWORLD_ACTOR_WALK_STEP_CLEAR_PRESENTATION 0x08
+#define OVERWORLD_ACTOR_WALK_STEP_CONTINUATION 0x10
+#define OVERWORLD_ACTOR_WALK_STEP_POST_SKID 0x20
+#define OVERWORLD_ACTOR_WALK_STEP_RESET_ACCELERATION 0x40
+#define OVERWORLD_ACTOR_WALK_STEP_PLANNED_SKID_PATH 0x80
+#define OVERWORLD_ACTOR_WALK_STEP_PLANNED_STOP_SKID \
+    OVERWORLD_ACTOR_WALK_STEP_PLANNED_SKID_PATH
+
+#define OVERWORLD_ACTOR_WALK_POLICY_SKID_PATH_TILES_INDEX 1
+#define OVERWORLD_ACTOR_WALK_POLICY_STOP_SKID_TILES_INDEX \
+    OVERWORLD_ACTOR_WALK_POLICY_SKID_PATH_TILES_INDEX
+
+/* pendingStep is a fixed ABI byte shared by both adapters. */
+#define OVERWORLD_ACTOR_WALK_PENDING_NONE 0
+#define OVERWORLD_ACTOR_WALK_PENDING_PROPOSAL 1
+#define OVERWORLD_ACTOR_WALK_PENDING_ACTIVE 2
+#define OVERWORLD_ACTOR_WALK_PENDING_CHAIN 3
+
+typedef struct OverworldActorPolicyView {
+    OverworldWildWalkMomentumState walkMomentum;
+    u32 behaviorFingerprint;
+    u32 matchedLayerMask;
+    u8 chainStepsRemaining;
+    u8 chainPauseTicks;
+    u8 chainPauseAction;
+    u8 variancePhase;
+    u8 bufferedDirection;
+    u8 stopPending;
+    u8 pendingStep;
+    u8 pendingSkid;
+    u8 streamState;
+    u8 reserved;
+    u16 pendingFirstPathAdvance;
+    u16 pendingLastPathAdvance;
+    u8 actorActive;
+    u8 motionPhase;
+} OverworldActorPolicyView;
+
+typedef struct OverworldActorPolicyProfileBinding {
+    u32 behaviorFingerprint;
+    u32 matchedLayerMask;
+} OverworldActorPolicyProfileBinding;
+
+typedef struct OverworldActorWalkPolicyCall {
+    u16 version;
+    u16 size;
+    union {
+        const struct OverworldWildBehaviorProfileData *lane;
+        OverworldActorPolicyView *policyView;
+        const OverworldActorPolicyProfileBinding *profileBinding;
+    };
+    u8 actorSlot;
+    u8 operation;
+    u8 direction;
+    u8 distance;
+    u8 locomotion;
+    u8 laneState;
+    u8 flags;
+    u8 startResult;
+    u8 decision;
+    u8 stepDirection;
+    u8 facingDirection;
+    u8 travelTime;
+    u8 stepFlags;
+    u8 effect;
+    u8 chainAction;
+    u8 chainTicks;
+    u8 reserved[4];
+} OverworldActorWalkPolicyCall;
+
+typedef char OverworldActorWalkPolicyCallSizeMustRemain28Bytes[
+    sizeof(OverworldActorWalkPolicyCall) == 28 ? 1 : -1];
+typedef char OverworldActorPolicyViewSizeMustRemain32Bytes[
+    sizeof(OverworldActorPolicyView) == 32 ? 1 : -1];
+typedef char OverworldActorPolicyProfileBindingSizeMustRemain8Bytes[
+    sizeof(OverworldActorPolicyProfileBinding) == 8 ? 1 : -1];
+typedef BOOL (*OverworldActorWalkPolicyReduceFunc)(
+    OverworldActorWalkPolicyCall *call);
+
+typedef u8 (*OverworldWildMovementPolicyBuildLookPlanFunc)(u8 baseDirection);
+typedef int (*OverworldWildMovementPolicyResolveLookFunc)(
+    u8 lookPlan,
+    u8 phase,
+    u8 totalFrames,
+    u8 remainingFrames);
+typedef int (*OverworldWildMovementPolicyChooseWanderDirectionFunc)(
+    const u8 *directions,
+    int directionCount,
+    u8 previousDirection,
+    u8 chance);
 #define OverworldWildCustomMovement_SetFieldSystem(fieldSystem) ((void)(fieldSystem))
 void OverworldWildSpawns_ApplyFacePlayerFacing(
     struct OverworldWildSpawnState *state,

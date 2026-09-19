@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Import, generate, or check the named overworld behavior catalog."""
+"""Generate or check C compatibility data from the named behavior catalog."""
 
 from __future__ import annotations
 
@@ -27,36 +27,53 @@ def main() -> int:
     )
     action = parser.add_mutually_exclusive_group()
     action.add_argument(
-        "--import-c",
-        action="store_true",
-        help="one-time migration: import the expanded C values into the named catalog",
-    )
-    action.add_argument(
         "--check",
         action="store_true",
         help="fail if the catalog and generated C/header are not synchronized",
     )
+    action.add_argument(
+        "--migrate-v2",
+        action="store_true",
+        help="rewrite a V1 catalog as the unified V2 model and regenerate compatibility data",
+    )
+    parser.add_argument("--catalog", type=Path, help="named catalog input")
+    parser.add_argument("--source-template", type=Path, help="compatibility C template")
+    parser.add_argument("--header-template", type=Path, help="compatibility header template")
+    parser.add_argument("--source-output", type=Path, help="generated compatibility C output")
+    parser.add_argument("--header-output", type=Path, help="generated compatibility header output")
     args = parser.parse_args()
     authoring = load_authoring_module()
 
-    if args.import_c:
-        authoring.write_behavior_data_source(
-            authoring.BEHAVIOR_DATA_SOURCE.read_text(),
-            authoring.BEHAVIOR_DATA_HEADER.read_text(),
-        )
-        print(f"Imported {authoring.BEHAVIOR_CATALOG_SOURCE.relative_to(ROOT)}")
-        return 0
-
-    if not authoring.BEHAVIOR_CATALOG_SOURCE.exists():
-        parser.error("named catalog is missing; run with --import-c once")
-    catalog = authoring.json.loads(authoring.BEHAVIOR_CATALOG_SOURCE.read_text())
+    catalog_path = (args.catalog or authoring.BEHAVIOR_CATALOG_SOURCE).resolve()
+    source_template = (args.source_template or authoring.BEHAVIOR_DATA_SOURCE).resolve()
+    header_template = (args.header_template or authoring.BEHAVIOR_DATA_HEADER).resolve()
+    if (args.source_output is None) != (args.header_output is None):
+        parser.error("--source-output and --header-output must be used together")
+    if args.check and args.source_output is not None:
+        parser.error("--check cannot be used with explicit output paths")
+    if not catalog_path.exists():
+        parser.error("named behavior catalog is missing")
+    catalog = authoring.json.loads(catalog_path.read_text())
     authoring.validate_behavior_catalog(catalog)
-    current_source = authoring.BEHAVIOR_DATA_SOURCE.read_text()
-    current_header = authoring.BEHAVIOR_DATA_HEADER.read_text()
+    if args.migrate_v2 and catalog["catalogVersion"] == 1:
+        catalog = authoring.migrate_behavior_catalog_v1(catalog)
+    current_source = source_template.read_text()
+    current_header = header_template.read_text()
     generated_source = authoring.render_behavior_catalog(catalog, current_source)
     generated_header = authoring.render_behavior_catalog_header(
         current_header, catalog, generated_source
     )
+
+    if args.migrate_v2:
+        if args.source_output is not None:
+            parser.error("--migrate-v2 does not accept explicit output paths")
+        if catalog_path != authoring.BEHAVIOR_CATALOG_SOURCE.resolve():
+            catalog_path.write_text(authoring.json.dumps(catalog, indent=2, ensure_ascii=False) + "\n")
+            print(f"Migrated {catalog_path} to catalog V2")
+            return 0
+        authoring.write_behavior_catalog(catalog)
+        print(f"Migrated {catalog_path} to catalog V2 and regenerated compatibility data")
+        return 0
 
     if args.check:
         stale = []
@@ -68,6 +85,16 @@ def main() -> int:
             print("Generated behavior data is stale: " + ", ".join(stale))
             return 1
         print("Named behavior catalog and generated C data are synchronized")
+        return 0
+
+    if args.source_output is not None and args.header_output is not None:
+        source_output = args.source_output.resolve()
+        header_output = args.header_output.resolve()
+        source_output.parent.mkdir(parents=True, exist_ok=True)
+        header_output.parent.mkdir(parents=True, exist_ok=True)
+        source_output.write_text(generated_source)
+        header_output.write_text(generated_header)
+        print(f"Generated {source_output} and {header_output}")
         return 0
 
     authoring.write_behavior_catalog(catalog)

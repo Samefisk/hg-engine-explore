@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 1,
+  "id": "world.unmounted.wild-soak",
+  "title": "Live wild actor 5000-frame identity and Walk soak",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "tests/overworld/scenarios/world.unmounted.wild-soak.json",
+  "requirements": [
+    "current.unmounted-wild-soak"
+  ],
+  "budgets": {
+    "maxSeconds": 900,
+    "maxFrames": 5200,
+    "noProgressFrames": 600,
+    "minObservedFrames": 5000
+  },
+  "subjects": [
+    {
+      "id": "bulbasaur",
+      "species": 1,
+      "role": "WILD",
+      "acquire": "existing"
+    }
+  ],
+  "setup": [
+    {
+      "id": "prepare-field",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 408,
+        "facing": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-bulbasaur",
+      "op": "spawn",
+      "args": {
+        "species": 1,
+        "role": "wild",
+        "level": 5,
+        "x": 583,
+        "z": 406
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-bulbasaur",
+      "op": "bind",
+      "args": {
+          "subject": "bulbasaur"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "bulbasaur-idle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "actor-field",
+          "subject": "bulbasaur",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE"
+        }
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "soak-01",
+      "op": "step",
+      "args": {"frames": 600, "keys": []},
+      "budget": {"maxSeconds": 90, "maxFrames": 600, "noProgressFrames": 600}
+    },
+    {
+      "id": "soak-02",
+      "op": "step",
+      "args": {"frames": 600, "keys": []},
+      "budget": {"maxSeconds": 90, "maxFrames": 600, "noProgressFrames": 600}
+    },
+    {
+      "id": "soak-03",
+      "op": "step",
+      "args": {"frames": 600, "keys": []},
+      "budget": {"maxSeconds": 90, "maxFrames": 600, "noProgressFrames": 600}
+    },
+    {
+      "id": "soak-04",
+      "op": "step",
+      "args": {"frames": 600, "keys": []},
+      "budget": {"maxSeconds": 90, "maxFrames": 600, "noProgressFrames": 600}
+    },
+    {
+      "id": "soak-05",
+      "op": "step",
+      "args": {"frames": 600, "keys": []},
+      "budget": {"maxSeconds": 90, "maxFrames": 600, "noProgressFrames": 600}
+    },
+    {
+      "id": "soak-06",
+      "op": "step",
+      "args": {"frames": 600, "keys": []},
+      "budget": {"maxSeconds": 90, "maxFrames": 600, "noProgressFrames": 600}
+    },
+    {
+      "id": "soak-07",
+      "op": "step",
+      "args": {"frames": 600, "keys": []},
+      "budget": {"maxSeconds": 90, "maxFrames": 600, "noProgressFrames": 600}
+    },
+    {
+      "id": "soak-08",
+      "op": "step",
+      "args": {"frames": 600, "keys": []},
+      "budget": {"maxSeconds": 90, "maxFrames": 600, "noProgressFrames": 600}
+    },
+    {
+      "id": "soak-09",
+      "op": "step",
+      "args": {"frames": 200, "keys": []},
+      "budget": {"maxSeconds": 60, "maxFrames": 200, "noProgressFrames": 200}
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "actor-field",
+      "subject": "bulbasaur",
+      "path": "identityVerified",
+      "operator": "eq",
+      "value": true,
+      "when": "always"
+    },
+    {
+      "kind": "actor-field",
+      "subject": "bulbasaur",
+      "path": "presentationAttached",
+      "operator": "eq",
+      "value": true,
+      "when": "always"
+    },
+    {
+      "kind": "actor-field",
+      "subject": "bulbasaur",
+      "path": "role",
+      "operator": "eq",
+      "value": "WILD",
+      "when": "always"
+    },
+    {
+      "kind": "event-count",
+      "subject": "bulbasaur",
+      "event": "MOTION_STARTED",
+      "operator": "gte",
+      "value": 1
+    },
+    {
+      "kind": "event-count",
+      "subject": "bulbasaur",
+      "event": "LOGICAL_COMMIT",
+      "operator": "gte",
+      "value": 1
+    },
+    {
+      "kind": "event-count",
+      "subject": "bulbasaur",
+      "event": "MOTION_FINISHED",
+      "operator": "gte",
+      "value": 1
+    },
+    {
+      "kind": "event-count",
+      "subject": "bulbasaur",
+      "event": "CONTROL_RETURNED",
+      "operator": "gte",
+      "value": 1
+    },
+    {
+      "kind": "frame-count",
+      "operator": "gte",
+      "value": 5000
+    }
+  ]
+}

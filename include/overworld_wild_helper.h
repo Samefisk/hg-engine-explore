@@ -2,15 +2,15 @@
 #define OVERWORLD_WILD_HELPER_H
 
 #include "types.h"
+#include "overworld_behavior_resolver.h"
 #include "overworld_wild_behavior_data.h"
 #include "overworld_wild_spawns_internal.h"
 
 #define OVERWORLD_WILD_HELPER_OVERLAY_ENTRY_ADDR 0x023C4000
 #define OVERWORLD_WILD_HELPER_OVERLAY_VALIDATE_ADDR 0x023C4069
-#define OVERWORLD_WILD_HELPER_FLEE_FALLBACK_ENTRY_ADDR 0x023C40F8
 #define OVERWORLD_WILD_HELPER_OVERLAY_LIFECYCLE_ADDR 0x023C4101
 #define OVERWORLD_WILD_HELPER_OVERLAY_MAGIC 0x4F574831
-#define OVERWORLD_WILD_HELPER_OVERLAY_VERSION 31
+#define OVERWORLD_WILD_HELPER_OVERLAY_VERSION 34
 #define OVERWORLD_WILD_HELPER_VALIDATE_ONLY 0
 #define OVERWORLD_WILD_HELPER_ENSURE_BEHAVIOR 1
 #define OVERWORLD_WILD_HELPER_REQUIRE_BEHAVIOR 2
@@ -26,8 +26,9 @@
 #define OW_WILD_HELPER_DIRECTION_RIGHT 3
 
 #define OW_WILD_HELPER_HOP_PLAN_MAX_DIRECTIONS 8
-#define OW_WILD_HELPER_HOP_PLAN_MAX_HOPS 5
-#define OW_WILD_HELPER_HOP_PLAN_NODE_COUNT 64
+#define OW_WILD_HELPER_HOP_PLAN_DIRECT 0
+#define OW_WILD_HELPER_HOP_PLAN_STOP_ONE_HOP_AWAY 1
+#define OW_WILD_HELPER_HOP_PLAN_FLEE 2
 
 #define OW_WILD_HELPER_HOP_RESULT_FLAG_DIRECT 0x01
 #define OW_WILD_HELPER_HOP_RESULT_FLAG_PLANNED 0x02
@@ -43,10 +44,25 @@
     ((u8)(((value) & OW_WILD_HELPER_THROW_TARGET_SLOT_MASK) - 1))
 #define OW_WILD_HELPER_THROW_RESERVATION_DECISIONS 120
 
-/* Negative normalizeThrowPresentation slots are reserved for ball lifecycle. */
-#define OW_WILD_HELPER_THROW_PRESENTATION_TRANSITION_SUSPEND (-1)
-#define OW_WILD_HELPER_THROW_PRESENTATION_TRANSITION_RESUME (-2)
-#define OW_WILD_HELPER_THROW_PRESENTATION_TRANSITION_DISCARD (-3)
+typedef enum OverworldWildHelperPresentationOperation {
+    OW_WILD_HELPER_PRESENTATION_NORMALIZE_SLOT = 0,
+    OW_WILD_HELPER_PRESENTATION_SUSPEND,
+    OW_WILD_HELPER_PRESENTATION_REBIND,
+    OW_WILD_HELPER_PRESENTATION_DISCARD,
+} OverworldWildHelperPresentationOperation;
+
+#define OVERWORLD_WILD_HELPER_PRESENTATION_CALL_VERSION 1
+
+typedef struct OverworldWildHelperPresentationCall {
+    u16 version;
+    u16 size;
+    u8 operation;
+    u8 slot;
+    u16 reserved;
+} OverworldWildHelperPresentationCall;
+
+typedef char OverworldWildHelperPresentationCallSizeMustRemain8Bytes[
+    sizeof(OverworldWildHelperPresentationCall) == 8 ? 1 : -1];
 
 typedef enum OverworldWildHelperPickupThrowQuery {
     OW_WILD_HELPER_PICKUP_THROW_QUERY_VALID,
@@ -80,12 +96,11 @@ typedef struct OverworldWildPreparedSpawn {
     OverworldWildSpawnPosition position;
     OverworldWildRolledEncounter encounter;
     OverworldWildSpawnStartup startup;
-    OverworldWildBehaviorProfile behaviorProfile;
+    BehaviorResolveResult behaviorResolution;
     int savedShinySlot;
-    u8 behaviorClass;
     u8 shiny;
-    u8 behaviorLimitKey;
     u8 playerBallCatchValue;
+    u8 reserved[2];
 } OverworldWildPreparedSpawn;
 
 typedef struct OverworldWildHelperPlayerState {
@@ -147,16 +162,31 @@ typedef struct OverworldWildHelperSpawnCallbacks {
     OverworldWildHelperLoadSavedShinyFunc loadSavedShiny;
 } OverworldWildHelperSpawnCallbacks;
 
-typedef BOOL (*OverworldWildHelperTryPrepareSpawnFunc)(
+typedef enum OverworldWildHelperPrepareResult {
+    OW_WILD_HELPER_PREPARE_FAILED = 0,
+    OW_WILD_HELPER_PREPARE_READY = 1,
+    /* The caller must resume this same request on a later field frame. */
+    OW_WILD_HELPER_PREPARE_POSITION_PENDING = 2,
+} OverworldWildHelperPrepareResult;
+
+#define OW_WILD_HELPER_SPAWN_POSITION_ATTEMPT_CHECKS 16
+#define OW_WILD_HELPER_SPAWN_POSITION_CHECKS_PER_UPDATE 16
+#define OW_WILD_HELPER_SPAWN_POSITION_ATTEMPT_UPDATES \
+    ((OW_WILD_HELPER_SPAWN_POSITION_ATTEMPT_CHECKS \
+        + OW_WILD_HELPER_SPAWN_POSITION_CHECKS_PER_UPDATE - 1) \
+        / OW_WILD_HELPER_SPAWN_POSITION_CHECKS_PER_UPDATE)
+
+typedef OverworldWildHelperPrepareResult (*OverworldWildHelperTryPrepareSpawnFunc)(
     const OverworldWildHelperSpawnCallbacks *callbacks,
     void *context,
     OverworldWildSpawnTerrain terrain,
     int slot,
     BOOL shinyAlreadySpawned,
     u16 shinyOddsDenominator,
+    u8 positionChecksRemaining,
     OverworldWildPreparedSpawn *prepared);
 
-typedef BOOL (*OverworldWildHelperTryPrepareEncounterSpawnFunc)(
+typedef OverworldWildHelperPrepareResult (*OverworldWildHelperTryPrepareEncounterSpawnFunc)(
     const OverworldWildHelperSpawnCallbacks *callbacks,
     void *context,
     OverworldWildSpawnTerrain terrain,
@@ -165,6 +195,7 @@ typedef BOOL (*OverworldWildHelperTryPrepareEncounterSpawnFunc)(
     BOOL shiny,
     int savedShinySlot,
     BOOL rollPersonality,
+    u8 positionChecksRemaining,
     OverworldWildPreparedSpawn *prepared);
 
 typedef struct OverworldWildHelperHopConfig {
@@ -175,7 +206,7 @@ typedef struct OverworldWildHelperHopConfig {
     u8 minDistance;
     u8 maxDistance;
     u8 allowNonCardinal;
-    u8 stopOneHopAway;
+    u8 planMode;
     u8 directionCount;
     u8 directions[OW_WILD_HELPER_HOP_PLAN_MAX_DIRECTIONS];
 } OverworldWildHelperHopConfig;
@@ -224,10 +255,10 @@ typedef int (*OverworldWildHelperReconcilePresentationsFunc)(
 typedef BOOL (*OverworldWildHelperIsPresentationContextCurrentFunc)(
     FieldSystem *fieldSystem,
     OverworldWildSpawnState *state);
-typedef void (*OverworldWildHelperNormalizeThrowPresentationFunc)(
+typedef BOOL (*OverworldWildHelperApplyPresentationCommandFunc)(
     FieldSystem *fieldSystem,
     OverworldWildSpawnState *state,
-    int slot);
+    const OverworldWildHelperPresentationCall *call);
 typedef void (*OverworldWildHelperSyncCarriedThrowTargetFunc)(
     FieldSystem *fieldSystem,
     OverworldWildSpawnState *state,
@@ -249,7 +280,8 @@ typedef void (*OverworldWildHelperDespawnFarEncountersFunc)(
     OverworldWildSpawnState *state,
     OverworldWildPresentationState *presentation,
     OverworldWildDespawnTelemetry *telemetry,
-    u16 movementProtectedMask,
+    u16 hardProtectedMask,
+    u16 movementDeferredMask,
     OverworldWildHelperResetSlotFunc resetSlot);
 typedef void (*OverworldWildHelperRecordDespawnEventFunc)(
     FieldSystem *fieldSystem,
@@ -354,15 +386,6 @@ typedef BOOL (*OverworldWildHelperValidateOverlayFunc)(u32 behaviorMode);
 typedef BOOL (*OverworldWildHelperLifecycleFunc)(
     u32 lifecycleMode,
     FieldSystem *fieldSystem);
-typedef void (*OverworldWildHelperAppendFleeFallbackDirectionsFunc)(
-    u8 *directions,
-    int *directionCount,
-    int fleeDx,
-    int fleeDy);
-typedef struct OverworldWildHelperFleeFallbackEntry {
-    OverworldWildHelperAppendFleeFallbackDirectionsFunc appendDirections;
-} OverworldWildHelperFleeFallbackEntry;
-
 typedef struct OverworldWildHelperOverlayEntry {
     u32 magic;
     u16 version;
@@ -372,7 +395,7 @@ typedef struct OverworldWildHelperOverlayEntry {
     OverworldWildHelperPickHopFunc pickRandomBehaviorHop;
     OverworldWildHelperPickHopFunc planBehaviorHopStep;
     OverworldWildHelperIsPresentationContextCurrentFunc isPresentationContextCurrent;
-    OverworldWildHelperNormalizeThrowPresentationFunc normalizeThrowPresentation;
+    OverworldWildHelperApplyPresentationCommandFunc applyPresentationCommand;
     OverworldWildHelperSyncCarriedThrowTargetFunc syncCarriedThrowTarget;
     OverworldWildHelperReconcilePresentationsFunc reconcilePresentations;
     OverworldWildHelperDespawnFarEncountersFunc despawnFarEncounters;
@@ -397,9 +420,6 @@ typedef struct OverworldWildHelperOverlayEntry {
     ((const OverworldWildHelperOverlayEntry *)OVERWORLD_WILD_HELPER_OVERLAY_ENTRY_ADDR)
 #define OVERWORLD_WILD_HELPER_OVERLAY_VALIDATE \
     ((OverworldWildHelperValidateOverlayFunc)OVERWORLD_WILD_HELPER_OVERLAY_VALIDATE_ADDR)
-#define OVERWORLD_WILD_HELPER_FLEE_FALLBACK_ENTRY \
-    ((const OverworldWildHelperFleeFallbackEntry *) \
-        OVERWORLD_WILD_HELPER_FLEE_FALLBACK_ENTRY_ADDR)
 #define OVERWORLD_WILD_HELPER_OVERLAY_LIFECYCLE \
     ((OverworldWildHelperLifecycleFunc)OVERWORLD_WILD_HELPER_OVERLAY_LIFECYCLE_ADDR)
 

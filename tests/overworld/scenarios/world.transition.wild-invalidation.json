@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "id": "world.transition.wild-invalidation",
+  "title": "A field transition invalidates the prior Wild handle and rebinds the actor",
+  "status": "active",
+  "capabilities": ["world.transition"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md#field-transition-protocol",
+    "actor": "One prepared WILD Rattata with a verified live handle and attached presentation",
+    "trigger": "After one natural Rattata Walk, use normal player input to cross from Route29 into Cherrygrove and take one recovery step",
+    "observable": "The actor owner advances field epoch and map generation once, emits CONTEXT_CHANGED then ACTOR_REBOUND, invalidates the old full handle, retains current Wild identity, and returns normal player control",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "actors",
+        "change": "Create one Rattata through the shared native spawn adapter at the saved Route29 start. This selects the subject only; it gives no motion, route, transition, or recovery credit."
+      }
+    ],
+    "limits": [
+      "Covers one Wild actor and one Route29-to-Cherrygrove boundary.",
+      "Does not prove retained follower or mount rebind, indoor transitions, or long-run streaming."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {"path": "test.sav", "kind": "sav"},
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "rattata",
+      "species": 19,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Spawn and bind one exact Rattata at the saved Route29 start"},
+    {"at": 1, "kind": "lifecycle", "value": "Observe one complete natural Wild Walk"},
+    {"at": 2, "kind": "input", "value": "Walk the short normal route through the Cherrygrove field boundary"},
+    {"at": 3, "kind": "lifecycle", "value": "Observe context loss, actor rebind, old-handle invalidation, and one settled recovery step"}
+  ],
+  "stop": {
+    "frameBudget": 420,
+    "condition": "One map change, the Wild actor has a current rebound handle, and the player settles one tile inside Cherrygrove"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED",
+      "CONTEXT_CHANGED",
+      "ACTOR_REBOUND"
+    ],
+    "forbiddenEvents": [],
+    "invariants": [
+      "The bound Wild actor completes one natural Walk before the transition",
+      "The field epoch and map generation each advance exactly once",
+      "The old Wild handle is absent after the transition",
+      "The rebound Wild actor retains its subject and current engine identity",
+      "Every active actor on the new map uses the current field context",
+      "Normal player control completes one recovery step"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "world.transition.wild-invalidation",
+    "claims": ["natural-input", "live-actor-identity", "world-transition", "control-release"],
+    "minimumFrames": 16
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "id": "world.streaming.cardinal-held-route",
+  "title": "Mounted Cyndaquil crosses a field-stream boundary on held input",
+  "status": "active",
+  "capabilities": ["world.streaming"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/README.md#system-contracts",
+    "actor": "One prepared MOUNTED Cyndaquil with its normal cardinal Walk profile, current live handle, and attached presentation",
+    "trigger": "Hold normal RIGHT input for 20 tiles on the clear Route29 lane, release through the normal bounded skid, then tap LEFT and drain one recovery tile",
+    "observable": "At least 20 east Walks cross a full 16-tile field-stream boundary; at most one queued east Walk and one or two policy skid tiles drain after release, each path advance precedes commit, and one west recovery returns control to the same actor",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Teleport to the reviewed Route29 origin, prepare slot 0 as Cyndaquil, mount it, settle, and bind the current actor. This gives no path, stream, motion, or control-return credit."
+      }
+    ],
+    "limits": [
+      "Covers one clear 20-tile east route, one field-stream boundary, and one west recovery on Route29.",
+      "Does not prove diagonal custom streaming, field transitions, blocked paths, or every map boundary."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {"path": "test.sav", "kind": "sav"},
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Prepare and bind mounted Cyndaquil at Route29 (584,403)"},
+    {"at": 1, "kind": "input", "value": "Hold RIGHT until x=604, release through the policy skid, then tap LEFT and drain one recovery tile"},
+    {"at": 2, "kind": "lifecycle", "value": "Observe 22 to 24 ordered public path advances, commits, and control returns"}
+  ],
+  "stop": {
+    "frameBudget": 320,
+    "condition": "The route, bounded stop skid, and one-tile recovery complete at x=604 through x=606 with stock stream state and mounted control"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "PATH_ADVANCED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": ["MOTION_CANCELED", "CONTEXT_CHANGED", "ACTOR_REBOUND", "CONTROL_REBOUND"],
+    "invariants": [
+      "The same live mounted Cyndaquil reaches the 20-tile target, drains one or two skid tiles and at most one queued east Walk, and completes one west recovery Walk",
+      "Every PATH_ADVANCED event occurs before its LOGICAL_COMMIT event",
+      "Each Walk exposes ordered public path states 1 then 2; the route and recovery end in idle state 0",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field context and has an attached presentation",
+      "Mounted control returns idle at x=604 through x=606"
+    ],
+    "eventCounts": [
+      {"event": "MOTION_STARTED", "reason": "OK", "valueA": {"equals": 1}, "minimum": 21, "maximum": 22},
+      {"event": "PATH_ADVANCED", "reason": "OK", "valueB": {"equals": 1}, "minimum": 21, "maximum": 22},
+      {"event": "LOGICAL_COMMIT", "reason": "OK", "valueB": {"equals": 1}, "minimum": 21, "maximum": 22},
+      {"event": "MOTION_FINISHED", "reason": "OK", "minimum": 22, "maximum": 24},
+      {"event": "CONTROL_RETURNED", "reason": "OK", "minimum": 22, "maximum": 24}
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "world.streaming.cardinal-held-route",
+    "claims": ["natural-input", "live-actor-identity", "streaming-path"],
+    "minimumFrames": 80
+  }
+}

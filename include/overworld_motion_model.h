@@ -106,6 +106,17 @@ typedef struct OverworldMotionIntent {
     u8 flags;
 } OverworldMotionIntent;
 
+static inline u8 OverworldMotion_ApplyWalkPauseVariance(
+    u8 pauseFrames,
+    u8 variance,
+    u8 phase)
+{
+    u16 variedPause = pauseFrames
+        + (u8)(((u16)phase * (variance + 1u)) >> 8);
+
+    return variedPause > 255 ? 255 : (u8)variedPause;
+}
+
 typedef struct OverworldMotionCandidate {
     s16 targetX;
     s16 targetY;
@@ -176,6 +187,18 @@ typedef struct OverworldMotionSample {
     u8 facing;
     u8 visible;
 } OverworldMotionSample;
+
+static inline u8 OverworldMotion_BlocksWorldGate(
+    u8 actorActive,
+    u8 inputOwnership,
+    u8 phase,
+    u16 reservationId)
+{
+    return actorActive && inputOwnership
+        && (reservationId != 0
+            || (phase != OVERWORLD_MOTION_PHASE_IDLE
+                && phase != OVERWORLD_MOTION_PHASE_CANCELED));
+}
 
 /*
  * Tick advances exactly one motion frame. firstPathAdvance..lastPathAdvance

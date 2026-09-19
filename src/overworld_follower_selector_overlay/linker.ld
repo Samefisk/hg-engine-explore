@@ -35,4 +35,28 @@ SECTIONS {
         _end = __bss_end__ ;
         __end__ = __bss_end__ ;
         } >rom = 0xff
+
+        .overworld_spawn_spatial ORIGIN(rom) + 0x1E00 : {
+                KEEP(*(.overworld_spawn_spatial_current_map_object))
+                ASSERT(OverworldSpawnSpatial_IsCurrentMapObject
+                        == ORIGIN(rom) + 0x1E00,
+                    "spawn spatial current-object helper moved");
+                ASSERT(. <= ORIGIN(rom) + 0x1E30,
+                    "spawn spatial current-object helper exceeds its slot");
+                . = ORIGIN(rom) + 0x1E30;
+                KEEP(*(.overworld_spawn_spatial_distance_from_player))
+                ASSERT(OverworldSpawnSpatial_DistanceFromPlayer
+                        == ORIGIN(rom) + 0x1E30,
+                    "spawn spatial distance helper moved");
+                ASSERT(. <= ORIGIN(rom) + 0x1E64,
+                    "spawn spatial distance helper exceeds its slot");
+                . = ORIGIN(rom) + 0x1E64;
+                KEEP(*(.overworld_spawn_spatial_object_on_player_tile))
+                ASSERT(OverworldSpawnSpatial_IsObjectOnPlayerTile
+                        == ORIGIN(rom) + 0x1E64,
+                    "spawn spatial object-tile helper moved");
+                ASSERT(. <= ORIGIN(rom) + 0x1EA0,
+                    "spawn spatial selector tail exceeds resident slot");
+                . = ORIGIN(rom) + 0x1EA0;
+        } >rom = 0xff
 }

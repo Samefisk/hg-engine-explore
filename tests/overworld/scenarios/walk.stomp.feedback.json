@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "id": "walk.stomp.feedback",
+  "title": "Mounted Walk stomp emits configured feedback once",
+  "status": "active",
+  "capabilities": [
+    "walk.feedback",
+    "mount.presentation"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld_walk_frame_timing_spec.md",
+    "actor": "MOUNTED species 155 (cyndaquil), acquired through mount; live handle and attached presentation required",
+    "trigger": "Mount the current Cyndaquil follower; Complete one Walk at the configured stomp threshold; Complete one control Walk below the stomp threshold",
+    "observable": "Two ordinary mounted Walks each commit once and return control with paired native poses. At threshold 2, the 2-frame Walk emits one stomp event, creates skid dust and starts sound 2183. The 3-frame Walk emits none of these. Missing native reader coverage is a failure, not zero feedback.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Private test.sav, checked teleport to map33 tile588/406, party slot0 Cyndaquil155 and its own mounted follower. Set idle Owner time2, threshold2 and zero acceleration."
+      },
+      {
+        "phase": "during-observation",
+        "target": "fixture",
+        "change": "After the first completed move and control release, set only the idle lane travel time to3 with the same threshold2. Normal rider input drives both moves."
+      }
+    ],
+    "limits": [
+      "Controlled fixture evidence does not establish unchanged authored-profile timing.",
+      "Native sound-start success is not proof of audible output from speakers. Separate current reader-control acceptance is required."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "lifecycle",
+      "value": "Mount the current Cyndaquil follower"
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Complete one Walk at the configured stomp threshold"
+    },
+    {
+      "at": 2,
+      "kind": "input",
+      "value": "Complete one control Walk below the stomp threshold"
+    }
+  ],
+  "stop": {
+    "frameBudget": 600,
+    "condition": "The positive and negative Walk cases finish and control returns"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ],
+    "orderedEvents": [
+      {
+        "id": "start",
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "commit",
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "finish",
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "control",
+        "event": "CONTROL_RETURNED",
+        "reason": "OK"
+      }
+    ],
+    "eventCounts": [
+      {
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 1
+        },
+        "minimum": 2,
+        "maximum": 2
+      },
+      {
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 2,
+        "maximum": 2
+      },
+      {
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 2,
+        "maximum": 2
+      },
+      {
+        "event": "CONTROL_RETURNED",
+        "reason": "OK",
+        "minimum": 2,
+        "maximum": 2
+      }
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "walk.stomp.feedback",
+    "claims": ["natural-input", "live-actor-identity", "logical-commit", "rendered-motion", "feedback-effect", "control-release"],
+    "minimumFrames": 5
+  }
+}

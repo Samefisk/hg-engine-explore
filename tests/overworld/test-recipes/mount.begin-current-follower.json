@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.begin-current-follower",
+  "title": "Select mounts the newly selected current follower and completes one Hop",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "tests/overworld/scenarios/mount.begin-current-follower.json",
+  "requirements": ["legacy.mount-begin-current-follower"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 600, "noProgressFrames": 120, "minObservedFrames": 1},
+  "subjects": [{"id": "mankey", "species": 56, "role": "MOUNTED", "acquire": "existing"}],
+  "setup": [
+    {"id": "prepare-previous-follower", "op": "spawn", "args": {"species": 174, "role": "follower", "slot": 3},
+     "budget": {"maxSeconds": 30, "maxFrames": 180, "noProgressFrames": 120}}
+  ],
+  "actions": [
+    {"id": "open-y-menu", "op": "step", "args": {"frames": 6, "keys": ["Y"], "until": {"kind": "selector-field", "path": "state", "operator": "eq", "value": 2}},
+     "budget": {"maxSeconds": 5, "maxFrames": 6, "noProgressFrames": 6}},
+    {"id": "release-y", "op": "step", "args": {"frames": 6, "keys": [], "until": {"kind": "selector-field", "path": "heldKeys", "operator": "eq", "value": 0}},
+     "budget": {"maxSeconds": 5, "maxFrames": 6, "noProgressFrames": 6}},
+    {"id": "confirm-current-follower", "op": "step", "args": {"frames": 6, "keys": ["Y"], "until": {"kind": "selector-field", "path": "state", "operator": "eq", "value": 0}},
+     "budget": {"maxSeconds": 5, "maxFrames": 6, "noProgressFrames": 6}},
+    {"id": "wait-current-slot", "op": "wait", "args": {"predicate": {"kind": "selector-field", "path": "activeFollowerPartySlot", "operator": "eq", "value": 2}},
+     "budget": {"maxSeconds": 15, "maxFrames": 150, "noProgressFrames": 120}},
+    {"id": "wait-selection-queue", "op": "wait", "args": {"predicate": {"kind": "selector-field", "path": "queue.count", "operator": "eq", "value": 0}},
+     "budget": {"maxSeconds": 10, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "wait-follower-release", "op": "wait", "args": {"predicate": {"kind": "selector-field", "path": "followerReleaseState", "operator": "eq", "value": 0}},
+     "budget": {"maxSeconds": 10, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "wait-follower-settled", "op": "wait", "args": {"predicate": {"kind": "follower-settled", "species": 56, "partySlot": 2}},
+     "budget": {"maxSeconds": 10, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "press-select", "op": "step", "args": {"frames": 6, "keys": ["SELECT"], "until": {"kind": "selector-field", "path": "newKeys", "operator": "eq", "value": 4}},
+     "budget": {"maxSeconds": 5, "maxFrames": 6, "noProgressFrames": 6}},
+    {"id": "wait-current-mount", "op": "wait", "args": {"predicate": {"kind": "actor-present", "subject": "mankey"}},
+     "budget": {"maxSeconds": 10, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "bind-current-mount", "op": "bind", "args": {"subject": "mankey"},
+     "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "request-one-hop", "op": "step", "args": {"frames": 60, "keys": ["RIGHT"], "until": {"kind": "actor-field", "subject": "mankey", "path": "motionKind", "operator": "eq", "value": "HOP"}},
+     "budget": {"maxSeconds": 10, "maxFrames": 60, "noProgressFrames": 60}},
+    {"id": "wait-hop-terminal", "op": "wait", "args": {"predicate": {"kind": "actor-field", "subject": "mankey", "path": "motionPhase", "operator": "eq", "value": "IDLE"}},
+     "budget": {"maxSeconds": 15, "maxFrames": 180, "noProgressFrames": 120}}
+  ],
+  "assertions": [
+    {"kind": "actor-field", "subject": "mankey", "path": "identityVerified", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "actor-field", "subject": "mankey", "path": "presentationAttached", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "actor-field", "subject": "mankey", "path": "inputOwnership", "operator": "eq", "value": 1, "when": "always"},
+    {"kind": "actor-field", "subject": "mankey", "path": "motionPhase", "operator": "eq", "value": "IDLE"},
+    {"kind": "selector-field", "path": "state", "operator": "eq", "value": 0},
+    {"kind": "frame-count", "operator": "gte", "value": 1}
+  ]
+}

@@ -123,54 +123,54 @@ superrodrate 0
 walklevels 2, 3, 2, 3, 3, 3, 2, 2, 4, 4, 4, 4
 
 // morning encounter slots
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
 
 // day encounter slots
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
 
 // night encounter slots
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
 
 // hoenn encounter slots
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
 
 // sinnoh encounter slots
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
+pokemon SPECIES_MAREEP
+pokemon SPECIES_MAREEP
 
 // surf encounters
 encounter SPECIES_NONE, 0, 0
@@ -205,7 +205,7 @@ encounter SPECIES_NONE, 0, 0
 encounter SPECIES_NONE, 0, 0
 
 // swarm grass
-pokemon SPECIES_RATTATA
+pokemon SPECIES_MAREEP
 // swarm surf
 pokemon SPECIES_NONE
 // swarm good rod
@@ -333,95 +333,95 @@ superrodrate 75
 walklevels 2, 3, 2, 3, 4, 4, 4, 4, 4, 4, 4, 4
 
 // morning encounter slots
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
 
 // day encounter slots
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
 
 // night encounter slots
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
 
 // hoenn encounter slots
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
 
 // sinnoh encounter slots
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
+pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_BELLSPROUT
 
 // surf encounters
-encounter SPECIES_LEDYBA, 15, 25
-encounter SPECIES_LEDYBA, 10, 20
-encounter SPECIES_LEDYBA, 15, 25
-encounter SPECIES_LEDYBA, 15, 25
-encounter SPECIES_LEDYBA, 32, 32
+encounter SPECIES_BELLSPROUT, 15, 25
+encounter SPECIES_BELLSPROUT, 10, 20
+encounter SPECIES_BELLSPROUT, 15, 25
+encounter SPECIES_BELLSPROUT, 15, 25
+encounter SPECIES_BELLSPROUT, 32, 32
 
 // rock smash encounters
 encounter SPECIES_NONE, 0, 0
 encounter SPECIES_NONE, 0, 0
 
 // old rod encounters
-encounter SPECIES_LEDYBA, 10, 10
-encounter SPECIES_LEDYBA, 10, 10
-encounter SPECIES_LEDYBA, 10, 10
-encounter SPECIES_LEDYBA, 10, 10
-encounter SPECIES_LEDYBA, 10, 10
+encounter SPECIES_BELLSPROUT, 10, 10
+encounter SPECIES_BELLSPROUT, 10, 10
+encounter SPECIES_BELLSPROUT, 10, 10
+encounter SPECIES_BELLSPROUT, 10, 10
+encounter SPECIES_BELLSPROUT, 10, 10
 
 // good rod encounters
-encounter SPECIES_LEDYBA, 20, 20
-encounter SPECIES_LEDYBA, 20, 20
-encounter SPECIES_LEDYBA, 20, 20
-encounter SPECIES_LEDYBA, 20, 20
-encounter SPECIES_LEDYBA, 20, 20
+encounter SPECIES_BELLSPROUT, 20, 20
+encounter SPECIES_BELLSPROUT, 20, 20
+encounter SPECIES_BELLSPROUT, 20, 20
+encounter SPECIES_BELLSPROUT, 20, 20
+encounter SPECIES_BELLSPROUT, 20, 20
 
 // super rod encounters
-encounter SPECIES_LEDYBA, 40, 40
-encounter SPECIES_LEDYBA, 40, 40
-encounter SPECIES_LEDYBA, 40, 40
-encounter SPECIES_LEDYBA, 40, 40
-encounter SPECIES_LEDYBA, 40, 40
+encounter SPECIES_BELLSPROUT, 40, 40
+encounter SPECIES_BELLSPROUT, 40, 40
+encounter SPECIES_BELLSPROUT, 40, 40
+encounter SPECIES_BELLSPROUT, 40, 40
+encounter SPECIES_BELLSPROUT, 40, 40
 
 // swarm grass
-pokemon SPECIES_LEDYBA
+pokemon SPECIES_BELLSPROUT
 // swarm surf
-pokemon SPECIES_LEDYBA
+pokemon SPECIES_BELLSPROUT
 // swarm good rod
-pokemon SPECIES_LEDYBA
+pokemon SPECIES_BELLSPROUT
 // swarm super rod
-pokemon SPECIES_LEDYBA
+pokemon SPECIES_BELLSPROUT
 
 .close
 
@@ -437,95 +437,95 @@ superrodrate 75
 walklevels 3, 4, 3, 4, 3, 3, 5, 5, 5, 5, 5, 5
 
 // morning encounter slots
-pokemon SPECIES_SENTRET
-pokemon SPECIES_BELLSPROUT
-pokemon SPECIES_SENTRET
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_LEDYBA
-pokemon SPECIES_BELLSPROUT
-pokemon SPECIES_MIMEJR
-pokemon SPECIES_BELLSPROUT
-pokemon SPECIES_TOEDSCOOL
-pokemon SPECIES_HAPPINY
-pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
 
 // day encounter slots
-pokemon SPECIES_SENTRET
-pokemon SPECIES_BELLSPROUT
-pokemon SPECIES_SENTRET
-pokemon SPECIES_BELLSPROUT
-pokemon SPECIES_BELLSPROUT
-pokemon SPECIES_BELLSPROUT
-pokemon SPECIES_PIDGEY
-pokemon SPECIES_PIDGEY
-pokemon SPECIES_TOEDSCOOL
-pokemon SPECIES_PIDGEY
-pokemon SPECIES_HAPPINY
-pokemon SPECIES_PIDGEY
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
 
 // night encounter slots
-pokemon SPECIES_HOOTHOOT
-pokemon SPECIES_HOOTHOOT
-pokemon SPECIES_SPINARAK
-pokemon SPECIES_SPINARAK
-pokemon SPECIES_SPINARAK
-pokemon SPECIES_BELLSPROUT
-pokemon SPECIES_BELLSPROUT
-pokemon SPECIES_RATTATA
-pokemon SPECIES_RATTATA
-pokemon SPECIES_BELLSPROUT
-pokemon SPECIES_RATTATA
-pokemon SPECIES_BELLSPROUT
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
 
 // hoenn encounter slots
-pokemon SPECIES_WHISMUR
-pokemon SPECIES_LINOONE
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
 
 // sinnoh encounter slots
-pokemon SPECIES_BUIZEL
-pokemon SPECIES_BIDOOF
+pokemon SPECIES_STANTLER
+pokemon SPECIES_STANTLER
 
 // surf encounters
-encounter SPECIES_POLIWAG, 15, 25
-encounter SPECIES_POLIWAG, 10, 20
-encounter SPECIES_POLIWHIRL, 15, 25
-encounter SPECIES_POLIWHIRL, 15, 25
-encounter SPECIES_POLIWHIRL, 32, 32
+encounter SPECIES_STANTLER, 15, 25
+encounter SPECIES_STANTLER, 10, 20
+encounter SPECIES_STANTLER, 15, 25
+encounter SPECIES_STANTLER, 15, 25
+encounter SPECIES_STANTLER, 32, 32
 
 // rock smash encounters
 encounter SPECIES_NONE, 0, 0
 encounter SPECIES_NONE, 0, 0
 
 // old rod encounters
-encounter SPECIES_MAGIKARP, 10, 10
-encounter SPECIES_MAGIKARP, 10, 10
-encounter SPECIES_MAGIKARP, 10, 10
-encounter SPECIES_POLIWAG, 10, 10
-encounter SPECIES_POLIWAG, 10, 10
+encounter SPECIES_STANTLER, 10, 10
+encounter SPECIES_STANTLER, 10, 10
+encounter SPECIES_STANTLER, 10, 10
+encounter SPECIES_STANTLER, 10, 10
+encounter SPECIES_STANTLER, 10, 10
 
 // good rod encounters
-encounter SPECIES_MAGIKARP, 20, 20
-encounter SPECIES_POLIWAG, 20, 20
-encounter SPECIES_POLIWAG, 20, 20
-encounter SPECIES_POLIWAG, 20, 20
-encounter SPECIES_POLIWAG, 20, 20
+encounter SPECIES_STANTLER, 20, 20
+encounter SPECIES_STANTLER, 20, 20
+encounter SPECIES_STANTLER, 20, 20
+encounter SPECIES_STANTLER, 20, 20
+encounter SPECIES_STANTLER, 20, 20
 
 // super rod encounters
-encounter SPECIES_POLIWAG, 40, 40
-encounter SPECIES_POLIWAG, 40, 40
-encounter SPECIES_MAGIKARP, 40, 40
-encounter SPECIES_POLIWAG, 40, 40
-encounter SPECIES_MAGIKARP, 40, 40
+encounter SPECIES_STANTLER, 40, 40
+encounter SPECIES_STANTLER, 40, 40
+encounter SPECIES_STANTLER, 40, 40
+encounter SPECIES_STANTLER, 40, 40
+encounter SPECIES_STANTLER, 40, 40
 
 // swarm grass
-pokemon SPECIES_PIDGEY
+pokemon SPECIES_STANTLER
 // swarm surf
-pokemon SPECIES_POLIWAG
+pokemon SPECIES_STANTLER
 // swarm good rod
-pokemon SPECIES_POLIWAG
+pokemon SPECIES_STANTLER
 // swarm super rod
-pokemon SPECIES_MAGIKARP
+pokemon SPECIES_STANTLER
 
 .close
 

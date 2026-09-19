@@ -2,21 +2,168 @@
   "schemaVersion": 1,
   "id": "warp.blocked-mid-motion",
   "title": "Warp tiles do not fire during mounted motion",
-  "status": "planned",
-  "capabilities": ["world.warp-gating"],
+  "status": "active",
+  "capabilities": [
+    "world.warp-gating"
+  ],
   "proofLevel": "S3",
   "costTier": 3,
-  "fixture": {"rom": "test.nds", "save": {"path": "test.dsv", "kind": "dsv"}, "seed": 0},
-  "events": [
-    {"at": 0, "kind": "setup", "value": "Place a warp tile inside a multi-tile mounted path"},
-    {"at": 1, "kind": "input", "value": "Start the mounted motion across the warp tile"}
-  ],
-  "stop": {"frameBudget": 1200, "condition": "The motion reaches its terminal commit"},
-  "expect": {
-    "requiredEvents": ["PATH_ADVANCED", "LOGICAL_COMMIT"],
-    "forbiddenEvents": ["CONTEXT_CHANGED"],
-    "invariants": ["Warp evaluation does not run during interpolation or path advance", "Only an eligible terminal commit can trigger a warp"]
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/README.md#system-contracts",
+    "actor": "MOUNTED species 155 (cyndaquil), acquired through mount; live handle and attached presentation required",
+    "trigger": "Face the loaded door and press UP for one frame without firing the warp, start a south Teleport with DOWN, return north, then restore Walk and press UP into the same door",
+    "observable": "Each accepted motion has exactly one terminal result; No logical commit occurs after motion cancellation; Control returns after the selected motion finishes or cancels; No active actors share a nonzero target reservation; Every active actor handle uses the current field epoch; Every active actor has an attached presentation",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Prepare own-party mounted Cyndaquil at map67 (555,392), south of the real door (555,391). Read the loaded warp table at the checked lane configuration boundary."
+      },
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Change only mounted lane offsets12,23,24 for fixed Teleport, then restore those original Walk-profile bytes with exact full-state readback. One UP frame checks the faced door gate. DOWN starts a legal south Teleport; normal input returns north facing the door and later enters it."
+      }
+    ],
+    "limits": [
+      "Registration is not accepted game proof; the current shared test must pass on the packaged ROM.",
+      "Controlled fixture evidence does not establish unchanged authored-profile timing.",
+      "Prepared fixture only; no natural mount acquisition or setup travel claim."
+    ]
   },
-  "capture": "failure",
-  "adapter": null
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Prepare mounted Cyndaquil south of Cherrygrove door (555,391)"
+    },
+    {
+      "at": 1,
+      "kind": "setup",
+      "value": "Authenticate the loaded door destination and the three-byte Teleport fixture"
+    },
+    {
+      "at": 2,
+      "kind": "input",
+      "value": "Press UP for one frame at the faced door, Teleport south with DOWN, then return north"
+    },
+    {
+      "at": 3,
+      "kind": "input",
+      "value": "Restore Walk and press into the same door normally"
+    }
+  ],
+  "stop": {
+    "frameBudget": 800,
+    "condition": "The faced door stays blocked on the UP frame; south and north Teleports complete on map67; restored Walk enters map68"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ],
+    "orderedEvents": [
+      {
+        "id": "start",
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 3
+        }
+      },
+      {
+        "id": "commit",
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "finish",
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "control",
+        "event": "CONTROL_RETURNED",
+        "reason": "OK"
+      }
+    ],
+    "eventCounts": [
+      {
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 3
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "CONTROL_RETURNED",
+        "reason": "OK",
+        "minimum": 1,
+        "maximum": 1
+      }
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "warp.blocked-mid-motion", "claims": ["natural-input", "live-actor-identity", "logical-commit", "world-transition", "control-release"], "minimumFrames": 16}
 }
