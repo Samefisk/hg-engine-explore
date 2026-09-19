@@ -957,7 +957,7 @@ def resolve_context(
             previous, current
         )
         previous_by_lane[lane] = current
-        if kind == 3 and lane == 0:
+        if kind in {3, 4} and lane == 0:
             changes_by_override[int(step.get("sourceIndex", -1))] = changes
         if kind == 6 and lane == 0:
             normalizations.extend(changes)
@@ -1088,4 +1088,332 @@ def resolve_context(
         "appliedApplicationIds": applied_application_ids,
         "normalizations": normalizations,
         "runtimeLayers": runtime_layers,
+    }
+
+
+def resolve_conditional_preview(legacy: ModuleType, payload: dict[str, Any]) -> dict[str, Any]:
+    """Run a Workshop draft through the shared condition evaluator and resolver."""
+
+    if not isinstance(payload, dict):
+        raise ValueError("condition preview must be a JSON object")
+    catalog_wrapper = payload.get("profileCatalog")
+    catalog = catalog_wrapper.get("catalog") if isinstance(catalog_wrapper, dict) and "catalog" in catalog_wrapper else catalog_wrapper
+    if not isinstance(catalog, dict):
+        catalog = legacy.load_behavior_catalog_v3()
+    legacy.validate_behavior_catalog(catalog)
+    if catalog.get("catalogVersion") != 3:
+        raise ValueError("condition preview needs a V3 profile catalog")
+
+    subject_input = payload.get("subject")
+    observation = payload.get("observation")
+    if not isinstance(subject_input, dict) or not isinstance(observation, dict):
+        raise ValueError("condition preview needs subject and observation objects")
+    player_input = observation.get("player", {})
+    if not isinstance(player_input, dict):
+        raise ValueError("condition preview player must be an object")
+
+    expressions, species_order = legacy.parse_define_expressions(legacy.DEFINE_SOURCE_FILES)
+    macros = legacy.evaluate_defines(expressions)
+    macros.update(legacy.evaluate_armips_equ([legacy.ARMIPS_CONFIG, legacy.ARMIPS_CONSTANTS]))
+    terrain_values, destination_values = legacy.parse_behavior_data_enums()
+    macros.update(terrain_values)
+    macros.update(destination_values)
+    species = legacy.parse_species(expressions, macros, species_order)
+    legacy.apply_species_type_metadata(species, legacy.parse_species_type_metadata(macros))
+    canonical_types = legacy.parse_species_type_metadata(macros, canonical_symbols=True)
+    species_by_symbol = {entry["symbol"]: entry for entry in species}
+
+    def bounded(raw: object, label: str, minimum: int, maximum: int) -> int:
+        try:
+            value = int(raw)
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"{label} must be a number") from error
+        if value < minimum or value > maximum:
+            raise ValueError(f"{label} must be from {minimum} to {maximum}")
+        return value
+
+    def signed(raw: object, label: str) -> int:
+        return bounded(raw, label, -32768, 32767)
+
+    def species_entry(raw: object, label: str) -> dict[str, Any]:
+        symbol = str(raw or "").strip().upper()
+        if symbol and not symbol.startswith("SPECIES_"):
+            symbol = f"SPECIES_{symbol}"
+        entry = species_by_symbol.get(symbol)
+        if entry is None:
+            raise ValueError(f"unknown Pokemon species for {label}: {raw}")
+        return entry
+
+    def terrain_value(raw: object, label: str) -> int:
+        text = str(raw or "").strip()
+        if text in terrain_values:
+            return terrain_values[text]
+        try:
+            value = int(text, 0)
+        except ValueError as error:
+            raise ValueError(f"unknown terrain for {label}: {raw}") from error
+        if value not in set(terrain_values.values()):
+            raise ValueError(f"unknown terrain value for {label}: {value}")
+        return value
+
+    def expression(raw: object, label: str, maximum: int) -> int:
+        try:
+            value = legacy.eval_c_expr(str(raw), macros)
+        except Exception as error:
+            raise ValueError(f"invalid {label}: {raw}") from error
+        if value < 0 or value > maximum:
+            raise ValueError(f"{label} must be from 0 to {maximum}")
+        return value
+
+    subject_species = species_entry(subject_input.get("species"), "subject")
+    requested_class = subject_input.get("behaviorClass", "auto")
+    behavior_class = 0xFF if str(requested_class).lower() == "auto" else expression(requested_class, "behavior class", 0xFF)
+    subject = {
+        "species": subject_species["value"],
+        "level": bounded(subject_input.get("level", 1), "subject level", 1, 100),
+        "terrain": terrain_value(subject_input.get("terrain", "OW_WILD_SPAWN_TERRAIN_LAND"), "subject"),
+        "shiny": _parse_bool(str(subject_input.get("shiny", False))),
+        "groupFlags": legacy.canonical_spawn_group_flags(subject_species, canonical_types),
+        "behaviorClass": behavior_class,
+        "handle": {"slot": 0, "generation": 1, "fieldEpoch": 1, "mapGeneration": 1, "encounterGeneration": 1},
+    }
+    native_observation = {
+        "frame": bounded(observation.get("frame", 0), "current frame", 0, 0xFFFFFFFF),
+        "x": signed(observation.get("x", 10), "subject x"),
+        "y": signed(observation.get("y", 10), "subject y"),
+        "facing": bounded(observation.get("facing", 3), "subject facing", 0, 3),
+        "terrainMask": expression(observation.get("terrainMask", 1), "observed terrain mask", 0x3FF),
+        "movementSpeed": bounded(observation.get("movementSpeed", 0), "movement speed", 0, 0xFF),
+        "player": {
+            "valid": _parse_bool(str(player_input.get("valid", True))),
+            "x": signed(player_input.get("x", 12), "player x"),
+            "y": signed(player_input.get("y", 10), "player y"),
+        },
+    }
+
+    candidate_inputs = payload.get("candidates", [])
+    if not isinstance(candidate_inputs, list) or len(candidate_inputs) > 10:
+        raise ValueError("condition preview supports at most 10 candidates")
+    candidate_ids: list[str] = []
+    candidates: list[dict[str, Any]] = []
+    for index, candidate_input in enumerate(candidate_inputs):
+        if not isinstance(candidate_input, dict):
+            raise ValueError(f"candidate {index} must be an object")
+        candidate_id = str(candidate_input.get("id") or f"candidate-{index + 1}")
+        if candidate_id in candidate_ids:
+            raise ValueError(f"candidate id is duplicated: {candidate_id}")
+        candidate_ids.append(candidate_id)
+        entry = species_entry(candidate_input.get("species"), f"candidate {candidate_id}")
+        role = str(candidate_input.get("role", "wild"))
+        if role not in {"wild", "follower"}:
+            raise ValueError(f"candidate {candidate_id} role must be wild or follower")
+        candidates.append({
+            "species": entry["value"],
+            "level": bounded(candidate_input.get("level", subject["level"]), f"candidate {candidate_id} level", 1, 100),
+            "terrain": terrain_value(candidate_input.get("terrain", subject_input.get("terrain", "OW_WILD_SPAWN_TERRAIN_LAND")), f"candidate {candidate_id}"),
+            "shiny": _parse_bool(str(candidate_input.get("shiny", False))),
+            "groupFlags": legacy.canonical_spawn_group_flags(entry, canonical_types),
+            "behaviorClass": 0xFF,
+            "roleMask": 1 if role == "wild" else 2,
+            "handle": {"slot": index + 1, "generation": 1, "fieldEpoch": 1, "mapGeneration": 1, "encounterGeneration": 1},
+            "x": signed(candidate_input.get("x", 12 + index), f"candidate {candidate_id} x"),
+            "y": signed(candidate_input.get("y", 10), f"candidate {candidate_id} y"),
+            "valid": _parse_bool(str(candidate_input.get("valid", True))),
+        })
+
+    profiles_by_id = {profile["id"]: profile for profile in catalog["profiles"]}
+    condition_records: list[dict[str, Any]] = []
+    condition_by_authored: dict[tuple[str, str], dict[str, Any]] = {}
+    condition_by_numeric: dict[tuple[int, int], dict[str, Any]] = {}
+    for application_index, application in enumerate(catalog["applications"]):
+        profile = profiles_by_id[application["profile"]]
+        for condition in profile.get("conditions", []):
+            numeric_id = legacy._stable_condition_id(profile["id"], condition["id"])
+            record = {
+                "profileId": profile["id"],
+                "applicationId": application["id"],
+                "applicationIndex": application_index,
+                "conditionId": condition["id"],
+                "numericConditionId": numeric_id,
+            }
+            condition_records.append(record)
+            condition_by_authored[(profile["id"], condition["id"])] = record
+            condition_by_numeric[(application_index, numeric_id)] = record
+
+    state_inputs = payload.get("conditionState", [])
+    if not isinstance(state_inputs, list) or len(state_inputs) > 32:
+        raise ValueError("condition preview supports at most 32 condition states")
+    native_states = []
+    for index, state in enumerate(state_inputs):
+        if not isinstance(state, dict):
+            raise ValueError(f"condition state {index} must be an object")
+        record = condition_by_authored.get((str(state.get("profileId", "")), str(state.get("conditionId", ""))))
+        if record is None:
+            raise ValueError(f"condition state {index} names an unknown condition")
+        target = state.get("target", {})
+        if not isinstance(target, dict):
+            raise ValueError(f"condition state {index} target must be an object")
+        target_kind_name = str(target.get("kind", "none"))
+        if target_kind_name not in {"none", "player", "actor"}:
+            raise ValueError(f"condition state {index} target kind is invalid")
+        candidate_id = str(target.get("candidateId", ""))
+        native_states.append({
+            "conditionId": record["numericConditionId"],
+            "active": _parse_bool(str(state.get("active", False))),
+            "hasTriggered": _parse_bool(str(state.get("hasTriggered", False))),
+            "activeUntil": bounded(state.get("activeUntil", 0), f"condition state {index} activeUntil", 0, 0xFFFFFFFF),
+            "cooldownUntil": bounded(state.get("cooldownUntil", 0), f"condition state {index} cooldownUntil", 0, 0xFFFFFFFF),
+            "targetKind": {"none": 0, "player": 1, "actor": 2}[target_kind_name],
+            "targetCandidateIndex": candidate_ids.index(candidate_id) if target_kind_name == "actor" and candidate_id in candidate_ids else -1,
+        })
+
+    native_request = {
+        "subject": subject,
+        "observation": native_observation,
+        "candidates": candidates,
+        "conditionState": native_states,
+        "chanceSeed": bounded(payload.get("chanceSeed", native_observation["frame"]), "chance seed", 0, 0xFFFFFFFF),
+    }
+    with tempfile.TemporaryDirectory(prefix="workshop-condition-preview-") as directory:
+        temporary = Path(directory)
+        catalog_path = temporary / "catalog.json"
+        executable = temporary / "condition-preview"
+        catalog_path.write_text(json.dumps(catalog, indent=2) + "\n")
+        native_resolver.build_condition_preview(
+            legacy.ROOT,
+            catalog=catalog_path,
+            output=executable,
+        )
+        native = native_resolver.preview_conditions(
+            native_request,
+            root=legacy.ROOT,
+            executable=executable,
+        )
+
+    resolver = native["resolver"]
+    if resolver.get("status") not in {0, 4} or resolver.get("traceDropped") != 0:
+        raise RuntimeError("conditional preview resolver provenance is incomplete")
+    trace = resolver.get("trace", [])
+    owner_base_step = next((step for step in trace if step.get("lane") == 0 and step.get("kind") == 2), None)
+    if owner_base_step is None:
+        raise RuntimeError("conditional preview did not report its selected profile")
+    selected_values = legacy.decode_native_profile(macros, owner_base_step["profileHex"])
+    resolved_values = legacy.decode_native_profile(macros, resolver["profileHex"], lane=0)
+    changes_by_application: dict[int, list[dict[str, Any]]] = {}
+    previous_by_lane: dict[int, dict[str, dict[str, Any]]] = {}
+    runtime_layers = []
+    kind_names = {2: "Selected profile", 3: "Profile application", 4: "Conditional application", 5: "Application reference", 6: "Runtime normalization"}
+    for step in trace:
+        lane = int(step.get("lane", 255))
+        kind = int(step.get("kind", 255))
+        encoded = step.get("profileHex")
+        if lane not in {0, 1, 2} or not isinstance(encoded, str):
+            continue
+        current = legacy.decode_native_profile(macros, encoded)
+        previous = previous_by_lane.get(lane)
+        changes = [] if previous is None else legacy.native_profile_changes(previous, current)
+        previous_by_lane[lane] = current
+        source_index = int(step.get("sourceIndex", -1))
+        if kind in {3, 4} and lane == 0:
+            changes_by_application[source_index] = changes
+        runtime_layers.append({"kind": kind_names.get(kind, "resolver"), "sourceIndex": source_index, "lane": lane, "changes": changes})
+
+    behavior_class = int(resolver["behaviorClass"])
+    class_order = catalog["runtimeBindings"]["classOrder"]
+    selected_profile_id = class_order[behavior_class]["profile"]
+    matched_mask = int(resolver.get("matchedOverrideMask", 0))
+    applied_mask = int(resolver.get("appliedOverrideMask", 0))
+    conditional_mask = int(resolver.get("conditionalOverrideMask", 0))
+    resolver_layers = [{
+        "id": selected_profile_id,
+        "kind": "selection",
+        "order": 0,
+        "name": profiles_by_id[selected_profile_id]["name"],
+        "matched": True,
+        "applied": True,
+        "summary": "Selected profile",
+        "changes": [],
+    }]
+    for index, application in enumerate(catalog["applications"]):
+        profile = profiles_by_id[application["profile"]]
+        bit = 1 << index
+        resolver_layers.append({
+            "id": application["id"],
+            "profileId": profile["id"],
+            "kind": "application",
+            "profileKind": profile["kind"],
+            "order": index + 1,
+            "name": profile["name"],
+            "matched": bool(matched_mask & bit) or bool(conditional_mask & bit),
+            "applied": bool(applied_mask & bit),
+            "summary": "Conditional activation" if profile["kind"] == "conditional" else application["target"]["mode"],
+            "fields": list(profile.get("fields", {})),
+            "changes": changes_by_application.get(index, []),
+        })
+
+    def target_view(target: dict[str, Any]) -> dict[str, Any]:
+        kind = {0: "none", 1: "player", 2: "actor"}.get(int(target.get("kind", 0)), "none")
+        result = {"kind": kind}
+        if kind == "actor":
+            slot = int(target.get("actorSlot", 0))
+            if 1 <= slot <= len(candidate_ids):
+                result["candidateId"] = candidate_ids[slot - 1]
+        return result
+
+    native_entries = {(int(entry["applicationIndex"]), int(entry["conditionId"])): entry for entry in native.get("entries", [])}
+    evaluation_entries = []
+    next_state = []
+    for record in condition_records:
+        entry = native_entries.get((record["applicationIndex"], record["numericConditionId"]))
+        view = {key: record[key] for key in ("profileId", "applicationId", "conditionId")}
+        view.update({
+            "subjectMatched": entry is not None,
+            "conditionTrue": bool(entry and entry.get("conditionTrue")),
+            "triggered": bool(entry and entry.get("triggered")),
+            "active": bool(entry and entry.get("active")),
+            "winsProfile": bool(entry and entry.get("winsProfile")),
+            "target": target_view(entry.get("target", {})) if entry else {"kind": "none"},
+        })
+        evaluation_entries.append(view)
+        if entry is not None:
+            next_state.append({
+                "profileId": record["profileId"],
+                "conditionId": record["conditionId"],
+                "active": bool(entry.get("active")),
+                "hasTriggered": bool(entry.get("hasTriggered")),
+                "activeUntil": int(entry.get("activeUntil", 0)),
+                "cooldownUntil": int(entry.get("cooldownUntil", 0)),
+                "target": target_view(entry.get("target", {})),
+            })
+
+    winner_record = condition_by_numeric.get((int(native.get("winningConditionSourceApplication", 0xFF)), int(native.get("winningConditionId", 0xFFFF))))
+    target_record = condition_by_numeric.get((int(native.get("resolvedTargetSourceApplication", 0xFF)), int(native.get("resolvedTargetConditionId", 0xFFFF))))
+    active_ids = [application["id"] for index, application in enumerate(catalog["applications"]) if int(native.get("activeApplicationMask", 0)) & (1 << index)]
+    triggered_ids = [application["id"] for index, application in enumerate(catalog["applications"]) if int(native.get("triggeredApplicationMask", 0)) & (1 << index)]
+    condition_evaluation = {
+        "entries": evaluation_entries,
+        "activeApplicationIds": active_ids,
+        "triggeredApplicationIds": triggered_ids,
+        "winningCondition": ({key: winner_record[key] for key in ("profileId", "applicationId", "conditionId")} if winner_record else None),
+        "targetSource": ({
+            **{key: target_record[key] for key in ("profileId", "applicationId", "conditionId")},
+            "target": target_view(native.get("resolvedTarget", {})),
+        } if target_record else None),
+        "nextState": next_state,
+    }
+    return {
+        "apiVersion": 2,
+        "sourceRevision": current_revision(legacy, legacy.ROOT),
+        "resolutionOrder": "top-to-bottom",
+        "lastAppliesLast": True,
+        "context": {"species": subject_species, "level": subject["level"], "terrain": subject["terrain"], "shiny": bool(subject["shiny"])},
+        "selectedProfile": {"id": selected_profile_id, "name": profiles_by_id[selected_profile_id]["name"]},
+        "selectedProfileValues": legacy.profile_numeric_view(selected_values),
+        "resolvedProfile": legacy.profile_numeric_view(resolved_values),
+        "resolvedPrimitives": legacy.decode_native_primitives(macros, resolver["primitivesHex"]),
+        "resolverLayers": resolver_layers,
+        "matchedApplicationIds": [application["id"] for index, application in enumerate(catalog["applications"]) if matched_mask & (1 << index)],
+        "appliedApplicationIds": [application["id"] for index, application in enumerate(catalog["applications"]) if applied_mask & (1 << index)],
+        "runtimeLayers": runtime_layers,
+        "conditionEvaluation": condition_evaluation,
     }

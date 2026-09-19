@@ -26,6 +26,23 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _stage_native_sources(
+    root: Path,
+    generated_root: Path,
+    relative_paths: tuple[str, ...],
+) -> tuple[Path, ...]:
+    """Copy native sources so their relative includes use generated headers."""
+
+    staged: list[Path] = []
+    for relative_path in relative_paths:
+        source = root / relative_path
+        destination = generated_root / relative_path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        staged.append(destination)
+    return tuple(staged)
+
+
 def _sources(
     root: Path,
     catalog: Path,
@@ -137,6 +154,15 @@ def build(
                 if generated.returncode != 0:
                     detail = generated.stderr.strip() or generated.stdout.strip()
                     raise RuntimeError(f"could not generate resolver input: {detail}")
+                staged_resolver, staged_main, _staged_header = _stage_native_sources(
+                    root,
+                    generated_root,
+                    (
+                        "lib/overworld/overworld_behavior_resolver.c",
+                        "tools/overworld-viewer-v2/native/overworld_behavior_resolver_main.c",
+                        "include/overworld_behavior_resolver.h",
+                    ),
+                )
                 command = compiler + [
                     "-std=c99",
                     "-O2",
@@ -144,11 +170,13 @@ def build(
                     "-Wextra",
                     "-DOVERWORLD_BEHAVIOR_HOST",
                     "-I",
+                    str(generated_root / "include"),
+                    "-I",
                     str(root / "include"),
                     "-I",
                     str(root / "data"),
-                    str(root / "lib/overworld/overworld_behavior_resolver.c"),
-                    str(root / "tools/overworld-viewer-v2/native/overworld_behavior_resolver_main.c"),
+                    str(staged_resolver),
+                    str(staged_main),
                     str(generated_source),
                     "-o",
                     str(temporary),
@@ -168,6 +196,178 @@ def build(
         finally:
             temporary.unlink(missing_ok=True)
     return output
+
+
+def build_condition_preview(
+    root: Path | None = None,
+    *,
+    catalog: Path | None = None,
+    source_template: Path | None = None,
+    header_template: Path | None = None,
+    output: Path | None = None,
+) -> Path:
+    """Build the shared condition-evaluator plus resolver preview host."""
+
+    root = (root or _repo_root()).resolve()
+    catalog = (catalog or root / "data/overworld_behavior_profiles.json").resolve()
+    source_template = (source_template or root / "data/OverworldWildBehaviorData.c").resolve()
+    header_template = (header_template or root / "include/overworld_wild_behavior_data.h").resolve()
+    output = (output or root / "build/overworld_behavior_condition_preview_host").resolve()
+    compiler_setting = os.environ.get("CC")
+    compiler = shlex.split(compiler_setting) if compiler_setting else []
+    if not compiler:
+        default_compiler = shutil.which("cc")
+        compiler = [default_compiler] if default_compiler else []
+    if not compiler:
+        raise RuntimeError("a host C compiler is required (set CC or install cc)")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    file_descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{output.name}.",
+        dir=output.parent,
+    )
+    os.close(file_descriptor)
+    temporary = Path(temporary_name)
+    try:
+        with tempfile.TemporaryDirectory(
+            prefix=f".{output.name}.catalog.",
+            dir=output.parent,
+        ) as generated_name:
+            generated_root = Path(generated_name)
+            generated_source = generated_root / "data/OverworldWildBehaviorData.c"
+            generated_header = generated_root / "include/overworld_wild_behavior_data.h"
+            generate_command = [
+                sys.executable,
+                str(root / "scripts/generate_overworld_behavior_catalog.py"),
+                "--catalog", str(catalog),
+                "--source-template", str(source_template),
+                "--header-template", str(header_template),
+                "--source-output", str(generated_source),
+                "--header-output", str(generated_header),
+            ]
+            generated = subprocess.run(
+                generate_command,
+                cwd=root,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if generated.returncode != 0:
+                detail = generated.stderr.strip() or generated.stdout.strip()
+                raise RuntimeError(f"could not generate condition preview input: {detail}")
+            (
+                staged_conditions,
+                staged_runtime,
+                staged_resolver,
+                staged_main,
+                _staged_actor_header,
+                _staged_conditions_header,
+                _staged_runtime_header,
+                _staged_resolver_header,
+            ) = _stage_native_sources(
+                root,
+                generated_root,
+                (
+                    "lib/overworld/overworld_behavior_conditions.c",
+                    "lib/overworld/overworld_behavior_condition_runtime.c",
+                    "lib/overworld/overworld_behavior_resolver.c",
+                    "tools/overworld-viewer-v2/native/overworld_behavior_condition_preview_main.c",
+                    "include/overworld_actor_system.h",
+                    "include/overworld_behavior_conditions.h",
+                    "include/overworld_behavior_condition_runtime.h",
+                    "include/overworld_behavior_resolver.h",
+                ),
+            )
+            command = compiler + [
+                "-std=c99", "-O2", "-Wall", "-Wextra",
+                "-DOVERWORLD_BEHAVIOR_HOST",
+                "-DOVERWORLD_ACTOR_SYSTEM_HOST",
+                "-I", str(generated_root / "include"),
+                "-I", str(root / "include"),
+                "-I", str(root / "data"),
+                str(staged_conditions),
+                str(staged_runtime),
+                str(staged_resolver),
+                str(staged_main),
+                str(generated_source),
+                "-o", str(temporary),
+            ]
+            completed = subprocess.run(
+                command,
+                cwd=root,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if completed.returncode != 0:
+                detail = completed.stderr.strip() or completed.stdout.strip()
+                raise RuntimeError(f"could not compile condition preview host: {detail}")
+        temporary.chmod(0o755)
+        temporary.replace(output)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return output
+
+
+def preview_conditions(
+    request: Mapping[str, Any],
+    *,
+    root: Path | None = None,
+    executable: Path | None = None,
+) -> dict[str, Any]:
+    """Evaluate prepared conditions and resolve their explicit result."""
+
+    root = (root or _repo_root()).resolve()
+    executable = executable or build_condition_preview(root)
+    subject = request["subject"]
+    observation = request["observation"]
+    subject_handle = subject["handle"]
+    candidates = request.get("candidates", [])
+    states = request.get("conditionState", [])
+    player = observation["player"]
+    header = (
+        subject["species"], subject["level"], subject["terrain"], subject["shiny"],
+        subject["groupFlags"], subject["behaviorClass"], observation["terrainMask"],
+        subject_handle["slot"], subject_handle["generation"], subject_handle["fieldEpoch"],
+        subject_handle["mapGeneration"], subject_handle["encounterGeneration"],
+        observation["frame"], observation["x"], observation["y"],
+        player["x"], player["y"], player["valid"], observation["facing"],
+        observation["movementSpeed"], request.get("chanceSeed", observation["frame"]),
+        len(candidates), len(states),
+    )
+    lines = [" ".join(str(int(value)) for value in header)]
+    for candidate in candidates:
+        handle = candidate["handle"]
+        lines.append(" ".join(str(int(value)) for value in (
+            candidate["species"], candidate["level"], candidate["terrain"], candidate["shiny"],
+            candidate["groupFlags"], candidate["behaviorClass"], candidate["roleMask"],
+            handle["slot"], handle["generation"], handle["fieldEpoch"],
+            handle["mapGeneration"], handle["encounterGeneration"],
+            candidate["x"], candidate["y"], candidate["valid"],
+        )))
+    for state in states:
+        lines.append(" ".join(str(int(value)) for value in (
+            state["conditionId"], state["active"], state["hasTriggered"],
+            state["activeUntil"], state["cooldownUntil"],
+            state["targetKind"], state.get("targetCandidateIndex", -1),
+        )))
+    completed = subprocess.run(
+        [str(executable)],
+        cwd=root,
+        input="\n".join(lines) + "\n",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip()
+        raise RuntimeError(f"condition preview host failed: {detail}")
+    try:
+        result = json.loads(completed.stdout)
+    except json.JSONDecodeError as error:
+        raise RuntimeError("condition preview host returned invalid JSON") from error
+    if not isinstance(result, dict):
+        raise RuntimeError("condition preview host did not return a JSON object")
+    return result
 
 
 def _condition_request_values(request: Mapping[str, Any]) -> tuple[int, ...]:

@@ -2250,7 +2250,7 @@ button {
 
 .resolver-drawer {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -2315,6 +2315,91 @@ button {
 
 .resolver-drawer-controls #resolveContext {
   width: 100%;
+}
+
+.profile-condition-preview {
+  max-height: 290px;
+  overflow: auto;
+  border-bottom: 1px solid #aaa8a1;
+  background: #e5e1d8;
+}
+
+.profile-condition-preview > summary {
+  padding: 8px;
+  cursor: pointer;
+}
+
+.profile-condition-preview > summary > span {
+  display: grid;
+  gap: 2px;
+}
+
+.profile-condition-preview__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 0 8px 8px;
+}
+
+.profile-condition-preview__grid > label {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  color: #4f5652;
+  font: 750 9px/1.2 var(--mono);
+}
+
+.profile-condition-preview__grid input,
+.profile-condition-preview__grid select,
+.profile-condition-preview__grid textarea {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid #aaa69c;
+  border-radius: 3px;
+  background: #f7f3e9;
+  color: var(--ink);
+}
+
+.profile-condition-preview__candidates {
+  grid-column: 1 / -1;
+}
+
+.pv2-condition-result,
+.pv2-condition-result > p,
+.pv2-condition-result dl,
+.pv2-condition-result ol {
+  display: grid;
+  gap: 6px;
+}
+
+.pv2-condition-result > p {
+  margin: 0;
+}
+
+.pv2-condition-result dl {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.pv2-condition-result dl > div,
+.pv2-condition-result ol > li {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid #c6c2b8;
+  background: #eeeae1;
+}
+
+.pv2-condition-result ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pv2-condition-result ol > li.is-active {
+  border-color: #4e947d;
+  background: #dfeee8;
 }
 
 .resolver-drawer .resolution-panel {
@@ -5225,6 +5310,109 @@ button {
   color: var(--muted);
 }
 
+.pv2-condition-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.pv2-condition-grid,
+.pv2-condition-match-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.pv2-condition-grid > label,
+.pv2-condition-match-grid > label,
+.pv2-condition-grid fieldset {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pv2-condition-grid label > span,
+.pv2-condition-match-grid label > span,
+.pv2-condition-grid legend {
+  color: var(--muted);
+  font: 800 10px/1.2 var(--mono);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.pv2-condition-wide {
+  grid-column: 1 / -1;
+}
+
+.pv2-condition-grid fieldset {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 9px;
+  border: 1px solid #c8c4ba;
+}
+
+.pv2-condition-grid fieldset > legend {
+  padding: 0 4px;
+}
+
+.pv2-profile-kind {
+  display: grid;
+  gap: 3px;
+  min-width: 180px;
+  text-align: left;
+}
+
+.pv2-profile-kind > span,
+.pv2-profile-kind > small {
+  color: var(--muted);
+  font: 750 9px/1.25 var(--mono);
+}
+
+.pv2-migration-report {
+  margin: 10px 0;
+  border: 1px solid #c9c4b8;
+  background: #efebe1;
+}
+
+.pv2-migration-report > summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.pv2-migration-report > summary > span {
+  display: grid;
+  gap: 3px;
+}
+
+.pv2-migration-report dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 0 12px 12px;
+}
+
+.pv2-migration-report dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px;
+  border-bottom: 1px solid #d7d1c5;
+}
+
+.pv2-migration-report dt {
+  color: var(--muted);
+}
+
+.pv2-migration-report dd {
+  margin: 0;
+  font-family: var(--mono);
+  text-align: right;
+}
+
 .pv2-conditional-terrain .pv2-terrain-policy {
   grid-template-columns: repeat(5, minmax(46px, 58px));
 }
@@ -5249,6 +5437,12 @@ button {
   .pv2-conditional-state-card > header,
   .pv2-conditional-terrain,
   .pv2-conditional-speed {
+    grid-template-columns: 1fr;
+  }
+
+  .pv2-condition-grid,
+  .pv2-condition-match-grid,
+  .pv2-migration-report dl {
     grid-template-columns: 1fr;
   }
 

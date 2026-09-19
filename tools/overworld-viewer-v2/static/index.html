@@ -259,6 +259,24 @@
               <button id="resolveContext" class="button button--dark" type="button">Resolve</button>
             </div>
 
+            <details class="profile-condition-preview" open>
+              <summary><span><strong>Condition facts</strong><small>The shared evaluator uses these facts. Times are absolute frame values.</small></span></summary>
+              <div class="profile-condition-preview__grid">
+                <label><span>Current frame</span><input id="profileContextFrame" type="number" min="0" max="4294967295" value="0"></label>
+                <label><span>Subject X</span><input id="profileContextSubjectX" type="number" min="-32768" max="32767" value="10"></label>
+                <label><span>Subject Y</span><input id="profileContextSubjectY" type="number" min="-32768" max="32767" value="10"></label>
+                <label><span>Facing</span><select id="profileContextFacing"><option value="0">Up</option><option value="1">Down</option><option value="2">Left</option><option value="3" selected>Right</option></select></label>
+                <label><span>Physical terrain mask</span><input id="profileContextTerrainMask" type="number" min="0" max="1023" value="1"></label>
+                <label><span>Walk time</span><input id="profileContextMovementSpeed" type="number" min="0" max="255" value="0"></label>
+                <label><span>Player X</span><input id="profileContextPlayerX" type="number" min="-32768" max="32767" value="12"></label>
+                <label><span>Player Y</span><input id="profileContextPlayerY" type="number" min="-32768" max="32767" value="10"></label>
+                <label class="check-control"><input id="profileContextPlayerValid" type="checkbox" checked><span>Player exists</span></label>
+                <label><span>Seed active until</span><input id="profileContextActiveUntil" type="number" min="0" max="4294967295" value="0"></label>
+                <label><span>Seed cooldown until</span><input id="profileContextCooldownUntil" type="number" min="0" max="4294967295" value="0"></label>
+                <label class="profile-condition-preview__candidates"><span>Candidate Pokémon</span><textarea id="profileContextCandidates" rows="3" placeholder="target-a, SPECIES_PIKACHU, wild, 12, 10"></textarea><small>One per line: ID, species, wild or follower, X, Y.</small></label>
+              </div>
+            </details>
+
             <div id="profileResolution" class="resolution-panel" aria-label="Context resolution" aria-live="polite">
               <header class="panel-heading">
                 <span><small>Context scan</small><strong>Resolution</strong></span>

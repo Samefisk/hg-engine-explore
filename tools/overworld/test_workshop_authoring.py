@@ -7,6 +7,8 @@ import importlib.util
 import inspect
 import json
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -369,6 +371,147 @@ class WorkshopAuthoringTests(unittest.TestCase):
         self.assertIn('>Ordered overrides</strong>', index)
         self.assertIn('>Base only</option>', index)
         self.assertIn('>Overrides only</option>', index)
+
+    def test_workshop_conditional_profile_model_round_trips_canonical_data(self) -> None:
+        module = self.temp / "profiles-model.mjs"
+        shutil.copyfile(V2_STATIC / "profiles.js", module)
+        catalog_path = self.temp / "profiles-model-catalog.json"
+        catalog_path.write_text(json.dumps(self.catalog))
+        authored_path = self.temp / "profiles-model-authored.json"
+        script = self.temp / "profiles-model-test.mjs"
+        script.write_text(f"""
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {{
+  addConditionalProfileCondition,
+  canonicalCatalogStructuralErrors,
+  moveConditionalProfileCondition,
+  removeConditionalProfileCondition,
+  setConditionalProfileKind,
+}} from {json.dumps(module.as_uri())};
+
+const source = JSON.parse(fs.readFileSync({json.dumps(str(catalog_path))}, 'utf8'));
+const classProfiles = new Set(source.runtimeBindings.classOrder.map((item) => item.profile));
+const conditionalParents = new Set(source.profiles.filter((item) => item.kind === 'conditional').map((item) => item.parent));
+const application = source.applications.find((item) => {{
+  const profile = source.profiles.find((candidate) => candidate.id === item.profile);
+  return profile?.kind === 'normal' && item.target.mode !== 'disabled'
+    && !classProfiles.has(profile.id) && !conditionalParents.has(profile.id);
+}});
+assert.ok(application, 'fixture needs a normal override with a subject pool');
+const originalApplications = source.applications.map((item) => item.id);
+const originalProfiles = source.profiles.map((item) => item.id);
+const originalSelectors = source.selectors.map((item) => item.id);
+
+let draft = setConditionalProfileKind(source, application.id, 'conditional');
+let profile = draft.profiles.find((item) => item.id === application.profile);
+let ownerApplication = draft.applications.find((item) => item.id === application.id);
+assert.equal(profile.kind, 'conditional');
+assert.equal(profile.conditions.length, 1);
+assert.equal(profile.conditions[0].subjects.mode, application.target.mode);
+assert.deepEqual(profile.conditions[0].subjects.members, application.target.members);
+assert.equal(ownerApplication.target.mode, 'disabled');
+assert.deepEqual(draft.applications.map((item) => item.id), originalApplications);
+assert.deepEqual(draft.profiles.map((item) => item.id), originalProfiles);
+assert.deepEqual(draft.selectors.map((item) => item.id), originalSelectors);
+
+const firstId = profile.conditions[0].id;
+draft = addConditionalProfileCondition(draft, application.id, firstId);
+profile = draft.profiles.find((item) => item.id === application.profile);
+assert.equal(profile.conditions.length, 2);
+const secondId = profile.conditions[1].id;
+assert.notEqual(firstId, secondId);
+draft = moveConditionalProfileCondition(draft, application.id, secondId, -1);
+profile = draft.profiles.find((item) => item.id === application.profile);
+assert.deepEqual(profile.conditions.map((item) => item.id), [secondId, firstId]);
+profile.conditions[0].activation = {{ mode: 'timed', durationFrames: 45, cooldownFrames: 90 }};
+profile.conditions[0].target = {{ kind: 'actor', roles: ['wild'], selection: 'nearest', groupMask: 'OW_WILD_BEHAVIOR_GROUP_NONE', members: ['SPECIES_PIKACHU'] }};
+profile.conditions[0].when = {{ kind: 'notice-target', rangeKind: 'OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS', rangeLength: 4, chancePercent: 75 }};
+assert.deepEqual(canonicalCatalogStructuralErrors(draft, {{ fields: [], numericOverrideOperatorFieldKeys: [], boundedOverrideOperatorFieldKeys: [] }}).filter((error) => /duration|cooldown|target/.test(error)), []);
+const authored = JSON.parse(JSON.stringify(draft));
+assert.deepEqual(authored.applications.map((item) => item.id), originalApplications);
+assert.deepEqual(authored.profiles.map((item) => item.id), originalProfiles);
+assert.deepEqual(authored.selectors.map((item) => item.id), originalSelectors);
+fs.writeFileSync({json.dumps(str(authored_path))}, JSON.stringify(authored, null, 2) + '\\n');
+
+const tooMany = JSON.parse(JSON.stringify(authored));
+const expanded = tooMany.profiles.find((item) => item.id === application.profile);
+expanded.conditions = Array.from({{ length: 32 }}, (_, index) => ({{
+  ...JSON.parse(JSON.stringify(expanded.conditions[0])),
+  id: `condition-limit-${{index + 1}}`,
+}}));
+assert.ok(canonicalCatalogStructuralErrors(tooMany).some((error) => /at most 32 condition entries/.test(error)));
+
+const invalidFacts = JSON.parse(JSON.stringify(authored));
+const invalidCondition = invalidFacts.profiles.find((item) => item.id === application.profile).conditions[0];
+invalidCondition.when = {{ kind: 'terrain-motion', terrainMask: 2, terrainOverrideMask: 1, minMovementSpeed: 12, maxMovementSpeed: 4 }};
+invalidCondition.target = {{ kind: 'none' }};
+const factErrors = canonicalCatalogStructuralErrors(invalidFacts);
+assert.ok(factErrors.some((error) => /enabled terrains/.test(error)));
+assert.ok(factErrors.some((error) => /reversed Walk-time/.test(error)));
+
+const invalidNotice = JSON.parse(JSON.stringify(authored));
+const noticeCondition = invalidNotice.profiles.find((item) => item.id === application.profile).conditions[0];
+noticeCondition.when = {{ kind: 'notice-target', rangeKind: 9, rangeLength: 256, chancePercent: 101 }};
+const noticeErrors = canonicalCatalogStructuralErrors(invalidNotice);
+assert.ok(noticeErrors.some((error) => /notice shape/.test(error)));
+assert.ok(noticeErrors.some((error) => /notice range/.test(error)));
+assert.ok(noticeErrors.some((error) => /notice chance/.test(error)));
+
+profile.conditions[0].subjects = {{ mode: 'members', match: profile.conditions[1].subjects.match, members: ['SPECIES_PIKACHU'] }};
+assert.throws(() => setConditionalProfileKind(draft, application.id, 'normal'), /different subject pools/);
+draft = removeConditionalProfileCondition(draft, application.id, secondId);
+draft = setConditionalProfileKind(draft, application.id, 'normal');
+profile = draft.profiles.find((item) => item.id === application.profile);
+assert.equal(profile.kind, 'normal');
+assert.equal(Object.hasOwn(profile, 'conditions'), false);
+assert.deepEqual(draft.applications.find((item) => item.id === application.id).target, application.target);
+assert.throws(() => removeConditionalProfileCondition(setConditionalProfileKind(source, application.id, 'conditional'), application.id, firstId), /at least one condition/);
+""")
+        completed = subprocess.run(
+            ["node", script],
+            cwd=REPO,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr or completed.stdout)
+        generated = subprocess.run(
+            [
+                sys.executable,
+                "scripts/generate_overworld_behavior_catalog.py",
+                "--catalog",
+                authored_path,
+                "--source-output",
+                self.temp / "OverworldWildBehaviorData.c",
+                "--header-output",
+                self.temp / "overworld_wild_behavior_data.h",
+            ],
+            cwd=REPO,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(generated.returncode, 0, generated.stderr or generated.stdout)
+
+    def test_active_tab_is_removed_and_alert_is_repurposed(self) -> None:
+        profile_editor = (V2_STATIC / "profiles.js").read_text()
+        self.assertNotIn('title: "Active state"', profile_editor)
+        self.assertNotIn('data-lifecycle-tab="active"', profile_editor)
+        self.assertIn('title: "Conditions"', profile_editor)
+        self.assertIn('Old Active and attentive values', profile_editor)
+        self.assertIn(
+            "if (resetConditionState) ui.conditionPreview.nextState = [];",
+            profile_editor,
+        )
+        self.assertIn(
+            "contextAbortController !== requestController",
+            profile_editor,
+        )
+        self.assertIn(
+            "targetSource.target?.candidateId",
+            profile_editor,
+        )
 
     def test_profile_commit_uses_focused_runtime_validation(self) -> None:
         validation_source = inspect.getsource(reliability.validate_commit_domains)

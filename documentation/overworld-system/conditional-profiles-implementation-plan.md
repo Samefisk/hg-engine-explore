@@ -12,7 +12,8 @@ until the CP7 cutover gate passes.
 | CP2 | Complete | The portable evaluator covers while-true, timed duration, cooldown, refresh, player and actor targets, overlap order, stale targets, terrain/speed, and frame wrap. Its fixed result includes per-application winners and one final target. |
 | CP3 | Complete | The 44-byte request and 276-byte result support explicit conditions. Ordered resolver tests, 15 goldens, and host/package fixtures prove the new one-pass path. Legacy callers remain on the compatibility mode. |
 | CP4 | Complete | The role adapter prepares bounded condition entries at bind, clears them with actor identity, evaluates at the idle decision boundary, resolves in shadow mode, and emits armed-only trace facts. The old path still owns visible behavior. |
-| CP5–CP8 | Not started | Workshop authoring, catalog migration, cutover, deletion, and live acceptance remain. |
+| CP5 | Complete | The Workshop authors ordered, profile-owned conditions and previews draft data through the shared portable evaluator and resolver. The Active tab is gone; Conditions replaces Alert authoring. |
+| CP6–CP8 | Not started | Catalog migration, cutover, deletion, and live acceptance remain. |
 
 This plan changes who owns alert and active behavior. It does not design a
 general condition language.

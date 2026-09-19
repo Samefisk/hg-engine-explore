@@ -468,10 +468,10 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluateWithResults(
     result->resolvedTargetConditionId =
         OVERWORLD_BEHAVIOR_CONDITION_NO_ENTRY;
     result->resolvedTargetSourceApplication =
-        OVERWORLD_BEHAVIOR_CONDITION_MAX_APPLICATIONS;
+        OVERWORLD_BEHAVIOR_CONDITION_NO_APPLICATION;
     result->winningConditionId = OVERWORLD_BEHAVIOR_CONDITION_NO_ENTRY;
     result->winningConditionSourceApplication =
-        OVERWORLD_BEHAVIOR_CONDITION_MAX_APPLICATIONS;
+        OVERWORLD_BEHAVIOR_CONDITION_NO_APPLICATION;
     OverworldBehaviorCondition_ClearTarget(&result->resolvedTarget);
     for (i = 0; i < OVERWORLD_BEHAVIOR_CONDITION_MAX_APPLICATIONS; i++) {
         result->winningConditionIds[i] =
