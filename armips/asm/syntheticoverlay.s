@@ -20,6 +20,11 @@ load_arm9_expansion: // load the narc subfile with arm9 expansion data
     mov r1, #2
     bl HandleLoadOverlay129 // HandleLoadOverlay(129, 2) // noinit load
 
+// load overlay 158's resident overworld actor-system code home
+    mov r0, #0
+    mov r1, #158
+    bl LoadResidentOverlay
+
 // load overlay 157's bounded mount-controller home
     mov r0, #0
     mov r1, #157

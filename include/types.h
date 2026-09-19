@@ -2,6 +2,10 @@
 #define TYPES_H
 
 #include <stdint.h>
+#ifdef OVERWORLD_BEHAVIOR_HOST
+#include <stdio.h>
+#include <string.h>
+#endif
 #include "io_reg.h"
 #include "debug.h"
 #include "constants/buttons.h"
@@ -197,9 +201,11 @@ void LONG_CALL GfGfx_SetBanks(void *);
 void LONG_CALL OS_ResetSystem(u32);
 
 
+#ifndef OVERWORLD_BEHAVIOR_HOST
 void *memcpy(void *dest, void *src, u32 size);
 void *memset(void *dest, u8 fill, u32 size);
 void sprintf(u8 *buf, char *str, ...);
+#endif
 void debugsyscall(u8 *buf);
 
 

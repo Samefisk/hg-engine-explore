@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.resolve.packaged-rom-parity",
+  "title": "Seven packaged resolver cases match Workshop",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "tests/overworld/scenarios/profile.resolve.packaged-rom-parity.json",
+  "requirements": ["legacy.packaged-resolver-parity"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 4000, "noProgressFrames": 120, "minObservedFrames": 1},
+  "subjects": [],
+  "setup": [],
+  "actions": [
+    {"id": "resolve-seven-cases", "op": "resolver.probe", "args": {},
+     "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}}
+  ],
+  "assertions": [{"kind": "measurement-complete", "measurement": "packaged-resolver-parity-v1", "when": "final"}],
+  "measurements": [{"kind": "packaged-resolver-parity-v1"}]
+}

@@ -40,6 +40,9 @@ typedef struct OverworldFollowerTransitionQueueStorage {
     u8 reserved; /* pending selector request/mount-after-spawn state */
 } OverworldFollowerTransitionQueueStorage;
 
+typedef char OverworldFollowerTransitionQueueStorageMustRemain8Bytes[
+    sizeof(OverworldFollowerTransitionQueueStorage) == 8 ? 1 : -1];
+
 #define OVERWORLD_FOLLOWER_TRANSITION_QUEUE \
     ((volatile OverworldFollowerTransitionQueueStorage *) \
         OVERWORLD_FOLLOWER_TRANSITION_QUEUE_ADDR)

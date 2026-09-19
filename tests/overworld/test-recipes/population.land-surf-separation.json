@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "id": "population.land-surf-separation",
+  "title": "Cherrygrove Surf Tentacool stays out of the land-only spawn window",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/README.md#system-contracts",
+  "requirements": [
+    "legacy.cherrygrove-surf-spawn-terrain"
+  ],
+  "budgets": {
+    "maxSeconds": 120,
+    "maxFrames": 320,
+    "noProgressFrames": 240,
+    "minObservedFrames": 100
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    }
+  ],
+  "setup": [
+    {
+      "id": "cherrygrove-land-window",
+      "op": "teleport",
+      "args": {
+        "map": 67,
+        "x": 543,
+        "z": 393,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "current-follower",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "actor-present",
+          "subject": "mankey"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "bind-current-field",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "natural-population-window",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "land-surf-separation-v1",
+          "stage": "two-attempts",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "land-surf-separation-v1",
+      "when": "final"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "land-surf-separation-v1",
+      "subject": "mankey"
+    }
+  ]
+}

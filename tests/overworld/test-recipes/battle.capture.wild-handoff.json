@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "id": "battle.capture.wild-handoff",
+  "title": "A input hands the same live Wild Rattata to battle",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/README.md#system-contracts and tools/overworld/runtime_proof_registry.json: legacy.wild-battle-handoff",
+  "requirements": ["legacy.wild-battle-handoff"],
+  "budgets": {"maxSeconds": 180, "maxFrames": 600, "noProgressFrames": 120, "minObservedFrames": 12},
+  "subjects": [{"id": "rattata", "species": 19, "role": "WILD", "acquire": "spawn"}],
+  "measurements": [{"kind": "wild-battle-handoff-v1", "subject": "rattata"}],
+  "setup": [
+    {"id": "outside-alert-line", "op": "teleport", "args": {"map": 33, "x": 585, "z": 408, "facing": 0},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "spawn-own-rattata", "op": "spawn", "args": {"species": 19, "role": "wild", "level": 5, "x": 583, "z": 406},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "idle-own-rattata", "op": "wait", "args": {"predicate": {"kind": "actor-count", "subject": "rattata", "motionPhase": "IDLE", "operator": "eq", "value": 1}},
+      "budget": {"maxSeconds": 20, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "bind-new-rattata", "op": "bind", "args": {"subject": "rattata"},
+      "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "natural-walk-start", "op": "wait", "args": {"predicate":
+      {"kind": "measurement-stage", "measurement": "wild-battle-handoff-v1", "stage": "motion-started", "when": "final"}},
+      "budget": {"maxSeconds": 90, "maxFrames": 400, "noProgressFrames": 120}},
+    {"id": "approach-up", "op": "step", "args": {"frames": 32, "keys": ["UP"], "until":
+      {"kind": "player-settled-at", "map": 33, "x": 585, "z": 404, "when": "final"}},
+      "budget": {"maxSeconds": 32, "maxFrames": 32, "noProgressFrames": 32}},
+    {"id": "approach-left", "op": "step", "args": {"frames": 8, "keys": ["LEFT"], "until":
+      {"kind": "player-settled-at", "map": 33, "x": 584, "z": 404, "when": "final"}},
+      "budget": {"maxSeconds": 10, "maxFrames": 8, "noProgressFrames": 8}},
+    {"id": "hold-outside-alert", "op": "step", "args": {"frames": 8, "keys": []},
+      "budget": {"maxSeconds": 10, "maxFrames": 8, "noProgressFrames": 8}},
+    {"id": "final-left", "op": "step", "args": {"frames": 8, "keys": ["LEFT"], "until":
+      {"kind": "player-settled-at", "map": 33, "x": 583, "z": 404, "when": "final"}},
+      "budget": {"maxSeconds": 10, "maxFrames": 8, "noProgressFrames": 8}},
+    {"id": "natural-walk-complete", "op": "wait", "args": {"predicate":
+      {"kind": "measurement-stage", "measurement": "wild-battle-handoff-v1", "stage": "motion-complete", "when": "final"}},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "face-rattata", "op": "step", "args": {"frames": 1, "keys": ["UP"]},
+      "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "request-battle", "op": "step", "args": {"frames": 120, "keys": ["A"], "until":
+      {"kind": "measurement-stage", "measurement": "wild-battle-handoff-v1", "stage": "request-complete", "when": "final"}},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}}
+  ],
+  "assertions": [{"kind": "measurement-complete", "measurement": "wild-battle-handoff-v1", "when": "final"}]
+}

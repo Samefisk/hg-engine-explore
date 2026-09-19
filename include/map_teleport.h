@@ -5,6 +5,8 @@
 
 typedef struct FieldSystem FieldSystem;
 typedef struct OverworldWildSpawnState OverworldWildSpawnState;
+typedef struct OverworldMountRuntimeState OverworldMountRuntimeState;
+typedef struct LocalMapObject LocalMapObject;
 
 /*
  * Overlay 131 used to expose the custom debug map-teleport service here.
@@ -44,6 +46,70 @@ typedef char OverworldFieldServiceEntrySizeMustRemain16Bytes[
 
 #define OVERWORLD_FIELD_SERVICE_ENTRY \
     ((const OverworldFieldServiceEntry *)OVERWORLD_FIELD_SERVICE_ENTRY_ADDR)
+
+#define OVERWORLD_FIELD_MOUNT_PRESENTATION_ENTRY_ADDR 0x023C8154
+#define OVERWORLD_FIELD_MOUNT_PRESENTATION_MAGIC 0x50544D57 /* WMTP */
+#define OVERWORLD_FIELD_MOUNT_PRESENTATION_VERSION 2
+#define OVERWORLD_FIELD_TERRAIN_STREAM_CALL_VERSION 2
+
+typedef enum OverworldFieldTerrainStreamOperation {
+    OVERWORLD_FIELD_TERRAIN_STREAM_BEGIN = 0,
+    OVERWORLD_FIELD_TERRAIN_STREAM_POLL,
+    OVERWORLD_FIELD_TERRAIN_STREAM_QUERY_IDLE,
+    OVERWORLD_FIELD_TERRAIN_STREAM_CANCEL,
+    OVERWORLD_FIELD_TERRAIN_STREAM_REBIND,
+} OverworldFieldTerrainStreamOperation;
+
+typedef enum OverworldFieldTerrainStreamResult {
+    OVERWORLD_FIELD_TERRAIN_STREAM_REJECTED = 0,
+    OVERWORLD_FIELD_TERRAIN_STREAM_IDLE,
+    OVERWORLD_FIELD_TERRAIN_STREAM_WAITING,
+    OVERWORLD_FIELD_TERRAIN_STREAM_READY,
+    OVERWORLD_FIELD_TERRAIN_STREAM_RETRY_BUSY,
+} OverworldFieldTerrainStreamResult;
+
+typedef struct OverworldFieldTerrainStreamCall {
+    u16 version;
+    u16 size;
+    FieldSystem *fieldSystem;
+    u32 fieldContext;
+    u16 motionIdentity;
+    s16 targetX;
+    s16 targetY;
+    u8 operation;
+    u8 reserved;
+} OverworldFieldTerrainStreamCall;
+
+typedef OverworldFieldTerrainStreamResult (*OverworldFieldTerrainStreamFunc)(
+    const OverworldFieldTerrainStreamCall *call);
+
+typedef struct OverworldFieldMountPresentationCall {
+    u16 version;
+    u16 size;
+    OverworldMountRuntimeState *mount;
+    OverworldWildSpawnState *wild;
+    LocalMapObject *player;
+    LocalMapObject *follower;
+} OverworldFieldMountPresentationCall;
+
+typedef struct OverworldFieldMountPresentationEntry {
+    u32 magic;
+    u16 version;
+    u16 size;
+    BOOL (*sync)(OverworldFieldMountPresentationCall *call);
+    OverworldFieldTerrainStreamFunc terrainStream;
+} OverworldFieldMountPresentationEntry;
+
+typedef char OverworldFieldMountPresentationCallSizeMustRemain20Bytes[
+    sizeof(OverworldFieldMountPresentationCall) == 20 ? 1 : -1];
+typedef char OverworldFieldMountPresentationEntrySizeMustRemain16Bytes[
+    sizeof(OverworldFieldMountPresentationEntry) == 16 ? 1 : -1];
+typedef char OverworldFieldTerrainStreamCallSizeMustRemain20Bytes[
+    sizeof(OverworldFieldTerrainStreamCall) == 20 ? 1 : -1];
+
+#define OVERWORLD_FIELD_MOUNT_PRESENTATION_ENTRY \
+    ((const OverworldFieldMountPresentationEntry *) \
+        OVERWORLD_FIELD_MOUNT_PRESENTATION_ENTRY_ADDR)
 
 /* Runs from the independent field-ready SysTask, never FieldSystem_Control. */
 #define OVERWORLD_FOLLOWER_SELECTOR_TASK_POLL_ADDR 0x023C8010

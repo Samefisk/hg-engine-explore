@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "overworld-feature-manifest-v1",
+  "title": "Overworld feature manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "proofLevels", "roles", "traceGroups", "checks", "capabilities"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "proofLevels": {"const": ["S0", "S1", "S2", "S3", "S4", "S5"]},
+    "roles": {"const": ["Wild", "Follower", "Mounted", "Scripted"]},
+    "traceGroups": {"const": ["actor", "profile", "intent", "motion", "streaming", "presentation", "lifecycle", "population"]},
+    "checks": {"type": "array", "minItems": 1},
+    "capabilities": {"type": "array", "minItems": 1}
+  }
+}

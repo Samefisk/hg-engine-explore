@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "observation.wild-clear-control",
+  "title": "Real wild Rattata clear reader detects and restores a bad active byte",
+  "mode": "observer-control",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/verification.md#memory-backed-proof",
+  "requirements": ["shared.wild-clear-recorder-control-v1"],
+  "budgets": {"maxSeconds": 180, "maxFrames": 1200, "noProgressFrames": 120, "minObservedFrames": 4},
+  "subjects": [{"id": "rattata", "species": 19, "role": "WILD", "acquire": "spawn"}],
+  "measurements": [{"kind": "live-wild-clear-control-v1", "subject": "rattata"}],
+  "setup": [
+    {"id": "outside-alert-line", "op": "teleport", "args": {"map": 33, "x": 585, "z": 408, "facing": 0},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "spawn-own-rattata", "op": "spawn", "args": {"species": 19, "role": "wild", "level": 5, "x": 583, "z": 406},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "bind-new-rattata", "op": "bind", "args": {"subject": "rattata"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "idle-own-rattata", "op": "wait", "args": {"predicate": {"kind": "actor-field", "subject": "rattata", "path": "motionPhase", "operator": "eq", "value": "IDLE"}},
+      "budget": {"maxSeconds": 20, "maxFrames": 120, "noProgressFrames": 120}}
+  ],
+  "actions": [
+    {"id": "arm-native-clear", "op": "wild-walk.arm", "args": {"subject": "rattata"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "natural-clear-baseline", "op": "wait", "args": {"predicate": {"kind": "measurement-stage", "measurement": "live-wild-clear-control-v1", "stage": "natural-walk-complete"}},
+      "budget": {"maxSeconds": 90, "maxFrames": 600, "noProgressFrames": 120}},
+    {"id": "calibrate-same-reader", "op": "wild-walk.calibrate", "args": {},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "close-native-clear", "op": "wild-walk.close", "args": {},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "assertions": [{"kind": "measurement-complete", "measurement": "live-wild-clear-control-v1"}]
+}

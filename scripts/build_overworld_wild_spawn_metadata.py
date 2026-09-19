@@ -12,10 +12,10 @@ from pathlib import Path
 
 
 OWSM_MAGIC = 0x4F57534D
-OWSM_VERSION = 2
+OWSM_VERSION = 3
 OWSM_HEADER_SIZE = 36
-OWSM_RECORD_SIZE = 8
-OWSM_EXCEPTION_SIZE = 12
+OWSM_RECORD_SIZE = 12
+OWSM_EXCEPTION_SIZE = 16
 OWSM_CHECKSUM_OFFSET = 32
 OWSM_MAX_ENCODED_FORM = 31
 OWSM_EXPECTED_DENSE_RECORD_COUNT = 1076
@@ -25,14 +25,42 @@ OVERLAY_1_RENDER_DESCRIPTOR_SIZE = 8
 OVERLAY_1_RENDER_MODE_OFFSET = 2
 
 SPECIES_PIKACHU = 25
+SPECIES_GASTLY = 92
 SPECIES_SLOWBRO = 80
 SPECIES_HOOTHOOT = 163
+SPECIES_PICHU = 172
 SPECIES_DEOXYS = 386
 SPECIES_WORMADAM = 413
 SPECIES_ROTOM = 479
 SPECIES_GIRATINA = 487
 SPECIES_SHAYMIN = 492
 SPECIES_FINNEON = 456
+
+GROUP_BABY = 1 << 0
+GROUP_GHOST = 1 << 1
+GROUP_TYPE_NORMAL = 1 << 2
+TYPE_STELLAR = 19
+GHOST_GROUP_SPECIES = frozenset((92, 93, 94, 200, 355))
+BABY_GROUP_SPECIES = frozenset((
+    172, 173, 174, 175, 236, 238, 239, 240, 298, 360, 406, 433,
+    438, 439, 440, 446, 447, 458,
+))
+
+
+def behavior_group_flags(species: int, type1: int, type2: int) -> int:
+    """Return the resolver group bits stored in canonical spawn metadata."""
+
+    flags = 0
+    if species == 0:
+        return flags
+    if species in GHOST_GROUP_SPECIES:
+        flags |= GROUP_GHOST
+    elif species in BABY_GROUP_SPECIES:
+        flags |= GROUP_BABY
+    for pokemon_type in (type1, type2):
+        if 0 <= pokemon_type <= TYPE_STELLAR:
+            flags |= GROUP_TYPE_NORMAL << pokemon_type
+    return flags
 
 
 def parse_object_define(source: str, name: str) -> int:
@@ -111,6 +139,15 @@ def validate_shared_format_header(path: Path) -> None:
         header_offsets.get("checksum") == OWSM_CHECKSUM_OFFSET,
         f"{path}: checksum offset is {header_offsets.get('checksum')}, expected {OWSM_CHECKSUM_OFFSET}",
     )
+
+
+def validate_runtime_capacity(blob: bytes, format_header: Path, label: str) -> None:
+    maximum = parse_object_define(format_header.read_text(encoding="utf-8"),
+                                  "OVERWORLD_WILD_SPAWN_METADATA_MAX_BLOB_SIZE")
+    require(OWSM_HEADER_SIZE <= maximum <= 0xFFFFFFFF,
+            f"{format_header}: invalid metadata allocation bound {maximum}")
+    require(len(blob) <= maximum,
+            f"{label}: metadata is {len(blob)} bytes, above runtime capacity {maximum}")
 
 
 def require(condition: bool, message: str) -> None:
@@ -208,16 +245,18 @@ class SpawnMetadata:
     type2: int
     catch_value: int
     render_mode_plus_one: int
+    group_flags: int
 
     def encode(self) -> bytes:
         return struct.pack(
-            "<HHBBBB",
+            "<HHBBBBI",
             self.sprite_id,
             self.follower_param,
             self.type1,
             self.type2,
             self.catch_value,
             self.render_mode_plus_one,
+            self.group_flags,
         )
 
 
@@ -320,6 +359,7 @@ class MetadataSources:
         catch_rate = personal[8]
         sprite_id = self.sprite_id(species, form)
         require(sprite_id in self.render_modes, f"render table lacks emitted sprite tag {sprite_id}")
+        group_flags = behavior_group_flags(species, personal[6], personal[7])
         return SpawnMetadata(
             sprite_id=sprite_id,
             follower_param=(overworld[1] << 8) | overworld[2],
@@ -327,6 +367,7 @@ class MetadataSources:
             type2=personal[7],
             catch_value=(catch_rate + 2) // 3,
             render_mode_plus_one=self.render_modes[sprite_id],
+            group_flags=group_flags,
         )
 
 
@@ -378,11 +419,11 @@ def build_blob(sources: MetadataSources) -> bytes:
 
 
 def decode_record(blob: bytes, offset: int) -> SpawnMetadata:
-    sprite_id, follower_param, type1, type2, catch_value, render_mode_plus_one = struct.unpack_from(
-        "<HHBBBB", blob, offset
+    sprite_id, follower_param, type1, type2, catch_value, render_mode_plus_one, group_flags = struct.unpack_from(
+        "<HHBBBBI", blob, offset
     )
     require(1 <= render_mode_plus_one <= 64, f"record at {offset} has invalid render mode")
-    return SpawnMetadata(sprite_id, follower_param, type1, type2, catch_value, render_mode_plus_one)
+    return SpawnMetadata(sprite_id, follower_param, type1, type2, catch_value, render_mode_plus_one, group_flags)
 
 
 def validate_blob(blob: bytes, sources: MetadataSources, label: str) -> tuple[int, int]:
@@ -452,8 +493,16 @@ def validate_blob(blob: bytes, sources: MetadataSources, label: str) -> tuple[in
     hoothoot_personal = sources.personal_members[SPECIES_HOOTHOOT]
     require(hoothoot_personal[8] == 255, "Hoothoot fixture catch rate is not 255")
     require(
-        hoothoot == SpawnMetadata(646, 0, 0, 2, 85, 1),
+        hoothoot == SpawnMetadata(646, 0, 0, 2, 85, 1, 0x14),
         f"Hoothoot fixture mismatch: {hoothoot}",
+    )
+    require(
+        decoded_base[SPECIES_GASTLY].group_flags == 0x222,
+        f"Gastly group fixture mismatch: {decoded_base[SPECIES_GASTLY].group_flags:#x}",
+    )
+    require(
+        decoded_base[SPECIES_PICHU].group_flags == 0x8001,
+        f"Pichu group fixture mismatch: {decoded_base[SPECIES_PICHU].group_flags:#x}",
     )
     return base_count, exception_count
 
@@ -491,11 +540,14 @@ def main() -> int:
         if args.output is not None:
             blob = build_blob(sources)
             base_count, exception_count = validate_blob(blob, sources, str(args.output))
+            validate_runtime_capacity(blob, args.format_header, str(args.output))
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_bytes(blob)
             print(f"wrote OWSM v{OWSM_VERSION}: {base_count} dense records, {exception_count} form exceptions, {len(blob)} bytes")
         if args.verify is not None:
-            base_count, exception_count = validate_blob(args.verify.read_bytes(), sources, str(args.verify))
+            blob = args.verify.read_bytes()
+            base_count, exception_count = validate_blob(blob, sources, str(args.verify))
+            validate_runtime_capacity(blob, args.format_header, str(args.verify))
             print(f"verified OWSM v{OWSM_VERSION}: {base_count} dense records, {exception_count} form exceptions")
     except (OSError, ValueError) as exc:
         print(exc, file=sys.stderr)

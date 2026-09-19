@@ -15,6 +15,26 @@
 
 #ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
 
+/* Same resident archive ABI. Direct Thumb calls avoid long-call veneers in
+ * this fixed 4KiB overlay; no archive lifetime or read policy changes. */
+extern void *SpawnMetadata_NARC_ctor(u32 narcId, u32 heapId);
+extern void SpawnMetadata_NARC_dtor(void *narc);
+extern u16 SpawnMetadata_NARC_GetFileCount(void *narc);
+extern u32 SpawnMetadata_NARC_GetMemberSize(void *narc, u32 member);
+extern void SpawnMetadata_NARC_ReadWholeMember(void *narc, u32 member, void *dest);
+#define NARC_ctor SpawnMetadata_NARC_ctor
+#define NARC_dtor SpawnMetadata_NARC_dtor
+#define NARC_GetFileCount SpawnMetadata_NARC_GetFileCount
+#define NARC_GetMemberSize SpawnMetadata_NARC_GetMemberSize
+#define NARC_ReadWholeMember SpawnMetadata_NARC_ReadWholeMember
+__asm__(
+    ".thumb\n"
+    ".global SpawnMetadata_NARC_ctor\n.thumb_func\n.thumb_set SpawnMetadata_NARC_ctor, 0x02007688\n"
+    ".global SpawnMetadata_NARC_dtor\n.thumb_func\n.thumb_set SpawnMetadata_NARC_dtor, 0x0200770C\n"
+    ".global SpawnMetadata_NARC_GetFileCount\n.thumb_func\n.thumb_set SpawnMetadata_NARC_GetFileCount, 0x020078E8\n"
+    ".global SpawnMetadata_NARC_GetMemberSize\n.thumb_func\n.thumb_set SpawnMetadata_NARC_GetMemberSize, 0x020077E8\n"
+    ".global SpawnMetadata_NARC_ReadWholeMember\n.thumb_func\n.thumb_set SpawnMetadata_NARC_ReadWholeMember, 0x0200778C\n");
+
 #define OW_WILD_LEGACY_ENCOUNTER_AREA_COUNT 150
 #define OW_WILD_PLAYER_BALL_CAPTURE_DESTINATION_PARTY (-1)
 #define OW_WILD_PLAYER_BALL_CAPTURE_DESTINATION_NONE (-2)
@@ -24,7 +44,6 @@
 #define OW_WILD_DIRECTION_DOWN 1
 #define OW_WILD_DIRECTION_LEFT 2
 #define OW_WILD_DIRECTION_RIGHT 3
-#define OW_WILD_SPAWN_METADATA_MAX_BLOB_SIZE 0x4000
 #define OW_WILD_LEVELUP_LEARNSET_MEMBER_COUNT 1
 #define OW_WILD_LEVELUP_LEARNSET_ROW_COUNT \
     (MAX_SPECIES_INCLUDING_FORMS + 1)
@@ -37,6 +56,7 @@
 #define OW_WILD_PERSONAL_ATTR_COUNT (PERSONAL_TM_ARRAY_4 + 1)
 #define OW_WILD_PERSONAL_CACHE_INVALID 0
 #define OW_WILD_PERSONAL_CACHE_FAILED ((void *)1)
+
 typedef struct OverworldWildBehaviorDataOverlayHeader {
     OverworldWildBehaviorOverlayEntry behavior;
     OverworldWildEncounterLookupDataEntry legacyEncounterLookup;
@@ -209,10 +229,10 @@ typedef char OverworldWildLevelUpLearnsetRowCountMustRemain1393[
     OW_WILD_LEVELUP_LEARNSET_ROW_COUNT == 1393 ? 1 : -1];
 typedef char OverworldWildLevelUpLearnsetMemberSizeMustRemain228452[
     OW_WILD_LEVELUP_LEARNSET_MEMBER_SIZE == 228452 ? 1 : -1];
-typedef char OverworldWildSpawnMetadataSizeMustRemain8Bytes[
-    sizeof(OverworldWildSpawnMetadata) == 8 ? 1 : -1];
-typedef char OverworldWildSpawnMetadataExceptionSizeMustRemain12Bytes[
-    sizeof(OverworldWildSpawnMetadataException) == 12 ? 1 : -1];
+typedef char OverworldWildSpawnMetadataSizeMustRemain12Bytes[
+    sizeof(OverworldWildSpawnMetadata) == 12 ? 1 : -1];
+typedef char OverworldWildSpawnMetadataExceptionSizeMustRemain16Bytes[
+    sizeof(OverworldWildSpawnMetadataException) == 16 ? 1 : -1];
 typedef char OverworldWildSpawnMetadataHeaderSizeMustRemain36Bytes[
     sizeof(OverworldWildSpawnMetadataBlobHeader) == 36 ? 1 : -1];
 typedef char OverworldWildRenderModeObjectOffsetMustRemain120[
@@ -339,11 +359,9 @@ static u32 OverworldWildBehavior_CalculateJumpTrajectory(
     if (frameCount > 0xFFFF) {
         frameCount = 0xFFFF;
     }
-    arcHeightQ4 = packedElevationScales >> 8;
-    if (arcHeightQ4 != 0) {
-        arcHeightQ4 = OW_WILD_BEHAVIOR_JUMP_ARC_HEIGHT_MIN_Q4
-            + elevationQ4 * arcHeightQ4 / (2 * 100);
-    }
+    /* The scale controls extra elevation clearance, not the base Hop arc. */
+    arcHeightQ4 = OW_WILD_BEHAVIOR_JUMP_ARC_HEIGHT_MIN_Q4
+        + elevationQ4 * (packedElevationScales >> 8) / (2 * 100);
     if (arcHeightQ4 > 0xFF) {
         arcHeightQ4 = 0xFF;
     }
@@ -374,15 +392,23 @@ static u16 sOverworldWildLevelUpLearnsetCachedSpecies =
     OW_WILD_LEVELUP_LEARNSET_CACHE_INVALID;
 static BOOL sOverworldWildLevelUpLearnsetOpenAttempted;
 static OverworldWildPersonalCacheState sOverworldWildPersonalCache;
-void *sOverworldWildStagedHopMovementTasks[OW_WILD_MAX_SPAWNS]
-    __attribute__((section(".overworld_wild_staged_hop_tasks"), used));
 
-static u32 OverworldWildBehavior_SpawnMetadataChecksum(const u8 *blob, u32 size)
+static u32 __attribute__((noinline)) OverworldWildBehavior_SpawnMetadataChecksum(const u8 *blob, u32 size)
 {
     u32 checksum = 0;
+    u32 completeBytes = size & ~3u;
     u32 i;
 
-    for (i = 0; i < size; i++) {
+    /* Same byte sum, with the stored checksum at bytes32..35 excluded.
+     * Group byte reads (no alignment/aliasing assumption) so first-spawn
+     * validation does not branch and spill the loop index for every byte.
+     * Keep this small hot loop out of the large metadata-loader stack frame. */
+    for (i = 0; i < completeBytes; i += 4) {
+        if (i != 32) {
+            checksum += blob[i] + blob[i + 1] + blob[i + 2] + blob[i + 3];
+        }
+    }
+    for (; i < size; i++) {
         if (i < 32 || i >= 36) {
             checksum += blob[i];
         }
@@ -476,7 +502,7 @@ static BOOL OverworldWildBehavior_LoadSpawnMetadata(void)
     }
     size = NARC_GetMemberSize(narc, CODE_ADDON_OVERWORLD_WILD_SPAWN_METADATA);
     if (size >= sizeof(OverworldWildSpawnMetadataBlobHeader)
-        && size <= OW_WILD_SPAWN_METADATA_MAX_BLOB_SIZE) {
+        && size <= OVERWORLD_WILD_SPAWN_METADATA_MAX_BLOB_SIZE) {
         sOverworldWildSpawnMetadataBlob = sys_AllocMemory(HEAPID_WORLD, size);
     }
     if (sOverworldWildSpawnMetadataBlob != NULL) {
@@ -719,7 +745,9 @@ static BOOL OverworldWildBehavior_TryGetSpawnMetadata(
 
 static void OverworldWildBehavior_CleanupSpawnMetadata(void)
 {
-    sys_FreeMemoryEz(sOverworldWildSpawnMetadataBlob);
+    if (sOverworldWildSpawnMetadataBlob != NULL) {
+        sys_FreeMemoryEz(sOverworldWildSpawnMetadataBlob);
+    }
     sOverworldWildSpawnMetadataBlob = NULL;
     sOverworldWildSpawnMetadataBlobSize = 0;
     sOverworldWildSpawnMetadataLoadAttempted = FALSE;
@@ -882,7 +910,7 @@ static int OverworldWildBehavior_FindBattleTalkSlot(
     for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
         LocalMapObject *spawnObject = state->spawns[slot].object;
 
-        if (state->movementSpawnRunActive[slot]
+        if (state->movementSpawnRunActive[slot] == OW_WILD_SPAWN_ENTRY_HOP
             || (excludedMask & (1u << slot)) != 0
             || state->movementTeleportHidden[slot]
             || !state->spawns[slot].active

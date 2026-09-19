@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 1,
+  "id": "walk.crash.feedback",
+  "title": "Mounted Walk crash remains stationary and returns control",
+  "status": "active",
+  "capabilities": [
+    "walk.feedback",
+    "mount.presentation"
+  ],
+  "proofLevel": "S4",
+  "costTier": 4,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld_walk_frame_timing_spec.md",
+    "actor": "MOUNTED species 155 (cyndaquil), acquired through mount; live handle and attached presentation required",
+    "trigger": "Mount the current Cyndaquil follower; Hold Up into the fixed blocked wall until the crash presentation completes; Request one recovery Walk after the crash returns control",
+    "observable": "One stationary Crash presents elapsed frames 1 through 32, applies native shake, starts sound 1536 once, resets its state and permits exactly one rightward recovery Walk. Both mounted objects retain the same logical location during Crash and remain attached to the live actor.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Private test.sav; restore current party slot1 HP/status without changing species, level or personality; teleport to map33 tile577/397; mount that slot's Cyndaquil at its own follower site. At idle, set cardinal direction mode, locked turning and wall-hit sound. Do not change travel time, acceleration or stomp threshold. Check loaded wall and recovery terrain before input."
+      }
+    ],
+    "limits": [
+      "The original six-row contract remains required. Prepared setup and a meter pass alone do not prove this scenario.",
+      "Controlled locked-turning and sound setup does not prove all authored profiles or all wall approaches.",
+      "Native sound-start success does not prove audible speaker output. A separate current same-reader control must be accepted."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "lifecycle",
+      "value": "Mount the current Cyndaquil follower"
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Hold Up into the fixed blocked wall until the crash presentation completes"
+    },
+    {
+      "at": 2,
+      "kind": "input",
+      "value": "Request one recovery Walk after the crash returns control"
+    }
+  ],
+  "stop": {
+    "frameBudget": 600,
+    "condition": "The one crash and recovery Walk finish without displacement during the crash"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ],
+    "orderedEvents": [
+      {
+        "id": "start",
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "commit",
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "finish",
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "control",
+        "event": "CONTROL_RETURNED",
+        "reason": "OK"
+      }
+    ],
+    "eventCounts": [
+      {
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 1
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "CONTROL_RETURNED",
+        "reason": "OK",
+        "minimum": 1,
+        "maximum": 1
+      }
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "walk.crash.feedback",
+    "claims": ["natural-input", "live-actor-identity", "engine-boundary", "frame-pacing", "feedback-effect", "control-release"],
+    "minimumFrames": 64
+  }
+}

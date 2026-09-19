@@ -36,4 +36,18 @@ SECTIONS {
         .overworld_wild_turn_skid : {
                 KEEP(*(.overworld_wild_turn_skid))
         } >rom = 0xff
+
+        /* Append only: existing core exports and their callers stay fixed. */
+        .overworld_grass_effect_guard : {
+                KEEP(*(.overworld_grass_effect_guard))
+        } >rom = 0xff
+        ASSERT(SIZEOF(.overworld_grass_effect_guard) <= 32,
+                "grass-effect allocation guard exceeds its 32-byte budget")
+
+        /* Keep the Walk pause resolver out of the fixed-address core ABI. */
+        .overworld_walk_pause_variance 0x023DFFCC : {
+                KEEP(*(.overworld_walk_pause_variance))
+        } >rom = 0xff
+        ASSERT(SIZEOF(.overworld_walk_pause_variance) <= 52,
+                "Walk pause variance resolver exceeds its 52-byte tail budget")
 }

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "actor.inspect-current-and-stale",
+  "title": "Packaged actor facade returns current actor and rejects stale handle",
+  "status": "active",
+  "capabilities": ["actor.system"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/roadmap.md#phase-3---actor-facade-and-compatibility-views",
+    "actor": "Existing saved FOLLOWER Mankey (56), bound by full current handle, native source identity and current engine object.",
+    "trigger": "Call the authenticated public Inspect facade with the current handle, then with only its generation changed to a different nonzero value.",
+    "observable": "Current lookup returns OK and the exact current 88-byte actor state. Stale-generation lookup returns REJECTED with no actor. Both use the same authenticated facade and unchanged actor context.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {"phase": "before-observation", "target": "fixture", "change": "Copy test.nds and test.sav into a private session and load normally. Bind the existing saved follower; no party replacement, spawn, teleport, profile or actor writes."},
+      {"phase": "during-observation", "target": "control-result", "change": "Use the existing shared field-return bridge with one owned guarded heap11 query/output block. Write only that block, make two Inspect calls, check each native entry/return and buffer, then free once. The deliberately stale query does not alter the actor."}
+    ],
+    "limits": [
+      "Native facade lookup only: controlled-action claim, not movement, normal selection, broad role identity or Scripted actor coverage.",
+      "The observation floor is one native cycle containing actual Inspect work, not completed game frames or setup padding. Current and stale calls may share a cycle.",
+      "The public state must already be initialized before Inspect. Any owner, service, buffer or identity mismatch fails; no repair is allowed."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "mankey", "species": 56, "role": "FOLLOWER", "acquisition": "follower", "minimum": 1, "maximum": 1, "motionActor": false, "requirePresentation": true}],
+  "events": [{"at": 0, "kind": "setup", "value": "Bind the current saved Mankey."}, {"at": 1, "kind": "lifecycle", "value": "Inspect the current handle and a stale generation through the packaged native facade."}],
+  "stop": {"frameBudget": 120, "condition": "Two native Inspect receipts and exact private-session cleanup, or first failure."},
+  "expect": {"requiredEvents": [], "forbiddenEvents": [], "invariants": ["Current handle returns the exact live actor", "Stale generation returns no actor", "Probe changes no actor state"]},
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "actor.inspect-current-and-stale", "claims": ["controlled-action"], "minimumFrames": 1}
+}

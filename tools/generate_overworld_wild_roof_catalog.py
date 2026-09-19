@@ -41,10 +41,9 @@ SURFACE_TYPES = {
     "signpost": 1,
     "mailbox": 2,
     "flowerbed": 3,
+    "canopy": 4,
 }
-NATIVE_GROUND_HEIGHT_PAGE = 0xFF
-
-
+NATIVE_GROUND_HEIGHT_PAGE = 0x1F
 GEOMETRY_PARAM_COUNTS = visual_probe.GEOMETRY_PARAM_COUNTS
 
 
@@ -267,6 +266,21 @@ def read_land_objects(land_narc: NarcArchive, land_data_id: int) -> list[Buildin
             BuildingPlacement(land_data_id, object_index, model_id, x_fx32, y_fx32, z_fx32)
         )
     return placements
+
+
+def read_land_permissions(land_narc: NarcArchive, land_data_id: int) -> tuple[int, ...]:
+    """Read the native 32x32 collision/behavior grid for one land block."""
+
+    require(0 <= land_data_id < len(land_narc.files), f"land data {land_data_id} is out of range")
+    data = land_narc.files[land_data_id]
+    require(len(data) >= LAND_HEADER_SIZE, f"land data {land_data_id} is truncated")
+    permission_size = struct.unpack_from("<I", data, 0)[0]
+    magic = struct.unpack_from("<H", data, 16)[0]
+    require(magic == LAND_MAGIC, f"land data {land_data_id} has bad magic {magic:#x}")
+    require(permission_size == CELL_SIZE * CELL_SIZE * 2, f"land data {land_data_id} has an unexpected permission grid")
+    permission_offset = LAND_HEADER_SIZE
+    require(permission_offset + permission_size <= len(data), f"land data {land_data_id} permission grid is truncated")
+    return struct.unpack_from(f"<{CELL_SIZE * CELL_SIZE}H", data, permission_offset)
 
 
 def model_geometry(
@@ -857,9 +871,13 @@ def partition_tile_rectangles(
                 maximum_width += 1
             for width in range(1, maximum_width + 1):
                 height = 1
-                while min_y + height < CELL_SIZE and all(
+                while (
+                    width * (height + 1) <= 0xFF
+                    and min_y + height < CELL_SIZE
+                    and all(
                     (x, min_y + height) in remaining
                     for x in range(min_x, min_x + width)
+                    )
                 ):
                     height += 1
                 candidate = (
@@ -975,6 +993,100 @@ def horizontal_material_tiles(
     return tiles, matched_materials
 
 
+def canopy_surface_tiles(
+    model: dict[str, Any],
+    position_scale: int,
+    material_pattern: re.Pattern[str],
+    repeat_width: int,
+    repeat_height: int,
+    surface_rows_from_bottom: int,
+) -> tuple[set[tuple[int, int]], set[str], dict[str, Any]]:
+    """Extract crown supports from flat repeated tree footprints.
+
+    The flat material records each tree as a two-by-two footprint. Its bottom
+    row aligns with the high edge of the paired tree billboard. The other row
+    is the visible tree shoulder, not a standing surface.
+    """
+
+    polygons = {polygon["index"]: polygon for polygon in model["polygons"]}
+    tiles: set[tuple[int, int]] = set()
+    matched_materials: set[str] = set()
+    plane_heights: set[int] = set()
+    matched_faces = 0
+    ignored_non_horizontal_faces = 0
+    rounded_boundary_faces = 0
+    repeated_footprints = 0
+
+    for pair in model["render_pairs"]:
+        material = model["material_names"][pair["material_index"]]
+        if material_pattern.fullmatch(material) is None:
+            continue
+        matched_materials.add(material)
+        polygon = polygons[pair["polygon_index"]]
+        for face in visual_probe.parse_display_faces_with_uv(polygon["display_list"]):
+            positions = [position for position, _uv in face]
+            if len({position[1] for position in positions}) != 1:
+                ignored_non_horizontal_faces += 1
+                continue
+            matched_faces += 1
+            scaled_height_numerator = (
+                positions[0][1] * position_scale * MODEL_FX32_SCALE
+            )
+            require(
+                scaled_height_numerator % 65536 == 0,
+                f"material {material} has a non-integral flat height",
+            )
+            plane_heights.add(scaled_height_numerator // 65536)
+
+            projected = [
+                (
+                    project_land_vertex(position[0], position_scale),
+                    project_land_vertex(position[2], position_scale),
+                )
+                for position in positions
+            ]
+            bounds = (
+                min(point[0] for point in projected),
+                min(point[1] for point in projected),
+                max(point[0] for point in projected),
+                max(point[1] for point in projected),
+            )
+            rounded = tuple(round(value) for value in bounds)
+            if any(abs(value - integer) > 0.05 for value, integer in zip(bounds, rounded)):
+                rounded_boundary_faces += 1
+            min_x, min_y, max_x, max_y = rounded
+            if max_x - min_x < repeat_width or max_y - min_y < repeat_height:
+                continue
+
+            for x in range(min_x, max_x, repeat_width):
+                for y in range(min_y, max_y, repeat_height):
+                    if x + repeat_width > max_x or y + repeat_height > max_y:
+                        continue
+                    center_x = x + repeat_width / 2
+                    center_y = y + repeat_height / 2
+                    if not point_in_polygon_inclusive(
+                        center_x,
+                        center_y,
+                        projected,
+                    ):
+                        continue
+                    repeated_footprints += 1
+                    surface_start_y = y + repeat_height - surface_rows_from_bottom
+                    tiles |= {
+                        (tile_x, tile_y)
+                        for tile_y in range(surface_start_y, y + repeat_height)
+                        for tile_x in range(x, x + repeat_width)
+                    }
+
+    return tiles, matched_materials, {
+        "matched_faces": matched_faces,
+        "ignored_non_horizontal_faces": ignored_non_horizontal_faces,
+        "rounded_boundary_faces": rounded_boundary_faces,
+        "repeated_footprints": repeated_footprints,
+        "plane_heights_fx32": sorted(plane_heights),
+    }
+
+
 def billboard_material_tiles(
     model: dict[str, Any],
     position_scale: int,
@@ -1059,6 +1171,82 @@ def generate_catalog(
         )
         flat_material_pattern = re.compile(flat_material_pattern_text, re.IGNORECASE)
     billboard_material_names = {str(name) for name in raw_native_ground.get("billboard_material_names", [])}
+
+    raw_native_canopy = manifest.get("native_canopy_surface")
+    require(raw_native_canopy is not None, "manifest has no native canopy surface rule")
+    native_canopy_surface_type = str(raw_native_canopy["surface_type"])
+    require(native_canopy_surface_type == "canopy", "native canopy rule must use Canopy")
+    native_canopy_surface_type_id = SURFACE_TYPES[native_canopy_surface_type]
+    native_canopy_confidence = str(raw_native_canopy.get("confidence", "mesh_verified"))
+    require(native_canopy_confidence == "mesh_verified", "native canopy rule must be mesh-verified")
+    canopy_material_pattern_text = str(raw_native_canopy["flat_material_pattern"])
+    require(
+        canopy_material_pattern_text.startswith("^")
+        and canopy_material_pattern_text.endswith("$"),
+        "native canopy flat material pattern must be anchored",
+    )
+    canopy_material_pattern = re.compile(canopy_material_pattern_text, re.IGNORECASE)
+    canopy_repeat_width = parse_int(
+        raw_native_canopy.get("repeat_width_tiles", 2),
+        "native canopy repeat width",
+    )
+    canopy_repeat_height = parse_int(
+        raw_native_canopy.get("repeat_height_tiles", 2),
+        "native canopy repeat height",
+    )
+    canopy_surface_rows_from_bottom = parse_int(
+        raw_native_canopy.get("surface_rows_from_bottom", 1),
+        "native canopy surface rows from bottom",
+    )
+    require(
+        canopy_repeat_width == 2
+        and canopy_repeat_height == 2
+        and canopy_surface_rows_from_bottom == 1,
+        "native canopy meshes must expose one bottom support row from each two-by-two footprint",
+    )
+    native_canopy_height_offset_fx32 = parse_int(
+        raw_native_canopy["height_above_ground_fx32"],
+        "native canopy height above ground",
+    )
+    require(
+        native_canopy_height_offset_fx32 > 0
+        and native_canopy_height_offset_fx32 & 0xF == 0,
+        "native canopy height must be a positive Q4-aligned FX32 value",
+    )
+    native_canopy_height_q4 = native_canopy_height_offset_fx32 >> 4
+    require(
+        native_canopy_height_q4 <= 0xFFFF,
+        "native canopy height does not fit the native-ground offset encoding",
+    )
+    canopy_matrix_ids_value = raw_native_canopy.get("matrix_ids", matrix_ids)
+    if canopy_matrix_ids_value == "all":
+        canopy_matrix_ids = list(range(len(matrix_narc.files)))
+    else:
+        canopy_matrix_ids = [
+            parse_int(value, "native canopy matrix id")
+            for value in canopy_matrix_ids_value
+        ]
+    excluded_canopy_matrix_ids = {
+        parse_int(value, "excluded native canopy matrix id")
+        for value in raw_native_canopy.get("excluded_matrix_ids", [])
+    }
+    canopy_matrix_ids = [
+        matrix_id for matrix_id in canopy_matrix_ids
+        if matrix_id not in excluded_canopy_matrix_ids
+    ]
+    require(canopy_matrix_ids, "native canopy matrix scope is empty")
+    canopy_cells = [
+        cell
+        for matrix_id in canopy_matrix_ids
+        for cell in read_matrix_cells(matrix_narc, matrix_id)
+    ]
+    canopy_cell_by_location = {
+        (cell.matrix_id, cell.matrix_x, cell.matrix_y): cell
+        for cell in canopy_cells
+    }
+    canopy_cells_by_land: dict[int, list[MatrixCell]] = defaultdict(list)
+    for cell in canopy_cells:
+        canopy_cells_by_land[cell.land_data_id].append(cell)
 
     placements: dict[int, list[BuildingPlacement]] = {}
     for land_data_id in sorted(cells_by_land):
@@ -1463,6 +1651,192 @@ def generate_catalog(
                 }
             )
 
+    occupied_surface_tiles_by_land: dict[int, set[tuple[int, int]]] = defaultdict(set)
+    for row in pending:
+        occupied_surface_tiles_by_land[row["target_cell"].land_data_id] |= {
+            (x, y)
+            for y in range(row["min_y"], row["min_y"] + row["height"])
+            for x in range(row["min_x"], row["min_x"] + row["width"])
+        }
+
+    canopy_tiles_by_land: dict[int, set[tuple[int, int]]] = defaultdict(set)
+    canopy_materials_by_land: dict[int, set[str]] = defaultdict(set)
+    canopy_mesh_audit_by_land: dict[int, dict[str, Any]] = {}
+    native_canopy_cross_block_audit: list[dict[str, Any]] = []
+    for source_land_data_id in sorted(canopy_cells_by_land):
+        raw_tiles: set[tuple[int, int]] = set()
+        materials: set[str] = set()
+        mesh_audit = {
+            "matched_faces": 0,
+            "ignored_non_horizontal_faces": 0,
+            "rounded_boundary_faces": 0,
+            "repeated_footprints": 0,
+            "plane_heights_fx32": set(),
+        }
+        for model, position_scale in read_land_visual_models(
+            land_narc,
+            source_land_data_id,
+        ):
+            model_tiles, model_materials, model_audit = canopy_surface_tiles(
+                model,
+                position_scale,
+                canopy_material_pattern,
+                canopy_repeat_width,
+                canopy_repeat_height,
+                canopy_surface_rows_from_bottom,
+            )
+            raw_tiles |= model_tiles
+            materials |= model_materials
+            for key in (
+                "matched_faces",
+                "ignored_non_horizontal_faces",
+                "rounded_boundary_faces",
+                "repeated_footprints",
+            ):
+                mesh_audit[key] += model_audit[key]
+            mesh_audit["plane_heights_fx32"].update(
+                model_audit["plane_heights_fx32"]
+            )
+        if not materials:
+            continue
+        canopy_mesh_audit_by_land[source_land_data_id] = {
+            **mesh_audit,
+            "plane_heights_fx32": sorted(mesh_audit["plane_heights_fx32"]),
+        }
+        canopy_materials_by_land[source_land_data_id] |= materials
+
+        occurrences = canopy_cells_by_land[source_land_data_id]
+        for x, y in raw_tiles:
+            if 0 <= x < CELL_SIZE and 0 <= y < CELL_SIZE:
+                canopy_tiles_by_land[source_land_data_id].add((x, y))
+                continue
+            block_dx = x // CELL_SIZE
+            block_dy = y // CELL_SIZE
+            target_x = x % CELL_SIZE
+            target_y = y % CELL_SIZE
+            redirected_targets = set()
+            missing_target = False
+            for occurrence in occurrences:
+                target_cell = canopy_cell_by_location.get(
+                    (
+                        occurrence.matrix_id,
+                        occurrence.matrix_x + block_dx,
+                        occurrence.matrix_y + block_dy,
+                    )
+                )
+                if target_cell is None:
+                    missing_target = True
+                    break
+                redirected_targets.add(
+                    (target_cell.land_data_id, target_x, target_y)
+                )
+            status = "represented"
+            if missing_target:
+                status = "excluded_matrix_edge"
+            elif len(redirected_targets) != 1:
+                status = "excluded_occurrence_specific_target"
+            else:
+                target_land, target_x, target_y = next(iter(redirected_targets))
+                if len(canopy_cells_by_land[target_land]) != 1:
+                    status = "excluded_reused_target_land"
+                else:
+                    canopy_tiles_by_land[target_land].add((target_x, target_y))
+            native_canopy_cross_block_audit.append(
+                {
+                    "source_land_data_id": source_land_data_id,
+                    "source_x": x,
+                    "source_y": y,
+                    "target_x": target_x,
+                    "target_y": target_y,
+                    "status": status,
+                }
+            )
+
+    native_canopy_audit: list[dict[str, Any]] = []
+    for land_data_id in sorted(canopy_tiles_by_land):
+        occurrences = sorted(
+            canopy_cells_by_land[land_data_id],
+            key=lambda cell: (cell.matrix_id, cell.matrix_y, cell.matrix_x),
+        )
+        canopy_tiles = set(canopy_tiles_by_land[land_data_id])
+        overlap = canopy_tiles & occupied_surface_tiles_by_land.get(land_data_id, set())
+        canopy_tiles -= overlap
+        if not canopy_tiles:
+            continue
+        rectangles = partition_tile_rectangles(canopy_tiles)
+        native_canopy_audit.append(
+            {
+                "land_data_id": land_data_id,
+                "materials": sorted(canopy_materials_by_land.get(land_data_id, set())),
+                "mesh": canopy_mesh_audit_by_land.get(land_data_id),
+                "nodes": len(canopy_tiles),
+                "rectangles": len(rectangles),
+                "surface_overlap_nodes_removed": len(overlap),
+            }
+        )
+        source_cell = occurrences[0]
+        for region_index, (min_x, min_y, width, height) in enumerate(rectangles):
+            group_id = next_group
+            next_group += 1
+            group_name = f"land{land_data_id}_native_canopy_rect{region_index}"
+            logical_groups.append(
+                {
+                    "id": group_id,
+                    "name": group_name,
+                    "model_id": None,
+                    "model_name": "native_canopy_mesh",
+                    "surface_type": native_canopy_surface_type,
+                    "source_land_data_id": land_data_id,
+                    "source_object_index": None,
+                    "anchor_local_surface_id": 0,
+                    "width": width,
+                    "height": height,
+                    "height_rectangle_count": 1,
+                    "height_mode": "native_canopy",
+                    "mesh_fallback_node_count": 0,
+                    "mesh_fallback_nodes": [],
+                    "mesh_component_added_node_count": 0,
+                    "minimum_height_fx32": None,
+                    "maximum_height_fx32": None,
+                    "confidence": native_canopy_confidence,
+                }
+            )
+            signature = (
+                min_x,
+                min_y,
+                width,
+                height,
+                native_canopy_height_q4,
+                NATIVE_GROUND_HEIGHT_PAGE,
+                0,
+                0,
+                0,
+                native_canopy_surface_type_id,
+                "native_canopy_mesh",
+            )
+            for occurrence in occurrences:
+                affected_cell_signatures[
+                    (occurrence.matrix_id, occurrence.matrix_x, occurrence.matrix_y)
+                ].add(signature)
+            pending.append(
+                {
+                    "target_cell": source_cell,
+                    "min_x": min_x,
+                    "min_y": min_y,
+                    "width": width,
+                    "height": height,
+                    "height_q4": native_canopy_height_q4,
+                    "height_page": NATIVE_GROUND_HEIGHT_PAGE,
+                    "anchor_block_dx": 0,
+                    "anchor_block_dy": 0,
+                    "anchor_local_surface_id": 0,
+                    "surface_type": native_canopy_surface_type_id,
+                    "logical_group": group_id,
+                    "source": group_name,
+                    "confidence": native_canopy_confidence,
+                }
+            )
+
     # A catalog keyed only by land-data ID is safe only when every occurrence of
     # that ID receives the same local surface signatures.
     for land_data_id, land_cells in cells_by_land.items():
@@ -1536,7 +1910,7 @@ def generate_catalog(
         ),
         "represented_point_surfaces": sum(
             group["surface_type"] != "rooftop"
-            and group.get("height_mode") != "native_ground"
+            and group.get("height_mode") not in ("native_ground", "native_canopy")
             for group in logical_groups
         ),
         "represented_native_ground_surfaces": sum(
@@ -1556,6 +1930,21 @@ def generate_catalog(
         ),
         "native_ground_nodes": sum(row["nodes"] for row in native_ground_material_audit),
         "native_ground_rectangles": sum(row["rectangles"] for row in native_ground_material_audit),
+        "native_canopy_audit": native_canopy_audit,
+        "native_canopy_material_pattern": canopy_material_pattern.pattern,
+        "native_canopy_cross_block_audit": sorted(
+            native_canopy_cross_block_audit,
+            key=lambda row: (
+                row["source_land_data_id"],
+                row["source_y"],
+                row["source_x"],
+            ),
+        ),
+        "native_canopy_matrix_ids": canopy_matrix_ids,
+        "native_canopy_excluded_matrix_ids": sorted(excluded_canopy_matrix_ids),
+        "native_canopy_height_offset_fx32": native_canopy_height_offset_fx32,
+        "native_canopy_nodes": sum(row["nodes"] for row in native_canopy_audit),
+        "native_canopy_rectangles": sum(row["rectangles"] for row in native_canopy_audit),
         "unmatched_flower_like_materials": sorted(unmatched_flower_like_materials),
     }
     require(
@@ -1570,6 +1959,11 @@ def generate_catalog(
     require(
         coverage["represented_native_ground_surfaces"] == coverage["native_ground_rectangles"],
         "native-ground surface coverage count is inconsistent",
+    )
+    require(
+        sum(group.get("height_mode") == "native_canopy" for group in logical_groups)
+        == coverage["native_canopy_rectangles"],
+        "native canopy surface coverage count is inconsistent",
     )
     return instances, verified_specs, logical_groups, coverage
 
@@ -1622,9 +2016,20 @@ def render_outputs(
                     "height_fx32": None
                     if row.height_page == NATIVE_GROUND_HEIGHT_PAGE
                     else (row.height_page << 20) + (row.height_q4 << 4),
-                    "height_mode": "native_ground"
-                    if row.height_page == NATIVE_GROUND_HEIGHT_PAGE
-                    else "catalog",
+                    "height_mode": (
+                        "native_ground_offset"
+                        if row.height_page == NATIVE_GROUND_HEIGHT_PAGE
+                        and row.surface_type == SURFACE_TYPES["canopy"]
+                        else "native_ground"
+                        if row.height_page == NATIVE_GROUND_HEIGHT_PAGE
+                        else "catalog"
+                    ),
+                    "height_offset_fx32": (
+                        coverage["native_canopy_height_offset_fx32"]
+                        if row.height_page == NATIVE_GROUND_HEIGHT_PAGE
+                        and row.surface_type == SURFACE_TYPES["canopy"]
+                        else 0
+                    ),
                     "height_q4": row.height_q4,
                     "height_page": row.height_page,
                     "anchor_block_dx": row.anchor_block_dx,
@@ -1650,6 +2055,7 @@ def render_outputs(
             f"#define OWBD_GENERATED_SURFACE_MODEL_COUNT {len(model_rows)}",
             f"#define OWBD_GENERATED_SURFACE_INSTANCE_COUNT {len(instance_rows)}",
             f"#define OWBD_GENERATED_SURFACE_TEMPLATE_COUNT {len(template_shapes)}",
+            f"#define OW_WILD_SURFACE_CANOPY_HEIGHT_OFFSET_FX32 0x{coverage['native_canopy_height_offset_fx32']:08X}",
             "",
             "#endif // GUARD_GENERATED_OVERWORLD_WILD_ROOF_CATALOG_COUNTS_H",
             "",
@@ -1680,9 +2086,11 @@ def render_outputs(
         row,
     ) in enumerate(instance_rows):
         suffix = " \\" if index + 1 < len(instance_rows) else ""
+        packed_surface = height_page | (surface_type << 5)
+        packed_anchor = (anchor_dx & 0x0F) | ((anchor_dy & 0x0F) << 4)
         include_lines.append(
             f"    {{{min_x}, {min_y}, {template_id}, {local_id}, 0x{height_q4:04X}, "
-            f"{height_page}, {surface_type}, {anchor_dx}, {anchor_dy}}}, "
+            f"0x{packed_surface:02X}, 0x{packed_anchor:02X}}}, "
             f"/* group {row.logical_group}: {row.source}; {row.confidence} */{suffix}"
         )
     include_lines.extend(["", "/* OverworldWildSurfaceTemplate initializers */", "#define OWBD_GENERATED_SURFACE_TEMPLATE_ROWS \\"])

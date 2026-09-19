@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "observation.mount-pose-control",
+  "title": "Same mounted pose reader detects a wrong position and exact restore",
+  "mode": "observer-control",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/verification.md#memory-backed-proof",
+  "requirements": ["shared.mounted-pose-recorder-control-v1"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 360, "noProgressFrames": 90, "minObservedFrames": 1},
+  "subjects": [{"id": "cyndaquil", "species": 155, "role": "MOUNTED", "acquire": "existing"}],
+  "measurements": [{"kind": "live-mount-pose-control-v1", "subject": "cyndaquil"}],
+  "setup": [
+    {"id": "own-path", "op": "teleport", "args": {"map": 33, "x": 584, "z": 406, "facing": 0}, "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "own-party", "op": "party", "args": {"slot": 0, "species": 155, "level": 10, "hp": 1, "status": 0}, "budget": {"maxSeconds": 15, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "mount-own-pokemon", "op": "spawn", "args": {"species": 155, "role": "mounted", "slot": 0}, "budget": {"maxSeconds": 30, "maxFrames": 180, "noProgressFrames": 120}},
+    {"id": "bind-mount", "op": "bind", "args": {"subject": "cyndaquil"}, "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "excluded-warmup", "op": "step", "args": {"frames": 10, "keys": ["UP"]}, "budget": {"maxSeconds": 10, "maxFrames": 10, "noProgressFrames": 10}},
+    {"id": "settle-warmup", "op": "wait", "args": {"predicate": {"kind": "actor-field", "subject": "cyndaquil", "path": "motionPhase", "operator": "eq", "value": "IDLE"}}, "budget": {"maxSeconds": 10, "maxFrames": 30, "noProgressFrames": 30}}
+  ],
+  "actions": [
+    {"id": "arm-reader", "op": "mount-pacing.arm", "args": {"subject": "cyndaquil"}, "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "coherent-sample", "op": "wait", "args": {"predicate": {"kind": "frame-count", "operator": "gte", "value": 1}}, "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "calibrate-reader", "op": "mount-pacing.calibrate", "args": {}, "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "close-reader", "op": "mount-pacing.close", "args": {}, "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "assertions": [{"kind": "measurement-complete", "measurement": "live-mount-pose-control-v1"}]
+}

@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "id": "observation.live-actor-and-motion-control",
+  "title": "The recorder rejects wrong live actor and missing live motion",
+  "status": "active",
+  "capabilities": [
+    "actor.system"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "observer-control",
+    "expectationSource": "documentation/overworld-system/verification.md#scenario-contract",
+    "actor": "WILD Ledyba (165) by current live handle in one disposable emulator process.",
+    "trigger": "A correct live identity and one complete rendered spawn Hop precede separate missing-object and frozen-render faults; the whole chain need not pass first.",
+    "observable": "The same collector rejects live identity loss and missing Ledyba render progress. Each fault records its boundary and exact classifier result. No captured evidence is edited.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Import unchanged raw test.sav into one disposable emulator and boot with normal input. Require map33 (585,406), then use the same reviewed Route29-to-Route30 setup through Cherrygrove as the normal Ledyba case: at most 67 one-cardinal-tile inputs. Stop new steps when live Ledyba is acquired and finish only the current player tile. Require its real spawn and completed rendered Hop. Do not create a second emulator core in this process."
+      },
+      {
+        "phase": "during-observation",
+        "target": "observation",
+        "change": "Use the same read-only hooks and frame samplers as the normal collector. Configure and close the public trace ring around the good Ledyba spawn before the faults. The exported actor evidence is this baseline, not the later failed motion."
+      },
+      {
+        "phase": "during-observation",
+        "target": "actors",
+        "change": "After the render fault, clear only the live selected engine object's current active bit at one authenticated main-queue boundary. The same coherent identity sampler must reject it. Restore that exact flags value during cleanup; do not reset the recorder or discard the rejected frame to continue Ledyba proof."
+      },
+      {
+        "phase": "during-observation",
+        "target": "control-result",
+        "change": "Freeze the selected live Ledyba X/Z position during a natural Walk with two later interior samples before the unchanged sampler reads it."
+      }
+    ],
+    "limits": [
+      "Executed only by the registered shared Workshop/owctl job. Active and ported mean executable, not accepted; the final controller must independently replay the current ROM/save/source and exact recipe.",
+      "Use the unchanged test.sav and the reviewed 67-tile normal-input Route29–Cherrygrove–Route30 route. Stop new input when the actual natural WILD Ledyba is acquired; finish the current player step. Blocked routes, absent actors and stale identity fail. No prepared teleport, party edit, forced spawn, RNG/time override or profile/counter reset.",
+      "Each Pokémon uses its own native selected spawn location. Bind this prepared encounter's species/personality, origin and landing target to its own current source object and full generation-safe handle. Do not borrow another species' tree, rooftop, flower-bed or ground destination.",
+      "Read-only native spawn/resolver/policy/RNG observations start before boot. Frame snapshots and actual render pose share the authenticated main-task-queue completion. Public trace records are drained at authenticated writer return before the small ring wraps, then published at completed-frame boundaries. Missing sequences or frames fail.",
+      "The checked recipe caps the whole job at6000 completed game frames/300 seconds with per-action bounds and240 no-progress frames. Setup frames do not count toward the bound subject floor. Native cycles and completed game frames remain separate.",
+      "Preserve source saves and the user's emulator. Retain each run's first failure, current subject, stream and images. Stop only the disposable session owned by this job.",
+      "The shared control first freezes a passing natural Ledyba spawn/chain baseline; it does not reset that recorder. Separate controls then use the same completed-frame sampler and actual native object.",
+      "During a natural Walk with two later interior samples, pin the initial native X/Z pose and restore those coordinates at the two subsequent advancing samples. The unchanged MotionRecorder must report render-stall. Missing eligible motion is a failure, not an expected fault pass.",
+      "After retaining that detection, clear only the same current object's active bit for one observed frame. The actual identity reader must reject it. Restore only that bit, revalidate the same source/native binding and retain the fresh same-frame restoration receipt before teardown. Cleanup earns no new frame credit.",
+      "Faults are explicitly marked non-normal. Keep original baseline/fault metrics[1,1,1] and the two-render-frame floor. These controls cannot clear gameplay behavior, substitute for the independent live-route timing control, or meet a normal-play/S5 frame floor."
+    ],
+    "control": {
+      "boundary": "live-runtime",
+      "fault": "Live Ledyba render frozen and live object active bit cleared, one fault at a time.",
+      "expectedFailure": "Identity loss raises the identity error; Ledyba render freeze raises render-stall."
+    }
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "ledyba",
+      "species": 165,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "From unchanged raw test.sav at map33 (585,406), use the reviewed normal-input route through Cherrygrove to Route30 map34, at most 67 player tiles. Stop issuing tiles upon Ledyba acquisition while keeping the live spawn recorder active; require a complete rendered spawn baseline."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Freeze a natural Walk render for two interior samples, then clear the current active bit for the terminal identity fault and restore it at cleanup. Both faults use the same authenticated main-queue sampler. Keep each unchanged recorder's exact failure result."
+    }
+  ],
+  "stop": {
+    "frameBudget": 6000,
+    "condition": "Good baseline succeeds and each live recorder fault fails for its declared reason"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "Control returns after the selected motion finishes or cancels"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "observation.ledyba-live-controls",
+    "claims": [
+      "live-actor-identity",
+      "controlled-action"
+    ],
+    "minimumFrames": 16
+  }
+}

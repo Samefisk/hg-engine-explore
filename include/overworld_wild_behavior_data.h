@@ -17,13 +17,15 @@ struct OverworldWildBehaviorPrimitives;
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_MAGIC 0x4F57424F
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION 11
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244
-#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 72
+#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 77
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_MAGIC 0x4F574544
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION 2
 #define OVERWORLD_WILD_SPAWN_METADATA_MAGIC 0x4F57534D
-#define OVERWORLD_WILD_SPAWN_METADATA_VERSION 2
+#define OVERWORLD_WILD_SPAWN_METADATA_VERSION 3
+/* Shared runtime/build allocation bound; v3 records exceed the old16KiB cap. */
+#define OVERWORLD_WILD_SPAWN_METADATA_MAX_BLOB_SIZE 0x8000
 #define OVERWORLD_WILD_SPAWN_METADATA_OVERLAY_MAGIC 0x4F57534F
-#define OVERWORLD_WILD_SPAWN_METADATA_OVERLAY_VERSION 2
+#define OVERWORLD_WILD_SPAWN_METADATA_OVERLAY_VERSION 3
 #define OVERWORLD_WILD_LEARNSET_CACHE_OVERLAY_MAGIC 0x4F574C43
 #define OVERWORLD_WILD_LEARNSET_CACHE_OVERLAY_VERSION 1
 #define OVERWORLD_WILD_PERSONAL_CACHE_OVERLAY_MAGIC 0x4F575043
@@ -33,7 +35,6 @@ struct OverworldWildBehaviorPrimitives;
 #define OVERWORLD_WILD_PERSONAL_CACHE_ENTRY_ADDR 0x023C30E0
 #define OVERWORLD_WILD_OVERLAP_RESOLVER_ENTRY_ADDR 0x023C30EC
 #define OVERWORLD_WILD_SURFACE_SERVICE_ENTRY_ADDR 0x023C30F0
-#define OVERWORLD_WILD_STAGED_HOP_TASKS_ADDR 0x023C3F18
 #define OVERWORLD_WILD_SPAWN_METADATA_MAX_FORM 31
 #define OW_WILD_BEHAVIOR_CLASS_DEFAULT 0
 #define OW_WILD_BEHAVIOR_CLASS_AGRESSIVE_CHASE 1
@@ -42,32 +43,35 @@ struct OverworldWildBehaviorPrimitives;
 #define OWBD_CLASS_PROFILE_COUNT 4
 #define OWBD_CLASS_RULE_COUNT 2
 #define OWBD_SPECIES_CLASS_RULE_COUNT 113
-#define OWBD_OVERRIDE_PROFILE_COUNT 17
-#define OWBD_CONDITIONAL_STATE_COUNT 1
+#define OWBD_OVERRIDE_PROFILE_COUNT 28
+#define OWBD_CONDITIONAL_STATE_COUNT 2
 #define OWBD_CONDITIONAL_STATE_STORAGE_COUNT \
     ((OWBD_CONDITIONAL_STATE_COUNT) ? OWBD_CONDITIONAL_STATE_COUNT : 1)
 #define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_BIRD 5
 #define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FLYING_INSECT 7
 #define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_NERVOUS_SCAVENGER 12
-#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON 13
+#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON 26
 #define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_ACTIVE 15
 #define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_TIRED 16
 #define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_BIRD_ROOFTOP 11
 typedef char OverworldWildBehaviorOverrideProfileCountMustFitApplicabilityMask[
     OWBD_OVERRIDE_PROFILE_COUNT <= 32 ? 1 : -1];
-#define OWBD_OVERRIDE_MEMBER_COUNT 265
+#define OWBD_OVERRIDE_MEMBER_COUNT 298
 #define OWBD_SURFACE_MODEL_COUNT OWBD_GENERATED_SURFACE_MODEL_COUNT
 #define OWBD_SURFACE_INSTANCE_COUNT OWBD_GENERATED_SURFACE_INSTANCE_COUNT
 #define OWBD_SURFACE_TEMPLATE_COUNT OWBD_GENERATED_SURFACE_TEMPLATE_COUNT
 #define OWBD_SURFACE_CATALOG_RAW_SIZE \
-    (OWBD_SURFACE_MODEL_COUNT * 6 + OWBD_SURFACE_INSTANCE_COUNT * 10 \
+    (OWBD_SURFACE_MODEL_COUNT * 6 + OWBD_SURFACE_INSTANCE_COUNT * 8 \
         + OWBD_SURFACE_TEMPLATE_COUNT * 2)
-/* surfaceModels begins two bytes past a four-byte boundary in blob v57. */
+/* All fields before overrideMembers have four-byte sizes. The u16 member
+ * array is the only prefix field that can shift the surface catalog by two. */
 #define OWBD_SURFACE_CATALOG_PADDING_SIZE \
-    ((4 - ((OWBD_SURFACE_CATALOG_RAW_SIZE + 2) & 3)) & 3)
+    ((4 - ((OWBD_SURFACE_CATALOG_RAW_SIZE \
+        + OWBD_OVERRIDE_MEMBER_COUNT * 2) & 3)) & 3)
 #define OW_WILD_ROOF_HEIGHT_QUANTUM_SHIFT 4
 #define OW_WILD_MAP_BLOCK_SHIFT 5
 #define OW_WILD_MAP_BLOCK_MASK 31
+#define OW_WILD_MAP_MATRIX_HEADERS_OFFSET 0x6
 #define OW_WILD_MAP_MATRIX_ALTITUDES_OFFSET 0x644
 #define OW_WILD_MAP_MATRIX_MODELS_OFFSET 0x964
 #define OW_WILD_MAP_ALTITUDE_HEIGHT_SHIFT 15
@@ -129,7 +133,8 @@ typedef enum OverworldWildSpawnDestination {
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SURFACE_FIRST \
     OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SURFACE_ALL \
-    (OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP \
+    (OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY \
+        | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP \
         | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST \
         | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX \
         | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_FLOWERBED)
@@ -140,11 +145,15 @@ typedef enum OverworldWildSpawnDestination {
 #define OW_WILD_SURFACE_TYPE_SIGNPOST 1
 #define OW_WILD_SURFACE_TYPE_MAILBOX 2
 #define OW_WILD_SURFACE_TYPE_FLOWERBED 3
-#define OW_WILD_SURFACE_TYPE_COUNT 4
-#define OW_WILD_SURFACE_HEIGHT_PAGE_NATIVE_GROUND 0xFF
+#define OW_WILD_SURFACE_TYPE_CANOPY 4
+#define OW_WILD_SURFACE_TYPE_COUNT 5
+#define OW_WILD_SURFACE_HEIGHT_PAGE_NATIVE_GROUND 0x1F
+#define OW_WILD_SURFACE_ID_NATIVE_CANOPY 0xFFFE
 #define OW_WILD_SURFACE_ID_NATIVE_GROUND 0xFFFF
 #define OW_WILD_SURFACE_TYPE_TERRAIN_MASK(surfaceType) \
-    (OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SURFACE_FIRST << (surfaceType))
+    ((surfaceType) == OW_WILD_SURFACE_TYPE_CANOPY \
+        ? OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY \
+        : OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SURFACE_FIRST << (surfaceType))
 
 #define OW_WILD_BEHAVIOR_PLAYER_ADJACENT_FRONT  (1u << 0)
 #define OW_WILD_BEHAVIOR_PLAYER_ADJACENT_BEHIND (1u << 1)
@@ -159,6 +168,8 @@ typedef enum OverworldWildSpawnDestination {
 #define OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_JUMPS 3
 #define OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_STEPS 4
 #define OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_SKIDS 5
+#define OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE 6
+#define OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_FORWARD 7
 #define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_JUMPS_DEFAULT 3
 #define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_JUMPS_MAX 8
 #define OW_WILD_BEHAVIOR_WALK_TIME_MIN 1
@@ -170,6 +181,9 @@ typedef enum OverworldWildSpawnDestination {
 #define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_DISTANCE_MAX 5
 #define OW_WILD_BEHAVIOR_TILES_TO_ACCELERATE_DEFAULT 3
 #define OW_WILD_BEHAVIOR_MAX_WALK_SPEED_DEFAULT 2
+#define OW_WILD_BEHAVIOR_WALK_ACCELERATION_NONE 0
+#define OW_WILD_BEHAVIOR_WALK_ACCELERATION_DIVIDE_BY_2 33
+#define OW_WILD_BEHAVIOR_WALK_ACCELERATION_STEP_DEFAULT 1
 #define OW_WILD_BEHAVIOR_WALK_PAUSE_DEFAULT 32
 #define OW_WILD_BEHAVIOR_TURN_SKID_BUILDUP_DEFAULT 1
 #define OW_WILD_BEHAVIOR_TURN_SKIDS_DISABLED 0
@@ -202,13 +216,91 @@ typedef enum OverworldWildSpawnDestination {
 #define OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_DIAGONAL_ONLY 2
 #define OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_MAX \
     OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_DIAGONAL_ONLY
+#define OW_WILD_BEHAVIOR_MOVEMENT_DIRECTION_MASK 0x03
+#define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_ALLOW_CARDINAL_MASK 0x01
+#define OW_WILD_BEHAVIOR_WALK_PAUSE_VARIANCE_SHIFT 1
+#define OW_WILD_BEHAVIOR_WALK_PAUSE_VARIANCE_MASK 0xFE
+#define OW_WILD_BEHAVIOR_WALK_PAUSE_VARIANCE_MAX 32
+#define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_CARDINAL_OPTIONS(allowCardinal, walkPauseVariance) \
+    (((allowCardinal) & OW_WILD_BEHAVIOR_CHAIN_REPOSITION_ALLOW_CARDINAL_MASK) \
+        | (((walkPauseVariance) << OW_WILD_BEHAVIOR_WALK_PAUSE_VARIANCE_SHIFT) \
+            & OW_WILD_BEHAVIOR_WALK_PAUSE_VARIANCE_MASK))
+#define OW_WILD_BEHAVIOR_WALK_PAUSE_VARIANCE(options) \
+    (((options) & OW_WILD_BEHAVIOR_WALK_PAUSE_VARIANCE_MASK) \
+        >> OW_WILD_BEHAVIOR_WALK_PAUSE_VARIANCE_SHIFT)
+#define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_ALLOWS_CARDINAL(options) \
+    ((options) & OW_WILD_BEHAVIOR_CHAIN_REPOSITION_ALLOW_CARDINAL_MASK)
+#define OW_WILD_BEHAVIOR_SET_CHAIN_REPOSITION_ALLOW_CARDINAL(options, allowCardinal) \
+    ((options) = ((options) & OW_WILD_BEHAVIOR_WALK_PAUSE_VARIANCE_MASK) \
+        | ((allowCardinal) & OW_WILD_BEHAVIOR_CHAIN_REPOSITION_ALLOW_CARDINAL_MASK))
+#define OW_WILD_BEHAVIOR_SET_WALK_PAUSE_VARIANCE(options, walkPauseVariance) \
+    ((options) = ((options) & OW_WILD_BEHAVIOR_CHAIN_REPOSITION_ALLOW_CARDINAL_MASK) \
+        | (((walkPauseVariance) << OW_WILD_BEHAVIOR_WALK_PAUSE_VARIANCE_SHIFT) \
+            & OW_WILD_BEHAVIOR_WALK_PAUSE_VARIANCE_MASK))
+#define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_ALLOW_DIAGONAL_MASK 0x01
+#define OW_WILD_BEHAVIOR_WALK_TIME_VARIANCE_SHIFT 1
+#define OW_WILD_BEHAVIOR_WALK_TIME_VARIANCE_MASK 0xFE
+#define OW_WILD_BEHAVIOR_WALK_TIME_VARIANCE_MAX 32
+#define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_DIAGONAL_OPTIONS(allowDiagonal, walkTimeVariance) \
+    (((allowDiagonal) & OW_WILD_BEHAVIOR_CHAIN_REPOSITION_ALLOW_DIAGONAL_MASK) \
+        | (((walkTimeVariance) << OW_WILD_BEHAVIOR_WALK_TIME_VARIANCE_SHIFT) \
+            & OW_WILD_BEHAVIOR_WALK_TIME_VARIANCE_MASK))
+#define OW_WILD_BEHAVIOR_WALK_TIME_VARIANCE(options) \
+    (((options) & OW_WILD_BEHAVIOR_WALK_TIME_VARIANCE_MASK) \
+        >> OW_WILD_BEHAVIOR_WALK_TIME_VARIANCE_SHIFT)
+#define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_ALLOWS_DIAGONAL(options) \
+    ((options) & OW_WILD_BEHAVIOR_CHAIN_REPOSITION_ALLOW_DIAGONAL_MASK)
+#define OW_WILD_BEHAVIOR_SET_CHAIN_REPOSITION_ALLOW_DIAGONAL(options, allowDiagonal) \
+    ((options) = ((options) & OW_WILD_BEHAVIOR_WALK_TIME_VARIANCE_MASK) \
+        | ((allowDiagonal) & OW_WILD_BEHAVIOR_CHAIN_REPOSITION_ALLOW_DIAGONAL_MASK))
+#define OW_WILD_BEHAVIOR_SET_WALK_TIME_VARIANCE(options, walkTimeVariance) \
+    ((options) = ((options) & OW_WILD_BEHAVIOR_CHAIN_REPOSITION_ALLOW_DIAGONAL_MASK) \
+        | (((walkTimeVariance) << OW_WILD_BEHAVIOR_WALK_TIME_VARIANCE_SHIFT) \
+            & OW_WILD_BEHAVIOR_WALK_TIME_VARIANCE_MASK))
+#define OW_WILD_BEHAVIOR_TILES_BEFORE_TURN_SKID_MASK 0x3F
+#define OW_WILD_BEHAVIOR_PLAN_TURN_SKID_PATH_SHIFT 6
+#define OW_WILD_BEHAVIOR_PLAN_TURN_SKID_PATH_MASK \
+    (1u << OW_WILD_BEHAVIOR_PLAN_TURN_SKID_PATH_SHIFT)
+#define OW_WILD_BEHAVIOR_STOP_SKID_SHIFT 7
+#define OW_WILD_BEHAVIOR_STOP_SKID_MASK \
+    (1u << OW_WILD_BEHAVIOR_STOP_SKID_SHIFT)
+#define OW_WILD_BEHAVIOR_TURN_SKID_OPTIONS(tilesBeforeTurnSkid, planTurnSkidPath, stopSkid) \
+    (((tilesBeforeTurnSkid) & OW_WILD_BEHAVIOR_TILES_BEFORE_TURN_SKID_MASK) \
+        | (((planTurnSkidPath) << OW_WILD_BEHAVIOR_PLAN_TURN_SKID_PATH_SHIFT) \
+            & OW_WILD_BEHAVIOR_PLAN_TURN_SKID_PATH_MASK) \
+        | (((stopSkid) << OW_WILD_BEHAVIOR_STOP_SKID_SHIFT) \
+            & OW_WILD_BEHAVIOR_STOP_SKID_MASK))
+#define OW_WILD_BEHAVIOR_TILES_BEFORE_TURN_SKID(options) \
+    ((options) & OW_WILD_BEHAVIOR_TILES_BEFORE_TURN_SKID_MASK)
+#define OW_WILD_BEHAVIOR_PLANS_TURN_SKID_PATH(options) \
+    (((options) & OW_WILD_BEHAVIOR_PLAN_TURN_SKID_PATH_MASK) != 0)
+#define OW_WILD_BEHAVIOR_STOPS_WITH_SKID(options) \
+    (((options) & OW_WILD_BEHAVIOR_STOP_SKID_MASK) != 0)
+#define OW_WILD_BEHAVIOR_SET_TILES_BEFORE_TURN_SKID(options, tilesBeforeTurnSkid) \
+    ((options) = ((options) & (OW_WILD_BEHAVIOR_PLAN_TURN_SKID_PATH_MASK \
+            | OW_WILD_BEHAVIOR_STOP_SKID_MASK)) \
+        | ((tilesBeforeTurnSkid) & OW_WILD_BEHAVIOR_TILES_BEFORE_TURN_SKID_MASK))
+#define OW_WILD_BEHAVIOR_SET_PLAN_TURN_SKID_PATH(options, planTurnSkidPath) \
+    ((options) = ((options) & (OW_WILD_BEHAVIOR_TILES_BEFORE_TURN_SKID_MASK \
+            | OW_WILD_BEHAVIOR_STOP_SKID_MASK)) \
+        | (((planTurnSkidPath) << OW_WILD_BEHAVIOR_PLAN_TURN_SKID_PATH_SHIFT) \
+            & OW_WILD_BEHAVIOR_PLAN_TURN_SKID_PATH_MASK))
+#define OW_WILD_BEHAVIOR_SET_STOP_SKID(options, stopSkid) \
+    ((options) = ((options) & (OW_WILD_BEHAVIOR_TILES_BEFORE_TURN_SKID_MASK \
+            | OW_WILD_BEHAVIOR_PLAN_TURN_SKID_PATH_MASK)) \
+        | (((stopSkid) << OW_WILD_BEHAVIOR_STOP_SKID_SHIFT) \
+            & OW_WILD_BEHAVIOR_STOP_SKID_MASK))
 #define OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_CARDINAL(mode) \
     ((mode) < OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_DIAGONAL_ONLY)
 #define OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(mode) \
     ((mode) != OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY)
 #define OW_WILD_BEHAVIOR_WALK_OPTION_FACE_PLAYER (1u << 6)
 #define OW_WILD_BEHAVIOR_WALK_OPTION_FIXED_FACING (1u << 7)
-#define OW_WILD_BEHAVIOR_WALK_OPTIONS_RESERVED_MASK 0x0E
+#define OW_WILD_BEHAVIOR_WALK_SWAY_WIDTH_SHIFT 1
+#define OW_WILD_BEHAVIOR_WALK_SWAY_WIDTH_MASK \
+    (7u << OW_WILD_BEHAVIOR_WALK_SWAY_WIDTH_SHIFT)
+#define OW_WILD_BEHAVIOR_WALK_SWAY_WIDTH_MAX 7
+#define OW_WILD_BEHAVIOR_WALK_OPTIONS_RESERVED_MASK 0x00
 #define OW_WILD_BEHAVIOR_WALK_ALLOWS_TURNING(options) \
     (((options) & OW_WILD_BEHAVIOR_WALK_OPTION_LOCK_DIRECTION) == 0)
 #define OW_WILD_BEHAVIOR_WALK_CRASH_SOUND(options) \
@@ -220,6 +312,9 @@ typedef enum OverworldWildSpawnDestination {
     (((options) & OW_WILD_BEHAVIOR_WALK_OPTION_FIXED_FACING) != 0)
 #define OW_WILD_BEHAVIOR_WALK_FACES_PLAYER(options) \
     (((options) & OW_WILD_BEHAVIOR_WALK_OPTION_FACE_PLAYER) != 0)
+#define OW_WILD_BEHAVIOR_WALK_SWAY_WIDTH(options) \
+    (((options) & OW_WILD_BEHAVIOR_WALK_SWAY_WIDTH_MASK) \
+        >> OW_WILD_BEHAVIOR_WALK_SWAY_WIDTH_SHIFT)
 #define OW_WILD_BEHAVIOR_WALK_PRESERVES_FACING(options) \
     (((options) & (OW_WILD_BEHAVIOR_WALK_OPTION_FACE_PLAYER \
         | OW_WILD_BEHAVIOR_WALK_OPTION_FIXED_FACING)) != 0)
@@ -256,7 +351,8 @@ typedef struct OverworldWildBehaviorProfileData {
     u8 alertChance;
     u8 spawnDestination;
     u8 battleTrigger;
-    /* Cardinal-only, cardinal and diagonal, or diagonal-only movement. */
+    /* Low two bits select cardinal/diagonal movement. High six bits store
+     * the independent 0..32 Walk travel-time variance. */
     u8 hopAllowNonCardinal;
     u8 hopMinDistance;
     u8 hopMaxDistance;
@@ -300,6 +396,7 @@ typedef struct OverworldWildBehaviorProfileData {
     u8 chainRepositionSpeed;
     u8 chainRepositionDistance;
     u8 chainRepositionDust;
+    /* Cardinal permission plus Walk pause variance in the high seven bits. */
     u8 chainRepositionAllowCardinal;
     u8 chainRepositionAllowDiagonal;
     /* Turning, effects, and presentation options for Walk movement. */
@@ -310,10 +407,14 @@ typedef struct OverworldWildBehaviorProfileData {
     u8 chainPauseActionChance;
     /* Frames to pause after each completed normal Walk step. */
     u8 walkPause;
-    /* Required continuous Walk steps before a turn skid; zero disables them. */
+    /* Low six bits: required Walk steps before a turn skid. Bit 6: whether
+     * normal movement plans the full turn-skid path. High bit: whether a
+     * lifecycle stop uses the stop-skid path. */
     u8 tilesBeforeTurnSkid;
     /* Zero disables stomp; otherwise stomp at this travel time or faster. */
     u8 walkStompTime;
+    /* Zero disables acceleration; 1..32 remove frames; 33 halves travel time. */
+    u8 walkAccelerationStep;
 } OverworldWildBehaviorProfileData;
 
 typedef char OverworldWildBehaviorProfileDataSizeMustRemain72Bytes[
@@ -392,6 +493,7 @@ typedef struct OverworldWildBehaviorProfile {
             u8 walkPause;
             u8 tilesBeforeTurnSkid;
             u8 walkStompTime;
+            u8 walkAccelerationStep;
         };
     };
     union {
@@ -452,6 +554,7 @@ typedef struct OverworldWildBehaviorProfile {
             u8 attentiveWalkPause;
             u8 attentiveTilesBeforeTurnSkid;
             u8 attentiveWalkStompTime;
+            u8 attentiveWalkAccelerationStep;
         };
     };
     union {
@@ -506,6 +609,7 @@ typedef struct OverworldWildBehaviorProfile {
             u8 tiredWalkPause;
             u8 tiredTilesBeforeTurnSkid;
             u8 tiredWalkStompTime;
+            u8 tiredWalkAccelerationStep;
         };
     };
 } OverworldWildBehaviorProfile;
@@ -675,6 +779,11 @@ typedef char OverworldWildBehaviorConditionalStateSizeMustRemain8Bytes[
 #define OW_WILD_BEHAVIOR_OVERRIDE3_WALK_PAUSE (1u << 22)
 #define OW_WILD_BEHAVIOR_OVERRIDE3_TILES_BEFORE_TURN_SKID (1u << 23)
 #define OW_WILD_BEHAVIOR_OVERRIDE3_WALK_STOMP_TIME (1u << 24)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_WALK_ACCELERATION_STEP (1u << 25)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_WALK_TIME_VARIANCE (1u << 26)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_WALK_PAUSE_VARIANCE (1u << 27)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_STOP_SKID (1u << 28)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_PLAN_TURN_SKID_PATH (1u << 29)
 
 #define OW_WILD_BEHAVIOR_MATCH_CLASS_FORCED_ASLEEP 0xFD
 
@@ -743,10 +852,8 @@ typedef struct OverworldWildSurfaceInstance {
     u8 templateId;
     u8 localSurfaceId;
     u16 heightQ4;
-    u8 heightPage;
-    u8 surfaceType;
-    s8 anchorBlockDx;
-    s8 anchorBlockDy;
+    u8 heightPageAndSurfaceType;
+    u8 anchorBlockOffsets;
 } OverworldWildSurfaceInstance;
 
 typedef struct OverworldWildSurfaceTemplate {
@@ -779,8 +886,8 @@ typedef char OverworldWildSurfaceModelCountMustFitCacheIndex[
 
 typedef char OverworldWildSurfaceModelDirectoryEntrySizeMustRemain6Bytes[
     sizeof(OverworldWildSurfaceModelDirectoryEntry) == 6 ? 1 : -1];
-typedef char OverworldWildSurfaceInstanceSizeMustRemain10Bytes[
-    sizeof(OverworldWildSurfaceInstance) == 10 ? 1 : -1];
+typedef char OverworldWildSurfaceInstanceSizeMustRemain8Bytes[
+    sizeof(OverworldWildSurfaceInstance) == 8 ? 1 : -1];
 typedef char OverworldWildSurfaceTemplateSizeMustRemain2Bytes[
     sizeof(OverworldWildSurfaceTemplate) == 2 ? 1 : -1];
 typedef char OverworldWildSurfaceCatalogMustRemainPacked[
@@ -805,8 +912,10 @@ typedef char OverworldWildSurfaceTemplateCountMustFitByteIndex[
     OWBD_SURFACE_TEMPLATE_COUNT <= 256 ? 1 : -1];
 typedef char OverworldWildSurfaceHitSizeMustRemain8Bytes[
     sizeof(OverworldWildSurfaceHit) == 8 ? 1 : -1];
+#ifndef OVERWORLD_BEHAVIOR_HOST
 typedef char OverworldWildSurfaceBlockCacheSizeMustRemain8Bytes[
     sizeof(OverworldWildSurfaceBlockCache) == 8 ? 1 : -1];
+#endif
 
 typedef struct OverworldWildBehaviorDataBlob {
     OverworldWildBehaviorDataBlobHeader header;
@@ -920,6 +1029,7 @@ typedef struct OverworldWildSpawnMetadata {
     u8 type2;
     u8 catchValue;
     u8 renderModePlusOne;
+    u32 groupFlags;
 } OverworldWildSpawnMetadata;
 
 typedef struct OverworldWildSpawnMetadataException {

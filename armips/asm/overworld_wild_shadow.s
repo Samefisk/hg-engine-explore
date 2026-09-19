@@ -40,4 +40,24 @@ overworld_wild_native_shadow_position_filter equ 0x023BF3BC
 .org 0x021FD96C
     bl overworld_wild_native_shadow_position_filter
 
+// The stock hidden-state stores share their word with the encounter token.
+// Store only the low half so hiding a shadow cannot erase its identity.
+.org 0x021FD766
+    strh r0, [r4, 0xC]
+
+.org 0x021FD964
+    strh r0, [r4, 0xC]
+
+// The matching draw callbacks must also read only the hidden-state half.
+// Otherwise the nonzero encounter token in the high half is mistaken for a
+// hidden shadow (or prevents the hidden variant from being recognized).
+.org 0x021FD7DC
+    ldrh r0, [r2, 0xC]
+
+.org 0x021FD840
+    ldrh r0, [r2, 0xC]
+
+.org 0x021FD986
+    ldrh r1, [r4, 0xC]
+
 .close

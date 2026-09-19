@@ -1,0 +1,175 @@
+{
+  "schemaVersion": 1,
+  "id": "walk.turn-skid.control-release",
+  "title": "Mounted cardinal turn skid retains direction and returns control",
+  "status": "active",
+  "capabilities": [
+    "walk.skid",
+    "mount.presentation"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld_walk_frame_timing_spec.md",
+    "actor": "MOUNTED species 155 (cyndaquil), acquired through mount; live handle and attached presentation required",
+    "trigger": "Place the disposable fixture on a clear Cherrygrove lane; mount Cyndaquil; hold Right through thirteen acceleration Walks; reverse to Left through one skid motion; release Left when the recovery Walk starts",
+    "observable": "The thirteen Walk durations are 8,8,8,7,7,7,6,6,6,5,5,5,4; the reversal keeps Right-facing skid presentation, emits one skid dust effect, commits one 8-frame skid motion and one 5-frame recovery Walk, then returns idle control facing Left",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use checked teleport, party and mount commands with test.sav; settle and bind the current Cyndaquil; set only its direction mode to the authored cardinal value before the observation window."
+      }
+    ],
+    "limits": [
+      "Prepared setup gives no motion or timing credit.",
+      "The case proves the cardinal Cyndaquil skid sequence on one clear lane; it does not prove diagonal movement or every species profile.",
+      "Registration alone is not runtime acceptance; the checked shared test must pass on the current ROM."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "lifecycle",
+      "value": "Prepare the clear city lane, mount own Cyndaquil, settle, bind its current identity, and set cardinal direction mode"
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Hold Right through thirteen natural acceleration commits"
+    },
+    {
+      "at": 2,
+      "kind": "input",
+      "value": "Hold Left through one Right-facing skid motion and release it when the Left recovery Walk starts"
+    },
+    {
+      "at": 3,
+      "kind": "input",
+      "value": "Observe the recovery Walk finish with neutral input and idle control return"
+    },
+    {
+      "at": 4,
+      "kind": "input",
+      "value": "Close the existing Walk matrix reader after idle control returns"
+    }
+  ],
+  "stop": {
+    "frameBudget": 221,
+    "condition": "Thirteen acceleration Walks, one skid motion, one recovery Walk, and the reader close finish"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ],
+    "orderedEvents": [
+      {
+        "id": "start",
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "commit",
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "finish",
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "control",
+        "event": "CONTROL_RETURNED",
+        "reason": "OK"
+      }
+    ],
+    "eventCounts": [
+      {
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 1
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "CONTROL_RETURNED",
+        "reason": "OK",
+        "minimum": 1,
+        "maximum": 1
+      }
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "walk.turn-skid.control-release",
+    "claims": ["natural-input", "live-actor-identity", "logical-commit", "rendered-motion", "frame-pacing", "feedback-effect", "control-release"],
+    "minimumFrames": 94
+  }
+}

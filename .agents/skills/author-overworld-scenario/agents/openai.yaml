@@ -1,0 +1,4 @@
+interface:
+  display_name: "Author Overworld Scenario"
+  short_description: "Turn observed game bugs into permanent tests"
+  default_prompt: "Use $author-overworld-scenario to turn this recorded failure into a permanent regression test."

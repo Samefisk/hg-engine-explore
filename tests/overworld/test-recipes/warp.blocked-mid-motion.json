@@ -1,0 +1,288 @@
+{
+  "schemaVersion": 1,
+  "id": "warp.blocked-mid-motion",
+  "title": "Mounted Teleport keeps a faced door blocked until normal Walk",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/README.md#system-contracts and runtime_proof_registry.json: legacy.warp-blocked-mid-motion",
+  "requirements": [
+    "legacy.warp-blocked-mid-motion"
+  ],
+  "budgets": {
+    "maxSeconds": 180,
+    "maxFrames": 800,
+    "noProgressFrames": 180,
+    "minObservedFrames": 16
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquire": "existing"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "warp-gate-v1",
+      "subject": "cyndaquil"
+    }
+  ],
+  "setup": [
+    {
+      "id": "place-at-door",
+      "op": "teleport",
+      "args": {
+        "map": 67,
+        "x": 555,
+        "z": 392,
+        "facing": 0
+      },
+      "budget": {
+        "maxSeconds": 40,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-cyndaquil",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 10,
+        "hp": 1,
+        "status": 0
+      },
+      "budget": {
+        "maxSeconds": 40,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "mount-cyndaquil",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "mounted",
+        "slot": 0,
+        "level": 5
+      },
+      "budget": {
+        "maxSeconds": 40,
+        "maxFrames": 180,
+        "noProgressFrames": 180
+      }
+    },
+    {
+      "id": "settle",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 40,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "bind",
+      "op": "bind",
+      "args": {
+        "subject": "cyndaquil"
+      },
+      "budget": {
+        "maxSeconds": 40,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "configure-up",
+      "op": "mount-teleport.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "locomotion": 9,
+        "teleportTime": 7,
+        "teleportPause": 0
+      },
+      "budget": {
+        "maxSeconds": 40,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "prime-door-direction",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 40,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "teleport-south",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "warp-gate-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 40,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "finish-south",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "warp-gate-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 40,
+        "maxFrames": 60,
+        "noProgressFrames": 60
+      }
+    },
+    {
+      "id": "configure-down",
+      "op": "mount-teleport.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "locomotion": 9,
+        "teleportTime": 7,
+        "teleportPause": 0
+      },
+      "budget": {
+        "maxSeconds": 40,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "teleport-north",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "warp-gate-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 40,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "finish-north",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "warp-gate-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 40,
+        "maxFrames": 60,
+        "noProgressFrames": 60
+      }
+    },
+    {
+      "id": "restore-walk",
+      "op": "mount-teleport.restore",
+      "args": {
+        "subject": "cyndaquil"
+      },
+      "budget": {
+        "maxSeconds": 40,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "walk-into-door",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "warp-gate-v1",
+          "stage": "walk-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 40,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "arrive-inside",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "warp-gate-v1",
+          "stage": "arrived",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 40,
+        "maxFrames": 180,
+        "noProgressFrames": 180
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "warp-gate-v1",
+      "when": "final"
+    }
+  ]
+}

@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "id": "walk.cardinal.frames-1-32",
+  "title": "Exact cardinal and diagonal Walk times1–32 with diagonal-only gating",
+  "status": "active",
+  "capabilities": [
+    "walk.exact"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld_walk_frame_timing_spec.md",
+    "actor": "MOUNTED species 155 (cyndaquil), acquired through mount; live handle and attached presentation required",
+    "trigger": "For each travel time 1 through 32, request one cardinal Walk; For each travel time 1 through 32, request one diagonal Walk",
+    "observable": "Each accepted motion has exactly one terminal result; No logical commit occurs after motion cancellation; Control returns after the selected motion finishes or cancels; No active actors share a nonzero target reservation; Every active actor handle uses the current field epoch; Every active actor has an attached presentation",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Disposable test.sav, checked map33 teleport, party and own mounted Cyndaquil follower setup; bind its current generation-safe identity."
+      },
+      {
+        "phase": "during-observation",
+        "target": "profile",
+        "change": "At each settled IDLE boundary, zero-time checked writes set only base time, fastest time, acceleration disabled and direction allowance. Native readback retains every other byte; no movement or terrain override."
+      }
+    ],
+    "limits": [
+      "Controlled lane timing only; not unchanged authored profiles or natural selection/spawning.",
+      "All65 motions and same-reader control require current controller acceptance."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "input",
+      "value": "For each travel time 1 through 32, request one cardinal Walk"
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "For each travel time 1 through 32, request one diagonal Walk"
+    }
+  ],
+  "stop": {
+    "frameBudget": 4096,
+    "condition": "All 64 exact-timing Walk motions and diagonal-only gating return results"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ],
+    "orderedEvents": [
+      {
+        "id": "start",
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "commit",
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "finish",
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "control",
+        "event": "CONTROL_RETURNED",
+        "reason": "OK"
+      }
+    ],
+    "eventCounts": [
+      {
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 1
+        },
+        "minimum": 65,
+        "maximum": 65
+      },
+      {
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 65,
+        "maximum": 65
+      },
+      {
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 65,
+        "maximum": 65
+      },
+      {
+        "event": "CONTROL_RETURNED",
+        "reason": "OK",
+        "minimum": 65,
+        "maximum": 65
+      }
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "walk.cardinal.frames-1-32",
+    "claims": [
+      "natural-input",
+      "live-actor-identity",
+      "profile-resolution",
+      "frame-pacing",
+      "control-release"
+    ],
+    "minimumFrames": 1061
+  }
+}

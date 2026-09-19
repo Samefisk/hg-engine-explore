@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.movement.frame-pacing",
+  "title": "Seven mounted Cyndaquil Walks and one separate recovery tile",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/devtools-tests.md#opt-in-mounted-callback-reader",
+  "requirements": ["legacy.mounted-smoothness"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 600, "noProgressFrames": 90, "minObservedFrames": 8},
+  "subjects": [{"id": "cyndaquil", "species": 155, "role": "MOUNTED", "acquire": "existing"}],
+  "measurements": [{"kind": "mounted-frame-pacing-v1", "subject": "cyndaquil"}],
+  "setup": [
+    {"id": "own-clear-lane", "op": "teleport", "args": {"map": 33, "x": 584, "z": 403, "facing": 3},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "own-party-data", "op": "party", "args": {"slot": 0, "species": 155, "level": 10, "hp": 1, "status": 0},
+      "budget": {"maxSeconds": 15, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "mount-own-cyndaquil", "op": "spawn", "args": {"species": 155, "role": "mounted", "slot": 0},
+      "budget": {"maxSeconds": 30, "maxFrames": 180, "noProgressFrames": 120}},
+    {"id": "bind-mount", "op": "bind", "args": {"subject": "cyndaquil"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "arm-reader", "op": "mount-pacing.arm", "args": {"subject": "cyndaquil"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "held-right-seven", "op": "step", "args": {"frames": 150, "keys": ["RIGHT"],
+      "until": {"kind": "measurement-stage", "measurement": "mounted-frame-pacing-v1", "stage": "main-started"}},
+      "budget": {"maxSeconds": 30, "maxFrames": 150, "noProgressFrames": 30}},
+    {"id": "seven-terminal", "op": "wait", "args": {"predicate": {"kind": "measurement-stage", "measurement": "mounted-frame-pacing-v1", "stage": "main-complete"}},
+      "budget": {"maxSeconds": 10, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "separate-recovery-window", "op": "mount-pacing.recovery", "args": {},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "one-recovery-start", "op": "step", "args": {"frames": 30, "keys": ["RIGHT"],
+      "until": {"kind": "measurement-stage", "measurement": "mounted-frame-pacing-v1", "stage": "recovery-started"}},
+      "budget": {"maxSeconds": 10, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "recovery-terminal", "op": "wait", "args": {"predicate": {"kind": "measurement-stage", "measurement": "mounted-frame-pacing-v1", "stage": "recovery-complete"}},
+      "budget": {"maxSeconds": 10, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "close-reader", "op": "mount-pacing.close", "args": {},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "assertions": [{"kind": "measurement-complete", "measurement": "mounted-frame-pacing-v1"}]
+}

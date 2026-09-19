@@ -1,0 +1,229 @@
+{
+  "schemaVersion": 1,
+  "id": "devtools.unmounted-cadence-prefix",
+  "title": "Diagnostic: first two unmounted route legs; full-route completion is not expected",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "tests/overworld/scenarios/world.unmounted.long-travel-cadence.json",
+  "requirements": [],
+  "budgets": {
+    "maxSeconds": 180,
+    "maxFrames": 2400,
+    "noProgressFrames": 600,
+    "minObservedFrames": 32
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    }
+  ],
+  "setup": [
+    {
+      "id": "source-pid",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "party-field",
+          "slot": 1,
+          "path": "personality",
+          "operator": "eq",
+          "value": 2046726716
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "source-species",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "party-field",
+          "slot": 1,
+          "path": "species",
+          "operator": "eq",
+          "value": 155
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "prepare-hp",
+      "op": "party",
+      "args": {
+        "slot": 1,
+        "hp": 21,
+        "status": 0
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 600,
+        "noProgressFrames": 600
+      }
+    },
+    {
+      "id": "hp-readback",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "party-field",
+          "slot": 1,
+          "path": "hp",
+          "operator": "eq",
+          "value": 21
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "prepare-follower",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "role": "follower",
+        "slot": 1
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 600,
+        "noProgressFrames": 600
+      }
+    },
+    {
+      "id": "follower-idle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "actor-count",
+          "subject": "cyndaquil",
+          "motionPhase": "IDLE",
+          "operator": "eq",
+          "value": 1
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 600,
+        "noProgressFrames": 600
+      }
+    },
+    {
+      "id": "bind-cyndaquil",
+      "op": "bind",
+      "args": {
+        "subject": "cyndaquil"
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "route-001",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 8
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-001-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 33,
+          "x": 585,
+          "z": 398
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-002",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 28
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-002-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 565,
+          "z": 398
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "unmounted-cadence-v1"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "unmounted-cadence-v1",
+      "setupTransitions": [],
+      "subject": "cyndaquil"
+    }
+  ]
+}

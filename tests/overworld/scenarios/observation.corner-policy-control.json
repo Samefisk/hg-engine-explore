@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "observation.corner-policy-control",
+  "title": "Mounted corner policy reader detects and restores a native byte fault",
+  "status": "active",
+  "capabilities": ["actor.system"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "observer-control",
+    "expectationSource": "documentation/overworld-system/verification.md#memory-backed-proof",
+    "actor": "Current mounted Cyndaquil155 and its own follower identity, player anchor and generation-safe handle.",
+    "trigger": "After a native corner rejection and one clear-side recovery, pause and change only direction allowance from1 to0. Read through the same policy reader, then restore.",
+    "observable": "The unchanged policy checker rejects the bad byte; exact native state, registers, ownership and clocks are restored. No later gameplay runs.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {"phase": "before-observation", "target": "fixture", "change": "Disposable test.sav, checked teleport, party and own mounted follower setup. Private idle Walk lane allows diagonals at4frames. Query all eight native neighbor outcomes before input."},
+      {"phase": "during-observation", "target": "observation", "change": "After complete recovery, change only the native direction allowance byte while paused; restore in finally. Failed restoration aborts the private core. No gameplay after calibration."}
+    ],
+    "limits": ["Policy-reader calibration only; no collision-result calibration or gameplay capability credit."],
+    "control": {"boundary": "live-runtime", "fault": "Mounted direction allowance reads0 instead of1.", "expectedFailure": "The same policy checker rejects the changed byte and accepts exact restoration without a guest instruction."}
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "cyndaquil", "species": 155, "role": "MOUNTED", "acquisition": "mount", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [{"at": 0, "kind": "setup", "value": "Bind the current mounted follower and query its native corner."}, {"at": 1, "kind": "lifecycle", "value": "Reject southwest, recover west, calibrate policy and close."}],
+  "stop": {"frameBudget": 600, "condition": "Full corner baseline, restored policy fault and private session closed."},
+  "expect": {"requiredEvents": [], "forbiddenEvents": ["MOTION_CANCELED"], "invariants": ["Every active actor has an attached presentation"]},
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "observation.corner-policy-control", "claims": ["live-actor-identity", "controlled-action"], "minimumFrames": 6}
+}

@@ -1,0 +1,2426 @@
+{
+  "schemaVersion": 1,
+  "id": "world.unmounted.spawn-zero-stutter",
+  "title": "Unmounted spawn work has zero extra game frames",
+  "mode": "normal",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "tests/overworld/scenarios/world.unmounted.spawn-zero-stutter.json",
+  "requirements": [
+    "current.unmounted-zero-stutter"
+  ],
+  "budgets": {
+    "maxSeconds": 300,
+    "maxFrames": 4000,
+    "noProgressFrames": 600,
+    "minObservedFrames": 2600
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    }
+  ],
+  "setup": [
+    {
+      "id": "follower-idle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "actor-count",
+          "subject": "mankey",
+          "motionPhase": "IDLE",
+          "operator": "eq",
+          "value": 1
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 600,
+        "noProgressFrames": 600
+      }
+    },
+    {
+      "id": "bind-mankey",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "route-001",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 8
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-001-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 33,
+          "x": 585,
+          "z": 398
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-002",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 28
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-002-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 565,
+          "z": 398
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-003",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 33
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-003-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 565,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-004",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 55
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-004-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-005",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 64
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-005-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-006",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 76
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-006-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-007",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 85
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-007-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-008",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 97
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-008-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-009",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 106
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-009-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-010",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 118
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-010-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-011",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 127
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-011-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-012",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 139
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-012-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-013",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 148
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-013-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-014",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 160
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-014-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-015",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 169
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-015-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-016",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 181
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-016-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-017",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 190
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-017-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-018",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 202
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-018-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-019",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 211
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-019-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-020",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 223
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-020-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-021",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 232
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-021-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-022",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 244
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-022-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-023",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 253
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-023-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-024",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 265
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-024-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-025",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 274
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-025-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-026",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 286
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-026-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-027",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 295
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-027-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-028",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 307
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-028-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-029",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 316
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-029-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-030",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 328
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-030-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-031",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 337
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-031-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-032",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 349
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-032-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-033",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 358
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-033-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-034",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 370
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-034-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-035",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 379
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-035-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-036",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 391
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-036-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-037",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 400
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-037-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-038",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 412
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-038-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-039",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 421
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-039-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-040",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 433
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-040-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-041",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 442
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-041-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-042",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 454
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-042-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-043",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 463
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-043-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-044",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 475
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-044-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-045",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 484
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-045-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-046",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 496
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-046-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-047",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 505
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-047-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-048",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 517
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-048-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-049",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 526
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-049-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-050",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 538
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-050-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-051",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 547
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-051-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-052",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 559
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-052-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-053",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 568
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-053-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-054",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 580
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-054-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-055",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 589
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-055-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-056",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 601
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-056-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-057",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 610
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-057-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-058",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 622
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-058-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-059",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 631
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-059-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-060",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 643
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-060-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-061",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 652
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-061-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-062",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 664
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-062-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-063",
+      "op": "step",
+      "args": {
+        "frames": 256,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 673
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-063-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 555,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "complete-zero-stutter-window",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-complete",
+          "measurement": "unmounted-zero-stutter-v1"
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 80,
+        "noProgressFrames": 80
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "unmounted-zero-stutter-v1"
+    },
+    {
+      "kind": "player-settled-at",
+      "map": 67,
+      "x": 555,
+      "z": 393
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "unmounted-zero-stutter-v1",
+      "subject": "mankey"
+    }
+  ]
+}

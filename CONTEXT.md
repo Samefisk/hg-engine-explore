@@ -39,19 +39,27 @@ _Avoid as a synonym_: Mount profile, riding mode
 ## Behavior
 
 **Profile**:
-Authored behavior values before all matching layers are applied.
+One named behavior definition with a stable ID, one parent, and local field
+operators. All profiles use this shape.
 _Avoid as a synonym_: Mount profile, movement config
 
-**Base profile**:
-The class profile loaded before ordered overrides are applied.
-_Avoid as a synonym_: Final profile, override profile
+**Root profile**:
+The one complete profile. It has no parent and supplies every field when a
+selected profile is materialized.
+_Avoid as a synonym_: Fallback layer
 
-**Override profile**:
-An authored record containing a match, target set, operators, and profile values. When it matches, it contributes one ordered layer.
-_Avoid as a synonym_: Base profile, per-Pokémon rule
+**Profile selector**:
+An ordered match that selects the initial profile for a subject. Selection is
+an authored use of a profile, not a different profile type.
+_Avoid as a synonym_: Profile, layer
+
+**Profile application**:
+An ordered target and match that applies one profile's local operators. A
+profile can be used by more than one application.
+_Avoid as a synonym_: Profile, per-Pokémon copy
 
 **Layer**:
-One ordered behavior override that can change selected profile values.
+One applied profile contribution that can change selected profile values.
 _Avoid as a synonym_: Patch, rule row
 
 **Lane**:

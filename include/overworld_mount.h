@@ -1,6 +1,7 @@
 #ifndef OVERWORLD_MOUNT_H
 #define OVERWORLD_MOUNT_H
 
+#include "overworld_actor_system.h"
 #include "overworld_wild_behavior_data.h"
 #include "pokemon.h"
 #include "types.h"
@@ -14,7 +15,7 @@
 #define OVERWORLD_MOUNT_TOGGLE_DOWN \
     (*(volatile u8 *)(OVERWORLD_MOUNT_TOGGLE_LATCH_ADDR + 1))
 #define OVERWORLD_MOUNT_OVERLAY_MAGIC 0x544E554D /* MUNT */
-#define OVERWORLD_MOUNT_OVERLAY_VERSION 8
+#define OVERWORLD_MOUNT_OVERLAY_VERSION 9
 
 typedef enum OverworldMountPhase {
     OVERWORLD_MOUNT_PHASE_NONE = 0,
@@ -76,7 +77,7 @@ typedef struct OverworldMountOverlayEntry {
         const OverworldWildBehaviorPrimitives *primitives,
         const OverworldWildSurfaceCatalog *surfaceCatalog);
     void (*cancel)(u8 reason);
-    void (*prepareMapTransition)(u8 mode);
+    BOOL (*transition)(const OverworldActorTransitionCall *call);
     void (*onPlayerStep)(void);
     BOOL (*isActive)(void);
     BOOL (*tick)(

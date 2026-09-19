@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "observation.mount-pose-control",
+  "title": "Mounted pair reader detects changed native position and exact restoration",
+  "status": "active",
+  "capabilities": ["actor.system"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "observer-control",
+    "expectationSource": "documentation/overworld-system/verification.md#memory-backed-proof",
+    "actor": "Current mounted Cyndaquil155, current field and attached player anchor, idle after excluded warmup.",
+    "trigger": "Arm the same pose reader, observe one complete idle update, change only mount pos_x by one without executing guest instructions, then restore exact bytes.",
+    "observable": "The same reader and unchanged pair checker reject the changed position. Clean and restored data match exactly. Native clocks and registers do not change. Reader and private session close.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {"phase": "before-observation", "target": "fixture", "change": "Disposable test.sav; checked own-path teleport, party0 Cyndaquil and mounted spawn. Ten north input frames and an idle wait are excluded warmup, not movement proof. No other species destination or user save is changed."},
+      {"phase": "during-observation", "target": "observation", "change": "Paused same-reader control changes only the exact current mount pos_x bytes by one, restores in finally and verifies readback. Failed restore stops the private core."}
+    ],
+    "limits": ["This is reader calibration only. It grants no natural movement, spawning, terrain, pacing or soak credit."],
+    "control": {"boundary": "live-runtime", "fault": "Current mount position differs by one in native memory during a stopped-guest read.", "expectedFailure": "The unchanged pair checker rejects that read; exact restored read passes before execution resumes."}
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "cyndaquil", "species": 155, "role": "MOUNTED", "acquisition": "mount", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [{"at": 0, "kind": "setup", "value": "Own mounted Cyndaquil fixture, excluded warmup and current binding."}, {"at": 1, "kind": "lifecycle", "value": "Coherent idle sample, same-reader position fault, exact restore and reader close."}],
+  "stop": {"frameBudget": 360, "condition": "One coherent idle sample and one restored native pose control, then clean private session close."},
+  "expect": {"requiredEvents": [], "forbiddenEvents": ["MOTION_CANCELED"], "invariants": ["Every active actor has an attached presentation"]},
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "observation.mount-pose-control", "claims": ["live-actor-identity", "controlled-action"], "minimumFrames": 1}
+}

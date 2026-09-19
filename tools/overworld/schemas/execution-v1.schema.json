@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "overworld-execution-v1",
+  "title": "Overworld executed input sequence v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "scenarioId",
+    "completed",
+    "events",
+    "sequenceSha256"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "scenarioId": {"type": "string", "minLength": 1},
+    "completed": {"type": "boolean"},
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["at", "kind", "value"],
+        "properties": {
+          "at": {"type": "integer", "minimum": 0, "maximum": 2147483647},
+          "kind": {"enum": ["input", "lifecycle", "setup"]},
+          "value": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "sequenceSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "traceWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "oldestSequence",
+        "nextSequence",
+        "eventCount",
+        "fieldEpoch",
+        "eventsSha256"
+      ],
+      "properties": {
+        "oldestSequence": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "nextSequence": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "eventCount": {"type": "integer", "minimum": 0, "maximum": 32},
+        "fieldEpoch": {"type": "integer", "minimum": 0, "maximum": 65535},
+        "eventsSha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    }
+  }
+}

@@ -1,9 +1,9 @@
 """Reliability primitives for the V2 overworld behavior editor.
 
 The legacy viewer remains the source of truth for parsing and writing the game
-sources.  This module adds the guarantees an editor needs around those calls:
-content revisions, one-writer transactions with rollback, and context-accurate
-profile resolution.
+sources. The portable C resolver is the only profile-composition policy. This
+module adds content revisions, one-writer transactions with rollback, and
+context-accurate profile resolution around those adapters.
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ import pokemon_evolution_writer
 import pokemon_learnset_writer
 import pokemon_form_writer
 import pokemon_asset_writer
+import native_resolver
 
 
 MUTATION_LOCK = threading.RLock()
@@ -107,15 +108,15 @@ def require_capability(legacy: ModuleType, capability: str) -> None:
         raise CapabilityUnavailable(capability, details)
 
 
-PROFILE_COMMIT_DOMAINS = {"profiles", "profileMemberships", "profileOverrides"}
+PROFILE_COMMIT_DOMAINS = {"profileCatalog"}
 
 
 def validate_commit_domains(legacy: ModuleType, domains: set[str]) -> None:
-    """Reparse only the optional source systems touched by a transaction."""
+    """Reparse touched sources and resolve profile writes through canonical C."""
 
     if domains & PROFILE_COMMIT_DOMAINS:
         legacy.validate_override_profile_source()
-        legacy.build_data(include_routes=False, include_spawn_settings=False)
+        legacy.validate_profile_runtime_resolution()
     if "encounters" in domains:
         legacy.build_route_only_data(
             include_routes=True,
@@ -160,6 +161,7 @@ def mutation_source_paths(legacy: ModuleType, root: Path) -> tuple[Path, ...]:
     """Return all files that any atomic V2 commit domain can write."""
 
     paths = {
+        legacy.BEHAVIOR_CATALOG_SOURCE,
         legacy.BEHAVIOR_DATA_SOURCE,
         legacy.BEHAVIOR_DATA_HEADER,
         legacy.ENCOUNTERS_SOURCE,
@@ -412,10 +414,6 @@ def _validate_revision(legacy: ModuleType, root: Path, expected: str | None) -> 
 
 
 MUTATION_HANDLERS: dict[str, str] = {
-    "/save-profiles": "apply_profile_changes",
-    "/save-profile-memberships": "apply_profile_membership_changes",
-    "/manage-profiles": "apply_profile_management_change",
-    "/save-profile-overrides": "apply_profile_override_changes",
     "/save-encounters": "apply_encounter_changes",
     "/save-spawn-settings": "apply_spawn_setting_changes",
 }
@@ -434,18 +432,11 @@ def transactional_mutation(
     if handler_name is None:
         raise ValueError(f"unsupported mutation endpoint: {path}")
     domain_by_path = {
-        "/save-profiles": "profiles",
-        "/save-profile-memberships": "profileMemberships",
-        "/manage-profiles": "profiles",
-        "/save-profile-overrides": "profileOverrides",
         "/save-encounters": "encounters",
         "/save-spawn-settings": "spawnSettings",
     }
     domain = domain_by_path[path]
     capability_by_domain = {
-        "profiles": "profiles",
-        "profileMemberships": "profiles",
-        "profileOverrides": "profiles",
         "encounters": "routes",
         "spawnSettings": "spawnSettings",
     }
@@ -484,9 +475,7 @@ def transactional_mutation(
 
 
 COMMIT_STEPS: tuple[tuple[str, str], ...] = (
-    ("profiles", "apply_profile_changes"),
-    ("profileMemberships", "apply_profile_membership_changes"),
-    ("profileOverrides", "apply_profile_override_changes"),
+    ("profileCatalog", "apply_profile_catalog_changes"),
     ("encounters", "apply_encounter_changes"),
     ("spawnSettings", "apply_spawn_setting_changes"),
 )
@@ -593,9 +582,7 @@ def transactional_commit(legacy: ModuleType, root: Path, body: bytes) -> dict[st
         raise ValueError("commit contains no changes")
 
     capability_by_domain = {
-        "profiles": "profiles",
-        "profileMemberships": "profiles",
-        "profileOverrides": "profiles",
+        "profileCatalog": "profiles",
         "encounters": "routes",
         "spawnSettings": "spawnSettings",
         "pokemonUpdates": "pokemon",
@@ -761,24 +748,12 @@ def _parse_bool(value: str | None) -> int:
     return 1 if str(value or "").strip().lower() in {"1", "true", "yes", "shiny"} else 0
 
 
-def _stable_layer_id(name: str, override: dict[str, Any], occurrence: int) -> str:
-    match = {
-        key: override["match"][key].get("raw")
-        for key in getattr(override.get("match"), "keys", lambda: [])()
-    }
-    behavior = override.get("behavior", {})
-    profile = behavior.get("profile", {}) if isinstance(behavior, dict) else {}
-    signature = {
-        "name": name,
-        "occurrence": occurrence,
-        "match": match,
-        "mask": behavior.get("mask", {}),
-        "profile": {key: value.get("raw") for key, value in profile.items()},
-    }
-    digest = hashlib.sha256(
-        json.dumps(signature, sort_keys=True, default=str).encode("utf-8")
-    ).hexdigest()[:16]
-    return f"override:{digest}"
+def _application_source_index(application_order: int) -> int:
+    """Translate one-based compatibility order to the resolver source index."""
+
+    if application_order < 1:
+        raise ValueError(f"application order must be positive: {application_order}")
+    return application_order - 1
 
 
 def resolve_context(
@@ -787,41 +762,37 @@ def resolve_context(
     level_value: str | None,
     terrain_value: str | None,
     shiny_value: str | None,
+    condition_terrain_mask_value: str | None = None,
+    forced_override_mask_value: str | None = None,
+    behavior_class_value: str | None = None,
 ) -> dict[str, Any]:
     """Resolve one real runtime context and expose the complete layer stack."""
 
-    raw_overlay = legacy.OVERLAY_SOURCE.read_text()
-    source = legacy.strip_c_comments(legacy.join_line_continuations(raw_overlay))
-    raw_behavior_data = legacy.BEHAVIOR_DATA_SOURCE.read_text()
-    behavior_source = legacy.strip_c_comments(legacy.join_line_continuations(raw_behavior_data))
+    canonical_catalog = legacy.load_behavior_catalog_v2()
+    catalog = legacy.load_behavior_catalog()
+    profiles_by_id = {
+        profile["id"]: profile for profile in canonical_catalog["profiles"]
+    }
+    applications = canonical_catalog["applications"]
     expressions, species_order = legacy.parse_define_expressions(legacy.DEFINE_SOURCE_FILES)
     macros = legacy.evaluate_defines(expressions)
     macros.update(legacy.evaluate_armips_equ([legacy.ARMIPS_CONFIG, legacy.ARMIPS_CONSTANTS]))
     terrain_values, destination_values = legacy.parse_behavior_data_enums()
     macros.update(terrain_values)
     macros.update(destination_values)
-    primitive_maps = legacy.parse_primitive_maps(source, macros)
-
+    legacy.apply_catalog_symbol_values(catalog, macros)
+    legacy.validate_canonical_spawn_group_constants(macros)
     class_labels = legacy.invert_labels(macros, legacy.CLASS_PREFIX)
     group_labels = legacy.invert_labels(macros, legacy.GROUP_PREFIX)
-    class_profiles = [
-        legacy.parse_profile(entry, macros)
-        for entry in legacy.parse_initializer(
-            legacy.extract_braced_initializer(
-                behavior_source, "sOverworldWildBehaviorClassProfiles"
-            )
-        )
-    ]
-    class_rules = legacy.parse_behavior_class_rules(
-        behavior_source, macros, group_labels, class_labels
+    variable_overrides = legacy.catalog_behavior_overrides(
+        catalog, macros, group_labels
     )
-    variable_overrides = legacy.parse_behavior_overrides(
-        behavior_source, macros, group_labels
-    )
-    override_names = legacy.parse_override_profile_names(raw_behavior_data)
-    group_species = legacy.parse_group_species(source, macros)
     species = legacy.parse_species(expressions, macros, species_order)
     legacy.apply_species_type_metadata(species, legacy.parse_species_type_metadata(macros))
+    canonical_type_metadata = legacy.parse_species_type_metadata(
+        macros,
+        canonical_symbols=True,
+    )
     species_by_symbol = {entry["symbol"]: entry for entry in species}
 
     symbol = str(species_symbol or "").strip().upper()
@@ -851,89 +822,228 @@ def resolve_context(
     if terrain not in set(terrain_values.values()):
         raise ValueError(f"unknown terrain value: {terrain}")
 
+    def resolver_integer(
+        raw_value: str | None,
+        label: str,
+        *,
+        default: int,
+        maximum: int,
+    ) -> int:
+        raw = str(raw_value or "").strip()
+        if not raw:
+            return default
+        try:
+            value = legacy.eval_c_expr(raw, macros)
+        except Exception as exc:
+            raise ValueError(f"invalid {label}: {raw}") from exc
+        if value < 0 or value > maximum:
+            raise ValueError(f"{label} must be from 0 to {maximum}")
+        return value
+
+    condition_terrain_mask = resolver_integer(
+        condition_terrain_mask_value,
+        "condition terrain mask",
+        default=0,
+        maximum=0xFFFF,
+    )
+    forced_override_mask = resolver_integer(
+        forced_override_mask_value,
+        "forced override mask",
+        default=0,
+        maximum=0xFFFFFFFF,
+    )
+    behavior_class_raw = str(behavior_class_value or "").strip()
+    requested_behavior_class: str | int = "auto"
+    if behavior_class_raw and behavior_class_raw.lower() != "auto":
+        requested_behavior_class = resolver_integer(
+            behavior_class_raw,
+            "behavior class",
+            default=macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0),
+            maximum=0xFF,
+        )
+
     context = {
         "species": species_entry["value"],
         "symbol": symbol,
         "level": level,
         "terrain": terrain,
         "shiny": _parse_bool(shiny_value),
-        "groupFlags": legacy.group_flags_for_species(
-            symbol, group_species, species_by_symbol, macros
+        "groupFlags": legacy.canonical_spawn_group_flags(
+            species_entry,
+            canonical_type_metadata,
         ),
-        "behaviorClass": macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0),
+        "behaviorClass": requested_behavior_class,
     }
-    behavior_class, class_hits = legacy.class_for_context(
-        context, class_rules, len(class_profiles), macros
+    canonical = native_resolver.resolve(
+        None,
+        {
+            "species": context["species"],
+            "level": context["level"],
+            "terrain": context["terrain"],
+            "shiny": context["shiny"],
+            "groupFlags": context["groupFlags"],
+            "conditionTerrainMask": condition_terrain_mask,
+            "forcedOverrideMask": forced_override_mask,
+            "behaviorClass": requested_behavior_class,
+        },
+        root=legacy.ROOT,
     )
+    if canonical.get("status") not in {0, 4}:
+        raise RuntimeError(
+            f"canonical resolver rejected the context with status {canonical.get('status')}"
+        )
+    behavior_class = int(canonical["behaviorClass"])
     context["behaviorClass"] = behavior_class
-    base_profile = legacy.clone_profile(class_profiles[behavior_class])
+    class_order = canonical_catalog["runtimeBindings"]["classOrder"]
+    if behavior_class < 0 or behavior_class >= len(class_order):
+        raise RuntimeError(
+            f"canonical resolver selected an unknown runtime class: {behavior_class}"
+        )
+    selected_profile_id = class_order[behavior_class]["profile"]
+    selected_profile_source = profiles_by_id[selected_profile_id]
+    trace = canonical.get("trace")
+    if not isinstance(trace, list) or canonical.get("traceDropped") != 0:
+        raise RuntimeError("canonical resolver provenance is incomplete")
+
+    owner_base_step = next(
+        (
+            step for step in trace
+            if step.get("lane") == 0 and step.get("kind") == 2
+        ),
+        None,
+    )
+    if owner_base_step is None:
+        raise RuntimeError("canonical resolver did not report its selected profile")
+    selected_profile_values = legacy.decode_native_profile(
+        macros, owner_base_step["profileHex"]
+    )
+    resolved_profile = legacy.decode_native_profile(
+        macros, canonical["profileHex"], lane=0
+    )
+    matched_mask = int(canonical.get("matchedOverrideMask", 0))
+    applied_mask = int(canonical.get("appliedOverrideMask", 0))
+    matched_application_ids = [
+        applications[index]["id"]
+        for index in range(min(len(applications), len(variable_overrides)))
+        if matched_mask & (1 << index)
+    ]
+    applied_application_ids = [
+        applications[index]["id"]
+        for index in range(min(len(applications), len(variable_overrides)))
+        if applied_mask & (1 << index)
+    ]
+
+    runtime_layers: list[dict[str, Any]] = []
+    normalizations: list[dict[str, Any]] = []
+    changes_by_override: dict[int, list[dict[str, Any]]] = {}
+    previous_by_lane: dict[int, dict[str, dict[str, Any]]] = {}
+    lane_names = {0: "Owner", 1: "Active", 2: "Tired"}
+    kind_names = {
+        2: "Selected profile",
+        3: "Profile application",
+        4: "Conditional application",
+        5: "Application reference",
+        6: "Runtime normalization",
+    }
+    for step in trace:
+        lane = int(step.get("lane", 255))
+        kind = int(step.get("kind", 255))
+        encoded = step.get("profileHex")
+        if lane not in lane_names or not isinstance(encoded, str):
+            continue
+        current = legacy.decode_native_profile(macros, encoded)
+        previous = previous_by_lane.get(lane)
+        changes = [] if previous is None else legacy.native_profile_changes(
+            previous, current
+        )
+        previous_by_lane[lane] = current
+        if kind == 3 and lane == 0:
+            changes_by_override[int(step.get("sourceIndex", -1))] = changes
+        if kind == 6 and lane == 0:
+            normalizations.extend(changes)
+        source_index = int(step.get("sourceIndex", -1))
+        if kind in {3, 4} and 0 <= source_index < len(applications):
+            application = applications[source_index]
+            profile_name = profiles_by_id[application["profile"]]["name"]
+            source_name = f"{profile_name} · {application['id']}"
+        else:
+            source_name = kind_names.get(kind, f"Resolver step {kind}")
+        runtime_layers.append({
+            "kind": kind_names.get(kind, "resolver"),
+            "label": f"{lane_names[lane]} · {source_name}",
+            "changes": changes,
+        })
 
     resolver_layers: list[dict[str, Any]] = [
         {
-            "id": f"class:{class_labels.get(behavior_class, {}).get('symbol', behavior_class)}",
-            "kind": "base",
+            "id": selected_profile_id,
+            "kind": "selection",
             "order": 0,
-            "name": class_labels.get(behavior_class, {}).get("name", f"Class {behavior_class}"),
+            "name": selected_profile_source["name"],
             "matched": True,
             "applied": True,
-            "summary": "Base profile",
+            "summary": "Selected profile",
             "changes": [],
         }
     ]
-    working_profile = legacy.clone_profile(base_profile)
-    matched_override_orders: list[int] = []
-    runtime_layers: list[dict[str, Any]] = [
-        {"kind": "class", "label": f"Class profile #{behavior_class}", "changes": []}
-    ]
-    for override in variable_overrides:
+    for source_index, (application, override) in enumerate(
+        zip(applications, variable_overrides)
+    ):
         profile_order = int(override["order"])
-        name = override_names.get(profile_order, "") or f"Override profile #{profile_order}"
-        matched = legacy.behavior_override_applies(context, override, macros)
-        if matched:
-            matched_override_orders.append(profile_order)
-        changes = (
-            legacy.merge_profile(working_profile, override["behavior"])
-            if matched
-            else []
-        )
-        if matched:
-            runtime_layers.append(
-                {
-                    "kind": "behaviorOverride",
-                    "label": name,
-                    "changes": changes,
-                    "mask": legacy.behavior_override_mask_summary(override["behavior"]),
-                }
-            )
+        profile_source = profiles_by_id[application["profile"]]
+        matched = bool(matched_mask & (1 << source_index))
+        applied = bool(applied_mask & (1 << source_index))
         members = override.get("memberSymbols") or []
         matched_member = symbol if matched and symbol in members else ""
-        resolver_layers.append(
-            {
-                "id": _stable_layer_id(name, override, profile_order),
-                "kind": "override",
-                "order": profile_order,
-                "name": name,
-                "matched": matched,
-                "applied": matched,
-                "summary": (
-                    f"Matched member {species_entry['name']}"
-                    if matched_member
-                    else override.get("summary", "Shared context")
-                ),
-                "memberCount": len(members),
-                "matchedMember": matched_member,
-                "match": override["match"],
-                "fields": legacy.behavior_override_mask_summary(override["behavior"])["labels"],
-                "changes": changes,
-            }
-        )
+        resolver_layers.append({
+            "id": application["id"],
+            "profileId": application["profile"],
+            "kind": "application",
+            "order": profile_order,
+            "name": profile_source["name"],
+            "matched": matched,
+            "applied": applied,
+            "summary": (
+                f"Matched member {species_entry['name']}"
+                if matched_member
+                else override.get("summary", "Shared context")
+            ),
+            "memberCount": len(members),
+            "matchedMember": matched_member,
+            "match": override["match"],
+            "fields": legacy.behavior_override_mask_summary(
+                override["behavior"]
+            )["labels"],
+            "changes": changes_by_override.get(source_index, []),
+        })
 
-    normalizations = legacy.normalize_profile(working_profile, macros)
-    if normalizations:
-        runtime_layers.append(
-            {"kind": "normalization", "label": "Runtime fallback", "changes": normalizations}
-        )
-    resolved_profile = working_profile
+    selector_hits = []
+    selectors_by_id = {
+        selector["id"]: selector for selector in canonical_catalog["selectors"]
+    }
+    species_selector_ids = canonical_catalog["runtimeBindings"]["speciesSelectors"]
+    species_selector_id_set = set(species_selector_ids)
+    general_selector_ids = [
+        selector["id"]
+        for selector in canonical_catalog["selectors"]
+        if selector["id"] not in species_selector_id_set
+    ]
+    for step in trace:
+        kind = int(step.get("kind", 255))
+        if kind not in {0, 1}:
+            continue
+        source_index = int(step.get("sourceIndex", -1))
+        selector_ids = general_selector_ids if kind == 0 else species_selector_ids
+        if source_index < 0 or source_index >= len(selector_ids):
+            continue
+        selector_id = selector_ids[source_index]
+        selector = selectors_by_id[selector_id]
+        selector_hits.append({
+            "id": selector_id,
+            "order": source_index,
+            "profileId": selector["profile"],
+            "profileName": profiles_by_id[selector["profile"]]["name"],
+        })
 
     terrain_symbol = next(
         (key for key, value in terrain_values.items() if value == terrain), str(terrain)
@@ -958,22 +1068,24 @@ def resolve_context(
             "terrain": {"symbol": terrain_symbol, "value": terrain},
             "shiny": bool(context["shiny"]),
             "groups": group_names,
+            "conditionTerrainMask": condition_terrain_mask,
+            "forcedOverrideMask": forced_override_mask,
+            "requestedRuntimeClass": requested_behavior_class,
         },
-        "behaviorClass": class_label,
-        "classRuleHits": [
-            {
-                "order": rule["order"],
-                "summary": rule["summary"],
-                "className": rule["className"],
-            }
-            for rule in class_hits
-        ],
-        "baseProfile": legacy.profile_numeric_view(base_profile),
+        "runtimeClass": class_label,
+        "selectorHits": selector_hits,
+        "selectedProfile": {
+            "id": selected_profile_id,
+            "name": selected_profile_source["name"],
+        },
+        "selectedProfileValues": legacy.profile_numeric_view(selected_profile_values),
         "resolvedProfile": legacy.profile_numeric_view(resolved_profile),
-        "resolvedPrimitives": legacy.resolve_primitives(resolved_profile, primitive_maps, macros),
+        "resolvedPrimitives": legacy.decode_native_primitives(
+            macros, canonical["primitivesHex"]
+        ),
         "resolverLayers": resolver_layers,
-        "matchedOverrideOrders": matched_override_orders,
-        "matchedOverrideProfileOrders": matched_override_orders,
+        "matchedApplicationIds": matched_application_ids,
+        "appliedApplicationIds": applied_application_ids,
         "normalizations": normalizations,
         "runtimeLayers": runtime_layers,
     }

@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.walk-transition-mid-motion",
+  "title": "A mounted Walk completes after the Route 29 field transition",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/architecture.md#field-transition-protocol and tools/overworld/runtime_proof_registry.json: legacy.mounted-walk-transition",
+  "requirements": ["legacy.mounted-walk-transition"],
+  "budgets": {"maxSeconds": 90, "maxFrames": 120, "noProgressFrames": 48, "minObservedFrames": 24},
+  "subjects": [{"id": "cyndaquil", "species": 155, "role": "MOUNTED", "acquire": "existing"}],
+  "measurements": [{"kind": "mounted-walk-transition-v1", "subject": "cyndaquil"}],
+  "setup": [
+    {"id": "transition-origin", "op": "teleport", "args": {"map": 33, "x": 671, "z": 402, "facing": 3},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "prepare-own-cyndaquil", "op": "party", "args": {"slot": 0, "species": 155, "level": 10, "hp": 1, "status": 0},
+      "budget": {"maxSeconds": 15, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "mount-own-cyndaquil", "op": "spawn", "args": {"species": 155, "form": 0, "role": "mounted", "slot": 0, "level": 10},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "settle-current-mount", "op": "step", "args": {"frames": 16, "keys": []},
+      "budget": {"maxSeconds": 15, "maxFrames": 16, "noProgressFrames": 16}},
+    {"id": "bind-cyndaquil", "op": "bind", "args": {"subject": "cyndaquil"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "cross-field-boundary", "op": "step", "args": {"frames": 32, "keys": ["RIGHT"],
+      "until": {"kind": "measurement-stage", "measurement": "mounted-walk-transition-v1", "stage": "context-changed", "when": "final"}},
+      "budget": {"maxSeconds": 30, "maxFrames": 32, "noProgressFrames": 32}},
+    {"id": "finish-transition-walk", "op": "wait", "args": {"predicate":
+      {"kind": "measurement-stage", "measurement": "mounted-walk-transition-v1", "stage": "transition-motion-complete", "when": "final"}},
+      "budget": {"maxSeconds": 20, "maxFrames": 24, "noProgressFrames": 24}},
+    {"id": "start-recovery-walk", "op": "step", "args": {"frames": 1, "keys": ["RIGHT"]},
+      "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "finish-recovery-walk", "op": "wait", "args": {"predicate":
+      {"kind": "measurement-stage", "measurement": "mounted-walk-transition-v1", "stage": "recovered", "when": "final"}},
+      "budget": {"maxSeconds": 20, "maxFrames": 24, "noProgressFrames": 24}}
+  ],
+  "assertions": [
+    {"kind": "measurement-complete", "measurement": "mounted-walk-transition-v1", "when": "final"},
+    {"kind": "player-settled-at", "map": 60, "x": 674, "z": 402, "when": "final"}
+  ]
+}

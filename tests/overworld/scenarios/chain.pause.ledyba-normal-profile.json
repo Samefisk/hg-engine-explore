@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "id": "chain.pause.ledyba-normal-profile",
+  "title": "Normal Ledyba chain count, pause action, and visible skid",
+  "status": "active",
+  "capabilities": [
+    "chain.movement",
+    "chain"
+  ],
+  "proofLevel": "S4",
+  "costTier": 4,
+  "verification": {
+    "kind": "normal-play",
+    "expectationSource": "data/overworld_behavior_profiles.json",
+    "actor": "One naturally spawned WILD Ledyba (species 165), with current field/map/encounter handle and attached presentation.",
+    "trigger": "Observe the same Ledyba for at least 5000 continuous bound-subject frames after its real off-screen spawn, using the unchanged resolved profile and checking every later chain.",
+    "observable": "From an observed successful spawn-start call, sample the actual Hop and landing. Capture the resolved lane before the first chain. Each ordinary Walk and reposition frame faces the player, including elapsed frame zero. Each complete interval falls within the authored count/variance range; observed RNG distinguishes chance skips. Three chosen actions each finish all four authored skids with full per-frame travel and exact landing.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Import test.sav bytes through a temporary file into a disposable emulator. Use short A pulses and, only if needed, B/X to close the normal menu. Require saved start map33 at (585,406), then drive the reviewed Route29-to-Route30 path through Cherrygrove with normal one-cardinal-tile input, at most 67 tiles. Stop new route input once the collector acquires Ledyba; finish only the current player tile. Never rewrite the source save, party, live coordinates, scene variables, time, RNG, profile, or counters."
+      },
+      {
+        "phase": "before-observation",
+        "target": "observation",
+        "change": "After ROM open and before boot cycles, install read-only spawn, resolver, public Walk-policy, and stock RNG entry/return taps. Capture actor and engine pose together only at the authenticated stock main-task-queue return. Wrap native emulator cycles only to retain their CPU/wall intervals and queue-completion counts. Restore the transport and remove owned taps at cleanup."
+      }
+    ],
+    "limits": [
+      "Executed only by the registered shared Workshop/owctl job. Active and ported mean executable, not accepted; the final controller must independently replay the current ROM/save/source and exact recipe.",
+      "Use the unchanged test.sav and the reviewed 67-tile normal-input Route29–Cherrygrove–Route30 route. Stop new input when the actual natural WILD Ledyba is acquired; finish the current player step. Blocked routes, absent actors and stale identity fail. No prepared teleport, party edit, forced spawn, RNG/time override or profile/counter reset.",
+      "Each Pokémon uses its own native selected spawn location. Bind this prepared encounter's species/personality, origin and landing target to its own current source object and full generation-safe handle. Do not borrow another species' tree, rooftop, flower-bed or ground destination.",
+      "Read-only native spawn/resolver/policy/RNG observations start before boot. Frame snapshots and actual render pose share the authenticated main-task-queue completion. Public trace records are drained at authenticated writer return before the small ring wraps, then published at completed-frame boundaries. Missing sequences or frames fail.",
+      "The checked recipe caps the whole job at12000 completed game frames/900 seconds, with at least5000 continuous bound-subject frames, per-action bounds and240 no-motion-progress frames. Earlier successful actions cannot end this longer witness. Setup frames do not count toward the bound subject floor. Native cycles and completed game frames remain separate.",
+      "Preserve source saves and the user's emulator. Retain each run's first failure, current subject and memory data. Do not capture or inspect images. Stop only the disposable session owned by this job.",
+      "Keep all six original claims and seven measurements. Observe the complete natural16-tile spawn Hop and terminal events, capture the resolved profile through same-source native resolver calls, and reject any normal Walk or reposition frame that does not face the player. Then measure8–14 eligible moves and actual60% chance outcomes. Three chosen actions must each complete four flat two-tile skids at2 frames per leg.",
+      "Normal AI lane changes are allowed only when the captured measured fields stay exact; each full lane must still match the same observed resolver output. No later expected-value relearning.",
+      "Acceptance requires the separately accepted current live actor/motion recorder-control run and same-subject native observations for the full window. Images supply no proof. A saved stream replay used for diagnosis does not replace fresh accepted runtime proof."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "ledyba",
+      "species": 165,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Require the unchanged raw save at map33 (585,406); walk the reviewed 67-tile maximum route through map67 to map34 using only normal input. Keep spawn sampling active and stop new route steps when live Ledyba is acquired; never replace the encounter."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Capture the resolved profile and independent expected interval/count/action rules before observing each of three chains."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Count eligible terminal moves and sample pause time and rendered skid/reposition displacement without clearing cooldowns or selecting an action by injection."
+    }
+  ],
+  "stop": {
+    "frameBudget": 12000,
+    "condition": "At least5000 continuous bound-subject frames, at least three complete chain actions, and every later completed chain and motion pass on the same live Ledyba; an overdue tail cannot pass"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "Control returns after the selected motion finishes or cancels"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "chain.ledyba-witness",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "natural-input",
+      "logical-commit",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumFrames": 5000
+  }
+}

@@ -1,0 +1,9212 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.transition-mid-motion",
+  "title": "Mounted Hop survives map change and continued input",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/README.md#system-contracts; map33 (671,402) uses the existing boundary fixture. The map60 alternating Hop lane still needs live terrain verification; this recipe grants no proof before accepted execution.",
+  "requirements": [
+    "legacy.mounted-transition"
+  ],
+  "budgets": {
+    "maxSeconds": 3600,
+    "maxFrames": 40000,
+    "noProgressFrames": 120,
+    "minObservedFrames": 5000
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "MOUNTED",
+      "acquire": "existing"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "mounted-hop-transition-v1",
+      "subject": "mankey"
+    }
+  ],
+  "setup": [
+    {
+      "id": "boundary-origin",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 671,
+        "z": 402,
+        "facing": 3
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "party-mankey",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 56,
+        "level": 10,
+        "hp": 1,
+        "status": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "mount-mankey",
+      "op": "spawn",
+      "args": {
+        "species": 56,
+        "form": 0,
+        "role": "mounted",
+        "slot": 0,
+        "level": 10
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-mount",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "bind-mankey",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "cross-boundary",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-hop-transition-v1",
+          "stage": "context-changed",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "finish-crossing-hop",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-hop-transition-v1",
+          "stage": "transition-motion-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "recovery-hop",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "finish-recovery-hop",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-0",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-0",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-1",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-1",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-2",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-2",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-3",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-3",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-4",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-4",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-5",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-5",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-6",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-6",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-7",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-7",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-8",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-8",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-9",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-9",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-10",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-10",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-11",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-11",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-12",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-12",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-13",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-13",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-14",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-14",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-15",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-15",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-16",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-16",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-17",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-17",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-18",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-18",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-19",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-19",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-20",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-20",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-21",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-21",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-22",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-22",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-23",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-23",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-24",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-24",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-25",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-25",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-26",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-26",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-27",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-27",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-28",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-28",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-29",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-29",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-30",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-30",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-31",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-31",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-32",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-32",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-33",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-33",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-34",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-34",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-35",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-35",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-36",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-36",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-37",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-37",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-38",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-38",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-39",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-39",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-40",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-40",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-41",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-41",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-42",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-42",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-43",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-43",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-44",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-44",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-45",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-45",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-46",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-46",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-47",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-47",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-48",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-48",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-49",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-49",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-50",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-50",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-51",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-51",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-52",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-52",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-53",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-53",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-54",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-54",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-55",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-55",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-56",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-56",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-57",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-57",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-58",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-58",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-59",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-59",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-60",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-60",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-61",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-61",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-62",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-62",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-63",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-63",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-64",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-64",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-65",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-65",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-66",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-66",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-67",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-67",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-68",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-68",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-69",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-69",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-70",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-70",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-71",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-71",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-72",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-72",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-73",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-73",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-74",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-74",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-75",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-75",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-76",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-76",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-77",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-77",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-78",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-78",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-79",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-79",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-80",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-80",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-81",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-81",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-82",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-82",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-83",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-83",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-84",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-84",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-85",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-85",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-86",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-86",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-87",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-87",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-88",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-88",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-89",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-89",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-90",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-90",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-91",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-91",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-92",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-92",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-93",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-93",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-94",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-94",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-95",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-95",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-96",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-96",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-97",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-97",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-98",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-98",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-99",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-99",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-100",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-100",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-101",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-101",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-102",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-102",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-103",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-103",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-104",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-104",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-105",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-105",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-106",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-106",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-107",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-107",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-108",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-108",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-109",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-109",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-110",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-110",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-111",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-111",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-112",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-112",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-113",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-113",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-114",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-114",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-115",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-115",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-116",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-116",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-117",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-117",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-118",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-118",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-119",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-119",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-120",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-120",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-121",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-121",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-122",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-122",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-123",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-123",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-124",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-124",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-125",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-125",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-126",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-126",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-127",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-127",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-128",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-128",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-129",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-129",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-130",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-130",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-131",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-131",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-132",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-132",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-133",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-133",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-134",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-134",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-135",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-135",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-136",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-136",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-137",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-137",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-138",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-138",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-139",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-139",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-140",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-140",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-141",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-141",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-142",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-142",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-143",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-143",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-144",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-144",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-145",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-145",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-146",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-146",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-147",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-147",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-148",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-148",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-149",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-149",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-150",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-150",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-151",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-151",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-152",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-152",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-153",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-153",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-154",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-154",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-155",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-155",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-156",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-156",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-157",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-157",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-158",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-158",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-159",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-159",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-160",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-160",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-161",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-161",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-162",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-162",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-163",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-163",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-164",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-164",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-165",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-165",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-166",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-166",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-167",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-167",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-168",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-168",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-169",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-169",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-170",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-170",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-171",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-171",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-172",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-172",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-173",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-173",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-174",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-174",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-175",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-175",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-176",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-176",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-177",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-177",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-178",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-178",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-179",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-179",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-180",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-180",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-181",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-181",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-182",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-182",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-183",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-183",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-184",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-184",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-185",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-185",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-186",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-186",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-187",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-187",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-188",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-188",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-189",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-189",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-190",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-190",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-191",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-191",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-192",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-192",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-193",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-193",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-194",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-194",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-195",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-195",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-196",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-196",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-197",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-197",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-198",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-198",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-199",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-199",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-200",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-200",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-201",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-201",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-202",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-202",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-203",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-203",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-204",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-204",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-205",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-205",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-206",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-206",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-207",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-207",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-208",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-208",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-209",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-209",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-210",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-210",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-211",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-211",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-212",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-212",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-213",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-213",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-214",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-214",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-215",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-215",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-216",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-216",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-217",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-217",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-218",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-218",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-219",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-219",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-220",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-220",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-221",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-221",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-222",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-222",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-223",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-223",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-224",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-224",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-225",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-225",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-226",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-226",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-227",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-227",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-228",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-228",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-229",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-229",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-230",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-230",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-231",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-231",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-232",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-232",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-233",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-233",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-234",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-234",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-235",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-235",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-236",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-236",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-237",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-237",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-238",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-238",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-239",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-239",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-240",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-240",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-241",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-241",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-242",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-242",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-243",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-243",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-244",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-244",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-245",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-245",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-246",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-246",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-247",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-247",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-248",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-248",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "soak-input-249",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "soak-settle-249",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "mankey",
+          "path": "motionPhase",
+          "operator": "eq",
+          "value": "IDLE",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "final-recovery",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-hop-transition-v1",
+          "stage": "recovered",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "mounted-hop-transition-v1",
+      "when": "final"
+    }
+  ]
+}

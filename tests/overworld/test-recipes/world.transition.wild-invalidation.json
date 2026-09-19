@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "world.transition.wild-invalidation",
+  "title": "A field transition invalidates one bound Wild actor",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/architecture.md#field-transition-protocol and tools/overworld/runtime_proof_registry.json: legacy.wild-transition",
+  "requirements": ["legacy.wild-transition"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 420, "noProgressFrames": 120, "minObservedFrames": 16},
+  "subjects": [{"id": "rattata", "species": 19, "role": "WILD", "acquire": "spawn"}],
+  "measurements": [{"kind": "wild-transition-invalidation-v1", "subject": "rattata"}],
+  "setup": [
+    {"id": "spawn-own-rattata", "op": "spawn", "args": {"species": 19, "role": "wild", "level": 5, "x": 583, "z": 406},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "bind-own-rattata", "op": "bind", "args": {"subject": "rattata"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "natural-walk-complete", "op": "wait", "args": {"predicate": {"kind": "measurement-stage", "measurement": "wild-transition-invalidation-v1", "stage": "natural-motion-complete", "when": "final"}},
+      "budget": {"maxSeconds": 40, "maxFrames": 240, "noProgressFrames": 120}},
+    {"id": "route-north", "op": "step", "args": {"frames": 64, "keys": ["UP"], "until": {"kind": "player-step-count", "operator": "eq", "value": 4}},
+      "budget": {"maxSeconds": 20, "maxFrames": 64, "noProgressFrames": 32}},
+    {"id": "route-north-settle", "op": "wait", "args": {"predicate": {"kind": "player-settled-at", "map": 33, "x": 585, "z": 402}},
+      "budget": {"maxSeconds": 15, "maxFrames": 16, "noProgressFrames": 16}},
+    {"id": "route-west", "op": "step", "args": {"frames": 64, "keys": ["LEFT"], "until": {"kind": "player-step-count", "operator": "eq", "value": 13}},
+      "budget": {"maxSeconds": 20, "maxFrames": 64, "noProgressFrames": 32}},
+    {"id": "route-west-settle", "op": "wait", "args": {"predicate": {"kind": "player-settled-at", "map": 33, "x": 576, "z": 402}},
+      "budget": {"maxSeconds": 15, "maxFrames": 16, "noProgressFrames": 16}},
+    {"id": "boundary-north", "op": "step", "args": {"frames": 32, "keys": ["UP"], "until": {"kind": "player-step-count", "operator": "eq", "value": 15}},
+      "budget": {"maxSeconds": 20, "maxFrames": 32, "noProgressFrames": 24}},
+    {"id": "boundary-north-settle", "op": "wait", "args": {"predicate": {"kind": "player-settled-at", "map": 33, "x": 576, "z": 400}},
+      "budget": {"maxSeconds": 15, "maxFrames": 16, "noProgressFrames": 16}},
+    {"id": "cross-boundary", "op": "step", "args": {"frames": 16, "keys": ["LEFT"], "until": {"kind": "player-step-count", "operator": "eq", "value": 16}},
+      "budget": {"maxSeconds": 20, "maxFrames": 16, "noProgressFrames": 16}},
+    {"id": "transition-arrival", "op": "wait", "args": {"predicate": {"kind": "player-settled-at", "map": 67, "x": 575, "z": 400}},
+      "budget": {"maxSeconds": 20, "maxFrames": 32, "noProgressFrames": 32}},
+    {"id": "recovery-step", "op": "step", "args": {"frames": 16, "keys": ["LEFT"], "until": {"kind": "player-step-count", "operator": "eq", "value": 17}},
+      "budget": {"maxSeconds": 20, "maxFrames": 16, "noProgressFrames": 16}},
+    {"id": "recovery-settle", "op": "wait", "args": {"predicate": {"kind": "player-settled-at", "map": 67, "x": 574, "z": 400}},
+      "budget": {"maxSeconds": 20, "maxFrames": 24, "noProgressFrames": 24}}
+  ],
+  "assertions": [
+    {"kind": "measurement-complete", "measurement": "wild-transition-invalidation-v1", "when": "final"},
+    {"kind": "player-settled-at", "map": 67, "x": 574, "z": 400, "when": "final"}
+  ]
+}

@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Serve a dynamic overview of overworld wild behavior profiles.
 
-The viewer keeps the C tables as the source of truth.  It parses the current
-runtime overlay and behavior-data overlay on every /data.json request, resolves
-class rules and variable overrides in the same order as the runtime resolver,
-and exposes the result to a small browser UI.
+The viewer edits the named JSON behavior catalog. Expanded C tables are a
+generated ROM-compatibility view. The portable C resolver produces every
+effective profile exposed to the browser UI.
 """
 
 from __future__ import annotations
@@ -42,10 +41,25 @@ from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_TOOLS = ROOT / "scripts"
+if str(SCRIPTS_TOOLS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_TOOLS))
+NATIVE_RESOLVER_TOOLS = ROOT / "tools/overworld-viewer-v2"
+if str(NATIVE_RESOLVER_TOOLS) not in sys.path:
+    sys.path.insert(0, str(NATIVE_RESOLVER_TOOLS))
+
+import build_overworld_wild_spawn_metadata as spawn_metadata  # noqa: E402
+import native_resolver  # noqa: E402
+
 OVERLAY_SOURCE = ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
 HELPER_SOURCE = ROOT / "src/overworld_wild_helper_overlay/overworld_wild_helper_overlay.c"
 BEHAVIOR_DATA_SOURCE = ROOT / "data/OverworldWildBehaviorData.c"
 BEHAVIOR_DATA_HEADER = ROOT / "include/overworld_wild_behavior_data.h"
+BEHAVIOR_CATALOG_SOURCE = ROOT / "data/overworld_behavior_profiles.json"
+BEHAVIOR_AUTHORING_SCHEMA = ROOT / "tools/overworld/schemas/behavior-authoring-v2.schema.json"
+BEHAVIOR_CATALOG_GENERATOR = ROOT / "scripts/generate_overworld_behavior_catalog.py"
+BEHAVIOR_SCHEMA_SOURCE = ROOT / "tools/overworld/behavior_schema.json"
+BEHAVIOR_SCHEMA_METADATA = ROOT / "tools/overworld/generated/behavior_schema.json"
 SPECIES_HEADER = ROOT / "include/constants/species.h"
 MAPS_HEADER = ROOT / "include/constants/maps.h"
 ARMIPS_SPECIES_INC = ROOT / "asm/include/species.inc"
@@ -95,15 +109,15 @@ EVODATA_SOURCE = ROOT / "armips/data/evodata.s"
 ARMIPS_CONSTANTS = ROOT / "armips/include/constants.s"
 ARMIPS_CONFIG = ROOT / "armips/include/config.s"
 TEST_NDS = ROOT / "test.nds"
-DESMUME_TEST_DSV = Path.home() / "Library/Application Support/DeSmuME/0.9.13/Battery/test.dsv"
+MELONDS_TEST_SAV = ROOT / "test.sav"
 DELTA_TEST_DSV = Path.home() / "Library/Mobile Documents/com~apple~CloudDocs/Delta/ROMs/test.dsv"
 
 
 def default_test_dsv_path() -> Path:
-    for candidate in (DESMUME_TEST_DSV, DELTA_TEST_DSV):
+    for candidate in (MELONDS_TEST_SAV, DELTA_TEST_DSV):
         if candidate.exists():
             return candidate
-    return DESMUME_TEST_DSV
+    return MELONDS_TEST_SAV
 
 
 TEST_DSV = Path(os.environ.get("HG_ENGINE_TEST_DSV", str(default_test_dsv_path()))).expanduser()
@@ -155,6 +169,11 @@ DATA_SOURCE_FILES = (
     HELPER_SOURCE,
     BEHAVIOR_DATA_SOURCE,
     BEHAVIOR_DATA_HEADER,
+    BEHAVIOR_CATALOG_SOURCE,
+    BEHAVIOR_AUTHORING_SCHEMA,
+    BEHAVIOR_CATALOG_GENERATOR,
+    BEHAVIOR_SCHEMA_SOURCE,
+    BEHAVIOR_SCHEMA_METADATA,
     SPECIES_HEADER,
     MAPS_HEADER,
     SPAWNS_PUBLIC_HEADER,
@@ -270,83 +289,46 @@ LEGACY_PROFILE_FIELDS = [
     "chainPauseVariance",
 ]
 
-# Stored profile schema v72. Active and Tired no longer duplicate complete
-# behavior lanes; they select an override profile and consume that profile's
-# Chill lane. Keep this order synchronized with
-# OverworldWildBehaviorProfileData and its three override-mask words.
-PROFILE_FIELDS = [
-    "chillState",
-    "alertState",
-    "alertEmote",
-    "alertTime",
-    "alertness",
-    "stamina",
-    "restTime",
-    "chillSpeed",
-    "range",
-    "jumpLevel",
-    "profileId",
-    "spawnState",
-    "chillAction",
-    "chillTarget",
-    "alertRange",
-    "playerAdjacentDirectionMasks",
-    "alertChance",
-    "spawnDestination",
-    "battleTrigger",
-    "hopAllowNonCardinal",
-    "hopMinDistance",
-    "hopMaxDistance",
-    "hopPause",
-    "teleportTime",
-    "teleportPause",
-    "alertSpecialAction",
-    "overworldLimit",
-    "spawnDestinationMinDistance",
-    "spawnDestinationMaxDistance",
-    "ramAccelerationSteps",
-    "ramMaxSpeed",
-    "chainPauseAction",
-    "chillAllowedTerrainMask",
-    "chillAllowedTerrainOverrideMask",
-    "hopTime",
-    "chaseBoostDistance",
-    "chaseBoostSpeed",
-    "hopSpinSpeed",
-    "spawnHopTime",
-    "circleRadius",
-    "continueWhenArrived",
-    "avoidPreviousTile",
-    "chainMovementVariance",
-    "chainPauseVariance",
-    "activeProfile",
-    "tiredProfile",
-    "hopElevationTimeScale",
-    "hopElevationArcScale",
-    "tilesToAccelerate",
-    "maxWalkSpeed",
-    "spawnDestinationMask",
-    "spawnDestinationOverrideMask",
-    "hopAllowVerticalObstacles",
-    "chainRepositionJumpCount",
-    "hopSwayWidth",
-    "spawnHopSwayWidth",
-    "chainRepositionSpeed",
-    "chainRepositionDistance",
-    "chainRepositionDust",
-    "chainRepositionAllowCardinal",
-    "chainRepositionAllowDiagonal",
-    "walkOptions",
-    "wanderStraightChance",
-    "chainPauseActionChance",
-    "walkPause",
-    "tilesBeforeTurnSkid",
-    "walkStompTime",
+# The named schema now owns v77 order and host-facing field metadata. Positional
+# C records remain the ROM compatibility input during the resolver migration.
+_BEHAVIOR_SCHEMA = json.loads(BEHAVIOR_SCHEMA_SOURCE.read_text(encoding="utf-8"))
+_BEHAVIOR_SCHEMA_GENERATED = json.loads(BEHAVIOR_SCHEMA_METADATA.read_text(encoding="utf-8"))
+_BEHAVIOR_SCHEMA_EDITOR = _BEHAVIOR_SCHEMA_GENERATED.get("editor", {})
+if _BEHAVIOR_SCHEMA.get("blobVersion") != 77 or len(_BEHAVIOR_SCHEMA_EDITOR.get("fields", ())) != 72:
+    raise RuntimeError("tools/overworld/behavior_schema.json is not the compact v77 schema")
+BEHAVIOR_SCHEMA_FIELDS = tuple(_BEHAVIOR_SCHEMA_EDITOR["fields"])
+PROFILE_FIELDS = [field["key"] for field in BEHAVIOR_SCHEMA_FIELDS]
+
+# v77 shares the turn-skid buildup byte with its path-planning and stop-skid
+# options. v76 has the threshold and stop-skid option only. v75
+# shares the cardinal Reposition byte with Walk-pause variance. v74 shares the
+# diagonal Reposition byte with Walk-time variance. Authoring keeps every
+# packed value independent.
+PROFILE_FIELDS_V76 = [
+    field for field in PROFILE_FIELDS if field != "planTurnSkidPath"
+]
+PROFILE_FIELDS_V75 = [
+    field for field in PROFILE_FIELDS_V76 if field != "stopSkid"
+]
+PROFILE_FIELDS_V74 = [
+    field for field in PROFILE_FIELDS_V75 if field != "walkPauseVariance"
+]
+PROFILE_FIELDS_V73 = [
+    field for field in PROFILE_FIELDS_V74 if field != "walkTimeVariance"
+]
+PROFILE_STORAGE_FIELDS = PROFILE_FIELDS_V73
+
+# v72 used its final byte as padding. v73 stores the configurable Walk
+# acceleration rule there. Value 33 preserves v72's ceil-half acceleration.
+PROFILE_FIELDS_V72 = [
+    field for field in PROFILE_FIELDS_V73 if field != "walkAccelerationStep"
 ]
 
 # v71 stored four Walk speed tiers. v72 stores exact frame times and moves the
 # stomp threshold out of the packed Walk options byte.
-PROFILE_FIELDS_V71 = [field for field in PROFILE_FIELDS if field != "walkStompTime"]
+PROFILE_FIELDS_V71 = [
+    field for field in PROFILE_FIELDS_V72 if field != "walkStompTime"
+]
 
 # v68 appends the required straight Walk tiles before a turn skid.
 # v67 appends the per-tile Walk pause.
@@ -462,6 +444,9 @@ FIELD_LABELS = {
     "hopElevationArcScale": "Elevation arc scaling",
     "tilesToAccelerate": "Tiles to accelerate",
     "maxWalkSpeed": "Fastest Walk time",
+    "walkAccelerationStep": "Acceleration amount",
+    "walkTimeVariance": "Walk time variance",
+    "walkPauseVariance": "Pause variance",
     "hopSpinSpeed": "Spin speed",
     "hopSwayWidth": "Horizontal sway",
     "spawnHopTime": "Spawn hop time",
@@ -489,6 +474,8 @@ FIELD_LABELS = {
     "chainPauseActionChance": "Pause action chance",
     "walkPause": "Pause after step",
     "tilesBeforeTurnSkid": "Steps before turn skid",
+    "planTurnSkidPath": "Plan turn-skid path",
+    "stopSkid": "Skid when stopping",
     "walkStompTime": "Stomp at time",
     "chillAllowedTerrainMask": "Allowed terrains",
     "chillAllowedTerrainOverrideMask": "Terrain override mask",
@@ -523,8 +510,8 @@ FIELD_LABELS = {
     "circleRadius": "Circle radius",
     "continueWhenArrived": "Continue when arrived",
     "avoidPreviousTile": "Avoid immediate backtracking",
-    "activeProfile": "Active override profile",
-    "tiredProfile": "Tired override profile",
+    "activeProfile": "Active application",
+    "tiredProfile": "Tired application",
 }
 
 FIELD_UNITS = {
@@ -541,6 +528,9 @@ FIELD_UNITS = {
     "hopElevationArcScale": "%",
     "tilesToAccelerate": "tiles",
     "maxWalkSpeed": "frames",
+    "walkAccelerationStep": "frames",
+    "walkTimeVariance": "frames",
+    "walkPauseVariance": "frames",
     "hopSpinSpeed": "frames",
     "hopSwayWidth": "px",
     "hopPause": "frames",
@@ -588,6 +578,16 @@ FIELD_UNITS = {
     "chaseBoostSpeed": "frames",
     "circleRadius": "tiles",
 }
+
+# Preserve legacy-only fields while making every compact v76 field read from
+# the canonical schema. V2 consumes this same backend payload.
+for _schema_field in BEHAVIOR_SCHEMA_FIELDS:
+    FIELD_LABELS[_schema_field["key"]] = _schema_field["label"]
+    _display_unit = _schema_field["unit"]
+    if _display_unit:
+        FIELD_UNITS[_schema_field["key"]] = _display_unit
+    else:
+        FIELD_UNITS.pop(_schema_field["key"], None)
 
 PRIMITIVE_FIELDS = [
     "spawnLocomotion",
@@ -646,6 +646,8 @@ FIELD_PREFIXES = {
     "chainRepositionDust": "OW_WILD_BEHAVIOR_BOOL_",
     "chainRepositionAllowCardinal": "OW_WILD_BEHAVIOR_BOOL_",
     "chainRepositionAllowDiagonal": "OW_WILD_BEHAVIOR_BOOL_",
+    "planTurnSkidPath": "OW_WILD_BEHAVIOR_BOOL_",
+    "stopSkid": "OW_WILD_BEHAVIOR_BOOL_",
     "attentiveHopAllowNonCardinal": "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_",
     "tiredHopAllowNonCardinal": "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_",
     "attentiveContinueWhenArrived": "OW_WILD_BEHAVIOR_BOOL_",
@@ -722,6 +724,8 @@ CANONICAL_CHAIN_PAUSE_ACTION_RAWS = [
     "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_JUMPS",
     "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_STEPS",
     "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_SKIDS",
+    "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE",
+    "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_FORWARD",
 ]
 
 CANONICAL_ALLOWED_TILE_RAWS = [
@@ -763,6 +767,8 @@ CANONICAL_PROFILE_FIELD_RAWS = {
     "chainPauseAction": CANONICAL_CHAIN_PAUSE_ACTION_RAWS,
     "hopAllowNonCardinal": CANONICAL_MOVEMENT_DIRECTION_RAWS,
     "hopAllowVerticalObstacles": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
+    "planTurnSkidPath": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
+    "stopSkid": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
     "chillAllowedTile": CANONICAL_ALLOWED_TILE_RAWS,
     "attentiveAllowedTile": CANONICAL_ALLOWED_TILE_RAWS,
     "tiredAllowedTile": CANONICAL_ALLOWED_TILE_RAWS,
@@ -913,6 +919,11 @@ OVERRIDE3_FIELDS = {
     "OW_WILD_BEHAVIOR_OVERRIDE3_WALK_PAUSE": "walkPause",
     "OW_WILD_BEHAVIOR_OVERRIDE3_TILES_BEFORE_TURN_SKID": "tilesBeforeTurnSkid",
     "OW_WILD_BEHAVIOR_OVERRIDE3_WALK_STOMP_TIME": "walkStompTime",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_WALK_ACCELERATION_STEP": "walkAccelerationStep",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_WALK_TIME_VARIANCE": "walkTimeVariance",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_WALK_PAUSE_VARIANCE": "walkPauseVariance",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_STOP_SKID": "stopSkid",
+    "OW_WILD_BEHAVIOR_OVERRIDE3_PLAN_TURN_SKID_PATH": "planTurnSkidPath",
 }
 
 OVERRIDE_FIELDS = {**OVERRIDE1_FIELDS, **OVERRIDE2_FIELDS, **OVERRIDE3_FIELDS}
@@ -1138,6 +1149,9 @@ NUMERIC_PROFILE_FIELDS = {
     "hopElevationArcScale",
     "tilesToAccelerate",
     "maxWalkSpeed",
+    "walkAccelerationStep",
+    "walkTimeVariance",
+    "walkPauseVariance",
     "hopSpinSpeed",
     "hopSwayWidth",
     "spawnHopTime",
@@ -1205,6 +1219,7 @@ RELATIVE_OVERRIDE_PROFILE_FIELDS = frozenset(
         "wanderStraightChance",
         "chainPauseActionChance",
         "tilesBeforeTurnSkid",
+        "walkAccelerationStep",
     }
 )
 BOUNDED_OVERRIDE_PROFILE_FIELDS = frozenset({
@@ -1247,6 +1262,8 @@ BOUNDED_OVERRIDE_PROFILE_FIELDS = frozenset({
     "circleRadius",
     "walkPause",
     "walkStompTime",
+    "walkTimeVariance",
+    "walkPauseVariance",
 })
 WALK_TIME_FIELDS = frozenset({
     "chillSpeed",
@@ -1332,6 +1349,9 @@ NUMERIC_PROFILE_FIELD_OPTION_MAX = {
     "hopElevationArcScale": 255,
     "tilesToAccelerate": 32,
     "maxWalkSpeed": 32,
+    "walkAccelerationStep": 33,
+    "walkTimeVariance": 32,
+    "walkPauseVariance": 32,
     "hopSpinSpeed": 15,
     "hopSwayWidth": 8,
     "spawnHopTime": 64,
@@ -1376,6 +1396,9 @@ NUMERIC_PROFILE_FIELD_OPTION_MIN = {
     "tiredSpeed": 1,
     "tilesToAccelerate": 1,
     "maxWalkSpeed": 1,
+    "walkAccelerationStep": 0,
+    "walkTimeVariance": 0,
+    "walkPauseVariance": 0,
     "spawnDestinationMinDistance": 1,
     "spawnDestinationMaxDistance": 1,
     "chainRepositionJumpCount": 1,
@@ -1734,6 +1757,7 @@ def _uncached_macro_label(symbol: str, value: int | None, field: str | None, mac
         "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_DIAGONAL_ONLY": "Diagonal only",
         "OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP": "Call for help",
         "OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW": "Pick up and throw",
+        "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_FORWARD": "Jump forward",
         "OW_WILD_BEHAVIOR_TARGET_PLAYER_CARDINAL_LINE": "Player cardinal line",
         "OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER": "Next to player",
         "OW_WILD_BEHAVIOR_CLASS_AGRESSIVE_CHASE": "Aggressive chase",
@@ -1898,6 +1922,95 @@ def profile_numeric_view(profile: dict[str, dict]) -> dict[str, dict]:
     return result
 
 
+NATIVE_PROFILE_LANE_SIZE = int(_BEHAVIOR_SCHEMA["compactSize"])
+
+
+def native_profile_value(macros: dict[str, int], field: str, value: int) -> dict:
+    for raw in CANONICAL_PROFILE_FIELD_RAWS.get(field, ()):
+        try:
+            if eval_c_expr(raw, macros) == value:
+                return make_value(raw, field, macros)
+        except Exception:
+            continue
+    return make_value(str(value), field, macros)
+
+
+def decode_native_profile(
+    macros: dict[str, int],
+    encoded: str,
+    lane: int = 0,
+) -> dict[str, dict]:
+    try:
+        raw = bytes.fromhex(encoded)
+    except ValueError as error:
+        raise RuntimeError("canonical resolver returned invalid profile bytes") from error
+    start = lane * NATIVE_PROFILE_LANE_SIZE
+    payload = raw[start:start + NATIVE_PROFILE_LANE_SIZE]
+    if len(payload) != NATIVE_PROFILE_LANE_SIZE:
+        raise RuntimeError("canonical resolver returned a truncated profile")
+    result: dict[str, dict] = {}
+    for field in _BEHAVIOR_SCHEMA["fields"]:
+        offset = int(field["offset"])
+        value = payload[offset]
+        if field["cType"] == "u16":
+            value = struct.unpack_from("<H", payload, offset)[0]
+        elif "bitOffset" in field:
+            value = (value >> int(field["bitOffset"])) \
+                & ((1 << int(field["bitWidth"])) - 1)
+        result[field["key"]] = native_profile_value(
+            macros,
+            field["key"],
+            value,
+        )
+    return result
+
+
+def decode_native_resolved_profile(
+    macros: dict[str, int],
+    encoded: str,
+) -> dict[str, dict]:
+    profile = decode_native_profile(macros, encoded, lane=0)
+    profile["_activeProfileData"] = decode_native_profile(macros, encoded, lane=1)
+    profile["_tiredProfileData"] = decode_native_profile(macros, encoded, lane=2)
+    return profile
+
+
+def decode_native_primitives(macros: dict[str, int], encoded: str) -> dict[str, dict]:
+    try:
+        raw = bytes.fromhex(encoded)
+    except ValueError as error:
+        raise RuntimeError("canonical resolver returned invalid primitive bytes") from error
+    if len(raw) != len(PRIMITIVE_FIELDS):
+        raise RuntimeError("canonical resolver returned a truncated primitive set")
+    return {
+        field: make_value(str(value), field, macros)
+        for field, value in zip(PRIMITIVE_FIELDS, raw)
+    }
+
+
+def native_profile_changes(
+    before: dict[str, dict],
+    after: dict[str, dict],
+) -> list[dict]:
+    changes = []
+    for field in PROFILE_FIELDS:
+        if numeric(before[field]) == numeric(after[field]):
+            continue
+        changes.append(
+            {
+                "field": field,
+                "label": FIELD_LABELS[field],
+                "before": before[field],
+                "after": after[field],
+                "relative": False,
+                "delta": None,
+                "operator": "resolved",
+                "operand": None,
+            }
+        )
+    return changes
+
+
 def canonical_profile_change_raw(
     field: str,
     raw: str,
@@ -1908,6 +2021,10 @@ def canonical_profile_change_raw(
     cleaned = clean_token(raw)
     if cleaned == "":
         return ""
+    # This field stores frames removed as a positive amount. Accept a typed
+    # minus sign as shorthand, but always author the positive stored value.
+    if field == "walkAccelerationStep" and re.fullmatch(r"-(?:[1-9]|[12]\d|3[0-2])", cleaned):
+        cleaned = cleaned[1:]
     if field in {"chillTarget", "targetSelector", "attentiveTarget"} \
             and cleaned == "OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT":
         return "OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER"
@@ -2024,12 +2141,83 @@ def migrate_legacy_walk_profile(
         "walkStompTime",
         macros,
     )
+    profile["walkAccelerationStep"] = make_value("33", "walkAccelerationStep", macros)
 
 
 def _parse_profile_unmigrated(items: list, macros: dict[str, int]) -> dict[str, dict]:
     if len(items) == 1 and clean_token(str(items[0])) == "0":
         return {
             field: make_value("0", field, macros)
+            for field in PROFILE_FIELDS
+        }
+    if len(items) == len(PROFILE_STORAGE_FIELDS):
+        storage = {
+            field: str(items[idx])
+            for idx, field in enumerate(PROFILE_STORAGE_FIELDS)
+        }
+        packed = clean_token(storage["chainRepositionAllowCardinal"])
+        match = re.fullmatch(
+            r"OW_WILD_BEHAVIOR_CHAIN_REPOSITION_CARDINAL_OPTIONS\s*\((.*)\)",
+            packed,
+            re.DOTALL,
+        )
+        if match is not None:
+            parts = split_top_level_csv(match.group(1))
+            if len(parts) != 2:
+                raise ParseError("packed Reposition options need cardinal allowance and Walk pause variance")
+            storage["chainRepositionAllowCardinal"] = parts[0]
+            storage["walkPauseVariance"] = parts[1]
+        else:
+            # A v74 initializer stored only the cardinal allowance in this byte.
+            storage["walkPauseVariance"] = "0"
+        packed = clean_token(storage["chainRepositionAllowDiagonal"])
+        match = re.fullmatch(
+            r"OW_WILD_BEHAVIOR_CHAIN_REPOSITION_DIAGONAL_OPTIONS\s*\((.*)\)",
+            packed,
+            re.DOTALL,
+        )
+        if match is not None:
+            parts = split_top_level_csv(match.group(1))
+            if len(parts) != 2:
+                raise ParseError("packed Reposition options need diagonal allowance and Walk variance")
+            storage["chainRepositionAllowDiagonal"] = parts[0]
+            storage["walkTimeVariance"] = parts[1]
+        else:
+            # A v73 initializer stored only the diagonal allowance in this byte.
+            storage["walkTimeVariance"] = "0"
+        packed = clean_token(storage["tilesBeforeTurnSkid"])
+        match = re.fullmatch(
+            r"OW_WILD_BEHAVIOR_TURN_SKID_OPTIONS\s*\((.*)\)",
+            packed,
+            re.DOTALL,
+        )
+        if match is not None:
+            parts = split_top_level_csv(match.group(1))
+            if len(parts) not in (2, 3):
+                raise ParseError("packed turn-skid options need a buildup, path-planning option, and stop-skid option")
+            storage["tilesBeforeTurnSkid"] = parts[0]
+            if len(parts) == 3:
+                storage["planTurnSkidPath"] = parts[1]
+                storage["stopSkid"] = parts[2]
+            else:
+                storage["planTurnSkidPath"] = "OW_WILD_BEHAVIOR_BOOL_NO"
+                storage["stopSkid"] = parts[1]
+        else:
+            # A v75 initializer stored only the turn-skid buildup in this byte.
+            storage["planTurnSkidPath"] = "OW_WILD_BEHAVIOR_BOOL_NO"
+            storage["stopSkid"] = "OW_WILD_BEHAVIOR_BOOL_NO"
+        return {
+            field: make_value(storage.get(field, "0"), field, macros)
+            for field in PROFILE_FIELDS
+        }
+    if len(items) == len(PROFILE_FIELDS_V72):
+        legacy = {
+            field: str(items[idx])
+            for idx, field in enumerate(PROFILE_FIELDS_V72)
+        }
+        legacy["walkAccelerationStep"] = "33"
+        return {
+            field: make_value(legacy.get(field, "0"), field, macros)
             for field in PROFILE_FIELDS
         }
     if len(items) == len(PROFILE_FIELDS_V67):
@@ -2159,7 +2347,7 @@ def _parse_profile_unmigrated(items: list, macros: dict[str, int]) -> dict[str, 
             field: make_value(legacy.get(field, "0"), field, macros)
             for field in PROFILE_FIELDS
         }
-    if len(PROFILE_FIELDS) < len(items) <= len(LEGACY_PROFILE_FIELDS):
+    if len(PROFILE_FIELDS) <= len(items) <= len(LEGACY_PROFILE_FIELDS):
         items = [*items, *(["0"] * (len(LEGACY_PROFILE_FIELDS) - len(items)))]
         legacy = {
             field: str(items[idx])
@@ -2193,10 +2381,12 @@ def _parse_profile_unmigrated(items: list, macros: dict[str, int]) -> dict[str, 
             "chainRepositionAllowCardinal": "OW_WILD_BEHAVIOR_BOOL_YES",
             "chainRepositionAllowDiagonal": "OW_WILD_BEHAVIOR_BOOL_YES",
         })
-        return {
+        profile = {
             field: make_value(migrated[field], field, macros)
             for field in PROFILE_FIELDS
         }
+        migrate_legacy_walk_profile(profile, macros)
+        return profile
     if len(items) > len(PROFILE_FIELDS):
         raise ParseError(f"profile has {len(items)} fields, expected {len(PROFILE_FIELDS)}")
     if len(items) < len(PROFILE_FIELDS):
@@ -2225,9 +2415,16 @@ def _parse_profile_unmigrated(items: list, macros: dict[str, int]) -> dict[str, 
 
 
 def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
-    legacy = len(items) != len(PROFILE_FIELDS)
+    legacy_walk_storage = len(items) not in {
+        len(PROFILE_FIELDS),
+        len(PROFILE_FIELDS_V76),
+        len(PROFILE_FIELDS_V75),
+        len(PROFILE_FIELDS_V74),
+        len(PROFILE_STORAGE_FIELDS),
+        len(PROFILE_FIELDS_V72),
+    }
     profile = _parse_profile_unmigrated(items, macros)
-    if legacy:
+    if legacy_walk_storage:
         migrate_legacy_walk_profile(profile, macros)
     return profile
 
@@ -2338,7 +2535,11 @@ def parse_behavior_override(items: list, macros: dict[str, int]) -> dict:
         profile_items = items[3]
     else:
         raise ParseError("behavior override initializer shape changed")
-    legacy_walk_storage = len(profile_items) != len(PROFILE_FIELDS)
+    legacy_walk_storage = len(profile_items) not in {
+        len(PROFILE_FIELDS),
+        len(PROFILE_STORAGE_FIELDS),
+        len(PROFILE_FIELDS_V72),
+    }
     mask = parse_mask(mask_raw, macros, OVERRIDE1_FIELDS)
     mask2 = parse_mask(mask2_raw, macros, OVERRIDE2_FIELDS)
     mask3 = parse_mask(mask3_raw, macros, OVERRIDE3_FIELDS)
@@ -2351,7 +2552,7 @@ def parse_behavior_override(items: list, macros: dict[str, int]) -> dict:
     at_most_mask = parse_mask(at_most_mask_raw, macros, OVERRIDE1_FIELDS)
     at_most_mask2 = parse_mask(at_most_mask2_raw, macros, OVERRIDE2_FIELDS)
     at_most_mask3 = parse_mask(at_most_mask3_raw, macros, OVERRIDE3_FIELDS)
-    if legacy_walk_storage:
+    if len(profile_items) != len(PROFILE_FIELDS):
         profile = _parse_profile_unmigrated(profile_items, macros)
         compound_bound_profile = _parse_profile_unmigrated(
             compound_bound_profile_items or ["0"],
@@ -3077,92 +3278,6 @@ def parse_primitive_maps(source: str, macros: dict[str, int]) -> dict[str, list]
     }
 
 
-def indexed_primitive(table: list, index: int | None) -> dict | None:
-    if index is None or index < 0 or index >= len(table):
-        return None
-    return table[index]
-
-
-def resolve_primitives(profile: dict[str, dict], primitive_maps: dict[str, list], macros: dict[str, int]) -> dict[str, dict]:
-    primitives = {
-        "spawnLocomotion": make_value("OW_WILD_BEHAVIOR_LOCOMOTION_NONE", "spawnLocomotion", macros),
-        "chillLocomotion": make_value("OW_WILD_BEHAVIOR_LOCOMOTION_NONE", "chillLocomotion", macros),
-        "chillTarget": make_value("OW_WILD_BEHAVIOR_TARGET_NONE", "chillTarget", macros),
-        "alertLogic": make_value("OW_WILD_BEHAVIOR_ALERT_LOGIC_NONE", "alertLogic", macros),
-        "alertReaction": make_value("OW_WILD_BEHAVIOR_REACTION_NONE", "alertReaction", macros),
-        "attentiveLocomotion": make_value("OW_WILD_BEHAVIOR_LOCOMOTION_NONE", "attentiveLocomotion", macros),
-        "attentiveTarget": make_value("OW_WILD_BEHAVIOR_TARGET_NONE", "attentiveTarget", macros),
-        "activeReaction": make_value("OW_WILD_BEHAVIOR_REACTION_NONE", "activeReaction", macros),
-        "tiredLocomotion": make_value("OW_WILD_BEHAVIOR_LOCOMOTION_NONE", "tiredLocomotion", macros),
-        "tiredTarget": make_value("OW_WILD_BEHAVIOR_TARGET_NONE", "tiredTarget", macros),
-        "tiredReaction": make_value("OW_WILD_BEHAVIOR_REACTION_NONE", "tiredReaction", macros),
-    }
-
-    spawn = indexed_primitive(primitive_maps["spawnLocomotionBySpawnState"], numeric(profile["spawnState"]))
-    if spawn:
-        primitives["spawnLocomotion"] = spawn
-
-    chill_behavior = numeric(profile["chillState"])
-    primitives["chillTarget"] = copy.deepcopy(profile["chillTarget"])
-    if chill_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_WANDER"):
-        primitives["chillLocomotion"] = copy.deepcopy(profile["chillAction"])
-        if numeric(primitives["chillTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
-            primitives["chillTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_RANDOM_NEARBY", "chillTarget", macros)
-    elif chill_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_CHASE"):
-        primitives["chillLocomotion"] = copy.deepcopy(profile["chillAction"])
-        if numeric(primitives["chillTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
-            primitives["chillTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER", "chillTarget", macros)
-    elif chill_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_FLEE"):
-        primitives["chillLocomotion"] = copy.deepcopy(profile["chillAction"])
-        if numeric(primitives["chillTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
-            primitives["chillTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_AWAY_FROM_PLAYER", "chillTarget", macros)
-    elif chill_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_PLAYFUL"):
-        primitives["chillLocomotion"] = copy.deepcopy(profile["chillAction"])
-        if numeric(primitives["chillTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
-            primitives["chillTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER", "chillTarget", macros)
-    elif chill_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_RAM"):
-        primitives["chillLocomotion"] = copy.deepcopy(profile["chillAction"])
-        if numeric(primitives["chillTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
-            primitives["chillTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER", "chillTarget", macros)
-    elif chill_behavior == macros.get("OW_WILD_BEHAVIOR_KIND_HEADBUTT_TREE_HOP"):
-        primitives["chillLocomotion"] = copy.deepcopy(profile["chillAction"])
-        if numeric(primitives["chillTarget"]) == macros.get("OW_WILD_BEHAVIOR_TARGET_NONE"):
-            primitives["chillTarget"] = make_value("OW_WILD_BEHAVIOR_TARGET_TREE_TOP", "chillTarget", macros)
-
-    if (numeric(profile["alertness"]) or 0) != 0 and (numeric(profile["alertChance"]) or 0) != 0:
-        alert = indexed_primitive(primitive_maps["alertPrimitivesByRange"], numeric(profile["alertRange"]))
-        if alert:
-            primitives["alertLogic"] = alert["alertLogic"]
-            primitives["alertReaction"] = alert["alertReaction"]
-
-    active_profile = profile.get("_activeProfileData")
-    if active_profile:
-        active_primitives = resolve_primitives(active_profile, primitive_maps, macros)
-        primitives["attentiveLocomotion"] = active_primitives["chillLocomotion"]
-        primitives["attentiveTarget"] = active_primitives["chillTarget"]
-        active_state = numeric(active_profile["chillState"])
-        if active_state in {
-            macros.get("OW_WILD_BEHAVIOR_KIND_CHASE"),
-            macros.get("OW_WILD_BEHAVIOR_KIND_RAM"),
-            macros.get("OW_WILD_BEHAVIOR_KIND_HEADBUTT_TREE_HOP"),
-        }:
-            primitives["activeReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_CONTACT", "activeReaction", macros)
-        elif active_state == macros.get("OW_WILD_BEHAVIOR_KIND_FLEE"):
-            primitives["activeReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_FLEE", "activeReaction", macros)
-        elif active_state == macros.get("OW_WILD_BEHAVIOR_KIND_PLAYFUL"):
-            primitives["activeReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_EMOTE", "activeReaction", macros)
-
-    tired_profile = profile.get("_tiredProfileData")
-    if tired_profile:
-        tired_primitives = resolve_primitives(tired_profile, primitive_maps, macros)
-        primitives["tiredLocomotion"] = tired_primitives["chillLocomotion"]
-        primitives["tiredTarget"] = tired_primitives["chillTarget"]
-        if numeric(tired_profile["chillState"]) != macros.get("OW_WILD_BEHAVIOR_KIND_NONE"):
-            primitives["tiredReaction"] = make_value("OW_WILD_BEHAVIOR_REACTION_TIRED", "tiredReaction", macros)
-
-    return primitives
-
-
 def value_option(raw: str, field: str, macros: dict[str, int]) -> dict:
     value = make_value(raw, field, macros)
     return {
@@ -3214,6 +3329,17 @@ def build_edit_options(macros: dict[str, int], class_profiles: list[dict[str, di
         elif field in FIELD_PREFIXES:
             for symbol in profile_option_symbols_for_prefix(field, macros):
                 add_value_option(options, seen, symbol, field, macros)
+        elif field == "walkAccelerationStep":
+            for value in (0, 33, *range(1, 33)):
+                add_value_option(options, seen, str(value), field, macros)
+            for option in options:
+                value = option["value"]
+                if value == 0:
+                    option["label"] = "0 — None"
+                elif value == 33:
+                    option["label"] = "/2 — Old rule"
+                else:
+                    option["label"] = f"{value} — Remove {value} frame{'s' if value != 1 else ''}"
         elif field in NUMERIC_PROFILE_FIELDS:
             for value in range(
                 NUMERIC_PROFILE_FIELD_OPTION_MIN.get(field, 0),
@@ -3334,154 +3460,6 @@ def spawn_destination_mask_for_legacy(value: dict | None) -> int:
     return (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3)
 
 
-def merge_profile(profile: dict[str, dict], override: dict) -> list[dict]:
-    changes = []
-    relative_fields = set(override.get("relativeFields") or [])
-    at_least_fields = set(override.get("atLeastFields") or [])
-    at_most_fields = set(override.get("atMostFields") or [])
-    bits = (
-        override["mask"]["bits"]
-        + override.get("mask2", {"bits": []})["bits"]
-        + override.get("mask3", {"bits": []})["bits"]
-    )
-    active_fields = {bit.get("field") for bit in bits}
-    policy_fields = {
-        "chillAllowedTerrainMask",
-        "chillAllowedTerrainOverrideMask",
-        "spawnDestinationMask",
-        "spawnDestinationOverrideMask",
-    }
-    if "chillAllowedTerrainOverrideMask" in active_fields:
-        before = profile["chillAllowedTerrainMask"]
-        before_mask = numeric(before) or 0
-        before_explicit = numeric(profile["chillAllowedTerrainOverrideMask"]) or 0
-        override_mask = numeric(override["profile"]["chillAllowedTerrainMask"]) or 0
-        explicit_mask = numeric(override["profile"]["chillAllowedTerrainOverrideMask"]) or 0
-        explicit_mask &= 0x3FF
-        resolved = (before_mask & ~explicit_mask) | (override_mask & explicit_mask)
-        after = make_value(str(resolved & 0x3FF), "chillAllowedTerrainMask", {})
-        profile["chillAllowedTerrainMask"] = after
-        profile["chillAllowedTerrainOverrideMask"] = make_value(
-            str((before_explicit | explicit_mask) & 0x3FF),
-            "chillAllowedTerrainOverrideMask",
-            {},
-        )
-        if before_mask != resolved:
-            changes.append(
-                {
-                    "field": "chillAllowedTerrainMask",
-                    "label": FIELD_LABELS["chillAllowedTerrainMask"],
-                    "before": before,
-                    "after": after,
-                    "relative": False,
-                    "delta": None,
-                    "operator": "absolute",
-                    "operand": None,
-                }
-            )
-    if "spawnDestinationOverrideMask" in active_fields:
-        before = profile["spawnDestinationMask"]
-        before_mask = numeric(before) or 0
-        before_explicit = numeric(profile["spawnDestinationOverrideMask"]) or 0
-        override_mask = numeric(override["profile"]["spawnDestinationMask"]) or 0
-        explicit_mask = numeric(override["profile"]["spawnDestinationOverrideMask"]) or 0
-        explicit_mask &= 0x3FF
-        resolved = (before_mask & ~explicit_mask) | (override_mask & explicit_mask)
-        after = make_value(str(resolved & 0x3FF), "spawnDestinationMask", {})
-        profile["spawnDestinationMask"] = after
-        profile["spawnDestinationOverrideMask"] = make_value(
-            str((before_explicit | explicit_mask) & 0x3FF),
-            "spawnDestinationOverrideMask",
-            {},
-        )
-        if before_mask != resolved:
-            changes.append(
-                {
-                    "field": "spawnDestinationMask",
-                    "label": FIELD_LABELS["spawnDestinationMask"],
-                    "before": before,
-                    "after": after,
-                    "relative": False,
-                    "delta": None,
-                    "operator": "absolute",
-                    "operand": None,
-                }
-            )
-    elif "spawnDestination" in active_fields:
-        # Existing source profiles can still carry the legacy scalar override.
-        # Mirror it into the new independent policy until that profile is saved.
-        before = profile["spawnDestinationMask"]
-        resolved = spawn_destination_mask_for_legacy(override["profile"]["spawnDestination"])
-        after = make_value(str(resolved), "spawnDestinationMask", {})
-        profile["spawnDestinationMask"] = after
-        profile["spawnDestinationOverrideMask"] = make_value("1023", "spawnDestinationOverrideMask", {})
-        if numeric(before) != resolved:
-            changes.append(
-                {
-                    "field": "spawnDestinationMask",
-                    "label": FIELD_LABELS["spawnDestinationMask"],
-                    "before": before,
-                    "after": after,
-                    "relative": False,
-                    "delta": None,
-                    "operator": "absolute",
-                    "operand": None,
-                }
-            )
-    for bit in bits:
-        field = bit.get("field")
-        if not field or field in policy_fields:
-            continue
-        before = profile[field]
-        after = copy.deepcopy(override["profile"][field])
-        if field in relative_fields:
-            before_numeric = numeric(before)
-            delta = numeric(after)
-            if before_numeric is None or delta is None:
-                continue
-            field_maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
-            field_minimum = NUMERIC_PROFILE_FIELD_OPTION_MIN.get(field, 0)
-            resolved = max(field_minimum, min(field_maximum, before_numeric + delta))
-            if field in at_least_fields or field in at_most_fields:
-                bound_value = override.get("compoundBoundProfile", {}).get(field, {})
-                threshold = numeric(bound_value)
-                if threshold is None:
-                    continue
-                resolved = max(resolved, threshold) if field in at_least_fields else min(resolved, threshold)
-            after = make_value(str(resolved), field, {})
-            after["label"] = str(resolved)
-        elif field in at_least_fields or field in at_most_fields:
-            before_numeric = numeric(before)
-            threshold = numeric(after)
-            if before_numeric is None or threshold is None:
-                continue
-            field_maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
-            if field in at_least_fields:
-                resolved = max(before_numeric, threshold)
-            else:
-                resolved = min(before_numeric, threshold)
-            field_minimum = NUMERIC_PROFILE_FIELD_OPTION_MIN.get(field, 0)
-            resolved = max(field_minimum, min(field_maximum, resolved))
-            after = make_value(str(resolved), field, {})
-            after["label"] = str(resolved)
-        profile[field] = after
-        changes.append(
-            {
-                "field": field,
-                "label": FIELD_LABELS[field],
-                "before": before,
-                "after": after,
-                "relative": field in relative_fields,
-                "delta": copy.deepcopy(override["profile"][field]) if field in relative_fields else None,
-                "operator": "compound" if field in relative_fields and (field in at_least_fields or field in at_most_fields) else ("atLeast" if field in at_least_fields else ("atMost" if field in at_most_fields else ("relative" if field in relative_fields else "absolute"))),
-                "operand": copy.deepcopy(
-                    override.get("compoundBoundProfile", {}).get(field, override["profile"][field])
-                ) if field in at_least_fields or field in at_most_fields else None,
-            }
-        )
-    return changes
-
-
 def behavior_override_field_keys(behavior: dict) -> list[str]:
     fields = []
     seen = set()
@@ -3516,7 +3494,10 @@ def behavior_override_profile_signature(behavior: dict) -> list[tuple[str, str]]
     ]
 
 
-def validate_override_profile_groups(variable_overrides: list[dict], override_profile_names: dict[int, str]) -> None:
+def validate_override_profile_groups(
+    variable_overrides: list[dict],
+    override_profile_names: dict[int, str],
+) -> None:
     groups: dict[str, dict] = {}
     for override in variable_overrides:
         order = override["order"]
@@ -3527,8 +3508,7 @@ def validate_override_profile_groups(variable_overrides: list[dict], override_pr
         if name not in groups:
             groups[name] = {"order": order, "signature": signature}
             continue
-        expected = groups[name]["signature"]
-        if signature == expected:
+        if signature == groups[name]["signature"]:
             continue
 
         # Old split data can contain multiple backend profiles for one displayed
@@ -3537,10 +3517,18 @@ def validate_override_profile_groups(variable_overrides: list[dict], override_pr
         continue
 
 
-def validate_behavior_data_override_profiles(raw_behavior_data: str, macros: dict[str, int], group_labels: dict[int, dict]) -> None:
+def validate_behavior_data_override_profiles(
+    raw_behavior_data: str,
+    macros: dict[str, int],
+    group_labels: dict[int, dict],
+) -> None:
     behavior_source = strip_c_comments(join_line_continuations(raw_behavior_data))
-    variable_overrides = parse_behavior_overrides(behavior_source, macros, group_labels)
-    conditional_states = parse_behavior_conditional_states(
+    variable_overrides = parse_behavior_overrides(
+        behavior_source,
+        macros,
+        group_labels,
+    )
+    parse_behavior_conditional_states(
         behavior_source,
         macros,
         len(variable_overrides),
@@ -3556,7 +3544,11 @@ def override_edit_profile(behavior: dict, macros: dict[str, int]) -> dict[str, d
         if field not in active_fields:
             profile[field] = make_value("", field, macros)
     if "spawnDestination" in active_fields \
-            and "spawnDestinationOverrideMask" not in active_fields:
+            and "spawnDestinationOverrideMask" not in active_fields \
+            and numeric(behavior["profile"]["spawnDestination"]) != 0:
+        # Explicit POOL resets earlier destination rules to the encounter's
+        # chosen site. A synthetic modern mask pair would replace that reset
+        # when copying/saving this edit profile, so keep its raw legacy field.
         legacy_mask = spawn_destination_mask_for_legacy(behavior["profile"]["spawnDestination"])
         profile["spawnDestinationMask"] = make_value(str(legacy_mask), "spawnDestinationMask", macros)
         profile["spawnDestinationOverrideMask"] = make_value(
@@ -3587,176 +3579,68 @@ def behavior_override_mask_summary(behavior: dict) -> dict:
     return {"labels": labels, "raw": raw}
 
 
-def normalize_profile(profile: dict[str, dict], macros: dict[str, int]) -> list[dict]:
-    changes = []
+def canonical_spawn_group_flags(
+    species: dict,
+    type_metadata: dict[str, list[dict]] | None = None,
+) -> int:
+    """Read resolver groups from the canonical spawn-metadata classification."""
 
-    def set_field(field: str, raw: str) -> None:
-        before = profile[field]
-        after = make_value(raw, field, macros)
-        if before.get("raw") == after.get("raw") and before.get("value") == after.get("value"):
-            return
-        profile[field] = after
-        changes.append(
-            {
-                "field": field,
-                "label": FIELD_LABELS[field],
-                "before": before,
-                "after": after,
-            }
-        )
-
-    for allow_field, min_field, max_field in (
-        ("hopAllowNonCardinal", "hopMinDistance", "hopMaxDistance"),
-    ):
-        if numeric(profile[allow_field]) not in range(3):
-            set_field(
-                allow_field,
-                "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY",
-            )
-        if (numeric(profile[max_field]) or 0) < (numeric(profile[min_field]) or 0):
-            set_field(max_field, profile[min_field]["raw"])
-    if (numeric(profile["spawnDestinationMinDistance"]) or 0) < 1:
-        set_field("spawnDestinationMinDistance", "1")
-    elif (numeric(profile["spawnDestinationMinDistance"]) or 0) > 8:
-        set_field("spawnDestinationMinDistance", "8")
-    if (numeric(profile["spawnDestinationMaxDistance"]) or 0) < 1:
-        set_field("spawnDestinationMaxDistance", "1")
-    elif (numeric(profile["spawnDestinationMaxDistance"]) or 0) > 8:
-        set_field("spawnDestinationMaxDistance", "8")
-    if (numeric(profile["spawnDestinationMaxDistance"]) or 0) < (numeric(profile["spawnDestinationMinDistance"]) or 0):
-        set_field("spawnDestinationMaxDistance", profile["spawnDestinationMinDistance"]["raw"])
-    if (numeric(profile["chaseBoostDistance"]) or 0) > 32:
-        set_field("chaseBoostDistance", "32")
-    if (numeric(profile["chaseBoostSpeed"]) or 0) > 32:
-        set_field("chaseBoostSpeed", "32")
-    if (numeric(profile["circleRadius"]) or 0) > 8:
-        set_field("circleRadius", "8")
-    if (numeric(profile["tilesToAccelerate"]) or 0) < 1:
-        set_field("tilesToAccelerate", "3")
-    elif (numeric(profile["tilesToAccelerate"]) or 0) > 32:
-        set_field("tilesToAccelerate", "32")
-    if (numeric(profile["maxWalkSpeed"]) or 0) < 1:
-        set_field("maxWalkSpeed", "2")
-    elif (numeric(profile["maxWalkSpeed"]) or 0) > 32:
-        set_field("maxWalkSpeed", "2")
-    if (numeric(profile["maxWalkSpeed"]) or 0) > (numeric(profile["chillSpeed"]) or 32):
-        set_field("maxWalkSpeed", profile["chillSpeed"]["raw"])
-    if (numeric(profile["chainRepositionSpeed"]) or 0) < 1:
-        set_field("chainRepositionSpeed", "16")
-    elif (numeric(profile["chainRepositionSpeed"]) or 0) > 32:
-        set_field("chainRepositionSpeed", "32")
-    if (numeric(profile["chainRepositionDistance"]) or 0) < 1:
-        set_field("chainRepositionDistance", "1")
-    elif (numeric(profile["chainRepositionDistance"]) or 0) > 5:
-        set_field("chainRepositionDistance", "5")
-    if (numeric(profile["walkStompTime"]) or 0) > 32:
-        set_field("walkStompTime", "32")
-    for bool_field in (
-        "hopAllowVerticalObstacles",
-        "continueWhenArrived",
-        "avoidPreviousTile",
-    ):
-        if numeric(profile[bool_field]) not in {
-            macros.get("OW_WILD_BEHAVIOR_BOOL_NO"),
-            macros.get("OW_WILD_BEHAVIOR_BOOL_YES"),
-        }:
-            set_field(bool_field, "OW_WILD_BEHAVIOR_BOOL_NO")
-    for bool_field in (
-        "chainRepositionDust",
-        "chainRepositionAllowCardinal",
-        "chainRepositionAllowDiagonal",
-    ):
-        if numeric(profile[bool_field]) not in {
-            macros.get("OW_WILD_BEHAVIOR_BOOL_NO"),
-            macros.get("OW_WILD_BEHAVIOR_BOOL_YES"),
-        }:
-            set_field(bool_field, "OW_WILD_BEHAVIOR_BOOL_YES")
-    if numeric(profile["chillState"]) == macros.get("OW_WILD_BEHAVIOR_KIND_ASLEEP"):
-        set_field("stamina", "1")
-        set_field("alertness", "0")
-        set_field("alertChance", "0")
-    return changes
-
-
-def resolve_inherited_terrain_policy(profile: dict[str, dict], macros: dict[str, int]) -> None:
-    all_mask = macros.get("OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL", 0x3FF)
-    default_mask = macros.get("OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_DEFAULT", 1)
-    explicit_mask = (numeric(profile["chillAllowedTerrainOverrideMask"]) or 0) & all_mask
-    value_mask = numeric(profile["chillAllowedTerrainMask"]) or 0
-    resolved = (value_mask & explicit_mask) | (default_mask & ~explicit_mask)
-    profile["chillAllowedTerrainMask"] = make_value(
-        str(resolved & all_mask),
-        "chillAllowedTerrainMask",
-        macros,
+    species_value = species.get("value")
+    types = (
+        type_metadata.get(species.get("symbol"))
+        if type_metadata is not None
+        else species.get("types")
     )
-    profile["chillAllowedTerrainOverrideMask"] = make_value(
-        str(all_mask),
-        "chillAllowedTerrainOverrideMask",
-        macros,
+    if not isinstance(species_value, int) or species_value <= 0:
+        raise ParseError("Pokemon metadata has an invalid species value")
+    if not isinstance(types, list) or not 1 <= len(types) <= 2:
+        raise ParseError(f"{species.get('symbol', 'Pokemon')} lacks canonical type metadata")
+    type_values = [entry.get("value") for entry in types]
+    if any(not isinstance(value, int) for value in type_values):
+        raise ParseError(f"{species.get('symbol', 'Pokemon')} has invalid canonical type metadata")
+    if len(type_values) == 1:
+        type_values.append(type_values[0])
+    return spawn_metadata.behavior_group_flags(
+        species_value,
+        type_values[0],
+        type_values[1],
     )
 
 
-def resolve_inherited_spawn_destination_policy(profile: dict[str, dict], macros: dict[str, int]) -> None:
-    all_mask = macros.get("OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL", 0x3FF)
-    explicit_mask = (numeric(profile["spawnDestinationOverrideMask"]) or 0) & all_mask
-    value_mask = numeric(profile["spawnDestinationMask"]) or 0
-    legacy_mask = spawn_destination_mask_for_legacy(profile.get("spawnDestination"))
-    resolved = (value_mask & explicit_mask) | (legacy_mask & ~explicit_mask)
-    profile["spawnDestinationMask"] = make_value(
-        str(resolved & all_mask),
-        "spawnDestinationMask",
-        macros,
-    )
-    profile["spawnDestinationOverrideMask"] = make_value(
-        str(all_mask),
-        "spawnDestinationOverrideMask",
-        macros,
-    )
+def validate_canonical_spawn_group_constants(macros: dict[str, int]) -> None:
+    expected_groups = {
+        "OW_WILD_BEHAVIOR_GROUP_BABY": spawn_metadata.GROUP_BABY,
+        "OW_WILD_BEHAVIOR_GROUP_GHOST": spawn_metadata.GROUP_GHOST,
+    }
+    for type_symbol in POKEMON_TYPE_ORDER:
+        type_value = macros.get(type_symbol)
+        if isinstance(type_value, int) and 0 <= type_value <= spawn_metadata.TYPE_STELLAR:
+            expected_groups[
+                f"OW_WILD_BEHAVIOR_GROUP_TYPE_{type_symbol.removeprefix(TYPE_PREFIX)}"
+            ] = spawn_metadata.GROUP_TYPE_NORMAL << type_value
+    for symbol, expected in expected_groups.items():
+        if macros.get(symbol) != expected:
+            raise ParseError(f"spawn metadata and behavior resolver disagree on {symbol}")
 
 
-def parse_group_species(source: str, macros: dict[str, int]) -> dict[int, list[str]]:
-    match = re.search(
-        r"static\s+u32\s+OverworldWildSpawns_GetBehaviorGroupFlags\s*\([^)]*\)\s*\{(.*?)\n\}",
-        source,
-        flags=re.S,
-    )
-    if not match:
-        return {}
-    groups: dict[int, list[str]] = {}
-    for cases, group_expr in re.findall(
-        r"((?:\s*case\s+SPECIES_[A-Z0-9_]+\s*:\s*)+)flags\s*\|=\s*([^;]+);",
-        match.group(1),
-        flags=re.S,
-    ):
-        symbols = [
-            symbol
-            for symbol in re.findall(r"\bOW_WILD_BEHAVIOR_GROUP_[A-Z0-9_]+\b", group_expr)
-            if symbol != "OW_WILD_BEHAVIOR_GROUP_NONE"
-        ]
-        case_species = re.findall(r"case\s+(SPECIES_[A-Z0-9_]+)\s*:", cases)
-        for group_symbol in symbols:
-            group_value = macros.get(group_symbol)
-            if group_value is None:
-                continue
-            groups.setdefault(group_value, [])
-            groups[group_value].extend(case_species)
-    return groups
+def canonical_special_group_species(
+    species: list[dict],
+    macros: dict[str, int],
+    type_metadata: dict[str, list[dict]],
+) -> dict[int, list[str]]:
+    """Project the non-type group membership used by the Workshop group list."""
 
-
-def type_group_symbol(type_symbol: str) -> str:
-    return f"OW_WILD_BEHAVIOR_GROUP_TYPE_{type_symbol.removeprefix(TYPE_PREFIX)}"
-
-
-def species_type_group_flags(species: dict | None, macros: dict[str, int]) -> int:
-    if not species:
-        return 0
-    flags = 0
-    for entry in species.get("types", []):
-        symbol = entry.get("symbol")
-        if not symbol:
-            continue
-        flags |= macros.get(type_group_symbol(symbol), 0)
-    return flags
+    validate_canonical_spawn_group_constants(macros)
+    groups = {
+        spawn_metadata.GROUP_BABY: [],
+        spawn_metadata.GROUP_GHOST: [],
+    }
+    for entry in species:
+        flags = canonical_spawn_group_flags(entry, type_metadata)
+        for group in groups:
+            if flags & group:
+                groups[group].append(entry["symbol"])
+    return {group: symbols for group, symbols in groups.items() if symbols}
 
 
 def parse_species(expressions: dict[str, str], macros: dict[str, int], species_order: list[str]) -> list[dict]:
@@ -3797,12 +3681,22 @@ def build_type_options(macros: dict[str, int]) -> list[dict]:
     return options
 
 
-def parse_species_type_metadata(macros: dict[str, int]) -> dict[str, list[dict]]:
+def parse_species_type_metadata(
+    macros: dict[str, int],
+    *,
+    canonical_symbols: bool = False,
+) -> dict[str, list[dict]]:
     if not MONDATA_SOURCE.exists():
         return {}
     text = strip_c_comments(join_line_continuations(MONDATA_SOURCE.read_text()))
     result: dict[str, list[dict]] = {}
     current_symbol: str | None = None
+    armips_species_values = parse_armips_species_values(macros) if canonical_symbols else {}
+    header_species_by_value: dict[int, str] = {}
+    if canonical_symbols:
+        for symbol, value in macros.items():
+            if symbol.startswith("SPECIES_") and isinstance(value, int):
+                header_species_by_value.setdefault(value, symbol)
     type_symbols_by_value = {
         macros[symbol]: symbol
         for symbol in POKEMON_TYPE_ORDER
@@ -3814,7 +3708,11 @@ def parse_species_type_metadata(macros: dict[str, int]) -> dict[str, list[dict]]
             continue
         match = re.match(r'^mondata\s+(SPECIES_[A-Z0-9_]+)\s*,', line)
         if match:
-            current_symbol = match.group(1)
+            source_symbol = match.group(1)
+            current_symbol = source_symbol
+            if canonical_symbols and source_symbol not in macros:
+                source_value = armips_species_values.get(source_symbol)
+                current_symbol = header_species_by_value.get(source_value)
             continue
         if current_symbol is None or not line.startswith("types "):
             continue
@@ -5159,31 +5057,6 @@ def invert_labels(macros: dict[str, int], prefix: str) -> dict[int, dict]:
     return dict(sorted(result.items()))
 
 
-def match_applies(context: dict, match: dict, macros: dict[str, int]) -> bool:
-    any_species = macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES", macros.get("SPECIES_NONE", 0))
-    if numeric(match["species"]) != any_species and numeric(match["species"]) != context["species"]:
-        return False
-    if numeric(match["groupMask"]) != macros.get("OW_WILD_BEHAVIOR_GROUP_NONE", 0):
-        if (context["groupFlags"] & (numeric(match["groupMask"]) or 0)) == 0:
-            return False
-    if numeric(match["terrain"]) != macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN"):
-        if numeric(match["terrain"]) != context["terrain"]:
-            return False
-    if numeric(match["minLevel"]) != macros.get("OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY", 0):
-        if context["level"] < (numeric(match["minLevel"]) or 0):
-            return False
-    if numeric(match["maxLevel"]) != macros.get("OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY", 0):
-        if context["level"] > (numeric(match["maxLevel"]) or 0):
-            return False
-    if numeric(match["shiny"]) != macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_SHINY"):
-        if numeric(match["shiny"]) != context["shiny"]:
-            return False
-    if numeric(match["behaviorClass"]) != macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"):
-        if numeric(match["behaviorClass"]) != context["behaviorClass"]:
-            return False
-    return True
-
-
 def match_is_no_target_placeholder(match: dict, macros: dict[str, int]) -> bool:
     any_species = macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES", macros.get("SPECIES_NONE", 0))
     return (
@@ -5222,233 +5095,102 @@ def match_summary(match: dict, macros: dict[str, int], group_labels: dict[int, d
     return ", ".join(parts) if parts else "All Pokemon"
 
 
-def class_for_context(context: dict, class_rules: list[dict], class_count: int, macros: dict[str, int]) -> tuple[int, list[dict]]:
-    behavior_class = macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0)
+def resolve_native_requests(requests: list[dict]) -> list[dict]:
+    results = native_resolver.resolve_many(None, requests, root=ROOT)
+    for index, result in enumerate(results):
+        if result.get("status") not in {0, 4}:
+            raise RuntimeError(
+                "canonical resolver rejected request "
+                f"{index} with status {result.get('status')}"
+            )
+        if result.get("traceDropped") != 0 or not isinstance(result.get("trace"), list):
+            raise RuntimeError(
+                f"canonical resolver returned incomplete provenance for request {index}"
+            )
+    return results
+
+
+def native_class_rule_hits(
+    result: dict,
+    full_class_rules: list[dict],
+    species_class_rules: list[dict],
+) -> list[dict]:
     hits = []
-    for rule in class_rules:
-        context["behaviorClass"] = behavior_class
-        if match_applies(context, rule["match"], macros):
-            behavior_class = numeric(rule["behaviorClass"]) or 0
-            hits.append(rule)
-    if behavior_class >= class_count:
-        behavior_class = macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0)
-    return behavior_class, hits
+    for step in result["trace"]:
+        kind = int(step.get("kind", -1))
+        source_index = int(step.get("sourceIndex", -1))
+        if kind == 0 and 0 <= source_index < len(full_class_rules):
+            hits.append(full_class_rules[source_index])
+        elif kind == 1 and 0 <= source_index < len(species_class_rules):
+            hits.append(species_class_rules[source_index])
+    return hits
 
 
-def behavior_override_targets_context(
-    context: dict,
-    override: dict,
+def native_owner_resolution(
+    result: dict,
     macros: dict[str, int],
-) -> bool:
-    if "targetMode" not in override:
-        return match_applies(context, override["match"], macros)
-    mode = numeric(override["targetMode"])
-    if mode == macros.get("OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED", 0):
-        return False
-    if not match_applies(context, override["match"], macros):
-        return False
-    if mode == macros.get("OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL", 2):
-        return True
-    if mode != macros.get("OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS", 1):
-        return False
-    return any(numeric(member) == context["species"] for member in override.get("members", []))
-
-
-def behavior_override_applies(
-    context: dict,
-    override: dict,
-    macros: dict[str, int],
-    applicable_override_indexes: set[int] | None = None,
-) -> bool:
-    del applicable_override_indexes
-    return behavior_override_targets_context(context, override, macros)
-
-
-def selected_conditional_override_indexes(
-    context: dict,
-    conditional_states: list[dict[str, int]],
-    normally_applicable_override_indexes: set[int],
-    movement_speed: int,
-    macros: dict[str, int],
-) -> set[int]:
-    terrain_mask = context.get("conditionTerrainMask")
-    if terrain_mask is None:
-        terrain = int(context.get("terrain", 0))
-        terrain_mask = {
-            macros.get("OW_WILD_SPAWN_TERRAIN_LAND", 0): macros.get(
-                "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_LAND", 1 << 0
-            ),
-            macros.get("OW_WILD_SPAWN_TERRAIN_SURF", 1): macros.get(
-                "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER", 1 << 1
-            ),
-            macros.get("OW_WILD_SPAWN_TERRAIN_FISHING", 3): macros.get(
-                "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER", 1 << 1
-            ),
-            macros.get("OW_WILD_SPAWN_TERRAIN_HEADBUTT", 2): macros.get(
-                "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY", 1 << 2
-            ),
-        }.get(terrain, 0)
-    terrain_mask = int(terrain_mask) & CONDITIONAL_TERRAIN_ALL_VALUE
-
-    def conditions_match(state: dict[str, int]) -> bool:
-        explicit = state["terrainOverrideMask"]
-        enabled = state["terrainMask"] & explicit
-        disabled = explicit & ~state["terrainMask"]
-        if explicit and not terrain_mask:
-            return False
-        if terrain_mask & disabled:
-            return False
-        if enabled and not terrain_mask & enabled:
-            return False
-        minimum = state["minMovementSpeed"]
-        maximum = state["maxMovementSpeed"]
-        if minimum and movement_speed < minimum:
-            return False
-        if maximum and movement_speed > maximum:
-            return False
-        return True
-
-    return {
-        state["overrideProfile"]
-        for state in conditional_states
-        if state["overrideProfile"] != CONDITIONAL_PROFILE_NONE_VALUE
-        and state["parentProfile"] in normally_applicable_override_indexes
-        and conditions_match(state)
-    }
-
-
-def resolve_referenced_profile_for_context(
-    context: dict,
-    class_profiles: list[dict[str, dict]],
     variable_overrides: list[dict],
-    macros: dict[str, int],
-    reference: dict,
-    normally_applicable_override_indexes: set[int] | None = None,
-    conditional_override_indexes: set[int] | None = None,
-) -> dict[str, dict] | None:
-    reference_index = numeric(reference)
-    if reference_index is None or reference_index < 0:
-        return None
-    selected_order = reference_index + 1
-    selected = next(
-        (override for override in variable_overrides if override["order"] == selected_order),
-        None,
-    )
-    if selected is None:
-        return None
-    class_index = context["behaviorClass"]
-    if class_index >= len(class_profiles):
-        class_index = macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0)
-    resolved = clone_profile(class_profiles[class_index])
-    resolve_inherited_terrain_policy(resolved, macros)
-    resolve_inherited_spawn_destination_policy(resolved, macros)
-    normal_indexes = normally_applicable_override_indexes or set()
-    conditional_indexes = conditional_override_indexes or set()
-    for override in variable_overrides:
-        if override["order"] == selected_order:
-            continue
-        override_index = override["order"] - 1
-        if override_index in normal_indexes - conditional_indexes:
-            merge_profile(resolved, override["behavior"])
-    merge_profile(resolved, selected["behavior"])
-    for override in variable_overrides:
-        if override["order"] == selected_order:
-            continue
-        override_index = override["order"] - 1
-        if override_index in conditional_indexes:
-            merge_profile(resolved, override["behavior"])
-    normalize_profile(resolved, macros)
-    return resolved
+) -> tuple[dict, dict, list[dict], list[dict], list[dict]]:
+    """Project one canonical native result into the legacy Workshop shape."""
 
-
-def resolve_profile_for_context(
-    context: dict,
-    class_profiles: list[dict[str, dict]],
-    variable_overrides: list[dict],
-    macros: dict[str, int],
-    conditional_states: list[dict[str, int]] | None = None,
-) -> tuple[dict[str, dict], list[dict], list[dict], list[dict]]:
-    class_index = context["behaviorClass"]
-    if class_index >= len(class_profiles):
-        class_index = macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0)
-    profile = clone_profile(class_profiles[class_index])
-    resolve_inherited_terrain_policy(profile, macros)
-    resolve_inherited_spawn_destination_policy(profile, macros)
-    layers = [{"kind": "class", "label": f"Class profile #{class_index}", "changes": []}]
-    variable_hits = []
-    normally_applicable_override_indexes = {
-        override["order"] - 1
-        for override in variable_overrides
-        if behavior_override_targets_context(context, override, macros)
+    override_by_index = {
+        int(override["order"]) - 1: override for override in variable_overrides
     }
-    preconditional_profile = clone_profile(profile)
-    for override in variable_overrides:
-        override_index = override["order"] - 1
-        if override_index in normally_applicable_override_indexes:
-            merge_profile(preconditional_profile, override["behavior"])
-    normalize_profile(preconditional_profile, macros)
-    preconditional_speed = numeric(preconditional_profile["chillSpeed"]) or 1
-    conditional_override_indexes = selected_conditional_override_indexes(
-        context,
-        conditional_states or [],
-        normally_applicable_override_indexes,
-        preconditional_speed,
-        macros,
-    )
-    for applicable_indexes in (
-        normally_applicable_override_indexes - conditional_override_indexes,
-        conditional_override_indexes,
-    ):
-        for override in variable_overrides:
-            override_index = override["order"] - 1
-            if override_index in applicable_indexes:
-                changes = merge_profile(profile, override["behavior"])
-                variable_hits.append(override)
-                layers.append(
-                    {
-                        "kind": "behaviorOverride",
-                        "label": f"Behavior override #{override['order']}",
-                        "changes": changes,
-                        "mask": behavior_override_mask_summary(override["behavior"]),
-                    }
+    previous: dict[str, dict] | None = None
+    base_profile: dict[str, dict] | None = None
+    layers: list[dict] = []
+    hit_indexes: list[int] = []
+    for step in result["trace"]:
+        if int(step.get("lane", -1)) != 0:
+            continue
+        kind = int(step.get("kind", -1))
+        if kind not in {2, 3, 4, 6}:
+            continue
+        current = decode_native_profile(macros, str(step.get("profileHex", "")))
+        changes = [] if previous is None else native_profile_changes(previous, current)
+        previous = current
+        if kind == 2:
+            base_profile = current
+            layers.append(
+                {
+                    "kind": "class",
+                    "label": f"Class profile #{int(step.get('sourceIndex', 0))}",
+                    "changes": [],
+                }
+            )
+            continue
+        if kind in {3, 4}:
+            source_index = int(step.get("sourceIndex", -1))
+            override = override_by_index.get(source_index)
+            if override is None:
+                raise RuntimeError(
+                    f"canonical resolver reported unknown override {source_index}"
                 )
-    normalizations = normalize_profile(profile, macros)
-    if normalizations:
-        layers.append({"kind": "normalization", "label": "Runtime fallback", "changes": normalizations})
-    profile["_activeProfileData"] = resolve_referenced_profile_for_context(
-        context,
-        class_profiles,
-        variable_overrides,
-        macros,
-        profile["activeProfile"],
-        normally_applicable_override_indexes,
-        conditional_override_indexes,
-    )
-    profile["_tiredProfileData"] = resolve_referenced_profile_for_context(
-        context,
-        class_profiles,
-        variable_overrides,
-        macros,
-        profile["tiredProfile"],
-        normally_applicable_override_indexes,
-        conditional_override_indexes,
-    )
-    return profile, layers, variable_hits, normalizations
-
-
-def group_flags_for_species(
-    symbol: str,
-    group_species: dict[int, list[str]],
-    species_by_symbol: dict[str, dict] | None = None,
-    macros: dict[str, int] | None = None,
-) -> int:
-    flags = 0
-    for group, symbols in group_species.items():
-        if symbol in symbols:
-            flags |= group
-    if species_by_symbol is not None and macros is not None:
-        flags |= species_type_group_flags(species_by_symbol.get(symbol), macros)
-    return flags
+            if source_index not in hit_indexes:
+                hit_indexes.append(source_index)
+            layers.append(
+                {
+                    "kind": "behaviorOverride",
+                    "label": f"Behavior override #{override['order']}",
+                    "changes": changes,
+                    "mask": behavior_override_mask_summary(override["behavior"]),
+                }
+            )
+            continue
+        if changes:
+            layers.append(
+                {
+                    "kind": "normalization",
+                    "label": "Runtime fallback",
+                    "changes": changes,
+                }
+            )
+    if base_profile is None:
+        raise RuntimeError("canonical resolver did not report its owner base profile")
+    profile = decode_native_resolved_profile(macros, result["profileHex"])
+    primitives = decode_native_primitives(macros, result["primitivesHex"])
+    hits = [override_by_index[index] for index in hit_indexes]
+    return base_profile, profile, primitives, hits, layers
 
 
 def data_source_metadata() -> dict[str, str]:
@@ -5531,6 +5273,11 @@ def source_capabilities() -> dict[str, dict]:
         HELPER_SOURCE,
         BEHAVIOR_DATA_SOURCE,
         BEHAVIOR_DATA_HEADER,
+        BEHAVIOR_CATALOG_SOURCE,
+        BEHAVIOR_AUTHORING_SCHEMA,
+        BEHAVIOR_CATALOG_GENERATOR,
+        BEHAVIOR_SCHEMA_SOURCE,
+        BEHAVIOR_SCHEMA_METADATA,
         SPAWNS_PUBLIC_HEADER,
         SPAWNS_INTERNAL_HEADER,
     )
@@ -5663,6 +5410,7 @@ def build_route_only_data(
         "capabilities": capabilities,
         "profilesAvailable": False,
         "profileError": profile_error_payload(profile_error),
+        "profileCatalog": None,
         "fields": [],
         "counts": {
             "species": 0,
@@ -5704,26 +5452,192 @@ def build_route_only_data(
     }
 
 
+def _canonical_profile_edit_options(
+    catalog: dict,
+    macros: dict[str, int],
+) -> dict[str, list[dict]]:
+    """Build field choices without creating legacy class or override records."""
+
+    result = build_edit_options(macros, [])
+    seen_by_field = {
+        field: {option["raw"] for option in options}
+        for field, options in result.items()
+    }
+    for profile in catalog["profiles"]:
+        for field, authored in profile["fields"].items():
+            if field in {"activeProfile", "tiredProfile"} \
+                    or authored["operator"] != "replace":
+                continue
+            add_value_option(
+                result[field],
+                seen_by_field[field],
+                str(authored["value"]),
+                field,
+                macros,
+            )
+    # The canonical deck builds linked-profile choices from stable application
+    # IDs. Positional options are legacy-only and would be misleading here.
+    result["activeProfile"] = []
+    result["tiredProfile"] = []
+    return result
+
+
+def build_profile_deck_data() -> dict:
+    """Build the canonical Profile Deck payload without native resolution."""
+
+    catalog = load_behavior_catalog_v2()
+    expressions, species_order = parse_define_expressions(DEFINE_SOURCE_FILES)
+    macros = evaluate_defines(expressions)
+    macros.update(evaluate_armips_equ([ARMIPS_CONFIG, ARMIPS_CONSTANTS]))
+    terrain_values, _ = parse_behavior_data_enums()
+    macros.update(terrain_values)
+    group_labels = invert_labels(macros, GROUP_PREFIX)
+    terrain_labels = {
+        value: {
+            "symbol": symbol,
+            "name": humanize_symbol(symbol, TERRAIN_PREFIX),
+            "value": value,
+        }
+        for symbol, value in terrain_values.items()
+    }
+
+    species = parse_species(expressions, macros, species_order)
+    baby_by_symbol = parse_baby_species_map()
+    evolution_edges = parse_evolution_edges()
+    apply_species_type_metadata(species, parse_species_type_metadata(macros))
+    canonical_type_metadata = parse_species_type_metadata(macros, canonical_symbols=True)
+    species_by_symbol = {entry["symbol"]: entry for entry in species}
+    apply_regional_form_metadata(species, species_by_symbol, macros)
+    apply_species_family_metadata(species, baby_by_symbol, evolution_edges)
+    assignments = []
+    for entry in species:
+        if entry.get("value") is not None:
+            entry["iconUrl"] = f"/icons/{entry['value']}.png"
+        group_flags = canonical_spawn_group_flags(entry, canonical_type_metadata)
+        species_summary = {
+            key: entry[key]
+            for key in (
+                "symbol", "name", "aliases", "iconUrl",
+                "familyBaseSymbol", "familyBaseName", "types",
+            )
+            if key in entry
+        }
+        assignments.append({
+            "species": species_summary,
+            "groups": [
+                label["name"]
+                for group, label in group_labels.items()
+                if group != macros.get("OW_WILD_BEHAVIOR_GROUP_NONE", 0)
+                and group_flags & group
+            ],
+        })
+
+    return {
+        "profilesAvailable": True,
+        "profileError": None,
+        "profileCatalog": catalog,
+        "fields": [
+            {
+                "key": field,
+                "label": FIELD_LABELS[field],
+                "unit": FIELD_UNITS.get(field, ""),
+            }
+            for field in PROFILE_FIELDS
+        ],
+        "numericProfileFieldKeys": sorted(NUMERIC_PROFILE_FIELDS),
+        "numericOverrideOperatorFieldKeys": sorted(RELATIVE_OVERRIDE_PROFILE_FIELDS),
+        "boundedOverrideOperatorFieldKeys": sorted(BOUNDED_OVERRIDE_PROFILE_FIELDS),
+        "editOptions": _canonical_profile_edit_options(catalog, macros),
+        "assignments": assignments,
+        "labels": {
+            "groups": group_labels,
+            "terrains": terrain_labels,
+        },
+    }
+
+
+def validate_profile_runtime_resolution() -> None:
+    """Resolve every species and runtime class without building the legacy UI model."""
+
+    catalog = load_behavior_catalog()
+    expressions, species_order, macros = behavior_authoring_context()
+    apply_catalog_symbol_values(catalog, macros)
+    species = parse_species(expressions, macros, species_order)
+    canonical_type_metadata = parse_species_type_metadata(
+        macros,
+        canonical_symbols=True,
+    )
+    default_terrain = macros.get("OW_WILD_SPAWN_TERRAIN_LAND", 0)
+    requests = [
+        {
+            "species": entry["value"],
+            "symbol": entry["symbol"],
+            "level": 1,
+            "terrain": default_terrain,
+            "shiny": 0,
+            "groupFlags": canonical_spawn_group_flags(
+                entry,
+                canonical_type_metadata,
+            ),
+            "behaviorClass": "auto",
+        }
+        for entry in species
+    ]
+    requests.extend(
+        {
+            "species": macros.get("SPECIES_NONE", 0),
+            "level": 1,
+            "terrain": default_terrain,
+            "shiny": 0,
+            "groupFlags": 0,
+            "behaviorClass": index,
+        }
+        for index in range(len(catalog["classProfiles"]))
+    )
+    results = resolve_native_requests(requests)
+    if len(results) != len(requests):
+        raise RuntimeError("canonical resolver returned an incomplete profile validation batch")
+    expected_profile_bytes = NATIVE_PROFILE_LANE_SIZE * 3
+    expected_primitive_bytes = len(PRIMITIVE_FIELDS)
+    for index, result in enumerate(results):
+        try:
+            profile_bytes = bytes.fromhex(str(result.get("profileHex", "")))
+            primitive_bytes = bytes.fromhex(str(result.get("primitivesHex", "")))
+        except ValueError as error:
+            raise RuntimeError(
+                f"canonical resolver returned invalid bytes for request {index}"
+            ) from error
+        if len(profile_bytes) != expected_profile_bytes:
+            raise RuntimeError(
+                f"canonical resolver returned a truncated profile for request {index}"
+            )
+        if len(primitive_bytes) != expected_primitive_bytes:
+            raise RuntimeError(
+                f"canonical resolver returned truncated primitives for request {index}"
+            )
+
+
 def build_data(
     *,
     include_routes: bool | None = None,
     include_spawn_settings: bool | None = None,
 ) -> dict:
     capabilities = source_capabilities()
+    profile_catalog = load_behavior_catalog_v2()
+    catalog = lower_behavior_catalog_v2(profile_catalog)
     if include_routes is None:
         include_routes = capabilities["routes"]["available"]
     if include_spawn_settings is None:
         include_spawn_settings = capabilities["spawnSettings"]["available"]
     raw_overlay = OVERLAY_SOURCE.read_text()
     source = strip_c_comments(join_line_continuations(raw_overlay))
-    raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
-    behavior_source = strip_c_comments(join_line_continuations(raw_behavior_data))
     expressions, species_order = parse_define_expressions(DEFINE_SOURCE_FILES)
     macros = evaluate_defines(expressions)
     macros.update(evaluate_armips_equ([ARMIPS_CONFIG, ARMIPS_CONSTANTS]))
     terrain_values, destination_values = parse_behavior_data_enums()
     macros.update(terrain_values)
     macros.update(destination_values)
+    apply_catalog_symbol_values(catalog, macros)
 
     class_labels = invert_labels(macros, CLASS_PREFIX)
     group_labels = invert_labels(macros, GROUP_PREFIX)
@@ -5731,36 +5645,44 @@ def build_data(
     destination_labels = {value: {"symbol": name, "name": macro_label(name, value, "spawnDestination", macros), "value": value} for name, value in destination_values.items()}
     primitive_maps = parse_primitive_maps(source, macros)
 
-    class_profiles = [
-        parse_profile(entry, macros)
-        for entry in parse_initializer(extract_braced_initializer(behavior_source, "sOverworldWildBehaviorClassProfiles"))
-    ]
-    for class_profile in class_profiles:
-        resolve_inherited_spawn_destination_policy(class_profile, macros)
+    class_profiles = catalog_class_profiles(catalog, macros)
     default_class = macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0)
-    default_profile = class_profiles[default_class]
-    class_rules = parse_behavior_class_rules(behavior_source, macros, group_labels, class_labels)
+    full_class_rules, species_class_rules = catalog_class_rules(
+        catalog,
+        macros,
+        group_labels,
+        class_labels,
+    )
+    class_rules = full_class_rules + species_class_rules
 
-    variable_overrides = parse_behavior_overrides(behavior_source, macros, group_labels)
-    conditional_states = parse_behavior_conditional_states(
-        behavior_source,
+    variable_overrides = catalog_behavior_overrides(catalog, macros, group_labels)
+    conditional_states = catalog_conditional_states(
+        catalog,
         macros,
         len(variable_overrides),
     )
-    override_profile_names = parse_override_profile_names(raw_behavior_data)
+    override_profile_names = catalog_override_profile_names(catalog)
     validate_override_profile_groups(variable_overrides, override_profile_names)
 
-    group_species = parse_group_species(source, macros)
     species = parse_species(expressions, macros, species_order)
     baby_by_symbol = parse_baby_species_map()
     evolution_edges = parse_evolution_edges()
     apply_species_type_metadata(species, parse_species_type_metadata(macros))
+    canonical_type_metadata = parse_species_type_metadata(
+        macros,
+        canonical_symbols=True,
+    )
     icon_paths = cached_icon_paths()
     for entry in species:
         if entry["value"] in icon_paths:
             entry["iconUrl"] = f"/icons/{entry['value']}.png"
     species_by_symbol = {entry["symbol"]: entry for entry in species}
     apply_regional_form_metadata(species, species_by_symbol, macros)
+    group_species = canonical_special_group_species(
+        species,
+        macros,
+        canonical_type_metadata,
+    )
     apply_species_family_metadata(species, baby_by_symbol, evolution_edges)
     species_by_value = {entry["value"]: entry for entry in species}
     species_options = build_encounter_species_options(species, macros)
@@ -5789,26 +5711,54 @@ def build_data(
         else []
     )
 
-    assignments = []
     default_terrain = macros.get("OW_WILD_SPAWN_TERRAIN_LAND", 0)
+    assignment_contexts = []
     for entry in species:
-        context = {
-            "species": entry["value"],
-            "symbol": entry["symbol"],
+        assignment_contexts.append(
+            {
+                "species": entry["value"],
+                "symbol": entry["symbol"],
+                "level": 1,
+                "terrain": default_terrain,
+                "shiny": 0,
+                "groupFlags": canonical_spawn_group_flags(
+                    entry,
+                    canonical_type_metadata,
+                ),
+                "behaviorClass": "auto",
+            }
+        )
+    class_contexts = [
+        {
+            "species": macros.get("SPECIES_NONE", 0),
             "level": 1,
             "terrain": default_terrain,
             "shiny": 0,
-            "groupFlags": group_flags_for_species(entry["symbol"], group_species, species_by_symbol, macros),
-            "behaviorClass": macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0),
+            "groupFlags": 0,
+            "behaviorClass": index,
         }
-        behavior_class, class_hits = class_for_context(context, class_rules, len(class_profiles), macros)
-        context["behaviorClass"] = behavior_class
-        profile, layers, variable_hits, _ = resolve_profile_for_context(
-            context,
-            class_profiles,
-            variable_overrides,
+        for index in range(len(class_profiles))
+    ]
+    native_results = resolve_native_requests(assignment_contexts + class_contexts)
+    assignment_results = native_results[:len(assignment_contexts)]
+    class_results = native_results[len(assignment_contexts):]
+
+    assignments = []
+    for entry, context, native_result in zip(
+        species,
+        assignment_contexts,
+        assignment_results,
+    ):
+        behavior_class = int(native_result["behaviorClass"])
+        class_hits = native_class_rule_hits(
+            native_result,
+            full_class_rules,
+            species_class_rules,
+        )
+        _, profile, primitives, variable_hits, layers = native_owner_resolution(
+            native_result,
             macros,
-            conditional_states,
+            variable_overrides,
         )
         max_speed_hits = [
             {"order": override["order"], "summary": override["summary"], "fields": behavior_override_mask_summary(override["behavior"])["labels"]}
@@ -5826,7 +5776,7 @@ def build_data(
                 "groups": group_names,
                 "behaviorClass": class_label,
                 "profile": profile_numeric_view(profile),
-                "primitives": resolve_primitives(profile, primitive_maps, macros),
+                "primitives": primitives,
                 "profileId": profile["profileId"],
                 "classRuleHits": [{"order": rule["order"], "summary": rule["summary"], "className": rule["className"]} for rule in class_hits],
                 "maxSpeedOverrideHits": max_speed_hits,
@@ -5836,26 +5786,19 @@ def build_data(
         )
 
     classes = []
-    for index, class_profile in enumerate(class_profiles):
+    for index, (class_profile, native_result) in enumerate(
+        zip(class_profiles, class_results)
+    ):
         class_label = class_labels.get(index, {"symbol": str(index), "name": f"Class {index}", "value": index})
         targeting_rules = [
             {"order": rule["order"], "summary": rule["summary"], "behaviorClass": rule["behaviorClass"]}
             for rule in class_rules
             if numeric(rule["behaviorClass"]) == index
         ]
-        context = {
-            "species": macros.get("SPECIES_NONE", 0),
-            "level": 1,
-            "terrain": default_terrain,
-            "shiny": 0,
-            "groupFlags": 0,
-            "behaviorClass": index,
-        }
-        profile, layers, _, _ = resolve_profile_for_context(
-            context,
-            class_profiles,
-            [],
+        base_profile, profile, primitives, _, layers = native_owner_resolution(
+            native_result,
             macros,
+            variable_overrides,
         )
         runtime_owned = class_symbol_used_by_runtime(class_label["symbol"])
         classes.append(
@@ -5865,16 +5808,22 @@ def build_data(
                 "name": class_label["name"],
                 "canRename": index != default_class and not runtime_owned,
                 "canDelete": index != default_class and not runtime_owned,
-                "override": {"mask": parse_mask("0", macros), "profile": profile_numeric_view(class_profile)},
+                "override": {"mask": parse_mask("0", macros), "profile": profile_numeric_view(base_profile)},
                 "profile": profile_numeric_view(profile),
-                "primitives": resolve_primitives(profile, primitive_maps, macros),
-                "editProfile": profile_numeric_view(class_profile),
+                "primitives": primitives,
+                "editProfile": profile_numeric_view(base_profile),
                 "layers": layers,
                 "classRules": targeting_rules,
                 "classRuleCount": len(targeting_rules),
                 "speciesCount": sum(1 for item in assignments if item["behaviorClass"]["value"] == index),
             }
         )
+
+    default_profile, _, _, _, _ = native_owner_resolution(
+        class_results[default_class],
+        macros,
+        variable_overrides,
+    )
 
     for override in variable_overrides:
         order = override["order"]
@@ -5949,6 +5898,14 @@ def build_data(
         "capabilities": capabilities,
         "profilesAvailable": True,
         "profileError": None,
+        "profileCatalog": profile_catalog,
+        "behaviorSchema": {
+            "name": _BEHAVIOR_SCHEMA["name"],
+            "schemaVersion": _BEHAVIOR_SCHEMA["schemaVersion"],
+            "blobVersion": _BEHAVIOR_SCHEMA["blobVersion"],
+            "source": str(BEHAVIOR_SCHEMA_SOURCE.relative_to(ROOT)),
+            "metadata": str(BEHAVIOR_SCHEMA_METADATA.relative_to(ROOT)),
+        },
         "allowedTerrains": [
             {
                 "key": key,
@@ -6220,8 +6177,29 @@ def line_indent_before(text: str, index: int) -> str:
 
 def format_profile_initializer(raws: dict[str, str], indent: str) -> str:
     value_indent = indent + "    "
-    values = ",\n".join(f"{value_indent}{raws[field]}" for field in PROFILE_FIELDS)
-    return f"{{\n{values},\n{indent}}}"
+    values = []
+    for field in PROFILE_STORAGE_FIELDS:
+        if field == "chainRepositionAllowCardinal":
+            value = (
+                "OW_WILD_BEHAVIOR_CHAIN_REPOSITION_CARDINAL_OPTIONS("
+                f"{raws[field]}, {raws['walkPauseVariance']})"
+            )
+        elif field == "chainRepositionAllowDiagonal":
+            value = (
+                "OW_WILD_BEHAVIOR_CHAIN_REPOSITION_DIAGONAL_OPTIONS("
+                f"{raws[field]}, {raws['walkTimeVariance']})"
+            )
+        elif field == "tilesBeforeTurnSkid":
+            value = (
+                "OW_WILD_BEHAVIOR_TURN_SKID_OPTIONS("
+                f"{raws[field]}, {raws['planTurnSkidPath']}, "
+                f"{raws['stopSkid']})"
+            )
+        else:
+            value = raws[field]
+        values.append(f"{value_indent}{value}")
+    joined_values = ",\n".join(values)
+    return f"{{\n{joined_values},\n{indent}}}"
 
 
 def override_profile_storage_raws(raws: dict[str, str]) -> dict[str, str]:
@@ -6496,153 +6474,1844 @@ def rewrite_behavior_blob_count_defines(raw_header: str, counts: dict[str, int])
     return updated_header
 
 
-def consolidate_named_override_profiles(raw_source: str, preferred_profile_orders: set[int] | None = None) -> str:
-    if (
-        "sOverworldWildBehaviorOverrideProfiles" not in raw_source
-        or "sOverworldWildBehaviorOverrideRules" not in raw_source
-    ):
-        return raw_source
+def _catalog_scalar(raw: str) -> int | str:
+    raw = clean_token(raw)
+    return int(raw, 10) if re.fullmatch(r"-?[0-9]+", raw) else raw
 
-    profile_names = parse_override_profile_entry_names(raw_source)
-    duplicate_orders_by_name: dict[str, list[int]] = {}
-    for order, name in profile_names.items():
-        if name:
-            duplicate_orders_by_name.setdefault(name, []).append(order)
-    duplicate_orders_by_name = {
-        name: orders
-        for name, orders in duplicate_orders_by_name.items()
-        if len(orders) > 1
+
+def _catalog_override_field(field: str, raw: str) -> dict[str, int | str]:
+    """Convert compact operator spelling into a named authoring value."""
+    raw = clean_token(raw)
+    compound = compound_override_parts(field, raw)
+    if compound is not None:
+        relative, bound, threshold = compound
+        return {
+            "operator": "relativeThenAtLeast" if bound == "/<" else "relativeThenAtMost",
+            "value": relative,
+            "threshold": threshold,
+        }
+    if is_relative_override_raw(field, raw):
+        return {"operator": "relative", "value": int(raw, 10)}
+    if is_at_least_override_raw(field, raw):
+        return {"operator": "atLeast", "value": int(raw[2:], 10)}
+    if is_at_most_override_raw(field, raw):
+        return {"operator": "atMost", "value": int(raw[2:], 10)}
+    return {"operator": "replace", "value": _catalog_scalar(raw)}
+
+
+def _catalog_override_raw(field: str, authored: object) -> str:
+    if not isinstance(authored, dict):
+        raise ParseError(f"catalog field {field} must have an operator and value")
+    operator_name = clean_token(str(authored.get("operator", "")))
+    value = authored.get("value")
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise ParseError(f"catalog field {field} has an invalid value")
+    raw_value = clean_token(str(value))
+    if operator_name == "replace":
+        return raw_value
+    if operator_name == "relative":
+        return f"{int(raw_value, 10):+d}"
+    if operator_name in {"atLeast", "atMost"}:
+        return ("/<" if operator_name == "atLeast" else "/>") + str(int(raw_value, 10))
+    if operator_name in {"relativeThenAtLeast", "relativeThenAtMost"}:
+        threshold = authored.get("threshold")
+        if isinstance(threshold, bool) or not isinstance(threshold, int):
+            raise ParseError(f"catalog field {field} needs an integer threshold")
+        bound = "/<" if operator_name == "relativeThenAtLeast" else "/>"
+        return f"{int(raw_value, 10):+d}, {bound}{threshold}"
+    raise ParseError(f"catalog field {field} has unknown operator {operator_name}")
+
+
+def _catalog_object(value: object, label: str, fields: set[str]) -> dict:
+    if not isinstance(value, dict):
+        raise ParseError(f"{label} must be an object")
+    missing = fields - set(value)
+    unexpected = set(value) - fields
+    if missing or unexpected:
+        details = []
+        if missing:
+            details.append("missing " + ", ".join(sorted(missing)))
+        if unexpected:
+            details.append("unknown " + ", ".join(sorted(unexpected)))
+        raise ParseError(f"{label} has {'; '.join(details)}")
+    return value
+
+
+def _catalog_expression(value: object, label: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise ParseError(f"{label} must be an integer or expression string")
+    if isinstance(value, str) and not clean_token(value):
+        raise ParseError(f"{label} must not be empty")
+
+
+def _validate_catalog_match(value: object, label: str) -> None:
+    match = _catalog_object(value, label, set(MATCH_FIELDS))
+    for field in MATCH_FIELDS:
+        _catalog_expression(match[field], f"{label}.{field}")
+
+
+def _validate_catalog_override_field(field: str, authored: object, label: str) -> None:
+    if field not in OVERRIDE_SYMBOL_BY_FIELD:
+        raise ParseError(f"{label} names a field that cannot be overridden: {field}")
+    if not isinstance(authored, dict):
+        raise ParseError(f"{label}.{field} must be an operator object")
+    operator_name = authored.get("operator")
+    compound = operator_name in {"relativeThenAtLeast", "relativeThenAtMost"}
+    expected_fields = {"operator", "value", "threshold"} if compound else {"operator", "value"}
+    _catalog_object(authored, f"{label}.{field}", expected_fields)
+    if operator_name not in {
+        "replace", "relative", "atLeast", "atMost",
+        "relativeThenAtLeast", "relativeThenAtMost",
+    }:
+        raise ParseError(f"{label}.{field} has an unknown operator: {operator_name}")
+    if operator_name == "replace":
+        _catalog_expression(authored["value"], f"{label}.{field}.value")
+        return
+
+    value = authored["value"]
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ParseError(f"{label}.{field}.value must be an integer for {operator_name}")
+    minimum = NUMERIC_PROFILE_FIELD_OPTION_MIN.get(field, 0)
+    maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 0xFF)
+    if operator_name == "relative":
+        if field not in RELATIVE_OVERRIDE_PROFILE_FIELDS:
+            raise ParseError(f"{label}.{field} does not support relative values")
+        if value < RELATIVE_OVERRIDE_DELTA_MIN or value > RELATIVE_OVERRIDE_DELTA_MAX:
+            raise ParseError(f"{label}.{field} relative value is out of range")
+        return
+    if operator_name in {"atLeast", "atMost"}:
+        if field not in BOUNDED_OVERRIDE_PROFILE_FIELDS:
+            raise ParseError(f"{label}.{field} does not support bounds")
+        if value < minimum or value > maximum:
+            raise ParseError(f"{label}.{field} bound is out of range")
+        return
+    if field not in RELATIVE_OVERRIDE_PROFILE_FIELDS \
+            or field not in BOUNDED_OVERRIDE_PROFILE_FIELDS:
+        raise ParseError(f"{label}.{field} does not support relative bounds")
+    if value < RELATIVE_OVERRIDE_DELTA_MIN or value > RELATIVE_OVERRIDE_DELTA_MAX:
+        raise ParseError(f"{label}.{field} relative value is out of range")
+    threshold = authored["threshold"]
+    if isinstance(threshold, bool) or not isinstance(threshold, int):
+        raise ParseError(f"{label}.{field}.threshold must be an integer")
+    if threshold < minimum or threshold > maximum:
+        raise ParseError(f"{label}.{field} threshold is out of range")
+
+
+def _validate_behavior_catalog_v1(catalog: object) -> None:
+    """Validate the retired catalog contract accepted only by the migrator."""
+
+    top_fields = {
+        "catalogVersion", "schema", "generatedCompatibilityOutput",
+        "classProfiles", "classRules", "speciesClassRules",
+        "overrideProfiles", "conditionalStates",
     }
-    if not duplicate_orders_by_name:
-        return raw_source
+    catalog = _catalog_object(catalog, "behavior catalog", top_fields)
+    if catalog["catalogVersion"] != 1:
+        raise ParseError("behavior catalog version must be 1")
+    if catalog["schema"] != "../tools/overworld/behavior_schema.json":
+        raise ParseError("behavior catalog names an unexpected field schema")
+    if catalog["generatedCompatibilityOutput"] != "OverworldWildBehaviorData.c":
+        raise ParseError("behavior catalog names an unexpected compatibility output")
 
-    preferred_profile_orders = preferred_profile_orders or set()
-    behavior_source = strip_c_comments(join_line_continuations(raw_source))
-    expressions, _ = parse_define_expressions(DEFINE_SOURCE_FILES)
+    class_profiles = catalog["classProfiles"]
+    if not isinstance(class_profiles, list) or not class_profiles:
+        raise ParseError("behavior catalog needs at least one class profile")
+    if len(class_profiles) > 0xFF:
+        raise ParseError("behavior catalog exceeds the u8 behavior-class limit")
+    class_symbols = []
+    for index, raw_profile in enumerate(class_profiles):
+        label = f"class profile {index}"
+        profile = _catalog_object(raw_profile, label, {"symbol", "fields"})
+        symbol = profile["symbol"]
+        if not isinstance(symbol, str) or not re.fullmatch(
+            rf"{re.escape(CLASS_PREFIX)}[A-Za-z0-9_]+", symbol
+        ):
+            raise ParseError(f"{label} has an invalid C symbol")
+        class_symbols.append(symbol)
+        fields = _catalog_object(profile["fields"], f"{label}.fields", set(PROFILE_FIELDS))
+        for field in PROFILE_FIELDS:
+            _catalog_expression(fields[field], f"{label}.fields.{field}")
+    if len(class_symbols) != len(set(class_symbols)):
+        raise ParseError("class profile symbols must be unique")
+    if class_symbols[0] != "OW_WILD_BEHAVIOR_CLASS_DEFAULT":
+        raise ParseError("the first class profile must be OW_WILD_BEHAVIOR_CLASS_DEFAULT")
+    missing_runtime_classes = RUNTIME_OWNED_CLASS_SYMBOLS - set(class_symbols)
+    if missing_runtime_classes:
+        raise ParseError(
+            "behavior catalog is missing runtime-owned class symbols: "
+            + ", ".join(sorted(missing_runtime_classes))
+        )
+
+    class_rules = catalog["classRules"]
+    species_rules = catalog["speciesClassRules"]
+    if not isinstance(class_rules, list) or len(class_rules) > 0xFFFF:
+        raise ParseError("class rules must fit u16 storage")
+    if not isinstance(species_rules, list) or len(species_rules) > 0xFFFF:
+        raise ParseError("species class rules must fit u16 storage")
+    for index, raw_rule in enumerate(class_rules):
+        label = f"class rule {index}"
+        rule = _catalog_object(raw_rule, label, {"match", "profile"})
+        _validate_catalog_match(rule["match"], f"{label}.match")
+        _catalog_expression(rule["profile"], f"{label}.profile")
+    for index, raw_rule in enumerate(species_rules):
+        label = f"species class rule {index}"
+        rule = _catalog_object(raw_rule, label, {"species", "profile"})
+        _catalog_expression(rule["species"], f"{label}.species")
+        _catalog_expression(rule["profile"], f"{label}.profile")
+
+    override_profiles = catalog["overrideProfiles"]
+    if not isinstance(override_profiles, list) or not override_profiles:
+        raise ParseError("behavior catalog needs at least one override profile")
+    if len(override_profiles) > MAX_RUNTIME_OVERRIDE_PROFILES:
+        raise ParseError(
+            f"behavior catalog supports at most {MAX_RUNTIME_OVERRIDE_PROFILES} override profiles"
+        )
+    override_names = []
+    total_members = 0
+    for index, raw_profile in enumerate(override_profiles):
+        label = f"override profile {index}"
+        profile = _catalog_object(raw_profile, label, {"name", "target", "fields"})
+        name = profile["name"]
+        if not isinstance(name, str) or not name.strip() or "*/" in name \
+                or "\n" in name or "\r" in name:
+            raise ParseError(f"{label} has an invalid name")
+        override_names.append(name.casefold())
+        target = _catalog_object(
+            profile["target"], f"{label}.target", {"mode", "match", "members"}
+        )
+        if target["mode"] not in {"disabled", "members", "all"}:
+            raise ParseError(f"{label}.target has an invalid mode")
+        _validate_catalog_match(target["match"], f"{label}.target.match")
+        members = target["members"]
+        if not isinstance(members, list):
+            raise ParseError(f"{label}.target.members must be an array")
+        for member_index, member in enumerate(members):
+            _catalog_expression(member, f"{label}.target.members[{member_index}]")
+        member_keys = [(type(member).__name__, str(member)) for member in members]
+        if len(member_keys) != len(set(member_keys)):
+            raise ParseError(f"{label}.target members must be unique")
+        if target["mode"] == "members" and not members:
+            raise ParseError(f"{label}.target members mode needs at least one member")
+        total_members += len(members)
+        fields = profile["fields"]
+        if not isinstance(fields, dict):
+            raise ParseError(f"{label}.fields must be an object")
+        for field, authored in fields.items():
+            _validate_catalog_override_field(field, authored, label)
+    if len(override_names) != len(set(override_names)):
+        raise ParseError("override profile names must be unique")
+    if total_members > 0xFFFF:
+        raise ParseError("override member table exceeds u16 storage")
+    actual_names = {profile["name"] for profile in override_profiles}
+    for required_name in ("Follower Pokemon", "Default Active", "Default Tired"):
+        if required_name not in actual_names:
+            raise ParseError(f"runtime-owned override profile is missing: {required_name}")
+
+    conditional_states = catalog["conditionalStates"]
+    conditional_fields = {
+        "parentProfile", "overrideProfile", "terrainMask",
+        "terrainOverrideMask", "minMovementSpeed", "maxMovementSpeed",
+    }
+    if not isinstance(conditional_states, list) or len(conditional_states) > 0xFFFF:
+        raise ParseError("conditional states must fit u16 storage")
+    for index, raw_state in enumerate(conditional_states):
+        label = f"conditional state {index}"
+        state = _catalog_object(raw_state, label, conditional_fields)
+        for field in conditional_fields:
+            _catalog_expression(state[field], f"{label}.{field}")
+
+
+BEHAVIOR_CATALOG_V2_SCHEMA = "../tools/overworld/schemas/behavior-authoring-v2.schema.json"
+BEHAVIOR_FIELD_SCHEMA = "../tools/overworld/behavior_schema.json"
+CATALOG_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
+
+
+class _CompatibilityCatalog(dict):
+    """V1-shaped working view backed by a canonical V2 catalog."""
+
+    source_v2: dict
+
+
+class _CompatibilityProfile(dict):
+    profile_id: str
+    application_id: str | None
+
+
+class _CompatibilitySelector(dict):
+    selector_id: str
+
+
+def _validate_catalog_id(value: object, label: str) -> str:
+    if not isinstance(value, str) or CATALOG_ID_RE.fullmatch(value) is None:
+        raise ParseError(f"{label} must be a stable lowercase kebab-case ID")
+    return value
+
+
+def _validate_catalog_target(value: object, label: str) -> int:
+    target = _catalog_object(value, label, {"mode", "match", "members"})
+    if target["mode"] not in {"disabled", "members", "all"}:
+        raise ParseError(f"{label}.mode is invalid")
+    _validate_catalog_match(target["match"], f"{label}.match")
+    members = target["members"]
+    if not isinstance(members, list):
+        raise ParseError(f"{label}.members must be an array")
+    member_keys = []
+    for index, member in enumerate(members):
+        _catalog_expression(member, f"{label}.members[{index}]")
+        member_keys.append((type(member).__name__, str(member)))
+    if len(member_keys) != len(set(member_keys)):
+        raise ParseError(f"{label}.members must be unique")
+    if target["mode"] == "members" and not members:
+        raise ParseError(f"{label} members mode needs at least one member")
+    return len(members)
+
+
+def _catalog_profile_chain(
+    profile_id: str,
+    profiles_by_id: dict[str, dict],
+) -> list[dict]:
+    chain = []
+    seen = set()
+    cursor: str | None = profile_id
+    while cursor is not None:
+        if cursor in seen:
+            raise ParseError(f"profile inheritance contains a cycle at {cursor}")
+        seen.add(cursor)
+        profile = profiles_by_id.get(cursor)
+        if profile is None:
+            raise ParseError(f"profile {profile_id} has missing parent {cursor}")
+        chain.append(profile)
+        cursor = profile["parent"]
+    chain.reverse()
+    return chain
+
+
+def _validate_behavior_catalog_v2(catalog: object) -> None:
+    """Validate the unified named-profile authoring contract."""
+
+    top_fields = {
+        "catalogVersion", "schema", "fieldSchema", "generatedCompatibilityOutput",
+        "rootProfile", "profiles", "selectors", "applications",
+        "conditionalStates", "runtimeBindings",
+    }
+    catalog = _catalog_object(catalog, "behavior catalog", top_fields)
+    if catalog["catalogVersion"] != 2:
+        raise ParseError("behavior catalog version must be 2")
+    if catalog["schema"] != BEHAVIOR_CATALOG_V2_SCHEMA:
+        raise ParseError("behavior catalog names an unexpected authoring schema")
+    if catalog["fieldSchema"] != BEHAVIOR_FIELD_SCHEMA:
+        raise ParseError("behavior catalog names an unexpected field schema")
+    if catalog["generatedCompatibilityOutput"] != "OverworldWildBehaviorData.c":
+        raise ParseError("behavior catalog names an unexpected compatibility output")
+
+    root_profile_id = _validate_catalog_id(catalog["rootProfile"], "rootProfile")
+    profiles = catalog["profiles"]
+    if not isinstance(profiles, list) or not profiles:
+        raise ParseError("behavior catalog needs at least one profile")
+    profile_ids = []
+    profile_names = []
+    profiles_by_id = {}
+    for index, raw_profile in enumerate(profiles):
+        label = f"profile {index}"
+        profile = _catalog_object(raw_profile, label, {"id", "name", "parent", "fields"})
+        profile_id = _validate_catalog_id(profile["id"], f"{label}.id")
+        name = profile["name"]
+        if not isinstance(name, str) or not name.strip() or "*/" in name \
+                or "\n" in name or "\r" in name:
+            raise ParseError(f"{label}.name is invalid")
+        parent = profile["parent"]
+        if parent is not None:
+            _validate_catalog_id(parent, f"{label}.parent")
+            if parent == profile_id:
+                raise ParseError(f"{label} cannot inherit from itself")
+        fields = profile["fields"]
+        if not isinstance(fields, dict):
+            raise ParseError(f"{label}.fields must be an object")
+        for field, authored in fields.items():
+            _validate_catalog_override_field(field, authored, label)
+        profile_ids.append(profile_id)
+        profile_names.append(name.casefold())
+        profiles_by_id[profile_id] = profile
+    if len(profile_ids) != len(set(profile_ids)):
+        raise ParseError("profile IDs must be unique")
+    if len(profile_names) != len(set(profile_names)):
+        raise ParseError("profile names must be unique")
+    if root_profile_id not in profiles_by_id:
+        raise ParseError("rootProfile must reference an existing profile")
+    root_profile = profiles_by_id[root_profile_id]
+    if root_profile["parent"] is not None:
+        raise ParseError("the root profile cannot have a parent")
+    if set(root_profile["fields"]) != set(PROFILE_FIELDS):
+        raise ParseError("the root profile must name every schema field")
+    for field, authored in root_profile["fields"].items():
+        if authored["operator"] != "replace":
+            raise ParseError(f"root profile field {field} must use replace")
+    for profile_id in profile_ids:
+        chain = _catalog_profile_chain(profile_id, profiles_by_id)
+        if chain[0]["id"] != root_profile_id:
+            raise ParseError(f"profile {profile_id} does not inherit from the root profile")
+
+    selectors = catalog["selectors"]
+    if not isinstance(selectors, list) or len(selectors) > 0xFFFF:
+        raise ParseError("selectors must fit u16 storage")
+    selector_ids = []
+    selectors_by_id = {}
+    for index, raw_selector in enumerate(selectors):
+        label = f"selector {index}"
+        selector = _catalog_object(raw_selector, label, {"id", "match", "profile"})
+        selector_id = _validate_catalog_id(selector["id"], f"{label}.id")
+        profile_id = _validate_catalog_id(selector["profile"], f"{label}.profile")
+        if profile_id not in profiles_by_id:
+            raise ParseError(f"{label} references missing profile {profile_id}")
+        _validate_catalog_match(selector["match"], f"{label}.match")
+        selector_ids.append(selector_id)
+        selectors_by_id[selector_id] = selector
+    if len(selector_ids) != len(set(selector_ids)):
+        raise ParseError("selector IDs must be unique")
+
+    applications = catalog["applications"]
+    if not isinstance(applications, list) or not applications:
+        raise ParseError("behavior catalog needs at least one application")
+    if len(applications) > MAX_RUNTIME_OVERRIDE_PROFILES:
+        raise ParseError(
+            f"behavior catalog supports at most {MAX_RUNTIME_OVERRIDE_PROFILES} applications"
+        )
+    application_ids = []
+    applications_by_id = {}
+    total_members = 0
+    for index, raw_application in enumerate(applications):
+        label = f"application {index}"
+        application = _catalog_object(raw_application, label, {"id", "profile", "target"})
+        application_id = _validate_catalog_id(application["id"], f"{label}.id")
+        profile_id = _validate_catalog_id(application["profile"], f"{label}.profile")
+        if profile_id not in profiles_by_id:
+            raise ParseError(f"{label} references missing profile {profile_id}")
+        total_members += _validate_catalog_target(application["target"], f"{label}.target")
+        application_ids.append(application_id)
+        applications_by_id[application_id] = application
+    if len(application_ids) != len(set(application_ids)):
+        raise ParseError("application IDs must be unique")
+    if total_members > 0xFFFF:
+        raise ParseError("application member table exceeds u16 storage")
+
+    for profile in profiles:
+        for field in ("activeProfile", "tiredProfile"):
+            authored = profile["fields"].get(field)
+            if authored is None:
+                continue
+            if authored["operator"] != "replace":
+                raise ParseError(f"profile {profile['id']} {field} must use replace")
+            reference = authored["value"]
+            if not isinstance(reference, str) or reference not in applications_by_id:
+                raise ParseError(
+                    f"profile {profile['id']} {field} references missing application {reference}"
+                )
+
+    conditional_fields = {
+        "id", "parentApplication", "application", "terrainMask",
+        "terrainOverrideMask", "minMovementSpeed", "maxMovementSpeed",
+    }
+    conditional_states = catalog["conditionalStates"]
+    if not isinstance(conditional_states, list) or len(conditional_states) > 0xFFFF:
+        raise ParseError("conditional states must fit u16 storage")
+    conditional_ids = set()
+    for index, raw_state in enumerate(conditional_states):
+        label = f"conditional state {index}"
+        state = _catalog_object(raw_state, label, conditional_fields)
+        condition_id = _validate_catalog_id(state["id"], f"{label}.id")
+        if condition_id in conditional_ids:
+            raise ParseError(f"conditional state id is duplicated: {condition_id}")
+        conditional_ids.add(condition_id)
+        parent = _validate_catalog_id(
+            state["parentApplication"], f"{label}.parentApplication"
+        )
+        if parent not in applications_by_id:
+            raise ParseError(f"{label} references missing parent application {parent}")
+        application = state["application"]
+        if application is not None:
+            application = _validate_catalog_id(application, f"{label}.application")
+            if application not in applications_by_id:
+                raise ParseError(f"{label} references missing application {application}")
+        for field in conditional_fields - {"id", "parentApplication", "application"}:
+            _catalog_expression(state[field], f"{label}.{field}")
+
+    runtime = _catalog_object(catalog["runtimeBindings"], "runtimeBindings", {
+        "classOrder", "speciesSelectors", "pickedUpProfile",
+        "followerApplication", "defaultActiveApplication", "defaultTiredApplication",
+        "forcedAsleepApplication", "forcedAsleepClassToken",
+    })
+    class_order = runtime["classOrder"]
+    if not isinstance(class_order, list) or not class_order or len(class_order) > 0xFF:
+        raise ParseError("runtimeBindings.classOrder must contain 1..255 entries")
+    class_symbols = []
+    class_profile_ids = []
+    for index, raw_binding in enumerate(class_order):
+        label = f"runtime class binding {index}"
+        binding = _catalog_object(raw_binding, label, {"profile", "symbol"})
+        profile_id = _validate_catalog_id(binding["profile"], f"{label}.profile")
+        if profile_id not in profiles_by_id:
+            raise ParseError(f"{label} references missing profile {profile_id}")
+        symbol = binding["symbol"]
+        if not isinstance(symbol, str) or not re.fullmatch(
+            rf"{re.escape(CLASS_PREFIX)}[A-Za-z0-9_]+", symbol
+        ):
+            raise ParseError(f"{label}.symbol is invalid")
+        class_profile_ids.append(profile_id)
+        class_symbols.append(symbol)
+        materialized = {}
+        for profile in _catalog_profile_chain(profile_id, profiles_by_id):
+            for field, authored in profile["fields"].items():
+                if authored["operator"] != "replace":
+                    raise ParseError(
+                        f"selected profile {profile_id} cannot materialize {field} "
+                        f"with {authored['operator']}"
+                    )
+                materialized[field] = authored["value"]
+        if set(materialized) != set(PROFILE_FIELDS):
+            raise ParseError(f"selected profile {profile_id} does not materialize every field")
+    if len(class_symbols) != len(set(class_symbols)):
+        raise ParseError("runtime class symbols must be unique")
+    if len(class_profile_ids) != len(set(class_profile_ids)):
+        raise ParseError("runtime class profiles must be unique")
+    if class_order[0] != {
+        "profile": root_profile_id,
+        "symbol": "OW_WILD_BEHAVIOR_CLASS_DEFAULT",
+    }:
+        raise ParseError("the first runtime class binding must be the root/default profile")
+    missing_runtime_classes = RUNTIME_OWNED_CLASS_SYMBOLS - set(class_symbols)
+    if missing_runtime_classes:
+        raise ParseError(
+            "behavior catalog is missing runtime-owned class symbols: "
+            + ", ".join(sorted(missing_runtime_classes))
+        )
+    for selector in selectors:
+        if selector["profile"] not in class_profile_ids:
+            raise ParseError(
+                f"selector {selector['id']} references a profile without a runtime class binding"
+            )
+    species_selectors = runtime["speciesSelectors"]
+    if not isinstance(species_selectors, list):
+        raise ParseError("runtimeBindings.speciesSelectors must be an array")
+    for index, selector_id in enumerate(species_selectors):
+        selector_id = _validate_catalog_id(
+            selector_id, f"runtimeBindings.speciesSelectors[{index}]"
+        )
+        if selector_id not in selectors_by_id:
+            raise ParseError(f"runtime species selector is missing: {selector_id}")
+    if len(species_selectors) != len(set(species_selectors)):
+        raise ParseError("runtime species selectors must be unique")
+
+    picked_up = _validate_catalog_id(runtime["pickedUpProfile"], "runtimeBindings.pickedUpProfile")
+    if picked_up not in class_profile_ids:
+        raise ParseError("runtime picked-up profile needs a class binding")
+    for field in (
+        "followerApplication", "defaultActiveApplication",
+        "defaultTiredApplication", "forcedAsleepApplication",
+    ):
+        application_id = _validate_catalog_id(runtime[field], f"runtimeBindings.{field}")
+        if application_id not in applications_by_id:
+            raise ParseError(f"runtimeBindings.{field} references a missing application")
+    _catalog_expression(runtime["forcedAsleepClassToken"], "runtimeBindings.forcedAsleepClassToken")
+
+
+def validate_behavior_catalog(catalog: object) -> None:
+    """Validate a canonical V2 catalog or a legacy V1 migration input."""
+
+    if not isinstance(catalog, dict):
+        raise ParseError("behavior catalog must be an object")
+    version = catalog.get("catalogVersion")
+    if version == 1:
+        _validate_behavior_catalog_v1(catalog)
+        return
+    if version == 2:
+        _validate_behavior_catalog_v2(catalog)
+        return
+    raise ParseError("behavior catalog version must be 1 or 2")
+
+
+def _unique_catalog_id(raw: object, used: set[str], fallback: str) -> str:
+    candidate = re.sub(r"[^a-z0-9]+", "-", str(raw).casefold()).strip("-")
+    if not candidate or not candidate[0].isalpha():
+        candidate = fallback
+    base = candidate
+    suffix = 2
+    while candidate in used:
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+    used.add(candidate)
+    return candidate
+
+
+def _legacy_override_reference_index(value: object, override_names: list[str]) -> int:
+    raw = clean_token(str(value))
+    named = {
+        "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON": "Follower Pokemon",
+        "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_ACTIVE": "Default Active",
+        "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_TIRED": "Default Tired",
+    }
+    if raw in named:
+        try:
+            return override_names.index(named[raw])
+        except ValueError as error:
+            raise ParseError(f"legacy profile reference is missing: {raw}") from error
+    try:
+        return int(raw, 0)
+    except ValueError as error:
+        raise ParseError(f"legacy profile reference is not positional: {raw}") from error
+
+
+def migrate_behavior_catalog_v1(catalog: dict) -> dict:
+    """Convert a validated V1 catalog into the canonical V2 model."""
+
+    _validate_behavior_catalog_v1(catalog)
+    used_profile_ids: set[str] = set()
+    class_profile_ids = []
+    symbol_to_profile_id = {}
+    for index, profile in enumerate(catalog["classProfiles"]):
+        symbol = profile["symbol"]
+        if index == 0:
+            profile_id = _unique_catalog_id("default", used_profile_ids, "default")
+        else:
+            raw_id = symbol.removeprefix(CLASS_PREFIX).replace("AGRESSIVE", "AGGRESSIVE")
+            profile_id = _unique_catalog_id(raw_id, used_profile_ids, "profile")
+        class_profile_ids.append(profile_id)
+        symbol_to_profile_id[symbol] = profile_id
+
+    override_profile_ids = []
+    application_ids = []
+    used_application_ids: set[str] = set()
+    for profile in catalog["overrideProfiles"]:
+        profile_id = _unique_catalog_id(profile["name"], used_profile_ids, "profile")
+        override_profile_ids.append(profile_id)
+        application_ids.append(
+            _unique_catalog_id(f"apply-{profile_id}", used_application_ids, "application")
+        )
+    override_names = [profile["name"] for profile in catalog["overrideProfiles"]]
+
+    def stable_reference(authored: dict) -> dict:
+        result = copy.deepcopy(authored)
+        index = _legacy_override_reference_index(result["value"], override_names)
+        if index < 0 or index >= len(application_ids):
+            raise ParseError(f"legacy application reference is out of range: {result['value']}")
+        result["value"] = application_ids[index]
+        return result
+
+    root_fields = {
+        field: {"operator": "replace", "value": value}
+        for field, value in catalog["classProfiles"][0]["fields"].items()
+    }
+    for field in ("activeProfile", "tiredProfile"):
+        root_fields[field] = stable_reference(root_fields[field])
+    profiles = [{
+        "id": class_profile_ids[0],
+        "name": humanize_symbol(catalog["classProfiles"][0]["symbol"], CLASS_PREFIX),
+        "parent": None,
+        "fields": root_fields,
+    }]
+    root_raw_fields = catalog["classProfiles"][0]["fields"]
+    for index, profile in enumerate(catalog["classProfiles"][1:], 1):
+        fields = {
+            field: {"operator": "replace", "value": value}
+            for field, value in profile["fields"].items()
+            if value != root_raw_fields[field]
+        }
+        for field in ("activeProfile", "tiredProfile"):
+            if field in fields:
+                fields[field] = stable_reference(fields[field])
+        profiles.append({
+            "id": class_profile_ids[index],
+            "name": humanize_symbol(profile["symbol"], CLASS_PREFIX),
+            "parent": class_profile_ids[0],
+            "fields": fields,
+        })
+    for index, profile in enumerate(catalog["overrideProfiles"]):
+        fields = copy.deepcopy(profile["fields"])
+        for field in ("activeProfile", "tiredProfile"):
+            if field in fields:
+                fields[field] = stable_reference(fields[field])
+        profiles.append({
+            "id": override_profile_ids[index],
+            "name": profile["name"],
+            "parent": class_profile_ids[0],
+            "fields": fields,
+        })
+
+    used_selector_ids: set[str] = set()
+    selectors = []
+    species_selector_ids = []
+    for index, rule in enumerate(catalog["classRules"], 1):
+        selector_id = _unique_catalog_id(
+            f"select-rule-{index}", used_selector_ids, "selector"
+        )
+        selectors.append({
+            "id": selector_id,
+            "match": copy.deepcopy(rule["match"]),
+            "profile": symbol_to_profile_id[rule["profile"]],
+        })
+    for rule in catalog["speciesClassRules"]:
+        selector_id = _unique_catalog_id(
+            f"select-{str(rule['species']).removeprefix('SPECIES_')}",
+            used_selector_ids,
+            "selector",
+        )
+        match = default_behavior_match_raws()
+        match["species"] = rule["species"]
+        selectors.append({
+            "id": selector_id,
+            "match": match,
+            "profile": symbol_to_profile_id[rule["profile"]],
+        })
+        species_selector_ids.append(selector_id)
+
+    applications = [
+        {
+            "id": application_ids[index],
+            "profile": override_profile_ids[index],
+            "target": copy.deepcopy(profile["target"]),
+        }
+        for index, profile in enumerate(catalog["overrideProfiles"])
+    ]
+
+    def application_reference(value: object, *, allow_none: bool = False) -> str | None:
+        raw = clean_token(str(value))
+        if allow_none and raw == CONDITIONAL_PROFILE_NONE_RAW:
+            return None
+        index = _legacy_override_reference_index(raw, override_names)
+        if allow_none and index == CONDITIONAL_PROFILE_NONE_VALUE:
+            return None
+        if index < 0 or index >= len(application_ids):
+            raise ParseError(f"legacy application reference is out of range: {raw}")
+        return application_ids[index]
+
+    used_condition_ids: set[str] = set()
+    conditional_states = [
+        {
+            "id": _unique_catalog_id(
+                f"condition-{index + 1}", used_condition_ids, "condition"
+            ),
+            "parentApplication": application_reference(state["parentProfile"]),
+            "application": application_reference(state["overrideProfile"], allow_none=True),
+            "terrainMask": state["terrainMask"],
+            "terrainOverrideMask": state["terrainOverrideMask"],
+            "minMovementSpeed": state["minMovementSpeed"],
+            "maxMovementSpeed": state["maxMovementSpeed"],
+        }
+        for index, state in enumerate(catalog["conditionalStates"])
+    ]
+
+    application_by_name = {
+        profile["name"]: application_ids[index]
+        for index, profile in enumerate(catalog["overrideProfiles"])
+    }
+    forced_token = "OW_WILD_BEHAVIOR_MATCH_CLASS_FORCED_ASLEEP"
+    forced_application = next(
+        (
+            applications[index]["id"]
+            for index, profile in enumerate(catalog["overrideProfiles"])
+            if profile["target"]["match"]["behaviorClass"] == forced_token
+        ),
+        None,
+    )
+    if forced_application is None:
+        raise ParseError("legacy catalog has no forced-asleep application")
+    migrated = {
+        "catalogVersion": 2,
+        "schema": BEHAVIOR_CATALOG_V2_SCHEMA,
+        "fieldSchema": BEHAVIOR_FIELD_SCHEMA,
+        "generatedCompatibilityOutput": catalog["generatedCompatibilityOutput"],
+        "rootProfile": class_profile_ids[0],
+        "profiles": profiles,
+        "selectors": selectors,
+        "applications": applications,
+        "conditionalStates": conditional_states,
+        "runtimeBindings": {
+            "classOrder": [
+                {"profile": class_profile_ids[index], "symbol": profile["symbol"]}
+                for index, profile in enumerate(catalog["classProfiles"])
+            ],
+            "speciesSelectors": species_selector_ids,
+            "pickedUpProfile": symbol_to_profile_id["OW_WILD_BEHAVIOR_CLASS_PICKED_UP"],
+            "followerApplication": application_by_name["Follower Pokemon"],
+            "defaultActiveApplication": application_by_name["Default Active"],
+            "defaultTiredApplication": application_by_name["Default Tired"],
+            "forcedAsleepApplication": forced_application,
+            "forcedAsleepClassToken": forced_token,
+        },
+    }
+    _validate_behavior_catalog_v2(migrated)
+    return migrated
+
+
+def _lower_profile_reference(authored: dict, application_indexes: dict[str, int]) -> dict:
+    result = copy.deepcopy(authored)
+    reference = result["value"]
+    if reference not in application_indexes:
+        raise ParseError(f"profile field references missing application {reference}")
+    result["value"] = application_indexes[reference]
+    return result
+
+
+def lower_behavior_catalog_v2(catalog: dict) -> dict:
+    """Lower the V2 graph to the existing positional runtime authoring shape."""
+
+    _validate_behavior_catalog_v2(catalog)
+    profiles_by_id = {profile["id"]: profile for profile in catalog["profiles"]}
+    application_indexes = {
+        application["id"]: index
+        for index, application in enumerate(catalog["applications"])
+    }
+    class_symbol_by_profile = {
+        binding["profile"]: binding["symbol"]
+        for binding in catalog["runtimeBindings"]["classOrder"]
+    }
+
+    def materialize(profile_id: str) -> dict:
+        fields = {}
+        for profile in _catalog_profile_chain(profile_id, profiles_by_id):
+            for field, authored in profile["fields"].items():
+                if authored["operator"] != "replace":
+                    raise ParseError(
+                        f"selected profile {profile_id} cannot materialize {field} "
+                        f"with {authored['operator']}"
+                    )
+                value = authored
+                if field in {"activeProfile", "tiredProfile"}:
+                    value = _lower_profile_reference(value, application_indexes)
+                fields[field] = str(value["value"])
+        return fields
+
+    class_profiles = []
+    for binding in catalog["runtimeBindings"]["classOrder"]:
+        profile = _CompatibilityProfile({
+            "symbol": binding["symbol"],
+            "fields": materialize(binding["profile"]),
+        })
+        profile.profile_id = binding["profile"]
+        profile.application_id = None
+        class_profiles.append(profile)
+
+    species_selector_ids = set(catalog["runtimeBindings"]["speciesSelectors"])
+    class_rules = []
+    species_rules = []
+    defaults = default_behavior_match_raws()
+    for selector in catalog["selectors"]:
+        profile_symbol = class_symbol_by_profile[selector["profile"]]
+        rule = _CompatibilitySelector({
+            "match": copy.deepcopy(selector["match"]),
+            "profile": profile_symbol,
+        })
+        rule.selector_id = selector["id"]
+        if selector["id"] not in species_selector_ids:
+            class_rules.append(rule)
+            continue
+        match = selector["match"]
+        if any(
+            match[field] != defaults[field]
+            for field in MATCH_FIELDS
+            if field != "species"
+        ) or match["species"] == defaults["species"]:
+            raise ParseError(
+                f"runtime species selector {selector['id']} must match one direct species"
+            )
+        species_rule = _CompatibilitySelector({
+            "species": match["species"],
+            "profile": profile_symbol,
+        })
+        species_rule.selector_id = selector["id"]
+        species_rules.append(species_rule)
+
+    override_profiles = []
+    for application in catalog["applications"]:
+        source_profile = profiles_by_id[application["profile"]]
+        fields = copy.deepcopy(source_profile["fields"])
+        for field in ("activeProfile", "tiredProfile"):
+            if field in fields:
+                fields[field] = _lower_profile_reference(fields[field], application_indexes)
+        profile = _CompatibilityProfile({
+            "name": source_profile["name"],
+            "target": copy.deepcopy(application["target"]),
+            "fields": fields,
+        })
+        profile.profile_id = source_profile["id"]
+        profile.application_id = application["id"]
+        override_profiles.append(profile)
+
+    conditional_states = []
+    for state in catalog["conditionalStates"]:
+        conditional_states.append({
+            "parentProfile": str(application_indexes[state["parentApplication"]]),
+            "overrideProfile": (
+                CONDITIONAL_PROFILE_NONE_RAW
+                if state["application"] is None
+                else str(application_indexes[state["application"]])
+            ),
+            "terrainMask": state["terrainMask"],
+            "terrainOverrideMask": state["terrainOverrideMask"],
+            "minMovementSpeed": state["minMovementSpeed"],
+            "maxMovementSpeed": state["maxMovementSpeed"],
+        })
+
+    lowered = _CompatibilityCatalog({
+        "catalogVersion": 1,
+        "schema": BEHAVIOR_FIELD_SCHEMA,
+        "generatedCompatibilityOutput": catalog["generatedCompatibilityOutput"],
+        "classProfiles": class_profiles,
+        "classRules": class_rules,
+        "speciesClassRules": species_rules,
+        "overrideProfiles": override_profiles,
+        "conditionalStates": conditional_states,
+    })
+    lowered.source_v2 = copy.deepcopy(catalog)
+    _validate_behavior_catalog_v1(lowered)
+    return lowered
+
+
+def _compat_application_reference(
+    value: object,
+    application_ids: list[str],
+    runtime_bindings: dict,
+    *,
+    allow_none: bool = False,
+) -> str | None:
+    raw = clean_token(str(value))
+    if allow_none and raw == CONDITIONAL_PROFILE_NONE_RAW:
+        return None
+    named = {
+        "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON": "followerApplication",
+        "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_ACTIVE": "defaultActiveApplication",
+        "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_TIRED": "defaultTiredApplication",
+    }
+    if raw in named:
+        reference = runtime_bindings[named[raw]]
+        if reference not in application_ids:
+            raise ParseError(f"runtime application reference was removed: {raw}")
+        return reference
+    try:
+        index = int(raw, 0)
+    except ValueError as error:
+        raise ParseError(f"application reference is not positional: {raw}") from error
+    if allow_none and index == CONDITIONAL_PROFILE_NONE_VALUE:
+        return None
+    if index < 0 or index >= len(application_ids):
+        raise ParseError(f"application reference is out of range: {raw}")
+    return application_ids[index]
+
+
+def _compat_stable_operator_fields(
+    fields: dict,
+    application_ids: list[str],
+    runtime_bindings: dict,
+) -> dict:
+    result = copy.deepcopy(fields)
+    for field in ("activeProfile", "tiredProfile"):
+        authored = result.get(field)
+        if authored is None:
+            continue
+        authored["value"] = _compat_application_reference(
+            authored["value"], application_ids, runtime_bindings
+        )
+    return result
+
+
+def lift_compatibility_behavior_catalog(catalog: dict) -> dict:
+    """Merge a V1-shaped Workshop edit back into its canonical V2 graph."""
+
+    _validate_behavior_catalog_v1(catalog)
+    source = getattr(catalog, "source_v2", None)
+    if source is None:
+        return migrate_behavior_catalog_v1(catalog)
+    source = copy.deepcopy(source)
+    _validate_behavior_catalog_v2(source)
+    root_id = source["rootProfile"]
+    old_profiles = {profile["id"]: profile for profile in source["profiles"]}
+    old_runtime = source["runtimeBindings"]
+    old_class_ids = {
+        binding["profile"] for binding in old_runtime["classOrder"]
+    }
+    old_application_profile_ids = {
+        application["profile"] for application in source["applications"]
+    }
+    old_materialized = {
+        profile.profile_id: dict(profile["fields"])
+        for profile in lower_behavior_catalog_v2(source)["classProfiles"]
+    }
+
+    used_profile_ids = set(old_profiles)
+    used_application_ids = {application["id"] for application in source["applications"]}
+    application_ids = []
+    application_profile_ids = []
+    for profile in catalog["overrideProfiles"]:
+        profile_id = getattr(profile, "profile_id", None)
+        if profile_id not in old_profiles:
+            profile_id = _unique_catalog_id(profile["name"], used_profile_ids, "profile")
+        application_id = getattr(profile, "application_id", None)
+        if application_id not in used_application_ids:
+            application_id = _unique_catalog_id(
+                f"apply-{profile_id}", used_application_ids, "application"
+            )
+        application_profile_ids.append(profile_id)
+        application_ids.append(application_id)
+
+    class_profile_ids = []
+    class_symbols = []
+    for index, profile in enumerate(catalog["classProfiles"]):
+        profile_id = getattr(profile, "profile_id", None)
+        if index == 0:
+            profile_id = root_id
+        elif profile_id not in old_profiles:
+            raw_id = profile["symbol"].removeprefix(CLASS_PREFIX).replace(
+                "AGRESSIVE", "AGGRESSIVE"
+            )
+            profile_id = _unique_catalog_id(raw_id, used_profile_ids, "profile")
+        class_profile_ids.append(profile_id)
+        class_symbols.append(profile["symbol"])
+
+    runtime = copy.deepcopy(old_runtime)
+    runtime["classOrder"] = [
+        {"profile": class_profile_ids[index], "symbol": symbol}
+        for index, symbol in enumerate(class_symbols)
+    ]
+    symbol_to_profile_id = dict(zip(class_symbols, class_profile_ids))
+    if "OW_WILD_BEHAVIOR_CLASS_PICKED_UP" not in symbol_to_profile_id:
+        raise ParseError("runtime-owned picked-up profile cannot be removed")
+    runtime["pickedUpProfile"] = symbol_to_profile_id[
+        "OW_WILD_BEHAVIOR_CLASS_PICKED_UP"
+    ]
+    for binding_name in (
+        "followerApplication", "defaultActiveApplication",
+        "defaultTiredApplication", "forcedAsleepApplication",
+    ):
+        if runtime[binding_name] not in application_ids:
+            raise ParseError(f"runtime-owned {binding_name} cannot be removed")
+
+    updated_profiles = {}
+    root_fields = {}
+    for field, raw in catalog["classProfiles"][0]["fields"].items():
+        authored = {"operator": "replace", "value": raw}
+        if field in {"activeProfile", "tiredProfile"}:
+            authored["value"] = _compat_application_reference(
+                raw, application_ids, runtime
+            )
+        root_fields[field] = authored
+    updated_profiles[root_id] = {
+        "id": root_id,
+        "name": old_profiles[root_id]["name"],
+        "parent": None,
+        "fields": root_fields,
+    }
+
+    for index, compat_profile in enumerate(catalog["classProfiles"][1:], 1):
+        profile_id = class_profile_ids[index]
+        existing = old_profiles.get(profile_id)
+        if existing is None:
+            local_fields = {}
+            for field, raw in compat_profile["fields"].items():
+                if raw == catalog["classProfiles"][0]["fields"][field]:
+                    continue
+                authored = {"operator": "replace", "value": raw}
+                if field in {"activeProfile", "tiredProfile"}:
+                    authored["value"] = _compat_application_reference(
+                        raw, application_ids, runtime
+                    )
+                local_fields[field] = authored
+            parent = root_id
+        else:
+            local_fields = copy.deepcopy(existing["fields"])
+            previous = old_materialized[profile_id]
+            for field, raw in compat_profile["fields"].items():
+                if raw == previous[field]:
+                    continue
+                authored = {"operator": "replace", "value": raw}
+                if field in {"activeProfile", "tiredProfile"}:
+                    authored["value"] = _compat_application_reference(
+                        raw, application_ids, runtime
+                    )
+                local_fields[field] = authored
+            parent = existing["parent"]
+        updated_profiles[profile_id] = {
+            "id": profile_id,
+            "name": humanize_symbol(compat_profile["symbol"], CLASS_PREFIX),
+            "parent": parent,
+            "fields": local_fields,
+        }
+
+    applications = []
+    for index, compat_profile in enumerate(catalog["overrideProfiles"]):
+        profile_id = application_profile_ids[index]
+        existing = old_profiles.get(profile_id)
+        profile_entry = {
+            "id": profile_id,
+            "name": compat_profile["name"],
+            "parent": existing["parent"] if existing is not None else root_id,
+            "fields": _compat_stable_operator_fields(
+                compat_profile["fields"], application_ids, runtime
+            ),
+        }
+        other = updated_profiles.get(profile_id)
+        if other is not None and other != profile_entry:
+            raise ParseError(
+                f"legacy Workshop cannot safely edit shared profile {profile_id}"
+            )
+        updated_profiles[profile_id] = profile_entry
+        applications.append({
+            "id": application_ids[index],
+            "profile": profile_id,
+            "target": copy.deepcopy(compat_profile["target"]),
+        })
+
+    removed_bound_ids = (
+        old_class_ids | old_application_profile_ids
+    ) - set(updated_profiles)
+    for profile in source["profiles"]:
+        if profile["id"] not in updated_profiles and profile["id"] not in removed_bound_ids:
+            updated_profiles[profile["id"]] = profile
+    ordered_profile_ids = []
+    for profile_id in [
+        *(profile["id"] for profile in source["profiles"]),
+        root_id,
+        *class_profile_ids[1:],
+        *application_profile_ids,
+    ]:
+        if profile_id in updated_profiles and profile_id not in ordered_profile_ids:
+            ordered_profile_ids.append(profile_id)
+
+    selectors = []
+    species_selector_ids = []
+    used_selector_ids = {selector["id"] for selector in source["selectors"]}
+    for rule in catalog["classRules"]:
+        selector_id = getattr(rule, "selector_id", None)
+        if selector_id is None:
+            selector_id = _unique_catalog_id(
+                "select-rule", used_selector_ids, "selector"
+            )
+        selectors.append({
+            "id": selector_id,
+            "match": copy.deepcopy(rule["match"]),
+            "profile": symbol_to_profile_id[rule["profile"]],
+        })
+    for rule in catalog["speciesClassRules"]:
+        selector_id = getattr(rule, "selector_id", None)
+        if selector_id is None:
+            selector_id = _unique_catalog_id(
+                f"select-{str(rule['species']).removeprefix('SPECIES_')}",
+                used_selector_ids,
+                "selector",
+            )
+        match = default_behavior_match_raws()
+        match["species"] = rule["species"]
+        selectors.append({
+            "id": selector_id,
+            "match": match,
+            "profile": symbol_to_profile_id[rule["profile"]],
+        })
+        species_selector_ids.append(selector_id)
+    runtime["speciesSelectors"] = species_selector_ids
+
+    conditional_states = []
+    used_condition_ids = {
+        state["id"] for state in source["conditionalStates"] if "id" in state
+    }
+    for index, state in enumerate(catalog["conditionalStates"]):
+        condition_id = (
+            source["conditionalStates"][index].get("id")
+            if index < len(source["conditionalStates"])
+            else None
+        )
+        if not condition_id:
+            condition_id = _unique_catalog_id(
+                f"condition-{index + 1}", used_condition_ids, "condition"
+            )
+        conditional_states.append({
+            "id": condition_id,
+            "parentApplication": _compat_application_reference(
+                state["parentProfile"], application_ids, runtime
+            ),
+            "application": _compat_application_reference(
+                state["overrideProfile"], application_ids, runtime, allow_none=True
+            ),
+            "terrainMask": state["terrainMask"],
+            "terrainOverrideMask": state["terrainOverrideMask"],
+            "minMovementSpeed": state["minMovementSpeed"],
+            "maxMovementSpeed": state["maxMovementSpeed"],
+        })
+
+    lifted = {
+        "catalogVersion": 2,
+        "schema": BEHAVIOR_CATALOG_V2_SCHEMA,
+        "fieldSchema": BEHAVIOR_FIELD_SCHEMA,
+        "generatedCompatibilityOutput": catalog["generatedCompatibilityOutput"],
+        "rootProfile": root_id,
+        "profiles": [updated_profiles[profile_id] for profile_id in ordered_profile_ids],
+        "selectors": selectors,
+        "applications": applications,
+        "conditionalStates": conditional_states,
+        "runtimeBindings": runtime,
+    }
+    _validate_behavior_catalog_v2(lifted)
+    return lifted
+
+
+def _catalog_match_raws(entry: object, label: str) -> dict[str, str]:
+    if not isinstance(entry, dict) or set(entry) != set(MATCH_FIELDS):
+        raise ParseError(f"{label} must name exactly: {', '.join(MATCH_FIELDS)}")
+    return {field: clean_token(str(entry[field])) for field in MATCH_FIELDS}
+
+
+def load_behavior_catalog_v2() -> dict:
+    """Load the only editable behavior catalog in canonical V2 form."""
+
+    try:
+        catalog = json.loads(BEHAVIOR_CATALOG_SOURCE.read_text())
+    except json.JSONDecodeError as error:
+        raise ParseError(f"behavior catalog is not valid JSON: {error}") from error
+    validate_behavior_catalog(catalog)
+    if catalog["catalogVersion"] == 1:
+        catalog = migrate_behavior_catalog_v1(catalog)
+    return catalog
+
+
+def load_behavior_catalog() -> dict:
+    """Return the retired V1-shaped view used by legacy HTTP handlers."""
+
+    return lower_behavior_catalog_v2(load_behavior_catalog_v2())
+
+
+def behavior_authoring_context() -> tuple[dict[str, str], list[str], dict[str, int]]:
+    """Return symbols and values used to validate named authoring edits."""
+
+    expressions, species_order = parse_define_expressions(DEFINE_SOURCE_FILES)
     macros = evaluate_defines(expressions)
     macros.update(evaluate_armips_equ([ARMIPS_CONFIG, ARMIPS_CONSTANTS]))
     terrain_values, destination_values = parse_behavior_data_enums()
     macros.update(terrain_values)
     macros.update(destination_values)
-    group_labels = invert_labels(macros, GROUP_PREFIX)
+    return expressions, species_order, macros
 
-    backend_profiles = parse_behavior_override_profiles(behavior_source, macros)
-    existing_overrides = parse_behavior_overrides(behavior_source, macros, group_labels)
-    profiles_model = [
+
+def catalog_class_profiles(
+    catalog: dict,
+    macros: dict[str, int],
+) -> list[dict[str, dict]]:
+    """Decode named class fields into the viewer's validation value shape."""
+
+    return [
         {
-            "behavior": profile["behavior"],
-            "name": profile_names.get(profile["order"], ""),
+            field: make_value(str(profile["fields"][field]), field, macros)
+            for field in PROFILE_FIELDS
         }
-        for profile in backend_profiles
-    ]
-    rules_model = [
-        {
-            "match": raw_match_values(override["match"]),
-            "profileOrder": override["profileOrder"],
-            "removed": False,
-        }
-        for override in existing_overrides
+        for profile in catalog["classProfiles"]
     ]
 
-    canonical_order_by_name: dict[str, int] = {}
-    for name, orders in duplicate_orders_by_name.items():
-        preferred = next((order for order in orders if order in preferred_profile_orders), None)
-        if preferred is not None:
-            canonical_order_by_name[name] = preferred
-            continue
-        referenced = next(
-            (
-                rule["profileOrder"]
-                for rule in rules_model
-                if rule.get("profileOrder") in orders and not rule.get("removed")
-            ),
-            None,
-        )
-        canonical_order_by_name[name] = referenced if referenced is not None else orders[0]
 
-    for rule in rules_model:
-        profile_order = rule["profileOrder"]
-        if profile_order < 1 or profile_order > len(profiles_model):
-            continue
-        name = profiles_model[profile_order - 1].get("name", "")
-        canonical_order = canonical_order_by_name.get(name)
-        if canonical_order is not None:
-            rule["profileOrder"] = canonical_order
+def apply_catalog_symbol_values(catalog: dict, macros: dict[str, int]) -> None:
+    """Make named catalog indexes authoritative over compatibility defines."""
 
-    kept_profile_orders = [
-        order
-        for order, profile in enumerate(profiles_model, 1)
-        if canonical_order_by_name.get(profile.get("name", ""), order) == order
-    ]
-    profile_index_map = {
-        profile_order: index
-        for index, profile_order in enumerate(kept_profile_orders)
+    for index, profile in enumerate(catalog["classProfiles"]):
+        macros[clean_token(str(profile["symbol"]))] = index
+    override_orders = {
+        clean_token(str(profile["name"])).casefold(): index
+        for index, profile in enumerate(catalog["overrideProfiles"])
     }
-    kept_profiles = [profiles_model[profile_order - 1] for profile_order in kept_profile_orders]
-
-    profile_span = initializer_brace_span(raw_source, "sOverworldWildBehaviorOverrideProfiles")
-    rule_span = initializer_brace_span(raw_source, "sOverworldWildBehaviorOverrideRules")
-    profile_indent = line_indent_before(raw_source, profile_span[0])
-    rule_indent = line_indent_before(raw_source, rule_span[0])
-    profile_entry_indent = profile_indent + "    "
-    rule_entry_indent = rule_indent + "    "
-    profile_entries = ",\n".join(
-        format_behavior_override_profile(
-            set(behavior_override_field_keys(profile["behavior"])),
-            raw_values(profile["behavior"]["profile"]),
-            profile_entry_indent,
-            profile["name"],
-            relative_fields=set(behavior_override_relative_field_keys(profile["behavior"])),
-            at_least_fields=set(behavior_override_at_least_field_keys(profile["behavior"])),
-            at_most_fields=set(behavior_override_at_most_field_keys(profile["behavior"])),
-        )
-        for profile in kept_profiles
-    )
-    rule_entries = ",\n".join(
-        format_behavior_override_profile_rule(
-            rule["match"],
-            profile_index_map[rule["profileOrder"]],
-            rule_entry_indent,
-        )
-        for rule in rules_model
-        if not rule["removed"]
-    )
-
-    updated_source = raw_source
-    for start, end, replacement in sorted(
-        [
-            (profile_span[0], profile_span[1], f"{{\n{profile_entries}\n{profile_indent}}}"),
-            (rule_span[0], rule_span[1], f"{{\n{rule_entries}\n{rule_indent}}}"),
-        ],
-        key=lambda item: item[0],
-        reverse=True,
-    ):
-        updated_source = updated_source[:start] + replacement + updated_source[end:]
-    return updated_source
-
-
-def write_behavior_data_source(raw_source: str, raw_header: str | None = None) -> None:
-    raw_source = consolidate_named_override_profiles(raw_source)
-    counts = behavior_blob_counts(raw_source)
-    if raw_header is None:
-        raw_header = BEHAVIOR_DATA_HEADER.read_text()
-    profile_orders_by_name = {
-        name.casefold(): order
-        for order, name in parse_override_profile_entry_names(raw_source).items()
-    }
-    for symbol, profile_name in (
+    for symbol, name in (
         ("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON", "Follower Pokemon"),
         ("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_ACTIVE", "Default Active"),
         ("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_TIRED", "Default Tired"),
     ):
+        macros[symbol] = override_orders[name.casefold()]
+
+
+def _catalog_match_value(entry: object, label: str, macros: dict[str, int]) -> dict:
+    raws = _catalog_match_raws(entry, label)
+    match = {
+        field: make_value(raws[field], field, macros)
+        for field in MATCH_FIELDS
+    }
+    unresolved = [field for field, value in match.items() if numeric(value) is None]
+    if unresolved:
+        raise ParseError(f"{label} has unresolved values for {', '.join(unresolved)}")
+    return match
+
+
+def catalog_class_rules(
+    catalog: dict,
+    macros: dict[str, int],
+    group_labels: dict[int, dict],
+    class_labels: dict[int, dict],
+) -> tuple[list[dict], list[dict]]:
+    """Decode named class rules without reading compatibility C arrays."""
+
+    full_rules = []
+    for order, authored in enumerate(catalog["classRules"], 1):
+        behavior_class = make_value(str(authored["profile"]), "behaviorClass", macros)
+        if numeric(behavior_class) is None:
+            raise ParseError(f"class rule #{order} has an unresolved profile")
+        rule = {
+            "order": order,
+            "match": _catalog_match_value(authored["match"], f"class rule #{order}", macros),
+            "behaviorClass": behavior_class,
+            "storage": "full",
+        }
+        rule["summary"] = match_summary(rule["match"], macros, group_labels)
+        rule["className"] = class_labels.get(
+            numeric(behavior_class) or -1,
+            {"name": behavior_class["label"]},
+        )["name"]
+        full_rules.append(rule)
+
+    species_rules = []
+    order_offset = len(full_rules)
+    for index, authored in enumerate(catalog["speciesClassRules"], 1):
+        raws = default_behavior_match_raws()
+        raws["species"] = clean_token(str(authored["species"]))
+        behavior_class = make_value(str(authored["profile"]), "behaviorClass", macros)
+        if numeric(behavior_class) is None:
+            raise ParseError(f"species class rule #{index} has an unresolved profile")
+        rule = {
+            "order": order_offset + index,
+            "match": _catalog_match_value(raws, f"species class rule #{index}", macros),
+            "behaviorClass": behavior_class,
+            "storage": "species",
+        }
+        rule["summary"] = match_summary(rule["match"], macros, group_labels)
+        rule["className"] = class_labels.get(
+            numeric(behavior_class) or -1,
+            {"name": behavior_class["label"]},
+        )["name"]
+        species_rules.append(rule)
+    return full_rules, species_rules
+
+
+def _catalog_override_mask(
+    fields: set[str],
+    word: int,
+    macros: dict[str, int],
+) -> dict:
+    mappings = {1: OVERRIDE1_FIELDS, 2: OVERRIDE2_FIELDS, 3: OVERRIDE3_FIELDS}
+    raw = " | ".join(
+        OVERRIDE_SYMBOL_BY_FIELD[field]
+        for field in PROFILE_FIELDS
+        if field in fields and OVERRIDE_WORD_BY_FIELD.get(field) == word
+    ) or "0"
+    return parse_mask(raw, macros, mappings[word])
+
+
+def catalog_behavior_override(authored_fields: dict, macros: dict[str, int]) -> dict:
+    """Decode one named override into the Workshop presentation model."""
+
+    active_fields = set(authored_fields)
+    relative_fields = {
+        field
+        for field, authored in authored_fields.items()
+        if authored["operator"] in {"relative", "relativeThenAtLeast", "relativeThenAtMost"}
+    }
+    at_least_fields = {
+        field
+        for field, authored in authored_fields.items()
+        if authored["operator"] in {"atLeast", "relativeThenAtLeast"}
+    }
+    at_most_fields = {
+        field
+        for field, authored in authored_fields.items()
+        if authored["operator"] in {"atMost", "relativeThenAtMost"}
+    }
+    profile = {field: make_value("0", field, macros) for field in PROFILE_FIELDS}
+    compound_bound_profile = {
+        field: make_value("0", field, macros) for field in PROFILE_FIELDS
+    }
+    for field, authored in authored_fields.items():
+        operator_name = authored["operator"]
+        raw = _catalog_override_raw(field, authored)
+        if operator_name == "replace":
+            profile[field] = make_value(raw, field, macros)
+            continue
+        if operator_name == "relative":
+            delta = int(authored["value"])
+            canonical = f"{delta:+d}"
+            profile[field] = {
+                "raw": canonical,
+                "symbol": None,
+                "value": delta,
+                "label": canonical,
+            }
+            continue
+        if operator_name in {"atLeast", "atMost"}:
+            threshold = int(authored["value"])
+            bound = "/<" if operator_name == "atLeast" else "/>"
+            canonical = f"{bound}{threshold}"
+            value = {
+                "raw": canonical,
+                "symbol": None,
+                "value": threshold,
+                "label": canonical,
+            }
+            profile[field] = copy.deepcopy(value)
+            compound_bound_profile[field] = value
+            continue
+        delta = int(authored["value"])
+        threshold = int(authored["threshold"])
+        bound = "/<" if operator_name == "relativeThenAtLeast" else "/>"
+        canonical = f"{delta:+d}, {bound}{threshold}"
+        profile[field] = {
+            "raw": canonical,
+            "symbol": None,
+            "value": delta,
+            "label": canonical,
+        }
+        bound_raw = f"{bound}{threshold}"
+        compound_bound_profile[field] = {
+            "raw": bound_raw,
+            "symbol": None,
+            "value": threshold,
+            "label": bound_raw,
+        }
+
+    mask = _catalog_override_mask(active_fields, 1, macros)
+    mask2 = _catalog_override_mask(active_fields, 2, macros)
+    mask3 = _catalog_override_mask(active_fields, 3, macros)
+    relative_mask = _catalog_override_mask(relative_fields, 1, macros)
+    relative_mask2 = _catalog_override_mask(relative_fields, 2, macros)
+    relative_mask3 = _catalog_override_mask(relative_fields, 3, macros)
+    at_least_mask = _catalog_override_mask(at_least_fields, 1, macros)
+    at_least_mask2 = _catalog_override_mask(at_least_fields, 2, macros)
+    at_least_mask3 = _catalog_override_mask(at_least_fields, 3, macros)
+    at_most_mask = _catalog_override_mask(at_most_fields, 1, macros)
+    at_most_mask2 = _catalog_override_mask(at_most_fields, 2, macros)
+    at_most_mask3 = _catalog_override_mask(at_most_fields, 3, macros)
+    labels = mask["labels"] + mask2["labels"] + mask3["labels"]
+    extra_raws = [
+        parsed["displayRaw"]
+        for parsed in (mask2, mask3)
+        if parsed["displayRaw"] != "0"
+    ]
+    return {
+        "mask": mask,
+        "mask2": mask2,
+        "mask3": mask3,
+        "relativeMask": relative_mask,
+        "relativeMask2": relative_mask2,
+        "relativeMask3": relative_mask3,
+        "relativeFields": sorted(relative_fields),
+        "atLeastMask": at_least_mask,
+        "atLeastMask2": at_least_mask2,
+        "atLeastMask3": at_least_mask3,
+        "atLeastFields": sorted(at_least_fields),
+        "atMostMask": at_most_mask,
+        "atMostMask2": at_most_mask2,
+        "atMostMask3": at_most_mask3,
+        "atMostFields": sorted(at_most_fields),
+        "compoundBoundProfile": compound_bound_profile,
+        "maskLabels": labels,
+        "maskRaw": (
+            mask["displayRaw"]
+            if not extra_raws
+            else " / ".join([mask["displayRaw"], *extra_raws])
+        ),
+        "profile": profile,
+    }
+
+
+def catalog_behavior_overrides(
+    catalog: dict,
+    macros: dict[str, int],
+    group_labels: dict[int, dict],
+) -> list[dict]:
+    """Decode named override profiles without positional compatibility data."""
+
+    modes = {
+        "disabled": "OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED",
+        "members": "OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS",
+        "all": "OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL",
+    }
+    valid_members = {
+        value
+        for symbol, value in macros.items()
+        if symbol.startswith("SPECIES_") and symbol != "SPECIES_NONE"
+    }
+    overrides = []
+    member_start = 0
+    for order, authored in enumerate(catalog["overrideProfiles"], 1):
+        target = authored["target"]
+        match = _catalog_match_value(target["match"], f"override profile #{order}", macros)
+        members = [make_value(str(member), None, macros) for member in target["members"]]
+        if any(numeric(member) not in valid_members for member in members):
+            raise ParseError(f"override profile #{order} contains an invalid Pokemon member")
+        mode = make_value(modes[target["mode"]], None, macros)
+        if numeric(mode) is None:
+            raise ParseError(f"override profile #{order} has an unresolved target mode")
+        any_species = macros.get(
+            "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+            macros.get("SPECIES_NONE", 0),
+        )
+        if numeric(match["species"]) != any_species:
+            raise ParseError(
+                f"override profile #{order} shared match must use ANY species"
+            )
+        any_level = macros.get("OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY", 0)
+        min_level = numeric(match["minLevel"])
+        max_level = numeric(match["maxLevel"])
+        if min_level != any_level and max_level != any_level and min_level > max_level:
+            raise ParseError(
+                f"override profile #{order} minimum level exceeds maximum level"
+            )
+        if target["mode"] == "all":
+            is_global = (
+                numeric(match["groupMask"])
+                == macros.get("OW_WILD_BEHAVIOR_GROUP_NONE", 0)
+                and numeric(match["terrain"])
+                == macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN")
+                and min_level == any_level
+                and max_level == any_level
+                and numeric(match["shiny"])
+                == macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_SHINY")
+                and numeric(match["behaviorClass"])
+                == macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_CLASS")
+            )
+            if is_global:
+                raise ParseError(
+                    f"override profile #{order} ALL target requires a shared condition"
+                )
+        condition_raws = default_override_condition_raws()
+        override = {
+            "order": order,
+            "profileOrder": order,
+            "kind": "behavior",
+            "match": match,
+            "memberStart": member_start,
+            "memberCount": len(members),
+            "members": members,
+            "memberSymbols": [str(member["symbol"] or member["raw"]) for member in members],
+            "targetMode": mode,
+            "conditionParentProfile": make_condition_value(
+                condition_raws["conditionParentProfile"],
+                "conditionParentProfile",
+                macros,
+            ),
+            "conditionMask": make_condition_value(
+                condition_raws["conditionMask"], "conditionMask", macros
+            ),
+            "conditionValue": make_condition_value(
+                condition_raws["conditionValue"], "conditionValue", macros
+            ),
+            "behavior": catalog_behavior_override(authored["fields"], macros),
+        }
+        member_start += len(members)
+        mode_value = numeric(mode)
+        if mode_value == macros.get("OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED", 0):
+            override["summary"] = "Disabled"
+        elif mode_value == macros.get("OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS", 1):
+            count = len(members)
+            override["summary"] = f"{count} member{'s' if count != 1 else ''}"
+        else:
+            override["summary"] = match_summary(match, macros, group_labels)
+        overrides.append(override)
+    return overrides
+
+
+def catalog_override_profile_names(catalog: dict) -> dict[int, str]:
+    return {
+        order: sanitize_override_profile_name(authored["name"])
+        for order, authored in enumerate(catalog["overrideProfiles"], 1)
+    }
+
+
+def catalog_conditional_states(
+    catalog: dict,
+    macros: dict[str, int],
+    override_profile_count: int,
+) -> list[dict[str, int]]:
+    fields = (
+        "parentProfile",
+        "overrideProfile",
+        "terrainMask",
+        "terrainOverrideMask",
+        "minMovementSpeed",
+        "maxMovementSpeed",
+    )
+    states = []
+    signatures = set()
+    for order, authored in enumerate(catalog["conditionalStates"], 1):
+        values = {
+            field: numeric(conditional_state_value(str(authored[field]), field, macros))
+            for field in fields
+        }
+        if any(value is None for value in values.values()):
+            raise ParseError(f"conditional state #{order} contains an unresolved value")
+        state = {field: int(value) for field, value in values.items()}
+        validate_conditional_state(
+            state,
+            f"conditional state #{order}",
+            override_profile_count,
+        )
+        signature = (
+            state["parentProfile"],
+            state["terrainMask"],
+            state["terrainOverrideMask"],
+            state["minMovementSpeed"],
+            state["maxMovementSpeed"],
+        )
+        if signature in signatures:
+            raise ParseError(f"conditional state #{order} duplicates an existing parent condition")
+        signatures.add(signature)
+        states.append(state)
+    return states
+
+def _format_catalog_class_rule(rule: dict, indent: str) -> str:
+    inner = indent + "    "
+    match = _catalog_match_raws(rule.get("match"), "class rule match")
+    profile = clean_token(str(rule.get("profile", "")))
+    if not profile:
+        raise ParseError("class rule needs a profile symbol")
+    return (
+        f"{indent}{{\n"
+        f"{inner}{format_match_initializer(match, inner)},\n"
+        f"{inner}{profile},\n"
+        f"{indent}}}"
+    )
+
+
+def render_behavior_catalog(catalog: dict, raw_source: str) -> str:
+    """Render named authoring data into the fixed-layout compatibility blob."""
+    validate_behavior_catalog(catalog)
+    if catalog["catalogVersion"] == 2:
+        catalog = lower_behavior_catalog_v2(catalog)
+    class_profiles = catalog.get("classProfiles")
+    class_rules = catalog.get("classRules")
+    species_rules = catalog.get("speciesClassRules")
+    override_profiles = catalog.get("overrideProfiles")
+    conditional_states = catalog.get("conditionalStates")
+    if not all(isinstance(value, list) for value in (
+        class_profiles, class_rules, species_rules, override_profiles, conditional_states
+    )):
+        raise ParseError("behavior catalog collections must be arrays")
+
+    replacements: list[tuple[int, int, str]] = []
+
+    class_span = initializer_brace_span(raw_source, "sOverworldWildBehaviorClassProfiles")
+    class_indent = line_indent_before(raw_source, class_span[0])
+    class_entry_indent = class_indent + "    "
+    formatted_classes = []
+    for index, profile in enumerate(class_profiles):
+        if not isinstance(profile, dict) or not isinstance(profile.get("fields"), dict):
+            raise ParseError(f"class profile {index} is invalid")
+        fields = profile["fields"]
+        if set(fields) != set(PROFILE_FIELDS):
+            raise ParseError(f"class profile {index} must name every schema field")
+        formatted_classes.append(format_profile_initializer(
+            {field: clean_token(str(fields[field])) for field in PROFILE_FIELDS},
+            class_entry_indent,
+        ))
+    formatted_classes_text = ",\n".join(formatted_classes)
+    replacements.append((
+        class_span[0], class_span[1],
+        f"{{\n{formatted_classes_text}\n{class_indent}}}",
+    ))
+
+    class_rule_span = initializer_brace_span(raw_source, "sOverworldWildBehaviorClassRules")
+    class_rule_indent = line_indent_before(raw_source, class_rule_span[0])
+    class_rule_entry_indent = class_rule_indent + "    "
+    formatted_class_rules = ",\n".join(
+        _format_catalog_class_rule(rule, class_rule_entry_indent)
+        for rule in class_rules
+    )
+    replacements.append((
+        class_rule_span[0], class_rule_span[1],
+        f"{{\n{formatted_class_rules}\n{class_rule_indent}}}",
+    ))
+
+    species_span = initializer_brace_span(raw_source, "sOverworldWildBehaviorSpeciesClassRules")
+    species_indent = line_indent_before(raw_source, species_span[0])
+    species_entry_indent = species_indent + "    "
+    formatted_species_rules = []
+    for index, rule in enumerate(species_rules):
+        if not isinstance(rule, dict):
+            raise ParseError(f"species class rule {index} is invalid")
+        species = clean_token(str(rule.get("species", "")))
+        profile = clean_token(str(rule.get("profile", "")))
+        if not species or not profile:
+            raise ParseError(f"species class rule {index} needs species and profile")
+        formatted_species_rules.append(f"{species_entry_indent}{{{species}, {profile}}}")
+    formatted_species_rules_text = ",\n".join(formatted_species_rules)
+    replacements.append((
+        species_span[0], species_span[1],
+        f"{{\n{formatted_species_rules_text}\n{species_indent}}}",
+    ))
+
+    override_span = initializer_brace_span(raw_source, "sOverworldWildBehaviorOverrideProfiles")
+    member_span = initializer_brace_span(raw_source, "sOverworldWildBehaviorOverrideMembers")
+    override_indent = line_indent_before(raw_source, override_span[0])
+    member_indent = line_indent_before(raw_source, member_span[0])
+    override_entry_indent = override_indent + "    "
+    member_entry_indent = member_indent + "    "
+    flat_members: list[str] = []
+    formatted_overrides = []
+    for index, profile in enumerate(override_profiles):
+        if not isinstance(profile, dict) or not isinstance(profile.get("target"), dict) \
+                or not isinstance(profile.get("fields"), dict):
+            raise ParseError(f"override profile {index} is invalid")
+        target = profile["target"]
+        members = target.get("members")
+        if not isinstance(members, list):
+            raise ParseError(f"override profile {index} members must be an array")
+        members = [clean_token(str(member)) for member in members]
+        if any(not member for member in members) or len(members) != len(set(members)):
+            raise ParseError(f"override profile {index} has invalid or duplicate members")
+        member_start = len(flat_members)
+        flat_members.extend(members)
+        authored_fields = profile["fields"]
+        unknown_fields = set(authored_fields) - set(PROFILE_FIELDS)
+        if unknown_fields:
+            raise ParseError(f"override profile {index} has unknown fields: {', '.join(sorted(unknown_fields))}")
+        raws = {field: "0" for field in PROFILE_FIELDS}
+        for field, authored in authored_fields.items():
+            raws[field] = _catalog_override_raw(field, authored)
+        formatted_overrides.append(format_behavior_override_member_profile(
+            _catalog_match_raws(target.get("match"), f"override profile {index} match"),
+            member_start,
+            len(members),
+            clean_token(str(target.get("mode", ""))),
+            set(authored_fields),
+            raws,
+            override_entry_indent,
+            clean_token(str(profile.get("name", ""))),
+            relative_fields=relative_override_fields_from_raws(raws),
+            at_least_fields=at_least_override_fields_from_raws(raws),
+            at_most_fields=at_most_override_fields_from_raws(raws),
+        ))
+    formatted_overrides_text = ",\n".join(formatted_overrides)
+    replacements.append((
+        override_span[0], override_span[1],
+        f"{{\n{formatted_overrides_text}\n{override_indent}}}",
+    ))
+    stored_members = flat_members or ["SPECIES_NONE"]
+    formatted_members_text = ",\n".join(member_entry_indent + member for member in stored_members)
+    replacements.append((
+        member_span[0], member_span[1],
+        f"{{\n{formatted_members_text}\n{member_indent}}}",
+    ))
+
+    conditional_span = initializer_brace_span(raw_source, "sOverworldWildBehaviorConditionalStates")
+    conditional_indent = line_indent_before(raw_source, conditional_span[0])
+    conditional_entry_indent = conditional_indent + "    "
+    conditional_fields = (
+        "parentProfile", "overrideProfile", "terrainMask",
+        "terrainOverrideMask", "minMovementSpeed", "maxMovementSpeed",
+    )
+    stored_states = conditional_states or [{
+        "parentProfile": CONDITIONAL_PROFILE_NONE_RAW,
+        "overrideProfile": CONDITIONAL_PROFILE_NONE_RAW,
+        "terrainMask": "0",
+        "terrainOverrideMask": "0",
+        "minMovementSpeed": "0",
+        "maxMovementSpeed": "0",
+    }]
+    formatted_states = []
+    for index, state in enumerate(stored_states):
+        if not isinstance(state, dict) or set(state) != set(conditional_fields):
+            raise ParseError(f"conditional state {index} must name all six fields")
+        values = ", ".join(clean_token(str(state[field])) for field in conditional_fields)
+        formatted_states.append(f"{conditional_entry_indent}{{{values}}}")
+    formatted_states_text = ",\n".join(formatted_states)
+    replacements.append((
+        conditional_span[0], conditional_span[1],
+        f"{{\n{formatted_states_text}\n{conditional_indent}}}",
+    ))
+
+    rendered = raw_source
+    for start, end, replacement in sorted(replacements, key=lambda item: item[0], reverse=True):
+        rendered = rendered[:start] + replacement + rendered[end:]
+    return rendered
+
+
+def render_behavior_catalog_header(raw_header: str, catalog: dict, raw_source: str) -> str:
+    runtime_application_orders = None
+    runtime_application_ids = None
+    if catalog.get("catalogVersion") == 2:
+        runtime_application_orders = {
+            application["id"]: order
+            for order, application in enumerate(catalog["applications"])
+        }
+        runtime_application_ids = catalog["runtimeBindings"]
+        catalog = lower_behavior_catalog_v2(catalog)
+    class_profiles = catalog["classProfiles"]
+    symbols = [clean_token(str(profile.get("symbol", ""))) for profile in class_profiles]
+    if any(not symbol for symbol in symbols) or len(symbols) != len(set(symbols)):
+        raise ParseError("class profile symbols must be present and unique")
+    old_count = len(class_define_entries(raw_header))
+    raw_header = replace_class_define_block(raw_header, symbols, old_count)
+    counts = behavior_blob_counts(raw_source)
+    profile_orders_by_name = None if runtime_application_orders is not None else {
+        clean_token(str(profile.get("name", ""))).casefold(): order - 1
+        for order, profile in enumerate(catalog["overrideProfiles"], 1)
+    }
+    for symbol, profile_name, binding_name in (
+        (
+            "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON",
+            "Follower Pokemon",
+            "followerApplication",
+        ),
+        (
+            "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_ACTIVE",
+            "Default Active",
+            "defaultActiveApplication",
+        ),
+        (
+            "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_TIRED",
+            "Default Tired",
+            "defaultTiredApplication",
+        ),
+    ):
         if symbol not in raw_header:
             continue
-        order = profile_orders_by_name.get(profile_name.casefold())
+        order = (
+            runtime_application_orders.get(runtime_application_ids[binding_name])
+            if runtime_application_orders is not None
+            else profile_orders_by_name.get(profile_name.casefold())
+        )
         if order is None:
             raise ParseError(f"runtime-owned {profile_name} override must exist exactly once")
-        raw_header = replace_define_value(raw_header, symbol, order - 1)
+        raw_header = replace_define_value(raw_header, symbol, order)
+    return rewrite_behavior_blob_count_defines(raw_header, counts)
+
+
+def validate_behavior_catalog_sources() -> dict:
+    """Require the named catalog and generated compatibility files to agree."""
+
+    try:
+        catalog = json.loads(BEHAVIOR_CATALOG_SOURCE.read_text())
+    except json.JSONDecodeError as error:
+        raise ParseError(f"behavior catalog is not valid JSON: {error}") from error
+    validate_behavior_catalog(catalog)
+    raw_source = BEHAVIOR_DATA_SOURCE.read_text()
+    raw_header = BEHAVIOR_DATA_HEADER.read_text()
+    generated_source = render_behavior_catalog(catalog, raw_source)
+    generated_header = render_behavior_catalog_header(raw_header, catalog, generated_source)
+    stale = []
+    if generated_source != raw_source:
+        stale.append(str(BEHAVIOR_DATA_SOURCE.relative_to(ROOT)))
+    if generated_header != raw_header:
+        stale.append(str(BEHAVIOR_DATA_HEADER.relative_to(ROOT)))
+    if stale:
+        raise ParseError(
+            "named behavior catalog has stale generated output: " + ", ".join(stale)
+        )
+    return catalog
+
+
+def write_behavior_catalog(catalog: dict) -> None:
+    canonical = (
+        lift_compatibility_behavior_catalog(catalog)
+        if catalog.get("catalogVersion") == 1
+        else copy.deepcopy(catalog)
+    )
+    _validate_behavior_catalog_v2(canonical)
+    raw_source = render_behavior_catalog(canonical, BEHAVIOR_DATA_SOURCE.read_text())
+    raw_header = render_behavior_catalog_header(
+        BEHAVIOR_DATA_HEADER.read_text(), canonical, raw_source
+    )
+    catalog_text = json.dumps(canonical, indent=2, ensure_ascii=False) + "\n"
+    BEHAVIOR_CATALOG_SOURCE.write_text(catalog_text)
     BEHAVIOR_DATA_SOURCE.write_text(raw_source)
-    BEHAVIOR_DATA_HEADER.write_text(rewrite_behavior_blob_count_defines(raw_header, counts))
+    BEHAVIOR_DATA_HEADER.write_text(raw_header)
     invalidate_data_cache()
 
 
@@ -6674,22 +8343,6 @@ def class_symbol_used_by_runtime(symbol: str) -> bool:
     return re.search(rf"\b{re.escape(symbol)}\b", runtime_source) is not None
 
 
-def append_profile_initializer(raw_behavior_data: str, profile_raws: dict[str, str]) -> str:
-    class_array_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorClassProfiles")
-    insert_at = class_array_span[1] - 1
-    entry_text = "    " + format_profile_initializer(profile_raws, "    ") + ",\n"
-    return raw_behavior_data[:insert_at] + entry_text + raw_behavior_data[insert_at:]
-
-
-def remove_profile_initializer(raw_behavior_data: str, class_index: int, class_profile_count: int) -> str:
-    class_array_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorClassProfiles")
-    class_entry_spans = top_level_braced_spans(raw_behavior_data, class_array_span)
-    if len(class_entry_spans) != class_profile_count:
-        raise ParseError("class profile entry count changed")
-    delete_start, delete_end = braced_entry_removal_span(raw_behavior_data, class_entry_spans[class_index], class_array_span)
-    return raw_behavior_data[:delete_start] + raw_behavior_data[delete_end:]
-
-
 def validate_profile_management_species(symbols: list[str], valid_species: set[str]) -> list[str]:
     result = []
     seen = set()
@@ -6702,24 +8355,83 @@ def validate_profile_management_species(symbols: list[str], valid_species: set[s
     return result
 
 
+def _catalog_rule_is_direct_species(rule: dict, species_symbol: str) -> bool:
+    match = rule.get("match")
+    if not isinstance(match, dict) or match.get("species") != species_symbol:
+        return False
+    defaults = default_behavior_match_raws()
+    return all(
+        match.get(field) == defaults[field]
+        for field in MATCH_FIELDS
+        if field != "species"
+    )
+
+
+def _set_catalog_species_memberships(
+    catalog: dict,
+    changes: dict[str, int],
+    valid_species: set[str],
+) -> bool:
+    class_profiles = catalog["classProfiles"]
+    changed = False
+    for symbol, class_index in changes.items():
+        if symbol not in valid_species:
+            raise ValueError(f"invalid Pokemon: {symbol}")
+        if class_index < 0 or class_index >= len(class_profiles):
+            raise ValueError(f"class index out of range: {class_index}")
+        class_symbol = class_profiles[class_index]["symbol"]
+        direct_rule = next(
+            (
+                rule
+                for rule in catalog["speciesClassRules"]
+                if rule.get("species") == symbol
+            ),
+            None,
+        )
+        if direct_rule is None:
+            direct_rule = next(
+                (
+                    rule
+                    for rule in catalog["classRules"]
+                    if _catalog_rule_is_direct_species(rule, symbol)
+                ),
+                None,
+            )
+        if direct_rule is None:
+            catalog["speciesClassRules"].append({
+                "species": symbol,
+                "profile": class_symbol,
+            })
+            changed = True
+        elif direct_rule.get("profile") != class_symbol:
+            direct_rule["profile"] = class_symbol
+            changed = True
+    return changed
+
+
+def _replace_catalog_symbol(value: object, old_symbol: str, new_symbol: str) -> object:
+    if isinstance(value, str):
+        return new_symbol if value == old_symbol else value
+    if isinstance(value, list):
+        return [_replace_catalog_symbol(item, old_symbol, new_symbol) for item in value]
+    if isinstance(value, dict):
+        replaced = copy.copy(value)
+        replaced.clear()
+        replaced.update({
+            key: _replace_catalog_symbol(item, old_symbol, new_symbol)
+            for key, item in value.items()
+        })
+        return replaced
+    return value
+
+
 def apply_profile_management_change(body: bytes) -> dict:
     change = parse_profile_management_payload(body)
-    raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
-    raw_behavior_header = BEHAVIOR_DATA_HEADER.read_text()
-    behavior_source = strip_c_comments(join_line_continuations(raw_behavior_data))
-    expressions, species_order = parse_define_expressions(DEFINE_SOURCE_FILES)
-    macros = evaluate_defines(expressions)
-    macros.update(evaluate_armips_equ([ARMIPS_CONFIG, ARMIPS_CONSTANTS]))
-    class_profiles = [
-        parse_profile(entry, macros)
-        for entry in parse_initializer(extract_braced_initializer(behavior_source, "sOverworldWildBehaviorClassProfiles"))
-    ]
-    class_entries = class_define_entries(raw_behavior_header)
-    validate_class_define_entries(class_entries, len(class_profiles))
-    class_symbols = [entry["symbol"] for entry in class_entries[: len(class_profiles)]]
-    default_class = macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0)
-    if default_class < 0 or default_class >= len(class_profiles):
-        default_class = 0
+    catalog = load_behavior_catalog()
+    expressions, species_order, macros = behavior_authoring_context()
+    class_profiles = catalog["classProfiles"]
+    class_symbols = [profile["symbol"] for profile in class_profiles]
+    default_class = 0
 
     action = change["action"]
     if action == "create":
@@ -6728,20 +8440,25 @@ def apply_profile_management_change(body: bytes) -> dict:
         pokemon = validate_profile_management_species(change.get("pokemon", []), valid_species)
         new_symbol = sanitize_class_symbol(change["name"], set(class_symbols))
         new_index = len(class_profiles)
-        updated_header = replace_class_define_block(raw_behavior_header, class_symbols + [new_symbol], len(class_profiles))
-        updated_source = append_profile_initializer(raw_behavior_data, raw_values(class_profiles[default_class]))
-        write_behavior_data_source(updated_source, updated_header)
-        membership_result = None
-        if pokemon:
-            membership_result = apply_profile_membership_changes(
-                json.dumps({"changes": {symbol: new_index for symbol in pokemon}}).encode()
-            )
+        class_profiles.append({
+            "symbol": new_symbol,
+            "fields": copy.deepcopy(class_profiles[default_class]["fields"]),
+        })
+        membership_changed = _set_catalog_species_memberships(
+            catalog,
+            {symbol: new_index for symbol in pokemon},
+            valid_species,
+        )
+        write_behavior_catalog(catalog)
         return {
             "saved": True,
             "message": f"Created {humanize_symbol(new_symbol, CLASS_PREFIX)}",
             "classIndex": new_index,
             "symbol": new_symbol,
-            "membership": membership_result,
+            "membership": {
+                "saved": membership_changed,
+                "message": "Saved" if membership_changed else "No code changes needed",
+            } if pokemon else None,
         }
 
     class_index = change["classIndex"]
@@ -6751,12 +8468,17 @@ def apply_profile_management_change(body: bytes) -> dict:
     if action == "duplicate":
         new_symbol = sanitize_class_symbol(change["name"], set(class_symbols))
         new_index = len(class_profiles)
-        updated_header = replace_class_define_block(raw_behavior_header, class_symbols + [new_symbol], len(class_profiles))
-        updated_source = append_profile_initializer(raw_behavior_data, raw_values(class_profiles[class_index]))
-        write_behavior_data_source(updated_source, updated_header)
+        class_profiles.append({
+            "symbol": new_symbol,
+            "fields": copy.deepcopy(class_profiles[class_index]["fields"]),
+        })
+        write_behavior_catalog(catalog)
         return {
             "saved": True,
-            "message": f"Duplicated {humanize_symbol(old_symbol, CLASS_PREFIX)} as {humanize_symbol(new_symbol, CLASS_PREFIX)}",
+            "message": (
+                f"Duplicated {humanize_symbol(old_symbol, CLASS_PREFIX)} "
+                f"as {humanize_symbol(new_symbol, CLASS_PREFIX)}"
+            ),
             "classIndex": new_index,
             "symbol": new_symbol,
         }
@@ -6765,27 +8487,46 @@ def apply_profile_management_change(body: bytes) -> dict:
         if class_index == default_class:
             raise ValueError("Default profile cannot be renamed")
         if class_symbol_used_by_runtime(old_symbol):
-            raise ValueError(f"{humanize_symbol(old_symbol, CLASS_PREFIX)} is referenced by behavior runtime code and cannot be renamed safely")
+            raise ValueError(
+                f"{humanize_symbol(old_symbol, CLASS_PREFIX)} is referenced by "
+                "behavior runtime code and cannot be renamed safely"
+            )
         new_symbol = sanitize_class_symbol(change["name"], set(class_symbols), old_symbol)
         if new_symbol == old_symbol:
-            return {"saved": False, "message": "No code changes needed", "classIndex": class_index, "symbol": old_symbol}
-        class_symbols[class_index] = new_symbol
-        updated_header = replace_class_define_block(raw_behavior_header, class_symbols, len(class_profiles))
-        updated_source = re.sub(rf"\b{re.escape(old_symbol)}\b", new_symbol, raw_behavior_data)
-        write_behavior_data_source(updated_source, updated_header)
-        return {"saved": True, "message": f"Renamed profile to {humanize_symbol(new_symbol, CLASS_PREFIX)}", "classIndex": class_index, "symbol": new_symbol}
+            return {
+                "saved": False,
+                "message": "No code changes needed",
+                "classIndex": class_index,
+                "symbol": old_symbol,
+            }
+        catalog = _replace_catalog_symbol(catalog, old_symbol, new_symbol)
+        write_behavior_catalog(catalog)
+        return {
+            "saved": True,
+            "message": f"Renamed profile to {humanize_symbol(new_symbol, CLASS_PREFIX)}",
+            "classIndex": class_index,
+            "symbol": new_symbol,
+        }
 
     if class_index == default_class:
         raise ValueError("Default profile cannot be deleted")
     if class_symbol_used_by_runtime(old_symbol):
-        raise ValueError(f"{humanize_symbol(old_symbol, CLASS_PREFIX)} is still referenced by behavior runtime code and cannot be deleted safely")
-    class_symbols.pop(class_index)
-    updated_source = re.sub(rf"\b{re.escape(old_symbol)}\b", "OW_WILD_BEHAVIOR_CLASS_DEFAULT", raw_behavior_data)
-    updated_header = replace_class_define_block(raw_behavior_header, class_symbols, len(class_profiles))
-    updated_source = remove_profile_initializer(updated_source, class_index, len(class_profiles))
-    write_behavior_data_source(updated_source, updated_header)
-    return {"saved": True, "message": f"Deleted {humanize_symbol(old_symbol, CLASS_PREFIX)}", "classIndex": default_class}
-
+        raise ValueError(
+            f"{humanize_symbol(old_symbol, CLASS_PREFIX)} is still referenced by "
+            "behavior runtime code and cannot be deleted safely"
+        )
+    catalog = _replace_catalog_symbol(
+        catalog,
+        old_symbol,
+        "OW_WILD_BEHAVIOR_CLASS_DEFAULT",
+    )
+    del catalog["classProfiles"][class_index]
+    write_behavior_catalog(catalog)
+    return {
+        "saved": True,
+        "message": f"Deleted {humanize_symbol(old_symbol, CLASS_PREFIX)}",
+        "classIndex": default_class,
+    }
 
 def default_behavior_match_raws() -> dict[str, str]:
     return {
@@ -7048,160 +8789,10 @@ def parse_profile_override_payload(body: bytes) -> dict[str, list]:
     }
 
 
-def canonicalize_named_override_profile_rules(
-    profiles_model: list[dict],
-    rules_model: list[dict],
-    preferred_profile_orders: set[int] | None = None,
-) -> None:
-    preferred_profile_orders = preferred_profile_orders or set()
-    canonical_profile_order_by_name: dict[str, int] = {}
-    for rule in rules_model:
-        if rule.get("removed"):
-            continue
-        profile_order = rule.get("profileOrder")
-        if not isinstance(profile_order, int) or profile_order < 1 or profile_order > len(profiles_model):
-            continue
-        name = profiles_model[profile_order - 1].get("name", "")
-        if not name:
-            continue
-        canonical_profile_order = canonical_profile_order_by_name.get(name)
-        if canonical_profile_order is None or (
-            profile_order in preferred_profile_orders
-            and canonical_profile_order not in preferred_profile_orders
-        ):
-            canonical_profile_order_by_name[name] = profile_order
-
-    for rule in rules_model:
-        if rule.get("removed"):
-            continue
-        profile_order = rule.get("profileOrder")
-        if not isinstance(profile_order, int) or profile_order < 1 or profile_order > len(profiles_model):
-            continue
-        name = profiles_model[profile_order - 1].get("name", "")
-        if name:
-            rule["profileOrder"] = canonical_profile_order_by_name.get(name, profile_order)
-
-
-def simple_species_class_rule(rule: dict, macros: dict[str, int]) -> str | None:
-    match = rule["match"]
-    species = match["species"].get("symbol")
-    if not species or not species.startswith("SPECIES_") or species == "SPECIES_NONE":
-        return None
-    if numeric(match["species"]) == macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES", macros.get("SPECIES_NONE", 0)):
-        return None
-    checks = [
-        ("groupMask", macros.get("OW_WILD_BEHAVIOR_GROUP_NONE", 0)),
-        ("terrain", macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN", 0)),
-        ("minLevel", macros.get("OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY", 0)),
-        ("maxLevel", macros.get("OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY", 0)),
-        ("shiny", macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_SHINY", 0)),
-        ("behaviorClass", macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_CLASS", 0)),
-    ]
-    for field, expected in checks:
-        if numeric(match[field]) != expected:
-            return None
-    return species
-
-
-def format_behavior_class_rule(species_symbol: str, class_symbol: str, indent: str = "    ") -> str:
-    inner = indent + "    "
-    value = inner + "    "
-    return (
-        f"{indent}{{\n"
-        f"{inner}{{\n"
-        f"{value}OW_WILD_BEHAVIOR_GROUP_NONE,\n"
-        f"{value}{species_symbol},\n"
-        f"{value}OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN,\n"
-        f"{value}OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY,\n"
-        f"{value}OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY,\n"
-        f"{value}OW_WILD_BEHAVIOR_MATCH_ANY_SHINY,\n"
-        f"{value}OW_WILD_BEHAVIOR_MATCH_ANY_CLASS,\n"
-        f"{inner}}},\n"
-        f"{inner}{class_symbol},\n"
-        f"{indent}}}"
-    )
-
-
-def format_behavior_species_class_rule(species_symbol: str, class_symbol: str, indent: str = "    ") -> str:
-    return f"{indent}{{{species_symbol}, {class_symbol}}}"
-
-
 def format_match_initializer(raws: dict[str, str], indent: str) -> str:
     value_indent = indent + "    "
     values = ",\n".join(f"{value_indent}{raws[field]}" for field in MATCH_FIELDS)
     return f"{{\n{values},\n{indent}}}"
-
-
-def format_behavior_override_rule(
-    match_raws: dict[str, str],
-    mask_fields: set[str],
-    profile_raws: dict[str, str],
-    indent: str = "    ",
-    name: str = "",
-    relative_fields: set[str] | None = None,
-    at_least_fields: set[str] | None = None,
-    at_most_fields: set[str] | None = None,
-) -> str:
-    inner = indent + "    "
-    relative_fields = relative_fields or set()
-    at_least_fields = at_least_fields or set()
-    at_most_fields = at_most_fields or set()
-    storage_raws = override_profile_storage_raws(profile_raws)
-    compound_bound_raws = compound_bound_profile_storage_raws(profile_raws)
-    return override_profile_name_comment(name, indent) + (
-        f"{indent}{{\n"
-        f"{inner}{format_match_initializer(match_raws, inner)},\n"
-        f"{inner}{format_mask_expression(mask_fields, inner, 1)},\n"
-        f"{inner}{format_mask_expression(mask_fields, inner, 2)},\n"
-        f"{inner}{format_mask_expression(mask_fields, inner, 3)},\n"
-        f"{inner}{format_profile_initializer(storage_raws, inner)},\n"
-        f"{inner}{format_mask_expression(relative_fields, inner, 1)},\n"
-        f"{inner}{format_mask_expression(relative_fields, inner, 2)},\n"
-        f"{inner}{format_mask_expression(relative_fields, inner, 3)},\n"
-        f"{inner}{format_mask_expression(at_least_fields, inner, 1)},\n"
-        f"{inner}{format_mask_expression(at_least_fields, inner, 2)},\n"
-        f"{inner}{format_mask_expression(at_least_fields, inner, 3)},\n"
-        f"{inner}{format_mask_expression(at_most_fields, inner, 1)},\n"
-        f"{inner}{format_mask_expression(at_most_fields, inner, 2)},\n"
-        f"{inner}{format_mask_expression(at_most_fields, inner, 3)},\n"
-        f"{inner}{format_compound_bound_profile_initializer(compound_bound_raws, inner)},\n"
-        f"{indent}}}"
-    )
-
-
-def format_behavior_override_profile(
-    mask_fields: set[str],
-    profile_raws: dict[str, str],
-    indent: str = "    ",
-    name: str = "",
-    relative_fields: set[str] | None = None,
-    at_least_fields: set[str] | None = None,
-    at_most_fields: set[str] | None = None,
-) -> str:
-    inner = indent + "    "
-    relative_fields = relative_fields or set()
-    at_least_fields = at_least_fields or set()
-    at_most_fields = at_most_fields or set()
-    storage_raws = override_profile_storage_raws(profile_raws)
-    compound_bound_raws = compound_bound_profile_storage_raws(profile_raws)
-    return override_profile_name_comment(name, indent) + (
-        f"{indent}{{\n"
-        f"{inner}{format_mask_expression(mask_fields, inner, 1)},\n"
-        f"{inner}{format_mask_expression(mask_fields, inner, 2)},\n"
-        f"{inner}{format_mask_expression(mask_fields, inner, 3)},\n"
-        f"{inner}{format_profile_initializer(storage_raws, inner)},\n"
-        f"{inner}{format_mask_expression(relative_fields, inner, 1)},\n"
-        f"{inner}{format_mask_expression(relative_fields, inner, 2)},\n"
-        f"{inner}{format_mask_expression(relative_fields, inner, 3)},\n"
-        f"{inner}{format_mask_expression(at_least_fields, inner, 1)},\n"
-        f"{inner}{format_mask_expression(at_least_fields, inner, 2)},\n"
-        f"{inner}{format_mask_expression(at_least_fields, inner, 3)},\n"
-        f"{inner}{format_mask_expression(at_most_fields, inner, 1)},\n"
-        f"{inner}{format_mask_expression(at_most_fields, inner, 2)},\n"
-        f"{inner}{format_mask_expression(at_most_fields, inner, 3)},\n"
-        f"{inner}{format_compound_bound_profile_initializer(compound_bound_raws, inner)},\n"
-        f"{indent}}}"
-    )
 
 
 def format_behavior_override_member_profile(
@@ -7252,83 +8843,50 @@ def format_behavior_override_member_profile(
     )
 
 
-def format_behavior_conditional_state(state: dict[str, int], indent: str = "    ") -> str:
-    parent_profile = state["parentProfile"]
-    parent_raw = (
-        CONDITIONAL_PROFILE_NONE_RAW
-        if parent_profile == CONDITIONAL_PROFILE_NONE_VALUE
-        else str(parent_profile)
-    )
-    override_profile = state["overrideProfile"]
-    override_raw = (
-        CONDITIONAL_PROFILE_NONE_RAW
-        if override_profile == CONDITIONAL_PROFILE_NONE_VALUE
-        else str(override_profile)
-    )
-    def terrain_mask_raw(mask: int) -> str:
-        parts = [
-            raw
-            for bit, (_, _, raw) in enumerate(ALLOWED_TERRAIN_OPTIONS)
-            if mask & (1 << bit)
-        ]
-        return " | ".join(parts) if parts else "0"
+def apply_profile_catalog_changes(body: bytes) -> dict:
+    """Validate and save one complete canonical V2 profile catalog."""
 
-    return (
-        f"{indent}{{"
-        f"{parent_raw}, {override_raw}, "
-        f"{terrain_mask_raw(state['terrainMask'])}, "
-        f"{terrain_mask_raw(state['terrainOverrideMask'])}, "
-        f"{state['minMovementSpeed']}, {state['maxMovementSpeed']}"
-        f"}}"
-    )
-
-
-def format_behavior_override_profile_rule(
-    match_raws: dict[str, str],
-    profile_index: int,
-    indent: str = "    ",
-) -> str:
-    inner = indent + "    "
-    return (
-        f"{indent}{{\n"
-        f"{inner}{format_match_initializer(match_raws, inner)},\n"
-        f"{inner}{profile_index},\n"
-        f"{indent}}}"
-    )
-
-
-def raw_match_values(match: dict[str, dict]) -> dict[str, str]:
-    return {field: match[field]["raw"] for field in MATCH_FIELDS}
-
-
-def braced_entry_removal_span(text: str, entry_span: tuple[int, int], container_span: tuple[int, int]) -> tuple[int, int]:
-    start, end = entry_span
-    delete_end = end
-    container_end = container_span[1] - 1
-    while delete_end < container_end and text[delete_end] in " \t":
-        delete_end += 1
-    if delete_end < container_end and text[delete_end] == ",":
-        delete_end += 1
-    if delete_end < len(text) and text[delete_end] == "\r":
-        delete_end += 1
-    if delete_end < len(text) and text[delete_end] == "\n":
-        delete_end += 1
-    return start, delete_end
+    try:
+        payload = json.loads(body.decode())
+    except Exception as exc:
+        raise ValueError(f"invalid JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("profile catalog payload must be an object")
+    if set(payload) != {"catalog"}:
+        missing = {"catalog"} - set(payload)
+        unknown = set(payload) - {"catalog"}
+        details = []
+        if missing:
+            details.append("missing catalog")
+        if unknown:
+            details.append("unknown " + ", ".join(sorted(unknown)))
+        raise ValueError("profile catalog payload has " + "; ".join(details))
+    catalog = payload["catalog"]
+    if not isinstance(catalog, dict):
+        raise ValueError("profile catalog must be an object")
+    try:
+        _validate_behavior_catalog_v2(catalog)
+    except ParseError as exc:
+        raise ValueError(str(exc)) from exc
+    current = load_behavior_catalog_v2()
+    if catalog == current:
+        return {
+            "saved": False,
+            "message": "No changes",
+            "catalogVersion": 2,
+        }
+    write_behavior_catalog(catalog)
+    return {
+        "saved": True,
+        "message": "Saved profile catalog",
+        "catalogVersion": 2,
+    }
 
 
 def apply_profile_changes(body: bytes) -> dict:
-    raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
-    behavior_source = strip_c_comments(join_line_continuations(raw_behavior_data))
-    expressions, _ = parse_define_expressions([SPECIES_HEADER, BEHAVIOR_DATA_HEADER, OVERLAY_SOURCE, BEHAVIOR_DATA_SOURCE])
-    macros = evaluate_defines(expressions)
-    _, destination_values = parse_behavior_data_enums()
-    macros.update(destination_values)
-    group_labels = invert_labels(macros, GROUP_PREFIX)
-
-    class_profiles = [
-        parse_profile(entry, macros)
-        for entry in parse_initializer(extract_braced_initializer(behavior_source, "sOverworldWildBehaviorClassProfiles"))
-    ]
+    catalog = load_behavior_catalog()
+    _, _, macros = behavior_authoring_context()
+    class_profiles = catalog_class_profiles(catalog, macros)
     changes = parse_save_payload(body)
     if not changes:
         return {"saved": False, "message": "No changes"}
@@ -7340,277 +8898,136 @@ def apply_profile_changes(body: bytes) -> dict:
         }
         for class_index, field_changes in changes.items()
     }
-
-    override_profile_count = len(parse_behavior_override_profiles(behavior_source, macros))
-    for class_index, field_changes in changes.items():
-        for field in ("activeProfile", "tiredProfile"):
-            if field not in field_changes:
-                continue
-            reference = numeric_raw(field_changes[field], field, macros)
-            if reference is None or reference < 0 or reference >= override_profile_count:
-                raise ValueError(f"{field} reference is out of range: {field_changes[field]}")
-
+    override_profile_count = len(catalog["overrideProfiles"])
     valid_options = valid_change_options(macros, class_profiles)
     for class_index, field_changes in changes.items():
         if class_index < 0 or class_index >= len(class_profiles):
             raise ValueError(f"class index out of range: {class_index}")
         for field, raw in field_changes.items():
+            if field in {"activeProfile", "tiredProfile"}:
+                reference = numeric_raw(raw, field, macros)
+                if reference is None or reference < 0 or reference >= override_profile_count:
+                    raise ValueError(f"{field} reference is out of range: {raw}")
             if raw not in valid_options[field]:
                 raise ValueError(f"invalid value for {field}: {raw}")
 
-    replacements: list[tuple[int, int, str]] = []
-    class_array_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorClassProfiles")
-    class_entry_spans = top_level_braced_spans(raw_behavior_data, class_array_span)
-    if len(class_entry_spans) != len(class_profiles):
-        raise ParseError("class profile entry count changed")
-
-    for class_index, field_changes in changes.items():
-        profile_raws = raw_values(class_profiles[class_index])
-        profile_raws.update(field_changes)
-        entry_span = class_entry_spans[class_index]
-        profile_indent = line_indent_before(raw_behavior_data, entry_span[0])
-        replacements.append((entry_span[0], entry_span[1], format_profile_initializer(profile_raws, profile_indent)))
-
-    updated_source = raw_behavior_data
     changed = False
-    for start, end, replacement in sorted(replacements, key=lambda item: item[0], reverse=True):
-        if updated_source[start:end] != replacement:
-            changed = True
-            updated_source = updated_source[:start] + replacement + updated_source[end:]
+    for class_index, field_changes in changes.items():
+        fields = catalog["classProfiles"][class_index]["fields"]
+        for field, raw in field_changes.items():
+            if fields[field] != raw:
+                fields[field] = raw
+                changed = True
     if changed:
-        validate_behavior_data_override_profiles(updated_source, macros, group_labels)
-        write_behavior_data_source(updated_source)
-    return {"saved": changed, "message": "Saved" if changed else "No code changes needed"}
-
+        write_behavior_catalog(catalog)
+    return {
+        "saved": changed,
+        "message": "Saved" if changed else "No code changes needed",
+    }
 
 def apply_profile_membership_changes(body: bytes) -> dict:
     changes = parse_profile_membership_payload(body)
     if not changes:
         return {"saved": False, "message": "No changes"}
 
-    raw_overlay = OVERLAY_SOURCE.read_text()
-    source = strip_c_comments(join_line_continuations(raw_overlay))
-    raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
-    behavior_source = strip_c_comments(join_line_continuations(raw_behavior_data))
-    expressions, species_order = parse_define_expressions(DEFINE_SOURCE_FILES)
-    macros = evaluate_defines(expressions)
-    macros.update(evaluate_armips_equ([ARMIPS_CONFIG, ARMIPS_CONSTANTS]))
-    _, destination_values = parse_behavior_data_enums()
-    macros.update(destination_values)
+    catalog = load_behavior_catalog()
+    expressions, species_order, macros = behavior_authoring_context()
     species = parse_species(expressions, macros, species_order)
-    apply_species_type_metadata(species, parse_species_type_metadata(macros))
     valid_species = {entry["symbol"] for entry in species}
-    species_by_symbol = {entry["symbol"]: entry for entry in species}
-    class_labels = invert_labels(macros, CLASS_PREFIX)
-    group_labels = invert_labels(macros, GROUP_PREFIX)
-    class_profiles = [
-        parse_profile(entry, macros)
-        for entry in parse_initializer(extract_braced_initializer(behavior_source, "sOverworldWildBehaviorClassProfiles"))
-    ]
-    full_class_rules = parse_full_class_rules(behavior_source, macros, group_labels, class_labels)
-    species_class_rules = parse_species_class_rules(behavior_source, macros, group_labels, class_labels, len(full_class_rules))
-    class_rules = full_class_rules + species_class_rules
-    group_species = parse_group_species(source, macros)
-    default_terrain = macros.get("OW_WILD_SPAWN_TERRAIN_LAND", 0)
-
-    for symbol, class_index in changes.items():
-        if symbol not in valid_species:
-            raise ValueError(f"invalid Pokemon: {symbol}")
-        if class_index < 0 or class_index >= len(class_profiles):
-            raise ValueError(f"class index out of range: {class_index}")
-
-    class_rule_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorClassRules")
-    class_rule_entry_spans = top_level_braced_spans(raw_behavior_data, class_rule_span)
-    if len(class_rule_entry_spans) != len(full_class_rules):
-        raise ParseError("class rule entry count changed")
-    species_rule_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorSpeciesClassRules")
-    species_rule_entry_spans = top_level_braced_spans(raw_behavior_data, species_rule_span)
-    if len(species_rule_entry_spans) != len(species_class_rules):
-        raise ParseError("compact species class rule entry count changed")
-
-    direct_rule_by_species: dict[str, tuple[str, tuple[int, int]]] = {}
-    for index, rule in enumerate(full_class_rules):
-        symbol = simple_species_class_rule(rule, macros)
-        if symbol:
-            direct_rule_by_species[symbol] = ("full", class_rule_entry_spans[index])
-    for index, rule in enumerate(species_class_rules):
-        symbol = simple_species_class_rule(rule, macros)
-        if symbol:
-            direct_rule_by_species[symbol] = ("species", species_rule_entry_spans[index])
-
-    replacements: list[tuple[int, int, str]] = []
-    appended_rules: list[str] = []
-    for symbol, class_index in changes.items():
-        entry = species_by_symbol[symbol]
-        context = {
-            "species": entry["value"],
-            "symbol": symbol,
-            "level": 1,
-            "terrain": default_terrain,
-            "shiny": 0,
-            "groupFlags": group_flags_for_species(symbol, group_species, species_by_symbol, macros),
-            "behaviorClass": macros.get("OW_WILD_BEHAVIOR_CLASS_DEFAULT", 0),
-        }
-        current_class, _ = class_for_context(context, class_rules, len(class_profiles), macros)
-        if current_class == class_index:
-            continue
-        class_symbol = class_labels.get(class_index, {"symbol": str(class_index)})["symbol"]
-        if symbol in direct_rule_by_species:
-            storage, span = direct_rule_by_species[symbol]
-            replacement = (
-                format_behavior_species_class_rule(symbol, class_symbol)
-                if storage == "species"
-                else format_behavior_class_rule(symbol, class_symbol)
-            )
-            replacements.append((span[0], span[1], replacement))
-        else:
-            appended_rules.append(format_behavior_species_class_rule(symbol, class_symbol))
-
-    if appended_rules:
-        insert_at = species_rule_span[1] - 1
-        replacements.append((insert_at, insert_at, "".join(f"{rule},\n" for rule in appended_rules)))
-
-    updated_source = raw_behavior_data
-    changed = False
-    for start, end, replacement in sorted(replacements, key=lambda item: item[0], reverse=True):
-        if updated_source[start:end] != replacement:
-            changed = True
-            updated_source = updated_source[:start] + replacement + updated_source[end:]
+    changed = _set_catalog_species_memberships(catalog, changes, valid_species)
     if changed:
-        write_behavior_data_source(updated_source)
-    return {"saved": changed, "message": "Saved" if changed else "No code changes needed"}
-
+        write_behavior_catalog(catalog)
+    return {
+        "saved": changed,
+        "message": "Saved" if changed else "No code changes needed",
+    }
 
 def apply_profile_override_changes(body: bytes) -> dict:
     changes = parse_profile_override_payload(body)
     additions = changes["add"]
     edits = changes["edit"]
     renames = changes["rename"]
-    removals = changes["remove"]
+    removals = set(changes["remove"])
     reorder_groups = changes["reorder"]
-    match_replacements = changes["replaceMatches"]
     target_replacements = changes["replaceTargets"]
-    conditional_state_replacement = changes["conditionalStates"]
+    conditional_replacement = changes["conditionalStates"]
     if not additions and not edits and not renames and not removals \
             and not reorder_groups and not target_replacements \
-            and conditional_state_replacement is None:
+            and conditional_replacement is None:
         return {"saved": False, "message": "No changes"}
 
-    raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
-    behavior_source = strip_c_comments(join_line_continuations(raw_behavior_data))
-    expressions, species_order = parse_define_expressions(DEFINE_SOURCE_FILES)
-    macros = evaluate_defines(expressions)
-    macros.update(evaluate_armips_equ([ARMIPS_CONFIG, ARMIPS_CONSTANTS]))
-    terrain_values, destination_values = parse_behavior_data_enums()
-    macros.update(terrain_values)
-    macros.update(destination_values)
-    valid_species = {entry["symbol"] for entry in parse_species(expressions, macros, species_order)}
-    runtime_owned_override_orders = {
-        macros.get("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON", -2) + 1,
-        macros.get("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_ACTIVE", -2) + 1,
-        macros.get("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_TIRED", -2) + 1,
+    catalog = load_behavior_catalog()
+    original_catalog = copy.deepcopy(catalog)
+    expressions, species_order, macros = behavior_authoring_context()
+    valid_species = {
+        entry["symbol"]
+        for entry in parse_species(expressions, macros, species_order)
     }
-    if runtime_owned_override_orders.intersection(removals) or runtime_owned_override_orders.intersection(renames):
-        raise ValueError("runtime-owned Follower/Default state overrides cannot be renamed or deleted")
-
-    class_profiles = [
-        parse_profile(entry, macros)
-        for entry in parse_initializer(extract_braced_initializer(behavior_source, "sOverworldWildBehaviorClassProfiles"))
-    ]
-    group_labels = invert_labels(macros, GROUP_PREFIX)
-    existing_overrides = parse_behavior_overrides(behavior_source, macros, group_labels)
-    existing_conditional_states = parse_behavior_conditional_states(
-        behavior_source,
-        macros,
-        len(existing_overrides),
+    profiles = catalog["overrideProfiles"]
+    original_count = len(profiles)
+    referenced_orders = (
+        set(edits) | set(renames) | removals | set(target_replacements)
+        | {order for group in reorder_groups for order in group}
     )
-    existing_names = parse_override_profile_names(raw_behavior_data)
+    for order in referenced_orders:
+        if order < 1 or order > original_count:
+            raise ValueError(f"override profile order out of range: {order}")
 
-    def canonical_conditional_states(raw_states: list[dict[str, str]]) -> list[dict[str, int]]:
-        profile_count = len(existing_overrides) + len(additions)
-        parsed_states = []
-        signatures = set()
-        for index, raw_state in enumerate(raw_states, 1):
-            parsed_values = {
-                field: numeric(conditional_state_value(raw_state[field], field, macros))
-                for field in (
-                    "parentProfile",
-                    "overrideProfile",
-                    "terrainMask",
-                    "terrainOverrideMask",
-                    "minMovementSpeed",
-                    "maxMovementSpeed",
-                )
-            }
-            if any(value is None for value in parsed_values.values()):
-                raise ValueError(f"conditional state {index} contains an invalid value")
-            state = {field: int(value) for field, value in parsed_values.items()}
-            validate_conditional_state(
-                state,
-                f"conditional state {index}",
-                profile_count,
-                ValueError,
+    protected_names = {"Follower Pokemon", "Default Active", "Default Tired"}
+    for order in removals | set(renames):
+        if profiles[order - 1]["name"] in protected_names:
+            raise ValueError(
+                "runtime-owned Follower/Default state overrides cannot be renamed or deleted"
             )
-            signature = (
-                state["parentProfile"],
-                state["terrainMask"],
-                state["terrainOverrideMask"],
-                state["minMovementSpeed"],
-                state["maxMovementSpeed"],
-            )
-            if signature in signatures:
-                raise ValueError(f"conditional state {index} duplicates an existing parent condition")
-            signatures.add(signature)
-            parsed_states.append(state)
-        return parsed_states
 
-    conditional_states = (
-        existing_conditional_states
-        if conditional_state_replacement is None
-        else canonical_conditional_states(conditional_state_replacement)
-    )
+    class_profiles = catalog_class_profiles(catalog, macros)
     valid_options = valid_change_options(macros, class_profiles)
-    for addition in additions:
-        addition["fields"] = {
-            field: canonical_profile_change_raw(field, raw, macros, allow_relative=True)
-            for field, raw in addition["fields"].items()
+    for profile in profiles:
+        for field, authored in profile["fields"].items():
+            raw = _catalog_override_raw(field, authored)
+            if raw:
+                valid_options[field].add(raw)
+
+    def canonical_fields(raw_fields: dict[str, str]) -> dict[str, str]:
+        result = {
+            field: canonical_profile_change_raw(
+                field,
+                raw,
+                macros,
+                allow_relative=True,
+            )
+            for field, raw in raw_fields.items()
         }
+        if "spawnDestinationMask" in result \
+                or "spawnDestinationOverrideMask" in result:
+            result["spawnDestination"] = ""
+        return result
+
+    additions = [
+        {**addition, "fields": canonical_fields(addition["fields"])}
+        for addition in additions
+    ]
     edits = {
-        order: {
-            field: canonical_profile_change_raw(field, raw, macros, allow_relative=True)
-            for field, raw in field_changes.items()
-        }
+        order: canonical_fields(field_changes)
         for order, field_changes in edits.items()
     }
-    for field_changes in edits.values():
-        if "spawnDestinationMask" in field_changes \
-                or "spawnDestinationOverrideMask" in field_changes:
-            # Once the unified policy is edited it is authoritative, including
-            # an explicit 0/0 pair used to mean fully inherited. Remove the
-            # hidden scalar so it cannot be projected back on the next load.
-            field_changes["spawnDestination"] = ""
-    for override in existing_overrides:
-        for field in behavior_override_field_keys(override["behavior"]):
-            value = override["behavior"]["profile"][field]
-            if value.get("raw") and value.get("value") is not None:
-                valid_options[field].add(canonical_profile_value_raw(value, field))
 
-    def validate_override_fields(
+    def validate_fields(
         fields: dict[str, str],
         label: str,
         *,
-        require_terrain_pair: bool = True,
+        require_pairs: bool = True,
     ) -> None:
-        if require_terrain_pair:
-            terrain_value_present = bool(fields.get("chillAllowedTerrainMask"))
-            terrain_override_present = bool(fields.get("chillAllowedTerrainOverrideMask"))
-            if terrain_value_present != terrain_override_present:
+        if require_pairs:
+            terrain_value = bool(fields.get("chillAllowedTerrainMask"))
+            terrain_override = bool(fields.get("chillAllowedTerrainOverrideMask"))
+            if terrain_value != terrain_override:
                 raise ValueError(
                     f"{label} must update allowed terrain values and inheritance together"
                 )
-            destination_value_present = bool(fields.get("spawnDestinationMask"))
-            destination_override_present = bool(fields.get("spawnDestinationOverrideMask"))
-            if destination_value_present != destination_override_present:
+            destination_value = bool(fields.get("spawnDestinationMask"))
+            destination_override = bool(fields.get("spawnDestinationOverrideMask"))
+            if destination_value != destination_override:
                 raise ValueError(
                     f"{label} must update spawn destination values and inheritance together"
                 )
@@ -7619,37 +9036,33 @@ def apply_profile_override_changes(body: bytes) -> dict:
                 raise ValueError(f"invalid override field: {field}")
             if field not in OVERRIDE_SYMBOL_BY_FIELD:
                 raise ValueError(f"field cannot be used in override profiles: {field}")
-            if field in {"activeProfile", "tiredProfile"} and raw:
+            if not raw:
+                continue
+            if field in {"activeProfile", "tiredProfile"}:
                 reference = numeric_raw(raw, field, macros)
-                if reference is None or reference < 0 or reference >= len(existing_overrides):
+                if reference is None or reference < 0 or reference >= original_count:
                     raise ValueError(f"{label} has an out-of-range {field} reference: {raw}")
-            if raw and is_numeric_override_operator_raw(field, raw):
+            if is_numeric_override_operator_raw(field, raw):
                 compound = compound_override_parts(field, raw)
                 if compound is not None:
                     delta, _, threshold = compound
-                    if delta < RELATIVE_OVERRIDE_DELTA_MIN or delta > RELATIVE_OVERRIDE_DELTA_MAX:
+                    if delta < RELATIVE_OVERRIDE_DELTA_MIN \
+                            or delta > RELATIVE_OVERRIDE_DELTA_MAX:
                         raise ValueError(f"invalid relative value for {field}: {raw}")
-                    maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
-                    minimum = NUMERIC_PROFILE_FIELD_OPTION_MIN.get(field, 0)
-                    if threshold < minimum or threshold > maximum:
-                        raise ValueError(f"invalid override bound for {field}: {raw}")
                 elif is_relative_override_raw(field, raw):
                     delta = int(raw, 10)
-                    if delta < RELATIVE_OVERRIDE_DELTA_MIN or delta > RELATIVE_OVERRIDE_DELTA_MAX:
+                    if delta < RELATIVE_OVERRIDE_DELTA_MIN \
+                            or delta > RELATIVE_OVERRIDE_DELTA_MAX:
                         raise ValueError(f"invalid relative value for {field}: {raw}")
+                    continue
                 else:
                     threshold = int(raw[2:], 10)
-                    maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
-                    minimum = NUMERIC_PROFILE_FIELD_OPTION_MIN.get(field, 0)
-                    if threshold < minimum or threshold > maximum:
-                        raise ValueError(f"invalid override bound for {field}: {raw}")
+                minimum = NUMERIC_PROFILE_FIELD_OPTION_MIN.get(field, 0)
+                maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
+                if threshold < minimum or threshold > maximum:
+                    raise ValueError(f"invalid override bound for {field}: {raw}")
                 continue
-            if raw and field in NUMERIC_PROFILE_FIELDS:
-                # Existing source entries may use symbolic expressions (for
-                # example a combined terrain mask) while editor changes are
-                # canonicalized to decimal strings. Validate both forms by
-                # their evaluated value instead of requiring an exact option
-                # spelling match.
+            if field in NUMERIC_PROFILE_FIELDS:
                 evaluated = numeric_raw(raw, field, macros)
                 minimum = NUMERIC_PROFILE_FIELD_OPTION_MIN.get(field, 0)
                 maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 64)
@@ -7658,865 +9071,280 @@ def apply_profile_override_changes(body: bytes) -> dict:
                 if field == "walkOptions" and not walk_options_valid(evaluated):
                     raise ValueError(f"invalid packed Walk options for {label}: {raw}")
                 continue
-            if raw and raw not in valid_options[field]:
+            if raw not in valid_options[field]:
                 raise ValueError(f"invalid value for {field}: {raw}")
 
-    def validate_override_match(match_raws: dict[str, str], label: str, allow_global: bool = False) -> None:
-        match_values = [match_raws[match_field] for match_field in MATCH_FIELDS]
-        parsed_match = parse_match(match_values, macros)
-        unresolved = [field_name for field_name, value in parsed_match.items() if numeric(value) is None]
+    def validate_match(match: dict[str, str], label: str, allow_global: bool) -> None:
+        values = [match[field] for field in MATCH_FIELDS]
+        parsed = parse_match(values, macros)
+        unresolved = [field for field, value in parsed.items() if numeric(value) is None]
         if unresolved:
-            raise ValueError(f"{label} has invalid match value for {', '.join(unresolved)}")
-        any_species = macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES", macros.get("SPECIES_NONE", 0))
+            raise ValueError(
+                f"{label} has invalid match value for {', '.join(unresolved)}"
+            )
+        any_species = macros.get(
+            "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+            macros.get("SPECIES_NONE", 0),
+        )
         any_class = macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_CLASS", 0)
         any_terrain = macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN", 0)
         any_level = macros.get("OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY", 0)
         any_shiny = macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_SHINY", 0)
         group_none = macros.get("OW_WILD_BEHAVIOR_GROUP_NONE", 0)
-        if not allow_global and (
-            numeric(parsed_match["species"]) == any_species
-            and numeric(parsed_match["groupMask"]) == group_none
-            and numeric(parsed_match["terrain"]) == any_terrain
-            and numeric(parsed_match["minLevel"]) == any_level
-            and numeric(parsed_match["maxLevel"]) == any_level
-            and numeric(parsed_match["shiny"]) == any_shiny
-            and numeric(parsed_match["behaviorClass"]) == any_class
-        ):
-            raise ValueError(f"{label} would match every Pokemon; choose a species, group, terrain, type, or class target")
-        min_level = numeric(parsed_match["minLevel"])
-        max_level = numeric(parsed_match["maxLevel"])
-        if min_level != any_level and max_level != any_level and min_level is not None and max_level is not None and min_level > max_level:
+        global_match = (
+            numeric(parsed["species"]) == any_species
+            and numeric(parsed["groupMask"]) == group_none
+            and numeric(parsed["terrain"]) == any_terrain
+            and numeric(parsed["minLevel"]) == any_level
+            and numeric(parsed["maxLevel"]) == any_level
+            and numeric(parsed["shiny"]) == any_shiny
+            and numeric(parsed["behaviorClass"]) == any_class
+        )
+        if global_match and not allow_global:
+            raise ValueError(
+                f"{label} would match every Pokemon; choose a species, group, "
+                "terrain, type, or class target"
+            )
+        min_level = numeric(parsed["minLevel"])
+        max_level = numeric(parsed["maxLevel"])
+        if min_level != any_level and max_level != any_level \
+                and min_level is not None and max_level is not None \
+                and min_level > max_level:
             raise ValueError(f"{label} minimum level cannot be greater than maximum level")
 
-    maximum_condition_parent = len(existing_overrides) + len(additions) - 1
-
-    def validate_override_target(
-        target: dict,
-        label: str,
-        own_profile_index: int | None = None,
-    ) -> None:
-        mode = target["targetMode"]
-        members = target["members"]
+    def catalog_target(raw_target: dict, label: str) -> dict:
+        mode = raw_target["targetMode"]
+        members = raw_target["members"]
         if len(members) != len(set(members)):
             raise ValueError(f"{label} contains duplicate Pokemon members")
-        if len(members) > 0xFFFF:
-            raise ValueError(f"{label} has too many Pokemon members for u16 storage")
-        invalid_members = [member for member in members if member not in valid_species or member == "SPECIES_NONE"]
-        if invalid_members:
-            raise ValueError(f"{label} contains invalid Pokemon: {', '.join(invalid_members)}")
+        invalid = [
+            member
+            for member in members
+            if member not in valid_species or member == "SPECIES_NONE"
+        ]
+        if invalid:
+            raise ValueError(
+                f"{label} contains invalid Pokemon: {', '.join(invalid)}"
+            )
         if mode == "members" and not members:
             raise ValueError(f"{label} member target must include at least one Pokemon")
-        validate_override_match(target["match"], label, allow_global=(mode in {"members", "disabled"}))
-        parent = numeric(make_condition_value(
-            target["conditionParentProfile"],
-            "conditionParentProfile",
-            macros,
-        ))
-        condition_mask = numeric(make_condition_value(
-            target["conditionMask"],
-            "conditionMask",
-            macros,
-        ))
-        condition_value = numeric(make_condition_value(
-            target["conditionValue"],
-            "conditionValue",
-            macros,
-        ))
-        if parent is None or not 0 <= parent <= 0xFF:
-            raise ValueError(f"{label} has an invalid condition parent profile")
-        if condition_mask is None or condition_value is None \
-                or not 0 <= condition_mask <= 0xFF or not 0 <= condition_value <= 0xFF:
-            raise ValueError(f"{label} has invalid condition bits")
-        if condition_value & ~condition_mask:
-            raise ValueError(f"{label} condition value contains bits outside its mask")
-        if parent == CONDITION_PARENT_NONE_VALUE:
-            if condition_mask != 0 or condition_value != 0:
-                raise ValueError(f"{label} has conditions but no parent profile")
-        else:
-            if parent > maximum_condition_parent:
-                raise ValueError(f"{label} condition parent profile is out of range")
-            if own_profile_index is not None and parent >= own_profile_index:
-                raise ValueError(f"{label} condition parent must precede the linked profile")
-            if condition_mask == 0:
-                raise ValueError(f"{label} condition link must select at least one condition")
-
-    def legacy_matches_from_target(target: dict, label: str) -> list[dict[str, str]]:
-        """Losslessly project the v32 target shape onto the pre-v32 row model."""
-        validate_override_target(target, label)
-        if target["targetMode"] == "disabled":
-            disabled_match = default_behavior_match_raws()
-            disabled_match["behaviorClass"] = "0xFE"
-            return [disabled_match]
-        if target["targetMode"] == "all":
-            return [dict(target["match"])]
-        return [
-            {**target["match"], "species": member}
-            for member in target["members"]
-        ]
-
-    try:
-        backend_profiles = parse_behavior_override_profiles(behavior_source, macros)
-    except ParseError:
-        backend_profiles = []
-
-    if behavior_source_uses_override_members(behavior_source):
-        order_inputs = set(removals) | set(edits) | set(renames) | set(target_replacements)
-        order_inputs.update(order for group in reorder_groups for order in group)
-        for order in order_inputs:
-            if order < 1 or order > len(backend_profiles):
-                raise ValueError(f"override profile order out of range: {order}")
-
-        def mode_name(value: dict) -> str:
-            numeric_mode = numeric(value)
-            if numeric_mode == macros.get("OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS", 1):
-                return "members"
-            if numeric_mode == macros.get("OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL", 2):
-                return "all"
-            return "disabled"
-
-        def behavior_from_fields(fields: dict[str, str]) -> dict:
-            profile_raws = {profile_field: "0" for profile_field in PROFILE_FIELDS}
-            profile_raws.update(fields)
-            relative_fields = relative_override_fields_from_raws(profile_raws)
-            at_least_fields = at_least_override_fields_from_raws(profile_raws)
-            at_most_fields = at_most_override_fields_from_raws(profile_raws)
-            return parse_behavior_override(
-                [
-                    format_mask_expression(set(fields), "", 1),
-                    format_mask_expression(set(fields), "", 2),
-                    format_mask_expression(set(fields), "", 3),
-                    [profile_raws[field] for field in PROFILE_FIELDS],
-                    format_mask_expression(relative_fields, "", 1),
-                    format_mask_expression(relative_fields, "", 2),
-                    format_mask_expression(relative_fields, "", 3),
-                    format_mask_expression(at_least_fields, "", 1),
-                    format_mask_expression(at_least_fields, "", 2),
-                    format_mask_expression(at_least_fields, "", 3),
-                    format_mask_expression(at_most_fields, "", 1),
-                    format_mask_expression(at_most_fields, "", 2),
-                    format_mask_expression(at_most_fields, "", 3),
-                ],
-                macros,
-            )
-
-        profiles_model = []
-        profile_names = parse_override_profile_entry_names(raw_behavior_data)
-        for profile in backend_profiles:
-            profiles_model.append(
-                {
-                    "originalOrder": profile["order"],
-                    "name": profile_names.get(profile["order"], ""),
-                    "behavior": profile["behavior"],
-                    "target": {
-                        "members": list(profile.get("memberSymbols") or []),
-                        "match": raw_match_values(profile["match"]),
-                        "targetMode": mode_name(profile["targetMode"]),
-                        "conditionParentProfile": profile["conditionParentProfile"]["raw"],
-                        "conditionMask": profile["conditionMask"]["raw"],
-                        "conditionValue": profile["conditionValue"]["raw"],
-                    },
-                }
-            )
-
-        for order, field_changes in edits.items():
-            if order in removals:
-                continue
-            validate_override_fields(
-                field_changes,
-                f"override {order}",
-                require_terrain_pair=False,
-            )
-            behavior = profiles_model[order - 1]["behavior"]
-            fields = {
-                field: behavior["profile"][field]["raw"]
-                for field in behavior_override_field_keys(behavior)
-            }
-            fields.update(field_changes)
-            fields = {field: raw for field, raw in fields.items() if raw}
-            validate_override_fields(fields, f"override {order}")
-            profiles_model[order - 1]["behavior"] = behavior_from_fields(fields)
-
-        for order, name in renames.items():
-            if order not in removals:
-                profiles_model[order - 1]["name"] = name
-
-        for order, target in target_replacements.items():
-            if order in removals:
-                raise ValueError(f"override {order} cannot be removed and retargeted")
-            validate_override_target(target, f"override {order}", order - 1)
-            profiles_model[order - 1]["target"] = target
-
-        next_original_order = len(profiles_model) + 1
-        for index, change in enumerate(additions, 1):
-            validate_override_fields(change["fields"], f"override addition {index}")
-            validate_override_target(
-                change["target"],
-                f"override addition {index}",
-                next_original_order - 1,
-            )
-            fields = {field: raw for field, raw in change["fields"].items() if raw}
-            profiles_model.append(
-                {
-                    "originalOrder": next_original_order,
-                    "name": change.get("name", ""),
-                    "behavior": behavior_from_fields(fields),
-                    "target": change["target"],
-                }
-            )
-            next_original_order += 1
-
-        active = [profile for profile in profiles_model if profile["originalOrder"] not in set(removals)]
-        if reorder_groups:
-            active_by_order = {profile["originalOrder"]: profile for profile in active}
-            requested = []
-            seen = set()
-            for group in reorder_groups:
-                for order in group:
-                    if order in active_by_order and order not in seen:
-                        requested.append(active_by_order[order])
-                        seen.add(order)
-            requested.extend(profile for profile in active if profile["originalOrder"] not in seen)
-            active = requested
-
-        if not active:
-            raise ValueError("at least one override profile is required; create a replacement before removing the last profile")
-
-        # Profile references are stored as zero-based override indices. Preserve
-        # their identity when profiles are reordered, and refuse a deletion that
-        # would leave a retained profile or base class pointing at nothing.
-        old_index_to_new = {
-            profile["originalOrder"] - 1: new_index
-            for new_index, profile in enumerate(active)
+        validate_match(
+            raw_target["match"],
+            label,
+            allow_global=mode in {"members", "disabled"},
+        )
+        return {
+            "mode": mode,
+            "match": dict(raw_target["match"]),
+            "members": list(members),
         }
 
-        remapped_conditional_states = []
-        for state_index, state in enumerate(conditional_states, 1):
-            parent_profile = state["parentProfile"]
-            override_profile = state["overrideProfile"]
-            if parent_profile not in old_index_to_new:
-                raise ValueError(
-                    f"conditional state {state_index} references a parent profile being removed"
-                )
-            if override_profile != CONDITIONAL_PROFILE_NONE_VALUE \
-                    and override_profile not in old_index_to_new:
-                raise ValueError(
-                    f"conditional state {state_index} references an override profile being removed"
-                )
-            remapped_conditional_states.append({
-                **state,
-                "parentProfile": old_index_to_new[parent_profile],
-                "overrideProfile": (
-                    CONDITIONAL_PROFILE_NONE_VALUE
-                    if override_profile == CONDITIONAL_PROFILE_NONE_VALUE
-                    else old_index_to_new[override_profile]
-                ),
-            })
-
-        def remap_reference_raw(raw: str, label: str) -> str:
-            old_index = numeric_raw(raw, label, macros)
-            if old_index is None:
-                raise ValueError(f"{label} has an invalid profile reference: {raw}")
-            if old_index not in old_index_to_new:
-                raise ValueError(f"{label} references an override profile being removed")
-            # Named runtime references follow the rewritten header constants.
-            # Literal references need to follow the profile they named.
-            if re.fullmatch(r"(?:0[xX][0-9A-Fa-f]+|[0-9]+)", raw.strip()):
-                return str(old_index_to_new[old_index])
-            return raw
-
-        def remap_condition_parent_raw(raw: str, label: str) -> str:
-            old_index = numeric(make_condition_value(raw, "conditionParentProfile", macros))
-            if old_index is None:
-                raise ValueError(f"{label} has an invalid condition parent profile: {raw}")
-            if old_index == CONDITION_PARENT_NONE_VALUE:
-                return CONDITION_PARENT_NONE_RAW
-            if old_index not in old_index_to_new:
-                raise ValueError(f"{label} references a condition parent profile being removed")
-            return str(old_index_to_new[old_index])
-
-        for new_profile_index, profile in enumerate(active):
-            target = profile["target"]
-            target["conditionParentProfile"] = remap_condition_parent_raw(
-                target["conditionParentProfile"],
-                f"override {profile['originalOrder']}",
-            )
-            remapped_parent = numeric(make_condition_value(
-                target["conditionParentProfile"],
-                "conditionParentProfile",
-                macros,
-            ))
-            if remapped_parent != CONDITION_PARENT_NONE_VALUE \
-                    and remapped_parent >= new_profile_index:
-                raise ValueError(
-                    f"override {profile['originalOrder']} condition parent must precede the linked profile"
-                )
-
-        for profile in active:
-            behavior = profile["behavior"]
-            fields = {
-                field: behavior["profile"][field]["raw"]
-                for field in behavior_override_field_keys(behavior)
-            }
-            changed_reference = False
-            for field in ("activeProfile", "tiredProfile"):
-                if field not in fields:
-                    continue
-                remapped = remap_reference_raw(
-                    fields[field],
-                    f"override {profile['originalOrder']} {field}",
-                )
-                changed_reference = changed_reference or remapped != fields[field]
-                fields[field] = remapped
-            if changed_reference:
-                profile["behavior"] = behavior_from_fields(fields)
-
-        class_profiles_changed = False
-        class_profile_raws = []
-        for class_index, class_profile in enumerate(class_profiles):
-            raws = raw_values(class_profile)
-            for field in ("activeProfile", "tiredProfile"):
-                remapped = remap_reference_raw(raws[field], f"class profile {class_index} {field}")
-                class_profiles_changed = class_profiles_changed or remapped != raws[field]
-                raws[field] = remapped
-            class_profile_raws.append(raws)
-
-        names = [profile["name"].strip().lower() for profile in active if profile["name"].strip()]
-        if len(names) != len(set(names)):
-            raise ValueError("override profile names must be unique")
-        if len(active) > MAX_RUNTIME_OVERRIDE_PROFILES:
-            raise ValueError(
-                f"the runtime supports at most {MAX_RUNTIME_OVERRIDE_PROFILES} ordered override profiles"
-            )
-
-        profile_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorOverrideProfiles")
-        member_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorOverrideMembers")
-        conditional_span = initializer_brace_span(
-            raw_behavior_data,
-            "sOverworldWildBehaviorConditionalStates",
-        )
-        profile_indent = line_indent_before(raw_behavior_data, profile_span[0])
-        member_indent = line_indent_before(raw_behavior_data, member_span[0])
-        conditional_indent = line_indent_before(raw_behavior_data, conditional_span[0])
-        profile_entry_indent = profile_indent + "    "
-        member_entry_indent = member_indent + "    "
-        flat_members = []
-        profile_entries = []
-        for profile in active:
-            target = profile["target"]
-            if len(flat_members) + len(target["members"]) > 0xFFFF:
-                raise ValueError("override member table exceeds u16 storage")
-            member_start = len(flat_members)
-            flat_members.extend(target["members"])
-            profile_entries.append(
-                format_behavior_override_member_profile(
-                    target["match"],
-                    member_start,
-                    len(target["members"]),
-                    target["targetMode"],
-                    set(behavior_override_field_keys(profile["behavior"])),
-                    raw_values(profile["behavior"]["profile"]),
-                    profile_entry_indent,
-                    profile["name"],
-                    relative_fields=set(behavior_override_relative_field_keys(profile["behavior"])),
-                    at_least_fields=set(behavior_override_at_least_field_keys(profile["behavior"])),
-                    at_most_fields=set(behavior_override_at_most_field_keys(profile["behavior"])),
-                )
-            )
-        # Keep the fixed C blob layout standard-compliant even when every
-        # profile uses disabled/all targeting and no member slice is referenced.
-        stored_members = flat_members or ["SPECIES_NONE"]
-        profile_entries_text = ",\n".join(profile_entries)
-        member_entries_text = ",\n".join(member_entry_indent + member for member in stored_members)
-        formatted_profiles = f"{{\n{profile_entries_text}\n{profile_indent}}}"
-        formatted_members = f"{{\n{member_entries_text}\n{member_indent}}}"
-        conditional_entry_indent = conditional_indent + "    "
-        stored_conditional_states = remapped_conditional_states or [{
-            "parentProfile": CONDITIONAL_PROFILE_NONE_VALUE,
-            "overrideProfile": CONDITIONAL_PROFILE_NONE_VALUE,
-            "terrainMask": 0,
-            "terrainOverrideMask": 0,
-            "minMovementSpeed": 0,
-            "maxMovementSpeed": 0,
-        }]
-        conditional_entries_text = ",\n".join(
-            format_behavior_conditional_state(state, conditional_entry_indent)
-            for state in stored_conditional_states
-        )
-        formatted_conditional_states = (
-            f"{{\n{conditional_entries_text}\n{conditional_indent}}}"
-        )
-        replacements = [
-            (profile_span[0], profile_span[1], formatted_profiles),
-            (member_span[0], member_span[1], formatted_members),
-            (
-                conditional_span[0],
-                conditional_span[1],
-                formatted_conditional_states,
-            ),
-        ]
-        if class_profiles_changed:
-            class_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorClassProfiles")
-            class_indent = line_indent_before(raw_behavior_data, class_span[0])
-            class_entry_indent = class_indent + "    "
-            formatted_classes = ",\n".join(
-                format_profile_initializer(raws, class_entry_indent)
-                for raws in class_profile_raws
-            )
-            replacements.append(
-                (class_span[0], class_span[1], f"{{\n{formatted_classes}\n{class_indent}}}")
-            )
-        updated_source = raw_behavior_data
-        changed = False
-        for start, end, replacement in sorted(replacements, key=lambda item: item[0], reverse=True):
-            if updated_source[start:end] != replacement:
-                changed = True
-                updated_source = updated_source[:start] + replacement + updated_source[end:]
-        if changed:
-            validate_behavior_data_override_profiles(updated_source, macros, group_labels)
-            write_behavior_data_source(updated_source)
-        total_changes = len(additions) + len(edits) + len(renames) \
-            + len(set(removals)) + len(target_replacements) \
-            + (1 if reorder_groups else 0) \
-            + (1 if conditional_state_replacement is not None else 0)
-        label = "override profile change" if total_changes == 1 else "override profile changes"
-        return {"saved": changed, "message": f"Saved {total_changes} {label}" if changed else "No code changes needed"}
-
-    # V2 always submits the profile-owned target shape. Older source layouts
-    # can still be upgraded/edited safely by projecting that one target into
-    # their legacy storage rows at the writer boundary.
-    for order, target in target_replacements.items():
-        match_replacements[order] = legacy_matches_from_target(target, f"override {order}")
-
-    if backend_profiles:
-        profile_names = parse_override_profile_entry_names(raw_behavior_data)
-
-        reorder_orders = {order for group in reorder_groups for order in group}
-        for order in set(removals) | set(edits.keys()) | set(renames.keys()) | set(match_replacements.keys()) | reorder_orders:
-            if order < 1 or order > len(existing_overrides):
-                raise ValueError(f"override order out of range: {order}")
-        for order, field_changes in edits.items():
-            validate_override_fields(
-                field_changes,
-                f"override {order}",
-                require_terrain_pair=False,
-            )
-
-        profiles_model = [
-            {
-                "behavior": profile["behavior"],
-                "name": profile_names.get(profile["order"], ""),
-            }
-            for profile in backend_profiles
-        ]
-        rules_model = [
-            {
-                "order": override["order"],
-                "match": raw_match_values(override["match"]),
-                "profileOrder": override["profileOrder"],
-                "removed": override["order"] in removals,
-            }
-            for override in existing_overrides
-        ]
-        preferred_profile_orders: set[int] = set()
-        identity_changed_profile_orders: set[int] = set()
-        edited_profile_orders: dict[int, int] = {}
-
-        for order, replacement_matches in match_replacements.items():
-            profile_order = existing_overrides[order - 1]["profileOrder"]
-            profile_rule_orders = {
-                override["order"]
-                for override in existing_overrides
-                if override["profileOrder"] == profile_order
-            }
-            if profile_rule_orders.intersection(removals):
-                raise ValueError(f"override {order} cannot be removed and have its matches replaced")
-            matching_indexes = [
-                index
-                for index, rule in enumerate(rules_model)
-                if rule["profileOrder"] == profile_order
-            ]
-            if not matching_indexes:
-                raise ValueError(f"override {order} has no rules to replace")
-            for match_index, match in enumerate(replacement_matches, 1):
-                validate_override_match(match, f"override {order}.{match_index}")
-            old_orders = [
-                rules_model[index].get("order")
-                for index in matching_indexes
-                if rules_model[index].get("order") is not None
-            ]
-            insertion_index = matching_indexes[0]
-            matching_index_set = set(matching_indexes)
-            rules_model = [
-                rule
-                for index, rule in enumerate(rules_model)
-                if index not in matching_index_set
-            ]
-            replacement_rules = [
-                {
-                    "order": old_orders[index] if index < len(old_orders) else None,
-                    "match": match,
-                    "profileOrder": profile_order,
-                    "removed": False,
-                }
-                for index, match in enumerate(replacement_matches)
-            ]
-            rules_model[insertion_index:insertion_index] = replacement_rules
-            preferred_profile_orders.add(profile_order)
-
-        for order, field_changes in edits.items():
-            if order in removals:
-                continue
-            profile_order = existing_overrides[order - 1]["profileOrder"]
-            preferred_profile_orders.add(profile_order)
-            edited_profile_orders.setdefault(profile_order, order)
-            behavior = profiles_model[profile_order - 1]["behavior"]
-            fields = {
-                field: behavior["profile"][field]["raw"]
-                for field in behavior_override_field_keys(behavior)
-            }
-            fields.update(field_changes)
-            fields = {field: raw for field, raw in fields.items() if raw}
-            profile_raws = {profile_field: "0" for profile_field in PROFILE_FIELDS}
-            profile_raws.update(fields)
-            relative_fields = relative_override_fields_from_raws(profile_raws)
-            at_least_fields = at_least_override_fields_from_raws(profile_raws)
-            at_most_fields = at_most_override_fields_from_raws(profile_raws)
-            profiles_model[profile_order - 1]["behavior"] = parse_behavior_override(
-                [
-                    format_mask_expression(set(fields.keys()), "", 1),
-                    format_mask_expression(set(fields.keys()), "", 2),
-                    format_mask_expression(set(fields.keys()), "", 3),
-                    [profile_raws[field] for field in PROFILE_FIELDS],
-                    format_mask_expression(relative_fields, "", 1),
-                    format_mask_expression(relative_fields, "", 2),
-                    format_mask_expression(relative_fields, "", 3),
-                    format_mask_expression(at_least_fields, "", 1),
-                    format_mask_expression(at_least_fields, "", 2),
-                    format_mask_expression(at_least_fields, "", 3),
-                    format_mask_expression(at_most_fields, "", 1),
-                    format_mask_expression(at_most_fields, "", 2),
-                    format_mask_expression(at_most_fields, "", 3),
-                ],
-                macros,
-            )
-
-        for profile_order, source_order in edited_profile_orders.items():
-            behavior = profiles_model[profile_order - 1]["behavior"]
-            fields = {
-                field: behavior["profile"][field]["raw"]
-                for field in behavior_override_field_keys(behavior)
-            }
-            validate_override_fields(fields, f"override {source_order}")
-
-        for order, name in renames.items():
-            if order in removals:
-                continue
-            profile_order = existing_overrides[order - 1]["profileOrder"]
-            preferred_profile_orders.add(profile_order)
-            profiles_model[profile_order - 1]["name"] = name
-            identity_changed_profile_orders.add(profile_order)
-
-        for index, change in enumerate(additions, 1):
-            validate_override_fields(change["fields"], f"override {index}")
-            fields = {field: raw for field, raw in change["fields"].items() if raw}
-            profile_raws = {profile_field: "0" for profile_field in PROFILE_FIELDS}
-            profile_raws.update(fields)
-            relative_fields = relative_override_fields_from_raws(profile_raws)
-            at_least_fields = at_least_override_fields_from_raws(profile_raws)
-            at_most_fields = at_most_override_fields_from_raws(profile_raws)
-            profiles_model.append(
-                {
-                    "behavior": parse_behavior_override(
-                        [
-                            format_mask_expression(set(fields.keys()), "", 1),
-                            format_mask_expression(set(fields.keys()), "", 2),
-                            format_mask_expression(set(fields.keys()), "", 3),
-                            [profile_raws[field] for field in PROFILE_FIELDS],
-                            format_mask_expression(relative_fields, "", 1),
-                            format_mask_expression(relative_fields, "", 2),
-                            format_mask_expression(relative_fields, "", 3),
-                            format_mask_expression(at_least_fields, "", 1),
-                            format_mask_expression(at_least_fields, "", 2),
-                            format_mask_expression(at_least_fields, "", 3),
-                            format_mask_expression(at_most_fields, "", 1),
-                            format_mask_expression(at_most_fields, "", 2),
-                            format_mask_expression(at_most_fields, "", 3),
-                        ],
-                        macros,
-                    ),
-                    "name": change.get("name", ""),
-                }
-            )
-            profile_order = len(profiles_model)
-            identity_changed_profile_orders.add(profile_order)
-            if change.get("name"):
-                preferred_profile_orders.add(profile_order)
-            addition_matches = legacy_matches_from_target(change["target"], f"override {index}")
-            for match_index, match in enumerate(addition_matches, 1):
-                validate_override_match(match, f"override {index}.{match_index}")
-                rules_model.append(
-                    {
-                        "match": match,
-                        "profileOrder": profile_order,
-                        "removed": False,
-                    }
-                )
-
-        active_profile_orders_by_name: dict[str, set[int]] = {}
-        for rule in rules_model:
-            if rule["removed"]:
-                continue
-            profile_order = rule["profileOrder"]
-            name = profiles_model[profile_order - 1].get("name", "").strip()
-            if name:
-                active_profile_orders_by_name.setdefault(name.lower(), set()).add(profile_order)
-        duplicate_changed_names = [
-            profiles_model[min(profile_orders) - 1].get("name", normalized_name)
-            for normalized_name, profile_orders in active_profile_orders_by_name.items()
-            if len(profile_orders) > 1 and profile_orders.intersection(identity_changed_profile_orders)
-        ]
-        if duplicate_changed_names:
-            raise ValueError(
-                f"override profile names must be unique: {', '.join(sorted(duplicate_changed_names))}"
-            )
-
-        if reorder_groups:
-            profile_order_by_rule_order = {
-                rule["order"]: rule["profileOrder"]
-                for rule in rules_model
-                if rule.get("order") is not None and not rule["removed"]
-            }
-            active_rules_by_profile: dict[int, list[dict]] = {}
-            active_profile_order: list[int] = []
-            for rule in rules_model:
-                if rule["removed"]:
-                    continue
-                profile_order = rule["profileOrder"]
-                if profile_order not in active_rules_by_profile:
-                    active_rules_by_profile[profile_order] = []
-                    active_profile_order.append(profile_order)
-                active_rules_by_profile[profile_order].append(rule)
-
-            requested_profile_order = []
-            seen_profile_orders = set()
-            for group in reorder_groups:
-                for order in group:
-                    profile_order = profile_order_by_rule_order.get(order)
-                    if profile_order is None or profile_order in seen_profile_orders:
-                        continue
-                    requested_profile_order.append(profile_order)
-                    seen_profile_orders.add(profile_order)
-            requested_profile_order.extend(
-                profile_order
-                for profile_order in active_profile_order
-                if profile_order not in seen_profile_orders
-            )
-            rules_model = [
-                rule
-                for profile_order in requested_profile_order
-                for rule in active_rules_by_profile[profile_order]
-            ] + [rule for rule in rules_model if rule["removed"]]
-
-        canonicalize_named_override_profile_rules(profiles_model, rules_model, preferred_profile_orders)
-
-        referenced_profile_orders = {
-            rule["profileOrder"]
-            for rule in rules_model
-            if not rule["removed"]
-        }
-        profile_index_map: dict[int, int] = {}
-        kept_profiles = []
-        if reorder_groups:
-            profile_orders = []
-            seen_profile_orders = set()
-            for rule in rules_model:
-                if rule["removed"]:
-                    continue
-                profile_order = rule["profileOrder"]
-                if profile_order in referenced_profile_orders and profile_order not in seen_profile_orders:
-                    profile_orders.append(profile_order)
-                    seen_profile_orders.add(profile_order)
-            for profile_order in range(1, len(profiles_model) + 1):
-                if profile_order in referenced_profile_orders and profile_order not in seen_profile_orders:
-                    profile_orders.append(profile_order)
-                    seen_profile_orders.add(profile_order)
-        else:
-            profile_orders = [
-                profile_order
-                for profile_order in range(1, len(profiles_model) + 1)
-                if profile_order in referenced_profile_orders
-            ]
-        for profile_order in profile_orders:
-            profile = profiles_model[profile_order - 1]
-            if profile_order not in referenced_profile_orders:
-                continue
-            profile_index_map[profile_order] = len(kept_profiles)
-            kept_profiles.append(profile)
-
-        profile_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorOverrideProfiles")
-        rule_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorOverrideRules")
-        profile_indent = line_indent_before(raw_behavior_data, profile_span[0])
-        rule_indent = line_indent_before(raw_behavior_data, rule_span[0])
-        profile_entry_indent = profile_indent + "    "
-        rule_entry_indent = rule_indent + "    "
-        profile_entries = ",\n".join(
-            format_behavior_override_profile(
-                set(behavior_override_field_keys(profile["behavior"])),
-                raw_values(profile["behavior"]["profile"]),
-                profile_entry_indent,
-                profile["name"],
-                relative_fields=set(behavior_override_relative_field_keys(profile["behavior"])),
-                at_least_fields=set(behavior_override_at_least_field_keys(profile["behavior"])),
-                at_most_fields=set(behavior_override_at_most_field_keys(profile["behavior"])),
-            )
-            for profile in kept_profiles
-        )
-        rule_entries = ",\n".join(
-            format_behavior_override_profile_rule(
-                rule["match"],
-                profile_index_map[rule["profileOrder"]],
-                rule_entry_indent,
-            )
-            for rule in rules_model
-            if not rule["removed"]
-        )
-        replacements = [
-            (profile_span[0], profile_span[1], f"{{\n{profile_entries}\n{profile_indent}}}"),
-            (rule_span[0], rule_span[1], f"{{\n{rule_entries}\n{rule_indent}}}"),
-        ]
-
-        updated_source = raw_behavior_data
-        changed = False
-        for start, end, replacement in sorted(replacements, key=lambda item: item[0], reverse=True):
-            if updated_source[start:end] != replacement:
-                changed = True
-                updated_source = updated_source[:start] + replacement + updated_source[end:]
-        if changed:
-            validate_behavior_data_override_profiles(updated_source, macros, group_labels)
-            write_behavior_data_source(updated_source)
-        total_changes = len(additions) + len(edits) + len(renames) + len(set(removals)) + len(match_replacements) + (1 if reorder_groups else 0)
-        label = "override profile change" if total_changes == 1 else "override profile changes"
-        return {"saved": changed, "message": f"Saved {total_changes} {label}" if changed else "No code changes needed"}
-
-    if match_replacements:
-        raise ValueError("override match replacement requires split override profile data")
-    if reorder_groups:
-        raise ValueError("override profile reordering requires split override profile data")
-
-    def override_rule_from_fields(match_raws: dict[str, str], fields: dict[str, str], name: str = "") -> str:
-        profile_raws = {profile_field: "0" for profile_field in PROFILE_FIELDS}
-        mask_fields = set()
-        for field, raw in fields.items():
-            if raw:
-                profile_raws[field] = raw
-                mask_fields.add(field)
-        return format_behavior_override_rule(
-            match_raws,
-            mask_fields,
-            profile_raws,
-            name=name,
-            relative_fields=relative_override_fields_from_raws(profile_raws),
-            at_least_fields=at_least_override_fields_from_raws(profile_raws),
-            at_most_fields=at_most_override_fields_from_raws(profile_raws),
-        )
-
-    formatted_rules = []
-    for index, change in enumerate(additions, 1):
-        validate_override_fields(change["fields"], f"override {index}")
-        addition_matches = legacy_matches_from_target(change["target"], f"override {index}")
-        for match_index, match in enumerate(addition_matches, 1):
-            validate_override_match(match, f"override {index}.{match_index}")
-            formatted_rules.append(override_rule_from_fields(match, change["fields"], change.get("name", "")))
-
-    override_span = initializer_brace_span(raw_behavior_data, "sOverworldWildBehaviorOverrides")
-    override_entry_spans = top_level_braced_spans(raw_behavior_data, override_span)
-    override_replacement_spans = override_entry_replacement_spans(raw_behavior_data, override_span, override_entry_spans)
-    for order in set(removals) | set(edits.keys()) | set(renames.keys()):
-        if order < 1 or order > len(override_entry_spans):
-            raise ValueError(f"override order out of range: {order}")
     for order, field_changes in edits.items():
-        validate_override_fields(
-            field_changes,
+        if order in removals:
+            continue
+        validate_fields(field_changes, f"override {order}", require_pairs=False)
+        profile = profiles[order - 1]
+        merged = {
+            field: _catalog_override_raw(field, authored)
+            for field, authored in profile["fields"].items()
+        }
+        merged.update(field_changes)
+        merged = {field: raw for field, raw in merged.items() if raw}
+        validate_fields(merged, f"override {order}")
+        profile["fields"] = {
+            field: _catalog_override_field(field, raw)
+            for field, raw in merged.items()
+        }
+
+    for order, name in renames.items():
+        if order not in removals:
+            profiles[order - 1]["name"] = name
+
+    for order, target in target_replacements.items():
+        if order in removals:
+            raise ValueError(f"override {order} cannot be removed and retargeted")
+        profiles[order - 1]["target"] = catalog_target(
+            target,
             f"override {order}",
-            require_terrain_pair=False,
         )
 
-    override_group_orders: dict[str, list[int]] = {}
-    for override in existing_overrides:
-        override_name = existing_names.get(override["order"], "")
-        if override_name:
-            override_group_orders.setdefault(override_name, []).append(override["order"])
+    entries = [
+        {"oldIndex": index, "profile": profile}
+        for index, profile in enumerate(profiles)
+    ]
+    for addition_index, addition in enumerate(additions, 1):
+        validate_fields(addition["fields"], f"override addition {addition_index}")
+        fields = {
+            field: raw
+            for field, raw in addition["fields"].items()
+            if raw
+        }
+        entries.append({
+            "oldIndex": len(entries),
+            "profile": {
+                "name": addition.get("name", ""),
+                "target": catalog_target(
+                    addition["target"],
+                    f"override addition {addition_index}",
+                ),
+                "fields": {
+                    field: _catalog_override_field(field, raw)
+                    for field, raw in fields.items()
+                },
+            },
+        })
 
-    rewrite_orders = set(edits.keys()) | set(renames.keys())
-    for order in list(rewrite_orders):
-        override_name = existing_names.get(order, "")
-        if override_name:
-            rewrite_orders.update(override_group_orders.get(override_name, []))
+    active = [
+        entry
+        for entry in entries
+        if entry["oldIndex"] + 1 not in removals
+    ]
+    if reorder_groups:
+        active_by_order = {
+            entry["oldIndex"] + 1: entry
+            for entry in active
+        }
+        requested = []
+        seen = set()
+        for group in reorder_groups:
+            for order in group:
+                if order in active_by_order and order not in seen:
+                    requested.append(active_by_order[order])
+                    seen.add(order)
+        requested.extend(
+            entry
+            for entry in active
+            if entry["oldIndex"] + 1 not in seen
+        )
+        active = requested
+    if not active:
+        raise ValueError(
+            "at least one override profile is required; create a replacement "
+            "before removing the last profile"
+        )
+    if len(active) > MAX_RUNTIME_OVERRIDE_PROFILES:
+        raise ValueError(
+            f"the runtime supports at most {MAX_RUNTIME_OVERRIDE_PROFILES} "
+            "ordered override profiles"
+        )
 
-    group_renames = {
-        existing_names[order]: name
-        for order, name in renames.items()
-        if existing_names.get(order)
+    old_to_new = {
+        entry["oldIndex"]: new_index
+        for new_index, entry in enumerate(active)
     }
 
-    def grouped_override_fields(order: int) -> dict[str, str]:
-        override_name = existing_names.get(order, "")
-        source_orders = override_group_orders.get(override_name, [order]) if override_name else [order]
-        primary_behavior = existing_overrides[source_orders[0] - 1]["behavior"]
-        active_fields: list[str] = []
-        fields: dict[str, str] = {}
-        for source_order in source_orders:
-            behavior = existing_overrides[source_order - 1]["behavior"]
-            for field in behavior_override_field_keys(behavior):
-                if field not in active_fields:
-                    active_fields.append(field)
-        for field in active_fields:
-            fields[field] = primary_behavior["profile"][field]["raw"]
-        return fields
+    def remap_reference(raw: str, label: str) -> str:
+        old_index = numeric_raw(raw, label, macros)
+        if old_index is None:
+            raise ValueError(f"{label} has an invalid profile reference: {raw}")
+        if old_index not in old_to_new:
+            raise ValueError(f"{label} references an override profile being removed")
+        if re.fullmatch(r"(?:0[xX][0-9A-Fa-f]+|[0-9]+)", raw.strip()):
+            return str(old_to_new[old_index])
+        return raw
 
-    replacements: list[tuple[int, int, str]] = []
-    for order in sorted(rewrite_orders):
-        if order in set(removals):
-            continue
-        field_changes = edits.get(order, {})
-        existing = existing_overrides[order - 1]
-        fields = grouped_override_fields(order)
-        fields.update(field_changes)
-        fields = {field: raw for field, raw in fields.items() if raw}
-        validate_override_fields(fields, f"override {order}")
-        entry_span = override_replacement_spans[order - 1]
-        profile_indent = line_indent_before(raw_behavior_data, entry_span[0])
-        override_name = existing_names.get(order, "")
-        replacement = format_behavior_override_rule(
-            raw_match_values(existing["match"]),
-            set(fields.keys()),
-            {**{profile_field: "0" for profile_field in PROFILE_FIELDS}, **fields},
-            profile_indent,
-            renames.get(order, group_renames.get(override_name, override_name)),
-            relative_fields=relative_override_fields_from_raws(fields),
-            at_least_fields=at_least_override_fields_from_raws(fields),
-            at_most_fields=at_most_override_fields_from_raws(fields),
+    for entry in active:
+        profile = entry["profile"]
+        for field in ("activeProfile", "tiredProfile"):
+            authored = profile["fields"].get(field)
+            if authored is None:
+                continue
+            raw = _catalog_override_raw(field, authored)
+            remapped = remap_reference(
+                raw,
+                f"override {entry['oldIndex'] + 1} {field}",
+            )
+            profile["fields"][field] = _catalog_override_field(field, remapped)
+
+    for class_index, class_profile in enumerate(catalog["classProfiles"]):
+        for field in ("activeProfile", "tiredProfile"):
+            class_profile["fields"][field] = remap_reference(
+                str(class_profile["fields"][field]),
+                f"class profile {class_index} {field}",
+            )
+
+    raw_states = (
+        catalog["conditionalStates"]
+        if conditional_replacement is None
+        else conditional_replacement
+    )
+    remapped_states = []
+    signatures = set()
+    for state_index, raw_state in enumerate(raw_states, 1):
+        parsed = {
+            field: numeric(conditional_state_value(str(raw_state[field]), field, macros))
+            for field in (
+                "parentProfile",
+                "overrideProfile",
+                "terrainMask",
+                "terrainOverrideMask",
+                "minMovementSpeed",
+                "maxMovementSpeed",
+            )
+        }
+        if any(value is None for value in parsed.values()):
+            raise ValueError(f"conditional state {state_index} contains an invalid value")
+        state = {field: int(value) for field, value in parsed.items()}
+        validate_conditional_state(
+            state,
+            f"conditional state {state_index}",
+            len(entries),
+            ValueError,
         )
-        replacements.append((entry_span[0], entry_span[1], replacement))
-    for order in sorted(set(removals), reverse=True):
-        start, end = braced_entry_removal_span(raw_behavior_data, override_replacement_spans[order - 1], override_span)
-        replacements.append((start, end, ""))
-    if formatted_rules:
-        insert_at = override_span[1] - 1
-        replacements.append((insert_at, insert_at, "".join(f"{rule},\n" for rule in formatted_rules)))
+        signature = (
+            state["parentProfile"],
+            state["terrainMask"],
+            state["terrainOverrideMask"],
+            state["minMovementSpeed"],
+            state["maxMovementSpeed"],
+        )
+        if signature in signatures:
+            raise ValueError(
+                f"conditional state {state_index} duplicates an existing parent condition"
+            )
+        signatures.add(signature)
+        if state["parentProfile"] not in old_to_new:
+            raise ValueError(
+                f"conditional state {state_index} references a parent profile being removed"
+            )
+        override_index = state["overrideProfile"]
+        if override_index != CONDITIONAL_PROFILE_NONE_VALUE \
+                and override_index not in old_to_new:
+            raise ValueError(
+                f"conditional state {state_index} references an override profile being removed"
+            )
+        remapped_states.append({
+            "parentProfile": str(old_to_new[state["parentProfile"]]),
+            "overrideProfile": (
+                CONDITIONAL_PROFILE_NONE_RAW
+                if override_index == CONDITIONAL_PROFILE_NONE_VALUE
+                else str(old_to_new[override_index])
+            ),
+            "terrainMask": str(raw_state["terrainMask"]),
+            "terrainOverrideMask": str(raw_state["terrainOverrideMask"]),
+            "minMovementSpeed": str(raw_state["minMovementSpeed"]),
+            "maxMovementSpeed": str(raw_state["maxMovementSpeed"]),
+        })
 
-    updated_source = raw_behavior_data
-    changed = False
-    for start, end, replacement in sorted(replacements, key=lambda item: item[0], reverse=True):
-        if updated_source[start:end] != replacement:
-            changed = True
-            updated_source = updated_source[:start] + replacement + updated_source[end:]
+    catalog["overrideProfiles"] = [entry["profile"] for entry in active]
+    catalog["conditionalStates"] = remapped_states
+    changed = catalog != original_catalog
     if changed:
-        write_behavior_data_source(updated_source)
-    total_changes = len(formatted_rules) + len(edits) + len(renames) + len(set(removals))
+        write_behavior_catalog(catalog)
+    total_changes = (
+        len(additions) + len(edits) + len(renames) + len(removals)
+        + len(target_replacements) + (1 if reorder_groups else 0)
+        + (1 if conditional_replacement is not None else 0)
+    )
     label = "override profile change" if total_changes == 1 else "override profile changes"
-    return {"saved": changed, "message": f"Saved {total_changes} {label}" if changed else "No code changes needed"}
-
+    return {
+        "saved": changed,
+        "message": (
+            f"Saved {total_changes} {label}"
+            if changed
+            else "No code changes needed"
+        ),
+    }
 
 def build_command_args() -> list[str]:
     if sys.platform == "win32":
@@ -17343,6 +18171,8 @@ HTML = r"""<!doctype html>
       "hopElevationTimeScale",
       "hopElevationArcScale",
       "tilesToAccelerate",
+      "walkAccelerationStep",
+      "walkTimeVariance",
       "maxWalkSpeed",
       "walkOptions",
       "walkStompTime",
@@ -17405,6 +18235,8 @@ HTML = r"""<!doctype html>
       attentiveCircleRadius: { min: 0, max: 8 },
       chillSpeed: { min: 1, max: 32 },
       tilesToAccelerate: { min: 1, max: 32 },
+      walkAccelerationStep: { min: 0, max: 33 },
+      walkTimeVariance: { min: 0, max: 32 },
       maxWalkSpeed: { min: 1, max: 32 },
       walkOptions: { min: 0, max: 255 },
       walkStompTime: { min: 0, max: 32 },
@@ -17427,14 +18259,17 @@ HTML = r"""<!doctype html>
       hopTime: "Ticks for a 1-tile hop. Extra tiles are slightly faster; 0 is immediate.",
       hopElevationTimeScale: "Added airtime for elevation changes. 0 disables it; 100 matches travel speed; higher values feel heavier.",
       hopElevationArcScale: "Added arc height for elevation changes. 0 keeps the level-jump arc; 100 clears the higher endpoint; higher values feel floatier.",
-      tilesToAccelerate: "Consecutive Walk tiles in one direction before the current travel time is halved.",
+      tilesToAccelerate: "Consecutive Walk tiles in one direction before one acceleration step.",
+      walkAccelerationStep: "Use positive values: 1 removes 1 frame. Use 0 for none or 33 for the old /2 rule.",
+      walkTimeVariance: "Variable extra travel frames chosen once when a normal Walk tile starts. 0 disables variance.",
       maxWalkSpeed: "Fastest allowed Walk travel time. This must be no slower than the base Walk time.",
-      walkOptions: "Packed Walk options: bit 0 locks direction, bit 4 selects crash sound, bit 5 disables acceleration, bit 6 faces the player, and bit 7 keeps one facing until a pause action.",
+      walkOptions: "Packed Walk options: bit 0 locks direction, bits 1–3 set horizontal sway from 0–7 px, bit 4 selects crash sound, bit 5 disables acceleration, bit 6 faces the player, and bit 7 keeps one facing until a pause action.",
       walkStompTime: "Play the skid dust and stomp sound when current Walk time is this value or faster. 0 disables it.",
       wanderStraightChance: "Exact chance to continue the last movement direction. A failed roll excludes that direction.",
       chainPauseActionChance: "Chance to run the configured pause action. A failed roll starts another movement chain.",
       walkPause: "Frames to pause after each completed normal Walk step. 0 removes the pause.",
       tilesBeforeTurnSkid: "Continuous Walk steps required before a turn can skid. 0 disables turn skids.",
+      stopSkid: "For Walk, skid when the behavior lifecycle stops a run. Movement Chain pauses and actions do not start it.",
       chainRepositionJumpCount: "Number of fixed-facing random surrounding-tile moves performed by Reposition jumps, steps, or skids.",
       chainRepositionSpeed: "Travel time in frames for Reposition steps and skids; jumps use Hop timing.",
       chainRepositionDistance: "Tiles travelled by each Reposition skid.",
@@ -17496,12 +18331,15 @@ HTML = r"""<!doctype html>
       chillAction: { label: "Chill movement", shortLabel: "Movement", category: "chill", subgroup: "Movement", iconFamily: "movement" },
       chillSpeed: { label: "Chill Walk time", shortLabel: "Walk time", unit: "frames", category: "chill", subgroup: "Timing", iconFamily: "timing" },
       tilesToAccelerate: { label: "Tiles to accelerate", shortLabel: "Acceleration", unit: "tiles", category: "chill", subgroup: "Movement", iconFamily: "speed" },
+      walkAccelerationStep: { label: "Acceleration amount", shortLabel: "Amount", unit: "frames", category: "chill", subgroup: "Movement", iconFamily: "speed" },
+      walkTimeVariance: { label: "Walk time variance", shortLabel: "Variance", unit: "frames", category: "chill", subgroup: "Timing", iconFamily: "timing" },
       maxWalkSpeed: { label: "Fastest Walk time", shortLabel: "Fastest time", unit: "frames", category: "chill", subgroup: "Timing", iconFamily: "timing" },
       walkOptions: { label: "Walk options (packed)", shortLabel: "Walk options", unit: "0..255", category: "chill", subgroup: "Movement", iconFamily: "movement" },
       walkStompTime: { label: "Stomp at Walk time", shortLabel: "Stomp time", unit: "frames", category: "chill", subgroup: "Timing", iconFamily: "timing" },
       wanderStraightChance: { label: "Continue straight chance", shortLabel: "Straight", unit: "%", category: "chill", subgroup: "Movement", iconFamily: "movement" },
       walkPause: { label: "Pause after step", shortLabel: "Step pause", unit: "frames", category: "chill", subgroup: "Timing", iconFamily: "timing" },
       tilesBeforeTurnSkid: { label: "Steps before turn skid", shortLabel: "Skid buildup", unit: "steps", category: "chill", subgroup: "Movement", iconFamily: "movement" },
+      stopSkid: { label: "Skid when stopping", shortLabel: "Stop skid", category: "chill", subgroup: "Movement", iconFamily: "movement" },
       chillAllowedTerrainMask: { label: "Allowed terrains", shortLabel: "Terrains", category: "chill", subgroup: "Terrain", iconFamily: "terrain" },
       chillAllowedTerrainOverrideMask: { label: "Terrain inheritance", shortLabel: "Terrain mode", category: "chill", subgroup: "Terrain", iconFamily: "terrain" },
       hopAllowNonCardinal: { label: "Allowed movement directions", shortLabel: "Directions", category: "chill", subgroup: "Movement", iconFamily: "condition" },
@@ -17606,6 +18444,8 @@ HTML = r"""<!doctype html>
       OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_JUMPS: "Reposition jumps",
       OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_STEPS: "Reposition steps",
       OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_SKIDS: "Reposition skids",
+      OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE: "Pause",
+      OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_FORWARD: "Jump forward",
       OW_WILD_BEHAVIOR_TARGET_PLAYER_CARDINAL_LINE: "Player cardinal line",
       [CIRCLE_PLAYER_TARGET_RAW]: "Circle player",
     };
@@ -17629,12 +18469,15 @@ HTML = r"""<!doctype html>
           "chillAction",
           "chillSpeed",
           "tilesToAccelerate",
+          "walkAccelerationStep",
+          "walkTimeVariance",
           "maxWalkSpeed",
           "walkOptions",
           "walkStompTime",
           "wanderStraightChance",
           "walkPause",
           "tilesBeforeTurnSkid",
+          "stopSkid",
           "chillAllowedTerrainMask",
           "chillAllowedTerrainOverrideMask",
           "hopAllowNonCardinal",
@@ -19177,6 +20020,14 @@ HTML = r"""<!doctype html>
       if (fieldKey === SPAWN_DESTINATION_TYPE_FIELD) {
         return spawnDestinationTypeDisplay(option.raw);
       }
+      if (fieldKey === "walkAccelerationStep") {
+        const value = Number(option.value ?? option.raw);
+        if (value === 0) return "0 — None";
+        if (value === 33) return "/2 — Old rule";
+        if (Number.isInteger(value) && value >= 1 && value <= 32) {
+          return `${value} — Remove ${value} frame${value === 1 ? "" : "s"}`;
+        }
+      }
       if (NUMERIC_PROFILE_FIELD_KEYS.has(fieldKey) && option.value !== null && option.value !== undefined) {
         return String(option.value);
       }
@@ -19884,12 +20735,15 @@ HTML = r"""<!doctype html>
         hopSpinSpeed: "hopSpinSpeed",
         hopSwayWidth: "hopSwayWidth",
         tilesToAccelerate: "tilesToAccelerate",
+        walkAccelerationStep: "walkAccelerationStep",
+        walkTimeVariance: "walkTimeVariance",
         maxWalkSpeed: "maxWalkSpeed",
         walkOptions: "walkOptions",
         walkStompTime: "walkStompTime",
         wanderStraightChance: "wanderStraightChance",
         walkPause: "walkPause",
         tilesBeforeTurnSkid: "tilesBeforeTurnSkid",
+        stopSkid: "stopSkid",
         chainHops: "ramAccelerationSteps",
         chainHopPause: "ramMaxSpeed",
         chainPauseAction: "chainPauseAction",
@@ -19917,12 +20771,15 @@ HTML = r"""<!doctype html>
         hopSpinSpeed: "attentiveHopSpinSpeed",
         hopSwayWidth: "hopSwayWidth",
         tilesToAccelerate: "tilesToAccelerate",
+        walkAccelerationStep: "walkAccelerationStep",
+        walkTimeVariance: "walkTimeVariance",
         maxWalkSpeed: "maxWalkSpeed",
         walkOptions: "walkOptions",
         walkStompTime: "walkStompTime",
         wanderStraightChance: "wanderStraightChance",
         walkPause: "walkPause",
         tilesBeforeTurnSkid: "tilesBeforeTurnSkid",
+        stopSkid: "stopSkid",
         chainHops: "ramAccelerationSteps",
         chainHopPause: "ramMaxSpeed",
         chainPauseAction: "chainPauseAction",
@@ -19950,12 +20807,15 @@ HTML = r"""<!doctype html>
         hopSpinSpeed: "hopSpinSpeed",
         hopSwayWidth: "hopSwayWidth",
         tilesToAccelerate: "tilesToAccelerate",
+        walkAccelerationStep: "walkAccelerationStep",
+        walkTimeVariance: "walkTimeVariance",
         maxWalkSpeed: "maxWalkSpeed",
         walkOptions: "walkOptions",
         walkStompTime: "walkStompTime",
         wanderStraightChance: "wanderStraightChance",
         walkPause: "walkPause",
         tilesBeforeTurnSkid: "tilesBeforeTurnSkid",
+        stopSkid: "stopSkid",
         chainHops: "ramAccelerationSteps",
         chainHopPause: "ramMaxSpeed",
         chainPauseAction: "chainPauseAction",
@@ -19996,8 +20856,16 @@ HTML = r"""<!doctype html>
           && (showInactiveUnset || movementStyleUsesWalk(raw) || inheritedOverride)) {
         fields.push(profileEditFieldItem(item, suboptionFields.tilesToAccelerate, {
           className: "profile-suboption-field",
-          hint: "Consecutive Walk tiles in one direction before current travel time is halved.",
+          hint: "Consecutive Walk tiles in one direction before one acceleration step.",
           numberLimits: { min: 1, max: 32 },
+        }));
+      }
+      if (suboptionFields.walkAccelerationStep
+          && (showInactiveUnset || movementStyleUsesWalk(raw) || inheritedOverride)) {
+        fields.push(profileEditFieldItem(item, suboptionFields.walkAccelerationStep, {
+          className: "profile-suboption-field",
+          hint: "Use positive values: 1 removes 1 frame. Use 0 for none or 33 for the old /2 rule.",
+          numberLimits: { min: 0, max: 33 },
         }));
       }
       if (suboptionFields.maxWalkSpeed
@@ -20006,6 +20874,14 @@ HTML = r"""<!doctype html>
           className: "profile-suboption-field",
           hint: "Fastest allowed Walk travel time. It must be equal to or lower than the base Walk time.",
           numberLimits: { min: 1, max: 32 },
+        }));
+      }
+      if (suboptionFields.walkTimeVariance
+          && (showInactiveUnset || movementStyleUsesWalk(raw) || inheritedOverride)) {
+        fields.push(profileEditFieldItem(item, suboptionFields.walkTimeVariance, {
+          className: "profile-suboption-field",
+          hint: "Variable extra travel frames chosen once for each accepted normal Walk tile. 0 disables variance.",
+          numberLimits: { min: 0, max: 32 },
         }));
       }
       if (suboptionFields.walkOptions
@@ -20046,6 +20922,13 @@ HTML = r"""<!doctype html>
           className: "profile-suboption-field",
           hint: "Continuous Walk steps required before a turn can skid. Pause after step resets the buildup. 0 disables turn skids.",
           numberLimits: { min: 0, max: 32 },
+        }));
+      }
+      if (suboptionFields.stopSkid
+          && (showInactiveUnset || movementStyleUsesWalk(raw) || inheritedOverride)) {
+        fields.push(profileEditFieldItem(item, suboptionFields.stopSkid, {
+          className: "profile-suboption-field",
+          hint: "For Walk, skid when the behavior lifecycle stops a run. Movement Chain pauses and actions do not start it.",
         }));
       }
       if (showInactiveUnset || movementStyleUsesWalk(raw) || movementStyleUsesHop(raw) || inheritedOverride) {
@@ -24502,7 +25385,9 @@ HTML = r"""<!doctype html>
 
     function profileComboOptionsForInput(input) {
       const options = profileOptionsForField(input.dataset.field);
-      const limit = input.dataset.field === "alertEmote" ? 32 : 12;
+      const limit = input.dataset.field === "walkAccelerationStep"
+        ? 34
+        : input.dataset.field === "alertEmote" ? 32 : 12;
       const query = input.dataset.comboFilter === "1"
         ? String(input.value || "").trim().toLowerCase()
         : "";
@@ -27806,7 +28691,14 @@ class ViewerHandler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         try:
             if path in ("/", "/index.html"):
-                self.send_bytes(HTML.encode(), "text/html; charset=utf-8")
+                self.send_bytes(
+                    (
+                        "This legacy editor is retired. Start "
+                        "tools/overworld-viewer-v2/server.py instead.\n"
+                    ).encode(),
+                    "text/plain; charset=utf-8",
+                    status=410,
+                )
                 return
             if path == "/favicon.ico":
                 self.send_bytes(b"", "image/x-icon", status=204, cache_control="public, max-age=86400")
@@ -27877,18 +28769,6 @@ class ViewerHandler(BaseHTTPRequestHandler):
         try:
             content_length = int(self.headers.get("Content-Length", "0"))
             body = self.rfile.read(content_length)
-            if path == "/save-profiles":
-                self.send_json(apply_profile_changes(body))
-                return
-            if path == "/save-profile-memberships":
-                self.send_json(apply_profile_membership_changes(body))
-                return
-            if path == "/manage-profiles":
-                self.send_json(apply_profile_management_change(body))
-                return
-            if path == "/save-profile-overrides":
-                self.send_json(apply_profile_override_changes(body))
-                return
             if path == "/save-encounters":
                 self.send_json(apply_encounter_changes(body))
                 return
@@ -27928,17 +28808,18 @@ def serve(host: str, port: int) -> None:
 
 
 def validate_override_profile_source() -> None:
-    raw_behavior_data = BEHAVIOR_DATA_SOURCE.read_text()
-    expressions, _ = parse_define_expressions(DEFINE_SOURCE_FILES)
-    macros = evaluate_defines(expressions)
-    macros.update(evaluate_armips_equ([ARMIPS_CONFIG, ARMIPS_CONSTANTS]))
-    terrain_values, destination_values = parse_behavior_data_enums()
-    macros.update(terrain_values)
-    macros.update(destination_values)
-    validate_behavior_data_override_profiles(
-        raw_behavior_data,
+    catalog = load_behavior_catalog()
+    _, _, macros = behavior_authoring_context()
+    apply_catalog_symbol_values(catalog, macros)
+    variable_overrides = catalog_behavior_overrides(
+        catalog,
         macros,
         invert_labels(macros, GROUP_PREFIX),
+    )
+    catalog_conditional_states(catalog, macros, len(variable_overrides))
+    validate_override_profile_groups(
+        variable_overrides,
+        catalog_override_profile_names(catalog),
     )
 
 

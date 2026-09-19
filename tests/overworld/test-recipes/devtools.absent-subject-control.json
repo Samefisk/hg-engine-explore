@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "devtools.absent-subject-control",
+  "title": "Expected failure: missing species cannot become a passing subject",
+  "mode": "observer-control",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/devtools-tests.md#author-an-executable-test",
+  "requirements": [],
+  "budgets": {"maxSeconds": 90, "maxFrames": 64, "noProgressFrames": 8, "minObservedFrames": 1},
+  "subjects": [{"id": "absent", "species": 1075, "role": "WILD", "acquire": "existing"}],
+  "setup": [],
+  "actions": [{"id": "require-subject", "op": "wait", "args": {"predicate": {"kind": "actor-present", "subject": "absent"}},
+    "budget": {"maxSeconds": 15, "maxFrames": 32, "noProgressFrames": 8}}],
+  "assertions": [{"kind": "actor-present", "subject": "absent"}]
+}

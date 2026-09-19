@@ -421,15 +421,18 @@ def decode_cleanup_dtor_provenance(
     require(len(base_loads) == 1, "cleanup lacks one exact state-base literal load")
 
     dtor_calls = [
-        (address, target)
+        (address, 6)
         for address, target in thumb_indirect_call_literals(
             binary, base, function_address, function_size
         )
         if target == 0x0200770D
     ]
+    dtor_calls += [(address, 4) for address, target in thumb_direct_calls(
+        binary, base, function_address, function_size) if target == 0x0200770C]
+    dtor_calls.sort()
     require(len(dtor_calls) == 2, "cleanup does not contain exactly two NARC_dtor calls")
     result = []
-    for call_address, _ in dtor_calls:
+    for call_address, call_size in dtor_calls:
         candidates = [item for item in handle_loads if base_loads[0] < item[0] < call_address]
         require(candidates, f"NARC_dtor at 0x{call_address:08X} has no state-handle r0 provenance")
         load_address, handle_offset = candidates[-1]
@@ -442,23 +445,26 @@ def decode_cleanup_dtor_provenance(
             require(branch & 0xFF00 == 0xD900, "personal NARC handle lacks exact unsigned <=1 guard")
             require(call_address == load_address + 6, "personal NARC guard/call adjacency differs")
             require(
-                thumb_conditional_branch_target(branch, load_address + 4) == call_address + 6,
+                thumb_conditional_branch_target(branch, load_address + 4) == call_address + call_size,
                 "personal NARC sentinel/null guard does not skip its complete dtor call",
             )
         else:
             before = struct.unpack_from("<H", binary, load_offset - 2)[0]
-            require(before == 0x2300, "learnset NARC handle lacks exact zero register setup")
+            require(before & 0xF8FF == 0x2000, "learnset NARC handle lacks exact zero register setup")
+            zero_register = (before >> 8) & 7
+            require(zero_register in (3, 5), "learnset NARC zero register differs from reviewed call forms")
             require(
-                struct.unpack_from("<HH", binary, load_offset + 2) == (0x6023, 0x80A3),
+                struct.unpack_from("<HH", binary, load_offset + 2)
+                == (0x6020 | zero_register, 0x80A0 | zero_register),
                 "learnset cleanup no longer clears personal handle/cache key before dtor",
             )
             compare = struct.unpack_from("<H", binary, load_offset + 6)[0]
             branch = struct.unpack_from("<H", binary, load_offset + 8)[0]
-            require(compare == 0x4298, "learnset NARC handle lacks exact r0-vs-zero compare")
+            require(compare == 0x4280 | (zero_register << 3), "learnset NARC handle lacks exact r0-vs-zero compare")
             require(branch & 0xFF00 == 0xD000, "learnset NARC handle lacks exact null guard")
             require(call_address == load_address + 10, "learnset NARC guard/call adjacency differs")
             require(
-                thumb_conditional_branch_target(branch, load_address + 8) == call_address + 6,
+                thumb_conditional_branch_target(branch, load_address + 8) == call_address + call_size,
                 "learnset NARC null guard does not skip its complete dtor call",
             )
         result.append((handle_offset, call_address))
@@ -1746,9 +1752,13 @@ def verify_overlay_lifecycle(repo: Path, fallback: int, move_filter: int) -> int
         (0x02007689, "NARC_ctor"),
         (0x020078E9, "NARC_GetFileCount"),
         (0x020077E9, "NARC_GetMemberSize"),
-        (MEMBER_SIZE, "member size"),
     ):
-        require(struct.pack("<I", value) in warm_bytes, f"warm lacks exact {label}")
+        targets = [target for _, target in thumb_indirect_call_literals(
+            overlay, base, warm_addr, warm_size)]
+        targets += [target | 1 for _, target in thumb_direct_calls(
+            overlay, base, warm_addr, warm_size)]
+        require(value in targets, f"warm lacks exact {label} call")
+    require(struct.pack("<I", MEMBER_SIZE) in warm_bytes, "warm lacks exact member size")
     publish_addr, publish_size = syms["OverworldWildBehavior_PublishPersonalDispatchers"]
     publish_bytes = overlay[publish_addr - base : publish_addr - base + publish_size]
     require(
@@ -1811,7 +1821,6 @@ def verify_overlay_lifecycle(repo: Path, fallback: int, move_filter: int) -> int
     for value, label in (
         (SLOT_ADDR, "learnset slot"),
         (fallback | 1, "learnset fallback"),
-        (0x0200770D, "NARC_dtor"),
     ):
         require(struct.pack("<I", value) in clear_bytes, f"cleanup lacks exact {label}")
 
@@ -1878,14 +1887,19 @@ def verify_overlay_lifecycle(repo: Path, fallback: int, move_filter: int) -> int
             personal_row_addr - base : personal_row_addr - base + personal_row_size
         ]
     else:
+        personal_row_addr, personal_row_size = get_addr, get_size
         personal_row_bytes = get_bytes
+    personal_row_targets = [target for _, target in thumb_indirect_call_literals(
+        overlay, base, personal_row_addr, personal_row_size)]
+    personal_row_targets += [target | 1 for _, target in thumb_direct_calls(
+        overlay, base, personal_row_addr, personal_row_size)]
     for value, label in (
         (0x02007689, "NARC_ctor"),
         (0x020078E9, "NARC_GetFileCount"),
         (0x020077E9, "NARC_GetMemberSize"),
         (0x0200778D, "NARC_ReadWholeMember"),
     ):
-        require(struct.pack("<I", value) in personal_row_bytes, f"personal row loader lacks {label}")
+        require(value in personal_row_targets, f"personal row loader lacks {label} call")
 
     for value, label in (
         (0x0206FAA9, "stock GetPersonalAttr"),
@@ -2682,6 +2696,30 @@ def run_unit_fixtures() -> None:
         ),
         "machine-level same-handle double NARC_dtor",
     )
+    # Same two guarded calls, now direct BL instead of LDR+veneer BL.
+    direct_cleanup = bytearray(linked_cleanup_fixture)
+    for offset in (0x14, 0x26):
+        displacement = 0x0200770C - (0x023C3314 + offset + 4)
+        struct.pack_into("<HHH", direct_cleanup, offset,
+                         0xF000 | ((displacement >> 12) & 0x7FF),
+                         0xF800 | ((displacement >> 1) & 0x7FF), 0x46C0)
+        branch = struct.unpack_from("<H", direct_cleanup, offset - 2)[0]
+        struct.pack_into("<H", direct_cleanup, offset - 2, branch - 1)
+    # A callee-saved zero register is legal when the direct native BL clobbers r3.
+    for offset, instruction in ((0x1A, 0x2500), (0x1E, 0x6025),
+                                (0x20, 0x80A5), (0x22, 0x42A8)):
+        struct.pack_into("<H", direct_cleanup, offset, instruction)
+    require(decode_cleanup_dtor_provenance(bytes(direct_cleanup),
+            0x023C3314, 0x023C3314, len(direct_cleanup), 0x023C3DE0)
+            == [(0, 0x023C3328), (52, 0x023C333A)],
+            "direct cleanup provenance fixture differs")
+    for offset, instruction in ((0x1C, 0x6820), (0x12, 0xD902),
+                                (0x22, 0x4298), (0x26, 0x46C0)):
+        bad_direct = bytearray(direct_cleanup)
+        struct.pack_into("<H", bad_direct, offset, instruction)
+        expect_rejection(lambda: decode_cleanup_dtor_provenance(bytes(bad_direct),
+            0x023C3314, 0x023C3314, len(bad_direct), 0x023C3DE0),
+            "direct cleanup wrong handle/guard/zero/call")
 
     form_table = bytearray((493 * PERSONAL_FORM_WIDTH) * 2)
     struct.pack_into("<H", form_table, (25 * PERSONAL_FORM_WIDTH + 1) * 2, 0x8000 | 1234)

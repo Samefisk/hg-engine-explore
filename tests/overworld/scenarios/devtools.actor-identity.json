@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "id": "devtools.actor-identity",
+  "title": "Prepared follower retains its exact current actor and engine identity",
+  "status": "active",
+  "capabilities": ["actor.system"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/verification.md#scenario-contract",
+    "actor": "One prepared FOLLOWER Mankey (56), party slot 0, level 10, bound by its actual personality and full six-field actor handle.",
+    "trigger": "Run the reviewed devtools.actor-identity recipe in one fresh copied-save session. Explicitly reload the field through native teleport to map 33, tile (585,405), then use native party and follower setup, wait for its normal release lifecycle, and bind the current follower.",
+    "observable": "Requirement shared.actor-identity.prepared-v1: the same live follower remains active, presentation-attached and in the current engine manager for 16 consecutive completed game frames. Actor, source identity, map context, engine object and handle generations agree on every sample.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Copy test.nds and test.sav into a private session. The source ROM and save remain unchanged; the fixture seed is provenance, not a game RNG override."
+      },
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use the shared native teleport operation to map 33 at (585,405), facing 1. This is explicit prepared field reconstruction, not normal save-load proof. The failed direct-load spawn receipt remains open; no stale actor fields or map objects are patched by the test."
+      },
+      {
+        "phase": "before-observation",
+        "target": "actors",
+        "change": "Use the fixed prepared native party operation to create Mankey in slot 0 at level 10, HP 1 and status 0, then the real follower lifecycle. Native temporary work buffers use the reviewed prepared work-heap adapter. Bind only the actual current follower after release has settled. No raw queue, profile, timer or chain writes."
+      },
+      {
+        "phase": "during-observation",
+        "target": "observation",
+        "change": "Read coherent completed-main-queue samples with public semantic tracing. Controller replay independently checks full identity and must reject missing-subject and stale-context inputs. These are evaluator controls, not live recorder faults."
+      }
+    ],
+    "limits": [
+      "Prepared identity-only S3 proof. This does not prove normal Y input, natural spawning, Hop, Walk, chain timing, visual motion, terrain streaming or long-run stability.",
+      "The direct-load follower attachment failure in test-12385ca378f045aaad17b5d15961ef36 is not fixed or cleared by this prepared-field test.",
+      "The 40 legacy gameplay requirements remain pending and cannot be cleared by this scenario.",
+      "The reviewed recipe bounds setup and observation to 2000 game frames and 300 seconds; only the 16 bound-subject observation frames receive proof credit. Any identity gap, trace loss, timeout or failed setup fails the run."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [
+    {"id": "follower", "species": 56, "role": "FOLLOWER", "acquisition": "follower", "minimum": 1, "maximum": 1, "motionActor": false, "requirePresentation": true}
+  ],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Reconstruct the prepared field through declared native teleport, prepare the copied party and follower through fixed native lifecycle operations, then bind the exact current follower."},
+    {"at": 1, "kind": "lifecycle", "value": "Observe 16 consecutive completed game frames for that same actor; stop and retain evidence on the first invalid sample."}
+  ],
+  "stop": {"frameBudget": 2000, "condition": "Complete the reviewed setup and 16 current-subject observation frames, or fail at the first invalid sample or bounded-action failure."},
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": ["Every active actor handle uses the current field epoch", "The selected follower retains one exact current source and engine identity with attached presentation"]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "devtools.actor-identity", "claims": ["live-actor-identity"], "minimumFrames": 16}
+}

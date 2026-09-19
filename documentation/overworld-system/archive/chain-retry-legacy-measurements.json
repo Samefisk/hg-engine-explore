@@ -1,0 +1,197 @@
+{
+  "controlled-action": [
+    {
+      "name": "controlled-chain-public-walk-counts",
+      "operator": "eq",
+      "type": "array",
+      "validator": "meaningful-observation",
+      "expected": [
+        9,
+        9
+      ]
+    }
+  ],
+  "live-actor-identity": [
+    {
+      "name": "ledyba-species",
+      "operator": "eq",
+      "type": "integer",
+      "validator": "meaningful-observation",
+      "expected": 165
+    },
+    {
+      "name": "ledyba-subject-identity",
+      "operator": "eq",
+      "type": "integer",
+      "validator": "meaningful-observation",
+      "minimum": 1
+    },
+    {
+      "name": "actor-handle",
+      "operator": "eq",
+      "type": "object",
+      "validator": "actor-handle-current",
+      "requiredKeys": [
+        "slot",
+        "generation",
+        "fieldEpoch",
+        "mapGeneration",
+        "encounterGeneration",
+        "value"
+      ]
+    },
+    {
+      "name": "public-ledyba-identity-flags",
+      "operator": "eq",
+      "type": "array",
+      "validator": "meaningful-observation",
+      "expected": [
+        1,
+        "WILD",
+        165,
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "name": "encounter-generation-match",
+      "operator": "eq",
+      "type": "array",
+      "validator": "positive-identical-values",
+      "minItems": 2
+    }
+  ],
+  "logical-commit": [
+    {
+      "name": "terminal-walk-commit-count",
+      "operator": "eq",
+      "type": "integer",
+      "validator": "meaningful-observation",
+      "minimum": 8
+    },
+    {
+      "name": "public-chain-retry-timeline",
+      "operator": "eq",
+      "type": "array",
+      "validator": "meaningful-observation",
+      "expected": [
+        5,
+        2,
+        8
+      ]
+    }
+  ],
+  "engine-boundary": [
+    {
+      "name": "walk-boundary-counts",
+      "operator": "eq",
+      "type": "array",
+      "validator": "meaningful-observation",
+      "expected": [
+        9,
+        9,
+        9
+      ]
+    }
+  ],
+  "rendered-motion": [
+    {
+      "name": "reposition-motion-count",
+      "operator": "eq",
+      "type": "integer",
+      "validator": "meaningful-observation",
+      "expected": 4
+    },
+    {
+      "name": "reposition-duration-distance",
+      "operator": "eq",
+      "type": "array",
+      "validator": "meaningful-observation",
+      "expected": [
+        [
+          8,
+          2,
+          2
+        ],
+        [
+          8,
+          2,
+          2
+        ],
+        [
+          8,
+          2,
+          2
+        ],
+        [
+          8,
+          2,
+          2
+        ]
+      ]
+    },
+    {
+      "name": "rendered-frame-sequences",
+      "operator": "eq",
+      "type": "array",
+      "validator": "meaningful-observation",
+      "expected": [
+        [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
+        [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
+        [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
+        [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ]
+      ]
+    }
+  ],
+  "control-release": [
+    {
+      "name": "reposition-lifecycle-counts",
+      "operator": "eq",
+      "type": "array",
+      "validator": "meaningful-observation",
+      "expected": [
+        4,
+        4,
+        0,
+        4
+      ]
+    }
+  ]
+}

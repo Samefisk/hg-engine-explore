@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "observation.walk-policy-control",
+  "title": "The native Walk policy reader detects a changed counter and exact restoration",
+  "status": "active",
+  "capabilities": ["actor.system"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "observer-control",
+    "expectationSource": "documentation/overworld-system/devtools-tests.md#acceleration-setup-and-terminal-readings",
+    "actor": "One current MOUNTED Onix95 with full identity, generations and presentation; the player remains the motion anchor.",
+    "trigger": "Admit one ordinary north Walk, release input after its actual start, and inject one stopped-guest counter-byte change at that actor's native COMMIT.",
+    "observable": "The same native reader sees clean, changed and exactly restored policy bytes. Game execution does not advance during the fault. The unchanged normal motion stream keeps clean bytes and one start, commit, finish and control return.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {"phase": "before-observation", "target": "fixture", "change": "Use a disposable test.sav session. Checked native teleport, party0 Onix data and mounted spawn establish the actor on its own path. Keep normal profile and timing; no menu/healing detour or source save changes."},
+      {"phase": "during-observation", "target": "observation", "change": "Change only the bound resident policy counter by one inside the paused COMMIT callback. Read through the same reader, restore the original byte in finally, verify all32 bytes and unchanged native clocks. Failed restoration stops the worker."}
+    ],
+    "limits": ["Registration is not acceptance. Missing identity, a blocked path, incomplete Walk, missed COMMIT, changed clock or uncertain restoration fails.", "This calibrates the Walk policy reader only. It is not general gameplay, spawn, terrain or soak proof."],
+    "control": {"boundary": "live-runtime", "fault": "One actual resident counter byte differs during the stopped-guest COMMIT read.", "expectedFailure": "The bad read differs only in that counter; exact restoration must recover the original clean read before game execution resumes."}
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "mounted-onix", "species": 95, "role": "MOUNTED", "acquisition": "mount", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [{"at": 0, "kind": "setup", "value": "Checked own-party mounted Onix and current binding."}, {"at": 1, "kind": "input", "value": "One ordinary Walk and one paused native policy reader fault, then exact restoration and terminal control."}],
+  "stop": {"frameBudget": 360, "condition": "One complete controlled native read, exact restore, one full Walk and closed private session."},
+  "expect": {"requiredEvents": ["MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"], "forbiddenEvents": ["MOTION_CANCELED"], "invariants": ["Each accepted motion has exactly one terminal result", "Control returns after the selected motion finishes or cancels"]},
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "observation.walk-policy-control", "claims": ["live-actor-identity", "controlled-action"], "minimumFrames": 1}
+}

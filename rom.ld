@@ -698,6 +698,8 @@ PokemonMoveRelearn_BuildCandidates = 0x023BE478 | 1;
 PokemonMoveHistory_ReplaceMove = 0x023BE480 | 1;
 PokemonMoveHistory_DeleteMoveSlot = 0x023BE488 | 1;
 OverworldWalkMount_RebaseMotionTarget = 0x023BFFEA | 1;
+OverworldWalk_DeltaX = 0x023BF59C | 1;
+OverworldWalk_DeltaY = 0x023BF5BE | 1;
 /* Boot-resident task-6 validation/transaction ABI in overlay 155. */
 PokemonMoveHistoryTask6_IsCanonical = 0x023BD400 | 1;
 PokemonMoveHistoryTask6_DaycareDepositCommit = 0x023BD408 | 1;

@@ -1,0 +1,156 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.movement.frame-pacing",
+  "title": "Mounted Walk keeps one smooth render update cadence",
+  "status": "active",
+  "capabilities": [
+    "walk.acceleration",
+    "mount.presentation",
+    "mount.lifecycle"
+  ],
+  "proofLevel": "S4",
+  "costTier": 4,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld_walk_frame_timing_spec.md",
+    "actor": "MOUNTED species 155 (cyndaquil), acquired through mount; live handle and attached presentation required",
+    "trigger": "Mount the current follower and hold Right through seven natural Walk commits; Record both visible actors on every render update and across every acceleration boundary",
+    "observable": "Each accepted motion has exactly one terminal result; No logical commit occurs after motion cancellation; Control returns after the selected motion finishes or cancels; No active actors share a nonzero target reservation; Every active actor handle uses the current field epoch; Every active actor has an attached presentation",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Disposable test.sav, checked teleport to map33 (584,403) facing Right, party0 Cyndaquil and mounted spawn. The full eight-tile lane was checked through current native terrain and Cyndaquil uses its own mounted setup. No other Pokemon is relocated, no profile/timer changes, no warmup movement or source save writes."
+      }
+    ],
+    "limits": [
+      "Registration is not acceptance. Requires seven actual Right Walks with durations8,8,8,7,7,7,6 and all nine original registry rows, followed by a separate recovery tile.",
+      "Seven lifecycle event counts apply to the main window only; the eighth recovery lifecycle has its own checked window.",
+      "Prepared fixture data does not prove natural mounting, selection or spawning. No runtime fix or intermittent reliability is proved by registration or one pass."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "input",
+      "value": "Mount the current follower and hold Right through seven natural Walk commits"
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Record both visible actors on every render update and across every acceleration boundary"
+    }
+  ],
+  "stop": {
+    "frameBudget": 600,
+    "condition": "Seven Walk commits finish and mounted control accepts one recovery step"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ],
+    "orderedEvents": [
+      {
+        "id": "start",
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "commit",
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "finish",
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "control",
+        "event": "CONTROL_RETURNED",
+        "reason": "OK"
+      }
+    ],
+    "eventCounts": [
+      {
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 1
+        },
+        "minimum": 7,
+        "maximum": 7
+      },
+      {
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 7,
+        "maximum": 7
+      },
+      {
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 7,
+        "maximum": 7
+      },
+      {
+        "event": "CONTROL_RETURNED",
+        "reason": "OK",
+        "minimum": 7,
+        "maximum": 7
+      }
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "mount.movement.frame-pacing", "claims": ["natural-input", "live-actor-identity", "rendered-motion", "frame-pacing", "engine-boundary", "control-release"], "minimumFrames": 8}
+}

@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.resolve.packaged-rom-parity",
+  "title": "Packaged ROM resolver matches the Workshop resolver",
+  "status": "active",
+  "capabilities": [
+    "profile.composition"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/README.md#system-contracts",
+    "actor": "World or resolver state identified by the scenario fixture; no named actor identity credit.",
+    "trigger": "Load the packaged resolver service and resolve the seven named golden requests through ARM and the Workshop adapter",
+    "observable": "The packaged ROM and Workshop use the same behavior blob; Status, profile bytes, primitives, fingerprint, metadata, and ordered provenance are identical for every request",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Import a disposable copy of test.sav and use normal boot input. Capture the real resolver service and behavior-blob pointers on a natural resolver call."
+      },
+      {
+        "phase": "during-observation",
+        "target": "control-result",
+        "change": "Use the shared field-return bridge and one owned 8,000-byte heap11 block for seven fixed public requests, result buffers and bounded provenance. Check live service/blob identity, native entry/return arguments, guards, unchanged inputs and heap ownership, then free the block. Do not write native registers or stack frames. Source save and behavior blob are unchanged."
+      }
+    ],
+    "limits": [
+      "This proves deployment parity for seven public service calls, not natural actor movement, role projection, or unchanged authored-profile timing.",
+      "Both builds use the same resolver C implementation. Independent authored golden cases remain the separate S1 requirement; this case is not an independent behavior oracle.",
+      "Observed frames count only real emulator cycles containing the captured service work, not boot padding. All seven calls can finish in one cycle; no gameplay soak credit is claimed."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Load the packaged resolver service and resolve the seven named golden requests through ARM and the Workshop adapter"
+    }
+  ],
+  "stop": {
+    "frameBudget": 4000,
+    "condition": "All seven packaged ARM resolutions and host resolutions are compared"
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "The packaged ROM and Workshop use the same behavior blob",
+      "Status, profile bytes, primitives, fingerprint, metadata, and ordered provenance are identical for every request"
+    ]
+  },
+  "capture": "none",
+  "subjects": [],
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "profile.resolve.packaged-rom-parity",
+    "claims": ["profile-resolution"],
+    "minimumFrames": 1
+  }
+}

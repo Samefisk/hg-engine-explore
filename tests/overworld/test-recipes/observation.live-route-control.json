@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "observation.live-route-control",
+  "title": "Same route recorder detects native CPU delay and player start stall",
+  "mode": "observer-control",
+  "fixture": {"rom":"test.nds","save":"test.sav"},
+  "expectationSource": "tests/overworld/scenarios/observation.live-route-control.json",
+  "requirements": ["legacy.live-route-observer-controls"],
+  "budgets": {"maxSeconds":240,"maxFrames":6000,"noProgressFrames":600,"minObservedFrames":4},
+  "subjects": [{"id":"cyndaquil","species":155,"role":"FOLLOWER","acquire":"existing"}],
+  "setup": [
+    {"id":"source-pid","op":"assert","args":{"predicate":{"kind":"party-field","slot":1,"path":"personality","operator":"eq","value":2046726716}},"budget":{"maxSeconds":10,"maxFrames":1,"noProgressFrames":1}},
+    {"id":"source-species","op":"assert","args":{"predicate":{"kind":"party-field","slot":1,"path":"species","operator":"eq","value":155}},"budget":{"maxSeconds":10,"maxFrames":1,"noProgressFrames":1}},
+    {"id":"prepare-hp","op":"party","args":{"slot":1,"hp":21,"status":0},"budget":{"maxSeconds":60,"maxFrames":600,"noProgressFrames":600}},
+    {"id":"hp-readback","op":"assert","args":{"predicate":{"kind":"party-field","slot":1,"path":"hp","operator":"eq","value":21}},"budget":{"maxSeconds":10,"maxFrames":1,"noProgressFrames":1}},
+    {"id":"prepare-follower","op":"spawn","args":{"species":155,"role":"follower","slot":1},"budget":{"maxSeconds":60,"maxFrames":600,"noProgressFrames":600}},
+    {"id":"follower-idle","op":"wait","args":{"predicate":{"kind":"actor-count","subject":"cyndaquil","motionPhase":"IDLE","operator":"eq","value":1}},"budget":{"maxSeconds":30,"maxFrames":600,"noProgressFrames":600}},
+    {"id":"bind-cyndaquil","op":"bind","args":{"subject":"cyndaquil"},"budget":{"maxSeconds":10,"maxFrames":1,"noProgressFrames":1}}
+  ],
+  "actions": [
+    {"id":"baseline-held-up","op":"step","args":{"frames":64,"keys":["UP"],"until":{"kind":"player-step-count","operator":"eq","value":4}},"budget":{"maxSeconds":30,"maxFrames":64,"noProgressFrames":32}},
+    {"id":"baseline-player-settle","op":"wait","args":{"predicate":{"kind":"player-settled-at","map":33,"x":585,"z":402}},"budget":{"maxSeconds":15,"maxFrames":16,"noProgressFrames":8}},
+    {"id":"baseline-follower-settle","op":"wait","args":{"predicate":{"kind":"measurement-stage","measurement":"live-route-control-v1","stage":"baseline"}},"budget":{"maxSeconds":60,"maxFrames":600,"noProgressFrames":600}},
+    {"id":"arm-cpu","op":"observer-control","args":{"subject":"cyndaquil","fault":"cpu-hitch"},"budget":{"maxSeconds":10,"maxFrames":1,"noProgressFrames":1}},
+    {"id":"detect-cpu","op":"wait","args":{"predicate":{"kind":"measurement-stage","measurement":"live-route-control-v1","stage":"cpu-detected"}},"budget":{"maxSeconds":15,"maxFrames":16,"noProgressFrames":16}},
+    {"id":"arm-player","op":"observer-control","args":{"subject":"cyndaquil","fault":"player-start-stall"},"budget":{"maxSeconds":10,"maxFrames":1,"noProgressFrames":1}},
+    {"id":"detect-player","op":"step","args":{"frames":16,"keys":["UP"],"until":{"kind":"measurement-stage","measurement":"live-route-control-v1","stage":"player-detected"}},"budget":{"maxSeconds":15,"maxFrames":16,"noProgressFrames":16}}
+  ],
+  "assertions": [{"kind":"measurement-complete","measurement":"live-route-control-v1","when":"final"}],
+  "measurements": [{"kind":"live-route-control-v1","subject":"cyndaquil","setupTransitions":[]}]
+}

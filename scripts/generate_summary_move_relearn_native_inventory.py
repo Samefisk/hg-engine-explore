@@ -25,7 +25,8 @@ RUNTIME_SOURCES = (
     "scripts/pokemon_move_history_build_manifest.py",
     "scripts/launch_summary_move_relearn_runtime.py",
     "scripts/verify_summary_move_relearn_runtime.py",
-    "scripts/headless-overworld-test.py",
+    "tools/overworld/devtools_native.py",
+    "tools/overworld/melonds_backend.py",
     "scripts/verify_pokemon_move_history_party_integrity.py",
     "scripts/summary_move_relearn_protected_spawn.py",
     "scripts/summary_move_relearn_protected_spawn.swift",
@@ -256,6 +257,8 @@ def build_inventory() -> str:
     add_regular(records, REPO / ".venv/pyvenv.cfg")
     add_membership_directory(records, REPO / ".venv")
     add_membership_directory(records, REPO / "scripts")
+    add_membership_directory(records, REPO / "tools")
+    add_membership_directory(records, REPO / "tools/overworld")
     add_membership_directory(records, REPO / "build/summary_move_relearn_native")
     add_membership_directory(records, BASE)
     add_membership_directory(records, BASE / "lib")
@@ -273,10 +276,11 @@ def build_inventory() -> str:
     add_directory(records, version_zip.parent)
     records[version_zip] = ("N", 0, EMPTY_SHA256)
     site_packages = REPO / ".venv/lib/python3.10/site-packages"
-    add_directory_graph(records, site_packages / "desmume")
     add_directory_graph(records, site_packages / "PIL")
-    add_tree(records, site_packages / "desmume")
     add_tree(records, site_packages / "PIL")
+    add_membership_directory(records, REPO / "build/melonds")
+    add_regular(records, REPO / "build/melonds/libow_melonds.dylib")
+    add_regular(records, REPO / "build/melonds/manifest.json")
     for path in EXTRA_NATIVE:
         add_regular(records, path.resolve())
     lines = [HEADER]

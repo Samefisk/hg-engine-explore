@@ -55,26 +55,133 @@ else:
 
 REPO = Path(__file__).resolve().parents[1]
 OVERLAY_BASE = 0x023BE400
-OVERLAY_LIMIT = 0x1C00
-OVERLAY_WALK_ENTRY = OVERLAY_BASE + 0x1000
-OVERLAY_PROFILE_ENTRY = OVERLAY_BASE + 0x1040
-OVERLAY_MOUNT_ENTRY = OVERLAY_BASE + 0x1058
-OVERLAY_FACE_ENTRY = OVERLAY_BASE + 0x1068
-OVERLAY_GUARDED_END = OVERLAY_BASE + OVERLAY_LIMIT
+OVERLAY_RETIRED_WALK_TABLES_START = OVERLAY_BASE + 0x1000
+OVERLAY_RETIRED_WALK_TABLES_END = OVERLAY_BASE + 0x1088
+OVERLAY_WALK_HELPERS = {
+    "OverworldWalk_DecelerateTime": OVERLAY_BASE + 0x1000,
+    "OverworldWalk_ProposeStep": OVERLAY_BASE + 0x105C,
+    "OverworldWalk_ClampTime": OVERLAY_BASE + 0x1088,
+    "OverworldWalk_AccelerateTime": OVERLAY_BASE + 0x109E,
+    "OverworldWalk_SkidTiles": OVERLAY_BASE + 0x10D6,
+    "OverworldWalk_SkidTime": OVERLAY_BASE + 0x10F0,
+    "OverworldWalk_StompApplies": OVERLAY_BASE + 0x1104,
+    "OverworldWalk_DirectionFromKeys": OVERLAY_BASE + 0x1134,
+    "OverworldWalk_DirectionKey": OVERLAY_BASE + 0x1186,
+    "OverworldWalk_DeltaX": OVERLAY_BASE + 0x119C,
+    "OverworldWalk_DeltaY": OVERLAY_BASE + 0x11BE,
+    "OverworldWalk_IsFortyFiveDegreeTurn": OVERLAY_BASE + 0x11E2,
+    "OverworldWalk_DirectionFromDelta": OVERLAY_BASE + 0x128C,
+    "OverworldWalk_StrictDiagonalAllowed": OVERLAY_BASE + 0x12CE,
+    "OverworldWalk_DiagonalFacing": OVERLAY_BASE + 0x134E,
+    "OverworldWalk_ResolveMountedDiagonal": OVERLAY_BASE + 0x1380,
+    "OverworldWalk_StartMountedFlat": OVERLAY_BASE + 0x1440,
+    "OverworldWalk_FilterMountedInput": OVERLAY_BASE + 0x15A0,
+}
+OVERLAY_RETIRED_WALK_SYMBOLS = {
+    "gOverworldWalkModuleEntry",
+    "gOverworldWalkProfileModuleEntry",
+    "gOverworldWalkMountModuleEntry",
+    "gOverworldWalkFaceModuleEntry",
+    "gOverworldWalkWildPolicyModuleEntry",
+    "Walk_ApplyFacePlayerFacing",
+    "Walk_MountApply",
+    "Walk_MountFilterInput",
+    "Walk_StartMountedFlatMotion",
+}
+FIELD_OVERLAY_BASE = 0x023C8000
+FIELD_OVERLAY_END = 0x023CCFD8
+FIELD_TERRAIN_ENTRY = OVERLAY_BASE + 0x1860
+FIELD_TERRAIN_END = OVERLAY_BASE + 0x1A50
+FIELD_TERRAIN_STATE = "sOverworldFieldTerrainStream"
+FIELD_TERRAIN_APPLY = "OverworldFieldTerrainStream_Apply"
+FIELD_TERRAIN_WRAPPER = "OverworldFieldService_TerrainStream"
+# Field uses these resident Thumb veneers, never a Thumb BL to their stock
+# ARM implementations. idiv/idivmod share the same two-result ABI veneer.
+FIELD_CORE_HELPERS = {
+    "__aeabi_idiv": (0x023DEE44, 0x020F2998),
+    "__aeabi_idivmod": (0x023DEE44, 0x020F2998),
+    "__aeabi_uidivmod": (0x023DEE4C, 0x020F2BA4),
+    "memset": (0x023DEEA2, 0x020E5B44),
+    "memcpy": (0x023DEEBE, 0x020E5AD8),
+}
+OVERWORLD_CORE_THUMB_HELPERS = {
+    **{name: resident for name, (resident, _stock_arm) in FIELD_CORE_HELPERS.items()},
+    "__aeabi_uidiv": 0x023DEE4C,
+    "__aeabi_lmul": 0x023DEEC6,
+    "__gnu_thumb1_case_uqi": 0x023DEE54,
+    "__gnu_thumb1_case_uhi": 0x023DEE78,
+    "OverworldWildSpawns_ApplyFacePlayerFacing": 0x023D98F6,
+}
+OVERWORLD_CORE_HELPER_CLIENTS = {
+    158: ("overworld_actor_system_overlay", ("memcpy", "memset", "__aeabi_uidivmod", "__aeabi_lmul", "__aeabi_idiv", "__aeabi_uidiv", "__gnu_thumb1_case_uqi", "__aeabi_idivmod")),
+    152: ("overworld_follower_selector_overlay", ("__gnu_thumb1_case_uhi", "__aeabi_idivmod", "memcpy", "__aeabi_lmul", "__aeabi_idiv", "memset")),
+    149: ("overworld_wild_spawns_overlay", ("__aeabi_uidivmod", "memset", "__aeabi_idivmod", "__gnu_thumb1_case_uhi", "__aeabi_idiv", "OverworldWildSpawns_ApplyFacePlayerFacing", "__gnu_thumb1_case_uqi", "memcpy")),
+    153: ("pokemon_move_history_overlay", ("memset",)),
+}
+OVERWORLD_CORE_PRESERVED_BODIES = {
+    "__gnu_thumb1_case_uqi": bytes.fromhex("02 b4 71 46 49 08 49 00 09 5c 49 00 8e 44 02 bc 70 47"),
+    # Preserve the existing ELF-sized span, including the adjacent case_si
+    # body covered by the assembly's historical uhi .size directive.
+    "__gnu_thumb1_case_uhi": bytes.fromhex("03 b4 71 46 49 08 40 00 49 00 09 5a 49 00 8e 44 03 bc 70 47 03 b4 71 46 02 31 89 08 80 00 89 00 08 58 40 18 86 46 03 bc f7 46"),
+    "OverworldWildSpawns_ApplyFacePlayerFacing": bytes.fromhex("f0 b5 00 2a 1d d0 03 00 e0 33 1b 68 1b 6c 1a 6b 00 2a 16 d0 14 23 59 43 0b 58 54 6e d5 6e 5f 6e de 6e 03 22 e0 1b a9 1b 00 28 01 dc 38 1b 01 3a 01 24 00 29 01 dc 00 24 71 1b 88 42 00 da 22 00 9a 62 f0 bd"),
+}
 OVERLAY152_BASE = 0x023C0400
-OVERLAY153_CALL_INVENTORY_SHA256 = (
-    "87c71c590ad1e785577d32738dbf0ddd2c831bd4355267e81fc30c17a7a4ee56"
+OVERLAY153_PREFIX_SIZE = 0x1BF6
+# The historical tail-relocation proof froze this whole prefix. That freeze
+# is not a permanent requirement that Walk/Field can never change. Bind every
+# packaged prefix byte to the current linked sections instead; retain fixed
+# entries, region bounds, no mutable storage, and the history/save core seal.
+OVERLAY153_SPAWN_ENTRY = 0x023C0000
+OVERLAY153_OCCUPANCY_ENTRY = 0x023C0184
+OVERLAY153_END = 0x023C0400
+OVERLAY153_SPAWN_FUNCTION = "OverworldWildSpawnIdentity_PrepareSlot"
+OVERLAY153_OCCUPANCY_FUNCTION = "OverworldWildOccupancy_Query"
+OVERLAY153_TAIL_FUNCTIONS = (
+    (OVERLAY153_SPAWN_FUNCTION, OVERLAY153_SPAWN_ENTRY, OVERLAY153_OCCUPANCY_ENTRY),
+    (OVERLAY153_OCCUPANCY_FUNCTION, OVERLAY153_OCCUPANCY_ENTRY, 0x023C025C),
+    ("OverworldWildSpawnGuard_Read", 0x023C025C, 0x023C034C),
+    ("OverworldWildSpawnGuard_IsNearActiveSpawn", 0x023C034C, 0x023C03D0),
+    ("OverworldWildSpawnGuard_IsSurfBehavior", 0x023C03D0, OVERLAY153_END),
+)
+# The 112 history/save/filter calls before the shadow-position entry are
+# unchanged from the published package. Bind the complete current movement,
+# Field, and tail graph to linked output, without rebaselining this old core.
+OVERLAY153_CORE_CALL_INVENTORY_SHA256 = (
+    "728d32c7d4161aa9a4548acd359c35b29c22a13be122d9e7c027df2b5c5eaa88"
 )
 OVERLAY155_BASE = 0x023BD400
 OVERLAY155_LIMIT = 0x1000
 OVERLAY155_CALL_INVENTORY_SHA256 = (
-    "da0163161c8867a389c76acae14d14a8f237b81b5397fe733f0d6eb06bc8be04"
+    "618008667911384b39e43dbb1936eb84aed2dd1f51c73b901933ed8a7c192df5"
 )
+# The planner reserve contains the current Hop and Teleport calls, including
+# Teleport's ARM9 BLX classifier callback.
+# Its 82 outside calls (history/save/diagnostics, role reducer, and shadow)
+# retain the published call graph with the current resident-helper targets.
+# Keep their identity separate so a planner update cannot rebaseline them.
+OVERLAY155_PLANNER_CODE_START = OVERLAY155_BASE + 0x898
+OVERLAY155_PLANNER_CODE_END = OVERLAY155_BASE + 0xE40
+OVERLAY155_CORE_CALL_INVENTORY_SHA256 = (
+    "fe15bacfc9501148908226ff868ef93ca3c0abb0481feb0ee2624fd2831819af"
+)
+OVERLAY155_ACTOR_PLANNERS = (
+    (0xF0, "OverworldActorHopPlanner_Plan", "OverworldActorHopPlanner_PlanImpl"),
+    (0xF8, "OverworldActorTeleportPlanner_Plan", "OverworldActorTeleportPlanner_PlanImpl"),
+)
+OVERLAY155_RETIRED_HOP_SYMBOLS = {
+    "gOverworldWildHopServiceEntry",
+    "OverworldWild_ResolveHopTrajectory",
+    "OverworldWild_TryGetBehaviorHopVector",
+    "OverworldWild_ValidateHopLanding",
+    "OverworldWild_BuildHopHelperConfig",
+    "OverworldWild_RunChainReposition",
+    "OverworldWild_IsChainActionReady",
+}
 EXPECTED_MAKEFILE_SHA256 = (
-    "947d3a6d15d0a82515eefcf6f3ec6a558f4fd337d33490f7f9fa6912cbac07ec"
+    "82647a1254f31b572fde2f51c9ac38f31c155bbb6c44a70be68c65a7f409d5a5"
 )
 EXPECTED_BUILD_WRAPPER_SHA256 = (
-    "1968d013d730de3d11efdab8ce57679a19a7c0b5b424c92690e00baa0412f349"
+    "96a807bb9033336361b2da6c57eb0b55a3dcc18e19b900007bdf416c11833e1c"
 )
 EXPECTED_INCLUDED_MAKE_SOURCES = {
     "data/codetables.mk":
@@ -88,7 +195,7 @@ EXPECTED_INCLUDED_MAKE_SOURCES = {
     "narcs.mk":
         "df964fe5b5822e230ab179e45eb53e23fbf9adab46afbe89167495b4f96e467a",
     "overlays.mk":
-        "8b3a0131eec5763daf53321114f3346392b4ceb754221ed63bd7b0bb0f37eb67",
+        "f0a124ef0d19e26f09d7784e2976accce1ae6c8360010a74af5c55bf8050d0a1",
 }
 MANAGED_BUILD_PATH = (
     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -462,11 +569,15 @@ def generated_dependency_inputs_are_safe(root: Path = REPO) -> bool:
 
 
 def trusted_pre_make_sources_are_exact(makefile: str) -> bool:
+    return trusted_pre_make_source_mismatch(makefile) is None
+
+
+def trusted_pre_make_source_mismatch(makefile: str) -> str | None:
     if (
         hashlib.sha256(makefile.encode()).hexdigest()
         != EXPECTED_MAKEFILE_SHA256
     ):
-        return False
+        return "Makefile"
     wrapper = REPO / "docker-makerom.cmd"
     if (
         not wrapper.is_file()
@@ -474,7 +585,7 @@ def trusted_pre_make_sources_are_exact(makefile: str) -> bool:
         or hashlib.sha256(wrapper.read_bytes()).hexdigest()
         != EXPECTED_BUILD_WRAPPER_SHA256
     ):
-        return False
+        return "docker-makerom.cmd"
     for relative_path, expected_sha256 in (
         EXPECTED_INCLUDED_MAKE_SOURCES.items()
     ):
@@ -485,8 +596,10 @@ def trusted_pre_make_sources_are_exact(makefile: str) -> bool:
             or hashlib.sha256(path.read_bytes()).hexdigest()
             != expected_sha256
         ):
-            return False
-    return generated_dependency_inputs_are_safe()
+            return relative_path
+    if not generated_dependency_inputs_are_safe():
+        return "generated dependency inputs"
+    return None
 
 
 def enter_managed_build_environment(clean_mode: str) -> None:
@@ -515,9 +628,11 @@ def exec_managed_build() -> None:
         outer_make_invocation_is_safe(),
         "managed pre-Make environment contains controls or overrides",
     )
+    trust_mismatch = trusted_pre_make_source_mismatch(makefile)
     require(
-        trusted_pre_make_sources_are_exact(makefile),
-        "managed pre-Make source/dependency trust gate differs",
+        trust_mismatch is None,
+        "managed pre-Make source/dependency trust gate differs: "
+        + str(trust_mismatch),
     )
     try:
         parallelism = subprocess.check_output(
@@ -555,6 +670,7 @@ def effective_make_all_contract_matches(
     expected_recipe_variables_sha256: str,
     *,
     make_arguments: tuple[str, ...] = (),
+    required_prerequisites: frozenset[str] = frozenset(),
 ) -> bool:
     if (
         hashlib.sha256(makefile.encode()).hexdigest()
@@ -663,9 +779,11 @@ def effective_make_all_contract_matches(
     prerequisites = " ".join(
         lines[rule_index].removeprefix("all:").split()
     )
+    prerequisite_tokens = frozenset(prerequisites.split())
     if (
         hashlib.sha256(prerequisites.encode()).hexdigest()
         != expected_prerequisites_sha256
+        or not required_prerequisites.issubset(prerequisite_tokens)
     ):
         return False
 
@@ -1799,9 +1917,11 @@ def source_contracts() -> None:
         outer_make_invocation_is_safe(),
         "outer Make invocation contains unsafe flags or command variables",
     )
+    trust_mismatch = trusted_pre_make_source_mismatch(makefile)
     require(
-        trusted_pre_make_sources_are_exact(makefile),
-        "pre-Make source/dependency trust gate differs",
+        trust_mismatch is None,
+        "pre-Make source/dependency trust gate differs: "
+        + str(trust_mismatch),
     )
     require(
         outer_make_invocation_is_safe({})
@@ -2053,11 +2173,12 @@ def source_contracts() -> None:
         == "base/overlay/overlay_0131.bin",
         "scripted daycare field binary/package provenance is not sealed",
     )
+    field_core_helper_seal_contract(FIXED_INPUTS, OUTPUTS)
     for runtime_evidence_input in (
         "scripts/launch_summary_move_relearn_runtime.py",
         "scripts/verify_summary_move_relearn_runtime.py",
         "scripts/pokemon_move_history_build_manifest.py",
-        "scripts/headless-overworld-test.py",
+        "tools/overworld/devtools_native.py",
         "scripts/verify_pokemon_move_history_party_integrity.py",
         "scripts/build_summary_move_relearn_native_bootstrap.sh",
         "scripts/generate_summary_move_relearn_native_inventory.py",
@@ -2403,7 +2524,26 @@ def source_contracts() -> None:
         ".mount_abort ORIGIN(rom) + 0x1BEA" in linker
         and "KEEP(*(.overworld_walk_mount_abort))" in linker
         and "ASSERT(. == ORIGIN(rom) + 0x1BF6" in linker,
-        "overlay 153 file size can drift from its packaged Y9/FAT metadata",
+        "overlay 153 existing mount-abort prefix extent changed",
+    )
+    require(
+        ".spawn_identity 0x023C0000" in linker
+        and "KEEP(*(.overworld_spawn_identity))" in linker
+        and "ABSOLUTE(OverworldWildSpawnIdentity_PrepareSlot) == 0x023C0000" in linker
+        and "ASSERT(. <= 0x023C0184" in linker
+        and ". = ORIGIN(rom) + 0x1D84" in linker
+        and "KEEP(*(.overworld_wild_occupancy))" in linker
+        and "ABSOLUTE(OverworldWildOccupancy_Query) == 0x023C0184" in linker
+        and "ASSERT(. <= ORIGIN(rom) + LENGTH(rom)" in linker,
+        "Wild spawn-identity/occupancy tail lacks its fixed-entry/reservation guards",
+    )
+    require(
+        "KEEP(*(.overworld_field_terrain_stream_entry))" in linker
+        and "KEEP(*(.overworld_field_terrain_stream_code))" in linker
+        and "overworld Walk module overlaps Field terrain code host" in linker
+        and "Field terrain code overlaps Walk rejection code host" in linker
+        and "Walk rejection code overlaps mount abort helper" in linker,
+        "Field terrain physical host lacks its linker boundary guards",
     )
 
     require(
@@ -3087,6 +3227,10 @@ def source_contracts() -> None:
         "-7 $(BASE)/arm7.bin -y9 $(BASE)/overarm9.bin "
         "-y7 $(BASE)/overarm7.bin -d $(FILESYS) -y $(BASE)/overlay "
         "-t $(BASE)/banner.bin -h $(BASE)/header.bin",
+        "$(PYTHON_NO_VENV) scripts/verify_overworld_spawn_identity.py "
+        "--package-only --rom $(BUILDROM).tmp",
+        "$(PYTHON_NO_VENV) scripts/verify_overworld_wild_occupancy.py "
+        "--package-only --rom $(BUILDROM).tmp",
         "$(VENV)/bin/python3 -I -S -B -X pycache_prefix=/dev/null "
         "scripts/pokemon_move_history_build_manifest.py "
         "--seal $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
@@ -3163,6 +3307,7 @@ def source_contracts() -> None:
         "--package-only "
         "--patched-arm9 $(BASE)/arm9.bin --require-patched-arm9",
         "$(PYTHON_NO_VENV) scripts/verify_overworld_wild_direction_delta_calls.py",
+        "$(PYTHON_NO_VENV) scripts/verify_overworld_walk_helper_alignment.py",
         '@echo "Making ROM..."',
         *expected_publication_tail,
     ]
@@ -3172,8 +3317,11 @@ def source_contracts() -> None:
     expected_makefile_sha256 = EXPECTED_MAKEFILE_SHA256
     expected_included_make_sources = EXPECTED_INCLUDED_MAKE_SOURCES
     expected_prerequisites_sha256 = (
-        "7900603c8a0030444541b637f03d5f0f239c785bc85141c4cac8b0b84be3b544"
+        "50282520e21aff95c193d0010c31506d03dae36b1db2c72b61855e4484f29b39"
     )
+    required_all_prerequisites = frozenset({
+        "build/output_overworld_actor_system_overlay.bin",
+    })
     require(
         make_publication_contract_matches(
             makefile,
@@ -3192,9 +3340,35 @@ def source_contracts() -> None:
             expected_prerequisites_sha256,
             expected_all_recipe,
             expected_recipe_variables_sha256,
+            required_prerequisites=required_all_prerequisites,
         ),
         "effective GNU Make all rule, prerequisites, recipe, or critical "
         "variables differ",
+    )
+    missing_actor_prerequisites_sha256 = (
+        "dd22fb0e6680211431541ed08dbcce42a6adcec903746d0f33afed8f7808d399"
+    )
+    require(
+        effective_make_all_contract_matches(
+            makefile,
+            expected_makefile_sha256,
+            expected_included_make_sources,
+            missing_actor_prerequisites_sha256,
+            expected_all_recipe,
+            expected_recipe_variables_sha256,
+            make_arguments=("OVERLAY_OUTPUTS=",),
+        )
+        and not effective_make_all_contract_matches(
+            makefile,
+            expected_makefile_sha256,
+            expected_included_make_sources,
+            missing_actor_prerequisites_sha256,
+            expected_all_recipe,
+            expected_recipe_variables_sha256,
+            make_arguments=("OVERLAY_OUTPUTS=",),
+            required_prerequisites=required_all_prerequisites,
+        ),
+        "resident actor-overlay prerequisite removal mutation is invalid",
     )
     exact_command_positions = [
         recipe_commands.index(command)
@@ -3207,6 +3381,10 @@ def source_contracts() -> None:
         and exact_command_positions == sorted(exact_command_positions),
         "complete package/seal/verify/publish recipes differ or can ignore "
         "command failures",
+    )
+    capture_package_command = next(
+        command for command in exact_package_commands
+        if "scripts/verify_pokemon_move_history_capture.py " in command
     )
     ignored_prefix_makefile = makefile.replace(
         "\t$(PYTHON_NO_VENV) "
@@ -3223,9 +3401,9 @@ def source_contracts() -> None:
         1,
     )
     require(
-        exact_package_commands[3]
+        capture_package_command
         not in make_recipe_commands(ignored_prefix_makefile)
-        and exact_package_commands[3]
+        and capture_package_command
         not in make_recipe_commands(ignored_suffix_makefile),
         "Make error-ignoring mutation fixture does not fail closed",
     )
@@ -3238,7 +3416,7 @@ def source_contracts() -> None:
         1,
     )
     require(
-        exact_package_commands[3]
+        capture_package_command
         not in make_target_recipe_commands(
             detached_target_makefile,
             "all",
@@ -3796,11 +3974,18 @@ def source_contracts() -> None:
     require(
         "FORCE_MOVE_HISTORY_CAPTURE_OBJECTS" not in makefile
         and "MOVE_HISTORY_CAPTURE_OBJECTS" not in makefile
+        and "CC_ID=$$($(CC) -dumpmachine)@$$($(CC) -dumpfullversion -dumpversion)"
+        in makefile
+        and "AS_ID=$$($(AS) --version | sed -n '1p')" in makefile
+        and "LD_ID=$$($(LD) --version | sed -n '1p')" in makefile
+        and "OBJCOPY_ID=$$($(OBJCOPY) --version | sed -n '1p')" in makefile
         and "-include $(basename $1).d" in makefile
-        and "$1: $2 $(LEARNSETS_HEADER) $(BATTLETESTS_HEADER) "
-        "$(COMPILE_CONFIG_STAMP) | $(CODE_BUILD_DIRS) venv "
-        "toolchain-preflight" in makefile
-        and "$1: $2 $(COMPILE_CONFIG_STAMP) | $(CODE_BUILD_DIRS) "
+        and "GENERATED_LEARNSET_C_SRCS :=" in makefile
+        and "GENERATED_TEST_BATTLE_C_SRCS := src/test_battle.c" in makefile
+        and "$(if $(filter $2,$(GENERATED_LEARNSET_C_SRCS)),$(LEARNSETS_HEADER))" in makefile
+        and "$(if $(filter $2,$(GENERATED_TEST_BATTLE_C_SRCS)),$(BATTLETESTS_HEADER))" in makefile
+        and "$1: $2 " in makefile
+        and "$(COMPILE_CONFIG_STAMP) | $(CODE_BUILD_DIRS) venv "
         "toolchain-preflight" in makefile,
         "incremental move-history objects are not covered by source/dependency "
         "tracking",
@@ -5366,6 +5551,10 @@ def host_fixtures(
         "packaged call scanner does not decode BL and BLX-register forms",
     )
     manifest_mutation_fixtures(packaged_manifest, packaged_rom)
+    field_terrain_layout_mutation_fixtures()
+    field_core_helper_mutation_fixtures()
+    overworld_core_helper_mutation_fixtures()
+    task6_actor_planner_mutation_fixtures()
 
 
 def symbol_table(path: Path) -> dict[str, int]:
@@ -5391,6 +5580,990 @@ def symbol_sizes(path: Path) -> dict[str, int]:
         if len(parts) >= 4:
             sizes[parts[3]] = int(parts[1], 16)
     return sizes
+
+
+def layout_symbols(path: Path, objdump: str) -> dict[str, tuple[int, int, str, str]]:
+    """Keep section and function metadata: an ABS import is not hosted code."""
+    output = subprocess.check_output([objdump, "-t", str(path)], text=True)
+    result = {}
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) >= 5 and re.fullmatch(r"[0-9a-fA-F]+", parts[0]):
+            result[parts[-1]] = (
+                int(parts[0], 16), int(parts[-2], 16), parts[-3],
+                "F" if "F" in parts[1:-3] else "O" if "O" in parts[1:-3] else "",
+            )
+    return result
+
+
+def elf_section_layout(path: Path) -> list[tuple[int, int, int, int]]:
+    """Return (type, flags, address, size) from allocated ELF32 sections."""
+    image = path.read_bytes()
+    require(image[:6] == b"\x7fELF\x01\x01" and len(image) >= 52,
+            f"{path} is not little-endian ELF32")
+    offset = struct.unpack_from("<I", image, 0x20)[0]
+    stride, count = struct.unpack_from("<HH", image, 0x2E)
+    require(stride >= 40 and offset + stride * count <= len(image),
+            f"{path} has an invalid section table")
+    sections = []
+    for index in range(count):
+        _name, kind, flags, address, _file_offset, size = struct.unpack_from(
+            "<6I", image, offset + index * stride)
+        if flags & 2 and size:
+            sections.append((kind, flags, address, size))
+    return sections
+
+
+def overlay153_extent_contracts(resident: bytes, symbols: dict) -> None:
+    for name, entry, limit in OVERLAY153_TAIL_FUNCTIONS:
+        function = symbols.get(name)
+        require(function is not None and function[0] == entry
+                and function[2:] == (".spawn_identity", "F")
+                and 0 < function[1] <= limit - entry
+                and ((entry + function[1] + 3) & ~3) <= limit,
+                f"overlay 153 {name} tail binding/size differs")
+    last_name, last_entry, _limit = OVERLAY153_TAIL_FUNCTIONS[-1]
+    expected_end = (last_entry + symbols[last_name][1] + 3) & ~3
+    require(OVERLAY_BASE + len(resident) == expected_end <= OVERLAY153_END,
+            "overlay 153 packaged extent differs from its named spawn tail")
+
+
+def overlay153_spawn_tail_contracts(resident: bytes, symbols: dict,
+                                    bindings: dict, linked_tail: bytes,
+                                    linked_prefix: bytes) -> None:
+    overlay153_extent_contracts(resident, symbols)
+    for name, entry, _limit in OVERLAY153_TAIL_FUNCTIONS:
+        binding = bindings.get(name)
+        require(binding is not None and binding[:3] == (entry | 1, symbols[name][1], "FUNC")
+                and binding[3].isdigit() and int(binding[3]) > 0,
+                f"overlay 153 {name} tail is not a hosted Thumb function")
+    require(len(linked_prefix) == OVERLAY153_PREFIX_SIZE
+            and resident[:OVERLAY153_PREFIX_SIZE] == linked_prefix,
+            "overlay 153 history/Field/Walk prefix differs from current linked bytes")
+    offset = OVERLAY153_SPAWN_ENTRY - OVERLAY_BASE
+    require(resident[OVERLAY153_PREFIX_SIZE:offset] == bytes(offset - OVERLAY153_PREFIX_SIZE),
+            "overlay 153 gained code in the gap before its named tail")
+    require(len(linked_tail) == len(resident) - offset
+            and resident[offset:] == linked_tail,
+            "overlay 153 spawn-identity/occupancy code/padding differs from linked bytes")
+
+
+def overlay153_spawn_tail_mutation_fixtures(resident, symbols, bindings, linked_tail,
+                                           linked_prefix) -> None:
+    """Mutate actual package copies against the independent current ELF bytes."""
+    baseline = [resident, symbols, bindings, linked_tail, linked_prefix]
+    overlay153_spawn_tail_contracts(*baseline)
+    mutations = []
+    for label, image in (("retired extent", resident[:OVERLAY153_PREFIX_SIZE]),
+                         ("stale spawn-only extent", resident[:OVERLAY153_OCCUPANCY_ENTRY - OVERLAY_BASE]),
+                         ("truncated tail", resident[:-2]),
+                         ("extra tail", resident + bytes(4))):
+        args = copy.deepcopy(baseline)
+        args[0] = image
+        mutations.append((label, args))
+    for label, offset in (("old body changed", 0xFBC),
+                          ("typed diagonal classifier changed", 0x12D0),
+                          ("mounted diagonal admission changed", 0x1380),
+                          ("Field terrain body changed", 0x1860),
+                          ("Walk candidate rejection changed", 0x1A50),
+                          ("mount abort body changed", 0x1BEA),
+                          ("new gap code", OVERLAY153_PREFIX_SIZE),
+                          ("tail body changed", OVERLAY153_SPAWN_ENTRY - OVERLAY_BASE),
+                          ("pre-occupancy padding changed", OVERLAY153_OCCUPANCY_ENTRY - OVERLAY_BASE - 1),
+                          ("occupancy body changed", OVERLAY153_OCCUPANCY_ENTRY - OVERLAY_BASE),
+                          ("tail padding changed", len(resident) - 1)):
+        args = copy.deepcopy(baseline)
+        image = bytearray(resident)
+        image[offset] ^= 1
+        args[0] = bytes(image)
+        mutations.append((label, args))
+    args = copy.deepcopy(baseline)
+    args[4] = linked_prefix[:-1]
+    mutations.append(("truncated linked prefix", args))
+    for name, entry, limit in OVERLAY153_TAIL_FUNCTIONS:
+        args = copy.deepcopy(baseline)
+        del args[1][name]
+        mutations.append((name + " missing function", args))
+        for label, value in (("entry moved", (entry + 4, symbols[name][1], ".spawn_identity", "F")),
+                             ("wrong section", (entry, symbols[name][1], ".text", "F")),
+                             ("zero function", (entry, 0, ".spawn_identity", "F")),
+                             ("reservation overlap", (entry, limit - entry + 1, ".spawn_identity", "F"))):
+            args = copy.deepcopy(baseline)
+            args[1][name] = value
+            mutations.append((name + " " + label, args))
+        binding = bindings[name]
+        for label, value in (("ARM binding", (binding[0] & ~1, *binding[1:])),
+                             ("untyped binding", (*binding[:2], "NOTYPE", binding[3])),
+                             ("absolute import only", (*binding[:3], "ABS")),
+                             ("missing binding", None)):
+            args = copy.deepcopy(baseline)
+            args[2][name] = value
+            mutations.append((name + " " + label, args))
+    for label, args in mutations:
+        try:
+            overlay153_spawn_tail_contracts(*args)
+        except SystemExit:
+            pass
+        else:
+            require(False, f"mutated overlay-153 spawn tail passed: {label}")
+
+
+def verify_overlay153_spawn_tail_packaging(linked: Path, resident: bytes,
+                                           objdump: str = "arm-none-eabi-objdump") -> bytes:
+    symbols = layout_symbols(linked, objdump)
+    overlay153_extent_contracts(resident, symbols)
+    tail = elf_bytes_at(linked, OVERLAY153_SPAWN_ENTRY,
+                        OVERLAY_BASE + len(resident) - OVERLAY153_SPAWN_ENTRY)
+    require(not any(flags & 1 for _kind, flags, _address, _size in elf_section_layout(linked)),
+            "overlay 153 gained mutable storage")
+    bindings = elf_helper_bindings(linked, {name for name, _entry, _limit in OVERLAY153_TAIL_FUNCTIONS})
+    prefix = elf_bytes_at(linked, OVERLAY_BASE, OVERLAY153_PREFIX_SIZE)
+    overlay153_spawn_tail_mutation_fixtures(resident, symbols, bindings, tail, prefix)
+    # objcopy fills the ten-byte inter-section gap with zero. Do not teach
+    # the generic ELF reader to accept holes or infer their contents.
+    linked_image = prefix + bytes(OVERLAY153_SPAWN_ENTRY - OVERLAY_BASE - len(prefix)) + tail
+    overlay153_call_inventory_contracts(resident, linked_image)
+    return linked_image
+
+
+def field_terrain_layout_contracts(
+    field: bytes,
+    resident: bytes,
+    field_symbols: dict[str, tuple[int, int, str, str]],
+    resident_symbols: dict[str, tuple[int, int, str, str]],
+    hosted_functions: set[str],
+    bss_start: int,
+    bss_size: int,
+) -> None:
+    """Physical hosting only: Field owns state and the public callback ABI."""
+    overlay153_extent_contracts(resident, resident_symbols)
+    friendship = field_symbols.get("OverworldField_ApplyWalkingFriendship")
+    if friendship is None:
+        require(FIELD_OVERLAY_BASE + len(field) == bss_start
+                and bss_start + bss_size <= FIELD_OVERLAY_END,
+                "Field file/BSS zeroing boundary differs or exceeds its fixed cap")
+    else:
+        address, size, section, kind = friendship
+        require(address == 0x023CCF90 and 0 < size <= 72
+                and (section, kind) == (".walking_friendship", "F")
+                and bss_start + bss_size <= address
+                and FIELD_OVERLAY_BASE + len(field) == address + size
+                and address + size <= FIELD_OVERLAY_END,
+                "walking friendship tail overlaps Field state or exceeds its cap")
+        require(not any(field[bss_start - FIELD_OVERLAY_BASE:address - FIELD_OVERLAY_BASE]),
+                "Field BSS before walking friendship is not zero-filled")
+        targets = []
+        for site in range(address, address + size - 2, 2):
+            opcode = struct.unpack_from("<H", field, site - FIELD_OVERLAY_BASE)[0]
+            if opcode & 0xF800 == 0xF000:
+                targets.append(thumb_bl_target(field, FIELD_OVERLAY_BASE, site))
+        require(targets == [0x0206DD40, 0x0206FE90, 0x0206DD8C],
+                "walking friendship native lock/apply/release calls differ")
+    state = field_symbols.get(FIELD_TERRAIN_STATE)
+    require(state is not None and state[1:] == (24, ".bss", "O")
+            and bss_start <= state[0] and state[0] + 24 <= bss_start + bss_size
+            and FIELD_TERRAIN_STATE not in resident_symbols,
+            "terrain stream state must remain 24 bytes in Field .bss only")
+    require(FIELD_TERRAIN_APPLY in hosted_functions,
+            "Field terrain host object is missing its entry")
+    for name in hosted_functions:
+        symbol = resident_symbols.get(name)
+        require(symbol is not None and symbol[3] == "F" and symbol[1] > 0
+                and symbol[2] == ".walk_helpers"
+                and FIELD_TERRAIN_ENTRY <= symbol[0]
+                and symbol[0] + symbol[1] <= FIELD_TERRAIN_END,
+                f"Field terrain function {name} escaped its resident slot")
+        require(name not in field_symbols or field_symbols[name][2] == "*ABS*",
+                f"Field terrain function {name} has a second implementation")
+    require(resident_symbols[FIELD_TERRAIN_APPLY][0] == FIELD_TERRAIN_ENTRY,
+            "Field terrain private entry moved")
+    imported = field_symbols.get(FIELD_TERRAIN_APPLY)
+    require(imported is not None and imported[2] == "*ABS*"
+            and imported[0] & ~1 == FIELD_TERRAIN_ENTRY,
+            "Field terrain private import does not name its resident entry")
+    wrapper = field_symbols.get(FIELD_TERRAIN_WRAPPER)
+    require(wrapper is not None and wrapper[2:] == (".text", "F")
+            and 0 < wrapper[1] <= 32
+            and FIELD_OVERLAY_BASE <= wrapper[0]
+            and wrapper[0] + wrapper[1] <= bss_start,
+            "Field terrain public wrapper is missing or is not a small Field function")
+    # Decode the forwarding prologue, not a source string or an address literal
+    # alone. Reject any instruction that can replace r0 or alter call arguments.
+    cursor = wrapper[0]
+    argument1 = None
+    literal = None
+    pushed = None
+    while cursor + 2 <= wrapper[0] + wrapper[1]:
+        instruction = struct.unpack_from("<H", field, cursor - FIELD_OVERLAY_BASE)[0]
+        if instruction & 0xF800 == 0xF000:
+            require(thumb_bl_target(field, FIELD_OVERLAY_BASE, cursor)
+                    == FIELD_TERRAIN_ENTRY and argument1 == state[0],
+                    "Field wrapper must Thumb-call resident code with r0=call and r1=Field state")
+            break
+        if instruction & 0xF800 == 0x4800:
+            register = (instruction >> 8) & 7
+            require(register == 1, "Field wrapper changed its caller argument")
+            literal, argument1 = thumb_literal_load(
+                field, FIELD_OVERLAY_BASE, cursor, 1)
+        else:
+            require(instruction & 0xFF00 == 0xB500 and pushed is None
+                    and not instruction & 1,
+                    "Field wrapper gained an unverified argument instruction")
+            pushed = instruction & 0xFF
+        cursor += 2
+    else:
+        require(False, "Field wrapper has no verified Thumb call")
+    require(pushed is not None and literal is not None,
+            "Field wrapper did not save its return address or load state")
+    cursor += 4
+    instruction = struct.unpack_from("<H", field, cursor - FIELD_OVERLAY_BASE)[0]
+    if instruction == 0xBD00 | pushed:  # pop {saved low registers, pc}
+        cursor += 2
+    else:
+        tail = struct.unpack_from("<3H", field, cursor - FIELD_OVERLAY_BASE)
+        require(tail[0] == 0xBC00 | pushed
+                and any(tail[1:] == (0xBC00 | (1 << register),
+                                     0x4700 | (register << 3))
+                        for register in (1, 2, 3)),
+                "Field wrapper return changes r0, stack balance, or saved lr")
+        cursor += 6
+    require(cursor <= literal and literal + 4 == wrapper[0] + wrapper[1]
+            and all(struct.unpack_from("<H", field, address - FIELD_OVERLAY_BASE)[0]
+                    in (0x46C0, 0x0000) for address in range(cursor, literal, 2)),
+            "Field wrapper gained code after its verified return")
+    require(struct.unpack_from("<I", field, 0x160)[0] == wrapper[0] | 1,
+            "Field mount entry no longer exposes the Field terrain wrapper")
+
+
+def verify_field_terrain_packaging(
+    field_linked: Path,
+    resident_linked: Path,
+    terrain_object: Path,
+    field: bytes,
+    resident: bytes,
+    objdump: str = "arm-none-eabi-objdump",
+) -> None:
+    verify_overlay153_spawn_tail_packaging(resident_linked, resident, objdump)
+    field_sections = elf_section_layout(field_linked)
+    bss = [(address, size) for kind, _flags, address, size in field_sections if kind == 8]
+    require(len(bss) == 1, "Field must retain one linked BSS region")
+    require(not any(flags & 1 for _kind, flags, _address, _size
+                    in elf_section_layout(terrain_object)),
+            "resident Field terrain object gained mutable storage")
+    object_symbols = layout_symbols(terrain_object, objdump)
+    field_terrain_layout_contracts(
+        field, resident, layout_symbols(field_linked, objdump),
+        layout_symbols(resident_linked, objdump),
+        {name for name, symbol in object_symbols.items()
+         if symbol[3] == "F" and symbol[1] > 0},
+        *bss[0],
+    )
+
+
+def field_core_helper_call_contract(field: bytes) -> None:
+    stock_arm = {target for _resident, target in FIELD_CORE_HELPERS.values()}
+    wrong_mode = [(address, target) for address, kind, target in
+                  packaged_thumb_calls(field, FIELD_OVERLAY_BASE, FIELD_OVERLAY_BASE, len(field))
+                  if kind == "bl" and target in stock_arm]
+    require(not wrong_mode,
+            "Field Thumb BL enters stock ARM helper without interworking: "
+            + ", ".join(f"0x{address:08X}->0x{target:08X}" for address, target in wrong_mode))
+
+
+def overworld_core_helper_mode_contract(image: bytes, base: int) -> None:
+    """Reject linker BX-PC/ARM-B veneers whose destination is known Thumb code."""
+    targets = {address & ~3 for address in OVERWORLD_CORE_THUMB_HELPERS.values()}
+    failures = []
+    for offset in range(0, len(image) - 7, 2):
+        if image[offset:offset + 4] != bytes.fromhex("78 47 fd e7"):
+            continue
+        branch = struct.unpack_from("<I", image, offset + 4)[0]
+        if branch & 0xFF000000 != 0xEA000000:
+            continue
+        delta = (branch & 0xFFFFFF) << 2
+        if delta & (1 << 25):
+            delta -= 1 << 26
+        target = base + offset + 12 + delta
+        if target in targets:
+            failures.append((base + offset, target))
+    require(not failures,
+            "overworld helper veneer switches to ARM before entering core Thumb code: "
+            + ", ".join(f"0x{address:08X}->0x{target:08X}" for address, target in failures))
+
+
+def overworld_core_helper_body(name: str) -> bytes:
+    if name in OVERWORLD_CORE_PRESERVED_BODIES:
+        return OVERWORLD_CORE_PRESERVED_BODIES[name]
+    resident = OVERWORLD_CORE_THUMB_HELPERS[name]
+    stock = (0x020F2948 if name == "__aeabi_lmul" else
+             0x020F2BA4 if name == "__aeabi_uidiv" else FIELD_CORE_HELPERS[name][1])
+    return bytes.fromhex("00 b5") + encode_thumb_blx(resident + 2, stock) + bytes.fromhex("00 bd")
+
+
+def overworld_core_helper_body_contract(core: bytes, core_base: int, symbols) -> None:
+    for name, address in OVERWORLD_CORE_THUMB_HELPERS.items():
+        expected = overworld_core_helper_body(name)
+        symbol = symbols.get(name)
+        require(symbol is not None and symbol[:3] == (address | 1, len(expected), "FUNC")
+                and symbol[3].isdigit() and int(symbol[3]) > 0
+                and bytes_at(core, core_base, address, len(expected)) == expected,
+                f"overworld resident helper {name} changed its hosted Thumb ABI/body")
+
+
+def overworld_core_import_contract(symbols, names) -> None:
+    for name in names:
+        symbol = symbols.get(name)
+        require(symbol is not None and symbol[0] == OVERWORLD_CORE_THUMB_HELPERS[name] | 1
+                and symbol[1] in (0, len(overworld_core_helper_body(name)))
+                and symbol[2:] == ("FUNC", "ABS"),
+                f"overworld client import {name} lacks exact Thumb-function metadata")
+
+
+def overworld_core_client_objects(client: str) -> list[Path]:
+    # Match the sealed overlay recipe's source-derived list, not cached *.o:
+    # retired objects can remain in build/ without participating in this link.
+    sources = list((REPO / "src" / client).glob("*.c")) + list((REPO / "asm" / client).glob("*.s"))
+    objects = {REPO / "build" / client / (source.stem + ".o") for source in sources}
+    if client == "overworld_actor_system_overlay":
+        objects.update(REPO / "build" / client / (name + ".o") for name in (
+            "overworld_behavior_resolver", "overworld_motion_model",
+            "overworld_actor_transition_model", "overworld_population_model"))
+    require(bool(sources) and all(path.is_file() for path in objects),
+            f"overworld helper client {client} lacks current source/caller objects")
+    return sorted(objects)
+
+
+def verify_overworld_core_helper_packaging(rom: bytes, core: bytes, core_base: int, core_linked: Path) -> None:
+    core_symbols = elf_helper_bindings(core_linked, OVERWORLD_CORE_THUMB_HELPERS)
+    overworld_core_helper_body_contract(core, core_base, core_symbols)
+    for name, address in OVERWORLD_CORE_THUMB_HELPERS.items():
+        require(bytes_at(core, core_base, address, len(overworld_core_helper_body(name)))
+                == elf_bytes_at(core_linked, address, len(overworld_core_helper_body(name))),
+                f"packaged core helper {name} differs from linked bytes")
+    fat, fat_size, y9, y9_size = struct.unpack_from("<4I", rom, 0x48)
+    for overlay_id, (client, names) in OVERWORLD_CORE_HELPER_CLIENTS.items():
+        require((overlay_id + 1) * 32 <= y9_size and y9 + y9_size <= len(rom),
+                f"overworld helper client {overlay_id} lacks overlay metadata")
+        row = struct.unpack_from("<8I", rom, y9 + overlay_id * 32)
+        require(row[0] == overlay_id and row[2] > 0 and row[7] == 0
+                and (row[6] + 1) * 8 <= fat_size and fat + fat_size <= len(rom),
+                f"overworld helper client {overlay_id} has invalid package metadata")
+        start, end = struct.unpack_from("<2I", rom, fat + row[6] * 8)
+        require(start <= end <= len(rom) and end - start == row[2],
+                f"overworld helper client {overlay_id} has invalid packaged bytes")
+        image, base = rom[start:end], row[1]
+        overworld_core_helper_mode_contract(image, base)
+        linked = REPO / f"build/{client}_linked.o"
+        if overlay_id == 153:
+            require(base == OVERLAY_BASE, "overlay 153 helper client base moved")
+            linked_image = verify_overlay153_spawn_tail_packaging(linked, image)
+        else:
+            linked_image = elf_bytes_at(linked, base, len(image))
+        require(image == linked_image,
+                f"overworld helper client {client} differs from its linked image")
+        overworld_core_import_contract(elf_helper_bindings(linked, names), names)
+        symbols = layout_symbols(linked, "arm-none-eabi-objdump")
+        targets = {OVERWORLD_CORE_THUMB_HELPERS[name] for name in names}
+        verified = set()
+        used_targets = set()
+        for object_path in overworld_core_client_objects(client):
+            relocations = subprocess.check_output(["arm-none-eabi-objdump", "-r", str(object_path)], text=True)
+            object_symbols = None
+            section = None
+            for line in relocations.splitlines():
+                heading = re.match(r"RELOCATION RECORDS FOR \[(.+)\]:", line)
+                if heading:
+                    section = heading.group(1)
+                    continue
+                match = re.match(r"([0-9a-fA-F]+)\s+(R_ARM_\w+)\s+(\S+)$", line)
+                if match is None:
+                    continue
+                offset, kind, target_name = match.groups()
+                absolute = re.fullmatch(r"\*ABS\*0x([0-9a-fA-F]+)", target_name)
+                target = (OVERWORLD_CORE_THUMB_HELPERS.get(target_name) if target_name in names else
+                          int(absolute[1], 16) & ~1 if absolute else None)
+                if target not in targets:
+                    continue
+                if object_symbols is None:
+                    object_symbols = layout_symbols(object_path, "arm-none-eabi-objdump")
+                origins = {symbols[name][0] - symbol[0] for name, symbol in object_symbols.items()
+                           if symbol[2] == section and symbol[3] == "F" and symbol[1] > 0 and name in symbols}
+                require(kind == "R_ARM_THM_CALL" and len(origins) == 1,
+                        f"unverified overworld helper relocation {client}/{object_path.name}:{section}:{offset}")
+                address = next(iter(origins)) + int(offset, 16)
+                field_core_helper_target_contract(elf_bytes_at(linked, address, 4),
+                    bytes_at(image, base, address, 4), address, target)
+                require(address not in verified, "overworld helper caller has duplicate ownership")
+                verified.add(address)
+                used_targets.add(target)
+        actual = {address for address, kind, target in packaged_thumb_calls(image, base, base, len(image))
+                  if kind in ("bl", "blx") and target in targets}
+        require(verified == actual and used_targets == targets,
+                f"overworld helper client {client} has missing or unverified direct callers")
+
+
+def overworld_core_helper_mutation_fixtures() -> None:
+    base = min(OVERWORLD_CORE_THUMB_HELPERS.values())
+    core = bytearray(max(address + len(overworld_core_helper_body(name))
+                         for name, address in OVERWORLD_CORE_THUMB_HELPERS.items()) - base)
+    symbols, imports = {}, {}
+    for name, address in OVERWORLD_CORE_THUMB_HELPERS.items():
+        body = overworld_core_helper_body(name)
+        core[address - base:address - base + len(body)] = body
+        symbols[name] = (address | 1, len(body), "FUNC", "1")
+        imports[name] = (address | 1, 0, "FUNC", "ABS")
+    overworld_core_helper_body_contract(bytes(core), base, symbols)
+    overworld_core_import_contract(imports, imports)
+
+    def reject(label, operation):
+        try:
+            operation()
+        except SystemExit:
+            return
+        require(False, f"overworld helper negative control passed: {label}")
+
+    veneer_address = 0x023BA0C0
+    def veneer(target):
+        return bytes.fromhex("78 47 fd e7") + struct.pack("<I", 0xEA000000 | (((target - veneer_address - 12) >> 2) & 0xFFFFFF))
+    # Actual stock ARM callees remain legal. Only known core Thumb targets fail.
+    overworld_core_helper_mode_contract(veneer(0x020E5B44), veneer_address)
+    for name, address in OVERWORLD_CORE_THUMB_HELPERS.items():
+        reject(name + " wrong ARM veneer", lambda: overworld_core_helper_mode_contract(veneer(address & ~3), veneer_address))
+        wrong = dict(imports)
+        wrong[name] = (address | 1, 0, "NOTYPE", "ABS")
+        reject(name + " untyped import", lambda: overworld_core_import_contract(wrong, imports))
+        for index in (0, len(overworld_core_helper_body(name)) - 2):
+            changed = bytearray(core)
+            changed[address - base + index] ^= 1
+            reject(name + " changed helper body", lambda: overworld_core_helper_body_contract(bytes(changed), base, symbols))
+
+
+def elf_helper_bindings(path: Path, names=FIELD_CORE_HELPERS) -> dict[str, tuple[int, int, str, str]]:
+    """Unlike objdump's display address, ELF st_value retains the Thumb bit."""
+    output = subprocess.check_output(["arm-none-eabi-readelf", "-sW", str(path)], text=True)
+    result = {}
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) == 8 and parts[-1] in names:
+            result[parts[-1]] = (int(parts[1], 16), int(parts[2]), parts[3], parts[6])
+    return result
+
+
+def field_core_helper_binding_contracts(field_symbols, core_symbols, core: bytes, core_base: int) -> None:
+    for name, (resident, stock_arm) in FIELD_CORE_HELPERS.items():
+        binding = field_symbols.get(name)
+        require(binding is not None and binding[0] == resident | 1
+                and binding[1] in (0, 8) and binding[2:] == ("FUNC", "ABS"),
+                f"Field {name} is not a Thumb-function import of its resident veneer")
+        implementation = core_symbols.get(name)
+        require(implementation is not None and implementation[:3] == (resident | 1, 8, "FUNC")
+                and implementation[3].isdigit() and int(implementation[3]) > 0,
+                f"resident {name} is not the exact hosted eight-byte Thumb function")
+        expected = bytes.fromhex("00 b5") + encode_thumb_blx(resident + 2, stock_arm) + bytes.fromhex("00 bd")
+        require(bytes_at(core, core_base, resident, 8) == expected,
+                f"resident {name} loses its argument/return ABI or exact stock ARM BLX target")
+
+
+def field_core_helper_target_contract(linked: bytes, packaged: bytes, address: int, resident: int) -> None:
+    require(len(linked) == 4 and linked == packaged
+            and packaged_thumb_calls(packaged, address, address, 4) == [(address, "bl", resident)],
+            f"Field helper caller 0x{address:08X} is not a direct Thumb BL to its authenticated resident veneer")
+
+
+def field_core_helper_seal_contract(inputs, outputs) -> None:
+    require(inputs.count("asm/field/resident_helpers.s") == 1
+            and outputs.get("field_resident_helpers_object") == "build/field/resident_helpers.o",
+            "Field resident-helper import source and object are not uniquely sealed")
+
+
+def verify_field_core_helper_packaging(field_linked: Path, core_linked: Path,
+                                      field: bytes, core: bytes, core_base: int) -> None:
+    field_core_helper_call_contract(field)
+    field_core_helper_seal_contract(FIXED_INPUTS, OUTPUTS)
+    imports = REPO / OUTPUTS["field_resident_helpers_object"]
+    require(
+        imports.is_file()
+        and elf_section_layout(imports) == [(1, 6, 0, 44)],
+        "Field resident-helper object is missing or differs from its exact "
+        "44-byte executable helper section",
+    )
+    core_symbols = elf_helper_bindings(core_linked)
+    field_core_helper_binding_contracts(elf_helper_bindings(imports), core_symbols, core, core_base)
+    field_core_helper_binding_contracts(elf_helper_bindings(field_linked), core_symbols, core, core_base)
+    for resident, _stock_arm in set(FIELD_CORE_HELPERS.values()):
+        require(bytes_at(core, core_base, resident, 8) == elf_bytes_at(core_linked, resident, 8),
+                "packaged resident Field helper differs from its linked implementation")
+    field_symbols = layout_symbols(field_linked, "arm-none-eabi-objdump")
+    verified = set()
+    counts = dict.fromkeys(FIELD_CORE_HELPERS, 0)
+    objects = sorted((REPO / "build/field").glob("*.o"))
+    require(bool(objects), "Field helper caller objects are missing")
+    for object_path in objects:
+        relocation_text = subprocess.check_output(
+            ["arm-none-eabi-objdump", "-r", str(object_path)], text=True)
+        if not any(re.search(rf"R_ARM_\w+\s+{re.escape(name)}$", relocation_text, re.MULTILINE)
+                   for name in FIELD_CORE_HELPERS):
+            continue
+        object_symbols = layout_symbols(object_path, "arm-none-eabi-objdump")
+        origins = {}
+        for name, (address, size, section, kind) in object_symbols.items():
+            if kind == "F" and size > 0 and section != "*ABS*" and name in field_symbols:
+                origins.setdefault(section, set()).add(field_symbols[name][0] - address)
+        section = None
+        for line in relocation_text.splitlines():
+            heading = re.match(r"RELOCATION RECORDS FOR \[(.+)\]:", line)
+            if heading:
+                section = heading.group(1)
+                continue
+            relocation = re.match(r"([0-9a-fA-F]+)\s+(R_ARM_\w+)\s+(\S+)$", line)
+            if relocation is None or relocation[3] not in FIELD_CORE_HELPERS:
+                continue
+            offset, kind, name = relocation.groups()
+            require(kind == "R_ARM_THM_CALL" and len(origins.get(section, ())) == 1,
+                    f"cannot authenticate Field helper relocation {object_path.name}:{section}:{offset}")
+            address = next(iter(origins[section])) + int(offset, 16)
+            resident = FIELD_CORE_HELPERS[name][0]
+            field_core_helper_target_contract(elf_bytes_at(field_linked, address, 4),
+                bytes_at(field, FIELD_OVERLAY_BASE, address, 4), address, resident)
+            require(address not in verified, "Field helper caller has duplicate relocation ownership")
+            verified.add(address)
+            counts[name] += 1
+    resident_targets = {resident for resident, _stock_arm in FIELD_CORE_HELPERS.values()}
+    actual = {address for address, kind, target in
+              packaged_thumb_calls(field, FIELD_OVERLAY_BASE, FIELD_OVERLAY_BASE, len(field))
+              if target in resident_targets and kind in ("bl", "blx")}
+    require(all(counts.values()) and verified == actual,
+            "Field helper calls are missing, untyped, or not covered by object relocations")
+
+
+def field_core_helper_mutation_fixtures() -> None:
+    core_base = min(resident for resident, _arm in FIELD_CORE_HELPERS.values())
+    core = bytearray(max(resident + 8 for resident, _arm in FIELD_CORE_HELPERS.values()) - core_base)
+    field_symbols = {}
+    core_symbols = {}
+    for name, (resident, stock_arm) in FIELD_CORE_HELPERS.items():
+        core[resident - core_base:resident - core_base + 8] = (
+            bytes.fromhex("00 b5") + encode_thumb_blx(resident + 2, stock_arm) + bytes.fromhex("00 bd"))
+        field_symbols[name] = (resident | 1, 0, "FUNC", "ABS")
+        core_symbols[name] = (resident | 1, 8, "FUNC", "1")
+    field_core_helper_binding_contracts(field_symbols, core_symbols, bytes(core), core_base)
+
+    def thumb_bl(address, target):
+        delta = target - address - 4
+        return struct.pack("<HH", 0xF000 | ((delta >> 12) & 0x7FF), 0xF800 | ((delta >> 1) & 0x7FF))
+
+    def rejected(label, operation):
+        try:
+            operation()
+        except SystemExit:
+            return
+        require(False, f"Field helper negative control passed: {label}")
+
+    field_core_helper_seal_contract(FIXED_INPUTS, OUTPUTS)
+    rejected("unsealed import source", lambda: field_core_helper_seal_contract(
+        tuple(path for path in FIXED_INPUTS if path != "asm/field/resident_helpers.s"), OUTPUTS))
+    rejected("unsealed import object", lambda: field_core_helper_seal_contract(
+        FIXED_INPUTS, {key: value for key, value in OUTPUTS.items() if key != "field_resident_helpers_object"}))
+
+    for name, (resident, stock_arm) in FIELD_CORE_HELPERS.items():
+        address = FIELD_OVERLAY_BASE + 0x100
+        valid = thumb_bl(address, resident)
+        field_core_helper_target_contract(valid, valid, address, resident)
+        bad = bytes(0x100) + thumb_bl(address, stock_arm)
+        rejected(name + " direct Thumb BL to ARM", lambda: field_core_helper_call_contract(bad))
+        rejected(name + " wrong caller mode", lambda: field_core_helper_target_contract(
+            encode_thumb_blx(address, resident & ~3), encode_thumb_blx(address, resident & ~3), address, resident))
+        rejected(name + " package mismatch", lambda: field_core_helper_target_contract(valid, bytes(4), address, resident))
+        for value in ((stock_arm | 1, 0, "FUNC", "ABS"), (resident, 0, "FUNC", "ABS"),
+                      (resident | 1, 0, "NOTYPE", "ABS")):
+            changed = dict(field_symbols)
+            changed[name] = value
+            rejected(name + " invalid import", lambda: field_core_helper_binding_contracts(changed, core_symbols, bytes(core), core_base))
+        for offset, replacement in ((0, bytes.fromhex("01 b5")), (2, thumb_bl(resident + 2, stock_arm)),
+                                    (2, encode_thumb_blx(resident + 2, stock_arm + 4)),
+                                    (6, bytes.fromhex("00 bc"))):
+            changed_core = bytearray(core)
+            start = resident - core_base + offset
+            changed_core[start:start + len(replacement)] = replacement
+            rejected(name + " invalid veneer body", lambda: field_core_helper_binding_contracts(
+                field_symbols, core_symbols, bytes(changed_core), core_base))
+
+
+def field_terrain_layout_mutation_fixtures() -> None:
+    """Small permanent negatives for the cross-overlay placement/argument gate."""
+    field = bytearray(0x220)
+    resident = bytes(0x023C03F0 - OVERLAY_BASE)
+    wrapper = FIELD_OVERLAY_BASE + 0x180
+    state = FIELD_OVERLAY_BASE + len(field)
+    delta = FIELD_TERRAIN_ENTRY - (wrapper + 8)
+    struct.pack_into("<6HI", field, 0x180, 0xB510, 0x4902,
+                     0xF000 | ((delta >> 12) & 0x7FF),
+                     0xF800 | ((delta >> 1) & 0x7FF), 0xBD10, 0x46C0, state)
+    struct.pack_into("<I", field, 0x160, wrapper | 1)
+    field_symbols = {
+        FIELD_TERRAIN_STATE: (state, 24, ".bss", "O"),
+        FIELD_TERRAIN_WRAPPER: (wrapper, 16, ".text", "F"),
+        FIELD_TERRAIN_APPLY: (FIELD_TERRAIN_ENTRY, 0, "*ABS*", "F"),
+    }
+    resident_symbols = {
+        FIELD_TERRAIN_APPLY: (FIELD_TERRAIN_ENTRY, 100, ".walk_helpers", "F"),
+        **{name: (entry, min(128, limit - entry), ".spawn_identity", "F")
+           for name, entry, limit in OVERLAY153_TAIL_FUNCTIONS[:-1]},
+        "OverworldWildSpawnGuard_IsSurfBehavior": (0x023C03D0, 32, ".spawn_identity", "F"),
+    }
+    baseline = [bytes(field), resident, field_symbols, resident_symbols,
+                {FIELD_TERRAIN_APPLY}, state, 24]
+    field_terrain_layout_contracts(*baseline)
+    tail_case = copy.deepcopy(baseline)
+    tail_address = 0x023CCF90
+    image = bytearray(field)
+    image.extend(bytes(tail_address - FIELD_OVERLAY_BASE - len(image)))
+    for target in (0x0206DD40, 0x0206FE90, 0x0206DD8C):
+        delta = target - (FIELD_OVERLAY_BASE + len(image) + 4)
+        image.extend(struct.pack("<HH", 0xF000 | ((delta >> 12) & 0x7FF),
+                                 0xF800 | ((delta >> 1) & 0x7FF)))
+    tail_case[0] = bytes(image)
+    tail_case[2]["OverworldField_ApplyWalkingFriendship"] = (
+        tail_address, 12, ".walking_friendship", "F")
+    field_terrain_layout_contracts(*tail_case)
+    for offset in (state - FIELD_OVERLAY_BASE, tail_address - FIELD_OVERLAY_BASE + 2):
+        mutated = copy.deepcopy(tail_case)
+        changed = bytearray(mutated[0])
+        changed[offset] ^= 1
+        mutated[0] = bytes(changed)
+        try:
+            field_terrain_layout_contracts(*mutated)
+        except SystemExit:
+            pass
+        else:
+            require(False, "walking friendship accepted corrupt BSS or call")
+    split_return = copy.deepcopy(baseline)
+    image = bytearray(field)
+    struct.pack_into("<H", image, 0x182, 0x4903)
+    struct.pack_into("<4HI", image, 0x188, 0xBC10, 0xBC02, 0x4708, 0x46C0, state)
+    split_return[0] = bytes(image)
+    split_return[2][FIELD_TERRAIN_WRAPPER] = (wrapper, 20, ".text", "F")
+    field_terrain_layout_contracts(*split_return)
+    mutations = []
+    for offset, value, label in (
+        (0x182, 0x4802, "r0 overwritten"),
+        (0x186, 0xF800, "wrong call target"),
+        (0x184, 0x46C0, "call removed"),
+        (0x188, 0xBD01, "result overwritten on return"),
+        (0x188, 0xBD20, "return stack imbalance"),
+        (0x180, 0xB410, "return address not saved"),
+        (0x18C, 0x1234, "wrong state pointer"),
+        (0x160, 0, "public callback changed"),
+    ):
+        args = copy.deepcopy(baseline)
+        image = bytearray(args[0])
+        struct.pack_into("<H", image, offset, value)
+        args[0] = bytes(image)
+        mutations.append((label, args))
+    for label, symbol in (
+        ("entry moved", (FIELD_TERRAIN_ENTRY + 4, 100, ".walk_helpers", "F")),
+        ("host overrun", (FIELD_TERRAIN_ENTRY, 1000, ".walk_helpers", "F")),
+    ):
+        args = copy.deepcopy(baseline)
+        args[3][FIELD_TERRAIN_APPLY] = symbol
+        mutations.append((label, args))
+    for label, index, value in (("file/BSS gap", 5, state + 2),
+                                ("Field cap overrun", 6, FIELD_OVERLAY_END - state + 1)):
+        args = copy.deepcopy(baseline)
+        args[index] = value
+        mutations.append((label, args))
+    args = copy.deepcopy(baseline)
+    args[3][FIELD_TERRAIN_STATE] = (FIELD_TERRAIN_ENTRY + 200, 32, ".bss", "O")
+    mutations.append(("state moved to resident", args))
+    args = copy.deepcopy(baseline)
+    args[2][FIELD_TERRAIN_STATE] = (state, 32, ".data", "O")
+    mutations.append(("state no longer zero-initialized", args))
+    for label, args in mutations:
+        try:
+            field_terrain_layout_contracts(*args)
+        except SystemExit:
+            pass
+        else:
+            require(False, f"mutated Field terrain layout passed: {label}")
+
+
+def task6_actor_planner_contracts(
+    overlay: bytes,
+    symbols: dict[str, tuple[int, int, str, str]],
+) -> None:
+    """Authenticate retired slots and both one-argument Actor planner entries.
+
+    Task6 is their physical host. The old Wild callback table is not an ABI
+    alias: its whole 24-byte reserve must stay zero and its symbols stay absent.
+    Each new entry is exactly LDR r3/BX r3 plus an odd resident function pointer;
+    this preserves the public call pointer in r0 and the caller's return/stack.
+    """
+    require(0x100 <= len(overlay) <= OVERLAY155_LIMIT,
+            "packaged overlay 155 planner image is truncated or out of reserve")
+    require(overlay[0xD8:0xF0] == bytes(0x18),
+            "packaged overlay 155 restored retired Hop callback slots")
+    require(not (OVERLAY155_RETIRED_HOP_SYMBOLS & symbols.keys()),
+            "packaged overlay 155 restored retired Hop service symbols")
+    for offset, entry, implementation in OVERLAY155_ACTOR_PLANNERS:
+        public = symbols.get(entry)
+        target = symbols.get(implementation)
+        require(public is not None and public[0] == OVERLAY155_BASE + offset
+                and public[1] == 8 and public[2] == ".text" and public[3] == "F",
+                f"packaged overlay 155 Actor planner entry differs: {entry}")
+        require(target is not None and target[3] == "F" and target[2] == ".text"
+                and target[0] & 1 == 0 and target[1] > 0
+                and OVERLAY155_BASE + 0x100 <= target[0]
+                and target[0] + target[1] <= OVERLAY155_BASE + 0xE40
+                and target[0] + target[1] <= OVERLAY155_BASE + len(overlay),
+                f"packaged overlay 155 Actor planner implementation is missing or outside its code reserve: {implementation}")
+        require(overlay[offset:offset + 8]
+                == bytes.fromhex("00 4b 18 47") + struct.pack("<I", target[0] | 1),
+                f"packaged overlay 155 Actor planner Thumb target or argument transport differs: {entry}")
+
+
+def task6_actor_planner_mutation_fixtures() -> None:
+    """Synthetic ABI-layout rejection controls; these are not gameplay proof."""
+    image = bytearray(OVERLAY155_LIMIT)
+    symbols = {}
+    for index, (offset, entry, implementation) in enumerate(OVERLAY155_ACTOR_PLANNERS):
+        target = OVERLAY155_BASE + 0x100 + index * 0x20
+        image[offset:offset + 8] = bytes.fromhex("00 4b 18 47") + struct.pack("<I", target | 1)
+        symbols[entry] = (OVERLAY155_BASE + offset, 8, ".text", "F")
+        symbols[implementation] = (target, 0x20, ".text", "F")
+    baseline = bytes(image), symbols
+    task6_actor_planner_contracts(*baseline)
+    mutations = []
+    for offset in range(0xD8, 0xF0, 4):
+        changed = bytearray(image)
+        struct.pack_into("<I", changed, offset, OVERLAY155_BASE + 0x101)
+        mutations.append((f"retired slot {offset:#x}", bytes(changed), symbols))
+    for name in OVERLAY155_RETIRED_HOP_SYMBOLS:
+        changed_symbols = dict(symbols)
+        changed_symbols[name] = (OVERLAY155_BASE + 0x200, 8, ".text", "F")
+        mutations.append((f"retired symbol {name}", bytes(image), changed_symbols))
+    for offset, entry, implementation in OVERLAY155_ACTOR_PLANNERS:
+        target = symbols[implementation][0]
+        for label, at, value in (
+            ("r0 overwritten", offset, 0x4800),
+            ("wrong branch register", offset + 2, 0x4710),
+            ("Thumb bit cleared", offset + 4, target & 0xFFFF),
+            ("wrong function", offset + 4, (target + 5) & 0xFFFF),
+        ):
+            changed = bytearray(image)
+            struct.pack_into("<H", changed, at, value)
+            mutations.append((f"{entry}: {label}", bytes(changed), symbols))
+        for name, replacement, label in (
+            (entry, (OVERLAY155_BASE + offset + 4, 8, ".text", "F"), "entry moved"),
+            (entry, (OVERLAY155_BASE + offset, 12, ".text", "F"), "entry grew"),
+            (implementation, None, "missing implementation"),
+            (implementation, (target, 0x20, "*ABS*", "F"), "unhosted implementation"),
+            (implementation, (target, 0x20, ".text", "O"), "data instead of code"),
+            (implementation, (OVERLAY155_BASE + 0xE30, 0x20, ".text", "F"), "reserve overrun"),
+        ):
+            changed_symbols = dict(symbols)
+            if replacement is None:
+                del changed_symbols[name]
+            else:
+                changed_symbols[name] = replacement
+            mutations.append((f"{entry}: {label}", bytes(image), changed_symbols))
+    mutations.append(("truncated image", bytes(image[:0xFC]), symbols))
+    for label, candidate, candidate_symbols in mutations:
+        try:
+            task6_actor_planner_contracts(candidate, candidate_symbols)
+        except SystemExit:
+            pass
+        else:
+            require(False, f"mutated Task6 Actor planner ABI passed: {label}")
+
+
+def task6_call_inventory_contracts(overlay: bytes) -> None:
+    calls = packaged_thumb_calls(overlay, OVERLAY155_BASE, OVERLAY155_BASE, len(overlay))
+    core = [call for call in calls
+            if not OVERLAY155_PLANNER_CODE_START <= call[0] < OVERLAY155_PLANNER_CODE_END]
+    require(len(core) == 82
+            and sum(kind == "bl" for _address, kind, _target in core) == 70
+            and sum(kind == "blx" for _address, kind, _target in core) == 5
+            and sum(kind == "blx_reg" for _address, kind, _target in core) == 7
+            and call_inventory_sha256(core) == OVERLAY155_CORE_CALL_INVENTORY_SHA256,
+            "overlay-155 non-planner core call-site inventory differs")
+    require(len(calls) == 103
+            and sum(kind == "bl" for _address, kind, _target in calls) == 90
+            and sum(kind == "blx" for _address, kind, _target in calls) == 5
+            and sum(kind == "blx_reg" for _address, kind, _target in calls) == 8
+            and call_inventory_sha256(calls) == OVERLAY155_CALL_INVENTORY_SHA256,
+            "complete overlay-155 call-site inventory differs")
+
+
+def task6_call_inventory_mutation_fixtures(overlay: bytes) -> None:
+    """Run the same inventory guard on changed copies of the actual package."""
+    task6_call_inventory_contracts(overlay)
+    calls = packaged_thumb_calls(overlay, OVERLAY155_BASE, OVERLAY155_BASE, len(overlay))
+    first_bl = next(address - OVERLAY155_BASE for address, kind, _target in calls if kind == "bl")
+    added = bytearray(overlay)
+    struct.pack_into("<H", added, 0xD8, 0x4798)
+    removed = bytearray(overlay)
+    removed[first_bl:first_bl + 4] = bytes.fromhex("c0 46 c0 46")
+    wrong_target = bytearray(overlay)
+    wrong_target[first_bl + 2] ^= 1
+    planner_bl = next(address - OVERLAY155_BASE for address, kind, _target in calls
+                      if kind == "bl"
+                      and OVERLAY155_PLANNER_CODE_START <= address < OVERLAY155_PLANNER_CODE_END)
+    planner_removed = bytearray(overlay)
+    planner_removed[planner_bl:planner_bl + 4] = bytes.fromhex("c0 46 c0 46")
+    planner_wrong_target = bytearray(overlay)
+    planner_wrong_target[planner_bl + 2] ^= 1
+    planner_wrong_kind = bytearray(overlay)
+    second = struct.unpack_from("<H", planner_wrong_kind, planner_bl + 2)[0]
+    struct.pack_into("<H", planner_wrong_kind, planner_bl + 2, second ^ 0x1000)
+    for label, changed in (("added core call", added), ("removed core call", removed),
+                            ("changed core call target", wrong_target),
+                            ("removed planner call", planner_removed),
+                            ("changed planner call target", planner_wrong_target),
+                            ("changed planner call mode", planner_wrong_kind)):
+        try:
+            task6_call_inventory_contracts(bytes(changed))
+        except SystemExit:
+            pass
+        else:
+            require(False, f"mutated overlay-155 call inventory passed: {label}")
+
+
+def overlay153_call_inventory_contracts(overlay: bytes, linked_overlay: bytes) -> None:
+    # Include the complete current package: history, Walk, Field, rejected
+    # candidate service calls, mount abort and the named spawn/occupancy tail.
+    # The old movement-wide digest protected one relocation, not an immutable
+    # call graph. Current ELF equality permits reviewed movement work while
+    # still rejecting an added, missing, redirected or wrong-mode package call.
+    calls = packaged_thumb_calls(overlay, OVERLAY_BASE, OVERLAY_BASE, len(overlay))
+    linked_calls = packaged_thumb_calls(
+        linked_overlay, OVERLAY_BASE, OVERLAY_BASE, len(linked_overlay))
+    core = [call for call in calls if call[0] < OVERLAY_BASE + 0xFBC]
+    require(len(core) == 112
+            and call_inventory_sha256(core) == OVERLAY153_CORE_CALL_INVENTORY_SHA256,
+            "overlay-153 history/save core call-site inventory differs")
+    require(len(overlay) == len(linked_overlay) and calls == linked_calls,
+            "complete overlay-153 call-site inventory differs from current linked output")
+
+
+def overlay153_call_inventory_mutation_fixtures(overlay: bytes, linked_overlay: bytes) -> None:
+    """Reject changed copies with the real inventory guard, not list inequality."""
+    overlay153_call_inventory_contracts(overlay, linked_overlay)
+    calls = packaged_thumb_calls(overlay, OVERLAY_BASE, OVERLAY_BASE, len(overlay))
+    first_bl = next(address - OVERLAY_BASE for address, kind, _target in calls if kind == "bl")
+    added = bytearray(overlay)
+    struct.pack_into("<H", added, 0x7A, 0x4798)
+    removed = bytearray(overlay)
+    removed[first_bl:first_bl + 4] = bytes.fromhex("c0 46 c0 46")
+    changed_core_target = bytearray(overlay)
+    changed_core_target[first_bl + 2] ^= 1
+    changed_shadow_target = bytearray(overlay)
+    changed_shadow_target[0xFDA + 2] ^= 1
+    restored_shadow_call = bytearray(overlay)
+    struct.pack_into("<HH", restored_shadow_call, 0xFC4, 0x47B0, 0x46C0)
+    mutations = [
+        ("added call", added), ("removed call", removed),
+        ("changed history target", changed_core_target),
+        ("changed shadow value-service target", changed_shadow_target),
+        ("restored retired shadow register call", restored_shadow_call),
+    ]
+    for label, start, end in (
+        ("Walk rejection helper", OVERLAY_BASE + 0x1A50, OVERLAY_BASE + 0x1BEA),
+        ("Field terrain", FIELD_TERRAIN_ENTRY, FIELD_TERRAIN_END),
+        ("named tail", OVERLAY153_SPAWN_ENTRY, OVERLAY_BASE + len(overlay)),
+    ):
+        address = next(address for address, kind, _target in calls
+                       if kind == "bl" and start <= address < end)
+        changed = bytearray(overlay)
+        changed[address - OVERLAY_BASE + 2] ^= 1
+        mutations.append(("changed " + label + " call target", changed))
+    for label, changed in mutations:
+        try:
+            overlay153_call_inventory_contracts(bytes(changed), linked_overlay)
+        except SystemExit:
+            pass
+        else:
+            require(False, f"mutated overlay-153 call inventory passed: {label}")
+
+
+def overlay153_copy_clear_owner_contracts(linked_calls, symbols, sizes):
+    """Keep old owners exact; admit only three clears in the typed request owner.
+
+    The request's stack packet contains call, intent and candidate values.
+    Its compiler-local call offsets may move within its bounded function, but
+    an extra owner or a changed number/mode of clears must still fail closed.
+    """
+    historical = {
+        "PokemonMoveHistory_OverlayMemcpy": (0x023BE694, 0x023BEBF6, 0x023BEE0E),
+        "PokemonMoveHistory_OverlayMemset": (0x023BE52C, 0x023BFA4E, 0x023BFAB6),
+    }
+    owner = "Walk_RejectDiagonalCandidate"
+    start, size = symbols.get(owner), sizes.get(owner)
+    require(start == FIELD_TERRAIN_END and isinstance(size, int)
+            and 0 < size <= OVERLAY_BASE + 0x1BEA - start,
+            "Walk rejected-candidate clear owner has invalid binding/extent")
+    verified = {}
+    for helper, old_calls in historical.items():
+        require(helper in symbols, f"local bridge symbol {helper} is absent")
+        calls = [(address, mode) for address, mode, target in linked_calls
+                 if target == symbols[helper]]
+        owned = [address for address, mode in calls
+                 if mode == "bl" and start <= address < start + size]
+        require(len(owned) == (3 if helper.endswith("Memset") else 0),
+                f"{helper} rejected-candidate owner clear count/mode differs")
+        expected = sorted((*old_calls, *owned))
+        require(calls == [(address, "bl") for address in expected],
+                f"{helper} packaged callers differ from the exact owner call sites")
+        verified[helper] = tuple(expected)
+    return verified
+
+
+def native_shadow_halfword(load: bool, register: int, base: int) -> bytes:
+    # Thumb-1 STRH/LDRH immediate is measured in halfwords, not bytes. The low
+    # hidden-state half is +0xC; +0xE is the encounter token and must not change.
+    return struct.pack("<H", (0x8800 if load else 0x8000)
+                       | ((0xC // 2) << 6) | (base << 3) | register)
+
+
+def native_shadow_hidden_field_contracts(overlay153: bytes, overlay1: bytes, base1: int) -> None:
+    require(bytes_at(overlay153, OVERLAY_BASE, OVERLAY_BASE + 0xF9C, 0x20)
+            == bytes.fromhex("b2 68 e0 3a 01 23 93 40 04 4a 12 88 1a 42 01 d0 01 22 00 e0 00 22")
+            + native_shadow_halfword(False, 2, 4)
+            + bytes.fromhex("70 47 00 00 fc e3 3b 02"),
+            "native-shadow visibility filter body or hidden-state half differs")
+    for address, load, register, base in (
+        (0x021FD766, False, 0, 4), (0x021FD964, False, 0, 4),
+        (0x021FD7DC, True, 0, 2), (0x021FD840, True, 0, 2),
+        (0x021FD986, True, 1, 4),
+    ):
+        require(bytes_at(overlay1, base1, address, 2)
+                == native_shadow_halfword(load, register, base),
+                f"native-shadow hidden access at 0x{address:08X} includes or overwrites its encounter token")
+
+
+def native_shadow_hidden_field_mutation_fixtures(overlay153: bytes, overlay1: bytes, base1: int) -> None:
+    native_shadow_hidden_field_contracts(overlay153, overlay1, base1)
+    for image_index, offset, load, register, base in (
+        (0, 0xFB2, False, 2, 4),
+        (1, 0x021FD766 - base1, False, 0, 4),
+        (1, 0x021FD964 - base1, False, 0, 4),
+        (1, 0x021FD7DC - base1, True, 0, 2),
+        (1, 0x021FD840 - base1, True, 0, 2),
+        (1, 0x021FD986 - base1, True, 1, 4),
+    ):
+        for label, opcode in (
+            ("upper token half", (0x8800 if load else 0x8000)
+             | ((0xE // 2) << 6) | (base << 3) | register),
+            ("whole hidden/token word", (0x6800 if load else 0x6000)
+             | ((0xC // 4) << 6) | (base << 3) | register),
+        ):
+            images = [bytearray(overlay153), bytearray(overlay1)]
+            struct.pack_into("<H", images[image_index], offset, opcode)
+            try:
+                native_shadow_hidden_field_contracts(bytes(images[0]), bytes(images[1]), base1)
+            except SystemExit:
+                pass
+            else:
+                require(False, f"mutated native-shadow access passed: {image_index}:{offset:X} {label}")
 
 
 def thumb_bl_target(image: bytes, base: int, address: int) -> int:
@@ -5663,36 +6836,14 @@ EXPECTED_OVERLAY_METADATA = {
     ),
     129: (
         0x023D8000,
-        0x7FD0,
+        0x7FFA,
         0,
         0,
         0,
         129,
         0,
         0x3DAA00,
-        0x3E29D0,
-    ),
-    131: (
-        0x023C8000,
-        0x4FB2,
-        0,
-        0,
-        0,
-        131,
-        0,
-        0x3F3400,
-        0x3F83B2,
-    ),
-    153: (
-        OVERLAY_BASE,
-        0x1BF6,
-        0,
-        0,
-        0,
-        153,
-        0,
-        0x421600,
-        0x4231F6,
+        0x3E29FA,
     ),
     154: (
         0x023C0400,
@@ -5702,8 +6853,6 @@ EXPECTED_OVERLAY_METADATA = {
         0,
         154,
         0,
-        0x423200,
-        0x4246E8,
     ),
     155: (
         OVERLAY155_BASE,
@@ -5713,8 +6862,6 @@ EXPECTED_OVERLAY_METADATA = {
         0,
         155,
         0,
-        0x424800,
-        0x425800,
     ),
     156: (
         0x023BC800,
@@ -5724,8 +6871,6 @@ EXPECTED_OVERLAY_METADATA = {
         0,
         156,
         0,
-        0x425800,
-        0x426400,
     ),
     157: (
         0x023BAB00,
@@ -5735,23 +6880,46 @@ EXPECTED_OVERLAY_METADATA = {
         0,
         157,
         0,
-        0x426400,
-        0x428040,
     ),
 }
 OVERLAY129_THUNKS = {
-    0x023DA91E: bytes.fromhex("18 47"),
-    0x023DA924: bytes.fromhex("30 47"),
-    0x023DCBCC: bytes.fromhex("18 47"),
-    0x023DCBD0: bytes.fromhex("28 47"),
-    0x023DE182: bytes.fromhex("18 47"),
-    0x023DE184: bytes.fromhex("30 47"),
-    0x023DE186: bytes.fromhex("38 47"),
+    0x023DA90E: bytes.fromhex("18 47"),
+    0x023DA914: bytes.fromhex("30 47"),
+    0x023DCBBC: bytes.fromhex("18 47"),
+    0x023DCBC0: bytes.fromhex("28 47"),
+    0x023DE132: bytes.fromhex("18 47"),
+    0x023DE134: bytes.fromhex("30 47"),
+    0x023DE136: bytes.fromhex("38 47"),
 }
+
+
+def current_field_overlay_metadata() -> tuple[int, ...]:
+    """Bind variable Field size/BSS to the linked artifact, not the ROM's claim."""
+    image = (REPO / "build/output_field.bin").read_bytes()
+    sections = elf_section_layout(REPO / "build/field_linked.o")
+    bss = [(address, size) for kind, _flags, address, size in sections if kind == 8]
+    require(len(bss) == 1, "linked Field must have one BSS range")
+    start, size = bss[0]
+    file_end = FIELD_OVERLAY_BASE + len(image)
+    if file_end == start:
+        loader_bss = size
+    else:
+        require(FIELD_OVERLAY_BASE <= start and start + size <= 0x023CCF90
+                and 0x023CCF90 < file_end <= FIELD_OVERLAY_END
+                and not any(image[start - FIELD_OVERLAY_BASE:0x4F90]),
+                "linked Field embedded BSS is not bounded and zero-filled")
+        # BSS now lies in objcopy's zero-filled gap before the executable tail.
+        # Asking the loader to zero it again AFTER the file would erase Wild.
+        loader_bss = 0
+    require(file_end + loader_bss <= FIELD_OVERLAY_END,
+            "linked Field file/BSS exceeds its fixed cap")
+    return (FIELD_OVERLAY_BASE, len(image), loader_bss, 0, 0, 131, 0,
+            0x3F3400, 0x3F3400 + len(image))
 
 
 def packaged_components_from_bytes(
     rom: bytes,
+    field_metadata: tuple[int, ...] | None = None,
 ) -> tuple[int, bytes, dict[int, OverlayComponent]]:
     require(len(rom) >= 0x160, "packaged ROM header is truncated")
     arm9_offset, _entry, arm9_base, arm9_size = struct.unpack_from(
@@ -5837,7 +7005,30 @@ def packaged_components_from_bytes(
         )
         overlays[overlay_id] = component
 
-    for overlay_id, expected in EXPECTED_OVERLAY_METADATA.items():
+    expected_metadata = dict(EXPECTED_OVERLAY_METADATA)
+    expected_metadata[131] = (
+        current_field_overlay_metadata() if field_metadata is None else field_metadata)
+    resident = (REPO / "build/output_pokemon_move_history_overlay.bin").read_bytes()
+    verify_overlay153_spawn_tail_packaging(
+        REPO / "build/pokemon_move_history_overlay_linked.o", resident)
+    expected_metadata[153] = (OVERLAY_BASE, len(resident), 0, 0, 0, 153, 0)
+    # Removing Selector's invalid veneers changes its file length, not the
+    # following overlays' RAM ABI. Bind that predecessor to the real linked
+    # image, then require the exact ndstool 512-byte packing sequence. Do not
+    # derive expected offsets from potentially wrong FAT entries in the ROM.
+    selector = (REPO / "build/output_overworld_follower_selector_overlay.bin").read_bytes()
+    require(selector == elf_bytes_at(REPO / "build/overworld_follower_selector_overlay_linked.o",
+                                     0x023C0400, len(selector))
+            and 0 < len(selector) <= 0x1EA0,
+            "Selector predecessor does not match its linked reservation")
+    expected_metadata[152] = (0x023C0400, len(selector), 0, 0, 0, 152, 0,
+                              0x41F600, 0x41F600 + len(selector))
+    next_start = (expected_metadata[152][8] + 0x1FF) & ~0x1FF
+    for overlay_id in range(153, 158):
+        metadata = expected_metadata[overlay_id]
+        expected_metadata[overlay_id] = (*metadata[:7], next_start, next_start + metadata[1])
+        next_start = (next_start + metadata[1] + 0x1FF) & ~0x1FF
+    for overlay_id, expected in expected_metadata.items():
         require(
             overlay_id in overlays,
             f"packaged overlay {overlay_id} is absent",
@@ -5862,6 +7053,20 @@ def packaged_components_from_bytes(
             component.ram_size == len(component.data),
             f"overlay {overlay_id} RAM size differs from uncompressed payload",
         )
+    field = overlays[131]
+    require(all(other.overlay_id == 131 or field.fat_end <= other.fat_start
+                or other.fat_end <= field.fat_start for other in overlays.values()),
+            "Field FAT extent overlaps another overlay")
+    require(overlays[152].data == selector,
+            "packaged Selector predecessor differs from its authenticated linked bytes")
+    require(overlays[153].data == resident,
+            "packaged overlay 153 differs from its authenticated old prefix/new tail")
+    for overlay_id in range(152, 158):
+        current = overlays[overlay_id]
+        require(all(other.overlay_id == overlay_id
+                    or current.fat_end <= other.fat_start or other.fat_end <= current.fat_start
+                    for other in overlays.values()),
+                f"overlay {overlay_id} FAT extent overlaps another overlay")
     return arm9_base, rom[arm9_offset:arm9_offset + arm9_size], overlays
 
 
@@ -5908,6 +7113,7 @@ def overlay129_thunks_match(image: bytes, base: int) -> bool:
 
 
 def packaged_metadata_mutation_fixtures(rom: bytes) -> None:
+    field_metadata = current_field_overlay_metadata()
     y9_offset = struct.unpack_from("<I", rom, 0x50)[0]
     mutations: list[tuple[str, bytearray]] = []
     duplicate = bytearray(rom)
@@ -5916,9 +7122,25 @@ def packaged_metadata_mutation_fixtures(rom: bytes) -> None:
     wrong_size = bytearray(rom)
     struct.pack_into("<I", wrong_size, y9_offset + 153 * 32 + 8, 0xFA8)
     mutations.append(("overlay 153 RAM size", wrong_size))
+    for field, label in ((3, "BSS"), (4, "init start"), (5, "init end"), (7, "flags")):
+        changed = bytearray(rom)
+        struct.pack_into("<I", changed, y9_offset + 153 * 32 + field * 4, 1)
+        mutations.append((f"overlay 153 unexpected {label}", changed))
     wrong_flags = bytearray(rom)
     struct.pack_into("<I", wrong_flags, y9_offset + 129 * 32 + 28, 1)
     mutations.append(("overlay 129 flags", wrong_flags))
+    fat_offset = struct.unpack_from("<I", rom, 0x48)[0]
+    for overlay_id, start_delta, end_delta in (
+        (153, 0x200, 0x200),  # old absolute position, but correct payload size
+        (153, 0, 1),          # truncated/extended extent
+        (154, 2, 2),          # unaligned successor
+        (152, -0x200, -0x200),  # untrusted predecessor relocation
+    ):
+        changed = bytearray(rom)
+        start, end = struct.unpack_from("<2I", changed, fat_offset + overlay_id * 8)
+        struct.pack_into("<2I", changed, fat_offset + overlay_id * 8,
+                         start + start_delta, end + end_delta)
+        mutations.append((f"overlay {overlay_id} wrong aligned FAT sequence", changed))
     for field, label in enumerate(
         (
             "ID",
@@ -5990,7 +7212,7 @@ def packaged_metadata_mutation_fixtures(rom: bytes) -> None:
         mutations.append((f"overlay 155 {label}", wrong_overlay155))
     for label, mutation in mutations:
         try:
-            packaged_components_from_bytes(bytes(mutation))
+            packaged_components_from_bytes(bytes(mutation), field_metadata)
         except SystemExit:
             pass
         else:
@@ -6100,13 +7322,10 @@ def binary_contracts(
         require(False, f"content-addressed build manifest rejected: {exc}")
 
     overlay = overlay_path.read_bytes()
+    verify_overlay153_spawn_tail_packaging(linked, overlay)
     require(
-        len(overlay) <= OVERLAY_LIMIT,
-        f"overlay 153 exceeds guarded 0x{OVERLAY_LIMIT:X}-byte envelope",
-    )
-    require(
-        OVERLAY_GUARDED_END + 0x400 <= OVERLAY152_BASE,
-        "overlay 153 no longer leaves its 0x400 upper guard",
+        OVERLAY153_SPAWN_ENTRY + 0x400 == OVERLAY153_END == OVERLAY152_BASE,
+        "overlay 153 named tail reservation overlaps overlay 152",
     )
     symbols = symbol_table(linked)
     linked_symbol_sizes = symbol_sizes(linked)
@@ -6121,16 +7340,22 @@ def binary_contracts(
         "overlay 153 native-shadow visibility filter entry moved",
     )
     require(
-        symbols.get("gOverworldWalkModuleEntry") == OVERLAY_WALK_ENTRY
-        and symbols.get("gOverworldWalkProfileModuleEntry")
-            == OVERLAY_PROFILE_ENTRY
-        and symbols.get("gOverworldWalkMountModuleEntry")
-            == OVERLAY_MOUNT_ENTRY,
-        "overlay 153 Walk service entries moved",
+        all(symbols.get(name) == address
+            for name, address in OVERLAY_WALK_HELPERS.items()),
+        "overlay 153 direct Walk helper ABI moved",
     )
     require(
-        symbols.get("gOverworldWalkFaceModuleEntry") == OVERLAY_FACE_ENTRY,
-        "overlay 153 face-player service entry moved",
+        OVERLAY_RETIRED_WALK_SYMBOLS.isdisjoint(symbols)
+        and overlay[
+            OVERLAY_RETIRED_WALK_TABLES_START - OVERLAY_BASE:
+            OVERLAY_RETIRED_WALK_TABLES_END - OVERLAY_BASE
+        ] == elf_bytes_at(
+            linked,
+            OVERLAY_RETIRED_WALK_TABLES_START,
+            OVERLAY_RETIRED_WALK_TABLES_END
+                - OVERLAY_RETIRED_WALK_TABLES_START,
+        ),
+        "retired overlay 153 Walk tables remain or the deceleration helper is not packaged exactly",
     )
     require(
         symbols.get("OverworldWalkMount_RebaseMotionTargetImpl")
@@ -6278,8 +7503,9 @@ def binary_contracts(
             )
 
     rom_bytes = rom_path.read_bytes()
+    field_metadata = current_field_overlay_metadata()
     arm9_base, packaged_arm9, packaged_overlays = (
-        packaged_components_from_bytes(rom_bytes)
+        packaged_components_from_bytes(rom_bytes, field_metadata)
     )
     packaged_metadata_mutation_fixtures(rom_bytes)
     require(arm9_base == 0x02000000, "packaged ARM9 RAM base differs")
@@ -6294,6 +7520,7 @@ def binary_contracts(
     ov153_component = packaged_overlays[153]
     ov154_component = packaged_overlays[154]
     ov155_component = packaged_overlays[155]
+    ov156_component = packaged_overlays[156]
     ov1_base, packaged_ov1 = (
         ov1_component.ram_address,
         ov1_component.data,
@@ -6338,6 +7565,10 @@ def binary_contracts(
         ov155_component.ram_address,
         ov155_component.data,
     )
+    ov156_base, packaged_ov156 = (
+        ov156_component.ram_address,
+        ov156_component.data,
+    )
     require(ov12_base == 0x022378C0, "packaged overlay 12 base differs")
     require(
         ov65_base == 0x0221BE20
@@ -6375,15 +7606,15 @@ def binary_contracts(
     )
     require(
         ov131_base == 0x023C8000
-        and len(packaged_ov131) == 0x4FB2
+        and len(packaged_ov131) == field_metadata[1]
         and ov131_component.ram_size == len(packaged_ov131)
-        and ov131_component.bss_size == 0
+        and ov131_component.bss_size == field_metadata[2]
         and ov131_component.static_init_start == 0
         and ov131_component.static_init_end == 0
         and ov131_component.file_id == 131
         and ov131_component.flags == 0
         and ov131_component.fat_start == 0x003F3400
-        and ov131_component.fat_end == 0x003F83B2,
+        and ov131_component.fat_end == field_metadata[8],
         "packaged scripted-daycare field overlay 131 metadata differs",
     )
     require(ov1_base == 0x021E5900, "packaged overlay 1 base differs")
@@ -6412,6 +7643,8 @@ def binary_contracts(
         packaged_ov1 == ov1_path.read_bytes(),
         "packaged field overlay 1 differs from the current patched artifact",
     )
+    require(thumb_bl_target(packaged_ov1, ov1_base, 0x021E793E) == 0x023CCF90,
+            "walking friendship caller does not use the bounded Field wrapper")
     require(
         packaged_ov12 == ov12_path.read_bytes(),
         "packaged overlay 12 differs from the current patched artifact",
@@ -6454,7 +7687,7 @@ def binary_contracts(
         "wireless/GTS packaged commit hooks differ",
     )
     require(
-        thumb_bl_target(packaged_ov129, ov129_base, 0x023D9AA0)
+        thumb_bl_target(packaged_ov129, ov129_base, 0x023D9A90)
         == OVERLAY155_BASE + 0xA0
         and thumb_bl_target(packaged_ov112, ov112_base, 0x021EE65A)
         == OVERLAY155_BASE + 0x20
@@ -6471,6 +7704,20 @@ def binary_contracts(
         and thumb_bl_target(packaged_ov112, ov112_base, 0x021EEC7E)
         == OVERLAY155_BASE + 0x28,
         "Pokewalker packaged transaction/poll-boundary hooks differ",
+    )
+    walk_pause_calls = [
+        address
+        for address, kind, target in packaged_thumb_calls(
+            packaged_ov156,
+            ov156_base,
+            ov156_base,
+            len(packaged_ov156),
+        )
+        if kind == "bl" and target == 0x023DFFCC
+    ]
+    require(
+        len(walk_pause_calls) == 1,
+        "Wild runtime Walk pause resolver call differs",
     )
     require(
         bytes_at(packaged_ov70, ov70_base, 0x022418A4, 0x68)
@@ -6516,9 +7763,19 @@ def binary_contracts(
         == linked_field_bytes,
         "packaged scripted-daycare overlay 131 differs from linked field output",
     )
+    field_core_helper_mutation_fixtures()
+    verify_field_core_helper_packaging(field_linked, core_linked,
+                                       packaged_ov131, packaged_ov129, ov129_base)
+    overworld_core_helper_mutation_fixtures()
+    verify_overworld_core_helper_packaging(rom_bytes, packaged_ov129, ov129_base, core_linked)
     require(
         packaged_ov153 == ov153_path.read_bytes() == overlay,
         "packaged overlay 153 differs from the current linked output",
+    )
+    verify_field_terrain_packaging(
+        field_linked, linked,
+        REPO / "build/pokemon_move_history_overlay/overworld_field_terrain_stream.o",
+        packaged_ov131, packaged_ov153,
     )
     require(
         packaged_ov154
@@ -6602,37 +7859,12 @@ def binary_contracts(
         packaged_ov155[0xA8:0xD8] == bytes(0x30),
         "packaged overlay 155 diagnostic mailbox is not zero-initialized",
     )
-    for offset, implementation in (
-        (0xD8, "OverworldWild_ResolveHopTrajectory"),
-        (0xDC, "OverworldWild_TryGetBehaviorHopVector"),
-        (0xE0, "OverworldWild_ValidateHopLanding"),
-        (0xE4, "OverworldWild_BuildHopHelperConfig"),
-        (0xEC, "OverworldWild_ApplyJumpRenderMotion"),
-    ):
-        require(
-            struct.unpack_from("<I", packaged_ov155, offset)[0]
-            == task6_symbols.get(implementation, 0) + 1,
-            f"packaged overlay 155 hop service target differs: "
-            f"{implementation}",
-        )
-    task6_calls = packaged_thumb_calls(
-        packaged_ov155,
-        ov155_base,
-        ov155_base,
-        len(packaged_ov155),
+    task6_actor_planner_contracts(
+        packaged_ov155, layout_symbols(task6_linked, "arm-none-eabi-objdump"),
     )
-    require(
-        len(task6_calls) == 103
-        and sum(kind == "bl" for _address, kind, _target in task6_calls)
-        == 91
-        and sum(
-            kind == "blx_reg"
-            for _address, kind, _target in task6_calls
-        ) == 7
-        and call_inventory_sha256(task6_calls)
-        == OVERLAY155_CALL_INVENTORY_SHA256,
-        "complete overlay-155 call-site inventory differs",
-    )
+    task6_actor_planner_mutation_fixtures()
+    task6_call_inventory_contracts(packaged_ov155)
+    task6_call_inventory_mutation_fixtures(packaged_ov155)
     require(
         not any("_from_thumb" in name for name in task6_symbols),
         "overlay 155 unexpectedly linked an ARM interworking veneer",
@@ -6645,11 +7877,7 @@ def binary_contracts(
         == ov154_base + 8,
         "packaged overlay 154 header or fixed entry differs",
     )
-    linked_overlay = elf_bytes_at(
-        linked,
-        ov153_base,
-        len(packaged_ov153),
-    )
+    linked_overlay = verify_overlay153_spawn_tail_packaging(linked, packaged_ov153)
     packaged_call_inventory = packaged_thumb_calls(
         packaged_ov153,
         ov153_base,
@@ -6664,55 +7892,10 @@ def binary_contracts(
     )
     require(
         linked_overlay == packaged_ov153
-        and packaged_call_inventory == linked_call_inventory
-        and len(packaged_call_inventory) == 144
-        and sum(
-            kind == "bl" for _address, kind, _target
-            in packaged_call_inventory
-        ) == 140
-        and sum(
-            kind == "blx" for _address, kind, _target
-            in packaged_call_inventory
-        ) == 2
-        and [
-            call for call in packaged_call_inventory
-            if call[1] == "blx_reg"
-        ] == [
-            (OVERLAY_BASE + 0xF8E, "blx_reg", 5),
-            (OVERLAY_BASE + 0xFC4, "blx_reg", 6),
-        ]
-        and call_inventory_sha256(packaged_call_inventory)
-        == OVERLAY153_CALL_INVENTORY_SHA256,
-        "complete overlay-153 packaged/linked call-site inventory differs",
+        and packaged_call_inventory == linked_call_inventory,
+        "complete overlay-153 package differs from its linked output",
     )
-    added_indirect_call = bytearray(packaged_ov153)
-    struct.pack_into("<H", added_indirect_call, 0x7A, 0x4798)
-    require(
-        packaged_thumb_calls(
-            bytes(added_indirect_call),
-            ov153_base,
-            ov153_base,
-            len(added_indirect_call),
-        )
-        != packaged_call_inventory,
-        "inserted overlay-wide BLX-register call passes call authentication",
-    )
-    removed_direct_call = bytearray(packaged_ov153)
-    first_call_address = packaged_call_inventory[0][0]
-    removed_direct_call[
-        first_call_address - ov153_base:
-        first_call_address - ov153_base + 4
-    ] = b"\xc0\x46\xc0\x46"
-    require(
-        packaged_thumb_calls(
-            bytes(removed_direct_call),
-            ov153_base,
-            ov153_base,
-            len(removed_direct_call),
-        )
-        != packaged_call_inventory,
-        "removed overlay-wide direct call passes call authentication",
-    )
+    overlay153_call_inventory_mutation_fixtures(packaged_ov153, linked_overlay)
 
     expected = OVERLAY_BASE + 0x80
     require(
@@ -6831,18 +8014,10 @@ def binary_contracts(
     require(
         linked_symbol_sizes.get(
             "OverworldWildSpawns_FilterNativeShadowVisibilityImpl"
-        ) == 0x20
-        and bytes_at(
-            packaged_ov153,
-            ov153_base,
-            native_shadow_visibility_filter,
-            0x20,
-        ) == bytes.fromhex(
-            "b2 68 e0 3a 01 23 93 40 04 4a 12 88 1a 42 01 d0 "
-            "01 22 00 e0 00 22 e2 60 70 47 00 00 fc e3 3b 02"
-        ),
-        "native-shadow visibility filter body differs",
+        ) == 0x20,
+        "native-shadow visibility filter size differs",
     )
+    native_shadow_hidden_field_mutation_fixtures(packaged_ov153, packaged_ov1, ov1_base)
     native_shadow_position_filter = OVERLAY_BASE + 0xFBC
     require(
         all(
@@ -6852,22 +8027,29 @@ def binary_contracts(
         ),
         "native-shadow update tasks bypass the independent position filter",
     )
+    native_shadow_value_copy = symbols.get(
+        "OverworldWalk_CopyNativeShadowValue"
+    )
     require(
         linked_symbol_sizes.get(
             "OverworldWildSpawns_CopyNativeShadowPositionImpl"
-        ) == 0x3C
+        ) == 0x34
+        and native_shadow_value_copy is not None
         and packaged_thumb_calls(
             packaged_ov153,
             ov153_base,
             native_shadow_position_filter,
-            0x3C,
-        ) == [(native_shadow_position_filter + 8, "blx_reg", 6)]
+            0x34,
+        ) == [
+            (native_shadow_position_filter + 0xA, "blx_reg", 3),
+            (native_shadow_position_filter + 0x1E, "bl", native_shadow_value_copy),
+        ]
         and struct.unpack_from(
-            "<II",
+            "<I",
             packaged_ov153,
-            native_shadow_position_filter + 0x34 - ov153_base,
-        ) == (0x0205F945, 0x023DF9C8),
-        "native-shadow position filter body or runtime anchors differ",
+            native_shadow_position_filter + 0x30 - ov153_base,
+        )[0] == 0x0205F945,
+        "native-shadow position filter bypasses its value service",
     )
     require(
         "IsMoveUnimplemented" in core_symbols,
@@ -6912,12 +8094,12 @@ def binary_contracts(
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DD774,
+            0x023DD764,
             0x38,
-            "1f1d2eece6cdadcf00a99da5e46c656d488207975dffa6390c3ae4c9d193f3d0",
+            "8ee6cdd5eb50b67c761849cd16b072f7fe3ece703325356f9d7166140146193b",
             [
-                (0x023DD78C, "bl", 0x023DE182),
-                (0x023DD794, "bl", 0x023DE182),
+                (0x023DD77C, "bl", 0x023DE132),
+                (0x023DD784, "bl", 0x023DE132),
             ],
         ),
         (
@@ -6925,19 +8107,19 @@ def binary_contracts(
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DD960,
+            0x023DD930,
             0xCC,
-            "6cd2ca42c366bdacf938c67058e17559d60ffaedbb3b3c8c6f00b18d12eaffe6",
+            "e60e2ba11d8ca92580ebab7f7826eb16da78132f4fc5a917acc793ae62442dbe",
             [
-                (0x023DD974, "bl", 0x023DE184),
-                (0x023DD982, "bl", 0x023DD89C),
-                (0x023DD992, "bl", 0x023DE184),
-                (0x023DD9A4, "bl", 0x023DD89C),
-                (0x023DD9C0, "bl", 0x023DE186),
-                (0x023DD9D8, "bl", 0x023DE186),
-                (0x023DD9E4, "bl", 0x023DE182),
-                (0x023DD9EC, "bl", 0x023DE182),
-                (0x023DD9F4, "bl", 0x023DE182),
+                (0x023DD944, "bl", 0x023DE134),
+                (0x023DD952, "bl", 0x023DD884),
+                (0x023DD962, "bl", 0x023DE134),
+                (0x023DD974, "bl", 0x023DD884),
+                (0x023DD990, "bl", 0x023DE136),
+                (0x023DD9A8, "bl", 0x023DE136),
+                (0x023DD9B4, "bl", 0x023DE132),
+                (0x023DD9BC, "bl", 0x023DE132),
+                (0x023DD9C4, "bl", 0x023DE132),
             ],
         ),
         (
@@ -6945,14 +8127,14 @@ def binary_contracts(
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DDACC,
+            0x023DDA78,
             0x58,
-            "e48cab0c691f760112a4cb6de3aa855293345566f4e6ef4dd0308a4e77eba7bc",
+            "ba6633160f3ee1d2a9298e1ecfc750ccab0863d4dfea6191bb2f92adda88bba6",
             [
-                (0x023DDAD4, "bl", 0x023DE182),
-                (0x023DDADC, "bl", 0x023DE182),
-                (0x023DDB00, "bl", 0x023DE182),
-                (0x023DDB08, "bl", 0x023DE182),
+                (0x023DDA80, "bl", 0x023DE132),
+                (0x023DDA88, "bl", 0x023DE132),
+                (0x023DDAAC, "bl", 0x023DE132),
+                (0x023DDAB4, "bl", 0x023DE132),
             ],
         ),
         (
@@ -6960,14 +8142,14 @@ def binary_contracts(
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DDB38,
+            0x023DDAE4,
             0x94,
-            "d0ab077f4a074d4bdb9dd0d4a7cae88d312f3632cf4aa28881a6312e8de63ef0",
+            "fedbddba3476382a0571dff5b4bc467bc7e473b6f08b32f67048cf442d9f64ee",
             [
-                (0x023DDB5E, "bl", 0x023DE182),
-                (0x023DDB66, "bl", 0x023DE182),
-                (0x023DDB6E, "bl", 0x023DE182),
-                (0x023DDB82, "bl", 0x023DE182),
+                (0x023DDB0A, "bl", 0x023DE132),
+                (0x023DDB12, "bl", 0x023DE132),
+                (0x023DDB1A, "bl", 0x023DE132),
+                (0x023DDB2E, "bl", 0x023DE132),
             ],
         ),
         (
@@ -6975,23 +8157,23 @@ def binary_contracts(
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DDB24,
+            0x023DDAD0,
             0x14,
             "1a870f9245779d7c51a37ec7e2c59ed6f83f3d3fbc70bd84eab5c1d028866f88",
-            [(0x023DDB2C, "bl", 0x023DDACC)],
+            [(0x023DDAD8, "bl", 0x023DDA78)],
         ),
         (
             "Save_WriteFileAsync",
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DE0F0,
+            0x023DE0A0,
             0x40,
-            "84d8babc3bbbec9575f468493c19f98c08af8e0bc39a68594bc30cb93fdbfce0",
+            "37359978779b4e19d6cd8ba83c3b15d498eb80446e52c96e127cfb8275d22a66",
             [
-                (0x023DE102, "bl", 0x023DDFC4),
-                (0x023DE112, "bl", 0x023DDB38),
-                (0x023DE11C, "bl", 0x023DE182),
+                (0x023DE0B2, "bl", 0x023DDF74),
+                (0x023DE0C2, "bl", 0x023DDAE4),
+                (0x023DE0CC, "bl", 0x023DE132),
             ],
         ),
         (
@@ -6999,16 +8181,16 @@ def binary_contracts(
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DDBCC,
+            0x023DDB78,
             0x6C,
-            "760a810448748647fed89c9ba587fdda6e4d439482dc478df2cc57e8336aa48e",
+            "a82a8c41de36c005a4cac90d19231d3701935dc5ec80b72a935130ec8d8a20d8",
             [
-                (0x023DDBE0, "bl", 0x023DE182),
-                (0x023DDBEA, "bl", 0x023DE182),
-                (0x023DDBF8, "bl", 0x023DE182),
-                (0x023DDC00, "bl", 0x023DE182),
-                (0x023DDC0C, "bl", 0x023DE182),
-                (0x023DDC14, "bl", 0x023DE182),
+                (0x023DDB8C, "bl", 0x023DE132),
+                (0x023DDB96, "bl", 0x023DE132),
+                (0x023DDBA4, "bl", 0x023DE132),
+                (0x023DDBAC, "bl", 0x023DE132),
+                (0x023DDBB8, "bl", 0x023DE132),
+                (0x023DDBC0, "bl", 0x023DE132),
             ],
         ),
         (
@@ -7016,31 +8198,31 @@ def binary_contracts(
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DDC38,
+            0x023DDBE4,
             0x10,
             "b58e7ced034221bcc71a863e62fe4c97a82f88b9d35e8d6b89e162462fa017b5",
-            [(0x023DDC3E, "bl", 0x023DDBCC)],
+            [(0x023DDBEA, "bl", 0x023DDB78)],
         ),
         (
             "SaveData_New",
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DDCC4,
+            0x023DDC74,
             0x118,
-            "b077470b6728b6e5a54f89ae10afe4e00a26df1f3884071ab64c8552588d9296",
+            "2b52b5184f237375b792a230a89f3973841546894c0af5394016cda3109c18db",
             [
-                (0x023DDCCC, "bl", 0x023DE182),
-                (0x023DDCDA, "bl", 0x023DE182),
-                (0x023DDCE6, "bl", 0x023DE182),
-                (0x023DDCEC, "bl", 0x023DE182),
-                (0x023DDD0A, "bl", 0x023DE182),
-                (0x023DDD14, "bl", 0x023DDC48),
-                (0x023DDD1C, "bl", 0x023DE182),
-                (0x023DDD3C, "bl", 0x023DD774),
-                (0x023DDD44, "bl", 0x023DD960),
-                (0x023DDD5E, "bl", 0x023DE182),
-                (0x023DDD84, "bl", 0x023DE182),
+                (0x023DDC7C, "bl", 0x023DE132),
+                (0x023DDC8A, "bl", 0x023DE132),
+                (0x023DDC96, "bl", 0x023DE132),
+                (0x023DDC9C, "bl", 0x023DE132),
+                (0x023DDCBA, "bl", 0x023DE132),
+                (0x023DDCC4, "bl", 0x023DDBF4),
+                (0x023DDCCC, "bl", 0x023DE132),
+                (0x023DDCEC, "bl", 0x023DD764),
+                (0x023DDCF4, "bl", 0x023DD930),
+                (0x023DDD0E, "bl", 0x023DE132),
+                (0x023DDD34, "bl", 0x023DE132),
             ],
         ),
         (
@@ -7048,15 +8230,15 @@ def binary_contracts(
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DA204,
+            0x023DA1F4,
             0x6C,
             "fff8695ccb309e47286f0f4aeb8f67d1b1327c732a4b3896b3f91647e41f3357",
             [
-                (0x023DA214, "bl", 0x023DA91E),
-                (0x023DA230, "bl", 0x023DA924),
-                (0x023DA238, "bl", 0x023DA91E),
-                (0x023DA244, "bl", 0x023DA91E),
-                (0x023DA24E, "bl", 0x023DA91E),
+                (0x023DA204, "bl", 0x023DA90E),
+                (0x023DA220, "bl", 0x023DA914),
+                (0x023DA228, "bl", 0x023DA90E),
+                (0x023DA234, "bl", 0x023DA90E),
+                (0x023DA23E, "bl", 0x023DA90E),
             ],
         ),
         (
@@ -7064,21 +8246,21 @@ def binary_contracts(
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DC7B4,
+            0x023DC7A4,
             0x158,
             "457614c6a8b8e13d158ca0dab84536a662443e233db5fd29570bf2df861d481c",
             [
-                (0x023DC7C8, "bl", 0x023DCBCC),
-                (0x023DC7D6, "bl", 0x023DCBD0),
-                (0x023DC7E2, "bl", 0x023DCBD0),
-                (0x023DC7EE, "bl", 0x023DCBD0),
-                (0x023DC800, "bl", 0x023DCBCC),
-                (0x023DC84E, "bl", 0x023DCBCC),
-                (0x023DC85C, "bl", 0x023DCBCC),
-                (0x023DC874, "bl", 0x023DCBCC),
-                (0x023DC8B6, "bl", 0x023DCBCC),
-                (0x023DC8CA, "bl", 0x023DCBCC),
-                (0x023DC8DA, "bl", 0x023DCBCC),
+                (0x023DC7B8, "bl", 0x023DCBBC),
+                (0x023DC7C6, "bl", 0x023DCBC0),
+                (0x023DC7D2, "bl", 0x023DCBC0),
+                (0x023DC7DE, "bl", 0x023DCBC0),
+                (0x023DC7F0, "bl", 0x023DCBBC),
+                (0x023DC83E, "bl", 0x023DCBBC),
+                (0x023DC84C, "bl", 0x023DCBBC),
+                (0x023DC864, "bl", 0x023DCBBC),
+                (0x023DC8A6, "bl", 0x023DCBBC),
+                (0x023DC8BA, "bl", 0x023DCBBC),
+                (0x023DC8CA, "bl", 0x023DCBBC),
             ],
         ),
         (
@@ -7273,7 +8455,7 @@ def binary_contracts(
             ov153_base,
             0x023BF248,
             0x50,
-            "8df85e115fdf5bb3511264c8698fc2d0fde2d26e3f57ba038946dafe5a980939",
+            "1bd4e2778379ea9d0dce9b0317f101a23f793635685c735abd2da6f6820cb6e3",
             [
                 (0x023BF254, "bl", 0x023BF314),
                 (0x023BF266, "bl", 0x023BF314),
@@ -7476,12 +8658,12 @@ def binary_contracts(
             f"lifecycle entry 0x{entry_offset:X} target/body differs",
         )
     for literal_address, expected_target in (
-        (0x023DD7A8, OVERLAY_BASE + 0x11),
-        (0x023DDA28, OVERLAY_BASE + 0x49),
-        (0x023DDB20, OVERLAY_BASE + 0x51),
-        (0x023DDBA8, OVERLAY_BASE + 0x59),
-        (0x023DDC30, OVERLAY_BASE + 0x61),
-        (0x023DDDB4, OVERLAY_BASE + 0x01),
+        (0x023DD798, OVERLAY_BASE + 0x11),
+        (0x023DD9F8, OVERLAY_BASE + 0x49),
+        (0x023DDACC, OVERLAY_BASE + 0x51),
+        (0x023DDB54, OVERLAY_BASE + 0x59),
+        (0x023DDBDC, OVERLAY_BASE + 0x61),
+        (0x023DDD64, OVERLAY_BASE + 0x01),
     ):
         require(
             struct.unpack_from(
@@ -7492,14 +8674,14 @@ def binary_contracts(
             f"save lifecycle literal 0x{literal_address:08X} differs",
         )
     for hook_address, expected_bytes in (
-        (0x020271B0, "00 48 00 47 c5 dc 3d 02"),
-        (0x020274A8, "00 49 08 47 75 d7 3d 02"),
-        (0x02027550, "00 4a 10 47 25 db 3d 02"),
-        (0x02027564, "00 49 08 47 f1 e0 3d 02"),
-        (0x020275A4, "00 49 08 47 39 dc 3d 02"),
-        (0x02027AD4, "00 49 08 47 61 d9 3d 02"),
-        (0x02027BDC, "00 4b 18 47 cd da 3d 02"),
-        (0x02027CEC, "00 4b 18 47 39 db 3d 02"),
+        (0x020271B0, "00 48 00 47 75 dc 3d 02"),
+        (0x020274A8, "00 49 08 47 65 d7 3d 02"),
+        (0x02027550, "00 4a 10 47 d1 da 3d 02"),
+        (0x02027564, "00 49 08 47 a1 e0 3d 02"),
+        (0x020275A4, "00 49 08 47 e5 db 3d 02"),
+        (0x02027AD4, "00 49 08 47 31 d9 3d 02"),
+        (0x02027BDC, "00 4b 18 47 79 da 3d 02"),
+        (0x02027CEC, "00 4b 18 47 e5 da 3d 02"),
     ):
         require(
             bytes_at(packaged_arm9, arm9_base, hook_address, 8)
@@ -7520,13 +8702,13 @@ def binary_contracts(
             f"SeedParty accessor literal 0x{literal_address:08X} differs",
         )
 
-    party_body = bytes_at(packaged_ov129, ov129_base, 0x023DA204, 0x6C)
+    party_body = bytes_at(packaged_ov129, ov129_base, 0x023DA1F4, 0x6C)
     require(
         overlay129_thunks_match(packaged_ov129, ov129_base),
         "overlay-129 interworking thunk bodies/registers differ",
     )
     mutated_thunk = bytearray(packaged_ov129)
-    mutated_thunk[0x023DA91E - ov129_base] = 0x20
+    mutated_thunk[0x023DA90E - ov129_base] = 0x20
     require(
         not overlay129_thunks_match(bytes(mutated_thunk), ov129_base),
         "mutated overlay-129 thunk register passes exact authentication",
@@ -7542,7 +8724,7 @@ def binary_contracts(
             party_body.count(struct.pack("<I", target)) == 1,
             f"PartyMenu_LearnMoveToSlot target 0x{target:08X} differs",
         )
-    level_body = bytes_at(packaged_ov129, ov129_base, 0x023DC7B4, 0x158)
+    level_body = bytes_at(packaged_ov129, ov129_base, 0x023DC7A4, 0x158)
     for target in (
         0x0201AA8D,
         0x0206E541,
@@ -8033,12 +9215,14 @@ def binary_contracts(
             f"0x{disassembly_target:08X}",
         )
 
+    owned_helper_calls = overlay153_copy_clear_owner_contracts(
+        linked_calls, symbols, linked_symbol_sizes)
     helper_specs = (
-        ("PokemonMoveHistory_OverlayMemcpy", 3, 0x020E5AD8),
-        ("PokemonMoveHistory_OverlayMemset", 2, 0x020E5B44),
+        ("PokemonMoveHistory_OverlayMemcpy", 0x020E5AD8),
+        ("PokemonMoveHistory_OverlayMemset", 0x020E5B44),
     )
     helper_addresses: dict[str, int] = {}
-    for helper, expected_count, retail_target in helper_specs:
+    for helper, retail_target in helper_specs:
         require(helper in symbols, f"local bridge symbol {helper} is absent")
         helper_address = symbols[helper]
         helper_addresses[helper] = helper_address
@@ -8046,15 +9230,7 @@ def binary_contracts(
             OVERLAY_BASE <= helper_address < OVERLAY_BASE + len(packaged_ov153),
             f"local bridge {helper} is outside overlay 153",
         )
-        calls = [
-            call_address
-            for call_address, mnemonic, target in linked_calls
-            if mnemonic == "bl" and target == helper_address
-        ]
-        require(
-            len(calls) == expected_count,
-            f"{helper} packaged call count is {len(calls)}, expected {expected_count}",
-        )
+        calls = owned_helper_calls[helper]
         for call_address in calls:
             require(
                 thumb_bl_target(
@@ -8132,8 +9308,10 @@ def binary_contracts(
         relocation_text,
     )
     require(
-        relocation_names.count("PokemonMoveHistory_OverlayMemcpy") == 3
-        and relocation_names.count("PokemonMoveHistory_OverlayMemset") == 2
+        relocation_names.count("PokemonMoveHistory_OverlayMemcpy")
+            == len(owned_helper_calls["PokemonMoveHistory_OverlayMemcpy"])
+        and relocation_names.count("PokemonMoveHistory_OverlayMemset")
+            == len(owned_helper_calls["PokemonMoveHistory_OverlayMemset"])
         and relocation_names.count("MIi_CpuClearFast") == 3,
         "overlay copy/clear relocation multiset differs",
     )
@@ -8297,9 +9475,11 @@ def main() -> None:
             outer_make_invocation_is_safe(),
             "pre-Make environment contains unsafe flags or overrides",
         )
+        trust_mismatch = trusted_pre_make_source_mismatch(makefile)
         require(
-            trusted_pre_make_sources_are_exact(makefile),
-            "pre-Make source/dependency trust gate differs",
+            trust_mismatch is None,
+            "pre-Make source/dependency trust gate differs: "
+            + str(trust_mismatch),
         )
         print("move-history capture: pre-Make trust gate verified")
         return

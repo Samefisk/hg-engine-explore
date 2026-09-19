@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "header": {
+    "capacity": 4,
+    "count": 4,
+    "oldestSequence": 40,
+    "nextSequence": 44,
+    "overwrittenCount": 8,
+    "fieldEpoch": 3,
+    "filterEventMask": 15,
+    "filterActor": {"slot": 65535, "generation": 0},
+    "filterFramesRemaining": 12,
+    "writeIndex": 12,
+    "armed": 1
+  },
+  "events": [
+    {"sequence": 40, "frame": 100, "actorHandle": 65539, "actor": {"slot": 3, "generation": 1, "fieldEpoch": 3, "mapGeneration": 9, "encounterGeneration": 2}, "eventId": 6, "reasonId": 0, "valueA": 3, "valueB": 0},
+    {"sequence": 41, "frame": 100, "actorHandle": 65539, "actor": {"slot": 3, "generation": 1, "fieldEpoch": 3, "mapGeneration": 9, "encounterGeneration": 2}, "eventId": 8, "reasonId": 1, "valueA": 1, "valueB": 8},
+    {"sequence": 42, "frame": 100, "actorHandle": 65539, "actor": {"slot": 3, "generation": 1, "fieldEpoch": 3, "mapGeneration": 9, "encounterGeneration": 2}, "eventId": 9, "reasonId": 1, "valueA": 8, "valueB": 0},
+    {"sequence": 43, "frame": 108, "actorHandle": 65539, "actor": {"slot": 3, "generation": 1, "fieldEpoch": 3, "mapGeneration": 9, "encounterGeneration": 2}, "eventId": 13, "reasonId": 1, "valueA": 12, "valueB": 19}
+  ]
+}

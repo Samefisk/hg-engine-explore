@@ -1,0 +1,182 @@
+{
+  "schemaVersion": 1,
+  "id": "walk.diagonal.corner-block",
+  "title": "Diagonal Walk needs both cardinal side tiles",
+  "status": "active",
+  "capabilities": [
+    "walk.diagonal"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld_walk_frame_timing_spec.md",
+    "actor": "MOUNTED species 155 (cyndaquil), acquired through mount; live handle and attached presentation required",
+    "trigger": "Request the diagonal Walk through that corner; Request one valid cardinal Walk into the clear side tile",
+    "observable": "Each accepted motion has exactly one terminal result; No logical commit occurs after motion cancellation; Control returns after the selected motion finishes or cancels; No active actors share a nonzero target reservation; Every active actor handle uses the current field epoch; Every active actor has an attached presentation",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Disposable test.sav; native teleport, party and current mounted follower setup. Change only private idle Walk lane to diagonal allowed and4frames. Verify same subject and its own mount receipt; native eight-neighbor query must show open southwest destination and blocked south/open west. No observation-window setup mutations."
+      }
+    ],
+    "limits": [
+      "Prepared mounting and lane setup do not prove Y/Select UI, natural spawn, authored-profile timing or a soak.",
+      "Requires all seven original measurements, exact semantic rejection/lifecycle events, separate current same-reader policy control, and controller-owned negative replays."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Prepare the current mounted follower at the native-queried corner588,406 on map33; no walking route or image inference."
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Request the diagonal Walk through that corner"
+    },
+    {
+      "at": 2,
+      "kind": "input",
+      "value": "Request one valid cardinal Walk into the clear side tile"
+    }
+  ],
+  "stop": {
+    "frameBudget": 600,
+    "condition": "The diagonal request stays idle and the valid cardinal control move commits"
+  },
+  "expect": {
+    "requiredEvents": [
+      "CANDIDATE_REJECTED",
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ],
+    "orderedEvents": [
+      {
+        "id": "corner-rejected",
+        "event": "CANDIDATE_REJECTED",
+        "reason": "REJECTED_SIDE_TILE"
+      },
+      {
+        "id": "cardinal-start",
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "cardinal-commit",
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "cardinal-finish",
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "control",
+        "event": "CONTROL_RETURNED",
+        "reason": "OK"
+      }
+    ],
+    "eventCounts": [
+      {
+        "event": "CANDIDATE_REJECTED",
+        "reason": "REJECTED_SIDE_TILE",
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 1
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "CONTROL_RETURNED",
+        "reason": "OK",
+        "minimum": 1,
+        "maximum": 1
+      }
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "walk.diagonal.corner-block",
+    "claims": [
+      "natural-input",
+      "live-actor-identity",
+      "collision-decision",
+      "logical-commit",
+      "engine-boundary",
+      "control-release"
+    ],
+    "minimumFrames": 6
+  }
+}

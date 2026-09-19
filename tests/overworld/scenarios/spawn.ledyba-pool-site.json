@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "id": "spawn.ledyba-pool-site",
+  "title": "Normal Ledyba lands at its own POOL site on permitted loaded terrain",
+  "status": "active",
+  "capabilities": [
+    "spawn",
+    "population"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "normal-play",
+    "expectationSource": "data/overworld_behavior_profiles.json",
+    "actor": "One naturally spawned WILD Ledyba (165), bound by the actual finalized personality, source identity, current native object, and full generation-safe actor handle.",
+    "trigger": "Use the unchanged test.sav and the reviewed 67-tile normal-input route from map 33 through map 67 to map 34. Stop new route input when the actual Ledyba appears; observe that same actor's own native spawn Hop.",
+    "observable": "Requirements shared.ledyba-pool-site-v1 and shared.ledyba-pool-surface-v1: keep the species-bound native finalizer's own legacy POOL site through the complete Hop and control return. The native field-object creation call must use the off-screen origin for the visible sprite, never the landing target. Actor and engine render positions must still equal that origin at elapsed frame zero. At the same target, prove loaded metatile permission and model provenance, exclusion of authored surfaces, successful native height refresh and matching terminal Y. Missing, reused or mismatched native receipts fail.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Copy test.nds and unchanged test.sav into a private shared-tool session. Source bytes remain unchanged. The fixture seed is provenance, not a game RNG override."
+      },
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use the same 137 setup actions as chain.ledyba-witness: require map 33 at (585,406) and zero admitted player steps, then take at most 67 normal cardinal steps through Cherrygrove to Route 30. Each step waits for actual admission and the exact settled tile. Skip new route actions when the natural Wild Ledyba is present. Never teleport, edit the party or save, force a spawn, change the clock/RNG, or reset profile, motion or chain state."
+      },
+      {
+        "phase": "before-observation",
+        "target": "observation",
+        "change": "Install the shared read-only native finalizer, resolver, spawn and own-target height taps before boot. Retain exact native surface-query and height-refresh results, before/after loaded terrain and model provenance, actual object positions and world identity. Observe actor and engine state together at each authenticated completed-main-queue boundary with public semantic trace."
+      },
+      {
+        "phase": "before-observation",
+        "target": "observation",
+        "change": "Bind only the current naturally spawned Wild Ledyba and retain its native field-object creation call plus every frame through its complete first spawn Hop. Creation, actor render and engine render must all start at the off-screen origin, followed by exact logical landing and terminal/control events. Controller replay must reject landing-tile sprite creation, an early landing-tile render, missing/stale subjects, a changed POOL site, missing finalization provenance and missing required terminal meanings."
+      }
+    ],
+    "limits": [
+      "This S3 scenario retains the own-site requirement and adds a separate loaded-metatile, authored-surface-exclusion and native terminal-height requirement. It does not clear population, later mobility, Ledyba chain, visual-quality, cadence or long-run requirements.",
+      "Coordinate equality is not surface proof. Require native loaded metatile permission for this encounter's terrain, no authored surface at its own target, successful non-ignored height refresh and matching terminal Y. Missing loaded provenance or a false surface query alone cannot prove land. Universal unmodeled geometry and all other species/roles remain outside this claim.",
+      "The profile must be the actual winning authored legacy POOL owner rule. Explicit modern destination overrides, forced or conditional layers, headbutt encounters and tree-top exceptions are outside this witness and fail its setup contract.",
+      "A native personality/shiny finalizer may change PID. Bind the actor to the final output PID while keeping species, form and level exact; do not require the earlier candidate PID to survive.",
+      "The shared recorder must observe the actual native field-object creation call at the off-screen origin and the 16-cardinal-tile startup from elapsed frame zero, with both actor and engine render at the origin rather than the landing target, then the full Hop, logical commit and control return. This is a bounded spawn-prefix check, not the three-action chain checker finish condition.",
+      "The whole job is limited to 6000 completed game frames and 300 seconds. The final observation action is limited to 512 frames and 60 seconds, with 240 no-progress frames. At least 16 bound-subject observation frames are required; setup frames do not meet that floor.",
+      "Missing frames or native sequences, invalid identity/presentation, missing finalizer/spawn pairing, altered setup mode, timeout or incomplete landing fail. Keep original failure evidence; a setup failure is not proof of a changed destination.",
+      "Run only through the registered shared Workshop/owctl job. A pure checker result is not acceptance; the controller must independently replay the current ROM, save, source, recipe and retained observations. Stop only the private session owned by this job."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "ledyba",
+      "species": 165,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Drive the unchanged normal route with preboot native observation, stop new input at natural Ledyba acquisition and bind its exact live identity."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Match the same encounter's finalizer input POOL position and resolved authored destination to the exact prepared spawn output and nested Hop."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Require the native field-object creation coordinates, elapsed-zero actor render and elapsed-zero engine render to all equal the off-screen origin and reject the landing target. Observe the full first Hop through logical landing and control return. Match the same actor's terminal Y to its native own-target height receipt and require loaded metatile permission with authored surfaces excluded."
+    }
+  ],
+  "stop": {
+    "frameBudget": 6000,
+    "condition": "The same live natural Ledyba preserves its own POOL site, finishes its spawn Hop with control returned and proves its loaded metatile and native terminal height, or an exact failure/budget ends the private job."
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "Control returns after the selected motion finishes or cancels",
+      "This finalized encounter keeps its own authored POOL site through its completed spawn Hop",
+      "The visible field sprite is created at the off-screen origin, and the first Hop frame never flashes at the landing tile",
+      "The native own-target surface, loaded metatile and terminal height evidence belongs to this encounter and world"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "spawn.ledyba-pool-site",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "natural-input",
+      "logical-commit",
+      "control-release",
+      "terrain-selection"
+    ],
+    "minimumFrames": 16
+  }
+}

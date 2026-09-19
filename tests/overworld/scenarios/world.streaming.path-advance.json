@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "id": "world.streaming.path-advance",
+  "title": "Mounted diagonal Walk advances both public streaming axes",
+  "status": "active",
+  "capabilities": ["world.streaming"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/README.md#system-contracts",
+    "actor": "One prepared MOUNTED Ledyba with its authored diagonal-only Walk profile, current live handle, and attached presentation",
+    "trigger": "Use normal UP+RIGHT input to complete two consecutive diagonal Walk motions on Route29",
+    "observable": "Each diagonal motion emits one ordered PATH_ADVANCED before LOGICAL_COMMIT, exposes public stream states idle to advancing to commit-wait to idle, advances both axes, and returns mounted control",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Teleport to the reviewed Route29 origin, prepare slot 0 as Ledyba, mount it, settle, and bind the current actor. This gives no path, stream, motion, or control-return credit."
+      }
+    ],
+    "limits": [
+      "Covers two adjacent diagonal Walk motions and their public path and stream lifecycle on Route29.",
+      "Does not prove long-run streaming, field transitions, detach during a stream, or every map boundary."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {"path": "test.sav", "kind": "sav"},
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "ledyba",
+      "species": 165,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Prepare and bind mounted Ledyba at Route29 (594,403)"},
+    {"at": 1, "kind": "input", "value": "Hold UP+RIGHT until two diagonal Walks complete"},
+    {"at": 2, "kind": "lifecycle", "value": "Observe both public path advances, stream states, commits, and control returns"}
+  ],
+  "stop": {
+    "frameBudget": 120,
+    "condition": "Two diagonal Walks complete at (596,401) with idle stream and mounted control"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "PATH_ADVANCED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": ["MOTION_CANCELED", "CONTEXT_CHANGED", "ACTOR_REBOUND"],
+    "invariants": [
+      "The same live mounted Ledyba completes exactly two authored eight-frame diagonal Walks",
+      "Each PATH_ADVANCED event occurs before its LOGICAL_COMMIT event",
+      "Each motion exposes public stream states 0, 1, 2, then 0",
+      "Both horizontal and vertical path coordinates advance twice",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field context and has an attached presentation",
+      "Mounted control returns idle at (596,401)"
+    ],
+    "eventCounts": [
+      {"event": "MOTION_STARTED", "reason": "OK", "valueA": {"equals": 1}, "minimum": 2, "maximum": 2},
+      {"event": "PATH_ADVANCED", "reason": "OK", "valueB": {"equals": 1}, "minimum": 2, "maximum": 2},
+      {"event": "LOGICAL_COMMIT", "reason": "OK", "valueB": {"equals": 1}, "minimum": 2, "maximum": 2},
+      {"event": "MOTION_FINISHED", "reason": "OK", "minimum": 2, "maximum": 2},
+      {"event": "CONTROL_RETURNED", "reason": "OK", "minimum": 2, "maximum": 2}
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "world.streaming.path-advance",
+    "claims": ["natural-input", "live-actor-identity", "streaming-path"],
+    "minimumFrames": 16
+  }
+}

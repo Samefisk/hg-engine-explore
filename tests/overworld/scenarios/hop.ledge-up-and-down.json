@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "id": "hop.ledge-up-and-down",
+  "title": "Hop crosses a ledge in both permitted directions",
+  "status": "active",
+  "capabilities": [
+    "hop.ledge"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/README.md#system-contracts",
+    "actor": "WILD species 35 (Clefairy), acquired through spawn; live handle and attached presentation required",
+    "trigger": "Observe accepted south and north requests through the real ledge planner",
+    "observable": "Each accepted motion has exactly one terminal result; No logical commit occurs after motion cancellation; Control returns after the selected motion finishes or cancels; No active actors share a nonzero target reservation; Every active actor handle uses the current field epoch; Every active actor has an attached presentation",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Disposable test.sav, checked teleport to map33, and one Wild Clefairy spawn at its retained pool tile (590,395). During observation, change only the real ledge planner direction word to DOWN and then UP; restore the exact word before each call returns."
+      }
+    ],
+    "limits": [
+      "Controlled fixture evidence does not establish natural authored-profile timing.",
+      "The two direction writes prove the current ledge decision rules. They do not prove natural random direction selection.",
+      "Registration alone is not runtime acceptance; the checked shared test must pass on the current ROM."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "clefairy",
+      "species": 35,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Spawn and bind Wild Clefairy at map33 (590,395), north of the Route 29 ledge"
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "At natural planner calls, request DOWN, wait for the full Hop, then request UP and restore both stack words"
+    }
+  ],
+  "stop": {
+    "frameBudget": 600,
+    "condition": "Both ledge Hops finish and the actor returns to the origin"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ],
+    "orderedEvents": [
+      {
+        "id": "start",
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 2
+        }
+      },
+      {
+        "id": "commit",
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 2
+        }
+      },
+      {
+        "id": "finish",
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 2
+        }
+      },
+      {
+        "id": "control",
+        "event": "CONTROL_RETURNED",
+        "reason": "OK"
+      }
+    ],
+    "eventCounts": [
+      {
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 2
+        },
+        "minimum": 2,
+        "maximum": 2
+      },
+      {
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 2
+        },
+        "minimum": 2,
+        "maximum": 2
+      },
+      {
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 2
+        },
+        "minimum": 2,
+        "maximum": 2
+      },
+      {
+        "event": "CONTROL_RETURNED",
+        "reason": "OK",
+        "minimum": 2,
+        "maximum": 2
+      }
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "hop.ledge-up-and-down",
+    "claims": ["collision-decision", "live-actor-identity"],
+    "minimumFrames": 16
+  }
+}

@@ -6,6 +6,17 @@
 #include "../../include/save.h"
 #include "../../include/sprite.h"
 
+/* Import the existing core helpers as Thumb functions for every Selector
+ * object. No duplicate helper bodies or instruction-mode veneers are needed. */
+__asm__(
+    ".thumb\n"
+    ".global __gnu_thumb1_case_uhi\n.thumb_func\n.thumb_set __gnu_thumb1_case_uhi, 0x023DEE78\n"
+    ".global __aeabi_idivmod\n.thumb_func\n.thumb_set __aeabi_idivmod, 0x023DEE44\n"
+    ".global memcpy\n.thumb_func\n.thumb_set memcpy, 0x023DEEBE\n"
+    ".global __aeabi_lmul\n.thumb_func\n.thumb_set __aeabi_lmul, 0x023DEEC6\n"
+    ".global __aeabi_idiv\n.thumb_func\n.thumb_set __aeabi_idiv, 0x023DEE44\n"
+    ".global memset\n.thumb_func\n.thumb_set memset, 0x023DEEA2\n");
+
 #define FOLLOWER_SELECTOR_PARTY_SIZE 6
 #define FOLLOWER_SELECTOR_HEAP_ID 11
 #define FOLLOWER_SELECTOR_CHAR_RES_BASE 0x7F20

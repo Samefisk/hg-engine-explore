@@ -1,0 +1,225 @@
+{
+  "schemaVersion": 1,
+  "id": "hop.mounted-single-motion",
+  "title": "Mounted Mankey sustained Hop, detach and remount recovery",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "tools/overworld/runtime_proof_registry.json: legacy.mankey-control-stress; documentation/overworld-system/README.md#system-contracts",
+  "requirements": [
+    "legacy.mankey-control-stress"
+  ],
+  "budgets": {
+    "maxSeconds": 1200,
+    "maxFrames": 24000,
+    "noProgressFrames": 120,
+    "minObservedFrames": 5001
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "MOUNTED",
+      "acquire": "existing"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "mounted-control-stress-v1",
+      "subject": "mankey",
+      "contract": "hop"
+    }
+  ],
+  "setup": [
+    {
+      "id": "stress-origin",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 584,
+        "z": 403,
+        "facing": 3
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-own-mankey",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 56,
+        "level": 10,
+        "hp": 1,
+        "status": 0
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "mount-own-mankey",
+      "op": "spawn",
+      "args": {
+        "species": 56,
+        "role": "mounted",
+        "slot": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 180,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-current-mount",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "bind-mankey",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "mounted-control-stress-v1",
+      "when": "final"
+    }
+  ],
+  "actions": [
+    {"id":"stress-0001-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0002-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0003-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0004-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0005-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0006-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0007-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0008-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0009-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0010-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0011-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0012-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0013-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0014-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0015-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0016-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0017-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0018-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0019-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0020-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0021-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0022-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0023-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0024-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0025-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0026-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0027-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0028-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0029-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0030-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0031-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0032-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0033-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0034-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0035-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0036-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0037-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0038-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0039-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0040-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0041-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0042-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0043-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0044-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0045-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0046-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0047-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0048-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0049-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0050-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0051-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0052-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0053-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0054-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0055-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0056-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0057-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0058-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0059-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0060-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0061-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0062-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0063-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0064-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0065-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0066-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0067-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0068-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0069-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0070-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0071-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0072-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0073-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0074-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0075-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0076-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0077-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0078-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0079-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0080-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0081-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0082-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0083-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0084-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0085-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0086-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0087-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0088-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0089-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0090-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0091-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0092-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0093-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0094-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0095-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0096-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0097-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0098-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0099-right","op":"step","args":{"frames":100,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"stress-0100-left","op":"step","args":{"frames":100,"keys":["LEFT"]},"budget":{"maxSeconds":20,"maxFrames":100,"noProgressFrames":100}},
+    {"id":"settle-stress","op":"step","args":{"frames":64,"keys":[]},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":64}},
+    {"id":"press-select-detach","op":"step","args":{"frames":1,"keys":["SELECT"]},"budget":{"maxSeconds":20,"maxFrames":1,"noProgressFrames":1}},
+    {"id":"release-select-detach","op":"step","args":{"frames":60,"keys":[]},"budget":{"maxSeconds":20,"maxFrames":60,"noProgressFrames":60}},
+    {"id":"unmounted-right","op":"step","args":{"frames":32,"keys":["RIGHT"]},"budget":{"maxSeconds":20,"maxFrames":32,"noProgressFrames":32}},
+    {"id":"settle-unmounted","op":"step","args":{"frames":32,"keys":[]},"budget":{"maxSeconds":20,"maxFrames":32,"noProgressFrames":32}},
+    {"id":"press-select-remount","op":"step","args":{"frames":1,"keys":["SELECT"]},"budget":{"maxSeconds":20,"maxFrames":1,"noProgressFrames":1}},
+    {"id":"release-select-remount","op":"step","args":{"frames":60,"keys":[]},"budget":{"maxSeconds":20,"maxFrames":60,"noProgressFrames":60}},
+    {"id":"mounted-recovery-right","op":"step","args":{"frames":64,"keys":["RIGHT"],"until":{"kind":"actor-field","subject":"mankey","path":"motionKind","operator":"eq","value":"HOP"}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":64}},
+    {"id":"settle-recovery","op":"step","args":{"frames":64,"keys":[]},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":64}}
+  ]
+}

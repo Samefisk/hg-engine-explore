@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.transition-mid-motion",
+  "title": "Mounted motion completes through an area transition",
+  "status": "active",
+  "capabilities": [
+    "actor.system",
+    "world.transition",
+    "mount.lifecycle",
+    "hop"
+  ],
+  "proofLevel": "S5",
+  "costTier": 5,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/README.md#system-contracts",
+    "actor": "MOUNTED species 56 (mankey), acquired through mount; live handle and attached presentation required",
+    "trigger": "Mount Mankey and approach an area boundary; Hop across the boundary while motion is active; Continue mounted directional input until 5000 post-mount gameplay frames are observed",
+    "observable": "Each accepted motion has exactly one terminal result; No logical commit occurs after motion cancellation; Control returns after the selected motion finishes or cancels; No active actors share a nonzero target reservation; Every active actor handle uses the current field epoch; Every active actor has an attached presentation",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Checked map33 (671,402) teleport, party slot0 Mankey, mounted spawn,16 idle frames and exact bind. No profile or motion edits."
+      }
+    ],
+    "limits": [
+      "Prepared setup gives no movement credit.",
+      "The bounded map60 alternating Hop lane is a candidate pending current accepted runtime execution.",
+      "This case does not prove all map boundaries."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "lifecycle",
+      "value": "Mount Mankey and approach an area boundary"
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Hop across the boundary while motion is active"
+    },
+    {
+      "at": 2,
+      "kind": "input",
+      "value": "Continue mounted directional input until 5000 post-mount gameplay frames are observed"
+    }
+  ],
+  "stop": {
+    "frameBudget": 40000,
+    "condition": "The crossing Hop, recovery and at least5000 post-transition directional input frames finish idle."
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "mount.transition-mid-motion",
+    "claims": [
+      "natural-input",
+      "live-actor-identity",
+      "rendered-motion",
+      "world-transition",
+      "control-release"
+    ],
+    "minimumFrames": 5000
+  }
+}

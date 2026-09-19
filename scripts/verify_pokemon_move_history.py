@@ -9,17 +9,55 @@ import struct
 import subprocess
 from pathlib import Path
 
+if __package__:
+    from .verify_pokemon_move_history_capture import (
+        elf_bytes_at, layout_symbols, thumb_bl_target, verify_overlay153_spawn_tail_packaging,
+    )
+    from .verify_overworld_walk_frame_timing import verify_compiled_thumb_acceleration
+else:
+    from verify_pokemon_move_history_capture import (
+        elf_bytes_at, layout_symbols, thumb_bl_target, verify_overlay153_spawn_tail_packaging,
+    )
+    from verify_overworld_walk_frame_timing import verify_compiled_thumb_acceleration
+
 
 REPO = Path(__file__).resolve().parents[1]
 OVERLAY_ID = 153
 OVERLAY_BASE = 0x023BE400
 OVERLAY_LIMIT = 0x023C0400
-OVERLAY_SIZE_LIMIT = 0x1C00
-OVERLAY_GUARD = 0x400
-OVERLAY_WALK_ENTRY = OVERLAY_BASE + 0x1000
-OVERLAY_PROFILE_ENTRY = OVERLAY_BASE + 0x1040
-OVERLAY_MOUNT_ENTRY = OVERLAY_BASE + 0x1058
-OVERLAY_FACE_ENTRY = OVERLAY_BASE + 0x1068
+OVERLAY_RETIRED_WALK_TABLES_START = OVERLAY_BASE + 0x1000
+OVERLAY_RETIRED_WALK_TABLES_END = OVERLAY_BASE + 0x1088
+OVERLAY_WALK_HELPERS = {
+    "OverworldWalk_DecelerateTime": OVERLAY_BASE + 0x1000,
+    "OverworldWalk_ProposeStep": OVERLAY_BASE + 0x105C,
+    "OverworldWalk_ClampTime": OVERLAY_BASE + 0x1088,
+    "OverworldWalk_AccelerateTime": OVERLAY_BASE + 0x109E,
+    "OverworldWalk_SkidTiles": OVERLAY_BASE + 0x10D6,
+    "OverworldWalk_SkidTime": OVERLAY_BASE + 0x10F0,
+    "OverworldWalk_StompApplies": OVERLAY_BASE + 0x1104,
+    "OverworldWalk_DirectionFromKeys": OVERLAY_BASE + 0x1134,
+    "OverworldWalk_DirectionKey": OVERLAY_BASE + 0x1186,
+    "OverworldWalk_DeltaX": OVERLAY_BASE + 0x119C,
+    "OverworldWalk_DeltaY": OVERLAY_BASE + 0x11BE,
+    "OverworldWalk_IsFortyFiveDegreeTurn": OVERLAY_BASE + 0x11E2,
+    "OverworldWalk_DirectionFromDelta": OVERLAY_BASE + 0x128C,
+    "OverworldWalk_StrictDiagonalAllowed": OVERLAY_BASE + 0x12CE,
+    "OverworldWalk_DiagonalFacing": OVERLAY_BASE + 0x134E,
+    "OverworldWalk_ResolveMountedDiagonal": OVERLAY_BASE + 0x1380,
+    "OverworldWalk_StartMountedFlat": OVERLAY_BASE + 0x1440,
+    "OverworldWalk_FilterMountedInput": OVERLAY_BASE + 0x15A0,
+}
+OVERLAY_RETIRED_WALK_SYMBOLS = {
+    "gOverworldWalkModuleEntry",
+    "gOverworldWalkProfileModuleEntry",
+    "gOverworldWalkMountModuleEntry",
+    "gOverworldWalkFaceModuleEntry",
+    "gOverworldWalkWildPolicyModuleEntry",
+    "Walk_ApplyFacePlayerFacing",
+    "Walk_MountApply",
+    "Walk_MountFilterInput",
+    "Walk_StartMountedFlatMotion",
+}
 TASK6_OVERLAY_ID = 155
 TASK6_OVERLAY_BASE = 0x023BD400
 TASK6_OVERLAY_LIMIT = 0x023BE400
@@ -29,6 +67,13 @@ RUNTIME_OVERLAY_LIMIT = 0x023BD400
 MOUNT_OVERLAY_ID = 157
 MOUNT_OVERLAY_BASE = 0x023BAB00
 MOUNT_OVERLAY_LIMIT = 0x023BC800
+ACTOR_OVERLAY_ID = 158
+ACTOR_OVERLAY_LOAD_BASE = 0x023B6B00
+ACTOR_OVERLAY_LIMIT = 0x023BAB00
+ACTOR_PLANNER_IMPORTS = {
+    "OverworldActorHopPlanner_Plan": 0x023BD4F0,
+    "OverworldActorTeleportPlanner_Plan": 0x023BD4F8,
+}
 MOUNT_ARCHIVE_GUARD = 0xC00
 MAIN_RAM_START = 0x02000000
 MAIN_ARENA_HIGH = 0x023E0000
@@ -40,6 +85,92 @@ ROW_SIZE = 0x20
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise SystemExit(f"move-history verifier: {message}")
+
+
+def actor_planner_source_contract(source: str, linker: str) -> None:
+    for name, target in ACTOR_PLANNER_IMPORTS.items():
+        require(f".thumb_func\\n.thumb_set {name}, 0x{target:08X}\\n" in source,
+                f"Actor planner {name} lacks its exact Thumb-function import")
+        require(f"{name} = 0x{target:08X} | 1;" in linker,
+                f"Actor planner {name} linker target changed")
+
+
+def actor_planner_call_contract(linked: bytes, packaged: bytes,
+                                address: int, target: int) -> None:
+    # A direct Thumb-1 BL preserves the caller's r0-r3 and SP. A BLX or
+    # generated interworking veneer is not equivalent to this fixed import.
+    require(len(linked) == 4 and linked == packaged
+            and thumb_bl_target(linked, address, address) == target,
+            f"Actor planner call at 0x{address:08X} differs from its fixed Thumb target")
+
+
+def actor_planner_import_fixtures(source: str, linker: str) -> None:
+    actor_planner_source_contract(source, linker)
+    address, target = 0x023B7000, ACTOR_PLANNER_IMPORTS["OverworldActorHopPlanner_Plan"]
+    delta = target - address - 4
+    code = struct.pack("<HH", 0xF000 | ((delta >> 12) & 0x7FF),
+                       0xF800 | ((delta >> 1) & 0x7FF))
+    actor_planner_call_contract(code, code, address, target)
+    controls = (
+        lambda: actor_planner_source_contract(source.replace(
+            ".thumb_func\\n.thumb_set OverworldActorHopPlanner_Plan",
+            ".thumb_set OverworldActorHopPlanner_Plan"), linker),
+        lambda: actor_planner_source_contract(source, linker.replace("0x023BD4F8", "0x023BD4FA")),
+        lambda: actor_planner_call_contract(code, code, address, target + 2),
+        lambda: actor_planner_call_contract(code[:2] + b"\x00\xe8",
+                                            code[:2] + b"\x00\xe8", address, target),
+        lambda: actor_planner_call_contract(code, code[:2] + b"\x00\x00", address, target),
+        lambda: actor_planner_call_contract(b"\x00\x4b\x18\x47",
+                                            b"\x00\x4b\x18\x47", address, target),
+    )
+    for control in controls:
+        try:
+            control()
+        except SystemExit:
+            pass
+        else:
+            require(False, "changed Actor planner import/call passed its negative control")
+
+
+def verify_actor_planner_imports(packaged: bytes) -> None:
+    source_dir = REPO / "src/overworld_actor_system_overlay"
+    actor_planner_import_fixtures(
+        (source_dir / "overworld_actor_system_overlay.c").read_text(),
+        (source_dir / "linker.ld").read_text())
+    source_object = REPO / "build/overworld_actor_system_overlay/overworld_actor_system_overlay.o"
+    linked_object = REPO / "build/overworld_actor_system_overlay_linked.o"
+    imported = layout_symbols(source_object, "arm-none-eabi-objdump")
+    linked = layout_symbols(linked_object, "arm-none-eabi-objdump")
+    planners = layout_symbols(REPO / "build/pokemon_move_history_task6_overlay_linked.o",
+                              "arm-none-eabi-objdump")
+    for name, target in ACTOR_PLANNER_IMPORTS.items():
+        require(imported.get(name) == (target, 0, "*ABS*", "F")
+                and name in linked and linked[name][0] & ~1 == target
+                and linked[name][2] == "*ABS*"
+                and planners.get(name) == (target, 8, ".text", "F"),
+                f"Actor planner {name} changed its import or resident function")
+        require(not any(symbol.startswith(f"__{name}_from_") for symbol in linked),
+                f"Actor planner {name} acquired a redundant interworking veneer")
+    origins = {linked[name][0] - symbol[0] for name, symbol in imported.items()
+               if symbol[2:] == (".text", "F") and symbol[1] > 0 and name in linked}
+    require(len(origins) == 1, "cannot bind Actor planner calls to the linked C input section")
+    origin = origins.pop()
+    relocations = subprocess.check_output(
+        ["arm-none-eabi-objdump", "-r", "-j", ".text", str(source_object)], text=True)
+    counts = dict.fromkeys(ACTOR_PLANNER_IMPORTS.values(), 0)
+    for offset, kind, symbol in re.findall(
+            r"^([0-9a-fA-F]+)\s+(R_ARM_\w+)\s+(\S+)", relocations, re.M):
+        if not symbol.startswith("*ABS*0x") or int(symbol[7:], 16) not in counts:
+            continue
+        target = int(symbol[7:], 16)
+        require(kind == "R_ARM_THM_CALL", "Actor planner no longer uses a Thumb call relocation")
+        address = origin + int(offset, 16)
+        actor_planner_call_contract(
+            elf_bytes_at(linked_object, address, 4),
+            checked_slice(packaged, address - ACTOR_OVERLAY_LOAD_BASE, 4, "Actor planner call"),
+            address, target)
+        counts[target] += 1
+    require(all(counts.values()), "an Actor planner has no verified direct compiled callers")
 
 
 def align4(value: int) -> int:
@@ -1174,6 +1305,40 @@ def main() -> None:
         MOUNT_OVERLAY_ID < len(rows),
         "final y9 has no overlay 157 row",
     )
+    require(
+        ACTOR_OVERLAY_ID < len(rows),
+        "final y9 has no overlay 158 row",
+    )
+
+    actor_row = rows[ACTOR_OVERLAY_ID]
+    actor_overlay = final_overlay(rom, fat, actor_row)
+    actor_built = (
+        REPO / "build/output_overworld_actor_system_overlay.bin"
+    ).read_bytes()
+    require(
+        actor_overlay == actor_built,
+        "final ROM overlay 158 differs from linked output",
+    )
+    verify_actor_planner_imports(actor_overlay)
+    require(
+        actor_row == (
+            ACTOR_OVERLAY_ID,
+            ACTOR_OVERLAY_LOAD_BASE,
+            len(actor_overlay),
+            actor_row[3],
+            0,
+            0,
+            ACTOR_OVERLAY_ID,
+            0,
+        ),
+        "final overlay 158 row has unexpected metadata",
+    )
+    require(
+        0 < len(actor_overlay)
+        and ACTOR_OVERLAY_LOAD_BASE + len(actor_overlay) + actor_row[3]
+            <= ACTOR_OVERLAY_LIMIT,
+        "overlay 158 exceeds its resident reservation",
+    )
 
     mount_row = rows[MOUNT_OVERLAY_ID]
     mount_overlay = final_overlay(rom, fat, mount_row)
@@ -1282,11 +1447,13 @@ def main() -> None:
         ),
         "final overlay 153 row has unexpected metadata",
     )
-    require(
-        0 < len(overlay)
-        and len(overlay) <= OVERLAY_SIZE_LIMIT
-        and OVERLAY_BASE + len(overlay) + OVERLAY_GUARD <= OVERLAY_LIMIT,
-        "overlay 153 exceeds its reservation or upper growth guard",
+    # Full old-prefix identity plus the one named, bounded tail replaces the
+    # retired requirement that the entire tail remain empty.
+    verify_overlay153_spawn_tail_packaging(
+        REPO / "build/pokemon_move_history_overlay_linked.o", overlay)
+    verify_compiled_thumb_acceleration(
+        REPO / "build/pokemon_move_history_overlay/overworld_walk_module.o",
+        "arm-none-eabi-objcopy",
     )
 
     linked_symbols = subprocess.check_output(
@@ -1296,12 +1463,7 @@ def main() -> None:
         ],
         text=True,
     )
-    for symbol, expected in (
-        ("gOverworldWalkModuleEntry", OVERLAY_WALK_ENTRY),
-        ("gOverworldWalkProfileModuleEntry", OVERLAY_PROFILE_ENTRY),
-        ("gOverworldWalkMountModuleEntry", OVERLAY_MOUNT_ENTRY),
-        ("gOverworldWalkFaceModuleEntry", OVERLAY_FACE_ENTRY),
-    ):
+    for symbol, expected in OVERLAY_WALK_HELPERS.items():
         match = re.search(
             rf"^([0-9a-fA-F]+) [A-Za-z] {re.escape(symbol)}$",
             linked_symbols,
@@ -1309,8 +1471,25 @@ def main() -> None:
         )
         require(
             match is not None and int(match.group(1), 16) == expected,
-            f"overlay 153 Walk service entry moved: {symbol}",
+            f"overlay 153 direct Walk helper moved: {symbol}",
         )
+    require(
+        all(re.search(
+            rf"^[0-9a-fA-F]+ [A-Za-z] {re.escape(symbol)}$",
+            linked_symbols,
+            re.MULTILINE,
+        ) is None for symbol in OVERLAY_RETIRED_WALK_SYMBOLS)
+        and overlay[
+            OVERLAY_RETIRED_WALK_TABLES_START - OVERLAY_BASE:
+            OVERLAY_RETIRED_WALK_TABLES_END - OVERLAY_BASE
+        ] == elf_bytes_at(
+            REPO / "build/pokemon_move_history_overlay_linked.o",
+            OVERLAY_RETIRED_WALK_TABLES_START,
+            OVERLAY_RETIRED_WALK_TABLES_END
+                - OVERLAY_RETIRED_WALK_TABLES_START,
+        ),
+        "retired overlay 153 Walk tables remain or the deceleration helper is not packaged exactly",
+    )
     query_impl_match = re.search(
         r"^([0-9a-fA-F]+) T PokemonMoveHistory_QueryImpl$",
         linked_symbols,
@@ -1361,6 +1540,7 @@ def main() -> None:
             TASK6_OVERLAY_ID,
             RUNTIME_OVERLAY_ID,
             MOUNT_OVERLAY_ID,
+            ACTOR_OVERLAY_ID,
         ) or other_size == 0:
             continue
         other_start = other[1]
@@ -1383,9 +1563,9 @@ def main() -> None:
     full_save_size = parse_define(save_constants, "FULL_SAVE_SIZE")
     heap3_size = parse_define(save_constants, "NEW_HEAP3_SIZE")
     require(
-        heap3_size == 0x10AB00
-        and 0x110000 - heap3_size == 0x5500,
-        "heap 3 does not explicitly reserve 0x5500 for overlays 157/156/155/153",
+        heap3_size == 0x106B00
+        and 0x110000 - heap3_size == 0x9500,
+        "heap 3 does not explicitly reserve 0x9500 for overlays 158/157/156/155/153",
     )
 
     def arm9_word(address: int, description: str) -> int:
@@ -1448,7 +1628,7 @@ def main() -> None:
         "FNT/FAT caches exceed the SDK archive allocation",
     )
     require(
-        archive_end + MOUNT_ARCHIVE_GUARD <= MOUNT_OVERLAY_BASE,
+        archive_end + MOUNT_ARCHIVE_GUARD <= ACTOR_OVERLAY_LOAD_BASE,
         f"boot FNT+FAT allocation reaches 0x{archive_end:08X}",
     )
 
@@ -1457,20 +1637,20 @@ def main() -> None:
         not ranges_overlap(
             arm9_ram,
             arm9_end,
-            MOUNT_OVERLAY_BASE,
+            ACTOR_OVERLAY_LOAD_BASE,
             OVERLAY_LIMIT,
         ),
-        "final ARM9 load image overlaps resident overlays 157/156/155/153",
+        "final ARM9 load image overlaps resident overlays 158/157/156/155/153",
     )
     require(
         OVERLAY_LIMIT <= MAIN_ARENA_HIGH
         and not ranges_overlap(
             DTCM_START,
             DTCM_END,
-            MOUNT_OVERLAY_BASE,
+            ACTOR_OVERLAY_LOAD_BASE,
             OVERLAY_LIMIT,
         ),
-        "resident overlays 157/156/155/153 cross the main arena or DTCM stack boundary",
+        "resident overlays 158/157/156/155/153 cross the main arena or DTCM stack boundary",
     )
 
     require(129 < len(rows), "final y9 has no overlay 129 row")

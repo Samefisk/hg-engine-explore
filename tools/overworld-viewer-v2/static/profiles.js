@@ -35,6 +35,7 @@ const WALK_TIME_FIELDS = Object.freeze(new Set([
 const CONDITIONAL_PROFILE_NONE_VALUE = 0xFF;
 const CONDITIONS_LIFECYCLE_SECTION_ID = "conditions";
 const CONDITIONAL_LIFECYCLE_SECTION_PREFIX = "conditional:";
+const APPLICATION_DRAFT_PREFIX = "@application:";
 
 const TARGET_KINDS = Object.freeze([
   ["pokemon", "Pokémon"],
@@ -131,8 +132,8 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
       Object.freeze({ key: "chainMovementVariance", label: "Move variance", unit: "moves", note: "Adds a random 0 through this value to each new movement chain" }),
       Object.freeze({ key: "ramMaxSpeed", label: "Pause", unit: "frames" }),
       Object.freeze({ key: "chainPauseVariance", label: "Pause variance", unit: "frames", note: "Adds a random 0 through this value to passive and Look around pauses, or to the total Reposition jumps duration; ignored by Reposition steps, Reposition skids, and successful Hop in place actions" }),
-      Object.freeze({ key: "chainPauseAction", label: "Pause action", unit: "" }),
-      Object.freeze({ key: "chainPauseActionChance", label: "Action chance", unit: "%", note: "Chance to run the pause action. A failed roll starts a new movement chain" }),
+      Object.freeze({ key: "chainPauseAction", label: "Pause action", unit: "", note: "None skips the pause. Pause waits without playing an action" }),
+      Object.freeze({ key: "chainPauseActionChance", label: "Action chance", unit: "%", note: "Chance to run a visual action. This is ignored for None and Pause. A failed roll starts a new movement chain" }),
       Object.freeze({ key: "chainRepositionJumpCount", label: "Reposition moves", unit: "moves", note: "Number of fixed-facing random jumps, steps, or skids. Steps and skids finish the pause after the final move" }),
       Object.freeze({ key: "chainRepositionSpeed", label: "Reposition Walk time", unit: "frames", note: "Travel time for Reposition steps and skids; jumps use Hop timing" }),
       Object.freeze({ key: "chainRepositionDistance", label: "Skid distance", unit: "tiles", note: "Tiles travelled by each Reposition skid" }),
@@ -173,13 +174,13 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
         key: "chainPauseAction",
         label: "Chain pause action",
         unit: "",
-        note: "Optional action to perform when the chain pause is reached",
+        note: "None skips the pause. Pause waits without playing an action",
       }),
       Object.freeze({
         key: "chainPauseActionChance",
         label: "Pause action chance",
         unit: "%",
-        note: "A failed roll skips the pause and starts a new movement chain",
+        note: "Chance to run a visual action. This is ignored for None and Pause. A failed roll skips the pause and starts a new movement chain",
       }),
       Object.freeze({
         key: "chainRepositionJumpCount",
@@ -327,7 +328,7 @@ const FIELD_SECTIONS = Object.freeze([
       "chainRepositionSpeed",
       "chainRepositionDistance", "chainRepositionDust",
       "chainRepositionAllowCardinal", "chainRepositionAllowDiagonal",
-      "tilesToAccelerate", "maxWalkSpeed", "walkOptions", "walkStompTime", "wanderStraightChance",
+      "tilesToAccelerate", "walkAccelerationStep", "walkTimeVariance", "maxWalkSpeed", "walkOptions", "walkStompTime", "wanderStraightChance", "walkPause", "walkPauseVariance", "tilesBeforeTurnSkid", "planTurnSkidPath", "stopSkid",
       "battleTrigger", "chaseBoostDistance", "chaseBoostSpeed",
       "circleRadius", "continueWhenArrived", "avoidPreviousTile", "playerAdjacentDirectionMasks",
       "alertSpecialAction",
@@ -503,6 +504,8 @@ const RAW_LABEL_OVERRIDES = Object.freeze({
   "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_JUMPS": "Reposition jumps",
   "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_STEPS": "Reposition steps",
   "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_SKIDS": "Reposition skids",
+  "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE": "Pause",
+  "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_FORWARD": "Jump forward",
 });
 
 const MOVEMENT_FIELDS = Object.freeze({
@@ -510,11 +513,16 @@ const MOVEMENT_FIELDS = Object.freeze({
     speed: "chillSpeed",
     maxWalkSpeed: "maxWalkSpeed",
     walkAcceleration: "tilesToAccelerate",
+    walkAccelerationStep: "walkAccelerationStep",
+    walkTimeVariance: "walkTimeVariance",
+    walkPauseVariance: "walkPauseVariance",
     walkOptions: "walkOptions",
     walkStompTime: "walkStompTime",
     wanderStraightChance: "wanderStraightChance",
     walkPause: "walkPause",
     tilesBeforeTurnSkid: "tilesBeforeTurnSkid",
+    planTurnSkidPath: "planTurnSkidPath",
+    stopSkid: "stopSkid",
     hopPath: Object.freeze({ composite: "hop-path-chill", fields: Object.freeze(["hopAllowNonCardinal", "hopAllowVerticalObstacles", "hopMinDistance", "hopMaxDistance"]) }),
     hopTiming: Object.freeze({ composite: "hop-timing-chill", fields: Object.freeze(["hopTime", "hopElevationTimeScale", "hopElevationArcScale", "hopPause", "hopSpinSpeed", "hopSwayWidth"]) }),
     chain: ["ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction", "chainPauseActionChance", "chainRepositionJumpCount", "chainRepositionSpeed", "chainRepositionDistance", "chainRepositionDust", "chainRepositionAllowCardinal", "chainRepositionAllowDiagonal"],
@@ -524,11 +532,16 @@ const MOVEMENT_FIELDS = Object.freeze({
     speed: "attentiveSpeed",
     maxWalkSpeed: "maxWalkSpeed",
     walkAcceleration: "tilesToAccelerate",
+    walkAccelerationStep: "walkAccelerationStep",
+    walkTimeVariance: "walkTimeVariance",
+    walkPauseVariance: "walkPauseVariance",
     walkOptions: "walkOptions",
     walkStompTime: "walkStompTime",
     wanderStraightChance: "wanderStraightChance",
     walkPause: "walkPause",
     tilesBeforeTurnSkid: "tilesBeforeTurnSkid",
+    planTurnSkidPath: "planTurnSkidPath",
+    stopSkid: "stopSkid",
     hopPath: Object.freeze({ composite: "hop-path-active", fields: Object.freeze(["attentiveHopAllowNonCardinal", "hopAllowVerticalObstacles", "attentiveHopMinDistance", "attentiveHopMaxDistance"]) }),
     hopTiming: Object.freeze({ composite: "hop-timing-active", fields: Object.freeze(["hopTime", "hopElevationTimeScale", "hopElevationArcScale", "attentiveHopPause", "attentiveHopSpinSpeed", "hopSwayWidth"]) }),
     chain: ["ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction", "chainPauseActionChance", "chainRepositionJumpCount", "chainRepositionSpeed", "chainRepositionDistance", "chainRepositionDust", "chainRepositionAllowCardinal", "chainRepositionAllowDiagonal"],
@@ -538,11 +551,16 @@ const MOVEMENT_FIELDS = Object.freeze({
     speed: "tiredSpeed",
     maxWalkSpeed: "maxWalkSpeed",
     walkAcceleration: "tilesToAccelerate",
+    walkAccelerationStep: "walkAccelerationStep",
+    walkTimeVariance: "walkTimeVariance",
+    walkPauseVariance: "walkPauseVariance",
     walkOptions: "walkOptions",
     walkStompTime: "walkStompTime",
     wanderStraightChance: "wanderStraightChance",
     walkPause: "walkPause",
     tilesBeforeTurnSkid: "tilesBeforeTurnSkid",
+    planTurnSkidPath: "planTurnSkidPath",
+    stopSkid: "stopSkid",
     hopPath: Object.freeze({ composite: "hop-path-tired", fields: Object.freeze(["tiredHopAllowNonCardinal", "hopAllowVerticalObstacles", "tiredHopMinDistance", "tiredHopMaxDistance"]) }),
     hopTiming: Object.freeze({ composite: "hop-timing-tired", fields: Object.freeze(["hopTime", "hopElevationTimeScale", "hopElevationArcScale", "tiredHopPause", "hopSpinSpeed", "hopSwayWidth"]) }),
     chain: ["ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction", "chainPauseActionChance", "chainRepositionJumpCount", "chainRepositionSpeed", "chainRepositionDistance", "chainRepositionDust", "chainRepositionAllowCardinal", "chainRepositionAllowDiagonal"],
@@ -618,10 +636,12 @@ function ordersFor(profile) {
 }
 
 function baseProfileKey(profile) {
+  if (profile?.catalogKey) return profile.catalogKey;
   return `base:${profile?.symbol || profile?.name || profile?.index}`;
 }
 
 function overrideProfileKey(profile) {
+  if (profile?.catalogKey) return profile.catalogKey;
   const named = String(profile?.customName || "").trim();
   if (named) return `override:name:${named}`;
   const signature = ordersFor(profile).join(",") || profile?.symbol || profile?.index;
@@ -694,6 +714,88 @@ function cloneDraftJson(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function sameDraftJson(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function cloneDraftValue(value) {
+  return value === undefined ? undefined : cloneDraftJson(value);
+}
+
+function rebaseDraftValue(base, local, remote, keyHint = "") {
+  if (sameDraftJson(local, base)) return cloneDraftValue(remote);
+  if (sameDraftJson(remote, base)) return cloneDraftValue(local);
+  if (local === undefined) return undefined;
+  if (remote === undefined) return cloneDraftValue(local);
+
+  if (Array.isArray(base) && Array.isArray(local) && Array.isArray(remote)) {
+    const entries = [...base, ...local, ...remote];
+    const key = entries.length && entries.every((item) => item && typeof item === "object" && !Array.isArray(item) && Object.hasOwn(item, "id"))
+      ? "id"
+      : (keyHint === "classOrder" && entries.every((item) => item && typeof item === "object" && !Array.isArray(item) && Object.hasOwn(item, "symbol")) ? "symbol" : "");
+    if (key) {
+      const maps = [base, local, remote].map((items) => new Map(items.map((item) => [item[key], item])));
+      const [baseMap, localMap, remoteMap] = maps;
+      const baseIds = base.map((item) => item[key]);
+      const localIds = local.map((item) => item[key]);
+      const remoteIds = remote.map((item) => item[key]);
+      let ids;
+      if (sameDraftJson(localIds, baseIds)) {
+        const locallyEditedRemoteDeletions = localIds.filter((id) => (
+          !remoteMap.has(id)
+          && baseMap.has(id)
+          && !sameDraftJson(localMap.get(id), baseMap.get(id))
+        ));
+        ids = [...remoteIds];
+        for (const id of locallyEditedRemoteDeletions) {
+          const localIndex = localIds.indexOf(id);
+          const nextAnchor = localIds.slice(localIndex + 1).find((candidate) => ids.includes(candidate));
+          const insertion = nextAnchor ? ids.indexOf(nextAnchor) : ids.length;
+          ids.splice(insertion, 0, id);
+        }
+      }
+      else if (sameDraftJson(remoteIds, baseIds)) ids = localIds;
+      else ids = [...localIds, ...remoteIds.filter((id) => !baseMap.has(id) && !localMap.has(id))];
+      return ids.flatMap((id) => {
+        const value = rebaseDraftValue(baseMap.get(id), localMap.get(id), remoteMap.get(id));
+        return value === undefined ? [] : [value];
+      });
+    }
+
+    const encodedBase = new Set(base.map((item) => JSON.stringify(item)));
+    const encodedRemote = new Set(remote.map((item) => JSON.stringify(item)));
+    const result = local.filter((item) => !encodedBase.has(JSON.stringify(item)) || encodedRemote.has(JSON.stringify(item)));
+    const encodedResult = new Set(result.map((item) => JSON.stringify(item)));
+    for (const item of remote) {
+      const encoded = JSON.stringify(item);
+      if (!encodedBase.has(encoded) && !encodedResult.has(encoded)) {
+        result.push(cloneDraftValue(item));
+        encodedResult.add(encoded);
+      }
+    }
+    return result;
+  }
+
+  const plainObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+  if (plainObject(base) && plainObject(local) && plainObject(remote)) {
+    const result = {};
+    const keys = new Set([...Object.keys(base), ...Object.keys(local), ...Object.keys(remote)]);
+    for (const key of keys) {
+      const value = rebaseDraftValue(base[key], local[key], remote[key], key);
+      if (value !== undefined) result[key] = value;
+    }
+    return result;
+  }
+
+  // The local draft wins when both sides changed the same scalar value.
+  return cloneDraftValue(local);
+}
+
+export function rebaseProfileCatalogDraft(base, local, remote) {
+  if (!base || !local || !remote) return cloneDraftValue(local || remote || base);
+  return rebaseDraftValue(base, local, remote);
+}
+
 function cloneRawMatch(match) {
   const result = { ...DEFAULT_MATCH };
   for (const [field] of MATCH_FIELDS) result[field] = valueRaw(match?.[field]) || result[field];
@@ -711,6 +813,421 @@ function cloneTarget(target = {}) {
 function createDraftId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function canonicalCatalogFromDeck(input) {
+  const value = input?.profileCatalog?.catalog ?? input?.profileCatalog;
+  return value?.catalogVersion === 2 ? value : null;
+}
+
+function canonicalCompactLookup(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function canonicalStableId(name, used, prefix) {
+  const base = String(name || prefix)
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/^[^a-z]+/, "") || prefix;
+  let id = base;
+  let suffix = 2;
+  while (used.has(id)) id = `${base}-${suffix++}`;
+  used.add(id);
+  return id;
+}
+
+function canonicalExpressionNumber(raw) {
+  const direct = Number(raw);
+  if (Number.isFinite(direct)) return direct;
+  const terrainBits = {
+    OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_LAND: 1,
+    OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER: 2,
+    OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY: 4,
+    OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_GRASS: 8,
+    OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER: 16,
+    OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER_FRONT: 32,
+    OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP: 64,
+    OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST: 128,
+    OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX: 256,
+    OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_FLOWERBED: 512,
+    OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL: 1023,
+  };
+  const parts = String(raw || "").split("|").map((part) => part.trim()).filter(Boolean);
+  if (parts.length && parts.every((part) => Object.hasOwn(terrainBits, part))) {
+    return parts.reduce((value, part) => value | terrainBits[part], 0);
+  }
+  return 0;
+}
+
+function canonicalAuthoredRaw(authored, fieldKey, applicationIndex) {
+  if (!authored) return "";
+  if (authored.operator === "replace") {
+    if (["activeProfile", "tiredProfile"].includes(fieldKey) && applicationIndex.has(String(authored.value))) {
+      return String(applicationIndex.get(String(authored.value)));
+    }
+    return String(authored.value);
+  }
+  const value = Number(authored.value);
+  const adjust = `${value >= 0 ? "+" : ""}${value}`;
+  if (authored.operator === "relative") return adjust;
+  if (authored.operator === "atLeast") return `/<${value}`;
+  if (authored.operator === "atMost") return `/>${value}`;
+  if (authored.operator === "relativeThenAtLeast") return `${adjust}, /<${Number(authored.threshold)}`;
+  if (authored.operator === "relativeThenAtMost") return `${adjust}, />${Number(authored.threshold)}`;
+  return String(authored.value);
+}
+
+function canonicalAuthoredFromEditorRaw(raw, fieldKey, catalog, input) {
+  const value = String(raw ?? "").trim();
+  if (["activeProfile", "tiredProfile"].includes(fieldKey)) {
+    if (value.startsWith(APPLICATION_DRAFT_PREFIX)) {
+      return { operator: "replace", value: value.slice(APPLICATION_DRAFT_PREFIX.length) };
+    }
+    let index = Number(value);
+    if (!Number.isInteger(index)) {
+      const option = (input.editOptions?.[fieldKey] || []).find((entry) => valueRaw(entry) === value);
+      index = Number(option?.value);
+    }
+    return { operator: "replace", value: catalog.applications[index]?.id || value };
+  }
+  const compound = value.match(/^([+-]\d+)\s*,\s*\/([<>])(\d+)$/);
+  if (compound) return {
+    operator: compound[2] === "<" ? "relativeThenAtLeast" : "relativeThenAtMost",
+    value: Number(compound[1]),
+    threshold: Number(compound[3]),
+  };
+  if (/^[+-]\d+$/.test(value)) return { operator: "relative", value: Number(value) };
+  const bound = value.match(/^\/([<>])(\d+)$/);
+  if (bound) return { operator: bound[1] === "<" ? "atLeast" : "atMost", value: Number(bound[2]) };
+  return { operator: "replace", value };
+}
+
+function canonicalApplyAuthored(before, authored) {
+  if (!authored) return before;
+  if (authored.operator === "replace") return authored.value;
+  const base = Number(before);
+  const value = Number(authored.value);
+  if (!Number.isFinite(base) || !Number.isFinite(value)) return authored.value;
+  if (authored.operator === "relative") return base + value;
+  if (authored.operator === "atLeast") return Math.max(base, value);
+  if (authored.operator === "atMost") return Math.min(base, value);
+  if (authored.operator === "relativeThenAtLeast") return Math.max(base + value, Number(authored.threshold));
+  if (authored.operator === "relativeThenAtMost") return Math.min(base + value, Number(authored.threshold));
+  return authored.value;
+}
+
+function canonicalRawView(raw, fieldKey, input) {
+  const value = String(raw ?? "");
+  const option = (input.editOptions?.[fieldKey] || []).find((entry) => valueRaw(entry) === value);
+  return {
+    raw: value,
+    symbol: /^[A-Z][A-Z0-9_]*(?:\s*\|\s*[A-Z][A-Z0-9_]*)*$/.test(value) ? value : null,
+    value: Number.isFinite(Number(value)) ? Number(value) : value,
+    label: option?.label || humanizeRaw(value),
+  };
+}
+
+function projectCanonicalProfileDeck(input, catalogOverride = null) {
+  const source = input && typeof input === "object" ? input : {};
+  const catalog = catalogOverride || canonicalCatalogFromDeck(source);
+  if (!catalog) return normalizeData(source);
+  const profilesById = new Map(catalog.profiles.map((profile) => [profile.id, profile]));
+  const applicationIndex = new Map(catalog.applications.map((application, index) => [application.id, index]));
+  const applicationById = new Map(catalog.applications.map((application) => [application.id, application]));
+  const classBindings = catalog.runtimeBindings.classOrder || [];
+  const classIndex = new Map(classBindings.map((binding, index) => [binding.profile, index]));
+  const runtimeClassPathProfileIds = new Set();
+  for (const binding of classBindings) {
+    let cursor = profilesById.get(binding.profile);
+    while (cursor && !runtimeClassPathProfileIds.has(cursor.id)) {
+      runtimeClassPathProfileIds.add(cursor.id);
+      cursor = cursor.parent ? profilesById.get(cursor.parent) : null;
+    }
+  }
+  const rootClassIndex = classIndex.get(catalog.rootProfile) ?? 0;
+  const classSymbolByProfile = new Map(classBindings.map((binding) => [binding.profile, binding.symbol]));
+  const allFieldKeys = (source.fields || []).map((field) => field.key);
+  const effectiveCache = new Map();
+
+  const effectiveFields = (profileId) => {
+    if (effectiveCache.has(profileId)) return effectiveCache.get(profileId);
+    const chain = [];
+    const seen = new Set();
+    let cursor = profilesById.get(profileId);
+    while (cursor && !seen.has(cursor.id)) {
+      seen.add(cursor.id);
+      chain.unshift(cursor);
+      cursor = cursor.parent ? profilesById.get(cursor.parent) : null;
+    }
+    const result = {};
+    for (const profile of chain) {
+      for (const [fieldKey, authored] of Object.entries(profile.fields || {})) {
+        result[fieldKey] = canonicalApplyAuthored(result[fieldKey], authored);
+      }
+    }
+    effectiveCache.set(profileId, result);
+    return result;
+  };
+  const viewFields = (raws) => Object.fromEntries(Object.entries(raws).map(([key, raw]) => {
+    const displayRaw = ["activeProfile", "tiredProfile"].includes(key) && applicationIndex.has(String(raw))
+      ? String(applicationIndex.get(String(raw)))
+      : raw;
+    return [key, canonicalRawView(displayRaw, key, source)];
+  }));
+  const emptyMask = () => ({ raw: "0", displayRaw: "0", value: 0, bits: [], labels: [] });
+  const matchView = (match) => Object.fromEntries(MATCH_FIELDS.map(([key]) => [key, canonicalRawView(match?.[key] ?? DEFAULT_MATCH[key], key, source)]));
+  const matchSummary = (match) => MATCH_FIELDS
+    .map(([key]) => String(match?.[key] ?? DEFAULT_MATCH[key]))
+    .filter((raw, index) => raw !== DEFAULT_MATCH[MATCH_FIELDS[index][0]])
+    .map(humanizeRaw).join(" · ") || "Any";
+
+  const selectors = (catalog.selectors || []).map((selector, index) => {
+    const boundIndex = classIndex.get(selector.profile) ?? 0;
+    const binding = classBindings[boundIndex] || classBindings[0] || { symbol: "OW_WILD_BEHAVIOR_CLASS_DEFAULT" };
+    return {
+      id: selector.id,
+      order: index + 1,
+      match: matchView(selector.match),
+      behaviorClass: canonicalRawView(binding.symbol, "behaviorClass", source),
+      profile: binding.symbol,
+      storage: (catalog.runtimeBindings.speciesSelectors || []).includes(selector.id) ? "species" : "full",
+      summary: matchSummary(selector.match),
+      className: profilesById.get(selector.profile)?.name || selector.profile,
+    };
+  });
+  const selectorsByProfile = new Map();
+  for (const [index, selector] of selectors.entries()) {
+    const profileId = catalog.selectors[index]?.profile;
+    if (!selectorsByProfile.has(profileId)) selectorsByProfile.set(profileId, []);
+    selectorsByProfile.get(profileId).push(selector);
+  }
+  const assignmentRulesBySpecies = new Map();
+  const broadAssignmentRules = [];
+  for (const [order, selector] of (catalog.selectors || []).entries()) {
+    const speciesRaw = String(selector.match?.species ?? DEFAULT_MATCH.species);
+    const remainingAny = ["terrain", "minLevel", "maxLevel", "shiny", "behaviorClass"]
+      .every((key) => String(selector.match?.[key] ?? DEFAULT_MATCH[key]) === DEFAULT_MATCH[key]);
+    if (!remainingAny || !classIndex.has(selector.profile)) continue;
+    const rule = { order, selector };
+    if (speciesRaw === DEFAULT_MATCH.species) broadAssignmentRules.push(rule);
+    else {
+      if (!assignmentRulesBySpecies.has(speciesRaw)) assignmentRulesBySpecies.set(speciesRaw, []);
+      assignmentRulesBySpecies.get(speciesRaw).push(rule);
+    }
+  }
+
+  const assignments = (source.assignments || []).map((assignment) => {
+    const symbol = assignment.species?.symbol;
+    const groupNames = new Set((assignment.groups || []).map((group) => canonicalCompactLookup(group)));
+    let selectedProfile = catalog.rootProfile;
+    const candidateRules = [...broadAssignmentRules, ...(assignmentRulesBySpecies.get(symbol) || [])]
+      .sort((left, right) => left.order - right.order);
+    for (const { selector } of candidateRules) {
+      const speciesRaw = String(selector.match?.species ?? DEFAULT_MATCH.species);
+      const groupRaw = String(selector.match?.groupMask ?? DEFAULT_MATCH.groupMask);
+      const speciesMatches = speciesRaw === DEFAULT_MATCH.species || speciesRaw === symbol;
+      const groupMatches = groupRaw === DEFAULT_MATCH.groupMask || groupNames.has(canonicalCompactLookup(humanizeRaw(groupRaw)));
+      if (speciesMatches && groupMatches) selectedProfile = selector.profile;
+    }
+    const selectedIndex = classIndex.get(selectedProfile) ?? 0;
+    const binding = classBindings[selectedIndex] || classBindings[0] || { symbol: "OW_WILD_BEHAVIOR_CLASS_DEFAULT" };
+    return {
+      ...assignment,
+      behaviorClass: { symbol: binding.symbol, name: profilesById.get(binding.profile)?.name || humanizeRaw(binding.symbol), value: selectedIndex },
+      profile: viewFields(effectiveFields(binding.profile || catalog.rootProfile)),
+    };
+  });
+  const assignmentCountByClass = new Map();
+  const assignmentSpeciesBySymbol = new Map();
+  for (const assignment of assignments) {
+    const classIndexValue = String(assignment.behaviorClass?.value ?? rootClassIndex);
+    assignmentCountByClass.set(classIndexValue, (assignmentCountByClass.get(classIndexValue) || 0) + 1);
+    if (assignment.species?.symbol) assignmentSpeciesBySymbol.set(assignment.species.symbol, assignment.species);
+  }
+
+  const classes = classBindings.map((binding, index) => {
+    const item = profilesById.get(binding.profile);
+    const raws = effectiveFields(binding.profile);
+    return {
+      catalogKey: `profile:${binding.profile}`,
+      catalogProfileId: binding.profile,
+      index,
+      symbol: binding.symbol,
+      name: item?.name || humanizeRaw(binding.symbol),
+      canRename: binding.profile !== catalog.rootProfile,
+      canDelete: binding.profile !== catalog.rootProfile && binding.profile !== catalog.runtimeBindings.pickedUpProfile,
+      override: { mask: emptyMask(), profile: viewFields(raws) },
+      profile: viewFields(raws),
+      primitives: {},
+      editProfile: viewFields(raws),
+      layers: [],
+      classRules: selectorsByProfile.get(binding.profile) || [],
+      classRuleCount: selectorsByProfile.get(binding.profile)?.length || 0,
+      speciesCount: assignmentCountByClass.get(String(index)) || 0,
+    };
+  });
+
+  const runtimeApplicationIds = new Set([
+    catalog.runtimeBindings.followerApplication,
+    catalog.runtimeBindings.defaultActiveApplication,
+    catalog.runtimeBindings.defaultTiredApplication,
+    catalog.runtimeBindings.forcedAsleepApplication,
+  ]);
+  for (const [index, application] of catalog.applications.entries()) {
+    const item = profilesById.get(application.profile);
+    const localRaws = Object.fromEntries(Object.entries(item?.fields || {}).map(([key, authored]) => [key, canonicalAuthoredRaw(authored, key, applicationIndex)]));
+    const target = application.target || { mode: "disabled", match: DEFAULT_MATCH, members: [] };
+    const members = [...new Set(target.members || [])].map((symbol) => assignmentSpeciesBySymbol.get(symbol)).filter(Boolean);
+    const relativeFields = Object.entries(item?.fields || {}).filter(([, value]) => ["relative", "relativeThenAtLeast", "relativeThenAtMost"].includes(value.operator)).map(([key]) => key);
+    const atLeastFields = Object.entries(item?.fields || {}).filter(([, value]) => ["atLeast", "relativeThenAtLeast"].includes(value.operator)).map(([key]) => key);
+    const atMostFields = Object.entries(item?.fields || {}).filter(([, value]) => ["atMost", "relativeThenAtMost"].includes(value.operator)).map(([key]) => key);
+    classes.push({
+      catalogKey: `application:${application.id}`,
+      catalogProfileId: application.profile,
+      catalogApplicationId: application.id,
+      index: `override:${index + 1}`,
+      order: index + 1,
+      orders: [index + 1],
+      kind: "override",
+      isOverrideProfile: true,
+      symbol: `OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_${index + 1}`,
+      name: item?.name || application.profile,
+      customName: item?.name || application.profile,
+      canRename: !classIndex.has(application.profile),
+      canDelete: !runtimeApplicationIds.has(application.id),
+      relativeOverridesAllowed: !runtimeClassPathProfileIds.has(application.profile),
+      numericOverrideOperatorsAllowed: !runtimeClassPathProfileIds.has(application.profile),
+      override: {
+        mask: emptyMask(), mask2: emptyMask(), mask3: emptyMask(),
+        relativeMask: emptyMask(), relativeMask2: emptyMask(), relativeMask3: emptyMask(), relativeFields,
+        atLeastMask: emptyMask(), atLeastMask2: emptyMask(), atLeastMask3: emptyMask(), atLeastFields,
+        atMostMask: emptyMask(), atMostMask2: emptyMask(), atMostMask3: emptyMask(), atMostFields,
+        compoundBoundProfile: {},
+      },
+      profile: viewFields(localRaws),
+      primitives: {},
+      editProfile: viewFields(localRaws),
+      layers: [],
+      match: matchView(target.match),
+      members,
+      memberSymbols: [...(target.members || [])],
+      targetMode: { raw: target.mode === "members" ? "OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS" : (target.mode === "all" ? "OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL" : "OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED"), value: target.mode === "members" ? 1 : (target.mode === "all" ? 2 : 0) },
+      summary: `${target.mode} · ${matchSummary(target.match)}`,
+      classRules: [], classRuleCount: 0,
+      speciesCount: members.length,
+    });
+  }
+
+  const conditions = (catalog.conditionalStates || []).map((state) => ({
+    catalogConditionalId: state.id,
+    parentProfile: applicationIndex.get(state.parentApplication) ?? CONDITIONAL_PROFILE_NONE_VALUE,
+    overrideProfile: state.application === null ? CONDITIONAL_PROFILE_NONE_VALUE : (applicationIndex.get(state.application) ?? CONDITIONAL_PROFILE_NONE_VALUE),
+    terrainMask: canonicalExpressionNumber(state.terrainMask),
+    terrainOverrideMask: canonicalExpressionNumber(state.terrainOverrideMask),
+    minMovementSpeed: canonicalExpressionNumber(state.minMovementSpeed),
+    maxMovementSpeed: canonicalExpressionNumber(state.maxMovementSpeed),
+  }));
+  const typeBySymbol = new Map();
+  for (const assignment of assignments) {
+    for (const type of assignment.species?.types || []) if (!typeBySymbol.has(type.symbol)) typeBySymbol.set(type.symbol, type);
+  }
+  const typeOptions = [...typeBySymbol.values()];
+  const labels = { ...(source.labels || {}), classes: Object.fromEntries(classBindings.map((binding, index) => [index, { symbol: binding.symbol, name: profilesById.get(binding.profile)?.name || humanizeRaw(binding.symbol), value: index }])) };
+  return normalizeData({
+    ...source,
+    profileCatalog: catalog,
+    overrideFieldKeys: allFieldKeys,
+    relativeOverrideFieldKeys: source.numericOverrideOperatorFieldKeys || [],
+    speciesOptions: assignments.map((assignment) => assignment.species),
+    typeOptions,
+    labels,
+    classes,
+    classRules: selectors,
+    conditionalStates: conditions,
+    assignments,
+    defaultClassIndex: rootClassIndex,
+    defaultProfile: viewFields(effectiveFields(catalog.rootProfile)),
+  });
+}
+
+function canonicalCatalogStructuralErrors(catalog, input = {}) {
+  if (!catalog) return ["The V2 profile catalog is unavailable"];
+  const errors = [];
+  const duplicateIds = (items, label) => {
+    const seen = new Set();
+    for (const item of items || []) {
+      if (!item?.id) errors.push(`${label} needs a stable ID`);
+      else if (seen.has(item.id)) errors.push(`${label} ID ${item.id} is duplicated`);
+      seen.add(item?.id);
+    }
+  };
+  duplicateIds(catalog.profiles, "Profile");
+  duplicateIds(catalog.selectors, "Selector");
+  duplicateIds(catalog.applications, "Application");
+  duplicateIds(catalog.conditionalStates, "Conditional state");
+  const profiles = new Map((catalog.profiles || []).map((profile) => [profile.id, profile]));
+  const applications = new Set((catalog.applications || []).map((application) => application.id));
+  const selectors = new Set((catalog.selectors || []).map((selector) => selector.id));
+  const root = profiles.get(catalog.rootProfile);
+  if (!root) errors.push("The root profile is missing");
+  else if (root.parent !== null) errors.push("The root profile cannot have a parent");
+  const profileNames = new Set();
+  const knownFields = new Set((input.fields || []).map((field) => field.key));
+  const relativeFields = new Set(input.numericOverrideOperatorFieldKeys || []);
+  const boundedFields = new Set(input.boundedOverrideOperatorFieldKeys || []);
+  for (const profile of catalog.profiles || []) {
+    const foldedName = String(profile.name || "").trim().toLowerCase();
+    if (!foldedName) errors.push(`Profile ${profile.id || "without an ID"} needs a name`);
+    else if (profileNames.has(foldedName)) errors.push("Profile names must be unique");
+    profileNames.add(foldedName);
+    if (profile.id !== catalog.rootProfile && !profiles.has(profile.parent)) errors.push(`${profile.name || profile.id} has a missing parent`);
+    const walked = new Set();
+    let cursor = profile;
+    while (cursor?.parent) {
+      if (walked.has(cursor.id)) {
+        errors.push(`${profile.name || profile.id} has an inheritance cycle`);
+        break;
+      }
+      walked.add(cursor.id);
+      cursor = profiles.get(cursor.parent);
+    }
+    for (const [fieldKey, authored] of Object.entries(profile.fields || {})) {
+      if (!knownFields.has(fieldKey)) errors.push(`${profile.name || profile.id} has unknown field ${fieldKey}`);
+      const operator = authored?.operator;
+      if (!['replace', 'relative', 'atLeast', 'atMost', 'relativeThenAtLeast', 'relativeThenAtMost'].includes(operator)) {
+        errors.push(`${profile.name || profile.id} has an invalid operator for ${fieldKey}`);
+      } else if (operator !== "replace" && !relativeFields.has(fieldKey)) {
+        errors.push(`${profile.name || profile.id} cannot use a numeric operator for ${fieldKey}`);
+      } else if (["atLeast", "atMost", "relativeThenAtLeast", "relativeThenAtMost"].includes(operator) && !boundedFields.has(fieldKey)) {
+        errors.push(`${profile.name || profile.id} cannot use a bound operator for ${fieldKey}`);
+      }
+    }
+  }
+  for (const selector of catalog.selectors || []) {
+    if (!profiles.has(selector.profile)) errors.push(`Selector ${selector.id} has a missing profile`);
+  }
+  for (const application of catalog.applications || []) {
+    if (!profiles.has(application.profile)) errors.push(`Application ${application.id} has a missing profile`);
+    const target = application.target || {};
+    if (target.mode === "members" && !(target.members || []).length) errors.push(`Application ${application.id} needs at least one member`);
+    const sharedMatch = MATCH_FIELDS.some(([field]) => field !== "species" && String(target.match?.[field] ?? DEFAULT_MATCH[field]) !== DEFAULT_MATCH[field]);
+    if (target.mode === "all" && !sharedMatch) errors.push(`Application ${application.id} needs at least one shared condition`);
+  }
+  for (const state of catalog.conditionalStates || []) {
+    if (!applications.has(state.parentApplication)) errors.push(`Conditional state ${state.id} has a missing parent application`);
+    if (state.application !== null && !applications.has(state.application)) errors.push(`Conditional state ${state.id} has a missing application`);
+  }
+  const bindings = catalog.runtimeBindings || {};
+  for (const binding of bindings.classOrder || []) if (!profiles.has(binding.profile)) errors.push(`Runtime class ${binding.symbol} has a missing profile`);
+  for (const selectorId of bindings.speciesSelectors || []) if (!selectors.has(selectorId)) errors.push(`Runtime species selector ${selectorId} is missing`);
+  if (!profiles.has(bindings.pickedUpProfile)) errors.push("The Picked Up profile is missing");
+  for (const key of ["followerApplication", "defaultActiveApplication", "defaultTiredApplication", "forcedAsleepApplication"]) {
+    if (!applications.has(bindings[key])) errors.push(`Runtime application ${bindings[key] || key} is missing`);
+  }
+  return unique(errors);
 }
 
 /**
@@ -734,12 +1251,16 @@ export function createProfilesController({
   if (!(root instanceof Element)) throw new TypeError("createProfilesController requires elements.profilesView");
   if (!api) throw new TypeError("createProfilesController requires an injected api");
 
-  let data = normalizeData(state.profileData || state.data || state.appData);
+  let rawDeckData = state.profileData || state.data || state.appData || {};
+  let sourceCatalog = canonicalCatalogFromDeck(rawDeckData) ? cloneDraftJson(canonicalCatalogFromDeck(rawDeckData)) : null;
+  let structuralCatalogDraft = state.profileCatalogDraft?.catalogVersion === 2 ? cloneDraftJson(state.profileCatalogDraft) : null;
+  let data = projectCanonicalProfileDeck(rawDeckData, structuralCatalogDraft || sourceCatalog);
   const drafts = state.profileDrafts?.version === 2 ? state.profileDrafts : newDraftStore();
   if (!("conditionalStates" in drafts)) drafts.conditionalStates = null;
   state.profileDrafts = drafts;
   const invalidNumericOperatorInputs = new Set();
   let formulaRefreshTimer = null;
+  let contextControlsLoaded = false;
   const legacyLifecycleSections = state.profileLifecycleSections instanceof Map
     ? state.profileLifecycleSections
     : null;
@@ -784,6 +1305,10 @@ export function createProfilesController({
   };
   let contextAbortController = null;
   let dialogSubmit = null;
+  let derivedIndexes = null;
+  let validationCache = null;
+  let searchRenderFrame = null;
+  const searchDocumentCache = new Map();
 
   const listElement = elements.profileLibrary;
   const editorElement = elements.profileInspector;
@@ -900,6 +1425,144 @@ export function createProfilesController({
     return [...baseProfiles(), ...overrideProfiles()];
   }
 
+  function clearLegacyDrafts() {
+    drafts.baseFields.clear();
+    drafts.overrideFields.clear();
+    drafts.memberships.clear();
+    drafts.overrideNames.clear();
+    drafts.overrideTargets.clear();
+    drafts.conditionalStates = null;
+    drafts.removedOverrides.clear();
+    drafts.newOverrides = [];
+    drafts.overrideOrder = [];
+  }
+
+  function canonicalDraftFromLegacy() {
+    const next = cloneDraftJson(structuralCatalogDraft || sourceCatalog);
+    if (!next) return null;
+    const profilesById = new Map(next.profiles.map((item) => [item.id, item]));
+    const applicationsById = new Map(next.applications.map((item) => [item.id, item]));
+    const referenceApplicationIds = (structuralCatalogDraft || sourceCatalog)?.applications?.map((item) => item.id) || [];
+    const sourceReferenceCatalog = { ...next, applications: referenceApplicationIds.map((id) => applicationsById.get(id)).filter(Boolean) };
+
+    for (const [key, fields] of drafts.baseFields) {
+      const view = baseProfiles().find((item) => profileKey(item) === key);
+      const item = profilesById.get(view?.catalogProfileId);
+      if (!item) continue;
+      for (const [fieldKey, raw] of fields) item.fields[fieldKey] = canonicalAuthoredFromEditorRaw(raw, fieldKey, sourceReferenceCatalog, rawDeckData);
+    }
+
+    for (const [key, fields] of drafts.overrideFields) {
+      const view = savedOverrideProfiles().find((item) => profileKey(item) === key);
+      const item = profilesById.get(view?.catalogProfileId);
+      if (!item) continue;
+      for (const [fieldKey, raw] of fields) {
+        if (String(raw || "").trim()) item.fields[fieldKey] = canonicalAuthoredFromEditorRaw(raw, fieldKey, sourceReferenceCatalog, rawDeckData);
+        else delete item.fields[fieldKey];
+      }
+    }
+
+    for (const [key, name] of drafts.overrideNames) {
+      const view = savedOverrideProfiles().find((item) => profileKey(item) === key);
+      const item = profilesById.get(view?.catalogProfileId);
+      if (item) item.name = name;
+    }
+
+    for (const [key, target] of drafts.overrideTargets) {
+      const view = savedOverrideProfiles().find((item) => profileKey(item) === key);
+      const application = applicationsById.get(view?.catalogApplicationId);
+      if (application) application.target = { mode: target.targetMode, match: cloneRawMatch(target.match), members: [...target.members] };
+    }
+
+    const removedApplicationIds = new Set();
+    const removedProfileIds = new Set();
+    for (const key of drafts.removedOverrides) {
+      const view = savedOverrideProfiles().find((item) => profileKey(item) === key);
+      if (view?.catalogApplicationId) removedApplicationIds.add(view.catalogApplicationId);
+      if (view?.catalogProfileId) removedProfileIds.add(view.catalogProfileId);
+    }
+    next.applications = next.applications.filter((application) => !removedApplicationIds.has(application.id));
+    next.conditionalStates = next.conditionalStates.filter((state) => !removedApplicationIds.has(state.parentApplication) && !removedApplicationIds.has(state.application));
+
+    const usedProfileIds = new Set(next.profiles.map((item) => item.id));
+    const usedApplicationIds = new Set(next.applications.map((item) => item.id));
+    const newApplicationByDraftId = new Map();
+    for (const draft of drafts.newOverrides) {
+      const profileId = canonicalStableId(draft.name, usedProfileIds, "profile");
+      const applicationId = canonicalStableId(`apply-${profileId}`, usedApplicationIds, "application");
+      const fields = Object.fromEntries(Object.entries(draft.fields || {}).filter(([, raw]) => String(raw || "").trim()).map(([fieldKey, raw]) => [fieldKey, canonicalAuthoredFromEditorRaw(raw, fieldKey, sourceReferenceCatalog, rawDeckData)]));
+      next.profiles.push({ id: profileId, name: draft.name, parent: next.rootProfile, fields });
+      next.applications.push({ id: applicationId, profile: profileId, target: { mode: draft.target.targetMode, match: cloneRawMatch(draft.target.match), members: [...draft.target.members] } });
+      newApplicationByDraftId.set(draft.draftId, applicationId);
+    }
+
+    const desiredApplicationIds = overrideProfiles()
+      .filter((view) => !drafts.removedOverrides.has(profileKey(view)))
+      .map((view) => view.draftId ? newApplicationByDraftId.get(view.draftId) : view.catalogApplicationId)
+      .filter(Boolean);
+    const currentApplicationById = new Map(next.applications.map((application) => [application.id, application]));
+    next.applications = desiredApplicationIds.map((id) => currentApplicationById.get(id)).filter(Boolean);
+    for (const application of currentApplicationById.values()) if (!desiredApplicationIds.includes(application.id)) next.applications.push(application);
+
+    const selectorBySpecies = new Map();
+    const runtimeSelectorIds = new Set(next.runtimeBindings.speciesSelectors || []);
+    for (const selector of next.selectors) {
+      if (runtimeSelectorIds.has(selector.id) && selector.match?.species && selector.match.species !== DEFAULT_MATCH.species) selectorBySpecies.set(String(selector.match.species), selector);
+    }
+    const usedSelectorIds = new Set(next.selectors.map((selector) => selector.id));
+    for (const [symbol, targetKey] of drafts.memberships) {
+      const target = baseProfiles().find((item) => profileKey(item) === targetKey);
+      if (!target?.catalogProfileId) continue;
+      let selector = selectorBySpecies.get(symbol);
+      if (!selector) {
+        const selectorId = canonicalStableId(`select-${symbol.replace(/^SPECIES_/, "")}`, usedSelectorIds, "selector");
+        selector = { id: selectorId, match: { ...DEFAULT_MATCH, species: symbol }, profile: target.catalogProfileId };
+        next.selectors.push(selector);
+        next.runtimeBindings.speciesSelectors.push(selectorId);
+        selectorBySpecies.set(symbol, selector);
+      }
+      selector.profile = target.catalogProfileId;
+    }
+
+    if (drafts.conditionalStates !== null) {
+      const usedConditionalIds = new Set(next.conditionalStates.map((state) => state.id));
+      next.conditionalStates = currentConditionalStates().map((state) => {
+        const parent = findProfile(state.parentKey);
+        const linked = state.overrideKey ? findProfile(state.overrideKey) : null;
+        return {
+          id: state.catalogConditionalId || canonicalStableId(`conditional-${parent?.catalogApplicationId || "state"}`, usedConditionalIds, "conditional-state"),
+          parentApplication: parent?.catalogApplicationId,
+          application: linked?.catalogApplicationId || null,
+          terrainMask: String(state.terrainMask),
+          terrainOverrideMask: String(state.terrainOverrideMask),
+          minMovementSpeed: String(state.minMovementSpeed),
+          maxMovementSpeed: String(state.maxMovementSpeed),
+        };
+      }).filter((state) => state.parentApplication);
+    }
+
+    const boundProfiles = new Set((next.runtimeBindings.classOrder || []).map((binding) => binding.profile));
+    boundProfiles.add(next.runtimeBindings.pickedUpProfile);
+    const appliedProfiles = new Set(next.applications.map((application) => application.profile));
+    const parentProfiles = new Set(next.profiles.map((item) => item.parent).filter(Boolean));
+    next.profiles = next.profiles.filter((item) => (
+      !removedProfileIds.has(item.id)
+      || boundProfiles.has(item.id)
+      || appliedProfiles.has(item.id)
+      || parentProfiles.has(item.id)
+      || item.id === next.rootProfile
+    ));
+    return next;
+  }
+
+  function adoptStructuralCatalog(nextCatalog) {
+    structuralCatalogDraft = cloneDraftJson(nextCatalog);
+    state.profileCatalogDraft = structuralCatalogDraft;
+    clearLegacyDrafts();
+    data = projectCanonicalProfileDeck(rawDeckData, structuralCatalogDraft);
+    invalidateDerivedIndexes();
+  }
+
   function stateReferenceProfiles() {
     return orderedSavedOverrides().filter((profile) => (
       !drafts.removedOverrides.has(profileKey(profile)) && ordersFor(profile).length
@@ -994,6 +1657,7 @@ export function createProfilesController({
       }
     }
     return {
+      catalogConditionalId: entry.catalogConditionalId ? String(entry.catalogConditionalId) : "",
       parentKey: String(entry.parentKey || ""),
       overrideKey: entry.overrideKey ? String(entry.overrideKey) : null,
       terrainMask: String(accepted),
@@ -1008,6 +1672,7 @@ export function createProfilesController({
       const parent = conditionalProfileForRaw(entry?.parentProfile);
       const linked = conditionalProfileForRaw(entry?.referencedProfile ?? entry?.overrideProfile);
       return cloneConditionalState({
+        catalogConditionalId: entry?.catalogConditionalId,
         parentKey: parent ? profileKey(parent) : "",
         overrideKey: linked ? profileKey(linked) : null,
         terrainMask: entry?.terrainMask,
@@ -1083,7 +1748,16 @@ export function createProfilesController({
   function nameFor(profile) {
     if (!profile) return "";
     if (profile.draftId) return profile.name;
-    return drafts.overrideNames.get(profileKey(profile)) ?? profile.name ?? profile.symbol ?? "Profile";
+    const direct = drafts.overrideNames.get(profileKey(profile));
+    if (direct !== undefined) return direct;
+    if (profile.catalogProfileId) {
+      const sharedDraft = savedOverrideProfiles().find((candidate) => (
+        candidate.catalogProfileId === profile.catalogProfileId
+        && drafts.overrideNames.has(profileKey(candidate))
+      ));
+      if (sharedDraft) return drafts.overrideNames.get(profileKey(sharedDraft));
+    }
+    return profile.name ?? profile.symbol ?? "Profile";
   }
 
   function overrideNameAvailable(name, excludedProfile = null) {
@@ -1092,6 +1766,7 @@ export function createProfilesController({
     const excludedKey = excludedProfile ? profileKey(excludedProfile) : "";
     return !overrideProfiles().some((profile) => profile !== excludedProfile
       && (!excludedKey || profileKey(profile) !== excludedKey)
+      && (!excludedProfile?.catalogProfileId || profile.catalogProfileId !== excludedProfile.catalogProfileId)
       && nameFor(profile).trim().toLowerCase() === normalized
       && !drafts.removedOverrides.has(profileKey(profile)));
   }
@@ -1108,7 +1783,7 @@ export function createProfilesController({
     const result = {};
     for (const field of data.fields) {
       const raw = valueRaw(profile?.editProfile?.[field.key] ?? profile?.profile?.[field.key]);
-      if (raw) result[field.key] = raw;
+      if (raw) result[field.key] = storedFieldDraftRaw(raw, field.key);
     }
     return result;
   }
@@ -1120,10 +1795,28 @@ export function createProfilesController({
     return store.get(key) || null;
   }
 
+  function storedFieldDraftRaw(raw, fieldKey) {
+    const value = String(raw ?? "");
+    if (!["activeProfile", "tiredProfile"].includes(fieldKey) || value.startsWith(APPLICATION_DRAFT_PREFIX)) return value;
+    const index = Number(value);
+    const catalog = structuralCatalogDraft || sourceCatalog;
+    const applicationId = Number.isInteger(index) ? catalog?.applications?.[index]?.id : "";
+    return applicationId ? `${APPLICATION_DRAFT_PREFIX}${applicationId}` : value;
+  }
+
+  function editorFieldDraftRaw(raw, fieldKey) {
+    const value = String(raw ?? "");
+    if (!["activeProfile", "tiredProfile"].includes(fieldKey) || !value.startsWith(APPLICATION_DRAFT_PREFIX)) return value;
+    const applicationId = value.slice(APPLICATION_DRAFT_PREFIX.length);
+    const catalog = structuralCatalogDraft || sourceCatalog;
+    const index = catalog?.applications?.findIndex((application) => application.id === applicationId) ?? -1;
+    return index >= 0 ? String(index) : value;
+  }
+
   function fieldRaw(profile, fieldKey) {
-    if (profile?.draftId) return String(profile.fields?.[fieldKey] ?? "");
+    if (profile?.draftId) return editorFieldDraftRaw(profile.fields?.[fieldKey], fieldKey);
     const pending = fieldDraftMap(profile);
-    if (pending?.has(fieldKey)) return pending.get(fieldKey);
+    if (pending?.has(fieldKey)) return editorFieldDraftRaw(pending.get(fieldKey), fieldKey);
     return valueRaw(profile?.editProfile?.[fieldKey] ?? profile?.profile?.[fieldKey]);
   }
 
@@ -1133,18 +1826,24 @@ export function createProfilesController({
 
   function setField(profile, fieldKey, raw) {
     const next = String(raw ?? "");
+    const stored = storedFieldDraftRaw(next, fieldKey);
     if (profile.draftId) {
       const draft = backingNewOverride(profile);
       const fields = draft?.fields || profile.fields;
-      if (next) fields[fieldKey] = next;
+      if (next) fields[fieldKey] = stored;
       else delete fields[fieldKey];
       profile.fields = fields;
       return;
     }
-    const map = fieldDraftMap(profile, true);
-    if (next === originalFieldRaw(profile, fieldKey)) map.delete(fieldKey);
-    else map.set(fieldKey, next);
-    if (!map.size) (isOverrideProfile(profile) ? drafts.overrideFields : drafts.baseFields).delete(profileKey(profile));
+    const targets = isOverrideProfile(profile) && profile.catalogProfileId
+      ? savedOverrideProfiles().filter((candidate) => candidate.catalogProfileId === profile.catalogProfileId)
+      : [profile];
+    for (const target of targets) {
+      const map = fieldDraftMap(target, true);
+      if (next === originalFieldRaw(target, fieldKey)) map.delete(fieldKey);
+      else map.set(fieldKey, stored);
+      if (!map.size) (isOverrideProfile(target) ? drafts.overrideFields : drafts.baseFields).delete(profileKey(target));
+    }
   }
 
   function sourceTarget(profile) {
@@ -1182,11 +1881,13 @@ export function createProfilesController({
   }
 
   function baseByIndex(index) {
-    return baseProfiles().find((profile) => String(profile.index) === String(index)) || null;
+    ensureDerivedIndexes();
+    return derivedIndexes.baseByIndex.get(String(index)) || null;
   }
 
   function originalBaseForSpecies(symbol) {
-    const assignment = data.assignments.find((item) => item?.species?.symbol === symbol);
+    ensureDerivedIndexes();
+    const assignment = derivedIndexes.assignmentBySpecies.get(symbol);
     return baseByIndex(assignment?.behaviorClass?.value);
   }
 
@@ -1195,8 +1896,9 @@ export function createProfilesController({
   }
 
   function membersFor(profile) {
+    ensureDerivedIndexes();
     const key = profileKey(profile);
-    return data.assignments.filter((assignment) => pendingBaseKeyForSpecies(assignment?.species?.symbol) === key);
+    return derivedIndexes.membersByProfile.get(key) || [];
   }
 
   function setMembership(symbol, targetProfile) {
@@ -1204,12 +1906,12 @@ export function createProfilesController({
     const targetKey = profileKey(targetProfile);
     if (original && profileKey(original) === targetKey) drafts.memberships.delete(symbol);
     else drafts.memberships.set(symbol, targetKey);
+    invalidateDerivedIndexes();
   }
 
   function speciesEntries() {
-    return data.assignments
-      .map((assignment) => assignment?.species)
-      .filter((species) => species?.symbol && species.symbol !== "SPECIES_NONE");
+    ensureDerivedIndexes();
+    return derivedIndexes.species;
   }
 
   function compactLookup(value) {
@@ -1219,12 +1921,8 @@ export function createProfilesController({
   function speciesForInput(value) {
     const needle = compactLookup(value);
     if (!needle) return null;
-    const options = [...speciesEntries(), ...(data.speciesOptions || [])];
-    return options.find((species) => unique([
-      species.symbol,
-      species.name,
-      ...(species.aliases || []),
-    ]).some((candidate) => compactLookup(candidate) === needle)) || null;
+    ensureDerivedIndexes();
+    return derivedIndexes.speciesLookup.get(needle) || null;
   }
 
   function typeGroupSymbol(typeSymbol) {
@@ -1258,17 +1956,61 @@ export function createProfilesController({
   }
 
   function familyEntries() {
+    ensureDerivedIndexes();
+    return derivedIndexes.families;
+  }
+
+  function invalidateDerivedIndexes() {
+    derivedIndexes = null;
+    searchDocumentCache.clear();
+    validationCache = null;
+  }
+
+  function ensureDerivedIndexes() {
+    if (derivedIndexes) return derivedIndexes;
+    const bases = baseProfiles();
+    const baseByIndexMap = new Map(bases.map((profile) => [String(profile.index), profile]));
+    const assignmentBySpecies = new Map();
+    const species = [];
+    const speciesBySymbol = new Map();
+    for (const assignment of data.assignments) {
+      const item = assignment?.species;
+      if (!item?.symbol) continue;
+      assignmentBySpecies.set(item.symbol, assignment);
+      if (item.symbol !== "SPECIES_NONE" && !speciesBySymbol.has(item.symbol)) {
+        speciesBySymbol.set(item.symbol, item);
+        species.push(item);
+      }
+    }
+    const membersByProfile = new Map(bases.map((profile) => [profileKey(profile), []]));
+    for (const assignment of data.assignments) {
+      const symbol = assignment?.species?.symbol;
+      if (!symbol) continue;
+      const original = baseByIndexMap.get(String(assignment?.behaviorClass?.value));
+      const key = drafts.memberships.get(symbol) || (original ? profileKey(original) : "");
+      if (!membersByProfile.has(key)) membersByProfile.set(key, []);
+      membersByProfile.get(key).push(assignment);
+    }
+    const speciesLookup = new Map();
+    for (const item of [...species, ...(data.speciesOptions || [])]) {
+      for (const candidate of unique([item.symbol, item.name, ...(item.aliases || [])])) {
+        const compact = compactLookup(candidate);
+        if (compact && !speciesLookup.has(compact)) speciesLookup.set(compact, item);
+      }
+    }
     const byBase = new Map();
-    speciesEntries().forEach((species) => {
-      const base = species.familyBaseSymbol || species.symbol;
+    for (const item of species) {
+      const base = item.familyBaseSymbol || item.symbol;
       if (!byBase.has(base)) byBase.set(base, []);
-      byBase.get(base).push(species);
-    });
-    return [...byBase.entries()].map(([symbol, members]) => ({
+      byBase.get(base).push(item);
+    }
+    const families = [...byBase.entries()].map(([symbol, members]) => ({
       symbol,
-      name: members.find((species) => species.symbol === symbol)?.name || members[0]?.familyBaseName || humanizeRaw(symbol),
+      name: members.find((item) => item.symbol === symbol)?.name || members[0]?.familyBaseName || humanizeRaw(symbol),
       members,
     }));
+    derivedIndexes = { assignmentBySpecies, baseByIndex: baseByIndexMap, families, membersByProfile, species, speciesBySymbol, speciesLookup };
+    return derivedIndexes;
   }
 
   function targetOptions(kind) {
@@ -1309,8 +2051,9 @@ export function createProfilesController({
         if (!(assignment.species?.types || []).some((type) => type.symbol === dynamicType.symbol)) return false;
         return true;
       }
-      const group = (data.groups || []).find((entry) => entry.group?.symbol === match.groupMask);
-      if (!group?.species?.some((species) => species.symbol === assignment.species?.symbol)) return false;
+      const group = Object.values(data.labels?.groups || {}).find((entry) => entry.symbol === match.groupMask);
+      const assignmentGroups = new Set((assignment.groups || []).map(compactLookup));
+      if (!group || !assignmentGroups.has(compactLookup(group.name))) return false;
     }
     return true;
   }
@@ -1354,7 +2097,8 @@ export function createProfilesController({
 
   function hasChanges() {
     return Boolean(
-      drafts.baseFields.size
+      structuralCatalogDraft
+      || drafts.baseFields.size
       || drafts.overrideFields.size
       || drafts.memberships.size
       || drafts.overrideNames.size
@@ -1368,7 +2112,8 @@ export function createProfilesController({
 
   function changeCount() {
     const nestedSize = (store) => [...store.values()].reduce((total, fields) => total + fields.size, 0);
-    return nestedSize(drafts.baseFields)
+    return (structuralCatalogDraft ? 1 : 0)
+      + nestedSize(drafts.baseFields)
       + nestedSize(drafts.overrideFields)
       + drafts.memberships.size
       + drafts.overrideNames.size
@@ -1380,6 +2125,8 @@ export function createProfilesController({
   }
 
   function signalDirty() {
+    validationCache = null;
+    searchDocumentCache.clear();
     const dirty = hasChanges();
     state.profileDirty = dirty;
     state.selectedProfileKey = ui.selectedKey;
@@ -1479,6 +2226,11 @@ export function createProfilesController({
 
   function fieldOptions(fieldKey, currentRaw = "", profile = null, context = {}) {
     let options = [...(data.editOptions?.[fieldKey] || [])];
+    if (fieldKey === "walkAccelerationStep") {
+      options = options.map((option) => valueRaw(option) === "0"
+        ? { ...option, label: "0 — None" }
+        : (valueRaw(option) === "33" ? { ...option, label: "/2 — Old rule" } : option));
+    }
     if (["chillAction", "movementStyle", "specialAction"].includes(fieldKey)
         && TELEPORT_LOCOMOTIONS.has(String(currentRaw))) {
       options = options.filter((option) => {
@@ -1681,6 +2433,7 @@ export function createProfilesController({
         ${renderProfileSelectOptions(options, selectedRaw, allowInherit, permissions)}
       </select>`;
     }
+    const showSuggestions = fieldKey !== "walkAccelerationStep";
     const listId = `pv2-numeric-options-${String(instance).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
     const errorId = `pv2-numeric-error-${String(instance).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
     const walkTime = WALK_TIME_FIELDS.has(fieldKey);
@@ -1695,11 +2448,11 @@ export function createProfilesController({
         ? "Clear to inherit, or type an exact whole-number value."
         : "Type an exact whole-number value.");
     return `<span class="pv2-numeric-combobox">
-      <input class="field-control" type="text" inputmode="text" autocomplete="off" spellcheck="false" list="${escapeHtml(listId)}" value="${escapeHtml(selectedRaw)}" placeholder="${allowInherit ? "Inherit" : "Value"}" title="${escapeHtml(title)}" aria-errormessage="${escapeHtml(errorId)}" data-profile-value data-profile-numeric-entry data-profile-key="${escapeHtml(profileKey(profile))}" data-profile-allow-inherit="${allowInherit ? "true" : "false"}" data-numeric-adjust="${permissions.adjust ? "true" : "false"}" data-numeric-bounds="${permissions.bounds ? "true" : "false"}" data-field-key="${escapeHtml(fieldKey)}" data-field-instance="${escapeHtml(instance)}" ${attributes}>
-      <datalist id="${escapeHtml(listId)}">
+      <input class="field-control" type="text" inputmode="text" autocomplete="off" spellcheck="false" ${showSuggestions ? `list="${escapeHtml(listId)}"` : ""} value="${escapeHtml(selectedRaw)}" placeholder="${allowInherit ? "Inherit" : "Value"}" title="${escapeHtml(title)}" aria-errormessage="${escapeHtml(errorId)}" data-profile-value data-profile-numeric-entry data-profile-key="${escapeHtml(profileKey(profile))}" data-profile-allow-inherit="${allowInherit ? "true" : "false"}" data-numeric-adjust="${permissions.adjust ? "true" : "false"}" data-numeric-bounds="${permissions.bounds ? "true" : "false"}" data-field-key="${escapeHtml(fieldKey)}" data-field-instance="${escapeHtml(instance)}" ${attributes}>
+      ${showSuggestions ? `<datalist id="${escapeHtml(listId)}">
         ${allowInherit ? `<option value="Inherit"></option>` : ""}
         ${options.map((option) => `<option value="${escapeHtml(valueRaw(option))}" label="${escapeHtml(valueLabel(option))}"></option>`).join("")}
-      </datalist>
+      </datalist>` : ""}
       <small id="${escapeHtml(errorId)}" class="pv2-numeric-error" role="status" aria-live="polite"></small>
     </span>`;
   }
@@ -2025,6 +2778,18 @@ export function createProfilesController({
         unit: "tiles",
       });
     }
+    if (fields.walkAccelerationStep) {
+      append([fields.walkAccelerationStep], usesWalkAcceleration, {
+        label: "Acceleration amount",
+        unit: "frames",
+      });
+    }
+    if (fields.walkTimeVariance) {
+      append([fields.walkTimeVariance], usesWalkAcceleration, {
+        label: "Walk time variance",
+        unit: "frames",
+      });
+    }
     if (fields.walkOptions) {
       append([fields.walkOptions], usesWalkAcceleration, {
         virtual: "walk-options",
@@ -2052,10 +2817,24 @@ export function createProfilesController({
         unit: "frames",
       });
     }
+    if (fields.walkPauseVariance) {
+      append([fields.walkPauseVariance], usesWalkAcceleration, {
+        label: "Pause variance",
+        unit: "frames",
+        note: "Adds a random 0 through this value after each accepted normal Walk step. 0 disables variance.",
+      });
+    }
     if (fields.tilesBeforeTurnSkid) {
       append([fields.tilesBeforeTurnSkid], usesWalkAcceleration, {
         label: "Steps before turn skid",
         unit: "steps",
+      });
+    }
+    if (fields.planTurnSkidPath) {
+      append([fields.planTurnSkidPath], usesWalkAcceleration, {
+        label: "Plan turn-skid path",
+        unit: "",
+        note: "Check the full skid path and the first step after the turn before starting the skid",
       });
     }
     const throwUsesStandaloneRange = scope === "active"
@@ -2780,6 +3559,7 @@ export function createProfilesController({
       ? (changed ? "changed" : (inherited ? "inherited" : "override"))
       : (changed ? "changed" : "saved");
     const allowTurning = !(options & 1);
+    const swayWidth = (options >> 1) & 7;
     const crashSound = (options >> 4) & 1;
     const allowAcceleration = !(options & 0x20);
     const playerFacing = Boolean(options & 0x40);
@@ -2789,9 +3569,10 @@ export function createProfilesController({
     return `
       <div class="field-row profile-field pv2-field pv2-composite-field${changed ? " is-changed" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.inactive ? " is-inactive" : ""}" data-profile-key="${profileKeyValue}" data-field-row="${fieldKey}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
         <span class="field-copy pv2-field-copy"><strong>Walk options</strong><small class="pv2-field-meta"><span class="pv2-field-note">shared movement policy</span>${presentation.inactive ? `<span class="pv2-field-note">inactive</span>` : ""}</small></span>
-        <span class="pv2-composite-controls" role="group" aria-label="Walk options" style="--composite-columns:4">
+        <span class="pv2-composite-controls" role="group" aria-label="Walk options" style="--composite-columns:5">
           <label class="pv2-composite-control"><span><b>Allow turning</b></span><input type="checkbox" ${common} data-walk-option="turning" ${allowTurning ? "checked" : ""}></label>
           <label class="pv2-composite-control"><span><b>Allow acceleration</b></span><input type="checkbox" ${common} data-walk-option="acceleration" ${allowAcceleration ? "checked" : ""}></label>
+          <label class="pv2-composite-control"><span><b>Horizontal sway</b></span><input class="field-control" type="number" min="0" max="7" step="1" value="${swayWidth}" ${common} data-walk-option="sway" aria-label="Walk horizontal sway in pixels"></label>
           <label class="pv2-composite-control"><span><b>Crash sound</b></span><select class="field-control" ${common} data-walk-option="crash"><option value="0" ${crashSound === 0 ? "selected" : ""}>None</option><option value="1" ${crashSound === 1 ? "selected" : ""}>Wall hit</option></select></label>
           <label class="pv2-composite-control"><span><b>Facing</b></span><select class="field-control" ${common} data-walk-option="facing"><option value="movement" ${!fixedFacing && !playerFacing ? "selected" : ""}>Face movement</option><option value="fixed" ${fixedFacing ? "selected" : ""}>Fixed until pause action</option><option value="player" ${playerFacing ? "selected" : ""}>Face player</option></select></label>
           ${override ? `<button type="button" class="pv2-direction-inherit" data-action="inherit-walk-options" data-profile-key="${profileKeyValue}" ${inherited ? "disabled" : ""}>Inherit</button>` : ""}
@@ -3572,6 +4353,7 @@ export function createProfilesController({
   }
 
   function profileValidationErrors() {
+    if (validationCache) return validationCache;
     const baseKeys = new Set(baseProfiles().map(profileKey));
     const overrideKeys = new Set(savedOverrideProfiles().map(profileKey));
     const speciesSymbols = new Set(data.assignments.map((item) => item.species?.symbol).filter(Boolean));
@@ -3601,7 +4383,10 @@ export function createProfilesController({
         if (!profileCanEditField(profile, fieldKey)) return;
         const raw = fieldRaw(profile, fieldKey);
         if (raw && !laneReferenceProfile(raw)) {
-          errors.push(`${nameFor(profile)} — ${fieldKey === "activeProfile" ? "Active" : "Tired"} override profile #${Number(raw) + 1} is unavailable`);
+          const reference = raw.startsWith(APPLICATION_DRAFT_PREFIX)
+            ? raw.slice(APPLICATION_DRAFT_PREFIX.length)
+            : `#${Number(raw) + 1}`;
+          errors.push(`${nameFor(profile)} — ${fieldKey === "activeProfile" ? "Active" : "Tired"} override profile ${reference} is unavailable`);
         }
       });
     });
@@ -3631,14 +4416,15 @@ export function createProfilesController({
         if (error) errors.push(`${nameFor(profile)} — ${error}`);
       });
     });
-    const seenNames = new Set();
+    const seenNames = new Map();
     const activeOverrides = overrideProfiles().filter((profile) => !drafts.removedOverrides.has(profileKey(profile)));
     if (!activeOverrides.length) errors.push("Create a replacement before removing the last override profile");
     if (activeOverrides.length > 32) errors.push("The runtime supports at most 32 ordered override profiles");
     activeOverrides.forEach((profile) => {
       const name = nameFor(profile).trim().toLowerCase();
-      if (!name || seenNames.has(name)) errors.push("Override profile names must be unique");
-      seenNames.add(name);
+      const profileIdentity = profile.catalogProfileId || profileKey(profile);
+      if (!name || (seenNames.has(name) && seenNames.get(name) !== profileIdentity)) errors.push("Override profile names must be unique");
+      seenNames.set(name, profileIdentity);
       const target = targetFor(profile);
       const shouldValidateTarget = profile.draftId || drafts.overrideTargets.has(profileKey(profile));
       if (!shouldValidateTarget) return;
@@ -3668,7 +4454,9 @@ export function createProfilesController({
       if (seenConditionalStates.has(signature)) errors.push(`${nameFor(parent) || "A profile"} has the same conditional state more than once`);
       seenConditionalStates.add(signature);
     });
-    return unique(errors);
+    errors.push(...canonicalCatalogStructuralErrors(canonicalDraftFromLegacy(), rawDeckData));
+    validationCache = unique(errors);
+    return validationCache;
   }
 
   function staleDraftEntries() {
@@ -3883,8 +4671,8 @@ export function createProfilesController({
   }
 
   function renderAffected(profile) {
-    const affected = potentialAssignmentsFor(profile);
     const expanded = ui.openSections.has("affected");
+    const affected = potentialAssignmentsFor(profile);
     return `
       <details class="membership-section pv2-affected" data-section-id="affected" ${expanded ? "open" : ""}>
         <summary><span><strong>Potential coverage</strong><small>Pokémon that can match this one layer in at least one valid context.</small></span><em>${affected.length}</em></summary>
@@ -4009,7 +4797,9 @@ export function createProfilesController({
       </div>`;
   }
 
-  function renderContextControls() {
+  function renderContextControls(force = false) {
+    if (!force && !contextControlsLoaded) return;
+    contextControlsLoaded = true;
     ensureContextDefaults();
     const terrains = Object.values(data.labels?.terrains || {}).sort((left, right) => Number(left.value) - Number(right.value));
     elements.profileContextSpecies.innerHTML = data.assignments.map((assignment) => `<option value="${escapeHtml(assignment.species?.symbol)}" ${assignment.species?.symbol === ui.context.species ? "selected" : ""}>${escapeHtml(assignment.species?.name)}</option>`).join("");
@@ -4037,6 +4827,7 @@ export function createProfilesController({
     resolverDrawerElement.hidden = false;
     workbenchElement.classList.add("is-resolver-open");
     resolverOpenElement.setAttribute("aria-expanded", "true");
+    renderContextControls(true);
     requestAnimationFrame(() => elements.profileContextSpecies.focus({ preventScroll: true }));
   }
 
@@ -4044,6 +4835,9 @@ export function createProfilesController({
     resolverDrawerElement.hidden = true;
     workbenchElement.classList.remove("is-resolver-open");
     resolverOpenElement.setAttribute("aria-expanded", "false");
+    contextControlsLoaded = false;
+    elements.profileContextSpecies.innerHTML = "<option>Loading…</option>";
+    elements.profileContextTerrain.innerHTML = "<option>Loading…</option>";
     const fallbackFocus = resolverOpenElement.closest("details")?.querySelector("summary") || resolverOpenElement;
     const returnFocus = ui.resolverReturnFocus?.isConnected ? ui.resolverReturnFocus : fallbackFocus;
     ui.resolverReturnFocus = null;
@@ -4170,30 +4964,75 @@ export function createProfilesController({
 
   async function manageBaseProfile(payload, currentProfile = null) {
     if (ui.busy) return;
-    ui.busy = true;
-    status(`${humanizeRaw(payload.action)} profile…`, "busy");
-    renderList();
-    try {
-      const oldKey = currentProfile ? profileKey(currentProfile) : "";
-      const oldSymbol = currentProfile?.symbol || "";
-      const fallbackSymbol = baseByIndex(data.defaultClassIndex)?.symbol || "OW_WILD_BEHAVIOR_CLASS_DEFAULT";
-      const result = await apiPost("/manage-profiles", payload);
-      if (payload.action === "rename" && result?.symbol) {
-        rekeyBaseDraft(oldKey, `base:${result.symbol}`);
-        rewriteDraftBehaviorClass(oldSymbol, result.symbol);
-      }
-      if (payload.action === "delete") rewriteDraftBehaviorClass(oldSymbol, fallbackSymbol);
-      if (payload.action === "delete") dropProfileDraft(oldKey);
-      if (typeof state.reloadData === "function") await state.reloadData({ keepStatus: true });
-      else refresh(await apiGet("/data.json", { cache: "no-store" }));
-      if (result?.symbol) setSelected(`base:${result.symbol}`);
-      status(result?.message || "Profile structure saved.", "success");
-    } catch (error) {
-      status(`Profile action failed: ${error.message}`, "error");
-    } finally {
-      ui.busy = false;
-      renderAll();
+    const next = canonicalDraftFromLegacy();
+    if (!next) {
+      status("Profile changes need a V2 profile catalog.", "error");
+      return;
     }
+    const profilesById = new Map(next.profiles.map((profile) => [profile.id, profile]));
+    const currentId = currentProfile?.catalogProfileId;
+    const current = profilesById.get(currentId);
+    const usedProfileIds = new Set(profilesById.keys());
+    const usedSelectorIds = new Set(next.selectors.map((selector) => selector.id));
+    const usedClassSymbols = new Set(next.runtimeBindings.classOrder.map((binding) => binding.symbol));
+    const uniqueClassSymbol = (name) => {
+      const base = `OW_WILD_BEHAVIOR_CLASS_${String(name || "PROFILE").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "PROFILE"}`;
+      let symbol = base;
+      let suffix = 2;
+      while (usedClassSymbols.has(symbol)) symbol = `${base}_${suffix++}`;
+      return symbol;
+    };
+
+    let selectedProfileId = currentId;
+    if (payload.action === "create" || payload.action === "duplicate") {
+      const id = canonicalStableId(payload.name, usedProfileIds, "profile");
+      const source = payload.action === "duplicate" ? current : null;
+      next.profiles.push({
+        id,
+        name: String(payload.name || "New profile").trim(),
+        parent: source?.parent || next.rootProfile,
+        fields: cloneDraftJson(source?.fields || {}),
+      });
+      next.runtimeBindings.classOrder.push({ profile: id, symbol: uniqueClassSymbol(payload.name) });
+      for (const species of payload.pokemon || []) {
+        const selectorId = canonicalStableId(`select-${String(species).replace(/^SPECIES_/, "")}`, usedSelectorIds, "selector");
+        next.selectors.push({ id: selectorId, match: { ...DEFAULT_MATCH, species }, profile: id });
+        next.runtimeBindings.speciesSelectors.push(selectorId);
+      }
+      selectedProfileId = id;
+    } else if (payload.action === "rename" && current) {
+      current.name = String(payload.name || current.name).trim();
+    } else if (payload.action === "delete" && current && current.id !== next.rootProfile && current.id !== next.runtimeBindings.pickedUpProfile) {
+      const fallbackProfileId = current.parent || next.rootProfile;
+      const fallbackSymbol = next.runtimeBindings.classOrder.find((binding) => binding.profile === fallbackProfileId)?.symbol
+        || next.runtimeBindings.classOrder.find((binding) => binding.profile === next.rootProfile)?.symbol
+        || "OW_WILD_BEHAVIOR_CLASS_DEFAULT";
+      const removedSymbol = next.runtimeBindings.classOrder.find((binding) => binding.profile === current.id)?.symbol;
+      next.runtimeBindings.classOrder = next.runtimeBindings.classOrder.filter((binding) => binding.profile !== current.id);
+      next.selectors.forEach((selector) => {
+        if (selector.profile === current.id) selector.profile = fallbackProfileId;
+        if (removedSymbol && selector.match?.behaviorClass === removedSymbol) selector.match.behaviorClass = fallbackSymbol;
+      });
+      next.applications.forEach((application) => {
+        if (removedSymbol && application.target?.match?.behaviorClass === removedSymbol) application.target.match.behaviorClass = fallbackSymbol;
+      });
+      next.profiles.forEach((profile) => {
+        if (profile.parent === current.id) profile.parent = fallbackProfileId;
+      });
+      if (!next.applications.some((application) => application.profile === current.id)) {
+        next.profiles = next.profiles.filter((profile) => profile.id !== current.id);
+      }
+      selectedProfileId = fallbackProfileId;
+    } else {
+      status("That profile action is not available.", "error");
+      return;
+    }
+
+    adoptStructuralCatalog(next);
+    ui.selectedKey = `profile:${selectedProfileId}`;
+    ui.selectionHint = data.classes.find((profile) => profile.catalogProfileId === selectedProfileId)?.name || "";
+    status("Profile structure added to the draft transaction.", "warning");
+    renderAll();
   }
 
   function createBaseDialog() {
@@ -4249,7 +5088,10 @@ export function createProfilesController({
         const draft = {
           draftId: createDraftId(),
           name,
-          fields: source ? Object.fromEntries(data.fields.map((field) => [field.key, fieldRaw(source, field.key)]).filter(([, raw]) => raw)) : {},
+          fields: source ? Object.fromEntries(data.fields.map((field) => [
+            field.key,
+            storedFieldDraftRaw(fieldRaw(source, field.key), field.key),
+          ]).filter(([, raw]) => raw)) : {},
           target: source ? targetFor(source) : { members: [], match: { ...DEFAULT_MATCH }, targetMode: "disabled" },
         };
         drafts.newOverrides.push(draft);
@@ -4273,7 +5115,7 @@ export function createProfilesController({
     const allowed = new Set(data.overrideFieldKeys || []);
     data.fields.forEach((field) => {
       const raw = fieldRaw(profile, field.key);
-      if (allowed.has(field.key) && raw) fields[field.key] = raw;
+      if (allowed.has(field.key) && raw) fields[field.key] = storedFieldDraftRaw(raw, field.key);
     });
     const draft = {
       draftId: createDraftId(),
@@ -4309,8 +5151,15 @@ export function createProfilesController({
             if (draft) draft.name = name;
             profile.name = name;
           }
-          else if (name === profile.name) drafts.overrideNames.delete(profileKey(profile));
-          else drafts.overrideNames.set(profileKey(profile), name);
+          else {
+            const sharedProfiles = savedOverrideProfiles().filter((candidate) => (
+              candidate.catalogProfileId === profile.catalogProfileId
+            ));
+            for (const shared of sharedProfiles) {
+              if (name === shared.name) drafts.overrideNames.delete(profileKey(shared));
+              else drafts.overrideNames.set(profileKey(shared), name);
+            }
+          }
           ui.selectionHint = name;
           renderAll();
           status("Override rename added to the draft transaction.", "warning");
@@ -4668,7 +5517,11 @@ export function createProfilesController({
       return;
     } else if (event.target === elements.profileSearch) {
       ui.search = event.target.value;
-      renderList();
+      if (searchRenderFrame !== null) cancelAnimationFrame(searchRenderFrame);
+      searchRenderFrame = requestAnimationFrame(() => {
+        searchRenderFrame = null;
+        renderList();
+      });
     } else if (event.target.matches("[data-member-search]")) {
       ui.memberQuery = event.target.value;
       const profile = findProfile();
@@ -4816,6 +5669,9 @@ export function createProfilesController({
       const part = event.target.dataset.walkOption;
       if (part === "turning") {
         options = event.target.checked ? options & ~1 : options | 1;
+      } else if (part === "sway") {
+        const swayWidth = Math.max(0, Math.min(7, Number(event.target.value) || 0));
+        options = (options & ~0x0E) | (swayWidth << 1);
       } else if (part === "acceleration") {
         options = event.target.checked ? options & ~0x20 : options | 0x20;
       } else if (part === "crash") {
@@ -4948,6 +5804,12 @@ export function createProfilesController({
     if (event.target.getAttribute("aria-invalid") !== "true") refreshAfterFormulaCommit();
   }
 
+  function onFocusIn(event) {
+    if (!editorElement.contains(event.target) || formulaRefreshTimer === null) return;
+    window.clearTimeout(formulaRefreshTimer);
+    formulaRefreshTimer = null;
+  }
+
   function onToggle(event) {
     const section = event.target;
     if (!(section instanceof HTMLDetailsElement) || !section.matches("details[data-section-id]")) return;
@@ -5066,18 +5928,10 @@ export function createProfilesController({
     listElement.querySelectorAll(".is-dragging, .is-drop-before, .is-drop-after").forEach((item) => item.classList.remove("is-dragging", "is-drop-before", "is-drop-after"));
   }
 
-  function completeCoupledOverrideFieldEdits(profile, fieldEdits) {
-    const completed = new Map(fieldEdits);
-    for (const fields of COUPLED_OVERRIDE_FIELD_GROUPS) {
-      if (!fields.some((field) => completed.has(field))) continue;
-      for (const field of fields) completed.set(field, fieldRaw(profile, field));
-    }
-    return completed;
-  }
-
   root.addEventListener("click", onClick);
   root.addEventListener("input", onInput);
   root.addEventListener("change", onChange);
+  root.addEventListener("focusin", onFocusIn);
   root.addEventListener("focusout", onFocusOut);
   root.addEventListener("toggle", onToggle, true);
   root.addEventListener("submit", onSubmit);
@@ -5087,141 +5941,35 @@ export function createProfilesController({
   root.addEventListener("drop", onDrop);
   root.addEventListener("dragend", onDragEnd);
 
-  function serializedConditionalStates() {
-    return currentConditionalStates().flatMap((entry) => {
-      const parent = findProfile(entry.parentKey);
-      if (!parent || drafts.removedOverrides.has(entry.parentKey)) return [];
-      const linked = entry.overrideKey && !drafts.removedOverrides.has(entry.overrideKey)
-        ? findProfile(entry.overrideKey)
-        : null;
-      const parentProfile = Number(stateReferenceRaw(parent));
-      const overrideProfile = linked ? Number(stateReferenceRaw(linked)) : CONDITIONAL_PROFILE_NONE_VALUE;
-      if (!Number.isInteger(parentProfile) || !Number.isInteger(overrideProfile)) return [];
-      return [{
-        parentProfile,
-        overrideProfile,
-        terrainMask: terrainPolicyMaskNumber(entry.terrainMask),
-        terrainOverrideMask: terrainPolicyMaskNumber(entry.terrainOverrideMask),
-        minMovementSpeed: conditionalMovementSpeed(entry.minMovementSpeed),
-        maxMovementSpeed: conditionalMovementSpeed(entry.maxMovementSpeed),
-      }];
-    });
-  }
-
-  function overridePayload() {
-    const add = [];
-    const edit = {};
-    const rename = {};
-    const replaceTargets = {};
-    const remove = new Set();
-
-    for (const profile of savedOverrideProfiles()) {
-      const key = profileKey(profile);
-      const orders = ordersFor(profile);
-      const replacingTarget = drafts.overrideTargets.has(key) && !drafts.removedOverrides.has(key);
-      if (drafts.removedOverrides.has(key)) orders.forEach((order) => remove.add(order));
-      if (drafts.removedOverrides.has(key)) continue;
-
-      if (replacingTarget) {
-        replaceTargets[orders[0]] = targetFor(profile);
-      }
-
-      const fieldEdits = drafts.overrideFields.get(key);
-      if (fieldEdits?.size) {
-        const serializedFields = Object.fromEntries(completeCoupledOverrideFieldEdits(profile, fieldEdits));
-        for (const order of orders) edit[order] = serializedFields;
-      }
-      if (drafts.overrideNames.has(key)) {
-        for (const order of orders) rename[order] = drafts.overrideNames.get(key);
-      }
-    }
-
-    for (const draft of drafts.newOverrides) {
-      add.push({ name: draft.name, fields: { ...draft.fields }, target: cloneTarget(draft.target) });
-    }
-
-    const reorder = orderChanged() ? orderedSavedOverrides().map((profile) => ordersFor(profile)) : [];
-    const conditionalStatesChanged = drafts.conditionalStates !== null
-      || currentConditionalStates().some((entry) => (
-        drafts.removedOverrides.has(entry.parentKey)
-        || (entry.overrideKey && drafts.removedOverrides.has(entry.overrideKey))
-      ));
-    const payload = {
-      add,
-      edit,
-      rename,
-      replaceTargets,
-      remove: [...remove],
-      reorder,
-      ...(conditionalStatesChanged ? { conditionalStates: serializedConditionalStates() } : {}),
-    };
-    return add.length || Object.keys(edit).length || Object.keys(rename).length || Object.keys(replaceTargets).length
-      || remove.size || reorder.length || conditionalStatesChanged ? { changes: payload } : null;
-  }
-
   function commitPayload() {
-    const profileChanges = {};
-    for (const [key, fields] of drafts.baseFields) {
-      const profile = baseProfiles().find((item) => profileKey(item) === key);
-      if (profile && fields.size) profileChanges[profile.index] = Object.fromEntries(fields);
-    }
-
-    const membershipChanges = {};
-    for (const [symbol, targetKey] of drafts.memberships) {
-      const target = baseProfiles().find((profile) => profileKey(profile) === targetKey);
-      const original = originalBaseForSpecies(symbol);
-      if (target && (!original || String(target.index) !== String(original.index))) membershipChanges[symbol] = target.index;
-    }
-
-    return {
-      profiles: Object.keys(profileChanges).length ? { changes: profileChanges } : null,
-      profileMemberships: Object.keys(membershipChanges).length ? { changes: membershipChanges } : null,
-      profileOverrides: overridePayload(),
-    };
-  }
-
-  function committedDomains(value) {
-    if (!value) return new Set(["profiles", "profileMemberships", "profileOverrides"]);
-    if (Array.isArray(value)) return new Set(value);
-    if (Array.isArray(value.changedDomains)) return new Set(value.changedDomains);
-    if (typeof value === "string") return new Set([value]);
-    return new Set(Object.keys(value).filter((key) => value[key]));
+    const catalog = canonicalDraftFromLegacy();
+    return hasChanges() && catalog ? { profileCatalog: { catalog } } : {};
   }
 
   function clearCommitted(committed = null) {
-    const domains = committedDomains(committed);
+    const catalog = canonicalDraftFromLegacy();
     ui.selectionHint = nameFor(findProfile());
-    if (domains.has("profileOverrides")) {
-      ui.pendingLifecycleProfiles = overrideProfiles()
-        .filter((profile) => ui.selectedKey === profileKey(profile))
-        .map((profile) => ({ key: profileKey(profile), name: nameFor(profile), selected: true }));
+    if (catalog) {
+      sourceCatalog = cloneDraftJson(catalog);
+      rawDeckData = { ...rawDeckData, profileCatalog: { catalog: sourceCatalog } };
     }
-    if (domains.has("profiles")) drafts.baseFields.clear();
-    if (domains.has("profileMemberships")) drafts.memberships.clear();
-    if (domains.has("profileOverrides")) {
-      drafts.overrideFields.clear();
-      drafts.overrideNames.clear();
-      drafts.overrideTargets.clear();
-      drafts.conditionalStates = null;
-      drafts.removedOverrides.clear();
-      drafts.newOverrides = [];
-      drafts.overrideOrder = [];
-    }
-    renderAll();
+    structuralCatalogDraft = null;
+    state.profileCatalogDraft = null;
+    clearLegacyDrafts();
+    data = projectCanonicalProfileDeck(rawDeckData, sourceCatalog);
+    invalidateDerivedIndexes();
+    if (committed?.deferRender) signalDirty();
+    else renderAll();
   }
 
   function reset() {
     ui.selectionHint = nameFor(findProfile());
     ui.pendingLifecycleProfiles = [];
-    drafts.baseFields.clear();
-    drafts.overrideFields.clear();
-    drafts.memberships.clear();
-    drafts.overrideNames.clear();
-    drafts.overrideTargets.clear();
-    drafts.conditionalStates = null;
-    drafts.removedOverrides.clear();
-    drafts.newOverrides = [];
-    drafts.overrideOrder = [];
+    structuralCatalogDraft = null;
+    state.profileCatalogDraft = null;
+    clearLegacyDrafts();
+    data = projectCanonicalProfileDeck(rawDeckData, sourceCatalog);
+    invalidateDerivedIndexes();
     status("Profile drafts reset.", "info");
     renderAll();
   }
@@ -5236,7 +5984,7 @@ export function createProfilesController({
         const profile = profilesByKey.get(key);
         if (!profile) continue;
         for (const [fieldKey, raw] of fields) {
-          if (String(raw) === originalFieldRaw(profile, fieldKey)) fields.delete(fieldKey);
+          if (editorFieldDraftRaw(raw, fieldKey) === originalFieldRaw(profile, fieldKey)) fields.delete(fieldKey);
         }
         if (!fields.size) store.delete(key);
       }
@@ -5257,8 +6005,17 @@ export function createProfilesController({
   function refresh(nextData) {
     if (!nextData || typeof nextData !== "object") return;
     ui.selectionHint = ui.selectionHint || nameFor(findProfile());
-    data = normalizeData(nextData);
-    state.profileData = data;
+    rawDeckData = nextData;
+    const refreshedCatalog = canonicalCatalogFromDeck(nextData);
+    if (refreshedCatalog) {
+      if (structuralCatalogDraft && sourceCatalog) {
+        structuralCatalogDraft = rebaseProfileCatalogDraft(sourceCatalog, structuralCatalogDraft, refreshedCatalog);
+        state.profileCatalogDraft = structuralCatalogDraft;
+      }
+      sourceCatalog = cloneDraftJson(refreshedCatalog);
+    }
+    data = projectCanonicalProfileDeck(rawDeckData, structuralCatalogDraft || sourceCatalog);
+    state.profileData = nextData;
     if (ui.pendingLifecycleProfiles.length) {
       const overridesByName = new Map(savedOverrideProfiles().map((profile) => [nameFor(profile).trim().toLowerCase(), profile]));
       for (const pending of ui.pendingLifecycleProfiles) {
@@ -5273,28 +6030,34 @@ export function createProfilesController({
       ui.pendingLifecycleProfiles = [];
     }
     pruneDrafts();
+    invalidateDerivedIndexes();
     ui.contextResult = null;
     ui.contextError = data.profilesAvailable === false ? (data.profileError?.message || "Profiles are unavailable in this source state.") : "";
     renderAll();
   }
 
   function exportDraft() {
-    const mapOfMaps = (store) => [...store].map(([key, fields]) => [key, [...fields]]);
     return {
-      version: 2,
-      baseFields: mapOfMaps(drafts.baseFields),
-      overrideFields: mapOfMaps(drafts.overrideFields),
-      memberships: [...drafts.memberships],
-      overrideNames: [...drafts.overrideNames],
-      overrideTargets: [...drafts.overrideTargets].map(([key, target]) => [key, cloneTarget(target)]),
-      conditionalStates: drafts.conditionalStates === null ? null : drafts.conditionalStates.map(cloneConditionalState),
-      removedOverrides: [...drafts.removedOverrides],
-      newOverrides: cloneDraftJson(drafts.newOverrides),
-      overrideOrder: [...drafts.overrideOrder],
+      version: 3,
+      baseProfileCatalog: { catalog: cloneDraftJson(sourceCatalog) },
+      profileCatalog: { catalog: canonicalDraftFromLegacy() },
     };
   }
 
-  function prepareDraftImport(snapshot) {
+  function prepareDraftImport(snapshot, { allowRevisionMismatch = false } = {}) {
+    const importedCatalog = canonicalCatalogFromDeck(snapshot);
+    if (snapshot?.version === 3 && importedCatalog) {
+      const importedBaseCatalog = canonicalCatalogFromDeck({ profileCatalog: snapshot.baseProfileCatalog });
+      if (allowRevisionMismatch && !importedBaseCatalog) {
+        throw new TypeError("This older profile backup cannot be safely restored onto a different source revision.");
+      }
+      const rebasedCatalog = importedBaseCatalog && sourceCatalog
+        ? rebaseProfileCatalogDraft(importedBaseCatalog, importedCatalog, sourceCatalog)
+        : importedCatalog;
+      const errors = canonicalCatalogStructuralErrors(rebasedCatalog, rawDeckData);
+      if (errors.length) throw new TypeError(errors[0]);
+      return { version: 3, canonicalCatalog: cloneDraftJson(rebasedCatalog) };
+    }
     if (!snapshot || typeof snapshot !== "object" || ![1, 2].includes(snapshot.version)) {
       throw new TypeError("Profile draft backup version is not supported.");
     }
@@ -5422,6 +6185,14 @@ export function createProfilesController({
   }
 
   function applyDraftImport(prepared) {
+    if (prepared?.version === 3 && prepared.canonicalCatalog) {
+      adoptStructuralCatalog(prepared.canonicalCatalog);
+      invalidNumericOperatorInputs.clear();
+      ui.selectionHint = nameFor(findProfile());
+      invalidateDerivedIndexes();
+      renderAll();
+      return;
+    }
     Object.assign(drafts, prepared);
     invalidNumericOperatorInputs.clear();
     ui.selectionHint = nameFor(findProfile());
@@ -5433,10 +6204,12 @@ export function createProfilesController({
     if (ui.destroyed) return;
     ui.destroyed = true;
     if (formulaRefreshTimer !== null) window.clearTimeout(formulaRefreshTimer);
+    if (searchRenderFrame !== null) cancelAnimationFrame(searchRenderFrame);
     contextAbortController?.abort();
     root.removeEventListener("click", onClick);
     root.removeEventListener("input", onInput);
     root.removeEventListener("change", onChange);
+    root.removeEventListener("focusin", onFocusIn);
     root.removeEventListener("focusout", onFocusOut);
     root.removeEventListener("toggle", onToggle, true);
     root.removeEventListener("submit", onSubmit);
@@ -5479,6 +6252,7 @@ export function createProfilesController({
     clearCommitted,
     reset,
     refresh,
+    refreshPreservingDrafts: refresh,
     navigationContext: () => ({ selection: ui.selectedKey, label: nameFor(findProfile()) }),
     restoreSelection: (key, options = {}) => setSelected(key, { ...options, report: false }),
     destroy,

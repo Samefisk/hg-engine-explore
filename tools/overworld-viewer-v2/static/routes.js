@@ -164,6 +164,9 @@ export function createRoutesController({
     || library?.closest(".library-panel")?.querySelector("[data-route-count]")
     || null;
   const abort = new AbortController();
+  let searchFrame = 0;
+  let speciesList = null;
+  let speciesListKey = "";
 
   const model = {
     data: {},
@@ -181,6 +184,11 @@ export function createRoutesController({
     methodFilters: loadSet(ROUTE_FILTER_STORAGE_KEY, DEFAULT_FILTERS),
     openSections: loadSet(ROUTE_SECTION_STORAGE_KEY, ["grass", "sources"]),
     invalidInputs: new Map(),
+    routeCacheVersions: new Map(),
+    sourceGroupsCache: new Map(),
+    sidebarGroupsCache: new Map(),
+    searchDocumentsCache: new Map(),
+    speciesSearchCache: new WeakMap(),
     entryEditor: null,
     overrideEditor: false,
     spawnEditor: false,
@@ -197,6 +205,39 @@ export function createRoutesController({
 
   function signalDirty() {
     if (typeof markDirty === "function") markDirty();
+  }
+
+  function routeCacheVersion(routeId) {
+    return model.routeCacheVersions.get(String(routeId)) || 0;
+  }
+
+  function invalidateRouteDerived(routeId) {
+    const key = String(routeId);
+    model.routeCacheVersions.set(key, routeCacheVersion(key) + 1);
+    model.sourceGroupsCache.delete(key);
+    model.sidebarGroupsCache.delete(key);
+    model.searchDocumentsCache.delete(key);
+  }
+
+  function invalidateAllRouteDerived() {
+    model.routeCacheVersions.clear();
+    model.sourceGroupsCache.clear();
+    model.sidebarGroupsCache.clear();
+    model.searchDocumentsCache.clear();
+    model.speciesSearchCache = new WeakMap();
+  }
+
+  function cachedRouteValue(cache, route, create) {
+    const routeId = String(route.id);
+    const revision = String(model.data?.sourceRevision || "");
+    const version = routeCacheVersion(routeId);
+    const cached = cache.get(routeId);
+    if (cached && cached.revision === revision && cached.version === version && cached.route === route) {
+      return cached.value;
+    }
+    const value = create();
+    cache.set(routeId, { revision, version, route, value });
+    return value;
   }
 
   function invalidKey(kind, owner, path = "") {
@@ -228,8 +269,13 @@ export function createRoutesController({
     if (!path) return;
     const key = baselineKey(routeId, path);
     const normalized = String(value ?? "").trim();
+    const hadDraft = model.encounterDrafts.has(key);
+    const previous = model.encounterDrafts.get(key);
     if (normalized === baseline(routeId, path, fallback)) model.encounterDrafts.delete(key);
     else model.encounterDrafts.set(key, normalized);
+    if (hadDraft !== model.encounterDrafts.has(key) || previous !== model.encounterDrafts.get(key)) {
+      invalidateRouteDerived(routeId);
+    }
   }
 
   function setSpawnDraft(symbol, value, original) {
@@ -372,52 +418,54 @@ export function createRoutesController({
   }
 
   function sourceGroups(route) {
-    const groups = new Map();
-    asArray(route.pokemonTables).forEach((table) => {
-      groups.set(table.key, {
-        key: table.key,
-        label: METHOD_META.get(table.key)?.label || table.label,
-        targets: asArray(table.slots).map((slot, index) => targetFromPokemon(route, table, slot, index)),
+    return cachedRouteValue(model.sourceGroupsCache, route, () => {
+      const groups = new Map();
+      asArray(route.pokemonTables).forEach((table) => {
+        groups.set(table.key, {
+          key: table.key,
+          label: METHOD_META.get(table.key)?.label || table.label,
+          targets: asArray(table.slots).map((slot, index) => targetFromPokemon(route, table, slot, index)),
+        });
       });
+      [...asArray(route.slotTables), ...asArray(route.headbuttTables)].forEach((table) => {
+        const targets = asArray(table.slots).map((slot) => targetFromSlot(route, table, slot));
+        const existing = groups.get(table.key);
+        groups.set(table.key, {
+          key: table.key,
+          label: METHOD_META.get(table.key)?.label || table.label,
+          targets: existing ? [...existing.targets, ...targets] : targets,
+          treeCount: Number(existing?.treeCount || 0) + Number(table.treeCount || 0),
+        });
+      });
+      if (asArray(route.swarms).length) {
+        groups.set("swarms", {
+          key: "swarms",
+          label: "Swarms",
+          targets: asArray(route.swarms).map((swarm, index) => {
+            const symbol = effective(route.id, swarm.path, swarm.species?.symbol);
+            const form = effective(route.id, swarm.formPath, swarm.form || 0);
+            return {
+              groupKey: "swarms",
+              groupLabel: swarm.label || "Swarms",
+              swarmKey: swarm.key,
+              slot: index + 1,
+              weight: null,
+              path: swarm.path,
+              formPath: swarm.formPath,
+              originalSymbol: baseline(route.id, swarm.path, swarm.species?.symbol),
+              originalForm: baseline(route.id, swarm.formPath, swarm.form || 0),
+              symbol,
+              form,
+              option: displaySpecies(symbol, form),
+              levelLabel: String(swarm.label || "").replace(/ swarm$/i, ""),
+              enabled: true,
+              kind: "swarm",
+            };
+          }),
+        });
+      }
+      return SOURCE_ORDER.map((key) => groups.get(key)).filter(Boolean);
     });
-    [...asArray(route.slotTables), ...asArray(route.headbuttTables)].forEach((table) => {
-      const targets = asArray(table.slots).map((slot) => targetFromSlot(route, table, slot));
-      const existing = groups.get(table.key);
-      groups.set(table.key, {
-        key: table.key,
-        label: METHOD_META.get(table.key)?.label || table.label,
-        targets: existing ? [...existing.targets, ...targets] : targets,
-        treeCount: Number(existing?.treeCount || 0) + Number(table.treeCount || 0),
-      });
-    });
-    if (asArray(route.swarms).length) {
-      groups.set("swarms", {
-        key: "swarms",
-        label: "Swarms",
-        targets: asArray(route.swarms).map((swarm, index) => {
-          const symbol = effective(route.id, swarm.path, swarm.species?.symbol);
-          const form = effective(route.id, swarm.formPath, swarm.form || 0);
-          return {
-            groupKey: "swarms",
-            groupLabel: swarm.label || "Swarms",
-            swarmKey: swarm.key,
-            slot: index + 1,
-            weight: null,
-            path: swarm.path,
-            formPath: swarm.formPath,
-            originalSymbol: baseline(route.id, swarm.path, swarm.species?.symbol),
-            originalForm: baseline(route.id, swarm.formPath, swarm.form || 0),
-            symbol,
-            form,
-            option: displaySpecies(symbol, form),
-            levelLabel: String(swarm.label || "").replace(/ swarm$/i, ""),
-            enabled: true,
-            kind: "swarm",
-          };
-        }),
-      });
-    }
-    return SOURCE_ORDER.map((key) => groups.get(key)).filter(Boolean);
   }
 
   function locationLevelText(targets) {
@@ -514,56 +562,82 @@ export function createRoutesController({
   }
 
   function sidebarGroups(route) {
-    const groups = sourceGroups(route);
-    const byKey = new Map(groups.map((group) => [group.key, group]));
-    const grassGroups = ["morning", "day", "night"].map((key) => byKey.get(key));
-    let common = new Set();
-    if (grassGroups.every(Boolean)) {
-      const sets = grassGroups.map((group) => new Set(uniqueTargetSpecies(group.targets).map((entry) => entry.identity)));
-      common = new Set([...sets[0]].filter((identity) => sets.slice(1).every((set) => set.has(identity))));
-    }
-    const output = [];
-    if (common.size) {
-      output.push({
-        key: "grass",
-        label: METHOD_META.get("grass").label,
-        species: uniqueTargetSpecies(grassGroups[0].targets, common),
-      });
-    }
-    groups.forEach((group) => {
-      let species = uniqueTargetSpecies(group.targets);
-      if (["morning", "day", "night"].includes(group.key) && common.size) {
-        species = species.filter((entry) => !common.has(entry.identity));
+    return cachedRouteValue(model.sidebarGroupsCache, route, () => {
+      const groups = sourceGroups(route);
+      const byKey = new Map(groups.map((group) => [group.key, group]));
+      const grassGroups = ["morning", "day", "night"].map((key) => byKey.get(key));
+      let common = new Set();
+      if (grassGroups.every(Boolean)) {
+        const sets = grassGroups.map((group) => new Set(uniqueTargetSpecies(group.targets).map((entry) => entry.identity)));
+        common = new Set([...sets[0]].filter((identity) => sets.slice(1).every((set) => set.has(identity))));
       }
-      if (species.length) output.push({ key: group.key, label: group.label, species });
+      const output = [];
+      if (common.size) {
+        output.push({
+          key: "grass",
+          label: METHOD_META.get("grass").label,
+          species: uniqueTargetSpecies(grassGroups[0].targets, common),
+        });
+      }
+      groups.forEach((group) => {
+        let species = uniqueTargetSpecies(group.targets);
+        if (["morning", "day", "night"].includes(group.key) && common.size) {
+          species = species.filter((entry) => !common.has(entry.identity));
+        }
+        if (species.length) output.push({ key: group.key, label: group.label, species });
+      });
+      return output;
     });
-    return output;
   }
 
   function speciesSearchText(entry) {
+    if (entry && typeof entry === "object" && model.speciesSearchCache.has(entry)) {
+      return model.speciesSearchCache.get(entry);
+    }
     const option = entry.option || displaySpecies(entry.symbol, entry.form);
-    return [
+    const text = [
       entry.symbol,
       option?.symbol,
       option?.name,
       ...asArray(option?.aliases),
       ...asArray(option?.types).flatMap((type) => [type?.name, type?.symbol]),
     ].join(" ").toLowerCase();
+    if (entry && typeof entry === "object") model.speciesSearchCache.set(entry, text);
+    return text;
+  }
+
+  function routeSearchDocument(route) {
+    return cachedRouteValue(model.searchDocumentsCache, route, () => {
+      const groups = sidebarGroups(route);
+      const identityText = [
+        route.id,
+        route.name,
+        ...asArray(route.maps).flatMap((map) => [map.name, map.symbol]),
+      ].join(" ").toLowerCase();
+      return {
+        identityText,
+        compactIdentityText: compact(identityText),
+        groupText: new Map(groups.map((group) => {
+          const text = [group.key, group.label, ...group.species.map(speciesSearchText)].join(" ").toLowerCase();
+          return [group.key, { text, compactText: compact(text) }];
+        })),
+        speciesCount: new Set(sourceGroups(route).flatMap((group) => group.targets)
+          .filter((target) => target.symbol !== "SPECIES_NONE")
+          .map((target) => speciesIdentity(target.symbol, target.form))).size,
+      };
+    });
   }
 
   function routeFilterState(route) {
     const groups = sidebarGroups(route);
     const enabledGroups = groups.filter((group) => model.methodFilters.has(group.key));
-    const identityText = [
-      route.id,
-      route.name,
-      ...asArray(route.maps).flatMap((map) => [map.name, map.symbol]),
-    ].join(" ").toLowerCase();
+    const document = routeSearchDocument(route);
     const query = model.query;
-    const identityMatch = Boolean(query && (identityText.includes(query) || compact(identityText).includes(compact(query))));
+    const compactQuery = compact(query);
+    const identityMatch = Boolean(query && (document.identityText.includes(query) || document.compactIdentityText.includes(compactQuery)));
     const groupMatch = Boolean(query && enabledGroups.some((group) => {
-      const text = [group.key, group.label, ...group.species.map(speciesSearchText)].join(" ").toLowerCase();
-      return text.includes(query) || compact(text).includes(compact(query));
+      const text = document.groupText.get(group.key);
+      return text && (text.text.includes(query) || text.compactText.includes(compactQuery));
     }));
     return {
       groups,
@@ -628,30 +702,41 @@ export function createRoutesController({
     </span>`;
   }
 
+  function routeRowStats(route) {
+    const edits = routeChangeCount(route.id);
+    const errors = routeValidationCount(route.id);
+    const speciesCount = routeSearchDocument(route).speciesCount;
+    return {
+      edits,
+      errors,
+      summary: `${mapLabel(route)} · ${speciesCount} species${edits ? ` · ${edits} changed` : ""}${errors ? ` · ${errors} error${errors === 1 ? "" : "s"}` : ""}`,
+    };
+  }
+
+  function renderRouteRow(route, state) {
+    const selected = String(route.id) === String(model.selectedRouteId);
+    const { edits, errors, summary } = routeRowStats(route);
+    return `<article class="v2-route-list-row${selected ? " is-selected" : ""}${edits ? " is-dirty" : ""}${errors ? " is-invalid" : ""}" data-route-row="${escapeHtml(route.id)}">
+      <button class="v2-route-select" type="button" data-route-select="${escapeHtml(route.id)}" aria-pressed="${selected}">
+        <span class="v2-route-list-id">#${escapeHtml(route.id)}</span>
+        <span class="v2-route-list-copy"><strong>${escapeHtml(route.name)}</strong><small data-route-row-summary>${escapeHtml(summary)}</small></span>
+      </button>
+      <span class="v2-route-group-strip" aria-label="Encounter methods">
+        ${renderOverrideButton(route, true)}
+        ${state.enabledGroups.map((group) => renderSidebarGroup(route, group)).join("")}
+      </span>
+    </article>`;
+  }
+
   function renderLibrary() {
     if (!library) return;
     const previousScroll = library.scrollTop;
     const visible = model.routes.map((route) => ({ route, state: routeFilterState(route) })).filter((entry) => entry.state.visible);
     if (routeCount) routeCount.textContent = `${visible.length}/${model.routes.length}`;
-    library.innerHTML = visible.length ? visible.map(({ route, state }) => {
-      const selected = String(route.id) === String(model.selectedRouteId);
-      const edits = routeChangeCount(route.id);
-      const speciesCount = new Set(sourceGroups(route).flatMap((group) => group.targets)
-        .filter((target) => target.symbol !== "SPECIES_NONE")
-        .map((target) => speciesIdentity(target.symbol, target.form))).size;
-      const errors = routeValidationCount(route.id);
-      return `<article class="v2-route-list-row${selected ? " is-selected" : ""}${edits ? " is-dirty" : ""}${errors ? " is-invalid" : ""}" data-route-row="${escapeHtml(route.id)}">
-        <button class="v2-route-select" type="button" data-route-select="${escapeHtml(route.id)}" aria-pressed="${selected}">
-          <span class="v2-route-list-id">#${escapeHtml(route.id)}</span>
-          <span class="v2-route-list-copy"><strong>${escapeHtml(route.name)}</strong><small>${escapeHtml(mapLabel(route))} · ${speciesCount} species${edits ? ` · ${edits} changed` : ""}${errors ? ` · ${errors} error${errors === 1 ? "" : "s"}` : ""}</small></span>
-        </button>
-        <span class="v2-route-group-strip" aria-label="Encounter methods">
-          ${renderOverrideButton(route, true)}
-          ${state.enabledGroups.map((group) => renderSidebarGroup(route, group)).join("")}
-        </span>
-      </article>`;
-    }).join("") : `<p class="v2-route-empty">No routes match the active methods and search.</p>`;
-    library.scrollTop = previousScroll;
+    library.innerHTML = visible.length
+      ? visible.map(({ route, state }) => renderRouteRow(route, state)).join("")
+      : `<p class="v2-route-empty">No routes match the active methods and search.</p>`;
+    if (previousScroll > 0) library.scrollTop = previousScroll;
   }
 
   function sourceGroup(route, key) {
@@ -780,10 +865,20 @@ export function createRoutesController({
     return `<div class="v2-route-overview-strip" aria-label="Encounter overview">${sidebarGroups(route).map((group) => renderSidebarGroup(route, group)).join("")}</div>`;
   }
 
-  function speciesOptions() {
-    return `<datalist id="${ROUTE_SPECIES_LIST_ID}">${model.species.map((species) =>
+  function ensureSpeciesDatalist(populate = false) {
+    const nextKey = `${String(model.data?.sourceRevision || "")}\u0000${model.species.length}`;
+    if (!speciesList) speciesList = document.getElementById(ROUTE_SPECIES_LIST_ID);
+    if (!speciesList) {
+      speciesList = document.createElement("datalist");
+      speciesList.id = ROUTE_SPECIES_LIST_ID;
+      speciesList.dataset.routeControllerOwned = "true";
+      (document.body || inspector?.parentElement)?.appendChild(speciesList);
+    }
+    if (!populate || !speciesList || speciesListKey === nextKey) return;
+    speciesList.innerHTML = model.species.map((species) =>
       `<option value="${escapeHtml(shortSpeciesSymbol(species.symbol))}">${escapeHtml(species.name || species.symbol)}</option>`
-    ).join("")}</datalist>`;
+    ).join("");
+    speciesListKey = nextKey;
   }
 
   function inputNumber(routeId, path, value, label, min = 0, max = 100) {
@@ -967,7 +1062,7 @@ export function createRoutesController({
     if (!inspector) return;
     const route = selectedRoute();
     if (!route) {
-      inspector.innerHTML = `<p class="v2-route-empty">No route selected.</p>${speciesOptions()}${renderSpawnDialog()}`;
+      inspector.innerHTML = `<p class="v2-route-empty">No route selected.</p>${renderSpawnDialog()}`;
       showActiveDialog();
       return;
     }
@@ -991,7 +1086,7 @@ export function createRoutesController({
         ${section(route, "grass", "Grass", grass)}
         ${section(route, "sources", "Other sources", other)}
       </div>
-      ${renderEntryEditor(route)}${renderOverrideDialog(route)}${renderSpawnDialog()}${speciesOptions()}`;
+      ${renderEntryEditor(route)}${renderOverrideDialog(route)}${renderSpawnDialog()}`;
     showActiveDialog();
   }
 
@@ -1011,6 +1106,22 @@ export function createRoutesController({
       button.closest("[data-route-row]")?.classList.toggle("is-selected", selected);
       button.setAttribute("aria-pressed", String(selected));
     });
+  }
+
+  function routeRowElement(routeId) {
+    return [...(library?.querySelectorAll("[data-route-row]") || [])]
+      .find((row) => String(row.dataset.routeRow) === String(routeId)) || null;
+  }
+
+  function updateRouteRowStatus(route) {
+    if (!route) return;
+    const row = routeRowElement(route.id);
+    if (!row) return;
+    const { edits, errors, summary } = routeRowStats(route);
+    row.classList.toggle("is-dirty", Boolean(edits));
+    row.classList.toggle("is-invalid", Boolean(errors));
+    const summaryNode = row.querySelector("[data-route-row-summary]");
+    if (summaryNode) summaryNode.textContent = summary;
   }
 
   function selectRoute(routeId) {
@@ -1108,20 +1219,25 @@ export function createRoutesController({
     input.setAttribute("aria-invalid", String(!valid));
     const key = invalidKey("route", input.dataset.routeId, input.dataset.path);
     markInvalid(key, "Use a route value within the shown range.", !valid);
-    if (!valid) return false;
     const route = currentRouteById(input.dataset.routeId);
+    if (!valid || !route) {
+      updateRouteRowStatus(route);
+      return false;
+    }
     if (Number(input.value) === Number(effective(route.id, input.dataset.path, input.dataset.original))) {
+      updateRouteRowStatus(route);
       return true;
     }
     if (overrideSensitiveNumber(route, input.dataset.path, input.value) && !detachRouteOverride(route)) {
-      renderInspector();
+      input.value = effective(route.id, input.dataset.path, input.dataset.original);
+      updateRouteRowStatus(route);
       return false;
     }
     setEncounterDraft(input.dataset.routeId, input.dataset.path, input.value, input.dataset.original);
     validateTargetRange(route, input.dataset.path);
     input.closest("label")?.classList.toggle("is-dirty", effective(input.dataset.routeId, input.dataset.path, input.dataset.original) !== String(input.dataset.original));
     signalDirty();
-    renderLibrary();
+    updateRouteRowStatus(route);
     updateChrome(route);
     return true;
   }
@@ -1418,6 +1534,7 @@ export function createRoutesController({
     model.entryEditor = null;
     model.overrideEditor = false;
     model.spawnEditor = false;
+    invalidateAllRouteDerived();
     for (const key of model.encounterDrafts.keys()) {
       const [routeId, path] = splitBaselineKey(key);
       validateTargetRange(currentRouteById(routeId), path);
@@ -1428,6 +1545,8 @@ export function createRoutesController({
   }
 
   function clearCommitted(scope = "all") {
+    const options = scope && typeof scope === "object" ? scope : {};
+    if (options.scope) scope = options.scope;
     if (scope === "all" || scope === "encounters" || scope === "/save-encounters") {
       model.encounterDrafts.clear();
       model.overrideDrafts.clear();
@@ -1437,8 +1556,9 @@ export function createRoutesController({
     model.entryEditor = null;
     model.overrideEditor = false;
     model.spawnEditor = false;
+    invalidateAllRouteDerived();
     signalDirty();
-    render();
+    if (!options.deferRender) render();
   }
 
   function reset(scope = "all") {
@@ -1448,6 +1568,7 @@ export function createRoutesController({
 
   function refresh(nextData = null, { preserveDrafts = false } = {}) {
     model.data = currentData(appState, nextData);
+    invalidateAllRouteDerived();
     if (!featureAvailable("routeOverrides") && !preserveDrafts) {
       model.overrideDrafts.clear();
       model.overrideEditor = false;
@@ -1470,6 +1591,7 @@ export function createRoutesController({
     model.speciesByLookup.clear();
     model.speciesByBaseForm.clear();
     model.species.forEach(registerSpecies);
+    ensureSpeciesDatalist();
     if (preserveDrafts) {
       for (const key of [...model.invalidInputs.keys()]) {
         if (key.startsWith("rebase:")) model.invalidInputs.delete(key);
@@ -1577,11 +1699,15 @@ export function createRoutesController({
   }
 
   search?.addEventListener("input", () => {
-    model.query = search.value.trim().toLowerCase();
-    renderLibrary();
-    const scroll = inspector?.scrollTop || 0;
-    renderInspector();
-    if (inspector) inspector.scrollTop = scroll;
+    if (searchFrame) return;
+    searchFrame = requestAnimationFrame(() => {
+      searchFrame = 0;
+      model.query = search.value.trim().toLowerCase();
+      renderLibrary();
+      const scroll = inspector?.scrollTop || 0;
+      renderInspector();
+      if (inspector) inspector.scrollTop = scroll;
+    });
   }, { signal: abort.signal });
 
   filters?.addEventListener("click", (event) => {
@@ -1654,6 +1780,10 @@ export function createRoutesController({
     const input = event.target;
     if (input.matches("[data-route-number]")) applyNumberInput(input);
     else if (input.matches("[data-spawn-number]")) applySpawnInput(input);
+  }, { signal: abort.signal });
+
+  inspector?.addEventListener("focusin", (event) => {
+    if (event.target.matches(`[list="${ROUTE_SPECIES_LIST_ID}"]`)) ensureSpeciesDatalist(true);
   }, { signal: abort.signal });
 
   inspector?.addEventListener("change", (event) => {
@@ -1822,10 +1952,13 @@ export function createRoutesController({
       return selected;
     },
     destroy() {
+      if (searchFrame) cancelAnimationFrame(searchFrame);
+      searchFrame = 0;
       abort.abort();
+      if (speciesList?.dataset?.routeControllerOwned === "true") speciesList.remove();
+      speciesList = null;
     },
   };
 
-  refresh();
   return controller;
 }

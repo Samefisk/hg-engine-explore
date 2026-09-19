@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Overworld Devtools · Workshop</title>
+  <link rel="stylesheet" href="/v2-assets/devtools.css">
+  <script type="module" src="/v2-assets/devtools.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to session</a>
+  <header class="topbar">
+    <div><a class="back" href="/">← Workshop</a><h1>Overworld Devtools</h1><p>One live session. The same controls for people and agents.</p></div>
+    <div class="connection"><span id="connection" role="status">Connecting…</span><code>owctl dev help --json</code></div>
+  </header>
+  <main id="main">
+    <section class="session-bar" aria-label="Session state">
+      <div><small>State</small><strong id="sessionState">No session</strong></div>
+      <div><small>Mode</small><strong id="sessionMode">—</strong></div>
+      <div><small>Session / frame</small><code id="sessionIdentity">—</code></div>
+      <div><small>Loaded map / player</small><code id="playerPosition">Not observed</code></div>
+      <button id="refresh" type="button">Refresh state</button>
+    </section>
+    <p id="message" class="message" role="status" aria-live="polite">Start a private session. Your source save is not changed.</p>
+    <p id="controlStatus" class="message" role="status" aria-live="polite" hidden></p>
+    <p id="unknownOutcomes" class="message error" role="status" aria-live="polite" hidden></p>
+    <div class="columns">
+      <div class="primary">
+        <section class="panel screen-panel" aria-labelledby="screenHeading">
+          <div class="section-head"><h2 id="screenHeading">Optional game image</h2><button id="capture" type="button">Capture</button></div>
+          <div class="screen"><img id="screen" alt="Latest captured Nintendo DS screens" hidden><p id="screenEmpty">No screen has been captured.</p></div>
+          <p id="screenCaption" class="muted">Images are off by default. Capture is an optional human view, never test proof.</p>
+          <div class="controls">
+            <button data-op="play" type="button">Play</button><button data-op="pause" type="button">Pause</button>
+            <label>Frames<input id="stepFrames" type="number" min="1" max="600" value="1"></label>
+            <label class="keys-label">Keys<input id="stepKeys" placeholder="UP, B" autocomplete="off"></label>
+            <button id="step" type="button">Advance</button>
+          </div>
+          <label class="check"><input id="keyboard" type="checkbox">Use keyboard while this page has focus</label>
+          <p class="muted">Arrow keys: move · Z: A · X: B · A: Y · S: X · Q/W: L/R · Enter: Start · Shift: Select. Input stops on blur. Each input chunk is limited to 8 frames.</p>
+        </section>
+        <section class="panel" aria-labelledby="actorsHeading">
+          <div class="section-head"><h2 id="actorsHeading">Observed actors</h2><button data-op="inspect" type="button">Inspect</button></div>
+          <p class="muted">Choose a current actor from this list. Screen pixels are not used to guess its identity or map position.</p>
+          <div id="actors" class="actor-list"><p class="empty">No actors observed.</p></div>
+          <div id="actorInspector" hidden><p id="actorSummary" class="muted"></p><button id="actorExplain" type="button">Explain selected actor</button><p id="explanationSummary" class="muted"></p><details id="explanationRaw"><summary>Observed profile and decision JSON</summary><pre id="explanationDetail" class="data"></pre></details><details id="actorRaw"><summary>Full actor JSON</summary><pre id="actorDetail" class="data"></pre></details></div>
+        </section>
+        <section class="panel" aria-labelledby="terrainHeading">
+          <div class="section-head"><h2 id="terrainHeading">Loaded terrain</h2><div class="inline"><label>Radius<input id="terrainRadius" type="number" min="1" max="12" value="4"></label><button id="terrain" type="button">Read terrain</button></div></div>
+          <p class="muted">These cells come from the running game. Unknown cells stay unknown.</p>
+          <div id="terrainGrid" class="terrain-wrap"><p class="empty">No terrain capture.</p></div>
+        </section>
+      </div>
+      <aside class="secondary" aria-label="Session tools">
+        <section class="panel">
+          <h2>Start &amp; reset</h2>
+          <form id="startForm">
+            <label>ROM path <small>Blank uses the current test ROM</small><input name="rom" placeholder="test.nds"></label>
+            <label>Save path <small>Raw melonDS .sav is supported</small><input name="save" value="test.sav" placeholder="test.sav"></label>
+            <label>Initial mode<select name="mode"><option value="normal">Normal · no setup changes yet</option><option value="prepared">Prepared setup</option></select></label>
+            <button class="primary-button" type="submit">Start private session</button>
+          </form>
+          <div class="actions"><button data-op="reset" type="button">Reset session</button><button class="danger" data-op="stop" type="button">Stop</button></div>
+          <p class="muted">Reset discards live state. Prepared actions are logged. They cannot stand in for normal-play proof.</p>
+          <details><summary>Build and save identity</summary><pre id="identity" class="data">Not loaded.</pre></details>
+        </section>
+        <section class="panel">
+          <h2>Find IDs</h2>
+          <form id="catalogForm"><div class="form-row"><label>Kind<select name="kind"><option value="species">Species</option><option value="maps">Maps</option><option value="moves">Moves</option></select></label><label>Search<input name="query" placeholder="Name or ID"></label></div><button type="submit">Find</button></form>
+          <p class="muted">Choose a result to fill a setup field. This does not change the game.</p>
+          <div id="catalogResults" class="actor-list"></div>
+        </section>
+        <section class="panel">
+          <h2>Move to a map</h2>
+          <form id="teleportForm"><fieldset data-prepared disabled>
+            <div class="form-row"><label>Map<input name="map" type="number" min="0" required></label><label>X<input name="x" type="number" required></label><label>Z<input name="z" type="number" required></label></div>
+            <label>Face<select name="facing"><option value="0">Up</option><option value="1" selected>Down</option><option value="2">Left</option><option value="3">Right</option></select></label>
+            <button type="submit">Request map warp</button>
+          </fieldset></form><p class="prepared-note">This marks the session prepared; it cannot prove normal-play setup. The game must complete the transition.</p>
+        </section>
+        <section class="panel">
+          <h2>Spawn a Pokémon</h2>
+          <form id="spawnForm"><fieldset data-prepared disabled>
+            <div class="form-row"><label>Species ID<input name="species" type="number" min="1" max="1075" placeholder="165" required></label><label>Form<input name="form" type="number" min="0" max="31" value="0"></label><label>Level<input name="level" type="number" min="1" max="100" value="5"></label></div>
+            <label>Role<select name="role"><option value="wild">Wild</option><option value="follower">Follower</option><option value="mounted">Mounted</option></select></label>
+            <div class="form-row"><label>Slot <small>Optional</small><input name="slot" type="number" min="0" max="5"></label><label>X <small>Optional</small><input name="x" type="number"></label><label>Z <small>Optional</small><input name="z" type="number"></label></div>
+            <button type="submit">Spawn &amp; inspect result</button>
+          </fieldset></form><p class="prepared-note">Form, level, X and Z apply to wild spawns. Follower and mounted spawns use the party slot's existing data; edit the party first to change it. This marks the session prepared; a request is not a confirmed spawn.</p>
+        </section>
+        <section class="panel">
+          <h2>Party slot</h2>
+          <form id="partyForm">
+            <div class="inline"><label>Slot <small>0 is the first slot</small><input name="slot" type="number" min="0" max="5" value="0" required></label><button id="partyRead" type="button">Read party</button></div>
+            <fieldset data-prepared disabled>
+              <div class="form-row"><label>Species ID<input name="species" type="number" min="1" max="1075" placeholder="Leave unchanged"></label><label>Form<input name="form" type="number" min="0" max="31" placeholder="Unchanged"></label><label>Level<input name="level" type="number" min="1" max="100"></label></div>
+              <label>Moves <small>Four IDs, comma-separated; 0 means empty</small><input name="moves" placeholder="10, 0, 0, 0"></label>
+              <div class="form-row"><label>HP<input name="hp" type="number" min="0"></label><label>Status <small>Numeric value</small><input name="status" type="number" min="0"></label></div>
+              <button type="submit">Apply to private party</button>
+            </fieldset>
+          </form>
+          <p class="prepared-note">A party edit marks the session prepared; it cannot prove normal-play setup. Reading the party does not change its mode.</p>
+          <pre id="partyDetail" class="data" hidden></pre>
+        </section>
+      </aside>
+    </div>
+    <div class="bottom-grid">
+      <section class="panel">
+        <h2>Record &amp; reuse game data</h2>
+        <p class="muted">Recording saves native memory and trace events, not images or video.</p>
+        <div class="actions"><button data-op="record.start" type="button">Start data recording</button><button data-op="record.stop" type="button">Stop data recording</button><button data-op="recording.export" type="button">Export data recording</button></div>
+        <form id="recipeForm"><label>Recipe name<input name="name" placeholder="route-30-ledyba" required></label><div class="actions"><button type="submit" value="save">Save setup</button><button type="submit" value="load">Load setup</button><button id="recipeList" type="button">List recipes</button></div></form>
+        <p id="recipeProgress" class="muted" role="status" hidden></p>
+        <pre id="recipes" class="data" hidden></pre>
+        <details><summary>Create a scenario draft</summary><form id="draftForm"><label>Name<input name="name" required></label><label>Expected result<textarea name="expectation" rows="3" required placeholder="Describe the visible result and the exact actor to check."></textarea></label><button type="submit">Create draft</button></form><p class="muted">First choose an actor from Observed actors. Draft creation rechecks that exact actor and rejects a changed or unverified identity. Drafts need review and an accepted scenario run. Export does not mark a roadmap item complete.</p></details>
+      </section>
+      <section class="panel">
+        <div class="section-head"><h2>Recent commands</h2><div class="actions"><button data-op="diagnostics" type="button">Read diagnostics</button><button id="help" type="button">API help</button></div></div>
+        <ol id="events" class="events"><li>No commands yet.</li></ol>
+        <div id="downloads" class="downloads"></div>
+      </section>
+    </div>
+    <section class="panel" aria-labelledby="testHeading">
+      <div class="section-head"><h2 id="testHeading">Checked tests</h2><div class="actions"><button id="testList" type="button">List tests</button><button id="testRefresh" type="button">Refresh test status</button></div></div>
+      <p class="muted">Tests use the same shared session. Stop your own manual session first. A completed run is not accepted proof until its manifest reports <code>acceptedProof: true</code>.</p>
+      <form id="testStartForm"><div class="form-row"><label>Saved test<select id="testName" name="name" required><option value="">List tests to choose one</option></select></label><button id="testStart" type="submit">Start checked test</button></div></form>
+      <p id="testCatalog" class="muted">No test list loaded.</p>
+      <p id="testProgress" role="status" aria-live="polite">No test status loaded.</p>
+      <p id="testLimits" class="muted"></p>
+      <p id="testSubject" class="muted"></p>
+      <p id="testFailure" class="message error" role="status" hidden></p>
+      <p id="testTransport" class="message error" role="status" hidden></p>
+      <p id="testManifest" class="muted"></p>
+      <form id="testRunForm"><div class="form-row"><label>Exact run ID<input id="testRunId" name="runId" autocomplete="off" placeholder="From test start or status"></label><button type="submit">Inspect run</button><button id="testCancel" type="button" disabled>Cancel this run</button><button id="testExport" type="button" disabled>Export manifest</button></div></form>
+      <p class="muted">Status and Cancel stay available during boot and bounded input. Cancel stops further input when the current bounded command returns. A lost response is shown with its request ID; it is not sent again.</p>
+      <details id="testRaw"><summary>Full test status JSON</summary><pre id="testDetail" class="data"></pre></details>
+      <details><summary>Validate or save a reviewed test file</summary>
+        <form id="testFileForm"><label>UTF-8 JSON file<input id="testFile" type="file" accept=".json,application/json" required></label><label>Save name <small>Must match the test ID; an existing test is not overwritten</small><input id="testSaveName" name="name" placeholder="route-30-ledyba"></label><div class="actions"><button type="submit" value="validate">Validate only</button><button type="submit" value="save">Save new test</button></div></form>
+        <p id="testFileResult" class="muted">Validation does not run the game or grant proof.</p>
+      </details>
+    </section>
+    <section class="panel" aria-labelledby="compareHeading">
+      <div class="section-head"><h2 id="compareHeading">Read and compare observations</h2><div class="actions"><button id="checkpoint" type="button">Save checkpoint</button><button id="readEvents" type="button">Read recent events</button></div></div>
+      <p class="muted">A checkpoint is a saved observation, not a save state. Compare shows the first exact JSON difference. A changed frame or actor is not itself a game bug. The event tail is limited to 30 entries, not a full history.</p>
+      <form id="compareForm"><div class="form-row"><label>Left artifact<input id="compareLeft" name="left" placeholder="session-123/checkpoint-123.json" required></label><label>Right artifact<input id="compareRight" name="right" placeholder="session-456/checkpoint-456.json" required></label></div><button type="submit">Compare saved JSON</button></form>
+      <p id="compareResult" class="muted">Save two checkpoints or enter their relative artifact paths.</p>
+      <details id="eventTailRaw"><summary>Recent event JSON</summary><pre id="eventTail" class="data"></pre></details>
+    </section>
+    <section class="panel result-panel">
+      <div class="section-head"><h2>Last command result</h2><button id="copyResult" type="button">Copy JSON</button></div>
+      <p id="resultSummary" class="muted">No command result yet.</p>
+      <details id="resultRaw"><summary>Full command JSON</summary><pre id="result" class="data" tabindex="0"></pre></details>
+      <details><summary>Direct command</summary><form id="commandForm"><label>Operation<input name="op" placeholder="inspect" required></label><label>Arguments <small>JSON object</small><textarea name="args" rows="4">{}</textarea></label><button type="submit">Send command</button></form></details>
+    </section>
+  </main>
+</body>
+</html>

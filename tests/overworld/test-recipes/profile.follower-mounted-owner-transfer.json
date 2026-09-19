@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.follower-mounted-owner-transfer",
+  "title": "Current saved follower profile transfers to mounted Owner",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/README.md#current-invariants-to-preserve",
+  "requirements": ["shared.follower-mounted-owner-transfer-v1"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 600, "noProgressFrames": 120, "minObservedFrames": 1},
+  "subjects": [{"id": "mankey", "species": 56, "role": "MOUNTED", "acquire": "existing"}],
+  "setup": [
+    {"id": "mount-current-follower", "op": "spawn",
+      "args": {"species": 56, "role": "mounted", "slot": 2, "profileDiagnostics": "owner-transfer"},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "bind-mount", "op": "bind", "args": {"subject": "mankey"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "observe-owner", "op": "step", "args": {"frames": 1, "keys": []},
+      "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "assertions": [
+    {"kind": "actor-field", "subject": "mankey", "path": "identityVerified", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "actor-field", "subject": "mankey", "path": "presentationAttached", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "actor-field", "subject": "mankey", "path": "inputOwnership", "operator": "eq", "value": 1, "when": "always"},
+    {"kind": "actor-field", "subject": "mankey", "path": "lane", "operator": "eq", "value": "OWNER", "when": "always"},
+    {"kind": "frame-count", "operator": "gte", "value": 1}
+  ]
+}

@@ -1,0 +1,4004 @@
+{
+  "schemaVersion": 1,
+  "id": "walk.cardinal.frames-1-32",
+  "title": "Exact native Walk matrix",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld_walk_frame_timing_spec.md",
+  "requirements": [
+    "legacy.mounted-frames"
+  ],
+  "budgets": {
+    "maxSeconds": 240,
+    "maxFrames": 4096,
+    "noProgressFrames": 60,
+    "minObservedFrames": 1061
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquire": "existing"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "mounted-frame-matrix-v1",
+      "subject": "cyndaquil"
+    }
+  ],
+  "setup": [
+    {
+      "id": "matrix-origin",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 588,
+        "z": 406,
+        "facing": 3
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-own-cyndaquil",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 10,
+        "hp": 1,
+        "status": 0
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "mount-own-follower",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "role": "mounted",
+        "slot": 0
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-cyndaquil",
+      "op": "bind",
+      "args": {
+        "subject": "cyndaquil"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "prepared-walk-lane",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 1
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "matrix-000",
+      "op": "walk-matrix.arm",
+      "args": {
+        "subject": "cyndaquil"
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-001",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-002",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-003",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 2
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-004",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-005",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-006",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 3
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-007",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-008",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-009",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 4
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-010",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-011",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-012",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 5
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-013",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-014",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-015",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 6
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-016",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-017",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-018",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 7
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-019",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-020",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-021",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 8
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-022",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-023",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-024",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 9
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-025",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-026",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-027",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 10
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-028",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-029",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-030",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 11
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-031",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-032",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-033",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 12
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-034",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-035",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-036",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 13
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-037",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-038",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-039",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 14
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-040",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-041",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-042",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 15
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-043",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-044",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-045",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 16
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-046",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-047",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-048",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 17
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-049",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-050",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-051",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 18
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-052",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-053",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-054",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 19
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-055",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-056",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-057",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 20
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-058",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-059",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-060",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 21
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-061",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-062",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-063",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 22
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-064",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-065",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-066",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 23
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-067",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-068",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-069",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 24
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-070",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-071",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-072",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 25
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-073",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-074",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-075",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 26
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-076",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-077",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-078",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 27
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-079",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-080",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-081",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 28
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-082",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-083",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-084",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 29
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-085",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-086",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-087",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 30
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-088",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-089",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-090",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 31
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-091",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-092",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-093",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 0,
+        "travelTime": 32
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-094",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-095",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-096",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 1
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-097",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP",
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-098",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-099",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-100",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 2
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-101",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "DOWN",
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-102",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-103",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-104",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 3
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-105",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP",
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-106",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-107",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-108",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 4
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-109",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "DOWN",
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-110",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-111",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-112",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 5
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-113",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP",
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-114",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-115",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-116",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 6
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-117",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "DOWN",
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-118",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-119",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-120",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 7
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-121",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP",
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-122",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-123",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-124",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 8
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-125",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "DOWN",
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-126",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-127",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-128",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 9
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-129",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP",
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-130",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-131",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-132",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 10
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-133",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "DOWN",
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-134",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-135",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-136",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 11
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-137",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP",
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-138",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-139",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-140",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 12
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-141",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "DOWN",
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-142",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-143",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-144",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 13
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-145",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP",
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-146",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-147",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-148",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 14
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-149",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "DOWN",
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-150",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-151",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-152",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 15
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-153",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP",
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-154",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-155",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-156",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 16
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-157",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "DOWN",
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-158",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-159",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-160",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 17
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-161",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP",
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-162",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-163",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-164",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 18
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-165",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "DOWN",
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-166",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-167",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-168",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 19
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-169",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP",
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-170",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-171",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-172",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 20
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-173",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "DOWN",
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-174",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-175",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-176",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 21
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-177",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP",
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-178",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-179",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-180",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 22
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-181",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "DOWN",
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-182",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-183",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-184",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 23
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-185",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP",
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-186",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-187",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-188",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 24
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-189",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "DOWN",
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-190",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-191",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-192",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 25
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-193",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP",
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-194",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-195",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-196",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 26
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-197",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "DOWN",
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-198",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-199",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-200",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 27
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-201",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP",
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-202",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-203",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-204",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 28
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-205",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "DOWN",
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-206",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-207",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-208",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 29
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-209",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP",
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-210",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-211",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-212",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 30
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-213",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "DOWN",
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-214",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-215",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-216",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 31
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-217",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP",
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-218",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-219",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-220",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 1,
+        "travelTime": 32
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-221",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "DOWN",
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-222",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-223",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-224",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "cyndaquil",
+        "directionMode": 2,
+        "travelTime": 5
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-225",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "gate-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-226",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "gate-released",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-227",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP",
+          "LEFT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "matrix-228",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-frame-matrix-v1",
+          "stage": "case-complete",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "matrix-229",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "matrix-230",
+      "op": "walk-matrix.close",
+      "args": {},
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "mounted-frame-matrix-v1",
+      "when": "final"
+    }
+  ]
+}

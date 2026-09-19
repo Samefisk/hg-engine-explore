@@ -1,0 +1,4848 @@
+{
+  "schemaVersion": 2,
+  "executionMethod": "shared-devtools",
+  "migration": "tools/overworld/runtime_proof_migration.json",
+  "sharedTests": {
+    "world.unmounted.spawn-zero-stutter": {
+      "evaluator": "unmounted-zero-stutter-v1",
+      "recipeSha256": "1e8619634ef8392b7ceffb834798cd3b50fba7d861645b10f244ed2bcc40eabb",
+      "minimumObservedFrames": 2600,
+      "proofLevel": "S3",
+      "mode": "normal",
+      "claims": [
+        "live-actor-identity",
+        "natural-input",
+        "population-bounds",
+        "frame-pacing"
+      ],
+      "requirements": [
+        "current.unmounted-zero-stutter"
+      ],
+      "recorderControlRequirement": null,
+      "measurementContract": {
+        "live-actor-identity": [
+          {
+            "name": "zero-stutter-follower-identity",
+            "operator": "eq",
+            "type": "array",
+            "validator": "meaningful-observation",
+            "expected": [56, "FOLLOWER", 1]
+          }
+        ],
+        "natural-input": [
+          {
+            "name": "zero-stutter-moving-frame-count",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 1800
+          },
+          {
+            "name": "zero-stutter-source-profile-binding",
+            "operator": "eq",
+            "type": "array",
+            "validator": "meaningful-observation",
+            "expected": [5, 6, 1]
+          }
+        ],
+        "population-bounds": [
+          {
+            "name": "zero-stutter-spawn-work-witness-count",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 1
+          },
+          {
+            "name": "zero-stutter-spawn-attempt-frame-span",
+            "operator": "lte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "maximum": 21
+          }
+        ],
+        "frame-pacing": [
+          {
+            "name": "zero-stutter-observed-frame-count",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 2600
+          },
+          {
+            "name": "zero-stutter-late-main-loop-count",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 0
+          },
+          {
+            "name": "zero-stutter-maximum-native-cycles",
+            "operator": "lte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "maximum": 2
+          },
+          {
+            "name": "zero-stutter-maximum-frame-sequence",
+            "operator": "lte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "maximum": 2
+          },
+          {
+            "name": "zero-stutter-maximum-arm9-ticks",
+            "operator": "lte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "maximum": 2800950
+          },
+          {
+            "name": "zero-stutter-player-render-stall-count",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 0
+          }
+        ]
+      },
+      "scope": "Unchanged Continue load of test.sav with its existing Mankey follower, then the exact 673-step Route 30 and Cherrygrove trigger. The strict Cherrygrove window binds Mankey's source-checked profile, completes an explicit destination scan within21 frames, and retains at least2600 continuous main-loop intervals, 1800 moving frames, a joined normal destination-search/finalizer witness, and zero extra game frames or player render stalls. Separate movement scenarios own follower Hop, Movement Chain timing, and population-count behavior. No image or host-clock evidence."
+    },
+    "warp.blocked-mid-motion": {
+      "evaluator": "warp-gate-v1",
+      "recipeSha256": "6a1be3b98f2de69ac86ff6543d5e70718c1111089095957fabcb91fc01548fba",
+      "minimumObservedFrames": 16,
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "claims": ["natural-input", "live-actor-identity", "logical-commit", "world-transition", "control-release"],
+      "requirements": ["legacy.warp-blocked-mid-motion"],
+      "recorderControlRequirement": null,
+      "scope": "Prepared Mounted Cyndaquil faces the loaded Cherrygrove door (555,391). One UP frame must leave the warp blocked under the custom Teleport profile. DOWN then starts a south Teleport to (555,398), and UP returns to (555,392) facing the door, without leaving map67. Each motion commits once and returns control. Exact original Walk profile restoration precedes normal UP input into the same door and arrival on map68. No setup travel or natural acquisition claim."
+    },
+    "walk.turn-skid.control-release": {
+      "evaluator": "turn-skid-v1",
+      "recipeSha256": "4e0be5eebf51019f63ab6ee42772e98ba18d5ce197daeabb24ccb521616560e7",
+      "minimumObservedFrames": 94,
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "claims": ["natural-input", "live-actor-identity", "logical-commit", "rendered-motion", "frame-pacing", "feedback-effect", "control-release"],
+      "requirements": ["current.turn-deceleration"],
+      "recorderControlRequirement": "shared.walk-matrix-recorder-control-v1",
+      "measurementContract": {
+        "natural-input": [{"name": "turn-skid-acceleration-durations", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [8, 8, 8, 7, 7, 7, 6, 6, 6, 5, 5, 5, 4]}],
+        "live-actor-identity": [{"name": "mounted-cyndaquil-identity-flags", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [1, "MOUNTED", 155, 1, 1, 1]}],
+        "logical-commit": [{"name": "turn-skid-terminal-boundaries-and-target", "operator": "eq", "type": "object", "validator": "terminal-boundary-target-v1", "requiredCount": 2, "requiredKeys": ["boundaryCount", "final", "target"]}],
+        "rendered-motion": [{"name": "turn-skid-pair-and-facing", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [0, 2, 2]}],
+        "frame-pacing": [{"name": "turn-skid-motion-schedules", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [[0, 1, 2, 3, 4, 5, 6, 7], [0, 1, 2, 3, 4]]}],
+        "feedback-effect": [{"name": "turn-skid-dust-effect-count", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+        "control-release": [{"name": "turn-skid-recovery-state", "operator": "eq", "type": "array", "validator": "turn-skid-recovery-v1"}]
+      },
+      "scope": "Prepared mounted Cyndaquil on one clear Cherrygrove lane. Normal Right input proves the authored thirteen-step acceleration times; normal Left reversal proves one 8-frame skid motion, one dust effect, its exact native Tick schedule, and a 5-frame recovery Walk one acceleration level slower than the pre-turn 4-frame speed. Prepared teleport, mount and direction-mode setup give no motion or timing credit."
+    },
+    "walk.wild.runner-stop-skid": {
+      "evaluator": "runner-stop-skid-v1",
+      "recipeSha256": "7f0c1e7d8eb9c746ce59355a2535bc91ccb8fb46611aa0da0901867bb977acce",
+      "minimumObservedFrames": 12,
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "claims": ["natural-input", "live-actor-identity", "engine-boundary", "logical-commit", "rendered-motion", "frame-pacing", "control-release"],
+      "requirements": ["legacy.runner-stop-skid"],
+      "recorderControlRequirement": null,
+      "scope": "One current Wild Stantler spawned through native finalization at map33 (584,406), then left next to the player on neutral input through its normal alert run until the Tired lifecycle submits a separate NONE stop request at speed four. The proof retains exact identity, the 0x07 INPUT and accepted one-tile 0x87 start, zero Movement Chain action and pause fields, every elapsed frame, one logical commit, terminal lifecycle, reservation release and private-session cleanup. Prepared spawning does not prove natural population spawning."
+    },
+    "walk.wild.runner-turn-runway": {
+      "evaluator": "runner-turn-runway-v1",
+      "recipeSha256": "6832de0b7135b5be6e5e2fe6cb08fa8247a80805d0bfcd27ce616b45baa4202d",
+      "minimumObservedFrames": 14,
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "claims": ["natural-input", "live-actor-identity", "profile-resolution", "collision-decision", "engine-boundary", "logical-commit", "rendered-motion", "frame-pacing", "control-release"],
+      "requirements": ["current.runner-turn-runway"],
+      "recorderControlRequirement": null,
+      "scope": "One current Wild Stantler spawned through native finalization at map33 (586,404), then left on neutral input until its planned straight runway blocks. The same-frame perpendicular proposal must start one eight-frame skid and one six-frame recovery Walk in the new direction. The proof retains exact identity and profile lane, blocked-to-ignored and accepted policy receipts, zero Movement Chain action or pause fields, both complete motion lifecycles, two logical commits, reservation release and private-session cleanup. Prepared spawning does not prove natural population spawning."
+    },
+    "battle.capture.wild-handoff": {
+      "evaluator": "wild-battle-handoff-v1",
+      "recipeSha256": "0927e9076b964aa4815605fc9c2e2524c66f04c266cc3b1e64829a8012fb4384",
+      "minimumObservedFrames": 12,
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "claims": ["natural-input", "live-actor-identity", "battle-capture-handoff"],
+      "requirements": ["legacy.wild-battle-handoff"],
+      "recorderControlRequirement": null,
+      "scope": "One checked spawned Wild Rattata on Route29. One complete natural Walk and normal player approach precede a natural A edge. The native request must succeed with the same current slot, species, personality and encounter generation. Prepared teleport and spawn give no motion, input or battle credit."
+    },
+    "walk.crash.feedback": {
+      "evaluator": "mounted-crash-v1",
+      "recipeSha256": "81d41c6046d433dfae7778b253e3542127f1d8d161081e34a5855a8ecb440eb2",
+      "minimumObservedFrames": 64,
+      "proofLevel": "S4",
+      "mode": "prepared",
+      "claims": ["natural-input", "live-actor-identity", "engine-boundary", "frame-pacing", "feedback-effect", "control-release"],
+      "requirements": ["legacy.crash"],
+      "recorderControlRequirement": "shared.crash-recorder-control-v1",
+      "scope": "One native stationary Crash with elapsed1–32, shake, sound1536, reset and one recovery Walk. Prepared locked-turning/sound fixture, not all authored profiles or audible output."
+    },
+    "observation.crash-reader-control": {
+      "evaluator": "live-crash-control-v1",
+      "recipeSha256": "682038c3bf06643d44ffc5af47ca4f6c716c422fe17af271bf37b34d63ac7105",
+      "minimumObservedFrames": 64,
+      "proofLevel": "S3",
+      "mode": "observer-control",
+      "claims": ["live-actor-identity", "controlled-action"],
+      "requirements": ["shared.crash-recorder-control-v1"],
+      "measurementContract": {
+        "live-actor-identity": [{"name": "bound-crash-control-subject", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+        "controlled-action": [
+          {"name": "same-reader-mode-fault", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+          {"name": "exact-mode-restoration", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}
+        ]
+      },
+      "scope": "Complete normal Crash and recovery before the same reader rejects invalid mode255. Restore exact state with two writes and zero guest execution; keep failure latched and close."
+    },
+    "walk.stomp.feedback": {
+      "evaluator": "mounted-stomp-v1",
+      "recipeSha256": "7abe7ebfc125a5610399e8aac779302a92062e920eb6d13eb3494bae72074fa6",
+      "minimumObservedFrames": 5,
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "claims": [
+        "natural-input",
+        "live-actor-identity",
+        "logical-commit",
+        "rendered-motion",
+        "feedback-effect",
+        "control-release"
+      ],
+      "requirements": [
+        "legacy.stomp"
+      ],
+      "recorderControlRequirement": "shared.stomp-recorder-control-v1",
+      "scope": "Two normal-input Walk moves at times2 and3 with threshold2, exact mounted identity, lifecycle, paired poses, native dust allocation and sound start; prepared lane fixture, not authored-profile timing or audible output."
+    },
+    "observation.stomp-policy-control": {
+      "evaluator": "live-stomp-control-v1",
+      "recipeSha256": "a2c42b9b3b65f68caeb89d0b91848b0b94309fa0ffe1cb4782baf515d0da21c5",
+      "minimumObservedFrames": 5,
+      "proofLevel": "S3",
+      "mode": "observer-control",
+      "claims": [
+        "live-actor-identity",
+        "controlled-action"
+      ],
+      "requirements": [
+        "shared.stomp-recorder-control-v1"
+      ],
+      "measurementContract": {
+        "live-actor-identity": [
+          {
+            "name": "bound-stomp-control-subject",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "controlled-action": [
+          {
+            "name": "same-reader-threshold-fault",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          },
+          {
+            "name": "exact-threshold-restoration",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ]
+      },
+      "scope": "Same native threshold reader rejects255 after two real feedback cases, restores exact state and closes; no execution after control."
+    },
+    "walk.diagonal.corner-block": {
+      "evaluator": "diagonal-corner-v1",
+      "recipeSha256": "fae8305f7342e6ffea9f655fde58057b6892eaffafd92a0aea969e8af570b8b0",
+      "minimumObservedFrames": 6,
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "claims": [
+        "natural-input",
+        "live-actor-identity",
+        "collision-decision",
+        "logical-commit",
+        "engine-boundary",
+        "control-release"
+      ],
+      "requirements": [
+        "legacy.diagonal-corner-block"
+      ],
+      "recorderControlRequirement": "shared.corner-recorder-control-v1",
+      "scope": "Native open diagonal with one blocked cardinal side, one normal rejection and one clear-side recovery. Seven original rows and exact ordered semantic events. Not authored-profile or soak proof."
+    },
+    "observation.corner-policy-control": {
+      "evaluator": "live-corner-control-v1",
+      "recipeSha256": "51661b59d16588d25fd2820aac470fb999e6157c8b6e0319bfe2e7c7a0605ccb",
+      "minimumObservedFrames": 6,
+      "proofLevel": "S3",
+      "mode": "observer-control",
+      "claims": [
+        "live-actor-identity",
+        "controlled-action"
+      ],
+      "requirements": [
+        "shared.corner-recorder-control-v1"
+      ],
+      "measurementContract": {
+        "live-actor-identity": [
+          {
+            "name": "bound-corner-control-subject",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "controlled-action": [
+          {
+            "name": "same-reader-policy-fault",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          },
+          {
+            "name": "exact-policy-restoration",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ]
+      },
+      "scope": "Same native corner policy reader rejects a one-byte allowance fault and proves exact restoration without guest execution. No gameplay credit."
+    },
+    "walk.wild.exact-frame": {
+      "evaluator": "wild-walk-v1",
+      "recipeSha256": "2177e2aef284273cdde797115e664c626049b2290822e9ebf596beeecf8d462a",
+      "minimumObservedFrames": 4,
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "claims": [
+        "natural-input",
+        "live-actor-identity",
+        "logical-commit",
+        "rendered-motion",
+        "frame-pacing",
+        "engine-boundary",
+        "control-release"
+      ],
+      "requirements": [
+        "legacy.wild-walk"
+      ],
+      "recorderControlRequirement": "shared.wild-clear-recorder-control-v1",
+      "scope": "One natural four-frame Walk by the exact requested Wild Rattata, seven original rows, actual Local clear and neutral input. Prepared own native spawn does not prove natural population spawning or a soak."
+    },
+    "observation.wild-clear-control": {
+      "evaluator": "live-wild-clear-control-v1",
+      "recipeSha256": "7243d4b44cd04b670c56a266c373534317fd30404a6bb16583d325e10383e8f2",
+      "minimumObservedFrames": 4,
+      "proofLevel": "S3",
+      "mode": "observer-control",
+      "claims": [
+        "live-actor-identity",
+        "controlled-action"
+      ],
+      "requirements": [
+        "shared.wild-clear-recorder-control-v1"
+      ],
+      "measurementContract": {
+        "live-actor-identity": [
+          {
+            "name": "bound-wild-clear-subject",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "controlled-action": [
+          {
+            "name": "same-reader-clear-fault",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          },
+          {
+            "name": "exact-clear-restoration",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          },
+          {
+            "name": "complete-natural-walk-before-control",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ]
+      },
+      "scope": "After one actual natural Walk clear, fault only its current active byte through the same native reader and unchanged checker, then exactly restore with unchanged registers/clocks. Separate observer control, no movement credit."
+    },
+    "mount.movement.frame-pacing": {
+      "evaluator": "mounted-frame-pacing-v1",
+      "recipeSha256": "cc2e2d374b6cb31d14380500d0c34107a2ad2fff1522ddfd510dddece474ea20",
+      "minimumObservedFrames": 8,
+      "proofLevel": "S4",
+      "mode": "prepared",
+      "claims": [
+        "natural-input",
+        "live-actor-identity",
+        "rendered-motion",
+        "frame-pacing",
+        "engine-boundary",
+        "control-release"
+      ],
+      "requirements": [
+        "legacy.mounted-smoothness"
+      ],
+      "recorderControlRequirement": "shared.mounted-pose-recorder-control-v1",
+      "scope": "Seven ordinary held-Right Cyndaquil Walks with durations8,8,8,7,7,7,6 and all nine original pacing measurements, then one separately scoped recovery tile. Prepared own-party mount on a checked clear lane; no wild-object relocation or timing mutation. Actual pair poses, native callbacks, final queue poses and input readback. Not natural selection/spawn or intermittent soak proof."
+    },
+    "mount.detach-restores-control": {
+      "evaluator": "mounted-control-stress-v1",
+      "recipeSha256": "5154dc1f0cbc172882d93d30505dd81fd64549ae1c5fa0e600dccfb38609abfb",
+      "minimumObservedFrames": 5000,
+      "proofLevel": "S5",
+      "mode": "prepared",
+      "claims": ["natural-input", "live-actor-identity", "rendered-motion", "control-release"],
+      "requirements": ["legacy.cyndaquil-control-stress"],
+      "scope": "At least2000 complete native mounted Cyndaquil Walks,250 direction changes and5000 active motion frames through normal alternating input, then normal Select detach, one unmounted step, Select remount and one complete mounted recovery Walk. Prepared own-party setup; no natural selection or spawn claim."
+    },
+    "hop.mounted-single-motion": {
+      "evaluator": "mounted-control-stress-v1",
+      "recipeSha256": "46c63d3e04debfe401739fc810c1abd23cff509af0e01291357d2da17605a978",
+      "minimumObservedFrames": 5001,
+      "proofLevel": "S5",
+      "mode": "prepared",
+      "claims": ["natural-input", "live-actor-identity", "rendered-motion", "control-release"],
+      "requirements": ["legacy.mankey-control-stress"],
+      "scope": "At least200 complete native mounted Mankey Hops and5001 active motion frames through normal alternating input, then normal Select detach, one unmounted step, Select remount and one complete mounted recovery Hop. Prepared own-party setup; no natural selection or spawn claim."
+    },
+    "hop.mankey-visual-arc": {
+      "evaluator": "mounted-hop-arc-v1",
+      "recipeSha256": "73bea0c4f457bb5987cdfc7999a5106991b650e5a1fdc22947388845594d4d8c",
+      "minimumObservedFrames": 120,
+      "proofLevel": "S4",
+      "mode": "prepared",
+      "claims": ["natural-input", "live-actor-identity", "rendered-motion", "control-release"],
+      "requirements": ["legacy.mankey-hops"],
+      "scope": "Three natural mounted Mankey Hops in DOWN, RIGHT, LEFT order. Each case retains the authenticated native elapsed-zero start, every elapsed1..duration rendered height, exact actor lifecycle, logical travel and idle control return. Prepared own-party setup; no natural selection or spawn claim."
+    },
+    "hop.cardinal-and-diagonal": {
+      "evaluator": "mounted-nearest-diagonal-v1",
+      "recipeSha256": "c29185736304b7bd377d5c8a74a4c0963d9f6ca6a326b94d27f05b11e29e551d",
+      "minimumObservedFrames": 32,
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "claims": ["natural-input", "live-actor-identity", "rendered-motion", "control-release"],
+      "requirements": ["legacy.mankey-nearest-diagonal"],
+      "scope": "One natural mounted Mankey UP Hop from Cherrygrove map67 (545,392). Authenticated zero-frame native queries show every straight landing rejected and both a nearer off-axis and equal diagonal landing allowed in the current profile order. The normal input must select the first allowed near target and retain the elapsed-zero start, full arc, lifecycle and idle control return. Prepared own-party setup; no natural selection or spawn claim."
+    },
+    "hop.ledge-up-and-down": {
+      "evaluator": "wild-ledge-v1",
+      "recipeSha256": "5791eeda9309a44204911844f8b3300385defd3e1b0105905b318cecf18a89aa",
+      "minimumObservedFrames": 16,
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "claims": ["collision-decision", "live-actor-identity"],
+      "requirements": ["legacy.wild-ledge-hop"],
+      "recorderControlRequirement": null,
+      "scope": "One live Wild Clefairy at its retained pool tile beside the map33 ledge. Two natural planner calls receive restored direction inputs: DOWN must start and finish one real two-tile Hop to (590,397), then UP must start and finish a second Hop back to (590,395), as required by the current jumpLevel=BOTH profile. Exact actor, profile, caller, linked body, lifecycles and private cleanup are retained. The fixture does not prove random direction selection or authored timing."
+    },
+    "teleport.wild-lifecycle": {
+      "evaluator": "wild-teleport-v1",
+      "recipeSha256": "e0ac853b3faf632e24b185857760e832506b54096fcbda6bd7a1f050b73c6c11",
+      "minimumObservedFrames": 16,
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "claims": ["natural-input", "live-actor-identity", "logical-commit", "frame-pacing", "control-release"],
+      "requirements": ["legacy.wild-teleport"],
+      "recorderControlRequirement": null,
+      "scope": "One current Wild Gastly spawned through native finalization at map33 (583,406), then left on neutral input until its normal planner completes one authored nine-frame Teleport. The proof retains exact identity, every elapsed frame, path advances before one logical commit at the target, terminal lifecycle, reservation release and private-session cleanup. It does not prove the separate fixed/per-tile visibility matrix or natural population spawning."
+    },
+    "teleport.fixed-and-per-tile": {
+      "evaluator": "mounted-teleport-matrix-v1",
+      "recipeSha256": "a6f269e38b20576501ab32a74a6c1d0df2ef8720cad516dfe7716ad69c62b67a",
+      "minimumObservedFrames": 32,
+      "proofLevel": "S4",
+      "mode": "prepared",
+      "claims": ["natural-input", "live-actor-identity", "logical-commit", "rendered-motion", "frame-pacing", "control-release"],
+      "requirements": ["legacy.teleport-timing"],
+      "recorderControlRequirement": null,
+      "scope": "Ten normal-input mounted Cyndaquil Teleports cover fixed and per-tile timing, four directions and both visibility modes. Checked lane configuration changes only locomotion, Teleport time and pause without advancing the game. The proof retains each completed frame from elapsed one through the duration endpoint, paired player and mount visibility, one logical commit, rendered travel and idle control return for each case. The native start event retains elapsed-zero intent and the selected duration at the same first completed boundary. Two fixed-mode travel distances prove distance-independent timing; a non-unit per-tile path must equal Teleport time multiplied by distance. Prepared own-party setup; no authored-profile or natural selection claim."
+    },
+    "observation.mount-pose-control": {
+      "evaluator": "live-mount-pose-control-v1",
+      "recipeSha256": "2bb9ffd913a7d77dbae56f38d947c49f0ddff49b343cdc5ad54e696eae8ef1fc",
+      "minimumObservedFrames": 1,
+      "proofLevel": "S3",
+      "mode": "observer-control",
+      "claims": [
+        "live-actor-identity",
+        "controlled-action"
+      ],
+      "requirements": [
+        "shared.mounted-pose-recorder-control-v1"
+      ],
+      "measurementContract": {
+        "live-actor-identity": [
+          {
+            "name": "bound-mounted-control-subject",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "controlled-action": [
+          {
+            "name": "same-reader-pose-fault",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          },
+          {
+            "name": "exact-pose-restoration",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ]
+      },
+      "scope": "One current mounted Cyndaquil pair read, one paused position-X fault through the same reader and checker, and exact restoration with unchanged identity, registers and clocks. Prepared own-party setup and warmup are excluded; this is not movement or natural spawn proof."
+    },
+    "observation.walk-policy-control": {
+      "evaluator": "live-walk-policy-control-v1",
+      "recipeSha256": "63ff96262ef24b1ceca7a785307df9e01b33efb48103c82244fccfdae29de820",
+      "minimumObservedFrames": 1,
+      "proofLevel": "S3",
+      "mode": "observer-control",
+      "claims": [
+        "live-actor-identity",
+        "controlled-action"
+      ],
+      "requirements": [
+        "shared.walk-policy-recorder-control-v1"
+      ],
+      "measurementContract": {
+        "live-actor-identity": [
+          {
+            "name": "bound-control-subject",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "controlled-action": [
+          {
+            "name": "same-reader-counter-fault",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          },
+          {
+            "name": "exact-restoration",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          },
+          {
+            "name": "complete-walk-lifecycle",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ]
+      },
+      "scope": "One bound Mounted Onix Walk, with a stopped-guest one-byte counter fault at its real COMMIT through the same native reader, exact restoration before game execution resumes, and one full native lifecycle. Prepared party/location/mount setup is excluded. No broad movement, natural spawning or Cyndaquil-specific proof."
+    },
+    "chain.ledyba-retry": {
+      "evaluator": "chain-retry-v1",
+      "recipeSha256": "8c1fb1c97e3dd94929dd72617c703b22bb911c1d8dfd9d5b134b231d4990cbeb",
+      "minimumObservedFrames": 16,
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "claims": [
+        "controlled-action",
+        "live-actor-identity",
+        "logical-commit",
+        "engine-boundary",
+        "rendered-motion",
+        "control-release"
+      ],
+      "requirements": [
+        "legacy.ledyba-chain-pause"
+      ],
+      "recorderControlRequirement": "legacy.live-observer-controls",
+      "scope": "One controlled rejection of a naturally selected action5 after natural Wild Ledyba spawn; profile-derived eligible commits, preserved action/ticks, full cooldown frame, four complete native reposition legs and terminal control. No forced count, RNG, cooldown, actor replacement or position setup."
+    },
+    "actor.inspect-current-and-stale": {
+      "evaluator": "actor-inspect-handle-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "515f9af6a0d1766de3d71316dae6ac1c51350b000065e8184a8d925e5484022a",
+      "requirements": [
+        "shared.actor-inspect-handle-v1"
+      ],
+      "claims": [
+        "controlled-action"
+      ],
+      "minimumObservedFrames": 1,
+      "measurementContract": {
+        "controlled-action": [
+          {
+            "name": "packaged-inspect-entry",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          },
+          {
+            "name": "bound-subject-identity",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          },
+          {
+            "name": "current-actor-byte-parity",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          },
+          {
+            "name": "stale-generation-rejection",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          },
+          {
+            "name": "owned-buffer-cleanup",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          },
+          {
+            "name": "native-call-boundaries",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ]
+      },
+      "scope": "Two authenticated native facade Inspect calls return the exact current saved follower and reject its stale generation. One native-inspect-cycle minimum; not gameplay motion, normal selection, broad actor identity, Scripted role or soak proof."
+    },
+    "mount.begin-current-follower": {
+      "evaluator": "mount-begin-current-follower-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "ba6033ba3c85cf07c417fcef8ad5a6383c4e4866fd7e9bf8df155007767e22fa",
+      "requirements": [
+        "legacy.mount-begin-current-follower"
+      ],
+      "claims": [
+        "natural-input",
+        "live-actor-identity",
+        "profile-resolution",
+        "control-release"
+      ],
+      "minimumObservedFrames": 1,
+      "recorderControlRequirement": "shared.owner-reader-control-v1",
+      "scope": "Prepared different previous follower, then native Y/Y/Select selects and mounts current Mankey. Same actor and presentation object retain its resolved Owner and complete one Hop. No natural spawning, rendered trajectory, broad movement or soak claim."
+    },
+    "actor.binding-current-context": {
+      "evaluator": "actor-binding-context-v1",
+      "proofLevel": "S3",
+      "mode": "normal",
+      "recipeSha256": "645569c2579493ea1eaae5b8b4b93652e0017ecec57ddfb5e4b934145a2b6217",
+      "requirements": [
+        "legacy.actor-binding-current-context"
+      ],
+      "claims": [
+        "live-actor-identity"
+      ],
+      "minimumObservedFrames": 1,
+      "scope": "One natural Wild Rattata's exact public owner context and subsequent Walk terminal; not general movement, transition or soak proof."
+    },
+    "world.transition.wild-invalidation": {
+      "evaluator": "wild-transition-invalidation-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "5c7009c55b63b3a006ad7395a3a2abb4f1f76399e98017d8714dec6b535643fd",
+      "requirements": [
+        "legacy.wild-transition"
+      ],
+      "claims": [
+        "natural-input",
+        "live-actor-identity",
+        "world-transition",
+        "control-release"
+      ],
+      "minimumObservedFrames": 16,
+      "scope": "One prepared Rattata then normal Route29 input: one natural Wild Walk, one map-context advance to Cherrygrove, ordered context-loss and rebind traces, old full-handle invalidation, current retained identity, and one settled recovery step. Prepared spawning gives no route or transition credit."
+    },
+    "world.transition.follower-rebind": {
+      "evaluator": "follower-transition-rebind-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "2c21c5e18c9d480d1a3f4413df6bec6b31aec91c08427c9509813c84a54a4473",
+      "requirements": [
+        "legacy.follower-transition"
+      ],
+      "claims": [
+        "natural-input",
+        "live-actor-identity",
+        "world-transition",
+        "control-release"
+      ],
+      "minimumObservedFrames": 16,
+      "scope": "Prepared Cyndaquil follower and normal Route29 input: one follower Walk, one map-context advance to Cherrygrove, same-lifetime field rebind with current engine identity, and one settled recovery step. Prepared party and follower setup give no route or transition credit."
+    },
+    "mount.transition-mid-motion": {
+      "evaluator": "mounted-hop-transition-v1",
+      "proofLevel": "S5",
+      "mode": "prepared",
+      "recipeSha256": "f5a5b3b79838d37868fa215b925da4ad5baafd0d222127066986f00f3ac59fcb",
+      "requirements": [
+        "legacy.mounted-transition"
+      ],
+      "claims": [
+        "natural-input",
+        "live-actor-identity",
+        "rendered-motion",
+        "world-transition",
+        "control-release"
+      ],
+      "minimumObservedFrames": 5000,
+      "recorderControlRequirement": null,
+      "scope": "Prepared Mankey at known map33 (671,402) boundary. Natural Right input must preserve an in-flight Hop through map60 rebind, exact remaining elapsed, paired presentation and recovery. At least5000 subsequent directional input frames retain ownership. The bounded map60 alternating route is a candidate until checked live execution accepts it."
+    },
+    "mount.walk-transition-mid-motion": {
+      "evaluator": "mounted-walk-transition-v1",
+      "proofLevel": "S4",
+      "mode": "prepared",
+      "recipeSha256": "98f42bd78a468c77b2c79036dcc3ad84ad73881a3b4e19c39e4ed88a7d2c0dde",
+      "requirements": [
+        "legacy.mounted-walk-transition"
+      ],
+      "claims": [
+        "natural-input",
+        "live-actor-identity",
+        "logical-commit",
+        "rendered-motion",
+        "frame-pacing",
+        "world-transition",
+        "control-release"
+      ],
+      "minimumObservedFrames": 24,
+      "recorderControlRequirement": null,
+      "scope": "Prepared mounted Cyndaquil at map33 (671,402), then held Right input crosses once to map60. The same actor lifetime rebinds at the elapsed-zero start of a complete Walk; public completed-frame positions keep player and Pokemon paired through one commit and ordered lifecycle. One separate Right recovery Walk returns idle control. Prepared teleport and party setup give no transition or movement credit."
+    },
+    "world.streaming.path-advance": {
+      "evaluator": "mounted-streaming-path-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "255566d3f4b0409892cbea391dc31609ac47bf566979ef6691658ddd131180f4",
+      "requirements": [
+        "legacy.mounted-streaming-path"
+      ],
+      "claims": [
+        "natural-input",
+        "live-actor-identity",
+        "streaming-path"
+      ],
+      "minimumObservedFrames": 16,
+      "recorderControlRequirement": null,
+      "scope": "Prepared mounted Ledyba at Route29 (594,403), then normal UP+RIGHT input completes two authored diagonal Walks to (596,401). Each motion retains one ordered public PATH_ADVANCED before commit, public stream states 0 to 1 to 2 to 0, both path axes, exact live identity, reservation release, mounted control return, and private-session cleanup. Prepared setup gives no path or movement credit."
+    },
+    "world.streaming.cardinal-held-route": {
+      "evaluator": "mounted-cardinal-streaming-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "53b8905b07d7187e2ab8c198a9e35d486ec160e0ec00d4df607c34920a5f3641",
+      "requirements": [
+        "legacy.cyndaquil-streaming-stress"
+      ],
+      "claims": [
+        "natural-input",
+        "live-actor-identity",
+        "streaming-path"
+      ],
+      "minimumObservedFrames": 80,
+      "recorderControlRequirement": null,
+      "scope": "Prepared mounted Cyndaquil at Route29 (584,403), then one held RIGHT input reaches at least (604,403) across a full 16-tile field-stream boundary. The route permits the one already queued east step allowed by the original terminal-x contract. Every Walk keeps ordered public path states and one current identity; the route drain and one LEFT recovery return idle. Prepared setup gives no path or movement credit."
+    },
+    "population.land-surf-separation": {
+      "evaluator": "land-surf-separation-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "1446b611965aa8b804e5fddf5caf7b88a11a773253ab5a6d87e57319e760b8bc",
+      "requirements": [
+        "legacy.cherrygrove-surf-spawn-terrain"
+      ],
+      "claims": [
+        "terrain-selection"
+      ],
+      "minimumObservedFrames": 100,
+      "recorderControlRequirement": null,
+      "scope": "Direct prepared teleport to Cherrygrove (543,393), read-only current-field binding of the saved Mankey follower, then an unchanged idle population window. Two natural Tentacool finalizers must retain Surf terrain and resolver context, receive no valid target, return failure, and create no Tentacool Wild actor. Prepared setup gives no population or terrain credit."
+    },
+    "population.spawn-work-budget": {
+      "evaluator": "spawn-work-budget-v1",
+      "proofLevel": "S3",
+      "mode": "normal",
+      "recipeSha256": "c12394512225217cfb28c8bc677944a3d2e68fe2e5ab9f0c01c0f701948d6d4d",
+      "requirements": [
+        "shared.spawn-work-budget-v1"
+      ],
+      "claims": [
+        "live-actor-identity",
+        "profile-resolution",
+        "population-bounds",
+        "engine-boundary",
+        "logical-commit",
+        "rendered-motion",
+        "frame-pacing"
+      ],
+      "measurementContract": {
+        "live-actor-identity": [
+          {
+            "name": "spawn-work-anchor-identity",
+            "operator": "eq",
+            "type": "array",
+            "validator": "meaningful-observation",
+            "expected": [1, "FOLLOWER", 56, 1]
+          },
+          {
+            "name": "spawn-work-entry-actor-identity",
+            "operator": "eq",
+            "type": "array",
+            "validator": "meaningful-observation",
+            "expected": [1, "WILD", 19, 1]
+          }
+        ],
+        "profile-resolution": [
+          {
+            "name": "spawn-work-profile-receipt-count",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          },
+          {
+            "name": "spawn-work-metadata-receipt-count",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          },
+          {
+            "name": "spawn-work-class-selection-receipt-count",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "population-bounds": [
+          {
+            "name": "spawn-work-maximum-candidate-queries",
+            "operator": "lte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "maximum": 12
+          },
+          {
+            "name": "spawn-work-total-candidate-queries",
+            "operator": "lte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "maximum": 240
+          }
+        ],
+        "engine-boundary": [
+          {
+            "name": "spawn-work-destination-update-count",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 21
+          },
+          {
+            "name": "spawn-work-completed-scan-count",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          },
+          {
+            "name": "spawn-work-successful-spawn-count",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          },
+          {
+            "name": "spawn-work-maximum-resumed-finalizer-arm9-ticks",
+            "operator": "lte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "maximum": 50000
+          }
+        ],
+        "logical-commit": [
+          {
+            "name": "spawn-work-entry-target-distance",
+            "operator": "lte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "maximum": 16
+          },
+          {
+            "name": "spawn-work-entry-offscreen-clearance",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 4
+          },
+          {
+            "name": "spawn-work-entry-normal-walk-evidence",
+            "operator": "eq",
+            "type": "array",
+            "validator": "meaningful-observation",
+            "expected": [3, 1, 1, 1, 1, 1, 1, 1]
+          },
+          {
+            "name": "spawn-work-entry-distance-progress",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 4
+          }
+        ],
+        "rendered-motion": [
+          {
+            "name": "spawn-work-entry-render-displacement",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 4
+          }
+        ],
+        "frame-pacing": [
+          {
+            "name": "spawn-work-late-main-loop-count",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 0
+          },
+          {
+            "name": "spawn-work-maximum-main-loop-arm9-ticks",
+            "operator": "lte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "maximum": 2800950
+          },
+          {
+            "name": "spawn-work-maximum-main-loop-native-cycles",
+            "operator": "lte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "maximum": 2
+          },
+          {
+            "name": "spawn-work-maximum-main-loop-frame-sequence",
+            "operator": "lte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "maximum": 2
+          },
+          {
+            "name": "spawn-work-post-spawn-pacing-count",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 4
+          },
+          {
+            "name": "spawn-work-player-interior-moving-frames",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 120
+          },
+          {
+            "name": "spawn-work-player-interior-render-stall-count",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 0
+          }
+        ]
+      },
+      "minimumObservedFrames": 120,
+      "recorderControlRequirement": null,
+      "scope": "Unchanged direct save load at Route 30 (585,406), read-only binding of the saved Mankey follower, then travel north and east to the clear lane and keep moving north-south through the first automatic population scan. One natural helper-owned queue attempt must resolve and prepare its profile once, begin an explicit destination scan with zero terrain-matcher queries, then resume the same prepared attempt with no repeated profile work across 20 batches of at most 12 observed terrain-matcher queries per completed game update. The next update must create one prepared Rattata at A between 1 and 16 cardinal tiles from B, with A at least four tiles beyond the player-relative camera extent. The exact actor must use normal Walk base speed, acceleration, Movement Chain, turn, pause, resume, and tired behavior while logical and rendered positions progress at least four tiles toward B. At least 120 measured player samples must be in transit. Every measured main loop must stay at or below two native cycles; one late loop fails. The extracted-C checks own the exact 240-candidate mask coverage. Setup gives no population, scan, movement, or pacing credit."
+    },
+    "profile.owner-reader-control": {
+      "evaluator": "owner-reader-control-v1",
+      "proofLevel": "S3",
+      "mode": "observer-control",
+      "recipeSha256": "690ef18f5ef67eb1378b0921688e66b12f5f7a90745575ac618980c9f01da72b",
+      "requirements": [
+        "shared.owner-reader-control-v1"
+      ],
+      "claims": [
+        "live-actor-identity",
+        "controlled-action"
+      ],
+      "minimumObservedFrames": 1,
+      "scope": "Native Owner byte reader calibration with exact restoration and no guest advancement; not normal gameplay."
+    },
+    "profile.follower-mounted-owner-transfer": {
+      "evaluator": "follower-mounted-owner-transfer-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "4e5a20951959ad5c8c2b0074674cd25033880f6d059c9c9f1aba6f88843cc4aa",
+      "requirements": [
+        "shared.follower-mounted-owner-transfer-v1"
+      ],
+      "claims": [
+        "live-actor-identity",
+        "profile-resolution"
+      ],
+      "minimumObservedFrames": 1,
+      "recorderControlRequirement": "shared.owner-reader-control-v1",
+      "scope": "Saved current FOLLOWER Mankey getter bytes transfer to Begin and mounted Owner, with the same final actor and input owner. Prepared transfer only; no normal Select, Hop completion, provenance, movement or soak proof."
+    },
+    "profile.resolve.packaged-rom-parity": {
+      "evaluator": "packaged-resolver-parity-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "c7fe5b6e027fd526c27738cecea6da8624e0392c3e0ae78663ed0090b27a2dff",
+      "requirements": [
+        "legacy.packaged-resolver-parity"
+      ],
+      "claims": [
+        "profile-resolution"
+      ],
+      "minimumObservedFrames": 1,
+      "scope": "Seven authenticated native resolver calls compared byte-for-byte and by ordered provenance with Workshop on the same blob. Observed frame unit is native cycles containing resolver work, not completed queues, boot padding, actor identity, or movement soak."
+    },
+    "world.unmounted.long-travel-cadence": {
+      "evaluator": "unmounted-cadence-v1",
+      "proofLevel": "S5",
+      "mode": "prepared",
+      "recipeSha256": "6bd92c88e1b32210baab6201ae9f80ff4d044243e84d91db0f52f3c3bb4378d6",
+      "requirements": [
+        "legacy.unmounted-long-travel"
+      ],
+      "claims": [
+        "live-actor-identity",
+        "natural-input",
+        "logical-commit",
+        "rendered-motion",
+        "control-release",
+        "host-cpu-pacing"
+      ],
+      "minimumObservedFrames": 5000,
+      "recorderControlRequirement": "legacy.live-route-observer-controls",
+      "scope": "Prepared saved Cyndaquil fixture, then normal unmounted input without interventions: at least5000 actual active movement frames,80 tiles,3 cells,2 maps,16 complete follower motions, exact handoff recovery and restored crash effects. All CPU cycles retained. Prepared setup gives no movement credit. Not mounted or every-map proof."
+    },
+    "world.unmounted.game-cadence": {
+      "evaluator": "unmounted-game-cadence-v1",
+      "proofLevel": "S5",
+      "mode": "prepared",
+      "recipeSha256": "412eaecd6dd38058335d63a95a36831132bc68a12819a52c81997d598ffe8a7b",
+      "requirements": [
+        "current.unmounted-game-cadence"
+      ],
+      "claims": [
+        "live-actor-identity",
+        "natural-input",
+        "logical-commit",
+        "rendered-motion",
+        "control-release"
+      ],
+      "minimumObservedFrames": 5000,
+      "guestQueueBudgetArm9Ticks": 5601900,
+      "recorderControlRequirement": "legacy.live-route-observer-controls",
+      "measurementContract": {
+        "live-actor-identity": [
+          {
+            "name": "normal-route-follower-identity-samples",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 1
+          }
+        ],
+        "natural-input": [
+          {
+            "name": "normal-route-active-frames",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 5000
+          },
+          {
+            "name": "normal-route-distinct-cells",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 3
+          },
+          {
+            "name": "normal-route-distinct-maps",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 2
+          },
+          {
+            "name": "normal-route-distinct-tiles",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 80
+          }
+        ],
+        "logical-commit": [
+          {
+            "name": "normal-route-player-errors",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 0
+          }
+        ],
+        "rendered-motion": [
+          {
+            "name": "normal-route-follower-render-errors",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 0
+          },
+          {
+            "name": "normal-route-complete-follower-motions",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 16
+          }
+        ],
+        "control-release": [
+          {
+            "name": "normal-route-actor-frame-gaps",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 0
+          }
+        ]
+      },
+      "scope": "Current game cadence claim: prepared saved Cyndaquil fixture, then normal unmounted input without interventions with the same route, identity, movement, streaming, rebind, crash and cleanup checks as the retained legacy route. Exact guest two-queue scheduler intervals must stay at or below 5601900 ARM9 ticks. Host process CPU samples and classifier results remain diagnostics only; host hitches do not grant or deny this game claim."
+    },
+    "world.unmounted.wild-soak": {
+      "evaluator": "current-actor-identity-v1",
+      "proofLevel": "S5",
+      "mode": "prepared",
+      "recipeSha256": "fd342e520200692f1a9e69cd705effc16b7c5f0856bfd95016ec20d64577cd37",
+      "requirements": [
+        "current.unmounted-wild-soak"
+      ],
+      "claims": [
+        "live-actor-identity"
+      ],
+      "minimumObservedFrames": 5000,
+      "scope": "Prepared open Route 30 field and one native-spawned Wild Bulbasaur, followed by 5000 continuous completed game frames with normal Wild AI and no intervention. The same actor must stay current, engine-bound and presentation-attached, and complete a natural Walk lifecycle. This supplies the Wild S5 actor, Walk and population role witness; separate route scenarios own player travel, streaming and transitions."
+    },
+    "observation.live-route-control": {
+      "evaluator": "live-route-control-v1",
+      "proofLevel": "S3",
+      "mode": "observer-control",
+      "recipeSha256": "cfbc10eb4f2d64664dac0febc34857cce7fe1d888c814f6cd470c20d73e08f66",
+      "requirements": [
+        "legacy.live-route-observer-controls"
+      ],
+      "claims": [
+        "live-actor-identity",
+        "controlled-action"
+      ],
+      "minimumObservedFrames": 4,
+      "scope": "Saved FOLLOWER Cyndaquil: four normal player moves with an early held segment and complete follower trace, then real CPU-work and player-render start-stall faults through unchanged route classifiers. Exact private-session cleanup required. Calibration only; no normal-route or S5 credit."
+    },
+    "observation.spawn-height-control": {
+      "evaluator": "live-spawn-height-control-v1",
+      "proofLevel": "S3",
+      "mode": "observer-control",
+      "recipeSha256": "8df8d859e0a246f1f565f484967f5fc4ae7a5c55b74d62d4f467df865384fd6a",
+      "requirements": [
+        "shared.spawn-height-recorder-control-v1"
+      ],
+      "claims": [
+        "live-actor-identity",
+        "controlled-action"
+      ],
+      "minimumObservedFrames": 16,
+      "scope": "One naturally spawned Wild Ledyba's own-target native height reader sees clean, wrong-Y and restored state inside one callback. The unchanged surface checker rejects the measured fault after a valid spawn baseline. Recorder calibration only, not normal gameplay credit."
+    },
+    "spawn.ledyba-pool-site": {
+      "evaluator": "pool-spawn-surface-v1",
+      "proofLevel": "S3",
+      "mode": "normal",
+      "recipeSha256": "dfb67b4f926b1906d214fa52be8376edb5e917b7499d5a6a07556922bde74526",
+      "requirements": [
+        "shared.ledyba-pool-site-v1",
+        "shared.ledyba-pool-surface-v1"
+      ],
+      "claims": [
+        "live-actor-identity",
+        "profile-resolution",
+        "natural-input",
+        "logical-commit",
+        "control-release",
+        "terrain-selection"
+      ],
+      "minimumObservedFrames": 16,
+      "recorderControlRequirement": "legacy.live-observer-controls",
+      "scope": "One naturally spawned Wild Ledyba is created at its off-screen Hop origin and starts its complete native Hop with actor and engine render at that origin, never the landing target, then preserves its own POOL position with loaded metatile permission, authored surfaces excluded and actual native terminal height. Universal unmodeled geometry, other species/roles, later movement and chains are not proved."
+    },
+    "spawn.appear-hop-timing": {
+      "evaluator": "appear-hop-timing-v1",
+      "proofLevel": "S4",
+      "mode": "prepared",
+      "recipeSha256": "1fc31e9db4f489d176c9ab515bcefef308b7519eae909862c0b6cbbb7dfb6915",
+      "requirements": [
+        "shared.appear-hop-timing-v1"
+      ],
+      "claims": [
+        "live-actor-identity",
+        "profile-resolution",
+        "rendered-motion",
+        "frame-pacing",
+        "control-release"
+      ],
+      "minimumObservedFrames": 14,
+      "recorderControlRequirement": null,
+      "measurementContract": {
+        "live-actor-identity": [
+          {
+            "name": "appear-hop-clefairy-identity",
+            "operator": "eq",
+            "type": "array",
+            "validator": "meaningful-observation",
+            "expected": [1, "WILD", 35, 1, 1, 0]
+          }
+        ],
+        "profile-resolution": [
+          {
+            "name": "appear-hop-startup-profile",
+            "operator": "eq",
+            "type": "array",
+            "validator": "meaningful-observation",
+            "expected": [35, 7, 1]
+          }
+        ],
+        "rendered-motion": [
+          {
+            "name": "appear-hop-rendered-arc",
+            "operator": "eq",
+            "type": "array",
+            "validator": "meaningful-observation",
+            "expected": [1, 0]
+          }
+        ],
+        "frame-pacing": [
+          {
+            "name": "appear-hop-command-order-and-tail",
+            "operator": "eq",
+            "type": "array",
+            "validator": "meaningful-observation",
+            "expected": [49, 62, 74, 255, 0]
+          }
+        ],
+        "control-release": [
+          {
+            "name": "appear-hop-terminal-control",
+            "operator": "eq",
+            "type": "array",
+            "validator": "meaningful-observation",
+            "expected": [0, 255]
+          }
+        ]
+      },
+      "scope": "One prepared native Wild Clefairy spawn resolves APPEAR_HOP, keeps one current attached identity, draws one same-tile vertical arc, runs jump/delay/restore in order on contiguous completed frames, and returns CHILL control on the first idle frame after restore. Prepared setup does not prove natural population selection or other spawn locomotion modes."
+    },
+    "chain.ledyba-witness": {
+      "evaluator": "ledyba-chain-v1",
+      "proofLevel": "S4",
+      "mode": "normal",
+      "recipeSha256": "2112073f0fdc37dacb9e47f969d6a03966c86b50f7cfdf1a838d0da2278cb8b9",
+      "requirements": [
+        "legacy.ledyba-normal-profile"
+      ],
+      "claims": [
+        "live-actor-identity",
+        "profile-resolution",
+        "natural-input",
+        "logical-commit",
+        "rendered-motion",
+        "control-release"
+      ],
+      "minimumObservedFrames": 5000,
+      "recorderControlRequirement": "legacy.live-observer-controls",
+      "scope": "Exact natural Wild Ledyba spawn and at least5000 continuous bound-subject frames. Check all later chain counts and motion, at least three complete four-leg rendered skids, and no overdue open chain. Requires separate current live recorder calibration."
+    },
+    "observation.ledyba-live-controls": {
+      "evaluator": "live-observer-control-v1",
+      "proofLevel": "S3",
+      "mode": "observer-control",
+      "recipeSha256": "eea688babf4b4b6410c081555cebbf821b438eeebb74b2f4f38e2d1578a02929",
+      "requirements": [
+        "legacy.live-observer-controls"
+      ],
+      "claims": [
+        "live-actor-identity",
+        "controlled-action"
+      ],
+      "minimumObservedFrames": 16,
+      "scope": "Natural Ledyba baseline then two actual native render-stall samples and a same-object inactive-bit fault, detected by the real recorders. Exact cleanup is required; no normal-play credit."
+    },
+    "actor.follower-direct-load": {
+      "evaluator": "current-actor-identity-v1",
+      "proofLevel": "S3",
+      "mode": "normal",
+      "recipeSha256": "77020249ed50a948f29ebbebd41c20d221931ccf81b7326a370f0e3f84a4e309",
+      "requirements": [
+        "shared.follower-direct-load.identity-v1"
+      ],
+      "claims": [
+        "live-actor-identity"
+      ],
+      "minimumObservedFrames": 16,
+      "scope": "Unchanged saved FOLLOWER Mankey after normal direct save load: exact saved identity, current native manager membership and attached presentation for 16 complete frames. No prepared teleport, party or spawn. No motion, natural spawn, chain, input or cadence proof."
+    },
+    "devtools.actor-identity": {
+      "evaluator": "current-actor-identity-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "ca7eeaa4eb6ba7c2292d60466ca95b99e226ccfa10e23647766d372516e2770d",
+      "requirements": [
+        "shared.actor-identity.prepared-v1"
+      ],
+      "claims": [
+        "live-actor-identity"
+      ],
+      "minimumObservedFrames": 16,
+      "scope": "Prepared field (native teleport to map 33 tile 585,405), then FOLLOWER Mankey: current full handle, source personality, native object-manager membership, owner map/field context, and presentation attachment for 16 coherent frames. No direct save-load, natural spawning, Y selection, chain, motion, cadence, or normal-play proof."
+    },
+    "walk.cardinal.frames-1-32": {
+      "evaluator": "mounted-frame-matrix-v1",
+      "recipeSha256": "247af2968af437527ac96464328c7ce8b756d38f4c487b2be54334c77b206c3b",
+      "minimumObservedFrames": 1061,
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "claims": [
+        "natural-input",
+        "live-actor-identity",
+        "profile-resolution",
+        "frame-pacing",
+        "control-release"
+      ],
+      "requirements": [
+        "legacy.mounted-frames"
+      ],
+      "recorderControlRequirement": "shared.walk-matrix-recorder-control-v1",
+      "scope": "All65 native Walk timing cases, full raw elapsed sequences, one lifecycle each and diagonal-only input gate. Controlled idle lane overrides do not prove authored profile timing."
+    },
+    "observation.walk-matrix-state-control": {
+      "evaluator": "live-walk-matrix-control-v1",
+      "recipeSha256": "6edec7e47c33b820148ba5a833588f737ef65d7ff4ecddedc3728bbb239e8b2a",
+      "minimumObservedFrames": 5,
+      "proofLevel": "S3",
+      "mode": "observer-control",
+      "claims": [
+        "live-actor-identity",
+        "controlled-action"
+      ],
+      "requirements": [
+        "shared.walk-matrix-recorder-control-v1"
+      ],
+      "measurementContract": {
+        "live-actor-identity": [
+          {
+            "name": "bound-matrix-control-subject",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "controlled-action": [
+          {
+            "name": "same-reader-state-fault",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          },
+          {
+            "name": "exact-state-restoration",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ]
+      },
+      "scope": "Native phase reader fault and exact restoration after two genuine Walk motions; not a timing-fault calibration."
+    }
+  },
+  "runnerKinds": {
+    "current.runner-turn-runway": "controlled-case",
+    "legacy.runner-stop-skid": "controlled-case",
+    "legacy.actor-binding-current-context": "normal-play",
+    "legacy.ledyba-normal-profile": "normal-play",
+    "legacy.unmounted-long-travel": "normal-play",
+    "legacy.live-observer-controls": "observer-control",
+    "legacy.live-route-observer-controls": "observer-control",
+    "legacy.acceleration-parity": "controlled-case",
+    "legacy.cherrygrove-surf-spawn-terrain": "controlled-case",
+    "legacy.crash": "controlled-case",
+    "legacy.cyndaquil-control-stress": "controlled-case",
+    "legacy.cyndaquil-step-taps": "controlled-case",
+    "legacy.cyndaquil-streaming-stress": "controlled-case",
+    "legacy.diagonal-corner-block": "controlled-case",
+    "legacy.diagonal-turn-skid": "controlled-case",
+    "legacy.follower-transition": "controlled-case",
+    "legacy.ledyba-chain-pause": "controlled-case",
+    "legacy.mankey-control-stress": "controlled-case",
+    "legacy.mankey-hops": "controlled-case",
+    "legacy.mankey-nearest-diagonal": "controlled-case",
+    "legacy.mount-begin-current-follower": "controlled-case",
+    "legacy.mounted-diagonal-streaming": "controlled-case",
+    "legacy.mounted-frames": "controlled-case",
+    "legacy.mounted-smoothness": "controlled-case",
+    "legacy.mounted-streaming-path": "controlled-case",
+    "legacy.mounted-transition": "controlled-case",
+    "legacy.mounted-walk-transition": "controlled-case",
+    "legacy.packaged-resolver-parity": "controlled-case",
+    "legacy.population-after-fast-travel": "controlled-case",
+    "legacy.stomp": "controlled-case",
+    "legacy.teleport-timing": "controlled-case",
+    "legacy.turn-skid": "controlled-case",
+    "legacy.unmounted-failed-grass-scan-pacing": "controlled-case",
+    "legacy.unmounted-follower-frame-cadence": "controlled-case",
+    "legacy.unmounted-wild-frame-cadence": "controlled-case",
+    "legacy.warp-blocked-mid-motion": "controlled-case",
+    "legacy.wild-battle-handoff": "controlled-case",
+    "legacy.wild-ledge-hop": "controlled-case",
+    "legacy.wild-ledge-reverse": "controlled-case",
+    "legacy.wild-teleport": "controlled-case",
+    "legacy.wild-transition": "controlled-case",
+    "legacy.wild-walk": "controlled-case"
+  },
+  "runners": {
+    "current.runner-turn-runway": [
+      "natural-input",
+      "live-actor-identity",
+      "profile-resolution",
+      "collision-decision",
+      "engine-boundary",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "control-release"
+    ],
+    "legacy.runner-stop-skid": [
+      "natural-input",
+      "live-actor-identity",
+      "engine-boundary",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "control-release"
+    ],
+    "legacy.actor-binding-current-context": [
+      "live-actor-identity"
+    ],
+    "legacy.ledyba-normal-profile": [
+      "live-actor-identity",
+      "profile-resolution",
+      "natural-input",
+      "logical-commit",
+      "rendered-motion",
+      "control-release"
+    ],
+    "legacy.unmounted-long-travel": [
+      "live-actor-identity",
+      "natural-input",
+      "logical-commit",
+      "rendered-motion",
+      "control-release",
+      "host-cpu-pacing"
+    ],
+    "legacy.live-observer-controls": [
+      "live-actor-identity",
+      "controlled-action"
+    ],
+    "legacy.live-route-observer-controls": [
+      "live-actor-identity",
+      "controlled-action"
+    ],
+    "legacy.acceleration-parity": [
+      "live-actor-identity",
+      "profile-resolution",
+      "logical-commit",
+      "engine-boundary"
+    ],
+    "legacy.crash": [
+      "natural-input",
+      "live-actor-identity",
+      "engine-boundary",
+      "frame-pacing",
+      "feedback-effect",
+      "control-release"
+    ],
+    "legacy.cherrygrove-surf-spawn-terrain": [
+      "terrain-selection"
+    ],
+    "legacy.cyndaquil-control-stress": [
+      "natural-input",
+      "live-actor-identity",
+      "rendered-motion",
+      "control-release"
+    ],
+    "legacy.cyndaquil-step-taps": [
+      "natural-input",
+      "live-actor-identity",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "engine-boundary",
+      "control-release"
+    ],
+    "legacy.cyndaquil-streaming-stress": [
+      "natural-input",
+      "live-actor-identity",
+      "streaming-path"
+    ],
+    "legacy.diagonal-corner-block": [
+      "natural-input",
+      "live-actor-identity",
+      "collision-decision",
+      "logical-commit",
+      "engine-boundary",
+      "control-release"
+    ],
+    "legacy.diagonal-turn-skid": [
+      "natural-input",
+      "live-actor-identity",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "feedback-effect",
+      "control-release"
+    ],
+    "legacy.follower-transition": [
+      "natural-input",
+      "live-actor-identity",
+      "world-transition",
+      "control-release"
+    ],
+    "legacy.ledyba-chain-pause": [
+      "controlled-action",
+      "live-actor-identity",
+      "logical-commit",
+      "engine-boundary",
+      "rendered-motion",
+      "control-release"
+    ],
+    "legacy.mankey-control-stress": [
+      "natural-input",
+      "live-actor-identity",
+      "rendered-motion",
+      "control-release"
+    ],
+    "legacy.mankey-hops": [
+      "natural-input",
+      "live-actor-identity",
+      "rendered-motion",
+      "control-release"
+    ],
+    "legacy.mankey-nearest-diagonal": [
+      "natural-input",
+      "live-actor-identity",
+      "rendered-motion",
+      "control-release"
+    ],
+    "legacy.mount-begin-current-follower": [
+      "natural-input",
+      "live-actor-identity",
+      "profile-resolution",
+      "control-release"
+    ],
+    "legacy.mounted-diagonal-streaming": [
+      "natural-input",
+      "live-actor-identity",
+      "streaming-path"
+    ],
+    "legacy.mounted-streaming-path": [
+      "natural-input",
+      "live-actor-identity",
+      "streaming-path"
+    ],
+    "legacy.mounted-frames": [
+      "natural-input",
+      "live-actor-identity",
+      "profile-resolution",
+      "frame-pacing",
+      "control-release"
+    ],
+    "legacy.mounted-smoothness": [
+      "natural-input",
+      "live-actor-identity",
+      "rendered-motion",
+      "frame-pacing",
+      "engine-boundary",
+      "control-release"
+    ],
+    "legacy.mounted-transition": [
+      "natural-input",
+      "live-actor-identity",
+      "rendered-motion",
+      "world-transition",
+      "control-release"
+    ],
+    "legacy.mounted-walk-transition": [
+      "natural-input",
+      "live-actor-identity",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "world-transition",
+      "control-release"
+    ],
+    "legacy.packaged-resolver-parity": [
+      "profile-resolution"
+    ],
+    "legacy.population-after-fast-travel": [
+      "natural-input",
+      "live-actor-identity",
+      "population-bounds",
+      "world-transition"
+    ],
+    "legacy.unmounted-failed-grass-scan-pacing": [
+      "natural-input",
+      "population-bounds",
+      "frame-pacing",
+      "control-release"
+    ],
+    "legacy.unmounted-follower-frame-cadence": [
+      "natural-input",
+      "live-actor-identity",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "host-cpu-pacing",
+      "engine-boundary",
+      "control-release"
+    ],
+    "legacy.unmounted-wild-frame-cadence": [
+      "natural-input",
+      "live-actor-identity",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "host-cpu-pacing",
+      "engine-boundary",
+      "control-release"
+    ],
+    "legacy.teleport-timing": [
+      "natural-input",
+      "live-actor-identity",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "control-release"
+    ],
+    "legacy.stomp": [
+      "natural-input",
+      "live-actor-identity",
+      "logical-commit",
+      "rendered-motion",
+      "feedback-effect",
+      "control-release"
+    ],
+    "legacy.turn-skid": [
+      "natural-input",
+      "live-actor-identity",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "feedback-effect",
+      "control-release"
+    ],
+    "legacy.warp-blocked-mid-motion": [
+      "natural-input",
+      "live-actor-identity",
+      "logical-commit",
+      "world-transition",
+      "control-release"
+    ],
+    "legacy.wild-ledge-hop": [
+      "collision-decision",
+      "live-actor-identity"
+    ],
+    "legacy.wild-teleport": [
+      "natural-input",
+      "live-actor-identity",
+      "logical-commit",
+      "frame-pacing",
+      "control-release"
+    ],
+    "legacy.wild-transition": [
+      "natural-input",
+      "live-actor-identity",
+      "world-transition",
+      "control-release"
+    ],
+    "legacy.wild-battle-handoff": [
+      "natural-input",
+      "live-actor-identity",
+      "battle-capture-handoff"
+    ],
+    "legacy.wild-walk": [
+      "natural-input",
+      "live-actor-identity",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "engine-boundary",
+      "control-release"
+    ],
+    "legacy.wild-ledge-reverse": [
+      "collision-decision",
+      "live-actor-identity"
+    ]
+  },
+  "measurementContracts": {
+    "current.runner-turn-runway": {
+      "natural-input": [{
+        "name": "runner-turn-natural-motion-count",
+        "operator": "eq",
+        "type": "integer",
+        "validator": "meaningful-observation",
+        "expected": 2
+      }],
+      "live-actor-identity": [{
+        "name": "runner-turn-stantler-identity-flags",
+        "operator": "eq",
+        "type": "array",
+        "validator": "meaningful-observation",
+        "expected": [1, "WILD", 234, 1, 1, 1, 1, 0]
+      }],
+      "profile-resolution": [{
+        "name": "runner-turn-profile-lane",
+        "operator": "eq",
+        "type": "array",
+        "validator": "meaningful-observation",
+        "expected": [2279901407, 98312, 8, 1, 4, 193, 1]
+      }],
+      "collision-decision": [{
+        "name": "runner-turn-runway-decisions",
+        "operator": "eq",
+        "type": "array",
+        "validator": "meaningful-observation",
+        "expected": [2, 0, 1, 1]
+      }],
+      "engine-boundary": [{
+        "name": "runner-turn-policy-boundaries",
+        "operator": "eq",
+        "type": "array",
+        "validator": "meaningful-observation",
+        "expected": [129, 4, 1, 131, 5, 1, 161, 5, 1]
+      }],
+      "logical-commit": [{
+        "name": "runner-turn-terminal-boundaries-and-target",
+        "operator": "eq",
+        "type": "object",
+        "validator": "terminal-boundary-target-v1",
+        "requiredCount": 2,
+        "requiredKeys": ["boundaryCount", "final", "target"]
+      }],
+      "rendered-motion": [{
+        "name": "runner-turn-skid-recovery-and-corner",
+        "operator": "eq",
+        "type": "array",
+        "validator": "meaningful-observation",
+        "expected": [8, 6, 1]
+      }],
+      "frame-pacing": [{
+        "name": "runner-turn-motion-schedules",
+        "operator": "eq",
+        "type": "array",
+        "validator": "meaningful-observation",
+        "expected": [[0, 1, 2, 3, 4, 5, 6, 7], [0, 1, 2, 3, 4, 5]]
+      }],
+      "control-release": [{
+        "name": "runner-turn-control-return-count",
+        "operator": "eq",
+        "type": "integer",
+        "validator": "meaningful-observation",
+        "expected": 2
+      }]
+    },
+    "legacy.runner-stop-skid": {
+      "natural-input": [{
+        "name": "runner-stop-start-count",
+        "operator": "eq",
+        "type": "integer",
+        "validator": "meaningful-observation",
+        "expected": 1
+      }],
+      "live-actor-identity": [{
+        "name": "runner-stantler-identity-flags",
+        "operator": "eq",
+        "type": "array",
+        "validator": "meaningful-observation",
+        "expected": [1, "WILD", 234, 1, 1, 1, 1, 0]
+      }],
+      "engine-boundary": [{
+        "name": "runner-stop-normal-none-boundary",
+        "operator": "eq",
+        "type": "array",
+        "validator": "meaningful-observation",
+        "expected": [255, 3, 1, 8, 7, 135, 0, 0]
+      }],
+      "logical-commit": [{
+        "name": "runner-stop-commit-and-target",
+        "operator": "eq",
+        "type": "object",
+        "validator": "wild-teleport-terminal-v1",
+        "requiredKeys": ["origin", "target", "preCommit", "terminalCommit", "terminalLogical"]
+      }],
+      "rendered-motion": [{
+        "name": "runner-stop-one-tile-eight-frame-walk",
+        "operator": "eq",
+        "type": "array",
+        "validator": "meaningful-observation",
+        "expected": [1, 8]
+      }],
+      "frame-pacing": [{
+        "name": "runner-stop-elapsed-schedule",
+        "operator": "eq",
+        "type": "array",
+        "validator": "meaningful-observation",
+        "expected": [0, 1, 2, 3, 4, 5, 6, 7, 8]
+      }],
+      "control-release": [{
+        "name": "runner-stop-terminal-control",
+        "operator": "eq",
+        "type": "array",
+        "validator": "meaningful-observation",
+        "expected": ["NONE", "IDLE", 0]
+      }]
+    },
+    "legacy.actor-binding-current-context": {
+      "live-actor-identity": [
+        {
+          "name": "binding-live-subject-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        },
+        {
+          "name": "binding-owner-context-mismatch-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "binding-identity-failure-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ]
+    },
+    "legacy.ledyba-normal-profile": {
+      "live-actor-identity": [
+        {
+          "name": "normal-ledyba-identity-samples",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "normal-ledyba-public-profile-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "natural-input": [
+        {
+          "name": "normal-ledyba-complete-chain-intervals",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 3
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "normal-ledyba-chain-errors",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "normal-ledyba-render-errors",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "normal-ledyba-complete-actions",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 3
+        }
+      ],
+      "control-release": [
+        {
+          "name": "normal-ledyba-spawn-and-terminal",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ]
+    },
+    "legacy.unmounted-long-travel": {
+      "live-actor-identity": [
+        {
+          "name": "normal-route-follower-identity-samples",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "natural-input": [
+        {
+          "name": "normal-route-active-frames",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 5000
+        },
+        {
+          "name": "normal-route-distinct-cells",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 3
+        },
+        {
+          "name": "normal-route-distinct-maps",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 2
+        },
+        {
+          "name": "normal-route-distinct-tiles",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 80
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "normal-route-player-errors",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "normal-route-follower-render-errors",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "normal-route-complete-follower-motions",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 16
+        }
+      ],
+      "control-release": [
+        {
+          "name": "normal-route-actor-frame-gaps",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "host-cpu-pacing": [
+        {
+          "name": "normal-route-process-cpu-hitches",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ]
+    },
+    "legacy.live-observer-controls": {
+      "live-actor-identity": [
+        {
+          "name": "live-recorder-baseline-identity",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "controlled-action": [
+        {
+          "name": "live-recorder-baseline-and-faults",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "name": "live-recorder-render-fault-frames",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 2
+        }
+      ]
+    },
+    "legacy.live-route-observer-controls": {
+      "live-actor-identity": [
+        {
+          "name": "live-route-recorder-baseline-identity",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "controlled-action": [
+        {
+          "name": "live-route-recorder-baseline-and-faults",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    "legacy.crash": {
+      "natural-input": [
+        {
+          "name": "crash-held-input-hit-frame",
+          "operator": "gt",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "crash-cyndaquil-identity-flags",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "MOUNTED",
+            155,
+            1,
+            1
+          ]
+        }
+      ],
+      "engine-boundary": [
+        {
+          "name": "single-stationary-crash",
+          "operator": "eq",
+          "type": "array",
+          "validator": "stationary-single-crash-v1"
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "crash-presentation-elapsed-schedule",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32
+          ]
+        }
+      ],
+      "feedback-effect": [
+        {
+          "name": "crash-sound-and-shake",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1
+          ]
+        }
+      ],
+      "control-release": [
+        {
+          "name": "crash-reset-and-recovery-state",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            "IDLE",
+            0,
+            1,
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    "legacy.cyndaquil-step-taps": {
+      "natural-input": [
+        {
+          "name": "cyndaquil-tap-completed-step-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 100
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "cyndaquil-tap-identity-flags",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "MOUNTED",
+            155,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "cyndaquil-tap-player-step-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 100
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "cyndaquil-tap-pair-sync-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 100
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "cyndaquil-tap-eight-frame-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 100
+        },
+        {
+          "name": "cyndaquil-tap-maximum-start-delay",
+          "operator": "lte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "maximum": 3
+        }
+      ],
+      "engine-boundary": [
+        {
+          "name": "cyndaquil-tap-successful-boundary-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 100
+        }
+      ],
+      "control-release": [
+        {
+          "name": "cyndaquil-tap-recovery-state",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            "IDLE",
+            0,
+            1,
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    "legacy.diagonal-turn-skid": {
+      "natural-input": [
+        {
+          "name": "diagonal-turn-skid-acceleration-durations",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            8,
+            8,
+            8,
+            4,
+            4,
+            4,
+            2
+          ]
+        },
+        {
+          "name": "diagonal-turn-skid-natural-commit-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 7
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "diagonal-turn-skid-cyndaquil-identity-flags",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "MOUNTED",
+            155,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "diagonal-turn-skid-boundaries-and-target",
+          "operator": "eq",
+          "type": "object",
+          "validator": "terminal-boundary-target-v1",
+          "requiredCount": 3,
+          "requiredKeys": [
+            "boundaryCount",
+            "final",
+            "target"
+          ]
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "diagonal-turn-skid-pair-contract",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "diagonal-turn-skid-motion-schedules",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            [
+              0,
+              1,
+              2,
+              3
+            ],
+            [
+              0,
+              1,
+              2,
+              3
+            ],
+            [
+              0,
+              1
+            ]
+          ]
+        }
+      ],
+      "feedback-effect": [
+        {
+          "name": "diagonal-turn-skid-dust-effect-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "control-release": [
+        {
+          "name": "diagonal-turn-skid-recovery-state",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            "IDLE",
+            0,
+            1,
+            0
+          ]
+        }
+      ]
+    },
+    "legacy.follower-transition": {
+      "natural-input": [
+        {
+          "name": "follower-transition-acquisition-and-motion",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1
+          ]
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "follower-transition-role",
+          "operator": "eq",
+          "type": "string",
+          "validator": "meaningful-observation",
+          "expected": "FOLLOWER"
+        },
+        {
+          "name": "follower-transition-identity-flags",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "FOLLOWER",
+            155,
+            1,
+            1,
+            "FOLLOWER",
+            155,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "world-transition": [
+        {
+          "name": "follower-transition-map-change",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            67
+          ]
+        },
+        {
+          "name": "follower-transition-field-rebind",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "control-release": [
+        {
+          "name": "follower-transition-player-recovery",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ]
+    },
+    "legacy.mounted-walk-transition": {
+      "natural-input": [
+        {
+          "name": "mounted-walk-transition-route-milestones",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            [
+              671,
+              402
+            ],
+            1
+          ]
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "mounted-walk-transition-identity-flags",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "MOUNTED",
+            155,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "mounted-walk-transition-boundary-and-target",
+          "operator": "eq",
+          "type": "object",
+          "validator": "terminal-boundary-target-v1",
+          "requiredCount": 1,
+          "requiredKeys": [
+            "boundaryCount",
+            "final",
+            "target"
+          ]
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "mounted-walk-transition-pair-samples",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "mounted-walk-transition-elapsed-schedule",
+          "operator": "eq",
+          "type": "object",
+          "validator": "contiguous-elapsed-v1",
+          "requiredKeys": [
+            "start",
+            "duration",
+            "elapsed"
+          ]
+        },
+        {
+          "name": "mounted-walk-transition-maximum-callback-gap",
+          "operator": "lte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "maximum": 3
+        }
+      ],
+      "world-transition": [
+        {
+          "name": "mounted-walk-map-change",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            33,
+            60
+          ]
+        }
+      ],
+      "control-release": [
+        {
+          "name": "mounted-walk-transition-recovery-state",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            "IDLE",
+            0,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    "legacy.stomp": {
+      "natural-input": [
+        {
+          "name": "stomp-walk-input-results",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1
+          ]
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "stomp-cyndaquil-identity-flags",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "MOUNTED",
+            155,
+            1,
+            1
+          ]
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "stomp-player-step-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 2
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "stomp-pair-sync-results",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1
+          ]
+        }
+      ],
+      "feedback-effect": [
+        {
+          "name": "stomp-positive-negative-feedback",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1,
+            1,
+            0,
+            0,
+            0
+          ]
+        }
+      ],
+      "control-release": [
+        {
+          "name": "stomp-terminal-control-state",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            "IDLE",
+            0,
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    "legacy.turn-skid": {
+      "natural-input": [
+        {
+          "name": "turn-skid-acceleration-durations",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            8,
+            8,
+            8,
+            4,
+            4,
+            4,
+            2
+          ]
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "mounted-cyndaquil-identity-flags",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "MOUNTED",
+            155,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "turn-skid-terminal-boundaries-and-target",
+          "operator": "eq",
+          "type": "object",
+          "validator": "terminal-boundary-target-v1",
+          "requiredCount": 3,
+          "requiredKeys": [
+            "boundaryCount",
+            "final",
+            "target"
+          ]
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "turn-skid-pair-and-facing",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            0,
+            2,
+            2
+          ]
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "turn-skid-motion-schedules",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            [
+              0,
+              1,
+              2,
+              3
+            ],
+            [
+              0,
+              1,
+              2,
+              3
+            ],
+            [
+              0,
+              1
+            ]
+          ]
+        }
+      ],
+      "feedback-effect": [
+        {
+          "name": "turn-skid-dust-effect-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "control-release": [
+        {
+          "name": "turn-skid-recovery-state",
+          "operator": "eq",
+          "type": "array",
+          "validator": "turn-skid-recovery-v1"
+        }
+      ]
+    },
+    "legacy.wild-walk": {
+      "natural-input": [
+        {
+          "name": "natural-wild-walk-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "wild-rattata-identity-flags",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "wild-walk-target-commit-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "wild-walk-render-sample-counts",
+          "operator": "eq",
+          "type": "object",
+          "validator": "motion-sample-counts-v1",
+          "requiredKeys": [
+            "durations",
+            "sampleCounts"
+          ]
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "wild-walk-elapsed-schedules",
+          "operator": "eq",
+          "type": "object",
+          "validator": "motion-elapsed-schedules-v1",
+          "requiredKeys": [
+            "durations",
+            "sequences"
+          ]
+        }
+      ],
+      "engine-boundary": [
+        {
+          "name": "wild-walk-clear-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "control-release": [
+        {
+          "name": "wild-walk-idle-terminal-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ]
+    },
+    "legacy.wild-teleport": {
+      "natural-input": [
+        {
+          "name": "wild-teleport-start-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "wild-gastly-identity-flags",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "WILD",
+            92,
+            1,
+            1,
+            1,
+            1,
+            0
+          ]
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "wild-teleport-commit-and-target",
+          "operator": "eq",
+          "type": "object",
+          "validator": "wild-teleport-terminal-v1",
+          "requiredKeys": [
+            "origin",
+            "target",
+            "preCommit",
+            "terminalCommit",
+            "terminalLogical"
+          ]
+        },
+        {
+          "name": "wild-teleport-path-advance-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        },
+        {
+          "name": "wild-teleport-early-final-tile-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "wild-teleport-elapsed-schedule",
+          "operator": "eq",
+          "type": "object",
+          "validator": "contiguous-elapsed-v1",
+          "requiredKeys": [
+            "start",
+            "duration",
+            "elapsed"
+          ]
+        }
+      ],
+      "control-release": [
+        {
+          "name": "wild-teleport-terminal-control",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            "NONE",
+            "IDLE"
+          ]
+        }
+      ]
+    },
+    "legacy.wild-transition": {
+      "natural-input": [
+        {
+          "name": "wild-transition-acquisition-and-motion",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1
+          ]
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "wild-transition-role",
+          "operator": "eq",
+          "type": "string",
+          "validator": "meaningful-observation",
+          "expected": "WILD"
+        },
+        {
+          "name": "wild-transition-identity-flags",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "WILD",
+            19,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "world-transition": [
+        {
+          "name": "wild-transition-map-change",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            67
+          ]
+        },
+        {
+          "name": "wild-transition-old-handle-invalidated",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "control-release": [
+        {
+          "name": "wild-transition-player-recovery",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ]
+    },
+    "legacy.wild-battle-handoff": {
+      "natural-input": [
+        {
+          "name": "wild-battle-a-input-milestones",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "wild-battle-role",
+          "operator": "eq",
+          "type": "string",
+          "validator": "meaningful-observation",
+          "expected": "WILD"
+        },
+        {
+          "name": "wild-battle-identity-flags",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "WILD",
+            19,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "battle-capture-handoff": [
+        {
+          "name": "wild-battle-request-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        },
+        {
+          "name": "wild-battle-pending-species",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 19
+        },
+        {
+          "name": "wild-battle-slot-match",
+          "operator": "eq",
+          "type": "array",
+          "validator": "positive-identical-values",
+          "minItems": 2
+        },
+        {
+          "name": "wild-battle-personality-match",
+          "operator": "eq",
+          "type": "array",
+          "validator": "positive-identical-values",
+          "minItems": 2
+        },
+        {
+          "name": "wild-battle-encounter-generation-match",
+          "operator": "eq",
+          "type": "array",
+          "validator": "positive-identical-values",
+          "minItems": 2
+        }
+      ]
+    },
+    "legacy.acceleration-parity": {
+      "live-actor-identity": [
+        {
+          "name": "observed-role-counts",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            7,
+            7
+          ]
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "stable-profile-fingerprints",
+          "operator": "eq",
+          "type": "object",
+          "validator": "acceleration-terminal-series-v1",
+          "aspect": "profile",
+          "requiredKeys": [
+            "initials",
+            "series",
+            "durations"
+          ]
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "consecutive-terminal-commits",
+          "operator": "eq",
+          "type": "object",
+          "validator": "acceleration-terminal-series-v1",
+          "aspect": "commits",
+          "requiredKeys": [
+            "initials",
+            "series"
+          ]
+        }
+      ],
+      "engine-boundary": [
+        {
+          "name": "terminal-policy-states",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 14
+        }
+      ]
+    },
+    "legacy.cherrygrove-surf-spawn-terrain": {
+      "terrain-selection": [
+        {
+          "name": "surf-attempt-count",
+          "operator": "gt",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        },
+        {
+          "name": "tentacool-land-spawn-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ]
+    },
+    "legacy.cyndaquil-control-stress": {
+      "natural-input": [
+        {
+          "name": "held-input-commit-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 2000
+        },
+        {
+          "name": "held-input-turn-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 250
+        },
+        {
+          "name": "held-input-route-frame-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 5000
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "cyndaquil-species",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 155
+        },
+        {
+          "name": "mounted-object-pointer",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        },
+        {
+          "name": "actor-handle",
+          "operator": "eq",
+          "type": "object",
+          "validator": "actor-handle-current",
+          "requiredKeys": [
+            "slot",
+            "generation",
+            "fieldEpoch",
+            "mapGeneration",
+            "encounterGeneration",
+            "value"
+          ]
+        },
+        {
+          "name": "mounted-object-identity-flags",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1,
+            1,
+            1,
+            7,
+            155,
+            1
+          ]
+        },
+        {
+          "name": "encounter-generation-match",
+          "operator": "eq",
+          "type": "array",
+          "validator": "positive-identical-values",
+          "minItems": 3
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "valid-mounted-walk-callback-count",
+          "operator": "eq",
+          "type": "array",
+          "validator": "complete-motion-observation-v1",
+          "minimumTotal": 2000
+        }
+      ],
+      "control-release": [
+        {
+          "name": "dismount-remount-control-milestones",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            "IDLE",
+            0,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    "legacy.cyndaquil-streaming-stress": {
+      "natural-input": [
+        {
+          "name": "held-input-terminal-x",
+          "operator": "eq",
+          "type": "array",
+          "validator": "stream-target-reached-v1",
+          "distance": 20
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "streaming-cyndaquil-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "MOUNTED",
+            155,
+            1
+          ]
+        }
+      ],
+      "streaming-path": [
+        {
+          "name": "native-stream-contract",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    "legacy.diagonal-corner-block": {
+      "natural-input": [
+        {
+          "name": "natural-input-motion-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 2
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "diagonal-corner-cyndaquil-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "MOUNTED",
+            155,
+            1
+          ]
+        }
+      ],
+      "collision-decision": [
+        {
+          "name": "blocked-commit-sequence",
+          "operator": "eq",
+          "type": "array",
+          "validator": "blocked-state-unchanged-v1"
+        },
+        {
+          "name": "blocked-final-tile",
+          "operator": "eq",
+          "type": "array",
+          "validator": "blocked-state-unchanged-v1"
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "cardinal-logical-commit-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "engine-boundary": [
+        {
+          "name": "cardinal-lifecycle-counts",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1,
+            0,
+            1
+          ]
+        }
+      ],
+      "control-release": [
+        {
+          "name": "cardinal-terminal-result",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ]
+    },
+    "legacy.ledyba-chain-pause": {
+      "live-actor-identity": [
+        {
+          "name": "retry-natural-subject",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "controlled-action": [
+        {
+          "name": "retry-one-rejected-start",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        },
+        {
+          "name": "retry-full-cooldown-frame",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "retry-selection-and-count-preserved",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "retry-profile-defined-complete-action",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "engine-boundary": [
+        {
+          "name": "retry-native-motion-boundaries",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "control-release": [
+        {
+          "name": "retry-terminal-control",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ]
+    },
+    "legacy.mankey-control-stress": {
+      "natural-input": [
+        {
+          "name": "completed-natural-hop-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 200
+        },
+        {
+          "name": "mankey-stress-active-frame-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 5001
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "mankey-stress-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "MOUNTED",
+            56,
+            1
+          ]
+        },
+        {
+          "name": "actor-owned-hop-motion-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "valid-mounted-hop-motion-count",
+          "operator": "eq",
+          "type": "array",
+          "validator": "complete-motion-observation-v1",
+          "minimumTotal": 200
+        }
+      ],
+      "control-release": [
+        {
+          "name": "dismount-and-remount-milestones",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1,
+            1,
+            1,
+            "IDLE",
+            0
+          ]
+        }
+      ]
+    },
+    "legacy.mankey-hops": {
+      "natural-input": [
+        {
+          "name": "started-hop-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 3
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "mankey-hops-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "MOUNTED",
+            56,
+            1
+          ]
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "hop-arc-samples",
+          "operator": "eq",
+          "type": "object",
+          "validator": "hop-arc-parabola-v1",
+          "caseCount": 3,
+          "requiredKeys": [
+            "cases"
+          ]
+        }
+      ],
+      "control-release": [
+        {
+          "name": "recovered-hop-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 3
+        }
+      ]
+    },
+    "legacy.mankey-nearest-diagonal": {
+      "natural-input": [
+        {
+          "name": "nearest-diagonal-input-milestones",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 3
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "nearest-diagonal-mankey-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "MOUNTED",
+            56,
+            1
+          ]
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "nearest-diagonal-arc-samples",
+          "operator": "eq",
+          "type": "object",
+          "validator": "hop-arc-parabola-v1",
+          "caseCount": 1,
+          "requiredKeys": [
+            "cases"
+          ]
+        }
+      ],
+      "control-release": [
+        {
+          "name": "nearest-diagonal-terminal-tile",
+          "operator": "eq",
+          "type": "object",
+          "validator": "nearest-diagonal-choice-v1",
+          "requiredKeys": [
+            "direction",
+            "start",
+            "orderedNearTargets",
+            "equalDiagonalTargets",
+            "chosen",
+            "final"
+          ]
+        }
+      ]
+    },
+    "legacy.mount-begin-current-follower": {
+      "natural-input": [
+        {
+          "name": "menu-input-milestones",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 3
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "mount-begin-public-role-transition",
+          "operator": "eq",
+          "type": "object",
+          "validator": "public-role-transition-v1",
+          "fromRole": "FOLLOWER",
+          "toRole": "MOUNTED",
+          "requiredKeys": [
+            "beforeRole",
+            "afterRole",
+            "traceFromRole",
+            "traceToRole",
+            "beforeSubjectIdentity",
+            "afterSubjectIdentity",
+            "beforeEncounterGeneration",
+            "afterEncounterGeneration",
+            "traceActorHandle",
+            "mountedActorHandle"
+          ]
+        },
+        {
+          "name": "subject-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "stable-selector-identity-v1",
+          "aspect": "subject"
+        },
+        {
+          "name": "encounter-generation",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        },
+        {
+          "name": "unique-live-identity-counts",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1
+          ]
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "resolved-species-and-role",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            56,
+            56,
+            "MOUNTED"
+          ]
+        }
+      ],
+      "control-release": [
+        {
+          "name": "closed-selector-and-stable-object",
+          "operator": "eq",
+          "type": "array",
+          "validator": "stable-selector-identity-v1",
+          "aspect": "object"
+        }
+      ]
+    },
+    "legacy.mounted-diagonal-streaming": {
+      "natural-input": [
+        {
+          "name": "completed-cardinal-motion-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 20
+        },
+        {
+          "name": "completed-diagonal-motion-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 4
+        },
+        {
+          "name": "streaming-route-active-frame-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 5001
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "diagonal-streaming-cyndaquil-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "MOUNTED",
+            155,
+            1
+          ]
+        },
+        {
+          "name": "streaming-actor-mismatch-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "streaming-actor-frame-discontinuity-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "streaming-path": [
+        {
+          "name": "horizontal-stream-load-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 2
+        },
+        {
+          "name": "vertical-stream-load-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 2
+        },
+        {
+          "name": "public-stream-lifecycle",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    "legacy.mounted-streaming-path": {
+      "natural-input": [
+        {
+          "name": "completed-diagonal-motion-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 2
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "diagonal-streaming-ledyba-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "MOUNTED",
+            165,
+            1
+          ]
+        }
+      ],
+      "streaming-path": [
+        {
+          "name": "horizontal-path-advance-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 2
+        },
+        {
+          "name": "vertical-path-advance-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 2
+        },
+        {
+          "name": "public-stream-lifecycle",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "name": "ordered-path-advance-observation",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    "legacy.mounted-frames": {
+      "natural-input": [
+        {
+          "name": "started-motion-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 65
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "mounted-frames-cyndaquil-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "MOUNTED",
+            155,
+            1
+          ]
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "resolved-frame-counts",
+          "operator": "eq",
+          "type": "object",
+          "validator": "mounted-frame-matrix-v1",
+          "aspect": "counts",
+          "requiredKeys": [
+            "durations",
+            "elapsedCounts",
+            "diagonalAttempt"
+          ]
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "elapsed-frame-sequences",
+          "operator": "eq",
+          "type": "object",
+          "validator": "mounted-frame-matrix-v1",
+          "aspect": "elapsed",
+          "requiredKeys": [
+            "durations",
+            "sequences"
+          ]
+        }
+      ],
+      "control-release": [
+        {
+          "name": "completed-motion-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 65
+        },
+        {
+          "name": "terminal-mount-state",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            "IDLE",
+            0
+          ]
+        }
+      ]
+    },
+    "legacy.mounted-smoothness": {
+      "natural-input": [
+        {
+          "name": "held-input-tile-distance",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 7
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "mounted-smoothness-cyndaquil-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "MOUNTED",
+            155,
+            1
+          ]
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "rendered-motion-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 7
+        },
+        {
+          "name": "pair-delta-mismatch-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "maximum-callback-gap",
+          "operator": "lte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 2
+        },
+        {
+          "name": "maximum-boundary-gap",
+          "operator": "lte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 2
+        },
+        {
+          "name": "maximum-leading-zero-frames",
+          "operator": "lte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "engine-boundary": [
+        {
+          "name": "normal-player-step-callback-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 7
+        }
+      ],
+      "control-release": [
+        {
+          "name": "recovery-terminal-state",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    "legacy.mounted-transition": {
+      "natural-input": [
+        {
+          "name": "map-transition-input-frame",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 0,
+          "maximum": 2499
+        },
+        {
+          "name": "transition-stress-input-frame-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 5000
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "mounted-transition-mankey-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "MOUNTED",
+            56,
+            1
+          ]
+        },
+        {
+          "name": "transition-actor-ownership-mismatch-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "transition-motion-elapsed",
+          "operator": "eq",
+          "type": "object",
+          "validator": "contiguous-elapsed-v1",
+          "requiredKeys": [
+            "start",
+            "duration",
+            "elapsed"
+          ]
+        },
+        {
+          "name": "transition-pair-sync-samples",
+          "operator": "eq",
+          "type": "array",
+          "validator": "all-render-samples-synced-v1"
+        }
+      ],
+      "world-transition": [
+        {
+          "name": "mounted-map-change",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            33,
+            60
+          ]
+        }
+      ],
+      "control-release": [
+        {
+          "name": "post-transition-recovery",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            "IDLE",
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    "legacy.packaged-resolver-parity": {
+      "profile-resolution": [
+        {
+          "name": "packaged-resolver-entry",
+          "operator": "eq",
+          "type": "array",
+          "validator": "packaged-resolver-parity-v1",
+          "aspect": "service"
+        },
+        {
+          "name": "packaged-behavior-blob",
+          "operator": "eq",
+          "type": "array",
+          "validator": "packaged-resolver-parity-v1",
+          "aspect": "blob"
+        },
+        {
+          "name": "status-parity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "profile-byte-parity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "packaged-resolver-parity-v1",
+          "aspect": "profile"
+        },
+        {
+          "name": "primitive-byte-parity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "packaged-resolver-parity-v1",
+          "aspect": "primitives"
+        },
+        {
+          "name": "fingerprint-parity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "packaged-resolver-parity-v1",
+          "aspect": "fingerprint"
+        },
+        {
+          "name": "resolution-metadata-parity",
+          "operator": "eq",
+          "type": "string",
+          "validator": "packaged-resolver-parity-v1",
+          "aspect": "metadata"
+        },
+        {
+          "name": "provenance-parity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "packaged-resolver-parity-v1",
+          "aspect": "provenance"
+        }
+      ]
+    },
+    "legacy.population-after-fast-travel": {
+      "natural-input": [
+        {
+          "name": "input-travel-distance",
+          "operator": "gt",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "population-mankey-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "MOUNTED",
+            56,
+            1
+          ]
+        },
+        {
+          "name": "fast-travel-actor-mismatch-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "population-bounds": [
+        {
+          "name": "maximum-new-actors-per-frame",
+          "operator": "lte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 0,
+          "maximum": 1
+        },
+        {
+          "name": "population-refill",
+          "operator": "eq",
+          "type": "array",
+          "validator": "population-refill-v1"
+        }
+      ],
+      "world-transition": [
+        {
+          "name": "map-and-field-epoch-change",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    "legacy.unmounted-follower-frame-cadence": {
+      "natural-input": [
+        {
+          "name": "follower-cadence-player-active-frame-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 5001
+        },
+        {
+          "name": "follower-cadence-player-input-acceptance-stall-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "follower-cadence-completed-player-step-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 64
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "follower-cadence-identity-mismatch-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "follower-cadence-mounted-role-sample-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "follower-cadence-complete-walk-motion-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 16
+        },
+        {
+          "name": "follower-cadence-commit-mismatch-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "follower-cadence-render-mismatch-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "follower-cadence-render-regression-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "follower-cadence-player-interior-render-stall-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "follower-cadence-player-render-regression-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "follower-cadence-player-render-start-stall-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "follower-cadence-actor-frame-discontinuity-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "follower-cadence-motion-elapsed-discontinuity-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "follower-cadence-player-settle-stall-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "follower-cadence-player-timing-mismatch-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "host-cpu-pacing": [
+        {
+          "name": "follower-cadence-process-cpu-sample-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 5001
+        },
+        {
+          "name": "follower-cadence-process-cpu-hitch-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "engine-boundary": [
+        {
+          "name": "follower-cadence-engine-boundary-mismatch-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "follower-cadence-player-step-callback-mismatch-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "control-release": [
+        {
+          "name": "follower-cadence-terminal-control-state",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    "legacy.unmounted-wild-frame-cadence": {
+      "natural-input": [
+        {
+          "name": "wild-cadence-player-active-frame-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 5001
+        },
+        {
+          "name": "wild-cadence-player-input-acceptance-stall-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "wild-cadence-completed-player-step-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 64
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "wild-cadence-identity-mismatch-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "wild-cadence-mounted-role-sample-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "wild-cadence-complete-walk-motion-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 16
+        },
+        {
+          "name": "wild-cadence-commit-mismatch-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "wild-cadence-render-mismatch-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "wild-cadence-render-regression-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "wild-cadence-player-interior-render-stall-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "wild-cadence-player-render-regression-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "wild-cadence-player-render-start-stall-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "wild-cadence-actor-frame-discontinuity-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "wild-cadence-motion-elapsed-discontinuity-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "wild-cadence-player-settle-stall-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "wild-cadence-player-timing-mismatch-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "host-cpu-pacing": [
+        {
+          "name": "wild-cadence-process-cpu-sample-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 5001
+        },
+        {
+          "name": "wild-cadence-process-cpu-hitch-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "engine-boundary": [
+        {
+          "name": "wild-cadence-engine-boundary-mismatch-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "wild-cadence-player-step-callback-mismatch-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "control-release": [
+        {
+          "name": "wild-cadence-terminal-control-state",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    "legacy.unmounted-failed-grass-scan-pacing": {
+      "natural-input": [
+        {
+          "name": "observed-unmounted-gameplay-frame-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 5000
+        },
+        {
+          "name": "completed-unmounted-step-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 64
+        },
+        {
+          "name": "player-step-callback-mismatch-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "population-bounds": [
+        {
+          "name": "moving-failed-grass-scan-count",
+          "operator": "gt",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        },
+        {
+          "name": "failed-grass-scan-result",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "failed-grass-scan-reservoir-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 289
+        },
+        {
+          "name": "failed-grass-scan-reservoir-set-match",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        },
+        {
+          "name": "failed-grass-scan-candidate-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 240
+        },
+        {
+          "name": "failed-grass-scan-candidate-set-match",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        },
+        {
+          "name": "failed-grass-scan-grass-probe-parity",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        },
+        {
+          "name": "failed-grass-scan-non-grass-elevated-probe-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "failed-grass-scan-output-unchanged",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "actor-frame-clock-discontinuity-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "maximum-interior-render-stall-count",
+          "operator": "lte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "maximum": 2
+        }
+      ],
+      "control-release": [
+        {
+          "name": "unmounted-terminal-control-state",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    "legacy.teleport-timing": {
+      "natural-input": [
+        {
+          "name": "started-input-case-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 10
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "teleport-cyndaquil-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "MOUNTED",
+            155,
+            1
+          ]
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "commit-deltas",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "render-endpoints",
+          "operator": "eq",
+          "type": "array",
+          "validator": "teleport-timing-matrix-v1",
+          "aspect": "endpoints"
+        },
+        {
+          "name": "visibility-sample-counts",
+          "operator": "eq",
+          "type": "array",
+          "validator": "teleport-timing-matrix-v1",
+          "aspect": "visibility"
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "elapsed-frame-sequences",
+          "operator": "eq",
+          "type": "array",
+          "validator": "teleport-timing-matrix-v1",
+          "aspect": "elapsed"
+        }
+      ],
+      "control-release": [
+        {
+          "name": "settled-case-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 10
+        }
+      ]
+    },
+    "legacy.warp-blocked-mid-motion": {
+      "natural-input": [
+        {
+          "name": "completed-input-route-steps",
+          "operator": "eq",
+          "type": "array",
+          "validator": "completed-route-v1"
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "warp-gate-cyndaquil-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "MOUNTED",
+            155,
+            1
+          ]
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "teleport-commit-deltas",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1
+          ]
+        }
+      ],
+      "world-transition": [
+        {
+          "name": "normal-walk-warp-destination",
+          "operator": "eq",
+          "type": "object",
+          "validator": "warp-destination-v1",
+          "requiredKeys": [
+            "sourceMap",
+            "destinationMap",
+            "door"
+          ]
+        }
+      ],
+      "control-release": [
+        {
+          "name": "teleport-lifecycle-counts",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            {
+              "started": 1,
+              "finished": 1,
+              "canceled": 0,
+              "controlReturned": 1,
+              "ordered": true,
+              "complete": true
+            },
+            {
+              "started": 1,
+              "finished": 1,
+              "canceled": 0,
+              "controlReturned": 1,
+              "ordered": true,
+              "complete": true
+            }
+          ]
+        }
+      ]
+    },
+    "legacy.wild-ledge-hop": {
+      "collision-decision": [
+        {
+          "name": "south-ledge-custom-hop-decision",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1,
+            0,
+            [
+              590,
+              395
+            ],
+            [
+              590,
+              397
+            ]
+          ]
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "ledge-clefairy-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "WILD",
+            35,
+            1
+          ]
+        }
+      ]
+    },
+    "legacy.wild-ledge-reverse": {
+      "collision-decision": [
+        {
+          "name": "north-request-rejected-by-south-ledge",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            0,
+            0,
+            0,
+            [
+              590,
+              397
+            ]
+          ]
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "reverse-ledge-rattata-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "WILD",
+            19,
+            1
+          ]
+        }
+      ]
+    }
+  }
+}

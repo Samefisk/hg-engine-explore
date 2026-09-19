@@ -5,14 +5,13 @@ import re
 import sys
 import time
 
-from desmume.emulator import DeSmuME, DeSmuME_Memory
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from tools.overworld.melonds_backend import MelonDS
 
 # Settings
 SHOW_VIDEO_OUTPUT = False
 TEST_START_INDEX = 0
 IDLE_TIMEOUT_SECONDS = 1 * 60  # 1 minute
-
-os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
 g_EmulatorCommunicationSendHoleAddress = 0x02FFF81C
 TEST_CASE_PASS = -1
@@ -43,10 +42,8 @@ last_activity_time = time.monotonic()
 parser = argparse.ArgumentParser()
 parser.add_argument("-v", "--video", action="store_true")
 
-emu = DeSmuME()
-emu.volume_set(0)
-emu_memory = emu.memory
-memory = DeSmuME_Memory(emu)
+emu = None
+emu_memory = None
 
 
 def get_test_names() -> list[str]:
@@ -70,7 +67,8 @@ def get_test_names() -> list[str]:
 
 
 def read_communication_hole_value():
-    return emu_memory.signed[g_EmulatorCommunicationSendHoleAddress]
+    address = g_EmulatorCommunicationSendHoleAddress
+    return emu_memory.signed[address:address:4]
 
 
 def has_finished_testing() -> bool:
@@ -89,6 +87,10 @@ def callback_function_when_game_put_thing_into_communication_hole(
     last_activity_time = time.monotonic()
 
     value = read_communication_hole_value()
+    if value not in (TEST_CASE_FAIL, TEST_CASE_PASS, TEST_CASE_KNOWN_FAILING):
+        return
+    if current_test_case >= NUMBER_OF_TESTS_TO_RUN:
+        raise RuntimeError("battle tester reported an extra result")
 
     if value == TEST_CASE_FAIL:
         print(
@@ -122,47 +124,74 @@ def read_total_tests_from_header() -> int:
     return int(m.group(1))
 
 
-NUMBER_OF_TESTS_TO_RUN = read_total_tests_from_header()
+NUMBER_OF_TESTS_TO_RUN = 0
+
+
+class BattleWindow:
+    """Optional human view. Created only for explicit --video."""
+    def __init__(self):
+        import tkinter
+        from PIL import ImageTk
+        self.ImageTk = ImageTk
+        self.root = tkinter.Tk()
+        self.root.title("melonDS battle tests")
+        self.label = tkinter.Label(self.root)
+        self.label.pack()
+        self.closed = False
+        self.root.protocol("WM_DELETE_WINDOW", self.close)
+
+    def draw(self):
+        if self.closed:
+            raise RuntimeError("battle test window closed")
+        self.image = self.ImageTk.PhotoImage(emu.screenshot())
+        self.label.configure(image=self.image)
+        self.root.update()
+
+    def close(self):
+        if not self.closed:
+            self.closed = True
+            self.root.destroy()
 
 
 def main():
+    global emu, emu_memory, test_case_names, NUMBER_OF_TESTS_TO_RUN
+    global current_test_case, return_value, last_activity_time
     args = parser.parse_args()
-
-    memory.register_write(
-        g_EmulatorCommunicationSendHoleAddress,
-        callback_function_when_game_put_thing_into_communication_hole,
-    )
-
-    emu.open("test.nds")
-    emu.backup.import_file("test.sav")
-
-    window = None
-
-    if args.video:
-        # Create the window for the emulator
-        window = emu.create_sdl_window()
-
-    global test_case_names
+    NUMBER_OF_TESTS_TO_RUN = read_total_tests_from_header()
     test_case_names = get_test_names()
-
-    # Run the emulation as fast as possible until testing complete
-    while not has_finished_testing():
-        if (time.monotonic() - last_activity_time) > IDLE_TIMEOUT_SECONDS:
-            print(
-                f"{bcolors.FAIL}[Timeout] No activity for {IDLE_TIMEOUT_SECONDS // 60} minutes. Aborting.{bcolors.ENDC}",
-                flush=True,
-            )
-            sys.exit(1)
-
+    if NUMBER_OF_TESTS_TO_RUN <= 0 or len(test_case_names) != NUMBER_OF_TESTS_TO_RUN:
+        raise RuntimeError("battle test names and generated count differ or are empty")
+    current_test_case, return_value = TEST_START_INDEX, 0
+    emu = MelonDS()
+    emu_memory = emu.memory
+    window = None
+    try:
+        emu.volume_set(0)
+        emu_memory.register_write(
+            g_EmulatorCommunicationSendHoleAddress,
+            callback_function_when_game_put_thing_into_communication_hole,
+            size=4,
+        )
+        emu.open("test.nds")
+        emu.backup.import_file("test.sav")
+        if args.video:
+            window = BattleWindow()
+        last_activity_time = time.monotonic()
+        # This is the in-ROM battle harness, not an overworld test driver.
+        while not has_finished_testing():
+            if (time.monotonic() - last_activity_time) > IDLE_TIMEOUT_SECONDS:
+                print(f"{bcolors.FAIL}[Timeout] No activity for {IDLE_TIMEOUT_SECONDS // 60} minutes. Aborting.{bcolors.ENDC}", flush=True)
+                return 1
+            if window is not None:
+                window.draw()
+            emu.cycle(False)
+        print("Tests complete!\n", flush=True)
+        return return_value
+    finally:
         if window is not None:
-            window.draw()
-
-        emu.cycle(False)
-
-    print("Tests complete!\n", flush=True)
-    emu.destroy()
-    sys.exit(return_value)
+            window.close()
+        emu.destroy()
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "devtools.actor-identity",
+  "title": "Prepared follower has one current engine and actor identity",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/verification.md#scenario-contract",
+  "requirements": ["shared.actor-identity.prepared-v1"],
+  "budgets": {"maxSeconds": 300, "maxFrames": 2000, "noProgressFrames": 300, "minObservedFrames": 16},
+  "subjects": [{"id": "follower", "species": 56, "role": "FOLLOWER", "acquire": "existing"}],
+  "setup": [
+    {"id": "prepare-field", "op": "teleport", "args": {"map": 33, "x": 585, "z": 405, "facing": 1},
+      "budget": {"maxSeconds": 120, "maxFrames": 1000, "noProgressFrames": 300}},
+    {"id": "prepare-party", "op": "party", "args": {"slot": 0, "species": 56, "level": 10, "hp": 1, "status": 0},
+      "budget": {"maxSeconds": 120, "maxFrames": 1000, "noProgressFrames": 300}},
+    {"id": "spawn-follower", "op": "spawn", "args": {"species": 56, "role": "follower", "slot": 0},
+      "budget": {"maxSeconds": 120, "maxFrames": 1000, "noProgressFrames": 300}},
+    {"id": "bind-follower", "op": "bind", "args": {"subject": "follower"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "observe-identity", "op": "step", "args": {"frames": 16, "keys": []},
+      "budget": {"maxSeconds": 20, "maxFrames": 16, "noProgressFrames": 16}}
+  ],
+  "assertions": [
+    {"kind": "actor-field", "subject": "follower", "path": "identityVerified", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "actor-field", "subject": "follower", "path": "presentationAttached", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "actor-field", "subject": "follower", "path": "role", "operator": "eq", "value": "FOLLOWER", "when": "always"},
+    {"kind": "frame-count", "operator": "gte", "value": 16}
+  ]
+}

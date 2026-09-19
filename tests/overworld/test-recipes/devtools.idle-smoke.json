@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "devtools.idle-smoke",
+  "title": "Shared tools retain 32 coherent idle frames",
+  "mode": "normal",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/devtools-tests.md#evidence-and-acceptance",
+  "requirements": [],
+  "budgets": {"maxSeconds": 90, "maxFrames": 64, "noProgressFrames": 32, "minObservedFrames": 32},
+  "subjects": [],
+  "setup": [],
+  "actions": [{"id": "observe", "op": "step", "args": {"frames": 32, "keys": []},
+    "budget": {"maxSeconds": 15, "maxFrames": 32, "noProgressFrames": 32}}],
+  "assertions": [{"kind": "frame-count", "operator": "eq", "value": 32}]
+}

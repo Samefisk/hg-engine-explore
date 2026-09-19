@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "id": "walk.wild.exact-frame",
+  "title": "Live wild Rattata completes an exact-frame Walk",
+  "status": "active",
+  "capabilities": [
+    "walk.exact",
+    "walk.acceleration"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld_walk_frame_timing_spec.md",
+    "actor": "WILD species 19 (rattata), acquired through spawn; live handle and attached presentation required",
+    "trigger": "Wait for the same live Rattata to start a natural four-frame Walk; Observe every rendered frame, its one terminal commit, engine clear, and idle control return",
+    "observable": "Each accepted motion has exactly one terminal result; No logical commit occurs after motion cancellation; Control returns after the selected motion finishes or cancels; No active actors share a nonzero target reservation; Every active actor handle uses the current field epoch; Every active actor has an attached presentation",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Disposable test.sav, checked teleport and native Rattata spawn request. Bind only the request's finalized identity and own landing point; wait idle before measurement. Do not change profile timing, AI direction or counters."
+      }
+    ],
+    "limits": [
+      "Prepared spawning does not prove natural population spawning or selection UI.",
+      "One complete four-frame natural Walk retains all seven original measurements and proves that a Wild actor reaches the shared middle acceleration tier; it is not long-soak proof.",
+      "Requires a current accepted separate same-reader clear control and controller replay of all required wrong-data controls. Registration alone is not runtime acceptance."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "rattata",
+      "species": 19,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Spawn Rattata through the real encounter path and prove its current engine object identity"
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Wait for the same live Rattata to start a natural four-frame Walk"
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Observe every rendered frame, its one terminal commit, engine clear, and idle control return"
+    }
+  ],
+  "stop": {
+    "frameBudget": 1200,
+    "condition": "The selected Rattata completes its observed Walk and returns idle"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ],
+    "orderedEvents": [
+      {
+        "id": "start",
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "commit",
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "finish",
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "control",
+        "event": "CONTROL_RETURNED",
+        "reason": "OK"
+      }
+    ],
+    "eventCounts": [
+      {
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 1
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 1,
+        "maximum": 1
+      },
+      {
+        "event": "CONTROL_RETURNED",
+        "reason": "OK",
+        "minimum": 1,
+        "maximum": 1
+      }
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "walk.wild.exact-frame", "claims": ["natural-input", "live-actor-identity", "logical-commit", "rendered-motion", "frame-pacing", "engine-boundary", "control-release"], "minimumFrames": 4}
+}

@@ -378,17 +378,21 @@ def read_s16_pair(param: bytes) -> tuple[int, int]:
 
 def decode_vtx_10(param: bytes) -> tuple[int, int, int]:
     value = struct.unpack_from("<I", param, 0)[0]
-    x = sign_extend(value & 0x3FF, 10)
-    y = sign_extend((value >> 10) & 0x3FF, 10)
-    z = sign_extend((value >> 20) & 0x3FF, 10)
+    # VTX_10 stores signed 3.6 fixed-point components. Expand them to the
+    # common 1.12 model units used by the other vertex commands.
+    x = sign_extend(value & 0x3FF, 10) * 64
+    y = sign_extend((value >> 10) & 0x3FF, 10) * 64
+    z = sign_extend((value >> 20) & 0x3FF, 10) * 64
     return x, y, z
 
 
 def decode_vtx_diff(param: bytes) -> tuple[int, int, int]:
     value = struct.unpack_from("<I", param, 0)[0]
-    x = sign_extend(value & 0x3FF, 10) // 8
-    y = sign_extend((value >> 10) & 0x3FF, 10) // 8
-    z = sign_extend((value >> 20) & 0x3FF, 10) // 8
+    # VTX_DIFF stores signed 1.9 fixed-point deltas. Expand them to 1.12
+    # model units before adding them to the current vertex.
+    x = sign_extend(value & 0x3FF, 10) * 8
+    y = sign_extend((value >> 10) & 0x3FF, 10) * 8
+    z = sign_extend((value >> 20) & 0x3FF, 10) * 8
     return x, y, z
 
 

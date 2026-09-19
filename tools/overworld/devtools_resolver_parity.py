@@ -1,0 +1,114 @@
+"""Pure seven-call deployment comparison, never live proof or a behavior oracle.
+
+The caller owns native call/code authentication, current input hashes, clocks,
+scratch restoration and host execution against that same blob. Host results
+use the unchanged Workshop native_resolver.resolve_many JSON format.
+"""
+from copy import deepcopy
+import hashlib
+import struct
+
+CASE_NAMES = ("default-class-and-lanes", "species-class-selection", "forced-follower-profile",
+              "relative-override", "conditional-rooftop-replay", "explicit-picked-up-class",
+              "legacy-forced-asleep-match-token")
+METADATA = ("behaviorClass", "behaviorLimitKey", "speciesClassRuleIndex", "matchedClassRuleMask",
+            "matchedOverrideMask", "forcedOverrideMask", "conditionalOverrideMask", "appliedOverrideMask",
+            "fingerprint")
+
+
+def require(value, reason):
+    if not value:
+        raise ValueError("resolver parity: " + reason)
+
+
+def integer(value, maximum=0xFFFFFFFF):
+    require(type(value) is int and 0 <= value <= maximum, "invalid integer")
+    return value
+
+
+def raw_hex(value, size):
+    require(isinstance(value, str) and len(value) == size * 2, "wrong byte extent")
+    try:
+        raw = bytes.fromhex(value)
+    except ValueError as error:
+        raise ValueError("resolver parity: invalid hex") from error
+    require(len(raw) == size and raw.hex() == value, "noncanonical bytes")
+    return raw
+
+
+def request_bytes(request):
+    """Public request layout plus the Workshop adapter's defaults."""
+    allowed = {"species", "conditionTerrainMask", "groupFlags", "level", "terrain", "shiny",
+               "forcedOverrideMask", "behaviorClass"}
+    require(isinstance(request, dict) and set(request) <= allowed, "unknown request field")
+    behavior_class = request.get("behaviorClass", "auto")
+    behavior_class = 255 if behavior_class == "auto" else integer(behavior_class, 255)
+    return struct.pack("<HHIBBBBIB3x", integer(request.get("species", 0), 65535),
+        integer(request.get("conditionTerrainMask", 0), 65535), integer(request.get("groupFlags", 0)),
+        integer(request.get("level", 1), 255), integer(request.get("terrain", 0), 255),
+        integer(request.get("shiny", 0), 255), 0,
+        integer(request.get("forcedOverrideMask", 0)), behavior_class)
+
+
+def host_result_bytes(result):
+    require(isinstance(result, dict), "missing host result")
+    # Eleven byte-sized primitives; the alignment byte follows behaviorLimitKey,
+    # not the primitives. The compiled public-layout test anchors all 256 bytes.
+    return raw_hex(result.get("profileHex"), 216) + raw_hex(result.get("primitivesHex"), 11) + struct.pack(
+        "<BBxHIIIIII", *(integer(result.get(key), 255 if index < 2 else 65535 if index == 2 else 0xFFFFFFFF)
+                        for index, key in enumerate(METADATA)))
+
+
+def checked_trace(result):
+    require(type(result.get("traceDropped")) is int and result["traceDropped"] == 0,
+            "provenance was dropped")
+    trace = result.get("trace")
+    require(isinstance(trace, list) and 1 <= len(trace) <= 256, "missing or unbounded provenance")
+    for step in trace:
+        require(isinstance(step, dict) and set(step) == {"sourceIndex", "lane", "kind", "flags", "profileHex"},
+                "provenance fields differ")
+        integer(step["sourceIndex"], 65535)
+        require(type(step["lane"]) is int and step["lane"] in (0, 1, 2, 255), "invalid provenance lane")
+        integer(step["kind"], 6)
+        integer(step["flags"], 15)
+        raw_hex(step["profileHex"], 72)
+    return trace
+
+
+def compare_resolver_parity(vectors, native_receipts, host_results, *, blob_identity, service_identity):
+    """Compare exact ordered calls. Missing data raises; equality grants no live credit."""
+    require(isinstance(vectors, list) and len(vectors) == 7
+            and [v.get("name") for v in vectors if isinstance(v, dict)] == list(CASE_NAMES),
+            "the seven authored cases differ")
+    require(isinstance(native_receipts, list) and len(native_receipts) == 7
+            and isinstance(host_results, list) and len(host_results) == 7, "seven results required")
+    require(isinstance(blob_identity, dict) and set(blob_identity) == {"size", "sha256"}, "blob identity missing")
+    require(integer(blob_identity["size"]) > 0, "empty blob")
+    raw_hex(blob_identity["sha256"], 32)
+    require(isinstance(service_identity, dict) and set(service_identity) ==
+            {"magic", "version", "size", "resolveAddress", "entrySha256"}, "service identity missing")
+    for key in ("magic", "version", "size", "resolveAddress"):
+        require(integer(service_identity[key]) > 0, "empty service identity")
+    raw_hex(service_identity["entrySha256"], 32)
+    cases = []
+    for vector, native, host in zip(vectors, native_receipts, host_results):
+        require(isinstance(native, dict) and isinstance(host, dict), "missing result")
+        require(native.get("name") == vector["name"], "native case order differs")
+        require(native.get("blobIdentity") == blob_identity and native.get("serviceIdentity") == service_identity,
+                "native blob or service identity differs")
+        for key, expected in (("blobIdentity", blob_identity), ("serviceIdentity", service_identity)):
+            require(all(type(native[key][field]) is type(value) for field, value in expected.items()),
+                    "native identity field types differ")
+        require(isinstance(vector.get("request"), dict), "authored request missing")
+        request = request_bytes(vector["request"])
+        require(raw_hex(native.get("requestHex"), 20) == request, "native request differs")
+        require(type(native.get("status")) is int and type(host.get("status")) is int
+                and native["status"] == host["status"] == 0, "native/host status differs or failed")
+        result = raw_hex(native.get("resultHex"), 256)
+        require(result == host_result_bytes(host), "full result bytes differ")
+        require(checked_trace(native) == checked_trace(host), "ordered provenance differs")
+        cases.append({"name": vector["name"], "status": 0, "requestHex": request.hex(),
+                      "resultSha256": hashlib.sha256(result).hexdigest(), "traceCount": len(native["trace"])})
+    return {"passed": True, "acceptedProof": False, "caseCount": 7, "cases": cases,
+            "blobIdentity": deepcopy(blob_identity), "serviceIdentity": deepcopy(service_identity),
+            "scope": "seven-case deployment equality only; live authenticity and authored behavior proof are separate"}

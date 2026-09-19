@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.detach-restores-control",
+  "title": "Mounted detach always restores normal control",
+  "status": "active",
+  "capabilities": [
+    "actor.system",
+    "mount.lifecycle"
+  ],
+  "proofLevel": "S5",
+  "costTier": 5,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "tools/overworld/runtime_proof_registry.json",
+    "actor": "MOUNTED species155 Cyndaquil prepared in party slot0, bound through its live handle and attached presentation; the same party subject detaches and remounts.",
+    "trigger": "Hold alternating RIGHT and LEFT for 1200 twenty-frame actions; release movement, press and release SELECT to detach; take an unmounted RIGHT step; press and release SELECT to remount; take a mounted RIGHT recovery step and settle.",
+    "observable": "The unchanged legacy.cyndaquil-control-stress measurements require held-input-commit-count >=2000, held-input-turn-count >=250, held-input-route-frame-count >=5000, cyndaquil-species=155, positive mounted-object-pointer, current actor-handle, mounted-object-identity-flags=[1,1,1,1,7,155,1], encounter-generation-match, valid-mounted-walk-callback-count covering at least2000 motions, and dismount-remount-control-milestones=[IDLE,0,1,1,1,1,1].",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Private test.sav; teleport to map33 tile584/403; prepare party slot0 as species155, level10, HP1 and status0; spawn that own party subject mounted through the checked follower lifecycle, settle16 frames and bind its current identity. No profile, timer, counter or callback changes. Observation uses only normal step input."
+      }
+    ],
+    "limits": [
+      "Prepared party and mount setup do not prove natural acquisition or the selection UI.",
+      "All original named stress and detach/remount measurements remain required. A recipe or host pass alone grants no gameplay proof.",
+      "The 24000-frame route is a bounded attempt; insufficient commits, turns, callback coverage or control milestones fail rather than lowering the legacy thresholds."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "input",
+      "value": "Complete 1200 alternating twenty-frame RIGHT/LEFT holds"
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Release movement, detach with SELECT and take an unmounted RIGHT step"
+    },
+    {
+      "at": 2,
+      "kind": "input",
+      "value": "Remount with SELECT, take one mounted RIGHT recovery step and settle"
+    }
+  ],
+  "stop": {
+    "frameBudget": 30000,
+    "condition": "Sustained Walk meets every original stress threshold, then detach, unmounted movement, remount and mounted recovery finish"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "Control returns after the selected motion finishes or cancels"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "mount.detach-restores-control",
+    "claims": [
+      "natural-input",
+      "live-actor-identity",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumFrames": 5000
+  }
+}

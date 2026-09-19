@@ -49,11 +49,14 @@ BOOL OverworldWildSpawns_StartFollowerReleaseBounce(
 #define OW_WILD_HELPER_SPAWN_MAX_DISTANCE 8
 #define OW_WILD_HELPER_SPAWN_MIN_MON_DISTANCE 3
 #define OW_WILD_HELPER_BUDGETED_SPAWN_POSITION_SEARCH 1
-#define OW_WILD_HELPER_SPAWN_POSITION_BUDGET 16
 #define OW_WILD_HELPER_SPAWN_POSITION_DIAMETER (OW_WILD_HELPER_SPAWN_MAX_DISTANCE * 2 + 1)
 #define OW_WILD_HELPER_SPAWN_POSITION_TILE_COUNT \
     (OW_WILD_HELPER_SPAWN_POSITION_DIAMETER * OW_WILD_HELPER_SPAWN_POSITION_DIAMETER)
 #define OW_WILD_HELPER_SPAWN_POSITION_STRIDE 73
+#define OW_WILD_HELPER_HOP_PLAN_MAX_DISTANCE 8
+#define OW_WILD_HELPER_HOP_PLAN_VALIDATION_BUDGET \
+    (OW_WILD_HELPER_HOP_PLAN_MAX_DIRECTIONS \
+        * OW_WILD_HELPER_HOP_PLAN_MAX_DISTANCE)
 #define OW_WILD_HELPER_SPECIES_MASK 0x7FF
 #define OW_WILD_HELPER_FORM_SHIFT 11
 #define OW_WILD_HELPER_THROW_CARRIED_Y_OFFSET_FX32 (0x10000 / 2)
@@ -488,7 +491,7 @@ static BOOL OverworldWildHelper_LoadArchiveData(
     return callbacks->loadArchiveData(context, arcId, datId, offset, dest, size);
 }
 
-static BOOL OverworldWildHelper_TryPickSpawnPosition(
+static OverworldWildHelperPrepareResult OverworldWildHelper_TryPickSpawnPosition(
     const OverworldWildHelperSpawnCallbacks *callbacks,
     void *context,
     OverworldWildSpawnTerrain requestedTerrain,
@@ -502,7 +505,7 @@ static BOOL OverworldWildHelper_TryPickSpawnPosition(
     u32 visited = 0;
 
     if (!callbacks->getPlayerState(context, &playerState)) {
-        return FALSE;
+        return OW_WILD_HELPER_PREPARE_FAILED;
     }
 
     storedCursor = &sOverworldWildHelperSpawnPositionCursor[
@@ -511,7 +514,7 @@ static BOOL OverworldWildHelper_TryPickSpawnPosition(
         ? gf_rand() % OW_WILD_HELPER_SPAWN_POSITION_TILE_COUNT
         : *storedCursor - 1;
 
-    while (checked < OW_WILD_HELPER_SPAWN_POSITION_BUDGET
+    while (checked < OW_WILD_HELPER_SPAWN_POSITION_CHECKS_PER_UPDATE
         && visited < OW_WILD_HELPER_SPAWN_POSITION_TILE_COUNT) {
         u32 candidate = cursor;
         int dx;
@@ -552,11 +555,13 @@ static BOOL OverworldWildHelper_TryPickSpawnPosition(
         position->startX = x;
         position->startY = y;
         *storedCursor = cursor + 1;
-        return TRUE;
+        return OW_WILD_HELPER_PREPARE_READY;
     }
 
     *storedCursor = cursor + 1;
-    return FALSE;
+    return checked != 0
+        ? OW_WILD_HELPER_PREPARE_POSITION_PENDING
+        : OW_WILD_HELPER_PREPARE_FAILED;
 #else
     u32 candidateCount = 0;
     int x;
@@ -600,7 +605,9 @@ static BOOL OverworldWildHelper_TryPickSpawnPosition(
         }
     }
 
-    return candidateCount != 0;
+    return candidateCount != 0
+        ? OW_WILD_HELPER_PREPARE_READY
+        : OW_WILD_HELPER_PREPARE_FAILED;
 #endif
 }
 
@@ -672,23 +679,27 @@ static BOOL OverworldWildHelper_TryPickHeadbuttEncounterPool(
     return TRUE;
 }
 
-static BOOL OverworldWildHelper_TryPickSpawnPositionForTerrain(
+static OverworldWildHelperPrepareResult OverworldWildHelper_TryPickSpawnPositionForTerrain(
     const OverworldWildHelperSpawnCallbacks *callbacks,
     void *context,
     OverworldWildSpawnTerrain terrain,
     OverworldWildSpawnPosition *position)
 {
     if (position == NULL) {
-        return FALSE;
+        return OW_WILD_HELPER_PREPARE_FAILED;
     }
     if (terrain == OW_WILD_SPAWN_TERRAIN_HEADBUTT) {
         return OverworldWildHelper_TryPickHeadbuttEncounterPool(
-            callbacks,
-            context,
-            &position->headbuttTreeType);
+                callbacks,
+                context,
+                &position->headbuttTreeType)
+            ? OW_WILD_HELPER_PREPARE_READY
+            : OW_WILD_HELPER_PREPARE_FAILED;
     }
     if (terrain == OW_WILD_SPAWN_TERRAIN_FISHING) {
-        return OverworldWildHelper_TryPickFishingSpawnPosition(callbacks, context, position);
+        return OverworldWildHelper_TryPickFishingSpawnPosition(callbacks, context, position)
+            ? OW_WILD_HELPER_PREPARE_READY
+            : OW_WILD_HELPER_PREPARE_FAILED;
     }
     return OverworldWildHelper_TryPickSpawnPosition(callbacks, context, terrain, position);
 }
@@ -1060,7 +1071,7 @@ static BOOL OverworldWildHelper_TryPrepareSpawnEncounter(
     return TRUE;
 }
 
-static BOOL OverworldWildHelper_CopyPreparedSpawn(
+static BOOL __attribute__((noinline, optimize("Os"))) OverworldWildHelper_CopyPreparedSpawn(
     const OverworldWildSpawnPosition *position,
     const OverworldWildRolledEncounter *encounter,
     BOOL shiny,
@@ -1076,21 +1087,22 @@ static BOOL OverworldWildHelper_CopyPreparedSpawn(
     prepared->encounter = *encounter;
     prepared->savedShinySlot = savedShinySlot;
     prepared->shiny = shiny;
-    prepared->behaviorLimitKey = 0;
+    prepared->behaviorResolution.behaviorLimitKey = 0;
     prepared->playerBallCatchValue = 0;
-    prepared->behaviorProfile = (OverworldWildBehaviorProfile){ 0 };
+    prepared->behaviorResolution = (BehaviorResolveResult){ 0 };
     prepared->startup = (OverworldWildSpawnStartup){ 0 };
-    prepared->behaviorClass = 0;
+    prepared->behaviorResolution.behaviorClass = 0;
     return TRUE;
 }
 
-static BOOL OverworldWildHelper_TryPrepareSpawn(
+static OverworldWildHelperPrepareResult OverworldWildHelper_TryPrepareSpawn(
     const OverworldWildHelperSpawnCallbacks *callbacks,
     void *context,
     OverworldWildSpawnTerrain terrain,
     int slot,
     BOOL shinyAlreadySpawned,
     u16 shinyOddsDenominator,
+    u8 positionChecksRemaining,
     OverworldWildPreparedSpawn *prepared)
 {
     OverworldWildRolledEncounter encounter;
@@ -1099,18 +1111,30 @@ static BOOL OverworldWildHelper_TryPrepareSpawn(
         .startY = -1,
     };
     int savedShinySlot;
+    OverworldWildHelperPrepareResult positionResult;
     BOOL shiny;
 
     if (!OverworldWildHelper_AreSpawnCallbacksValid(callbacks)
-        || prepared == NULL
-        || (!OverworldWildHelper_TryPickSpawnPositionForTerrain(
-                callbacks,
-                context,
-                terrain,
-                &position)
-            && terrain != OW_WILD_SPAWN_TERRAIN_LAND
-            && terrain != OW_WILD_SPAWN_TERRAIN_SURF)
-        || !OverworldWildHelper_TryPrepareSpawnEncounter(
+        || prepared == NULL) {
+        return OW_WILD_HELPER_PREPARE_FAILED;
+    }
+
+    positionResult = OverworldWildHelper_TryPickSpawnPositionForTerrain(
+        callbacks,
+        context,
+        terrain,
+        &position);
+    if (positionResult != OW_WILD_HELPER_PREPARE_READY) {
+        if (positionChecksRemaining > 1) {
+            return positionResult;
+        }
+        if (terrain != OW_WILD_SPAWN_TERRAIN_LAND
+            && terrain != OW_WILD_SPAWN_TERRAIN_SURF) {
+            return OW_WILD_HELPER_PREPARE_FAILED;
+        }
+    }
+
+    if (!OverworldWildHelper_TryPrepareSpawnEncounter(
             callbacks,
             context,
             terrain,
@@ -1120,10 +1144,9 @@ static BOOL OverworldWildHelper_TryPrepareSpawn(
             &encounter,
             &savedShinySlot,
             &shiny)) {
-        return FALSE;
+        return OW_WILD_HELPER_PREPARE_FAILED;
     }
 
-    (void)terrain;
     (void)slot;
     return OverworldWildHelper_CopyPreparedSpawn(
         &position,
@@ -1133,7 +1156,7 @@ static BOOL OverworldWildHelper_TryPrepareSpawn(
         prepared);
 }
 
-static BOOL OverworldWildHelper_TryPrepareEncounterSpawn(
+static OverworldWildHelperPrepareResult OverworldWildHelper_TryPrepareEncounterSpawn(
     const OverworldWildHelperSpawnCallbacks *callbacks,
     void *context,
     OverworldWildSpawnTerrain terrain,
@@ -1142,6 +1165,7 @@ static BOOL OverworldWildHelper_TryPrepareEncounterSpawn(
     BOOL shiny,
     int savedShinySlot,
     BOOL rollPersonality,
+    u8 positionChecksRemaining,
     OverworldWildPreparedSpawn *prepared)
 {
     OverworldWildRolledEncounter rolledEncounter;
@@ -1149,18 +1173,27 @@ static BOOL OverworldWildHelper_TryPrepareEncounterSpawn(
         .startX = -1,
         .startY = -1,
     };
+    OverworldWildHelperPrepareResult positionResult;
 
     if (!OverworldWildHelper_AreSpawnCallbacksValid(callbacks)
         || prepared == NULL
-        || encounter == NULL
-        || (!OverworldWildHelper_TryPickSpawnPositionForTerrain(
-                callbacks,
-                context,
-                terrain,
-                &position)
-            && terrain != OW_WILD_SPAWN_TERRAIN_LAND
-            && terrain != OW_WILD_SPAWN_TERRAIN_SURF)) {
-        return FALSE;
+        || encounter == NULL) {
+        return OW_WILD_HELPER_PREPARE_FAILED;
+    }
+
+    positionResult = OverworldWildHelper_TryPickSpawnPositionForTerrain(
+        callbacks,
+        context,
+        terrain,
+        &position);
+    if (positionResult != OW_WILD_HELPER_PREPARE_READY) {
+        if (positionChecksRemaining > 1) {
+            return positionResult;
+        }
+        if (terrain != OW_WILD_SPAWN_TERRAIN_LAND
+            && terrain != OW_WILD_SPAWN_TERRAIN_SURF) {
+            return OW_WILD_HELPER_PREPARE_FAILED;
+        }
     }
 
     rolledEncounter = *encounter;
@@ -1168,7 +1201,6 @@ static BOOL OverworldWildHelper_TryPrepareEncounterSpawn(
         rolledEncounter.personality = OverworldWildHelper_RollPersonality();
     }
 
-    (void)terrain;
     (void)slot;
     return OverworldWildHelper_CopyPreparedSpawn(
         &position,
@@ -1378,7 +1410,7 @@ static int OverworldWildHelper_BuildHopPlanDirections(
             OverworldWildHelper_DirectionDeltaY(targetDirections[i]));
     }
 
-    for (i = 0; i < config->directionCount; i++) {
+    for (i = 0; i < (config->directionCount & 0x0F); i++) {
         OverworldWildHelper_AddHopPlanDirection(
             stepXs,
             stepYs,
@@ -1428,47 +1460,6 @@ static BOOL OverworldWildHelper_IsHopTargetOneHopAway(
         NULL);
 }
 
-static BOOL OverworldWildHelper_HopPlanHasVisited(
-    const s16 *nodeXs,
-    const s16 *nodeYs,
-    int nodeCount,
-    int x,
-    int y)
-{
-    int i;
-
-    for (i = 0; i < nodeCount; i++) {
-        if (nodeXs[i] == x && nodeYs[i] == y) {
-            return TRUE;
-        }
-    }
-
-    return FALSE;
-}
-
-static BOOL OverworldWildHelper_IsHopPlanCandidate(
-    const OverworldWildHelperHopConfig *config,
-    OverworldWildHelperHopTileValidator validator,
-    void *context,
-    int fromX,
-    int fromY,
-    int toX,
-    int toY)
-{
-    return OverworldWildHelper_TryGetHopVector(
-            config,
-            toX - fromX,
-            toY - fromY,
-            NULL,
-            NULL)
-        && OverworldWildHelper_IsLandingAllowed(
-            config,
-            validator,
-            context,
-            toX,
-            toY);
-}
-
 static BOOL __attribute__((optimize("Os", "tree-dominator-opts", "if-conversion")))
 OverworldWildHelper_PickRandomBehaviorHop(
     const OverworldWildHelperHopConfig *config,
@@ -1480,8 +1471,10 @@ OverworldWildHelper_PickRandomBehaviorHop(
     int dy;
     int targetX = 0;
     int targetY = 0;
+    int fallbackXs[2];
+    int fallbackYs[2];
     u32 candidateCount = 0;
-    BOOL hasBacktrack = FALSE;
+    u8 fallbackCount = 0;
 
     for (dy = -config->maxDistance; dy <= config->maxDistance; dy++) {
         for (dx = -config->maxDistance; dx <= config->maxDistance; dx++) {
@@ -1504,11 +1497,16 @@ OverworldWildHelper_PickRandomBehaviorHop(
                 continue;
             }
             if ((config->directionCount & 0x80) != 0) {
-                int straightX = config->objectX * 2 - config->targetX;
-                int straightY = config->objectY * 2 - config->targetY;
+                int straightX = config->objectX
+                    + ((config->objectX > config->targetX)
+                        - (config->objectX < config->targetX));
+                int straightY = config->objectY
+                    + ((config->objectY > config->targetY)
+                        - (config->objectY < config->targetY));
 
                 if (candidateX == straightX && candidateY == straightY) {
-                    if (config->stopOneHopAway) {
+                    if (config->planMode
+                        == OW_WILD_HELPER_HOP_PLAN_STOP_ONE_HOP_AWAY) {
                         return OverworldWildHelper_SetHopResult(
                             config,
                             candidateX,
@@ -1518,12 +1516,15 @@ OverworldWildHelper_PickRandomBehaviorHop(
                             OW_WILD_HELPER_HOP_RESULT_FLAG_DIRECT,
                             result);
                     }
+                    fallbackXs[fallbackCount] = candidateX;
+                    fallbackYs[fallbackCount++] = candidateY;
                     continue;
                 }
                 if ((config->directionCount & 0x40) != 0
                     && candidateX == config->targetX
                     && candidateY == config->targetY) {
-                    hasBacktrack = TRUE;
+                    fallbackXs[fallbackCount] = candidateX;
+                    fallbackYs[fallbackCount++] = candidateY;
                     continue;
                 }
             }
@@ -1536,11 +1537,14 @@ OverworldWildHelper_PickRandomBehaviorHop(
     }
 
     if (candidateCount == 0) {
-        if (!hasBacktrack) {
+        int fallbackIndex;
+
+        if (fallbackCount == 0) {
             return FALSE;
         }
-        targetX = config->targetX;
-        targetY = config->targetY;
+        fallbackIndex = gf_rand() % fallbackCount;
+        targetX = fallbackXs[fallbackIndex];
+        targetY = fallbackYs[fallbackIndex];
     }
 
     return OverworldWildHelper_SetHopResult(
@@ -1559,20 +1563,18 @@ static BOOL OverworldWildHelper_PlanBehaviorHopStep(
     void *context,
     OverworldWildHelperHopResult *result)
 {
-    s16 nodeXs[OW_WILD_HELPER_HOP_PLAN_NODE_COUNT];
-    s16 nodeYs[OW_WILD_HELPER_HOP_PLAN_NODE_COUNT];
-    s16 firstXs[OW_WILD_HELPER_HOP_PLAN_NODE_COUNT];
-    s16 firstYs[OW_WILD_HELPER_HOP_PLAN_NODE_COUNT];
-    u8 nodeDepths[OW_WILD_HELPER_HOP_PLAN_NODE_COUNT];
-    int head = 0;
-    int tail = 0;
-    int bestFirstX = 0;
-    int bestFirstY = 0;
-    int bestTerminalX = 0;
-    int bestTerminalY = 0;
-    int bestDistance = 0x7FFF;
-    u8 bestDepth = 0xFF;
-    BOOL bestFound = FALSE;
+    s8 stepXs[OW_WILD_HELPER_HOP_PLAN_MAX_DIRECTIONS];
+    s8 stepYs[OW_WILD_HELPER_HOP_PLAN_MAX_DIRECTIONS];
+    int currentDistance;
+    int planDirectionCount;
+    int directionIndex;
+    int validationCount = 0;
+    int randomLandingX = 0;
+    int randomLandingY = 0;
+    u32 randomCandidateCount;
+    BOOL rejectStraight;
+    BOOL randomizeDirections;
+    BOOL straightFallbackPass = FALSE;
 
     if (config == NULL
         || validator == NULL
@@ -1581,8 +1583,13 @@ static BOOL OverworldWildHelper_PlanBehaviorHopStep(
         || config->maxDistance < config->minDistance) {
         return FALSE;
     }
+    if (config->objectX == config->targetX
+        && config->objectY == config->targetY) {
+        return FALSE;
+    }
 
-    if ((config->stopOneHopAway
+    if (config->planMode != OW_WILD_HELPER_HOP_PLAN_FLEE
+        && (config->planMode == OW_WILD_HELPER_HOP_PLAN_STOP_ONE_HOP_AWAY
             || !OverworldWildHelper_IsLandingAllowed(
                 config,
                 validator,
@@ -1599,150 +1606,123 @@ static BOOL OverworldWildHelper_PlanBehaviorHopStep(
         return FALSE;
     }
 
-    nodeXs[tail] = (s16)config->objectX;
-    nodeYs[tail] = (s16)config->objectY;
-    firstXs[tail] = (s16)config->objectX;
-    firstYs[tail] = (s16)config->objectY;
-    nodeDepths[tail] = 0;
-    tail++;
+    /* Solve one Hop only. After its profile pause, the normal behavior owner
+     * reads the current target and plans again. Retaining a moving target here
+     * makes later Hops chase a stale player tile. */
+    currentDistance = OverworldWildHelper_GetHopPlanDistance(
+        config->objectX,
+        config->objectY,
+        config->targetX,
+        config->targetY);
+    planDirectionCount = OverworldWildHelper_BuildHopPlanDirections(
+        config,
+        config->objectX,
+        config->objectY,
+        stepXs,
+        stepYs);
+    rejectStraight = (config->directionCount & 0x80) != 0
+        && (gf_rand() % 100) >= config->directions[5];
+    randomizeDirections = (config->directionCount & 0xA0) != 0;
 
-    while (head < tail) {
-        int fromX = nodeXs[head];
-        int fromY = nodeYs[head];
-        int nodeDistance = OverworldWildHelper_GetHopPlanDistance(
-            fromX,
-            fromY,
-            config->targetX,
-            config->targetY);
-        s8 stepXs[OW_WILD_HELPER_HOP_PLAN_MAX_DIRECTIONS];
-        s8 stepYs[OW_WILD_HELPER_HOP_PLAN_MAX_DIRECTIONS];
-        int planDirectionCount = OverworldWildHelper_BuildHopPlanDirections(
-            config,
-            fromX,
-            fromY,
-            stepXs,
-            stepYs);
-        int directionIndex;
+retry_directions:
+    randomCandidateCount = 0;
+    /* A directed Hop must reduce the remaining distance. A legal sideways or
+     * backward landing can make an actor Hop forever on an isolated roof. If
+     * every closer landing is blocked, stay put and retry on the profile
+     * clock after the target or loaded terrain changes. */
+    for (directionIndex = 0;
+         directionIndex < planDirectionCount;
+         directionIndex++) {
+        int distance;
 
-        if (nodeDepths[head] >= OW_WILD_HELPER_HOP_PLAN_MAX_HOPS) {
-            head++;
-            continue;
-        }
+        for (distance = config->maxDistance;
+             distance >= config->minDistance;
+             distance--) {
+            int landingX = config->objectX
+                + stepXs[directionIndex] * distance;
+            int landingY = config->objectY
+                + stepYs[directionIndex] * distance;
+            BOOL straightDirection =
+                stepXs[directionIndex] == (s8)config->directions[6]
+                && stepYs[directionIndex] == (s8)config->directions[7];
 
-        for (directionIndex = 0; directionIndex < planDirectionCount; directionIndex++) {
-            int stepX = stepXs[directionIndex];
-            int stepY = stepYs[directionIndex];
-            int distance;
+            if (rejectStraight
+                && straightDirection != straightFallbackPass) {
+                continue;
+            }
 
-            for (distance = config->maxDistance; distance >= config->minDistance; distance--) {
-                int landingX = fromX + stepX * distance;
-                int landingY = fromY + stepY * distance;
-                int landingDistance = OverworldWildHelper_GetHopPlanDistance(
+            if (config->planMode == OW_WILD_HELPER_HOP_PLAN_FLEE) {
+                int playerX = config->objectX * 2 - config->targetX;
+                int playerY = config->objectY * 2 - config->targetY;
+
+                if (OverworldWildHelper_GetHopPlanDistance(
+                        landingX,
+                        landingY,
+                        playerX,
+                        playerY) <= currentDistance) {
+                    continue;
+                }
+            } else if (OverworldWildHelper_GetHopPlanDistance(
+                           landingX,
+                           landingY,
+                           config->targetX,
+                           config->targetY) >= currentDistance) {
+                continue;
+            }
+            if (config->planMode
+                    == OW_WILD_HELPER_HOP_PLAN_STOP_ONE_HOP_AWAY
+                && landingX == config->targetX
+                && landingY == config->targetY) {
+                continue;
+            }
+            if (validationCount >= OW_WILD_HELPER_HOP_PLAN_VALIDATION_BUDGET) {
+                return FALSE;
+            }
+            validationCount++;
+            if (!OverworldWildHelper_IsLandingAllowed(
+                    config,
+                    validator,
+                    context,
+                    landingX,
+                    landingY)) {
+                continue;
+            }
+
+            if (!randomizeDirections) {
+                return OverworldWildHelper_SetHopResult(
+                    config,
                     landingX,
                     landingY,
-                    config->targetX,
-                    config->targetY);
-                int firstX = nodeDepths[head] == 0 ? landingX : firstXs[head];
-                int firstY = nodeDepths[head] == 0 ? landingY : firstYs[head];
-                BOOL landingIsTarget;
-                BOOL landingCanReachTarget;
-
-                if (landingDistance >= nodeDistance) {
-                    continue;
-                }
-                /*
-                 * A coordinate already reached by this breadth-first search
-                 * cannot produce a shorter route.  Reject it before the
-                 * caller's comparatively expensive map/object validation.
-                 */
-                if (OverworldWildHelper_HopPlanHasVisited(
-                        nodeXs,
-                        nodeYs,
-                        tail,
-                        landingX,
-                        landingY)) {
-                    continue;
-                }
-                if (!OverworldWildHelper_IsHopPlanCandidate(
-                        config,
-                        validator,
-                        context,
-                        fromX,
-                        fromY,
-                        landingX,
-                        landingY)) {
-                    continue;
-                }
-
-                landingIsTarget = landingX == config->targetX
-                    && landingY == config->targetY;
-                landingCanReachTarget =
-                    !landingIsTarget
-                    && OverworldWildHelper_IsHopTargetOneHopAway(
-                        config,
-                        landingX,
-                        landingY,
-                        config->targetX,
-                        config->targetY);
-
-                if (!bestFound
-                    || landingDistance < bestDistance
-                    || (landingDistance == bestDistance
-                        && nodeDepths[head] + 1 < bestDepth)) {
-                    bestFound = TRUE;
-                    bestFirstX = firstX;
-                    bestFirstY = firstY;
-                    bestTerminalX = firstX;
-                    bestTerminalY = firstY;
-                    bestDistance = landingDistance;
-                    bestDepth = nodeDepths[head] + 1;
-                }
-
-                if ((!config->stopOneHopAway && landingIsTarget)
-                    || (config->stopOneHopAway && landingCanReachTarget)) {
-                    return OverworldWildHelper_SetHopResult(
-                        config,
-                        firstX,
-                        firstY,
-                        landingX,
-                        landingY,
-                        OW_WILD_HELPER_HOP_RESULT_FLAG_PLANNED,
-                        result);
-                }
-
-                if (config->stopOneHopAway && landingIsTarget) {
-                    continue;
-                }
-
-                if (nodeDepths[head] + 1 >= OW_WILD_HELPER_HOP_PLAN_MAX_HOPS
-                    || tail >= OW_WILD_HELPER_HOP_PLAN_NODE_COUNT) {
-                    continue;
-                }
-
-                nodeXs[tail] = (s16)landingX;
-                nodeYs[tail] = (s16)landingY;
-                firstXs[tail] = (s16)firstX;
-                firstYs[tail] = (s16)firstY;
-                nodeDepths[tail] = nodeDepths[head] + 1;
-                tail++;
+                    landingX,
+                    landingY,
+                    OW_WILD_HELPER_HOP_RESULT_FLAG_PLANNED,
+                    result);
+            }
+            randomCandidateCount++;
+            if ((gf_rand() % randomCandidateCount) == 0) {
+                randomLandingX = landingX;
+                randomLandingY = landingY;
             }
         }
-
-        head++;
     }
 
-    if (!bestFound) {
-        return FALSE;
+    if (randomCandidateCount != 0) {
+        return OverworldWildHelper_SetHopResult(
+            config,
+            randomLandingX,
+            randomLandingY,
+            randomLandingX,
+            randomLandingY,
+            OW_WILD_HELPER_HOP_RESULT_FLAG_PLANNED,
+            result);
     }
 
-    return OverworldWildHelper_SetHopResult(
-        config,
-        bestFirstX,
-        bestFirstY,
-        bestTerminalX,
-        bestTerminalY,
-        OW_WILD_HELPER_HOP_RESULT_FLAG_PLANNED,
-        result);
+    if (rejectStraight && !straightFallbackPass) {
+        straightFallbackPass = TRUE;
+        goto retry_directions;
+    }
+
+    return FALSE;
 }
 
 static BOOL OverworldWildHelper_IsContextCurrent(
@@ -3798,35 +3778,43 @@ static void OverworldWildHelper_CleanupResidentData(FieldSystem *fieldSystem)
     sOverworldWildHelperPlayerBallChargeFrames = 0;
 }
 
-static void OverworldWildHelper_NormalizeThrowPresentation(
+static BOOL OverworldWildHelper_ApplyPresentationCommand(
     FieldSystem *fieldSystem,
     OverworldWildSpawnState *state,
-    int slot)
+    const OverworldWildHelperPresentationCall *call)
 {
     OverworldWildHelperPlayerBallProjectileState *projectile =
         &sOverworldWildHelperPlayerBallProjectile;
     LocalMapObject *object;
     int x;
     int y;
+    int slot;
 
-    if (slot == OW_WILD_HELPER_THROW_PRESENTATION_TRANSITION_DISCARD) {
+    if (call == NULL
+        || call->version != OVERWORLD_WILD_HELPER_PRESENTATION_CALL_VERSION
+        || call->size != sizeof(*call)
+        || call->operation > OW_WILD_HELPER_PRESENTATION_DISCARD) {
+        return FALSE;
+    }
+    slot = call->slot;
+    if (call->operation == OW_WILD_HELPER_PRESENTATION_DISCARD) {
         if (projectile->objectId == 0) {
             projectile->objectId = OW_WILD_PLAYER_BALL_PROJECTILE_OBJECT_ID;
         }
         OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
-        return;
+        return TRUE;
     }
-    if (slot == OW_WILD_HELPER_THROW_PRESENTATION_TRANSITION_SUSPEND) {
+    if (call->operation == OW_WILD_HELPER_PRESENTATION_SUSPEND) {
         if (projectile->phase == OW_WILD_HELPER_PLAYER_BALL_PHASE_NONE) {
-            return;
+            return TRUE;
         }
         if (projectile->objectId == 0) {
-            return;
+            return TRUE;
         }
         if (projectile->objectId != OW_WILD_PLAYER_BALL_PROJECTILE_OBJECT_ID
             || projectile->state != state) {
             OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
-            return;
+            return TRUE;
         }
         OverworldWildHelper_RestoreCaptureTargetPalette(fieldSystem);
         if (OverworldWildHelper_IsPlayerBallProjectileObjectCurrent(
@@ -3836,13 +3824,11 @@ static void OverworldWildHelper_NormalizeThrowPresentation(
             projectile->object = NULL;
         }
         projectile->objectId = 0;
-        return;
+        return TRUE;
     }
-    if (slot == OW_WILD_HELPER_THROW_PRESENTATION_TRANSITION_RESUME) {
-        OVERWORLD_MOUNT_OVERLAY_ENTRY->prepareMapTransition(
-            OW_WILD_MAP_HEADER_CHANGE_RESUME_PRESENTATION);
+    if (call->operation == OW_WILD_HELPER_PRESENTATION_REBIND) {
         if (projectile->phase == OW_WILD_HELPER_PLAYER_BALL_PHASE_NONE) {
-            return;
+            return TRUE;
         }
         if (projectile->objectId != 0
             || projectile->state != state
@@ -3859,7 +3845,7 @@ static void OverworldWildHelper_NormalizeThrowPresentation(
                         != projectile->impactEncounterGeneration))) {
             projectile->objectId = OW_WILD_PLAYER_BALL_PROJECTILE_OBJECT_ID;
             OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
-            return;
+            return TRUE;
         }
         if (fieldSystem->playerAvatar == NULL
             || fieldSystem->playerAvatar->mapObject == NULL
@@ -3868,7 +3854,7 @@ static void OverworldWildHelper_NormalizeThrowPresentation(
                     fieldSystem)) == NULL) {
             projectile->objectId = OW_WILD_PLAYER_BALL_PROJECTILE_OBJECT_ID;
             OverworldWildHelper_CancelPlayerBallProjectile(fieldSystem);
-            return;
+            return TRUE;
         }
         projectile->fieldSystem = fieldSystem;
         projectile->manager = (MapObjectMan *)fieldSystem->mapObjectMan;
@@ -3932,12 +3918,15 @@ static void OverworldWildHelper_NormalizeThrowPresentation(
                 projectile->object,
                 OW_WILD_HELPER_PLAYER_BALL_WHITE_TAG);
         }
-        return;
+        return TRUE;
     }
 
+    if (call->operation != OW_WILD_HELPER_PRESENTATION_NORMALIZE_SLOT) {
+        return FALSE;
+    }
     if (!OverworldWildHelper_IsPresentationContextCurrent(fieldSystem, state)
         || !OverworldWildHelper_IsExactObject(fieldSystem, state, slot)) {
-        return;
+        return FALSE;
     }
 
     object = state->spawns[slot].object;
@@ -3958,6 +3947,7 @@ static void OverworldWildHelper_NormalizeThrowPresentation(
     MapObject_ClearBits(
         object,
         BIT_VANISH | MAPOBJECTFLAG_UNK18);
+    return TRUE;
 }
 
 static void OverworldWildHelper_SyncCarriedThrowTarget(
@@ -4068,7 +4058,7 @@ static BOOL OverworldWildHelper_IsStablePickupThrowTarget(
             targetSlot)
         || state->movementSpotStates[targetSlot] == 1
         || (unstableMask & (1u << targetSlot)) != 0
-        || state->movementSpawnRunActive[targetSlot]
+        || state->movementSpawnRunActive[targetSlot] == OW_WILD_SPAWN_ENTRY_HOP
         || state->movementStagedHopPending[targetSlot]
         || state->movementRamCrashShakeTimers[targetSlot] != 0
         || state->movementTeleportHidden[targetSlot]
@@ -4307,7 +4297,8 @@ static BOOL OverworldWildHelper_ConfirmDistanceDespawn(
     OverworldWildSpawnState *state,
     OverworldWildPresentationState *presentation,
     int slot,
-    BOOL movementProtected,
+    BOOL hardProtected,
+    BOOL movementDeferred,
     u8 *distance)
 {
     LocalMapObject *object;
@@ -4321,7 +4312,7 @@ static BOOL OverworldWildHelper_ConfirmDistanceDespawn(
         || slot < 0
         || slot >= OW_WILD_MAX_SPAWNS
         || state->spawns[slot].shiny
-        || movementProtected
+        || hardProtected
         || fieldSystem->playerAvatar == NULL
         || !OverworldWildHelper_IsExactObject(fieldSystem, state, slot)) {
         if (state != NULL
@@ -4329,6 +4320,7 @@ static BOOL OverworldWildHelper_ConfirmDistanceDespawn(
             && slot >= 0
             && slot < OW_WILD_MAX_SPAWNS) {
             presentation->farSamples[slot] = 0;
+            presentation->distanceDespawnPendingMask &= ~(1u << slot);
         }
         return FALSE;
     }
@@ -4345,12 +4337,17 @@ static BOOL OverworldWildHelper_ConfirmDistanceDespawn(
     }
     if (measured <= OW_WILD_DISTANCE_DESPAWN_TILES) {
         presentation->farSamples[slot] = 0;
+        presentation->distanceDespawnPendingMask &= ~(1u << slot);
         return FALSE;
     }
     if (presentation->farSamples[slot] < OW_WILD_DISTANCE_DESPAWN_SAMPLES) {
         presentation->farSamples[slot]++;
     }
-    return presentation->farSamples[slot] >= OW_WILD_DISTANCE_DESPAWN_SAMPLES;
+    if (presentation->farSamples[slot] >= OW_WILD_DISTANCE_DESPAWN_SAMPLES) {
+        presentation->distanceDespawnPendingMask |= 1u << slot;
+    }
+    return !movementDeferred
+        && presentation->farSamples[slot] >= OW_WILD_DISTANCE_DESPAWN_SAMPLES;
 }
 
 static OverworldWildDespawnAuthorization OverworldWildHelper_AuthorizeDespawn(
@@ -4743,22 +4740,25 @@ static void OverworldWildHelper_DespawnFarEncounters(
     OverworldWildSpawnState *state,
     OverworldWildPresentationState *presentation,
     OverworldWildDespawnTelemetry *telemetry,
-    u16 movementProtectedMask,
+    u16 hardProtectedMask,
+    u16 movementDeferredMask,
     OverworldWildHelperResetSlotFunc resetSlot)
 {
     int i;
 
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         u8 distance;
-        BOOL movementProtected = (movementProtectedMask & (1u << i)) != 0
-            || state->movementSpawnRunActive[i];
+        BOOL hardProtected = (hardProtectedMask & (1u << i)) != 0
+            || state->movementSpawnRunActive[i] != OW_WILD_SPAWN_ENTRY_NONE;
+        BOOL movementDeferred = (movementDeferredMask & (1u << i)) != 0;
 
         if (OverworldWildHelper_ConfirmDistanceDespawn(
                 fieldSystem,
                 state,
                 presentation,
                 i,
-                movementProtected,
+                hardProtected,
+                movementDeferred,
                 &distance)) {
             (void)OverworldWildHelper_RemoveEncounter(
                 fieldSystem,
@@ -4882,69 +4882,6 @@ static BOOL OverworldWildHelper_ValidateDeferredBattle(
         && OverworldWildHelper_IsExactObject(fieldSystem, state, slot);
 }
 
-static void OverworldWildHelper_AppendFleeFallbackDirections(
-    u8 *directions,
-    int *directionCount,
-    int fleeDx,
-    int fleeDy)
-{
-    static const u8 baseDirections[] = {
-        OW_WILD_HELPER_DIRECTION_UP,
-        OW_WILD_HELPER_DIRECTION_RIGHT,
-        OW_WILD_HELPER_DIRECTION_DOWN,
-        OW_WILD_HELPER_DIRECTION_LEFT,
-    };
-    static const s8 directionDeltas[][2] = {
-        {0, -1},
-        {0, 1},
-        {-1, 0},
-        {1, 0},
-    };
-    int start;
-
-    if (directions == NULL
-        || directionCount == NULL
-        || *directionCount >= 4
-        || (fleeDx == 0 && fleeDy == 0)) {
-        return;
-    }
-    if (*directionCount < 0) {
-        *directionCount = 0;
-    }
-
-    start = gf_rand() % 4;
-    while (*directionCount < 4) {
-        int bestDirection = -1;
-        int bestScore;
-        int i;
-
-        for (i = 0; i < 4; i++) {
-            u8 direction = baseDirections[(start + i) % 4];
-            int score;
-            int j;
-
-            for (j = 0; j < *directionCount; j++) {
-                if (directions[j] == direction) {
-                    break;
-                }
-            }
-            if (j < *directionCount) {
-                continue;
-            }
-
-            score = directionDeltas[direction][0] * fleeDx
-                + directionDeltas[direction][1] * fleeDy;
-            if (bestDirection < 0 || score > bestScore) {
-                bestDirection = direction;
-                bestScore = score;
-            }
-        }
-
-        directions[*directionCount] = (u8)bestDirection;
-        (*directionCount)++;
-    }
-}
-
 #define OW_WILD_HELPER_OVERLAY_ENTRY_INITIALIZER { \
     OVERWORLD_WILD_HELPER_OVERLAY_MAGIC, \
     OVERWORLD_WILD_HELPER_OVERLAY_VERSION, \
@@ -4954,7 +4891,7 @@ static void OverworldWildHelper_AppendFleeFallbackDirections(
     OverworldWildHelper_PickRandomBehaviorHop, \
     OverworldWildHelper_PlanBehaviorHopStep, \
     OverworldWildHelper_IsPresentationContextCurrent, \
-    OverworldWildHelper_NormalizeThrowPresentation, \
+    OverworldWildHelper_ApplyPresentationCommand, \
     OverworldWildHelper_SyncCarriedThrowTarget, \
     OverworldWildHelper_ReconcilePresentations, \
     OverworldWildHelper_DespawnFarEncounters, \
@@ -5096,8 +5033,3 @@ typedef char OverworldWildHelperOverlayEntrySizeMustRemain104Bytes[
 const OverworldWildHelperOverlayEntry gOverworldWildHelperOverlayEntry
     __attribute__((section(".overworld_wild_helper_entry"), used)) =
         OW_WILD_HELPER_OVERLAY_ENTRY_INITIALIZER;
-
-const OverworldWildHelperFleeFallbackEntry gOverworldWildHelperFleeFallbackEntry
-    __attribute__((section(".overworld_wild_helper_flee_fallback_entry"), used)) = {
-        OverworldWildHelper_AppendFleeFallbackDirections,
-    };

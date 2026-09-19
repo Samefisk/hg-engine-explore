@@ -24,6 +24,17 @@ import types
 import zipfile
 from pathlib import Path
 
+if __package__:
+    from .verify_pokemon_move_history_capture import (
+        elf_bytes_at,
+        verify_overlay153_spawn_tail_packaging,
+    )
+else:
+    from verify_pokemon_move_history_capture import (
+        elf_bytes_at,
+        verify_overlay153_spawn_tail_packaging,
+    )
+
 
 REPO = Path(__file__).resolve().parents[1]
 OVERLAY_ID = 154
@@ -38,20 +49,56 @@ SUMMARY_TEMPLATE_ID = 0x02103A28
 ARM9_BASE = 0x02000000
 OVERLAY129_BASE = 0x023D8000
 OVERLAY129_END = 0x023E0000
+
+
+def overlay129_extent_fits(image_size: int) -> bool:
+    """Enforce the resident reservation, not task 4's historical spare bytes."""
+    return 0 < image_size <= OVERLAY129_END - OVERLAY129_BASE
+
+
 OVERLAY153_ID = 153
 OVERLAY153_BASE = 0x023BE400
-OVERLAY153_LIMIT = 0x1C00
-OVERLAY153_WALK_ENTRY = OVERLAY153_BASE + 0x1000
-OVERLAY153_PROFILE_ENTRY = OVERLAY153_BASE + 0x1040
-OVERLAY153_MOUNT_ENTRY = OVERLAY153_BASE + 0x1058
-OVERLAY153_FACE_ENTRY = OVERLAY153_BASE + 0x1068
+OVERLAY153_PREFIX_LIMIT = 0x1C00
+OVERLAY153_RETIRED_WALK_TABLES_START = OVERLAY153_BASE + 0x1000
+OVERLAY153_RETIRED_WALK_TABLES_END = OVERLAY153_BASE + 0x1088
+OVERLAY153_WALK_HELPERS = {
+    "OverworldWalk_DecelerateTime": OVERLAY153_BASE + 0x1000,
+    "OverworldWalk_ProposeStep": OVERLAY153_BASE + 0x105C,
+    "OverworldWalk_ClampTime": OVERLAY153_BASE + 0x1088,
+    "OverworldWalk_AccelerateTime": OVERLAY153_BASE + 0x109E,
+    "OverworldWalk_SkidTiles": OVERLAY153_BASE + 0x10D6,
+    "OverworldWalk_SkidTime": OVERLAY153_BASE + 0x10F0,
+    "OverworldWalk_StompApplies": OVERLAY153_BASE + 0x1104,
+    "OverworldWalk_DirectionFromKeys": OVERLAY153_BASE + 0x1134,
+    "OverworldWalk_DirectionKey": OVERLAY153_BASE + 0x1186,
+    "OverworldWalk_DeltaX": OVERLAY153_BASE + 0x119C,
+    "OverworldWalk_DeltaY": OVERLAY153_BASE + 0x11BE,
+    "OverworldWalk_IsFortyFiveDegreeTurn": OVERLAY153_BASE + 0x11E2,
+    "OverworldWalk_DirectionFromDelta": OVERLAY153_BASE + 0x128C,
+    "OverworldWalk_StrictDiagonalAllowed": OVERLAY153_BASE + 0x12CE,
+    "OverworldWalk_DiagonalFacing": OVERLAY153_BASE + 0x134E,
+    "OverworldWalk_ResolveMountedDiagonal": OVERLAY153_BASE + 0x1380,
+    "OverworldWalk_StartMountedFlat": OVERLAY153_BASE + 0x1440,
+    "OverworldWalk_FilterMountedInput": OVERLAY153_BASE + 0x15A0,
+}
+OVERLAY153_RETIRED_WALK_SYMBOLS = {
+    "gOverworldWalkModuleEntry",
+    "gOverworldWalkProfileModuleEntry",
+    "gOverworldWalkMountModuleEntry",
+    "gOverworldWalkFaceModuleEntry",
+    "gOverworldWalkWildPolicyModuleEntry",
+    "Walk_ApplyFacePlayerFacing",
+    "Walk_MountApply",
+    "Walk_MountFilterInput",
+    "Walk_StartMountedFlatMotion",
+}
 OVERLAY152_BASE = 0x023C0400
 MAX_CANDIDATES = 458
 NATIVE_BOOTSTRAP_EXPECTED_SHA256 = (
-    "0523f7594cb05e21e22723f4a5305762a4f765adf3f13519525fb65f65d658a1"
+    "305fbfddb705079584636e52e4cf2008360706b4bc8c61734e4f51d564bfe43d"
 )
 NATIVE_BOOTSTRAP_EXPECTED_CDHASH = (
-    "166e69db3bfae0beb5f024fe98cf354cc1e533f7"
+    "96982744ecd810541e59be8e8ab1d931a092b07d"
 )
 
 
@@ -250,7 +297,7 @@ def source_contracts(root: Path) -> None:
     protected_spawn_swift = (
         root / "scripts/summary_move_relearn_protected_spawn.swift"
     ).read_text()
-    headless = (root / "scripts/headless-overworld-test.py").read_text()
+    headless = (root / "tools/overworld/devtools_native.py").read_text()
     pokemon_core = (root / "src/pokemon.c").read_text()
 
     protected_tree = ast.parse(protected_spawn)
@@ -729,7 +776,7 @@ def source_contracts(root: Path) -> None:
         '"scripts/launch_summary_move_relearn_runtime.py"',
         '"scripts/verify_summary_move_relearn_runtime.py"',
         '"scripts/pokemon_move_history_build_manifest.py"',
-        '"scripts/headless-overworld-test.py"',
+        '"tools/overworld/devtools_native.py"',
         '"scripts/verify_pokemon_move_history_party_integrity.py"',
         '"scripts/summary_move_relearn_protected_spawn.py"',
     ):
@@ -759,8 +806,8 @@ def source_contracts(root: Path) -> None:
         and '"summary-move-relearn-evidence-artifacts-v1"' in runtime
         and '"summary-move-relearn-result-v1"' in runtime
         and "EVIDENCE_ARTIFACTS.reauthenticate()" in runtime
-        and '"BOOTSTRAP_LIBDESMUME_PATH"' in runtime
-        and "DeSmuME(BOOTSTRAP_LIBDESMUME_PATH)" in runtime
+        and '"BOOTSTRAP_MELONDS_LIBRARY"' in runtime
+        and "HEADLESS.create_emulator()" in runtime
         and "runtime closure changed after result publication" in runtime
         and "runtime closure changed after stdout publication" in runtime
         and "os.replace(temporary_path, path)" in runtime,
@@ -877,7 +924,7 @@ def source_contracts(root: Path) -> None:
         and '"PIL"' in launcher
         and "runtime module differs from publication manifest" in launcher
         and "loaded mutable native image is outside sealed closure" in launcher
-        and "runtime libdesmume changed across native load" in launcher
+        and "runtime libmelonds changed across native load" in launcher
         and "_authenticate_loaded_python_modules(" in launcher
         and 'python["startup_bootstrap"]' in launcher
         and "_native_bootstrap_runtime_record()" in manifest_builder
@@ -886,15 +933,15 @@ def source_contracts(root: Path) -> None:
         in manifest_builder
         and "runtime import path/finder closure changed during execution"
         in launcher
-        and '"BOOTSTRAP_LIBDESMUME_PATH": libdesmume_path' in launcher
+        and '"BOOTSTRAP_MELONDS_LIBRARY": native_handle' in launcher
         and "require_bound_runtime=True" in launcher
-        and "create_desmume()" in headless
-        and "create_desmume()" in party_verifier
+        and "create_emulator()" in headless
+        and "create_emulator()" in party_verifier
         and "os.path.abspath(sys.executable)" in headless
         and "os.path.abspath(venv_python)" in headless
         and "os.path.abspath(sys.executable)" in party_verifier
         and "os.path.abspath(venv_python)" in party_verifier,
-        "runtime launcher does not independently seal Python/DeSmuME/Pillow/"
+        "runtime launcher does not independently seal Python/MelonDS/Pillow/"
         "native execution before retained-buffer helpers",
     )
     bind_index = build_wrapper.index("--bind-runtime")
@@ -1564,9 +1611,7 @@ def bootstrap_host_contracts(root: Path) -> None:
     expected_membership_paths.update(
         graph_directories(stdlib, {"__pycache__", "site-packages"})
     )
-    expected_membership_paths.update(
-        graph_directories(site_packages / "desmume", {"__pycache__"})
-    )
+    expected_membership_paths.add(str(root / "build/melonds"))
     expected_membership_paths.update(
         graph_directories(site_packages / "PIL", {"__pycache__"})
     )
@@ -4838,35 +4883,45 @@ def binary_contracts(args: argparse.Namespace) -> None:
         )
 
     require(OVERLAY153_ID < len(rows), "y9 has no overlay 153 row")
-    require(
-        rows[OVERLAY153_ID][2] <= OVERLAY153_LIMIT,
-        "read-only query growth exceeded overlay 153's guard",
-    )
     overlay153_linked = (
         REPO / "build/pokemon_move_history_overlay_linked.o"
     )
-    require(
-        symbol_address(overlay153_linked, "gOverworldWalkModuleEntry")
-            == OVERLAY153_WALK_ENTRY
-        and symbol_address(
-            overlay153_linked,
-            "gOverworldWalkProfileModuleEntry",
-        ) == OVERLAY153_PROFILE_ENTRY
-        and symbol_address(
-            overlay153_linked,
-            "gOverworldWalkMountModuleEntry",
-        ) == OVERLAY153_MOUNT_ENTRY
-        and symbol_address(
-            overlay153_linked,
-            "gOverworldWalkFaceModuleEntry",
-        ) == OVERLAY153_FACE_ENTRY
-        and OVERLAY153_BASE + OVERLAY153_LIMIT + 0x400
-            <= OVERLAY152_BASE,
-        "overlay 153 Walk entries or upper guard moved",
+    overlay153 = (
+        REPO / "build/output_pokemon_move_history_overlay.bin"
+    ).read_bytes()
+    # Query/Walk bytes cannot grow into the reserved tail. The shared gate
+    # pins their complete old prefix and admits only the named Wild function.
+    verify_overlay153_spawn_tail_packaging(overlay153_linked, overlay153)
+    require(rows[OVERLAY153_ID] == (
+        OVERLAY153_ID, OVERLAY153_BASE, len(overlay153), 0, 0, 0, OVERLAY153_ID, 0),
+        "overlay 153 y9 metadata differs from its authenticated prefix/tail")
+    overlay153_symbols = subprocess.check_output(
+        ["arm-none-eabi-nm", str(overlay153_linked)],
+        text=True,
     )
     require(
-        args.overlay129.stat().st_size <= 0x7FD0,
-        "task4 consumed the required 0x30-byte overlay-129 headroom",
+        all(symbol_address(overlay153_linked, symbol) == address
+            for symbol, address in OVERLAY153_WALK_HELPERS.items())
+        and all(re.search(
+            rf"(?m)^[0-9a-fA-F]+\s+[A-Za-z]\s+{re.escape(symbol)}$",
+            overlay153_symbols,
+        ) is None for symbol in OVERLAY153_RETIRED_WALK_SYMBOLS)
+        and overlay153[
+            OVERLAY153_RETIRED_WALK_TABLES_START - OVERLAY153_BASE:
+            OVERLAY153_RETIRED_WALK_TABLES_END - OVERLAY153_BASE
+        ] == elf_bytes_at(
+            overlay153_linked,
+            OVERLAY153_RETIRED_WALK_TABLES_START,
+            OVERLAY153_RETIRED_WALK_TABLES_END
+                - OVERLAY153_RETIRED_WALK_TABLES_START,
+        )
+        and OVERLAY153_BASE + OVERLAY153_PREFIX_LIMIT + 0x400
+            <= OVERLAY152_BASE,
+        "overlay 153 direct Walk helpers, retired symbols, packaging, or reserved tail boundary moved",
+    )
+    require(
+        overlay129_extent_fits(args.overlay129.stat().st_size),
+        "overlay 129 image exceeds its resident memory reservation",
     )
 
     relocations = subprocess.check_output(

@@ -127,6 +127,15 @@ OverworldWalkDirectionPolicy_IsFortyFiveDegreeTurn(u8 from, u8 to)
         > 0;
 }
 
+OVERWORLD_WALK_DIRECTION_INLINE u8
+OverworldWalkDirectionPolicy_ApplyStartResult(
+    u8 committedDirection,
+    u8 proposedDirection,
+    BOOL accepted)
+{
+    return accepted ? proposedDirection : committedDirection;
+}
+
 #undef OVERWORLD_WALK_DIRECTION_INLINE
 #undef OVERWORLD_WALK_DIRECTION_RODATA
 

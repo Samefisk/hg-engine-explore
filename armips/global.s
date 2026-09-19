@@ -22,6 +22,7 @@
 .include "armips/asm/overworld_follower_release_overlay2.s" // reuse retired follower task for release presentation
 .include "armips/asm/overworld_follower_selector.s" // reserve physical Y from registered items
 .include "armips/asm/overworld_mount.s" // mounted player-control and crash-sound call sites
+.include "armips/asm/field_party_move_query.s" // lock-once native party move lookup
 .include "armips/asm/trainers.s" // code for fixing the trainer ai accessing move data
 .include "armips/asm/cries.s" // code for remapping species to the file in the sdat
 .include "armips/asm/user_config.s" // user configurable code

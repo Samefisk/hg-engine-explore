@@ -256,10 +256,17 @@ FORCE_COMPILE_CONFIG:
 
 $(COMPILE_CONFIG_STAMP): FORCE_COMPILE_CONFIG | $(BUILD)
 	@{ \
-		printf '%s\n' 'CC=$(CC)' 'CFLAGS=$(CFLAGS)' \
-			'AS=$(AS)' 'ASFLAGS=$(ASFLAGS)' \
+		printf '%s\n' 'CC=$(CC)' \
+			"CC_ID=$$($(CC) -dumpmachine)@$$($(CC) -dumpfullversion -dumpversion)" \
+			'CFLAGS=$(CFLAGS)' \
+			'AS=$(AS)' "AS_ID=$$($(AS) --version | sed -n '1p')" \
+			'ASFLAGS=$(ASFLAGS)' \
+			'LD=$(LD)' "LD_ID=$$($(LD) --version | sed -n '1p')" \
+			'OBJCOPY=$(OBJCOPY)' "OBJCOPY_ID=$$($(OBJCOPY) --version | sed -n '1p')" \
 			'OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS=$(OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS)' \
-			'OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS=$(OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS)'; \
+			'OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS=$(OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS)' \
+			'FIELD_ENEMY_PARTY_CFLAGS=$(FIELD_ENEMY_PARTY_CFLAGS)' \
+			'FIELD_MAP_TELEPORT_CFLAGS=$(FIELD_MAP_TELEPORT_CFLAGS)'; \
 	} > $@.tmp
 	@cmp -s $@ $@.tmp || mv $@.tmp $@
 	@rm -f $@.tmp
@@ -275,10 +282,23 @@ toolchain-preflight:
 		|| { echo "$(CC) cannot preprocess <stdint.h>. Reinstall its matching newlib headers or use ./docker-makerom.cmd." >&2; exit 1; }
 
 # generate .d dependency files that are included as part of compiling if it does not exist
+GENERATED_LEARNSET_C_SRCS := \
+	src/pokemon.c \
+	src/field/move_tutor.c \
+	src/field/script_commands.c \
+	src/party_menu.c \
+	src/save.c \
+	src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.c \
+	src/pokemon_move_history_overlay/pokemon_move_history.c \
+	src/pokemon_move_history_overlay/pokemon_move_relearn.c \
+	src/pokemon_move_history_task6_overlay/pokemon_move_history_task6.c \
+	src/summary_move_relearn_overlay/summary_move_relearn.c
+GENERATED_TEST_BATTLE_C_SRCS := src/test_battle.c
+
 define SRC_OBJ_INC_DEFINE
 # this generates the objects as part of generating the dependency list which will just be massive files of rules
-$1: $2 $(LEARNSETS_HEADER) $(BATTLETESTS_HEADER) $(COMPILE_CONFIG_STAMP) | $(CODE_BUILD_DIRS) venv toolchain-preflight
-	$(CC) -MMD -MF $(basename $1).d $(CFLAGS) $(if $(filter build/overlay.o,$1),-fno-ira-loop-pressure) $(if $(filter build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS),$(if $(filter build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o,$1),$(OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS))) -c $2 -o $1
+$1: $2 $(if $(filter $2,$(GENERATED_LEARNSET_C_SRCS)),$(LEARNSETS_HEADER)) $(if $(filter $2,$(GENERATED_TEST_BATTLE_C_SRCS)),$(BATTLETESTS_HEADER)) $(COMPILE_CONFIG_STAMP) | $(CODE_BUILD_DIRS) venv toolchain-preflight
+	$(CC) -MMD -MF $(basename $1).d $(CFLAGS) $(if $(filter build/overlay.o,$1),-fno-ira-loop-pressure -fno-tree-fre) $(if $(filter build/save.o,$1),-fno-tree-forwprop) $(if $(filter build/field/enemy_party.o,$1),$(FIELD_ENEMY_PARTY_CFLAGS)) $(if $(filter build/field/map_teleport.o,$1),$(FIELD_MAP_TELEPORT_CFLAGS)) $(if $(filter build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS),$(if $(filter build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o,$1),$(OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS))) -c $2 -o $1
 	@#printf "\t$(CC) $(CFLAGS) -c $2 -o $1" >> $(basename $1).d
 
 -include $(basename $1).d
@@ -329,9 +349,12 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS) | venv
 		--package-only \
 		--patched-arm9 $(BASE)/arm9.bin --require-patched-arm9
 	$(PYTHON_NO_VENV) scripts/verify_overworld_wild_direction_delta_calls.py
+	$(PYTHON_NO_VENV) scripts/verify_overworld_walk_helper_alignment.py
 	@echo "Making ROM..."
 	rm -f $(BUILDROM).tmp $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP)
 	$(NDSTOOL) -c $(BUILDROM).tmp -9 $(BASE)/arm9.bin -7 $(BASE)/arm7.bin -y9 $(BASE)/overarm9.bin -y7 $(BASE)/overarm7.bin -d $(FILESYS) -y $(BASE)/overlay -t $(BASE)/banner.bin -h $(BASE)/header.bin
+	$(PYTHON_NO_VENV) scripts/verify_overworld_spawn_identity.py --package-only --rom $(BUILDROM).tmp
+	$(PYTHON_NO_VENV) scripts/verify_overworld_wild_occupancy.py --package-only --rom $(BUILDROM).tmp
 	$(VENV)/bin/python3 -I -S -B -X pycache_prefix=/dev/null \
 		scripts/pokemon_move_history_build_manifest.py \
 		--seal $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) --rom $(BUILDROM).tmp \

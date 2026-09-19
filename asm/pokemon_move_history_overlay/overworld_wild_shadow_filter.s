@@ -59,7 +59,8 @@ OverworldWildSpawns_FilterNativeShadowVisibilityImpl:
 1:
     movs r2, #0
 2:
-    str r2, [r4, #0xC]
+    // Keep the encounter token in the high half of this stock work word.
+    strh r2, [r4, #0xC]
     bx lr
     .pool
 .size OverworldWildSpawns_FilterNativeShadowVisibilityImpl, . - OverworldWildSpawns_FilterNativeShadowVisibilityImpl
@@ -71,30 +72,30 @@ OverworldWildSpawns_FilterNativeShadowVisibilityImpl:
 .thumb_func
 OverworldWildSpawns_CopyNativeShadowPositionImpl:
     push {r4, r5, r6, lr}
+    // Both stock shadow update tasks keep their work block in r4. Its high
+    // half at +0xC retains the encounter token bound on the first update.
+    mov r6, r4
     mov r4, r0
     mov r5, r1
-    ldr r6, =0x0205F945
-    blx r6
+    ldr r3, =0x0205F945
+    blx r3
     ldr r0, [r4, #8]
     subs r0, #0xE0
     cmp r0, #9
-    bhi 1f
-    ldr r1, =sOverworldWildSpawnState
-    movs r2, #0xE4
-    ldr r1, [r1, r2]
-    cmp r1, #0
+    bhi 2f
+    sub sp, #8
+    mov r2, sp
+    mov r1, r6
+    adds r1, #0xC
+    mov r0, r4
+    bl OverworldWalk_CopyNativeShadowValue
+    cmp r0, #0
     beq 1f
-    adds r2, r1, r0
-    ldrb r2, [r2, #0x0A]
-    cmp r2, #0
-    beq 1f
-    movs r2, #0x4E
-    lsls r2, r2, #2
-    adds r1, r1, r2
-    lsls r0, r0, #2
-    ldr r0, [r1, r0]
+    ldr r0, [sp]
     str r0, [r5, #4]
 1:
+    add sp, #8
+2:
     pop {r4, r5, r6, pc}
     .pool
 .size OverworldWildSpawns_CopyNativeShadowPositionImpl, . - OverworldWildSpawns_CopyNativeShadowPositionImpl

@@ -1377,6 +1377,8 @@ static int validate_python_command(const Inventory *inventory, char **command) {
         "/scripts/launch_summary_move_relearn_runtime.py";
     static const char binder_suffix[] =
         "/scripts/pokemon_move_history_build_manifest.py";
+    static const char party_suffix[] =
+        "/scripts/verify_pokemon_move_history_party_integrity.py";
     size_t index;
     if (command[0] == NULL || command[1] == NULL || command[2] == NULL
         || command[3] == NULL || command[4] == NULL || command[5] == NULL
@@ -1388,7 +1390,8 @@ static int validate_python_command(const Inventory *inventory, char **command) {
         || strcmp(command[4], "-X") != 0
         || strcmp(command[5], "pycache_prefix=/dev/null") != 0
         || (!has_path_suffix(command[6], launcher_suffix)
-            && !has_path_suffix(command[6], binder_suffix)))
+            && !has_path_suffix(command[6], binder_suffix)
+            && !has_path_suffix(command[6], party_suffix)))
         return -1;
     for (index = 0; index < inventory->count; index++) {
         const InventoryRecord *record = &inventory->items[index];

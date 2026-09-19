@@ -54,7 +54,7 @@ def _isolated_helper_path() -> tuple[str, ...]:
     version = f"python{sys.version_info.major}.{sys.version_info.minor}"
     base = sys.base_prefix + "/lib/" + version
     paths = (base, base + "/lib-dynload")
-    if globals().get("AUTHENTICATED_LIBDESMUME_PATH") is None:
+    if globals().get("AUTHENTICATED_MELONDS_LIBRARY") is None:
         venv = sys.executable.rsplit("/bin/", 1)[0]
         paths += (venv + "/lib/" + version + "/site-packages",)
     return paths
@@ -114,6 +114,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import struct
 import subprocess
 import tempfile
@@ -213,19 +214,28 @@ def ensure_repo_venv() -> None:
 
 ensure_repo_venv()
 
-from desmume.emulator import DeSmuME  # noqa: E402
-
-
-def create_desmume() -> DeSmuME:
-    authenticated = globals().get("AUTHENTICATED_LIBDESMUME_PATH")
-    return DeSmuME(authenticated) if authenticated is not None else DeSmuME()
+def create_emulator():
+    if globals().get("AUTHENTICATED_HEADLESS") is not None:
+        return HEADLESS.create_emulator()
+    # The native bootstrap pins this source and library before isolated Python
+    # starts. Load its retained bytes without adding the repository to sys.path.
+    path = REPO / "tools/overworld/melonds_backend.py"
+    source = path.read_bytes()
+    module = ModuleType("summary_party_melonds_backend")
+    module.__file__ = str(path)
+    module.__cached__ = None
+    module.__loader__ = None
+    module.__package__ = ""
+    module.__spec__ = None
+    exec(compile(source, str(path), "exec", dont_inherit=True, optimize=0), module.__dict__)
+    return module.MelonDS()
 
 
 def load_headless_helpers():
     authenticated = globals().get("AUTHENTICATED_HEADLESS")
     if authenticated is not None:
         return authenticated
-    path = REPO / "scripts/headless-overworld-test.py"
+    path = REPO / "tools/overworld/devtools_native.py"
     source = path.read_bytes()
     module = ModuleType("headless_overworld")
     module.__file__ = str(path)
@@ -395,16 +405,13 @@ def boot_arguments() -> SimpleNamespace:
     )
 
 
-def import_raw(emu: DeSmuME, raw: bytes, temporary: tempfile.NamedTemporaryFile) -> None:
+def import_raw(emu: MelonDS, raw: bytes, temporary: tempfile.NamedTemporaryFile) -> None:
     temporary.write(raw)
     temporary.flush()
-    require(
-        emu.backup.import_file(temporary.name, force_size=0),
-        "DeSmuME rejected the temporary raw save",
-    )
+    emu.backup.import_file(temporary.name, force_size=0)
 
 
-def read_runtime_party(emu: DeSmuME) -> bytes:
+def read_runtime_party(emu: MelonDS) -> bytes:
     save_data = emu.memory.unsigned[SAVE_DATA_POINTER:SAVE_DATA_POINTER:4]
     require(0x02000000 <= save_data < 0x02400000, "SaveData pointer is invalid")
     start = save_data + PARTY_SAVE_DATA_OFFSET
@@ -412,7 +419,7 @@ def read_runtime_party(emu: DeSmuME) -> bytes:
 
 
 def wait_for_runtime_party(
-    emu: DeSmuME,
+    emu: MelonDS,
     expected: bytes,
     maximum_frames: int = 60,
 ) -> tuple[bytes, int]:
@@ -426,7 +433,7 @@ def wait_for_runtime_party(
     return actual, maximum_frames + 1
 
 
-def read_runtime_save_counter(emu: DeSmuME) -> int:
+def read_runtime_save_counter(emu: MelonDS) -> int:
     save_data = emu.memory.unsigned[SAVE_DATA_POINTER:SAVE_DATA_POINTER:4]
     return emu.memory.unsigned[save_data + 0x2F010:save_data + 0x2F010:4]
 
@@ -466,17 +473,12 @@ def reload_party_in_fresh_process(
                 "-B",
                 "-X",
                 "pycache_prefix=/dev/null",
-                str(REPO / "scripts/headless-overworld-test.py"),
+                str(REPO / "scripts/verify_pokemon_move_history_party_integrity.py"),
                 "--rom",
                 str(rom),
-                "--sav",
+                "--reload-sav",
                 saved.name,
-                "--read",
-                f"party:bytes{PARTY_SIZE}:{SAVE_DATA_POINTER:#x}:"
-                f"{PARTY_SAVE_DATA_OFFSET:#x}",
-                "--action",
-                "sample:60:1",
-                "--screenshot",
+                "--reload-screenshot",
                 str(screenshot),
             ],
             expected_cdhash=native_cdhash,
@@ -521,7 +523,7 @@ def run(args: argparse.Namespace) -> dict:
 
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
     with HEADLESS.silence_native_output(True):
-        emu = create_desmume()
+        emu = create_emulator()
         emu.volume_set(0)
         emu.open(str(rom))
         with tempfile.NamedTemporaryFile(suffix=".sav") as imported:
@@ -566,10 +568,7 @@ def run(args: argparse.Namespace) -> dict:
             emu.screenshot().save(save_screenshot)
             with tempfile.TemporaryDirectory(prefix="move-history-export-") as export_root:
                 exported = Path(export_root) / "post-save.sav"
-                require(
-                    emu.backup.export_file(str(exported)),
-                    "DeSmuME could not export the post-save backup",
-                )
+                emu.backup.export_file(str(exported))
                 saved_raw = extract_raw_save(exported)
         emu.destroy()
 
@@ -625,6 +624,45 @@ def run(args: argparse.Namespace) -> dict:
     }
 
 
+def run_reload(args: argparse.Namespace) -> dict:
+    """Summary-only fresh process: fixed party readback, no general game driver."""
+    rom, save = args.rom.resolve(), args.reload_sav.resolve()
+    require(rom.is_file() and save.is_file(), "reload ROM/save is missing")
+    require(args.reload_screenshot is not None, "reload screenshot path is required")
+    screenshot = args.reload_screenshot.resolve()
+    require(screenshot not in (rom, save), "reload screenshot cannot overwrite an input")
+    before = {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in (rom, save)}
+    samples = []
+    os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+    # Keep the caller's ROM and save isolated from this disposable session.
+    with tempfile.TemporaryDirectory(prefix="summary-party-reload-") as directory:
+        copied_rom = Path(directory) / "game.nds"
+        copied_save = Path(directory) / "game.sav"
+        shutil.copyfile(rom, copied_rom)
+        shutil.copyfile(save, copied_save)
+        with HEADLESS.silence_native_output(True):
+            emu = create_emulator()
+            try:
+                emu.volume_set(0)
+                emu.open(str(copied_rom))
+                emu.backup.import_file(str(copied_save), force_size=0)
+                HEADLESS.boot_to_ready(boot_arguments(), emu)
+                for frame in range(61):
+                    party = read_runtime_party(emu)
+                    require(len(party) == PARTY_SIZE, "reload party read is incomplete")
+                    samples.append({"frame": frame, "reads": [{"value": party.hex()}]})
+                    if frame < 60:
+                        HEADLESS.cycle(emu, 1)
+                screenshot.parent.mkdir(parents=True, exist_ok=True)
+                emu.screenshot().save(str(screenshot))
+            finally:
+                emu.destroy()
+    require(all(hashlib.sha256(path.read_bytes()).hexdigest() == digest
+                for path, digest in before.items()), "reload source ROM/save changed")
+    return {"actions": [{"samples": samples}], "reads": samples[-1]["reads"],
+            "screenshot": str(screenshot), "sourceUnchanged": True}
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -633,7 +671,11 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument("--rom", type=Path, default=REPO / "test.nds")
-    parser.add_argument("--dsv", type=Path, required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--dsv", type=Path)
+    mode.add_argument("--reload-sav", type=Path,
+                      help="Summary-only fresh party readback from a copied raw save.")
+    parser.add_argument("--reload-screenshot", type=Path)
     parser.add_argument("--expected-dsv-sha256")
     parser.add_argument(
         "--screenshot-dir",
@@ -645,7 +687,9 @@ def parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     try:
-        print(json.dumps(run(parse_args()), indent=2, sort_keys=True))
+        arguments = parse_args()
+        result = run_reload(arguments) if arguments.reload_sav is not None else run(arguments)
+        print(json.dumps(result, indent=2, sort_keys=True))
     except Exception as error:
         print(f"party-integrity verification failed: {error}", file=sys.stderr)
         raise SystemExit(1)

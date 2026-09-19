@@ -23,24 +23,43 @@ movement, chain repositioning, and Walk feedback.
   be less than or equal to the lane's base travel time.
 - The mounted profile uses the resolved mounted override profile's main Walk
   lane. Active and Tired AI lanes do not control player input.
+- `walkTimeVariance` is an integer from 0 through 32. Zero disables it. A
+  nonzero value adds a value from 0 through `walkTimeVariance` to the current
+  Walk travel time for each accepted normal Walk tile. The result is capped at
+  32 frames.
+- The variance value is selected once when the tile starts. A rejected or
+  blocked start does not consume a value, and an active tile does not reroll.
+- Variance changes only that tile's duration. It does not change stored
+  momentum, acceleration, skid distance, stomp checks, Movement Chain counts,
+  chain repositioning, Hop, Teleport, or pause timing.
+- Wild, follower, and mounted Walk use the same rule. A mounted rider and its
+  Pokemon use the same selected duration because they share one motion.
 
 ## Acceleration and momentum
 
 - `tilesToAccelerate` remains the number of consecutive real Walk tiles in the
   same direction needed for one acceleration step.
-- One acceleration step changes the current time to `ceil(current / 2)`, then
-  clamps it so it cannot become faster than the configured fastest time.
-- Examples: 20 to 10 to 5 to 3 to 2 to 1; 16 to 8 to 4 to 2.
-- An ordinary turn preserves the current travel time and resets the acceleration
-  tile counter.
+- `walkAccelerationStep` selects the acceleration rule. Zero disables
+  acceleration. Values 1 through 32 remove that many travel frames per step.
+  Value 33 is shown as `/2` and keeps the old `ceil(current / 2)` rule. The
+  profile default is 1 frame.
+- Every result clamps at `maxWalkSpeed`, so it cannot become faster than the
+  configured fastest time.
+- Examples: step 0 stays at 20. `/2` gives 20 to 10 to 5 to 3 to 2 to 1.
+  Step 3 gives 20 to 17 to 14 to 11 to 8 to 5 to 2 to 1.
+- An accepted turn loses one acceleration step and resets the acceleration tile
+  counter. A blocked turn does not change speed or the counter. With `/2`, a
+  turn from 3 restores 5. With step 3, a turn from 8 restores 11. The result
+  cannot be slower than the base travel time.
 - Stopping resets the travel time to the base value.
-- A turn skid restores the travel time that was active before the skid.
+- A turn skid restores one acceleration step slower than the travel time that
+  was active before the skid.
 - Skid and reposition tiles do not count for acceleration or Movement Chain.
 
 ## Skid and feedback policy
 
-- Travel times 5 through 32 have no speed-based skid.
-- Travel times 3 through 4 skid for 1 tile.
+- Travel times 7 through 32 have no speed-based skid.
+- Travel times 3 through 6 skid for 1 tile.
 - Travel time 2 skids for 2 tiles.
 - Travel time 1 skids for 4 tiles.
 - A skid tile uses twice the current travel time, capped at 32 frames.
@@ -65,9 +84,11 @@ movement, chain repositioning, and Walk feedback.
 - A profile that allows diagonal Walk enables it for wild and mounted Pokemon.
 - A diagonal destination is valid only when the destination and both adjacent
   cardinal side tiles are clear.
-- If a mounted diagonal is blocked, try a cardinal component. Prefer the
-  current-facing component, then the newest pressed component. Stop only when
-  both components are blocked.
+- A blocked diagonal is a rejected candidate, not a cardinal fallback or a
+  stop command. Report the side or destination reason and preserve momentum.
+  A later cardinal input can move through the clear side.
+- Locked Ram uses its committed direction before checking a new raw direction;
+  blocked committed movement retains the existing crash rule.
 - A diagonal object keeps its current cardinal facing when that facing is one
   component. Otherwise it faces the newest pressed component.
 - A 45-degree direction adjustment does not skid, but it resets the acceleration

@@ -656,7 +656,7 @@ VERIFIER_RELATIVE = "scripts/verify_summary_move_relearn_runtime.py"
 MANIFEST_HELPER_RELATIVE = (
     "scripts/pokemon_move_history_build_manifest.py"
 )
-HEADLESS_RELATIVE = "scripts/headless-overworld-test.py"
+HEADLESS_RELATIVE = "tools/overworld/devtools_native.py"
 PARTY_RELATIVE = (
     "scripts/verify_pokemon_move_history_party_integrity.py"
 )
@@ -664,16 +664,14 @@ PROTECTED_SPAWN_RELATIVE = (
     "scripts/summary_move_relearn_protected_spawn.py"
 )
 RUNTIME_MODULE_RELATIVES = (
-    "desmume/__init__.py",
-    "desmume/i18n_util.py",
-    "desmume/controls.py",
-    "desmume/emulator.py",
+    "tools/overworld/melonds_backend.py",
 )
 AUTHENTICATED_SOURCES = (
     LAUNCHER_RELATIVE,
     VERIFIER_RELATIVE,
     MANIFEST_HELPER_RELATIVE,
     HEADLESS_RELATIVE,
+    "tools/overworld/melonds_backend.py",
     PARTY_RELATIVE,
     PROTECTED_SPAWN_RELATIVE,
 )
@@ -1215,7 +1213,7 @@ def _primitive_runtime_authentication(document):
         )
     packages = runtime["packages"]
     _require(
-        isinstance(packages, dict) and set(packages) == {"desmume", "PIL"},
+        isinstance(packages, dict) and set(packages) == {"PIL"},
         "runtime package closure is malformed",
     )
     for package, record in packages.items():
@@ -1230,20 +1228,20 @@ def _primitive_runtime_authentication(document):
     _require(
         isinstance(native, dict)
         and set(native)
-        == {"libdesmume", "mutable_closure", "os_trust_roots", "scope"}
+        == {"libmelonds", "mutable_closure", "os_trust_roots", "scope"}
         and isinstance(native["mutable_closure"], list)
         and isinstance(native["os_trust_roots"], list),
         "runtime native closure is malformed",
     )
-    _validate_file_path_record(native["libdesmume"], "libdesmume")
+    _validate_file_path_record(native["libmelonds"], "libmelonds")
     seen = set()
     for index, record in enumerate(native["mutable_closure"]):
         path = _validate_file_path_record(record, f"native closure item {index}")
         _require(path not in seen, "runtime native closure path duplicates")
         seen.add(path)
     _require(
-        native["libdesmume"]["path"] in seen,
-        "runtime native closure omits libdesmume",
+        native["libmelonds"]["path"] in seen,
+        "runtime native closure omits libmelonds",
     )
     return runtime
 
@@ -1381,7 +1379,7 @@ def _runtime_module_buffers(runtime):
     _require(
         isinstance(records, dict)
         and set(records) == set(RUNTIME_MODULE_RELATIVES),
-        "runtime DeSmuME module closure is malformed",
+        "runtime MelonDS module closure is malformed",
     )
     buffers = {}
     paths = {}
@@ -1536,25 +1534,10 @@ def _execute_module(
 
 
 def _execute_runtime_modules(compiled, paths):
-    root = os.path.dirname(paths["desmume/__init__.py"])
-    _execute_module(
-        "desmume",
-        paths["desmume/__init__.py"],
-        compiled["desmume/__init__.py"],
-        package="desmume",
-        package_path=root,
+    relative = RUNTIME_MODULE_RELATIVES[0]
+    return _execute_module(
+        "summary_relearn_melonds_backend", paths[relative], compiled[relative]
     )
-    for relative, name in (
-        ("desmume/i18n_util.py", "desmume.i18n_util"),
-        ("desmume/controls.py", "desmume.controls"),
-        ("desmume/emulator.py", "desmume.emulator"),
-    ):
-        _execute_module(
-            name,
-            paths[relative],
-            compiled[relative],
-            package="desmume",
-        )
 
 
 def _path_identity(path):
@@ -1571,26 +1554,26 @@ def _preload_runtime_native(runtime, manifest_module):
     import ctypes
 
     native = runtime.get("native")
-    record = native.get("libdesmume") if isinstance(native, dict) else None
+    record = native.get("libmelonds") if isinstance(native, dict) else None
     _require(
         isinstance(record, dict)
         and set(record) == {"path", "size", "sha256"},
-        "runtime libdesmume record is malformed",
+        "runtime libmelonds record is malformed",
     )
     path = os.path.realpath(os.path.abspath(record["path"]))
-    _require(path == record["path"], "runtime libdesmume path is not canonical")
+    _require(path == record["path"], "runtime libmelonds path is not canonical")
     before_identity = _path_identity(path)
     _require(
         _path_record(path)
         == {"size": record["size"], "sha256": record["sha256"]},
-        "runtime libdesmume differs before native load",
+        "runtime libmelonds differs before native load",
     )
     handle = ctypes.CDLL(path)
     _require(
         _path_identity(path) == before_identity
         and _path_record(path)
         == {"size": record["size"], "sha256": record["sha256"]},
-        "runtime libdesmume changed across native load",
+        "runtime libmelonds changed across native load",
     )
     _validate_loaded_native_closure(runtime, manifest_module)
     return handle, path
@@ -1631,10 +1614,10 @@ def _validate_loaded_native_closure(runtime, manifest_module):
             f"loaded mutable native image differs: {path}",
         )
         mutable.append(path)
-    libdesmume = native["libdesmume"]["path"]
+    libmelonds = native["libmelonds"]["path"]
     _require(
-        libdesmume in mutable,
-        "sealed libdesmume is not the loaded emulator image",
+        libmelonds in mutable,
+        "sealed libmelonds is not the loaded emulator image",
     )
     return tuple(mutable)
 
@@ -1663,7 +1646,7 @@ def _authentication_record(
         "runtime_closure_authenticated_at_start_and_end": True,
         "loaded_native_images_restricted_to_sealed_closure": True,
         "executed_from_retained_source_buffers": True,
-        "desmume_executed_from_retained_source_buffers": True,
+        "melonds_executed_from_retained_source_buffers": True,
         "pillow_python_executed_from_retained_source_buffers": True,
         "pycache_bypassed": True,
         "isolated_environment_ignored": True,
@@ -1745,7 +1728,7 @@ def _late_main():
     _require(
         manifest_module.capture_runtime_environment()
         == runtime_environment,
-        "runtime environment differs before DeSmuME source execution",
+        "runtime environment differs before MelonDS source execution",
     )
     runtime_buffers, runtime_paths = _runtime_module_buffers(
         runtime_environment
@@ -1758,11 +1741,12 @@ def _late_main():
         runtime_environment,
         "PIL",
     )
-    _execute_runtime_modules(runtime_compiled, runtime_paths)
-    native_handle, libdesmume_path = _preload_runtime_native(
+    melonds_backend = _execute_runtime_modules(runtime_compiled, runtime_paths)
+    native_handle, libmelonds_path = _preload_runtime_native(
         runtime_environment,
         manifest_module,
     )
+    melonds_backend.configure_library(native_handle)
     native_bootstrap = runtime_environment["native_bootstrap"]
     native_prefix = [
         native_bootstrap["binary"]["path"],
@@ -1777,7 +1761,8 @@ def _late_main():
         "summary_relearn_headless",
         paths[HEADLESS_RELATIVE],
         compiled[HEADLESS_RELATIVE],
-        {"AUTHENTICATED_LIBDESMUME_PATH": libdesmume_path},
+        {"AUTHENTICATED_MELONDS_LIBRARY": native_handle,
+         "AUTHENTICATED_MELONDS_BACKEND": melonds_backend},
     )
     protected_spawn_module = _execute_module(
         "summary_relearn_protected_spawn",
@@ -1790,7 +1775,7 @@ def _late_main():
         compiled[PARTY_RELATIVE],
         {
             "AUTHENTICATED_HEADLESS": headless_module,
-            "AUTHENTICATED_LIBDESMUME_PATH": libdesmume_path,
+            "AUTHENTICATED_MELONDS_LIBRARY": native_handle,
             "AUTHENTICATED_NATIVE_PREFIX": tuple(native_prefix),
             "AUTHENTICATED_NATIVE_RUNNER": (
                 protected_spawn_module.run_native_bootstrap
@@ -1880,7 +1865,7 @@ def _late_main():
         "BOOTSTRAP_MANIFEST_PATH": manifest_path,
         "BOOTSTRAP_ROM_PATH": rom_path,
         "BOOTSTRAP_LAUNCHER_PATH": os.path.abspath(__file__),
-        "BOOTSTRAP_LIBDESMUME_PATH": libdesmume_path,
+        "BOOTSTRAP_MELONDS_LIBRARY": native_handle,
         "BOOTSTRAP_PYTHON_PATH": os.path.abspath(sys.executable),
         "BOOTSTRAP_NATIVE_PREFIX": tuple(native_prefix),
         "BOOTSTRAP_NATIVE_RUNNER": protected_spawn_module.run_native_bootstrap,

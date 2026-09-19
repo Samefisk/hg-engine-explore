@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "id": "actor.binding.current-context",
+  "title": "A naturally bound wild actor uses the current owner context",
+  "status": "active",
+  "capabilities": [
+    "actor.system"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "normal-play",
+    "expectationSource": "documentation/overworld-system/README.md#current-invariants-to-preserve",
+    "actor": "A real visible WILD Rattata from the raw-save field; exact handle, subject and current engine membership are required. Owner map-generation equality is measured, not used to hide acquisition failures.",
+    "trigger": "Boot the raw save normally and observe native public getContext returns during natural Wild activity.",
+    "observable": "The selected actor map generation equals the owner context on the same native public-return boundary. One subsequent actual Walk terminal trace supplies structured actor evidence, not a broad movement claim.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Import a disposable copy of test.sav with normal boot input; source ROM and save stay unchanged. After the completed record-start boundary, enable a read-only public-return hook. Observe one exact naturally present Wild actor, including one already present after boot; do not force a replacement or filter on matching owner generations."
+      }
+    ],
+    "limits": [
+      "Shared actor.binding-current-context retains the original exact identity measurements. Host reader controls use the real callback with wrong register/context data; they are not live game fault injection.",
+      "Proves one natural Wild binding and one terminal motion. Does not prove all transitions, follower or mount setup, movement feel or long-run stability.",
+      "After boot, stop within 900 completed game frames or 4096 native cycles. A missing subject is a distinct failure, never a pass."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "rattata",
+      "species": 19,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Boot the raw save with no actor or profile changes"
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Acquire a real visible Wild Rattata and compare its context with a real public getContext return"
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Observe one complete natural Walk for the same subject"
+    }
+  ],
+  "stop": {
+    "frameBudget": 900,
+    "condition": "Fail at the first owner-context mismatch, or stop after one same-subject terminal Walk; post-boot observation is capped at 900 game frames and 4096 native cycles"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "Control returns after the selected motion finishes or cancels",
+      "Every active actor handle uses the current field epoch"
+    ],
+    "orderedEvents": [
+      {
+        "id": "start",
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "commit",
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "finish",
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "control",
+        "event": "CONTROL_RETURNED",
+        "reason": "OK"
+      }
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "actor.binding-current-context",
+    "claims": ["live-actor-identity"],
+    "minimumFrames": 1
+  }
+}

@@ -12,6 +12,9 @@ const MAX_DRAFT_BACKUP_BYTES = 256 * 1024 * 1024;
 
 const state = {
   data: null,
+  deckData: {},
+  deckLoads: {},
+  deckPrefetches: {},
   revision: "",
   conflict: false,
   conflictRevision: "",
@@ -60,10 +63,6 @@ Object.defineProperty(state, "selectedPokemonKey", {
 
 const MUTATION_PATHS = new Set([
   "/api/v2/commit",
-  "/save-profiles",
-  "/save-profile-memberships",
-  "/manage-profiles",
-  "/save-profile-overrides",
   "/save-encounters",
   "/save-spawn-settings",
 ]);
@@ -745,6 +744,11 @@ function activateView(view, { historyMode = "none", selection = "", focus = fals
     viewElement.tabIndex = -1;
     requestAnimationFrame(() => viewElement.focus({ preventScroll: true }));
   }
+  if (state.revision && ["profiles", "routes", "sounds"].includes(state.activeView)) {
+    void ensureViewLoaded(state.activeView, { selection }).catch((error) => {
+      setStatus(`${controllerDisplayName(state.activeView)} failed to load: ${error.message}`, "error");
+    });
+  }
   return state.activeView;
 }
 
@@ -907,31 +911,166 @@ function ensureWorkspaceController(name) {
   const factory = factories[name];
   if (!factory) return null;
   state.controllers[name] = factory(controllerContext());
-  state.controllerAvailability[name] = {
-    ...state.controllerAvailability[name],
-    status: "ready",
-  };
   return state.controllers[name];
 }
 
-function ensureAvailableWorkspaceControllers(data, refreshOnly = null, { preserveDrafts = false } = {}) {
-  const requested = refreshOnly ? new Set(refreshOnly) : null;
-  ["profiles", "routes", "sounds"].forEach((name) => {
-    const existed = Boolean(state.controllers[name]);
+async function fetchDeckData(name, { background = false } = {}) {
+  const data = await api.get(`/api/v2/decks/${name}`);
+  if (!data.sourceRevision) throw new Error(`${controllerDisplayName(name)} data has no source revision.`);
+  if (state.revision && data.sourceRevision !== state.revision) {
+    if (totalChangeCount() > 0) {
+      state.conflict = true;
+      state.conflictRevision = data.sourceRevision;
+      throw new Error("Sources changed while this draft was open. Your draft is still preserved.");
+    }
+    const error = new Error(`${controllerDisplayName(name)} data changed while it was loading.`);
+    error.code = background ? "stale_deck_prefetch" : "deck_revision_changed";
+    error.currentRevision = data.sourceRevision;
+    throw error;
+  }
+  state.deckData[name] = data;
+  if (name === "profiles") state.profileData = data;
+  if (name === "routes") state.routeData = data;
+  return data;
+}
+
+function cachedDeckData(name) {
+  const data = state.deckData[name];
+  if (!data || !state.revision || data.sourceRevision === state.revision) return data || null;
+  delete state.deckData[name];
+  if (name === "profiles") delete state.profileData;
+  if (name === "routes") delete state.routeData;
+  return null;
+}
+
+function prefetchDeck(name) {
+  const cached = cachedDeckData(name);
+  if (cached) return Promise.resolve(cached);
+  if (state.deckPrefetches[name]) return state.deckPrefetches[name];
+  const request = fetchDeckData(name, { background: true });
+  state.deckPrefetches[name] = request;
+  request.finally(() => {
+    if (state.deckPrefetches[name] === request) delete state.deckPrefetches[name];
+  }).catch(() => {});
+  return request;
+}
+
+function scheduleDeckWarmup() {
+  const queue = ["profiles", "routes"].filter((name) => viewIsAvailable(name) && !cachedDeckData(name));
+  const schedule = typeof requestIdleCallback === "function"
+    ? (callback) => requestIdleCallback(callback, { timeout: 1500 })
+    : (callback) => setTimeout(callback, 0);
+  const warmNext = () => {
+    const name = queue.shift();
+    if (!name) return;
+    schedule(() => {
+      void prefetchDeck(name).catch(() => {}).finally(warmNext);
+    });
+  };
+  warmNext();
+}
+
+async function loadDeck(name, { force = false, preserveDrafts = false, selection = "" } = {}) {
+  if (!["profiles", "routes"].includes(name) || !viewIsAvailable(name)) return null;
+  const cached = !force ? cachedDeckData(name) : null;
+  if (cached) {
+    const controllerWasReady = Boolean(state.controllers[name])
+      && state.controllerAvailability[name]?.status === "ready";
     const controller = ensureWorkspaceController(name);
-    if (!requested || requested.has(name) || !existed) {
-      const refresh = preserveDrafts && existed && controller?.refreshPreservingDrafts
+    if (!controllerWasReady) {
+      const refresh = preserveDrafts && controller?.refreshPreservingDrafts
         ? controller.refreshPreservingDrafts
         : controller?.refresh;
-      refresh?.call(controller, data);
-    }
-    if (controller) {
+      await Promise.resolve(refresh?.call(controller, cached));
       state.controllerAvailability[name] = {
         ...state.controllerAvailability[name],
         status: "ready",
       };
     }
-  });
+    if (selection) controller?.restoreSelection?.(selection);
+    return controller;
+  }
+  if (!force && state.deckLoads[name]) return state.deckLoads[name];
+
+  state.controllerAvailability[name] = {
+    ...state.controllerAvailability[name],
+    status: "loading",
+  };
+  const request = (async () => {
+    let data;
+    if (!force && state.deckPrefetches[name]) {
+      try {
+        data = await state.deckPrefetches[name];
+      } catch (error) {
+        if (error?.code !== "stale_deck_prefetch") throw error;
+        data = await fetchDeckData(name);
+      }
+    } else {
+      data = await fetchDeckData(name);
+    }
+    const controller = ensureWorkspaceController(name);
+    const refresh = preserveDrafts && controller?.refreshPreservingDrafts
+      ? controller.refreshPreservingDrafts
+      : controller?.refresh;
+    await Promise.resolve(refresh?.call(controller, data));
+    if (selection) controller?.restoreSelection?.(selection);
+    state.controllerAvailability[name] = {
+      ...state.controllerAvailability[name],
+      status: "ready",
+    };
+    return controller;
+  })();
+  state.deckLoads[name] = request;
+  try {
+    return await request;
+  } finally {
+    if (state.deckLoads[name] === request) delete state.deckLoads[name];
+  }
+}
+
+async function ensureViewLoaded(name, { selection = "" } = {}) {
+  if (name === "pokemon") {
+    const controller = ensurePokemonController();
+    if (state.controllerAvailability[name]?.status !== "ready") {
+      state.controllerAvailability[name] = {
+        ...state.controllerAvailability[name],
+        status: "loading",
+      };
+      await Promise.resolve(controller?.refresh?.(state.data));
+      state.controllerAvailability[name] = {
+        ...state.controllerAvailability[name],
+        status: "ready",
+      };
+    }
+    if (selection) controller?.openRecord?.(selection);
+    return controller;
+  }
+  if (name === "sounds") {
+    const controller = ensureWorkspaceController(name);
+    if (state.controllerAvailability[name]?.status !== "ready") {
+      await Promise.resolve(controller?.refresh?.());
+      state.controllerAvailability[name] = {
+        ...state.controllerAvailability[name],
+        status: "ready",
+      };
+    }
+    if (selection) controller?.restoreSelection?.(selection);
+    return controller;
+  }
+  if (["profiles", "routes"].includes(name)) {
+    try {
+      return await loadDeck(name, { selection });
+    } catch (error) {
+      if (error?.code !== "deck_revision_changed") throw error;
+      await loadData({
+        keepStatus: true,
+        refreshOnly: ["pokemon", name],
+        throwOnControllerRefreshError: true,
+      });
+      return loadDeck(name, { selection });
+    }
+  }
+  return null;
 }
 
 async function loadData({
@@ -942,7 +1081,7 @@ async function loadData({
   preserveDraftCapabilities = false,
 } = {}) {
   if (!keepStatus) setStatus("Loading workspace…", "busy");
-  const data = await api.get(`/data.json?ts=${Date.now()}`);
+  const data = await api.get("/api/v2/workspace-meta");
   if (!data.sourceRevision) throw new Error("V2 data did not include a source revision.");
 
   if (!allowDraftRebase && state.revision && data.sourceRevision !== state.revision && totalChangeCount() > 0) {
@@ -957,16 +1096,35 @@ async function loadData({
   state.workspaceDataError = "";
 
   if (!preserveDraftCapabilities) applyWorkspaceCapabilities(data);
-  ensureAvailableWorkspaceControllers(data, refreshOnly, { preserveDrafts: preserveDraftCapabilities });
-  const refreshPokemon = !refreshOnly || new Set(refreshOnly).has("pokemon");
-  const pokemonController = ensurePokemonController();
+  const requestedDecks = refreshOnly
+    ? [...new Set(refreshOnly)].filter((name) => ["profiles", "routes"].includes(name))
+    : (["profiles", "routes"].includes(state.activeView) ? [state.activeView] : []);
+  await Promise.all(requestedDecks.map((name) => loadDeck(name, {
+    force: true,
+    preserveDrafts: preserveDraftCapabilities,
+  })));
+  if (!refreshOnly && ["pokemon", "sounds"].includes(state.activeView)) await ensureViewLoaded(state.activeView);
+  const refreshPokemon = Boolean(refreshOnly && new Set(refreshOnly).has("pokemon"));
+  const pokemonController = refreshPokemon ? ensurePokemonController() : state.controllers.pokemon;
   if (refreshPokemon) {
+    state.controllerAvailability.pokemon = {
+      ...state.controllerAvailability.pokemon,
+      status: "loading",
+    };
     try {
       const refresh = throwOnControllerRefreshError && pokemonController?.refreshStrict
         ? pokemonController.refreshStrict(data)
         : pokemonController?.refresh?.(data);
       await Promise.resolve(refresh);
+      state.controllerAvailability.pokemon = {
+        ...state.controllerAvailability.pokemon,
+        status: "ready",
+      };
     } catch (error) {
+      state.controllerAvailability.pokemon = {
+        ...state.controllerAvailability.pokemon,
+        status: "pending",
+      };
       setStatus(`Pokémon Editor failed to refresh: ${error.message}`, "error");
       if (throwOnControllerRefreshError) throw error;
     }
@@ -1005,9 +1163,7 @@ function collectCommitDomains() {
 }
 
 const COMMIT_DOMAIN_CONTROLLERS = Object.freeze({
-  profiles: "profiles",
-  profileMemberships: "profiles",
-  profileOverrides: "profiles",
+  profileCatalog: "profiles",
   encounters: "routes",
   spawnSettings: "routes",
   pokemonUpdates: "pokemon",
@@ -1026,11 +1182,14 @@ function controllerDisplayName(name) {
   return ({ profiles: "Profile Deck", routes: "Route Deck", sounds: "Sound Deck", pokemon: "Pokémon Editor" })[name] || name;
 }
 
-function clearCommittedControllers(controllerNames, result, requestedDomains = []) {
+function clearCommittedControllers(controllerNames, result, requestedDomains = [], deferredControllerNames = []) {
+  const deferred = new Set(deferredControllerNames);
   controllerNames.forEach((name) => {
     const controller = state.controllers[name];
     if (!controller?.clearCommitted) return;
-    controller.clearCommitted(name === "pokemon" ? { ...result, requestedDomains } : undefined);
+    controller.clearCommitted(name === "pokemon"
+      ? { ...result, requestedDomains }
+      : { scope: "all", deferRender: Boolean(result?.saved && deferred.has(name)) });
   });
 }
 
@@ -1104,7 +1263,7 @@ async function checkUnknownSaveOutcome(originalRevision) {
   showCommitStatus("Checking save status", "No source files will be written during this check.", "busy", { phase: "verify" });
   let feedback;
   try {
-    const data = await api.get(`/data.json?ts=${Date.now()}`);
+    const data = await api.get(`/api/v2/workspace-meta?ts=${Date.now()}`);
     if (data.sourceRevision === originalRevision) {
       state.conflict = false;
       feedback = {
@@ -1304,10 +1463,18 @@ async function saveAllChanges() {
     });
     committedResult = result;
     state.revision = result.sourceRevision;
-    clearCommittedControllers(submittedControllerNames, result, Object.keys(domains));
-    refreshControllerNames = commitControllerNames(result.changedDomains || []);
+    // The profile writer persists the submitted canonical catalog exactly, so
+    // the controller can adopt that verified catalog without reading it back.
+    refreshControllerNames = commitControllerNames(result.changedDomains || [])
+      .filter((name) => name !== "profiles");
+    clearCommittedControllers(
+      submittedControllerNames,
+      result,
+      Object.keys(domains),
+      refreshControllerNames,
+    );
     shouldBuild = result.saved && elements.autoBuild.checked;
-    if (result.saved) {
+    if (result.saved && refreshControllerNames.length) {
       setStatus("Source committed · refreshing affected decks…", "busy");
       showCommitStatus(
         "Source files saved",
@@ -2001,13 +2168,6 @@ async function boot() {
     activateView(state.activeView);
     writeLocation(state.activeView, controllerSelection(state.activeView).selection, "replace");
   }
-  try {
-    Promise.resolve(ensurePokemonController()?.refresh?.()).catch((error) => {
-      setStatus(`Pokémon Editor failed to load: ${error.message}`, "error");
-    });
-  } catch (error) {
-    setStatus(`Pokémon Editor failed to initialize: ${error.message}`, "error");
-  }
   const [workspaceResult] = await Promise.allSettled([loadData(), loadShiny(), beginBuildPolling()]);
   if (workspaceResult.status === "rejected") {
     const error = workspaceResult.reason;
@@ -2038,6 +2198,7 @@ async function boot() {
   } else if (initialLocation && initialLocation.view !== "pokemon" && initialLocation.selection && viewIsAvailable(initialLocation.view)) {
     state.controllers[initialLocation.view]?.restoreSelection?.(initialLocation.selection);
   }
+  if (workspaceResult.status === "fulfilled") scheduleDeckWarmup();
   const activeSelection = state.activeView === "pokemon"
     ? state.selectedPokemonKey
     : controllerSelection(state.activeView).selection;

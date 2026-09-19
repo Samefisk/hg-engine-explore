@@ -132,7 +132,7 @@ if not all(
         "BOOTSTRAP_MANIFEST_PATH",
         "BOOTSTRAP_ROM_PATH",
         "BOOTSTRAP_LAUNCHER_PATH",
-        "BOOTSTRAP_LIBDESMUME_PATH",
+        "BOOTSTRAP_MELONDS_LIBRARY",
         "BOOTSTRAP_PYTHON_PATH",
         "BOOTSTRAP_NATIVE_PREFIX",
         "BOOTSTRAP_NATIVE_RUNNER",
@@ -144,9 +144,6 @@ if not all(
         "run Summary relearn acceptance through "
         "launch_summary_move_relearn_runtime.py"
     )
-
-from desmume.emulator import DeSmuME  # noqa: E402
-
 
 SUBPROCESS_AUTHENTICATION_ARGS: list[str] = []
 
@@ -460,7 +457,7 @@ def _atomic_artifact_path(path: Path, writer: object) -> dict[str, object]:
         temporary_directory.rmdir()
 
 
-def export_backup_artifact(emu: DeSmuME, path: Path) -> dict[str, object]:
+def export_backup_artifact(emu: MelonDS, path: Path) -> dict[str, object]:
     return _atomic_artifact_path(
         path,
         lambda temporary: emu.backup.export_file(str(temporary)),
@@ -588,18 +585,18 @@ def boot_arguments() -> SimpleNamespace:
     )
 
 
-def tap(emu: DeSmuME, key: str, gap: int = 60) -> None:
+def tap(emu: MelonDS, key: str, gap: int = 60) -> None:
     HEADLESS.tap_key(emu, key, 2, gap)
 
 
-def touch(emu: DeSmuME, x: int, y: int, gap: int = 60) -> None:
+def touch(emu: MelonDS, x: int, y: int, gap: int = 60) -> None:
     emu.input.touch_set_pos(x, y)
     HEADLESS.cycle(emu, 8)
     emu.input.touch_release()
     HEADLESS.cycle(emu, gap)
 
 
-def screenshot(emu: DeSmuME, root: Path, name: str) -> str:
+def screenshot(emu: MelonDS, root: Path, name: str) -> str:
     path = root / name
     record = _atomic_artifact_path(
         path,
@@ -608,7 +605,7 @@ def screenshot(emu: DeSmuME, root: Path, name: str) -> str:
     return str(record["path"])
 
 
-def save_data_pointer(emu: DeSmuME) -> int:
+def save_data_pointer(emu: MelonDS) -> int:
     pointer = emu.memory.unsigned[
         SAVE_DATA_POINTER:SAVE_DATA_POINTER:4
     ]
@@ -619,40 +616,40 @@ def save_data_pointer(emu: DeSmuME) -> int:
     return pointer
 
 
-def read_bytes(emu: DeSmuME, address: int, size: int) -> bytes:
+def read_bytes(emu: MelonDS, address: int, size: int) -> bytes:
     return bytes(emu.memory.unsigned[address:address + size:1])
 
 
-def read_u8(emu: DeSmuME, address: int) -> int:
+def read_u8(emu: MelonDS, address: int) -> int:
     return emu.memory.unsigned[address:address:1]
 
 
-def read_u16(emu: DeSmuME, address: int) -> int:
+def read_u16(emu: MelonDS, address: int) -> int:
     return emu.memory.unsigned[address:address:2]
 
 
-def read_u32(emu: DeSmuME, address: int) -> int:
+def read_u32(emu: MelonDS, address: int) -> int:
     return emu.memory.unsigned[address:address:4]
 
 
-def write_bytes(emu: DeSmuME, address: int, data: bytes) -> None:
+def write_bytes(emu: MelonDS, address: int, data: bytes) -> None:
     emu.memory.unsigned[address:address + len(data):1] = data
 
 
-def write_u8(emu: DeSmuME, address: int, value: int) -> None:
+def write_u8(emu: MelonDS, address: int, value: int) -> None:
     write_bytes(emu, address, bytes((value & 0xFF,)))
 
 
-def write_u16(emu: DeSmuME, address: int, value: int) -> None:
+def write_u16(emu: MelonDS, address: int, value: int) -> None:
     write_bytes(emu, address, struct.pack("<H", value))
 
 
-def write_u32(emu: DeSmuME, address: int, value: int) -> None:
+def write_u32(emu: MelonDS, address: int, value: int) -> None:
     write_bytes(emu, address, struct.pack("<I", value))
 
 
 def invoke_packaged_mailbox_operation(
-    emu: DeSmuME,
+    emu: MelonDS,
     operation: int,
     entry: int,
     *,
@@ -763,7 +760,7 @@ def invoke_packaged_mailbox_operation(
 
 
 
-def overlay_registry(emu: DeSmuME) -> list[tuple[int, int]]:
+def overlay_registry(emu: MelonDS) -> list[tuple[int, int]]:
     return [
         (
             read_u32(emu, MAIN_OVERLAY_TABLE + index * OVERLAY_ENTRY_SIZE),
@@ -776,7 +773,7 @@ def overlay_registry(emu: DeSmuME) -> list[tuple[int, int]]:
     ]
 
 
-def overlay_is_active(emu: DeSmuME, overlay_id: int) -> bool:
+def overlay_is_active(emu: MelonDS, overlay_id: int) -> bool:
     return any(
         current_id == overlay_id and active == 1
         for current_id, active in overlay_registry(emu)
@@ -784,7 +781,7 @@ def overlay_is_active(emu: DeSmuME, overlay_id: int) -> bool:
 
 
 def wait_overlay_active(
-    emu: DeSmuME,
+    emu: MelonDS,
     overlay_id: int,
     expected: bool,
     maximum_frames: int = 600,
@@ -799,11 +796,11 @@ def wait_overlay_active(
     )
 
 
-def runtime_party(emu: DeSmuME) -> bytes:
+def runtime_party(emu: MelonDS) -> bytes:
     return read_bytes(emu, save_data_pointer(emu) + PARTY_OFFSET, PARTY_SIZE)
 
 
-def runtime_pc_storage_address(emu: DeSmuME) -> int:
+def runtime_pc_storage_address(emu: MelonDS) -> int:
     return (
         save_data_pointer(emu)
         + SAVE_DYNAMIC_REGION_OFFSET
@@ -812,7 +809,7 @@ def runtime_pc_storage_address(emu: DeSmuME) -> int:
 
 
 def runtime_box_address(
-    emu: DeSmuME,
+    emu: MelonDS,
     box: int,
     slot: int,
 ) -> int:
@@ -826,21 +823,21 @@ def runtime_box_address(
 
 
 def runtime_box_record(
-    emu: DeSmuME,
+    emu: MelonDS,
     box: int,
     slot: int,
 ) -> bytes:
     return read_bytes(emu, runtime_box_address(emu, box, slot), PC_MON_SIZE)
 
 
-def runtime_pc_modified_flags(emu: DeSmuME) -> int:
+def runtime_pc_modified_flags(emu: MelonDS) -> int:
     return read_u32(
         emu,
         runtime_pc_storage_address(emu) + PC_MODIFIED_FLAGS_OFFSET,
     )
 
 
-def runtime_history(emu: DeSmuME) -> tuple[bytes, bytes]:
+def runtime_history(emu: MelonDS) -> tuple[bytes, bytes]:
     save = save_data_pointer(emu)
     metadata = read_bytes(
         emu,
@@ -868,7 +865,7 @@ def history_identity_count(
 
 
 def wait_party_locked(
-    emu: DeSmuME,
+    emu: MelonDS,
     maximum_frames: int = 90,
 ) -> bytes:
     for _ in range(maximum_frames + 1):
@@ -1122,7 +1119,7 @@ def validate_all_party_checksums(party: bytes) -> list[dict[str, int | bool]]:
 
 
 def locate_summary_relearn_state(
-    emu: DeSmuME,
+    emu: MelonDS,
     original_moves: tuple[int, ...] = CONTROLLED_MOVES,
     owner_pos: int = TARGET_SLOT,
     minimum_candidates: int = 1,
@@ -1160,7 +1157,7 @@ def locate_summary_relearn_state(
 
 
 def locate_inactive_summary_state(
-    emu: DeSmuME,
+    emu: MelonDS,
     moves: tuple[int, ...] = CONTROLLED_MOVES,
     owner_pos: int | None = TARGET_SLOT,
     data_type: int | None = 1,
@@ -1204,7 +1201,7 @@ def locate_inactive_summary_state(
     raise RuntimeError("could not locate inactive Summary state")
 
 
-def candidate_state(emu: DeSmuME, state: int) -> dict[str, object]:
+def candidate_state(emu: MelonDS, state: int) -> dict[str, object]:
     count = read_u16(emu, state + SUMMARY_STATE_CANDIDATE_COUNT_OFFSET)
     cursor = read_u16(emu, state + SUMMARY_STATE_CANDIDATE_CURSOR_OFFSET)
     top = read_u16(emu, state + SUMMARY_STATE_CANDIDATE_TOP_OFFSET)
@@ -1235,7 +1232,7 @@ def candidate_state(emu: DeSmuME, state: int) -> dict[str, object]:
 
 
 def assert_candidate_viewport(
-    emu: DeSmuME,
+    emu: MelonDS,
     state: int,
     expected_cursor: int,
     expected_top: int,
@@ -1273,7 +1270,7 @@ def assert_candidate_viewport(
 
 
 def assert_prospective_slot(
-    emu: DeSmuME,
+    emu: MelonDS,
     state: int,
     expected_slot: int,
     label: str,
@@ -1311,7 +1308,7 @@ def assert_prospective_slot(
 
 
 def summary_state_evidence(
-    emu: DeSmuME,
+    emu: MelonDS,
     state: int,
     expected_mode: int,
     expected_dirty: int,
@@ -1335,7 +1332,7 @@ def summary_state_evidence(
 
 
 def wait_summary_identity(
-    emu: DeSmuME,
+    emu: MelonDS,
     state: int,
     *,
     expected_pos: int,
@@ -1384,7 +1381,7 @@ def wait_summary_identity(
 
 
 def inactive_summary_evidence(
-    emu: DeSmuME,
+    emu: MelonDS,
     state: int,
     label: str,
 ) -> dict[str, int | str]:
@@ -1404,7 +1401,7 @@ def inactive_summary_evidence(
 
 
 def assert_fail_closed_fixture(
-    emu: DeSmuME,
+    emu: MelonDS,
     state: int,
     *,
     label: str,
@@ -1984,7 +1981,7 @@ def make_task6_daycare_raw(
 
 
 def assert_cancel_exact(
-    emu: DeSmuME,
+    emu: MelonDS,
     expected_party: bytes,
     expected_metadata: bytes,
     expected_history: bytes,
@@ -2013,7 +2010,7 @@ def assert_cancel_exact(
 
 
 def assert_box_cancel_exact(
-    emu: DeSmuME,
+    emu: MelonDS,
     expected_target: bytes,
     expected_switch: bytes,
     expected_metadata: bytes,
@@ -2033,7 +2030,7 @@ def assert_box_cancel_exact(
     require(history == expected_history, f"{label} changed history records")
 
 
-def normal_save(emu: DeSmuME, baseline_counter: int) -> None:
+def normal_save(emu: MelonDS, baseline_counter: int) -> None:
     # Summary B -> party, party B -> active start menu, then retail SAVE.
     tap(emu, "B", 150)
     tap(emu, "B", 120)
@@ -2058,7 +2055,7 @@ def normal_save(emu: DeSmuME, baseline_counter: int) -> None:
     HEADLESS.cycle(emu, 600)
 
 
-def open_summary_info(emu: DeSmuME, party_slot: int) -> None:
+def open_summary_info(emu: MelonDS, party_slot: int) -> None:
     tap(emu, "X", 20)
     tap(emu, "A", 100)
     # The fixture party menu uses a two-column grid (0/1, 2/3, 4/5).
@@ -2070,13 +2067,13 @@ def open_summary_info(emu: DeSmuME, party_slot: int) -> None:
     tap(emu, "A", 100)
 
 
-def open_summary_moves(emu: DeSmuME, party_slot: int) -> None:
+def open_summary_moves(emu: MelonDS, party_slot: int) -> None:
     open_summary_info(emu, party_slot)
     tap(emu, "RIGHT", 80)
 
 
 def navigate_to_moves_with_injection(
-    emu: DeSmuME,
+    emu: MelonDS,
     summary: int,
     inject,
     capture,
@@ -2113,7 +2110,7 @@ def navigate_to_moves_with_injection(
 
 
 def assert_malformed_navigation_consumed(
-    emu: DeSmuME,
+    emu: MelonDS,
     summary: int,
     *,
     expected_page: int,
@@ -2129,12 +2126,12 @@ def assert_malformed_navigation_consumed(
     )
 
 
-def hold(emu: DeSmuME, key: str, frames: int, gap: int = 20) -> None:
+def hold(emu: MelonDS, key: str, frames: int, gap: int = 20) -> None:
     HEADLESS.hold_key(emu, key, frames, gap)
 
 
 def open_retail_pc_storage_menu(
-    emu: DeSmuME,
+    emu: MelonDS,
     *,
     terminal_boot: bool = False,
 ) -> None:
@@ -2177,7 +2174,7 @@ def open_retail_pc_storage_menu(
 
 
 def open_retail_pc_move_ui(
-    emu: DeSmuME,
+    emu: MelonDS,
     *,
     terminal_boot: bool = False,
 ) -> None:
@@ -2188,7 +2185,7 @@ def open_retail_pc_move_ui(
 
 
 def open_retail_box_summary_moves(
-    emu: DeSmuME,
+    emu: MelonDS,
     screenshot_root: Path,
     prefix: str,
     *,
@@ -2222,7 +2219,7 @@ def open_retail_box_summary_moves(
 
 
 def exit_pc_and_retail_save(
-    emu: DeSmuME,
+    emu: MelonDS,
     baseline_counter: int,
 ) -> None:
     # Context menu -> box UI -> "Continue Box operations?" -> No.
@@ -2237,7 +2234,7 @@ def exit_pc_and_retail_save(
 
 
 def retail_save_from_field(
-    emu: DeSmuME,
+    emu: MelonDS,
     baseline_counter: int,
 ) -> None:
     # Retail field Save touch, text advance, explicit Yes, and completion.
@@ -2274,8 +2271,8 @@ def retail_save_from_field(
 def new_emulator(
     rom: Path,
     raw: bytes,
-) -> tuple[DeSmuME, tempfile.NamedTemporaryFile]:
-    emu = DeSmuME(BOOTSTRAP_LIBDESMUME_PATH)
+) -> tuple[MelonDS, tempfile.NamedTemporaryFile]:
+    emu = HEADLESS.create_emulator()
     emu.volume_set(0)
     emu.open(str(rom))
     imported = tempfile.NamedTemporaryFile(suffix=".sav")
@@ -2285,7 +2282,7 @@ def new_emulator(
 
 
 def close_emulator(
-    emu: DeSmuME,
+    emu: MelonDS,
     imported: tempfile.NamedTemporaryFile,
 ) -> None:
     emu.destroy()
@@ -2460,7 +2457,7 @@ def fresh_reload_evidence(
     )
 
 
-def runtime_field_location(emu: DeSmuME) -> tuple[int, int, int, int, int]:
+def runtime_field_location(emu: MelonDS) -> tuple[int, int, int, int, int]:
     field_system = read_u32(emu, GFIELD_SYSTEM_POINTER)
     require(
         0x02000000 <= field_system < 0x02400000,
@@ -2474,7 +2471,7 @@ def runtime_field_location(emu: DeSmuME) -> tuple[int, int, int, int, int]:
     return struct.unpack("<5i", read_bytes(emu, location, 20))
 
 
-def runtime_daycare_box(emu: DeSmuME, slot: int) -> bytes:
+def runtime_daycare_box(emu: MelonDS, slot: int) -> bytes:
     require(slot in (0, 1), "invalid runtime daycare slot")
     address = (
         save_data_pointer(emu)
@@ -2485,7 +2482,7 @@ def runtime_daycare_box(emu: DeSmuME, slot: int) -> bytes:
     return read_bytes(emu, address, PC_MON_SIZE)
 
 
-def runtime_daycare_image(emu: DeSmuME) -> bytes:
+def runtime_daycare_image(emu: MelonDS) -> bytes:
     return read_bytes(
         emu,
         save_data_pointer(emu)
@@ -2496,7 +2493,7 @@ def runtime_daycare_image(emu: DeSmuME) -> bytes:
 
 
 def open_retail_daycare_lady(
-    emu: DeSmuME,
+    emu: MelonDS,
 ) -> dict[str, object]:
     """Reach std_daycare_lady through the real Route 34 door and event object."""
     script_hits: list[int] = []
@@ -2539,7 +2536,7 @@ def open_retail_daycare_lady(
     }
 
 
-def open_retail_daycare_party_chooser(emu: DeSmuME) -> None:
+def open_retail_daycare_party_chooser(emu: MelonDS) -> None:
     # Complete two messages, accept the default YES, complete the selection
     # prompt, and let the retail party chooser finish its fade.
     for _ in range(6):
@@ -2547,7 +2544,7 @@ def open_retail_daycare_party_chooser(emu: DeSmuME) -> None:
 
 
 def task6_daycare_cancel_evidence(
-    emu: DeSmuME,
+    emu: MelonDS,
     raw: bytes,
     screenshot_path: Path,
 ) -> dict[str, object]:
@@ -2597,7 +2594,7 @@ def task6_daycare_cancel_evidence(
 
 
 def task6_daycare_sanitize_evidence(
-    emu: DeSmuME,
+    emu: MelonDS,
     raw: bytes,
     screenshot_path: Path,
 ) -> dict[str, object]:
@@ -2792,7 +2789,7 @@ def task6_daycare_sanitize_evidence(
 
 
 def task6_daycare_reload_evidence(
-    emu: DeSmuME,
+    emu: MelonDS,
     raw: bytes,
     screenshot_path: Path,
 ) -> dict[str, object]:
@@ -2855,7 +2852,7 @@ def task6_daycare_reload_evidence(
 
 
 def task6_pokewalker_rom_evidence(
-    emu: DeSmuME,
+    emu: MelonDS,
     screenshot_path: Path,
 ) -> dict[str, object]:
     """Exercise the packaged task-6 Walker transaction entries on ARM9."""
