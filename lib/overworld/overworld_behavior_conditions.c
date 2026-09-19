@@ -1,6 +1,9 @@
 #include "overworld_behavior_conditions.h"
 
+#if defined(OVERWORLD_BEHAVIOR_HOST) \
+    || defined(OVERWORLD_ACTOR_SYSTEM_HOST)
 #include <string.h>
+#endif
 
 typedef struct OverworldBehaviorConditionTruth {
     OverworldBehaviorConditionTargetReference target;
@@ -105,7 +108,7 @@ static u8 OverworldBehaviorCondition_InRange(
 
 static u8 OverworldBehaviorCondition_Reached(u32 now, u32 deadline)
 {
-    return (s32)(now - deadline) >= 0;
+    return now - deadline < 0x80000000u;
 }
 
 static void OverworldBehaviorCondition_ClearTarget(
@@ -258,7 +261,8 @@ static OverworldBehaviorConditionTruth OverworldBehaviorCondition_Truth(
 static u8 OverworldBehaviorCondition_DefinitionValid(
     const OverworldBehaviorConditionDefinition *definition)
 {
-    if (definition->applicationIndex
+    if (definition->conditionId == OVERWORLD_BEHAVIOR_CONDITION_NO_ENTRY
+        || definition->applicationIndex
             >= OVERWORLD_BEHAVIOR_CONDITION_MAX_APPLICATIONS
         || definition->kind
             > OVERWORLD_BEHAVIOR_CONDITION_TERRAIN_SPEED
@@ -277,6 +281,14 @@ static u8 OverworldBehaviorCondition_DefinitionValid(
                 == OVERWORLD_BEHAVIOR_CONDITION_WHILE_TRUE
             && (definition->durationFrames != 0
                 || definition->cooldownFrames != 0))
+        || definition->terrainMask
+            > OVERWORLD_BEHAVIOR_CONDITION_TERRAIN_MASK_MAX
+        || definition->terrainOverrideMask
+            > OVERWORLD_BEHAVIOR_CONDITION_TERRAIN_MASK_MAX
+        || (definition->minMovementSpeed != 0
+            && definition->maxMovementSpeed != 0
+            && definition->minMovementSpeed
+                > definition->maxMovementSpeed)
         || (definition->kind
                 == OVERWORLD_BEHAVIOR_CONDITION_TERRAIN_SPEED
             && definition->targetKind
@@ -315,6 +327,7 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluateEntry(
     OverworldBehaviorConditionTruth truth;
     u8 targetValid;
     u8 cooldownFinished;
+    u8 wasActive;
 
     if (definition == NULL || input == NULL || world == NULL
         || state == NULL || result == NULL) {
@@ -330,6 +343,7 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluateEntry(
         return OVERWORLD_BEHAVIOR_CONDITION_INVALID_DEFINITION;
     }
 
+    wasActive = state->active;
     truth = OverworldBehaviorCondition_Truth(definition, input, world);
     result->conditionTrue = truth.value;
     targetValid = OverworldBehaviorCondition_TargetValid(
@@ -352,7 +366,7 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluateEntry(
                 definition, &truth)) {
             state->active = 0;
             OverworldBehaviorCondition_ClearTarget(&state->target);
-        } else if (!state->active) {
+        } else if (!state->active && !wasActive) {
             state->active = 1;
             state->target = truth.target;
             result->triggered = 1;
@@ -406,6 +420,16 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_Evaluate(
         || world == NULL || result == NULL) {
         return OVERWORLD_BEHAVIOR_CONDITION_INVALID_ARGUMENT;
     }
+    if (count > OVERWORLD_BEHAVIOR_CONDITION_MAX_ENTRIES
+        || world->actorCount > OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS) {
+        return OVERWORLD_BEHAVIOR_CONDITION_INVALID_DEFINITION;
+    }
+    for (i = 0; i < count; i++) {
+        if (!OverworldBehaviorCondition_DefinitionValid(&definitions[i])
+            || inputs[i].chanceRoll >= 100) {
+            return OVERWORLD_BEHAVIOR_CONDITION_INVALID_DEFINITION;
+        }
+    }
     memset(result, 0, sizeof(*result));
     for (i = 0; i < OVERWORLD_BEHAVIOR_CONDITION_MAX_APPLICATIONS; i++) {
         result->winningConditionIds[i] =
@@ -428,6 +452,8 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_Evaluate(
         result->activeApplicationMask |= bit;
         if (entry.triggered) {
             result->triggeredApplicationMask |= bit;
+        } else {
+            result->triggeredApplicationMask &= ~bit;
         }
         result->winningConditionIds[application] = entry.conditionId;
         result->targets[application] = entry.target;

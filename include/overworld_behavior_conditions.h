@@ -4,8 +4,11 @@
 #include "overworld_actor_system.h"
 
 #define OVERWORLD_BEHAVIOR_CONDITION_MAX_APPLICATIONS 32
-#define OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS +    OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS
+#define OVERWORLD_BEHAVIOR_CONDITION_MAX_ENTRIES 32
+#define OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS \
+    OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS
 #define OVERWORLD_BEHAVIOR_CONDITION_NO_ENTRY 0xFFFF
+#define OVERWORLD_BEHAVIOR_CONDITION_TERRAIN_MASK_MAX 0x03FF
 
 typedef enum OverworldBehaviorConditionStatus {
     OVERWORLD_BEHAVIOR_CONDITION_OK = 0,
@@ -128,6 +131,19 @@ typedef char OverworldBehaviorConditionDefinitionSizeMustRemain20Bytes[
     sizeof(OverworldBehaviorConditionDefinition) == 20 ? 1 : -1];
 typedef char OverworldBehaviorConditionEntryStateSizeMustRemain24Bytes[
     sizeof(OverworldBehaviorConditionEntryState) == 24 ? 1 : -1];
+typedef char OverworldBehaviorConditionActorStateBudgetMustRemain768Bytes[
+    sizeof(OverworldBehaviorConditionEntryState)
+            * OVERWORLD_BEHAVIOR_CONDITION_MAX_ENTRIES
+        == 768
+        ? 1
+        : -1];
+typedef char OverworldBehaviorConditionSystemStateBudgetMustRemain7680Bytes[
+    sizeof(OverworldBehaviorConditionEntryState)
+            * OVERWORLD_BEHAVIOR_CONDITION_MAX_ENTRIES
+            * OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS
+        == 7680
+        ? 1
+        : -1];
 typedef char OverworldBehaviorConditionResultSizeMustRemain520Bytes[
     sizeof(OverworldBehaviorConditionResult) == 520 ? 1 : -1];
 
