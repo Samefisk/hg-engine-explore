@@ -234,15 +234,13 @@
         "kind",
         "rangeKind",
         "rangeLength",
-        "chancePercent",
-        "adjacentDirectionMasks"
+        "chancePercent"
       ],
       "properties": {
         "kind": { "const": "notice-target" },
         "rangeKind": { "$ref": "#/$defs/expression" },
         "rangeLength": { "type": "integer", "minimum": 0, "maximum": 255 },
-        "chancePercent": { "type": "integer", "minimum": 0, "maximum": 100 },
-        "adjacentDirectionMasks": { "$ref": "#/$defs/expression" }
+        "chancePercent": { "type": "integer", "minimum": 0, "maximum": 100 }
       }
     },
     "conditionWhen": {
@@ -306,6 +304,24 @@
               "type": "array",
               "uniqueItems": true,
               "items": { "$ref": "#/$defs/expression" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "when": {
+                "properties": { "kind": { "const": "terrain-motion" } },
+                "required": ["kind"]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "target": {
+                "properties": { "kind": { "const": "none" } },
+                "required": ["kind"]
+              }
             }
           }
         }

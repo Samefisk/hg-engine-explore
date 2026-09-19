@@ -361,9 +361,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
         OWBD_OFFSET(overrideMembers),
         OWBD_OVERRIDE_MEMBER_COUNT,
         sizeof(u16),
-        OWBD_OFFSET(conditionalStates),
-        OWBD_CONDITIONAL_STATE_COUNT,
-        sizeof(OverworldWildBehaviorConditionalState),
+        OWBD_OFFSET(conditionEntries),
+        OWBD_CONDITION_ENTRY_COUNT,
+        sizeof(OverworldWildBehaviorConditionEntry),
         OWBD_OFFSET(surfaceModels),
         OWBD_SURFACE_MODEL_COUNT,
         sizeof(OverworldWildSurfaceModelDirectoryEntry),
@@ -816,6 +816,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             0,
             96,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            0,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_RANGE
                 | OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_ID
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_ACTION
@@ -918,6 +921,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             96,
             49,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            0,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
@@ -1049,6 +1055,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             145,
             3,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            0,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
@@ -1188,6 +1197,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             148,
             5,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            0,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED
                 | OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_ACTION,
@@ -1301,6 +1313,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             153,
             17,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            0,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_ACTION
                 | OW_WILD_BEHAVIOR_OVERRIDE_HOP_ALLOW_NON_CARDINAL
@@ -1407,6 +1422,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             170,
             10,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            0,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_ACTION
                 | OW_WILD_BEHAVIOR_OVERRIDE_HOP_ALLOW_NON_CARDINAL
@@ -1522,6 +1540,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             180,
             34,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            0,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_TIME
@@ -1659,6 +1680,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             214,
             9,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            0,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_TIME
@@ -1773,6 +1797,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             223,
             1,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            0,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED
@@ -1876,6 +1903,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             224,
             10,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            0,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_STAMINA
                 | OW_WILD_BEHAVIOR_OVERRIDE_REST_TIME
@@ -1990,6 +2020,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             234,
             0,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            0,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_ACTION
@@ -2095,6 +2128,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             234,
             0,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            0,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_ACTION
@@ -2201,6 +2237,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             234,
             3,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            0,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
@@ -2311,6 +2350,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             237,
             0,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            0,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_ACTION
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_TARGET
@@ -2416,6 +2458,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             237,
             0,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            0,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_ACTION
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_TARGET,
@@ -2516,6 +2561,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             237,
             0,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            0,
+            0,
             0,
             0,
             0,
@@ -2614,6 +2662,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             237,
             0,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            0,
+            0,
             0,
             0,
             0,
@@ -2712,6 +2763,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             237,
             7,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            0,
+            0,
             0,
             OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_ALLOWED_TERRAIN_MASK
                 | OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_ALLOWED_TERRAIN_OVERRIDE_MASK,
@@ -2811,6 +2865,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             244,
             0,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_CONDITIONAL,
+            0,
+            1,
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_ACTION
                 | OW_WILD_BEHAVIOR_OVERRIDE_HOP_ALLOW_NON_CARDINAL
                 | OW_WILD_BEHAVIOR_OVERRIDE_HOP_MIN_DISTANCE
@@ -2914,6 +2971,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             244,
             9,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            1,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_TIME
@@ -3018,6 +3078,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             253,
             13,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            1,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_STATE,
             OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_ALLOWED_TERRAIN_MASK
                 | OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_ALLOWED_TERRAIN_OVERRIDE_MASK,
@@ -3118,6 +3181,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             266,
             0,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_CONDITIONAL,
+            1,
+            1,
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_ACTION
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_TARGET,
@@ -3219,6 +3285,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             266,
             9,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            2,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
@@ -3349,6 +3418,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             275,
             6,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            2,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_TIME
@@ -3452,6 +3524,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             281,
             0,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            2,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE
@@ -3561,6 +3636,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             281,
             17,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            2,
+            0,
             0,
             0,
             OW_WILD_BEHAVIOR_OVERRIDE3_ACTIVE_PROFILE,
@@ -3659,6 +3737,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             298,
             0,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            2,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_CHILL_STATE
                 | OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED
                 | OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_STATE
@@ -3763,6 +3844,9 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
             298,
             0,
             OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL,
+            OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL,
+            2,
+            0,
             OW_WILD_BEHAVIOR_OVERRIDE_STAMINA
                 | OW_WILD_BEHAVIOR_OVERRIDE_REST_TIME,
             0,
@@ -4150,10 +4234,76 @@ const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob = {
         SPECIES_RIOLU,
         SPECIES_MANTYKE
     },
-    /* sOverworldWildBehaviorConditionalStates */
+    /* sOverworldWildBehaviorConditionEntries */
     {
-        {17, 18, OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY, OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY, 0, 0},
-        {5, 21, OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX, OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX, 0, 0}
+        {
+            {
+                OW_WILD_BEHAVIOR_GROUP_NONE,
+                OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES,
+                OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN,
+                OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY,
+                OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY,
+                OW_WILD_BEHAVIOR_MATCH_ANY_SHINY,
+                OW_WILD_BEHAVIOR_MATCH_ANY_CLASS,
+            },
+            0,
+            OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY,
+            OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY,
+            0,
+            0,
+            237,
+            7,
+            298,
+            0,
+            1247,
+            18,
+            OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS,
+            17,
+            OW_WILD_BEHAVIOR_CONDITION_TERRAIN_SPEED,
+            OW_WILD_BEHAVIOR_CONDITION_WHILE_TRUE,
+            OW_WILD_BEHAVIOR_CONDITION_TARGET_NONE,
+            0,
+            0,
+            0,
+            0,
+            100,
+            0,
+            0,
+        },
+        {
+            {
+                OW_WILD_BEHAVIOR_GROUP_NONE,
+                OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES,
+                OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN,
+                OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY,
+                OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY,
+                OW_WILD_BEHAVIOR_MATCH_ANY_SHINY,
+                OW_WILD_BEHAVIOR_MATCH_ANY_CLASS,
+            },
+            0,
+            OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX,
+            OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX,
+            0,
+            0,
+            170,
+            10,
+            298,
+            0,
+            23303,
+            21,
+            OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS,
+            5,
+            OW_WILD_BEHAVIOR_CONDITION_TERRAIN_SPEED,
+            OW_WILD_BEHAVIOR_CONDITION_WHILE_TRUE,
+            OW_WILD_BEHAVIOR_CONDITION_TARGET_NONE,
+            0,
+            0,
+            0,
+            0,
+            100,
+            0,
+            0,
+        }
     },
     /* surfaceModels */
     {

@@ -17,7 +17,8 @@ struct OverworldWildBehaviorPrimitives;
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_MAGIC 0x4F57424F
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION 11
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244
-#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 77
+#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 78
+#define OVERWORLD_WILD_BEHAVIOR_SEMANTIC_VERSION 77
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_MAGIC 0x4F574544
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION 2
 #define OVERWORLD_WILD_SPAWN_METADATA_MAGIC 0x4F57534D
@@ -44,9 +45,9 @@ struct OverworldWildBehaviorPrimitives;
 #define OWBD_CLASS_RULE_COUNT 2
 #define OWBD_SPECIES_CLASS_RULE_COUNT 113
 #define OWBD_OVERRIDE_PROFILE_COUNT 28
-#define OWBD_CONDITIONAL_STATE_COUNT 2
-#define OWBD_CONDITIONAL_STATE_STORAGE_COUNT \
-    ((OWBD_CONDITIONAL_STATE_COUNT) ? OWBD_CONDITIONAL_STATE_COUNT : 1)
+#define OWBD_CONDITION_ENTRY_COUNT 2
+#define OWBD_CONDITION_ENTRY_STORAGE_COUNT \
+    ((OWBD_CONDITION_ENTRY_COUNT) ? OWBD_CONDITION_ENTRY_COUNT : 1)
 #define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_BIRD 5
 #define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FLYING_INSECT 7
 #define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_NERVOUS_SCAVENGER 12
@@ -56,6 +57,8 @@ struct OverworldWildBehaviorPrimitives;
 #define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_BIRD_ROOFTOP 11
 typedef char OverworldWildBehaviorOverrideProfileCountMustFitApplicabilityMask[
     OWBD_OVERRIDE_PROFILE_COUNT <= 32 ? 1 : -1];
+typedef char OverworldWildBehaviorConditionEntryCountMustFitRuntimeState[
+    OWBD_CONDITION_ENTRY_COUNT <= 32 ? 1 : -1];
 #define OWBD_OVERRIDE_MEMBER_COUNT 298
 #define OWBD_SURFACE_MODEL_COUNT OWBD_GENERATED_SURFACE_MODEL_COUNT
 #define OWBD_SURFACE_INSTANCE_COUNT OWBD_GENERATED_SURFACE_INSTANCE_COUNT
@@ -668,6 +671,9 @@ typedef struct OverworldWildBehaviorOverrideProfile {
     u16 memberStart;
     u16 memberCount;
     u8 targetMode;
+    u8 profileKind;
+    u8 conditionStart;
+    u8 conditionCount;
     u32 mask;
     u16 mask2;
     u32 mask3;
@@ -688,21 +694,53 @@ typedef struct OverworldWildBehaviorOverrideProfile {
 typedef char OverworldWildBehaviorOverrideProfileSizeMustRemain212Bytes[
     sizeof(OverworldWildBehaviorOverrideProfile) == 212 ? 1 : -1];
 
-typedef struct OverworldWildBehaviorConditionalState {
-    u8 parentProfile;
-    u8 overrideProfile;
+typedef struct OverworldWildBehaviorConditionEntry {
+    OverworldWildBehaviorMatch subjectMatch;
+    u32 targetGroupMask;
     u16 terrainMask;
     u16 terrainOverrideMask;
+    u16 durationFrames;
+    u16 cooldownFrames;
+    u16 subjectMemberStart;
+    u16 subjectMemberCount;
+    u16 targetMemberStart;
+    u16 targetMemberCount;
+    u16 conditionId;
+    u8 applicationIndex;
+    u8 subjectMode;
+    u8 subjectApplicationIndex;
+    u8 kind;
+    u8 activationMode;
+    u8 targetKind;
+    u8 targetRoleMask;
+    u8 targetSelection;
+    u8 rangeKind;
+    u8 rangeLength;
+    u8 chancePercent;
     u8 minMovementSpeed;
     u8 maxMovementSpeed;
-} OverworldWildBehaviorConditionalState;
+} OverworldWildBehaviorConditionEntry;
 
-typedef char OverworldWildBehaviorConditionalStateSizeMustRemain8Bytes[
-    sizeof(OverworldWildBehaviorConditionalState) == 8 ? 1 : -1];
+typedef char OverworldWildBehaviorConditionEntrySizeMustRemain48Bytes[
+    sizeof(OverworldWildBehaviorConditionEntry) == 48 ? 1 : -1];
 
 #define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED 0
 #define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS 1
 #define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL 2
+#define OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL 0
+#define OW_WILD_BEHAVIOR_PROFILE_KIND_CONDITIONAL 1
+#define OW_WILD_BEHAVIOR_CONDITION_SUBJECT_APPLICATION_NONE 0xFF
+#define OW_WILD_BEHAVIOR_CONDITION_PLAYER_NOTICED 0
+#define OW_WILD_BEHAVIOR_CONDITION_POKEMON_NOTICED 1
+#define OW_WILD_BEHAVIOR_CONDITION_TERRAIN_SPEED 2
+#define OW_WILD_BEHAVIOR_CONDITION_WHILE_TRUE 0
+#define OW_WILD_BEHAVIOR_CONDITION_TIMED 1
+#define OW_WILD_BEHAVIOR_CONDITION_TARGET_NONE 0
+#define OW_WILD_BEHAVIOR_CONDITION_TARGET_PLAYER 1
+#define OW_WILD_BEHAVIOR_CONDITION_TARGET_ACTOR 2
+#define OW_WILD_BEHAVIOR_CONDITION_TARGET_ROLE_WILD (1u << 0)
+#define OW_WILD_BEHAVIOR_CONDITION_TARGET_ROLE_FOLLOWER (1u << 1)
+#define OW_WILD_BEHAVIOR_CONDITION_TARGET_SELECTION_NEAREST 0
 #define OW_WILD_BEHAVIOR_CONDITIONAL_PROFILE_NONE 0xFF
 #define OW_WILD_BEHAVIOR_RELATIVE(value) ((u8)(s8)(value))
 #define OW_WILD_BEHAVIOR_AT_LEAST(value) ((u8)(value))
@@ -822,9 +860,9 @@ typedef struct OverworldWildBehaviorDataBlobHeader {
     u32 overrideMembersOffset;
     u16 overrideMemberCount;
     u16 overrideMemberSize;
-    u32 conditionalStatesOffset;
-    u16 conditionalStateCount;
-    u16 conditionalStateSize;
+    u32 conditionEntriesOffset;
+    u16 conditionEntryCount;
+    u16 conditionEntrySize;
     u32 surfaceModelsOffset;
     u16 surfaceModelCount;
     u16 surfaceModelSize;
@@ -924,8 +962,8 @@ typedef struct OverworldWildBehaviorDataBlob {
     OverworldWildBehaviorSpeciesClassRule speciesClassRules[OWBD_SPECIES_CLASS_RULE_COUNT];
     OverworldWildBehaviorOverrideProfile overrideProfiles[OWBD_OVERRIDE_PROFILE_COUNT];
     u16 overrideMembers[OWBD_OVERRIDE_MEMBER_COUNT];
-    OverworldWildBehaviorConditionalState
-        conditionalStates[OWBD_CONDITIONAL_STATE_STORAGE_COUNT];
+    OverworldWildBehaviorConditionEntry
+        conditionEntries[OWBD_CONDITION_ENTRY_STORAGE_COUNT];
     OverworldWildSurfaceModelDirectoryEntry surfaceModels[OWBD_SURFACE_MODEL_COUNT];
     OverworldWildSurfaceInstance surfaceInstances[OWBD_SURFACE_INSTANCE_COUNT];
     OverworldWildSurfaceTemplate surfaceTemplates[OWBD_SURFACE_TEMPLATE_COUNT];

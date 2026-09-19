@@ -34,10 +34,10 @@ typedef enum OverworldBehaviorConditionTargetKind {
 } OverworldBehaviorConditionTargetKind;
 
 typedef enum OverworldBehaviorConditionRangeKind {
-    OVERWORLD_BEHAVIOR_CONDITION_RANGE_CARDINAL_LINE = 0,
     OVERWORLD_BEHAVIOR_CONDITION_RANGE_RADIUS = 1,
     OVERWORLD_BEHAVIOR_CONDITION_RANGE_FACING_LINE_CLOSE_RADIUS = 2,
-    OVERWORLD_BEHAVIOR_CONDITION_RANGE_FACING_LINE = 3,
+    OVERWORLD_BEHAVIOR_CONDITION_RANGE_CARDINAL_LINE = 3,
+    OVERWORLD_BEHAVIOR_CONDITION_RANGE_FACING_LINE = 4,
 } OverworldBehaviorConditionRangeKind;
 
 typedef enum OverworldBehaviorConditionTargetReferenceKind {

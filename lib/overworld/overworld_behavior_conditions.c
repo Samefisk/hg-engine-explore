@@ -272,8 +272,10 @@ static u8 OverworldBehaviorCondition_DefinitionValid(
             > OVERWORLD_BEHAVIOR_CONDITION_TARGET_MATCHED_ACTOR
         || definition->chance > 100
         || (definition->kind != OVERWORLD_BEHAVIOR_CONDITION_TERRAIN_SPEED
-            && definition->rangeKind
-                > OVERWORLD_BEHAVIOR_CONDITION_RANGE_FACING_LINE)
+            && (definition->rangeKind
+                    < OVERWORLD_BEHAVIOR_CONDITION_RANGE_RADIUS
+                || definition->rangeKind
+                    > OVERWORLD_BEHAVIOR_CONDITION_RANGE_FACING_LINE))
         || (definition->activationMode
                 == OVERWORLD_BEHAVIOR_CONDITION_TIMED
             && definition->durationFrames == 0)

@@ -698,16 +698,21 @@ static u32 BehaviorResolver_SelectConditionalMask(
     u32 selected = 0;
     u16 i;
 
-    for (i = 0; i < blob->header.conditionalStateCount; i++) {
-        const OverworldWildBehaviorConditionalState *condition =
-            &blob->conditionalStates[i];
+    for (i = 0; i < blob->header.conditionEntryCount; i++) {
+        const OverworldWildBehaviorConditionEntry *condition =
+            &blob->conditionEntries[i];
         u16 explicitTerrainMask = condition->terrainOverrideMask;
         u16 acceptedTerrainMask = condition->terrainMask
             & explicitTerrainMask;
 
-        if (condition->parentProfile >= blob->header.overrideProfileCount
-            || condition->overrideProfile >= blob->header.overrideProfileCount
-            || (applicableMask & (1u << condition->parentProfile)) == 0
+        if (condition->kind
+                != OW_WILD_BEHAVIOR_CONDITION_TERRAIN_SPEED
+            || condition->subjectApplicationIndex
+                >= blob->header.overrideProfileCount
+            || condition->applicationIndex
+                >= blob->header.overrideProfileCount
+            || (applicableMask
+                & (1u << condition->subjectApplicationIndex)) == 0
             || (explicitTerrainMask != 0
                 && (context->conditionTerrainMask == 0
                     || (acceptedTerrainMask != 0
@@ -721,7 +726,7 @@ static u32 BehaviorResolver_SelectConditionalMask(
                 && movementSpeed > condition->maxMovementSpeed)) {
             continue;
         }
-        selected |= 1u << condition->overrideProfile;
+        selected |= 1u << condition->applicationIndex;
     }
     return selected;
 }
@@ -768,13 +773,13 @@ static BOOL BehaviorResolver_BlobValid(
             == __builtin_offsetof(OverworldWildBehaviorDataBlob, overrideMembers)
         && header->overrideMemberCount == OWBD_OVERRIDE_MEMBER_COUNT
         && header->overrideMemberSize == sizeof(u16)
-        && header->conditionalStatesOffset
+        && header->conditionEntriesOffset
             == __builtin_offsetof(
                 OverworldWildBehaviorDataBlob,
-                conditionalStates)
-        && header->conditionalStateCount == OWBD_CONDITIONAL_STATE_COUNT
-        && header->conditionalStateSize
-            == sizeof(OverworldWildBehaviorConditionalState)
+                conditionEntries)
+        && header->conditionEntryCount == OWBD_CONDITION_ENTRY_COUNT
+        && header->conditionEntrySize
+            == sizeof(OverworldWildBehaviorConditionEntry)
         && header->surfaceModelsOffset
             == __builtin_offsetof(OverworldWildBehaviorDataBlob, surfaceModels)
         && header->surfaceModelCount == OWBD_SURFACE_MODEL_COUNT
@@ -1241,7 +1246,7 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
     hash = 2166136261u;
     hash = BehaviorResolver_FingerprintU32(
         hash,
-        OVERWORLD_WILD_BEHAVIOR_DATA_VERSION);
+        OVERWORLD_WILD_BEHAVIOR_SEMANTIC_VERSION);
     hash = BehaviorResolver_FingerprintBytes(
         hash,
         &result->behaviorClass,

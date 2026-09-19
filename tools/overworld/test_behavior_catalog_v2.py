@@ -55,7 +55,6 @@ class BehaviorCatalogV3Tests(unittest.TestCase):
                 "rangeKind": "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS",
                 "rangeLength": 3,
                 "chancePercent": 100,
-                "adjacentDirectionMasks": "OW_WILD_BEHAVIOR_PLAYER_ADJACENT_ALL_STATES",
             },
             "activation": {
                 "mode": "timed",
@@ -139,6 +138,35 @@ class BehaviorCatalogV3Tests(unittest.TestCase):
         )
         with self.assertRaisesRegex(VIEWER.ParseError, "cannot be lowered"):
             VIEWER.lower_behavior_catalog_v3(changed)
+
+        source = VIEWER.BEHAVIOR_DATA_SOURCE.read_text()
+        rendered = VIEWER.render_behavior_catalog(changed, source)
+        counts = VIEWER.behavior_blob_counts(rendered)
+        self.assertEqual(counts["OWBD_CONDITION_ENTRY_COUNT"], 4)
+        self.assertEqual(counts["OWBD_OVERRIDE_MEMBER_COUNT"], 300)
+        entries = VIEWER.parse_initializer(
+            VIEWER.extract_braced_initializer(
+                VIEWER.strip_c_comments(VIEWER.join_line_continuations(rendered)),
+                "sOverworldWildBehaviorConditionEntries",
+            )
+        )
+        self.assertEqual(len(entries), 4)
+        self.assertTrue(all(len(entry) == 24 for entry in entries))
+
+    def test_condition_reorder_changes_precedence_without_changing_ids(self) -> None:
+        changed = copy.deepcopy(self.catalog)
+        profile = self.condition_profile(changed)
+        profile["conditions"].extend([
+            self.notice_condition("condition-bird-first"),
+            self.notice_condition("condition-bird-second"),
+        ])
+        metadata, before = VIEWER._catalog_condition_layout(changed)
+        before_ids = [entry["conditionId"] for entry in before[-3:]]
+        profile["conditions"][-2:] = reversed(profile["conditions"][-2:])
+        reordered_metadata, after = VIEWER._catalog_condition_layout(changed)
+        after_ids = [entry["conditionId"] for entry in after[-3:]]
+        self.assertEqual(metadata, reordered_metadata)
+        self.assertEqual(after_ids, [before_ids[0], before_ids[2], before_ids[1]])
 
     def test_canonical_loader_and_profile_read_model_return_v3(self) -> None:
         self.assertEqual(VIEWER.load_behavior_catalog_v3(), self.catalog)
@@ -466,6 +494,12 @@ class BehaviorCatalogV3Tests(unittest.TestCase):
         with self.assertRaisesRegex(VIEWER.ParseError, "needs a player or actor target"):
             VIEWER.validate_behavior_catalog(invalid)
 
+        terrain_target = copy.deepcopy(self.catalog)
+        condition = self.condition_profile(terrain_target)["conditions"][0]
+        condition["target"] = {"kind": "player"}
+        with self.assertRaisesRegex(VIEWER.ParseError, "terrain-motion must be targetless"):
+            VIEWER.validate_behavior_catalog(terrain_target)
+
     def test_terrain_motion_enforces_terrain_and_walk_time_bounds(self) -> None:
         terrain = copy.deepcopy(self.catalog)
         condition = self.condition_profile(terrain)["conditions"][0]
@@ -518,6 +552,21 @@ class BehaviorCatalogV3Tests(unittest.TestCase):
         condition["subjects"]["application"] = "apply-bird-rooftop"
         with self.assertRaisesRegex(VIEWER.ParseError, "normal-profile application"):
             VIEWER.validate_behavior_catalog(recursive)
+
+        disabled = copy.deepcopy(self.catalog)
+        condition = self.condition_profile(
+            disabled,
+            "canopy-hop-surface",
+        )["conditions"][0]
+        condition["subjects"]["application"] = "apply-bird-rooftop"
+        target_profile = next(
+            profile for profile in disabled["profiles"]
+            if profile["id"] == "bird-rooftop"
+        )
+        target_profile["kind"] = "normal"
+        target_profile.pop("conditions")
+        with self.assertRaisesRegex(VIEWER.ParseError, "has no subject pool"):
+            VIEWER.validate_behavior_catalog(disabled)
 
     def test_actor_target_fields_are_bounded(self) -> None:
         invalid = copy.deepcopy(self.catalog)

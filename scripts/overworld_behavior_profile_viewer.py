@@ -87,7 +87,7 @@ BLOB_BEHAVIOR_FIELD_INDEXES = {
     "sOverworldWildBehaviorSpeciesClassRules": 3,
     "sOverworldWildBehaviorOverrideProfiles": 4,
     "sOverworldWildBehaviorOverrideMembers": 5,
-    "sOverworldWildBehaviorConditionalStates": 6,
+    "sOverworldWildBehaviorConditionEntries": 6,
     "sOverworldWildBehaviorOverrideRules": 5,
     "sOverworldWildBehaviorOverrides": 4,
 }
@@ -2819,7 +2819,33 @@ def parse_behavior_override_profiles(source: str, macros: dict[str, int]) -> lis
             expected_member_start = member_end
             condition_raws = default_override_condition_raws()
             behavior_start = 4
-            if len(entry) == 21:
+            profile_kind = None
+            condition_start = 0
+            condition_count = 0
+            uses_condition_entries = (
+                len(entry) == 21
+                and "OW_WILD_BEHAVIOR_PROFILE_KIND_"
+                    in clean_token(str(entry[4]))
+            )
+            if uses_condition_entries:
+                profile_kind = make_value(str(entry[4]), None, macros)
+                condition_start_value = make_value(str(entry[5]), None, macros)
+                condition_count_value = make_value(str(entry[6]), None, macros)
+                if any(
+                    numeric(value) is None
+                    for value in (
+                        profile_kind,
+                        condition_start_value,
+                        condition_count_value,
+                    )
+                ):
+                    raise ParseError(
+                        f"override profile #{order} has invalid condition-entry metadata"
+                    )
+                condition_start = int(numeric(condition_start_value))
+                condition_count = int(numeric(condition_count_value))
+                behavior_start = 7
+            elif len(entry) == 21:
                 condition_raws = {
                     "conditionParentProfile": clean_token(str(entry[4])),
                     "conditionMask": clean_token(str(entry[5])),
@@ -2863,6 +2889,9 @@ def parse_behavior_override_profiles(source: str, macros: dict[str, int]) -> lis
                     "conditionParentProfile": condition_parent,
                     "conditionMask": condition_mask,
                     "conditionValue": condition_value,
+                    "profileKind": profile_kind,
+                    "conditionStart": condition_start,
+                    "conditionCount": condition_count,
                     "behavior": parse_behavior_override(entry[behavior_start:], macros),
                 }
             )
@@ -2875,7 +2904,9 @@ def parse_behavior_override_profiles(source: str, macros: dict[str, int]) -> lis
                 "behavior": parse_behavior_override(entry, macros),
             }
         )
-    if uses_member_model:
+    if uses_member_model and not any(
+        profile.get("profileKind") is not None for profile in profiles
+    ):
         for profile_index, profile in enumerate(profiles):
             parent = numeric(profile["conditionParentProfile"])
             if parent != CONDITION_PARENT_NONE_VALUE and (
@@ -2957,8 +2988,6 @@ def validate_conditional_state(
         raise error_type(f"{label} terrain condition contains unknown terrain bits")
     if terrain_mask & ~terrain_override_mask:
         raise error_type(f"{label} enabled terrains must also be explicit")
-    if (min_speed == 0) != (max_speed == 0):
-        raise error_type(f"{label} Walk time must have both no-faster and no-slower bounds")
     if min_speed not in range(CONDITIONAL_MOVEMENT_SPEED_MAX + 1) \
             or max_speed not in range(CONDITIONAL_MOVEMENT_SPEED_MAX + 1):
         raise error_type(f"{label} Walk time bounds must be 0 (any) or 1..32 frames")
@@ -2973,6 +3002,69 @@ def parse_behavior_conditional_states(
     macros: dict[str, int],
     override_profile_count: int,
 ) -> list[dict[str, int]]:
+    if "sOverworldWildBehaviorConditionEntries" in source:
+        entries = parse_initializer(
+            extract_braced_initializer(
+                source,
+                "sOverworldWildBehaviorConditionEntries",
+            )
+        )
+        states = []
+        terrain_kind = macros.get(
+            "OW_WILD_BEHAVIOR_CONDITION_TERRAIN_SPEED",
+            2,
+        )
+        no_subject = macros.get(
+            "OW_WILD_BEHAVIOR_CONDITION_SUBJECT_APPLICATION_NONE",
+            0xFF,
+        )
+        for order, entry in enumerate(entries, 1):
+            if entry == ["0"] or entry == [0]:
+                continue
+            if not isinstance(entry, list) or len(entry) != 24:
+                raise ParseError(
+                    f"condition entry #{order} initializer shape changed"
+                )
+            values = [
+                conditional_state_value(str(entry[index]), field, macros)
+                for index, field in (
+                    (13, "parentProfile"),
+                    (11, "overrideProfile"),
+                    (2, "terrainMask"),
+                    (3, "terrainOverrideMask"),
+                    (22, "minMovementSpeed"),
+                    (23, "maxMovementSpeed"),
+                )
+            ]
+            kind = numeric(make_value(str(entry[14]), None, macros))
+            parent = numeric(values[0])
+            if kind != terrain_kind or parent == no_subject:
+                continue
+            if any(numeric(value) is None for value in values):
+                raise ParseError(
+                    f"condition entry #{order} contains an unresolved value"
+                )
+            state = {
+                key: int(numeric(value))
+                for key, value in zip(
+                    (
+                        "parentProfile",
+                        "overrideProfile",
+                        "terrainMask",
+                        "terrainOverrideMask",
+                        "minMovementSpeed",
+                        "maxMovementSpeed",
+                    ),
+                    values,
+                )
+            }
+            validate_conditional_state(
+                state,
+                f"condition entry #{order}",
+                override_profile_count,
+            )
+            states.append(state)
+        return states
     if "OWBD_CONDITIONAL_STATE_COUNT" not in macros \
             and "sOverworldWildBehaviorConditionalStates" not in source:
         return []
@@ -6443,9 +6535,9 @@ def behavior_blob_counts(raw_source: str) -> dict[str, int]:
                 "OWBD_OVERRIDE_MEMBER_COUNT": "sOverworldWildBehaviorOverrideMembers",
             }
         )
-        if "sOverworldWildBehaviorConditionalStates" in raw_source:
-            count_defines["OWBD_CONDITIONAL_STATE_COUNT"] = \
-                "sOverworldWildBehaviorConditionalStates"
+        if "sOverworldWildBehaviorConditionEntries" in raw_source:
+            count_defines["OWBD_CONDITION_ENTRY_COUNT"] = \
+                "sOverworldWildBehaviorConditionEntries"
     elif "sOverworldWildBehaviorOverrideRules" in raw_source:
         count_defines.update(
             {
@@ -6460,8 +6552,11 @@ def behavior_blob_counts(raw_source: str) -> dict[str, int]:
         entries = parse_initializer(extract_braced_initializer(source, initializer_name))
         counts[define] = (
             0
-            if define == "OWBD_CONDITIONAL_STATE_COUNT"
-            and conditional_state_entries_are_empty_sentinel(entries)
+            if define == "OWBD_CONDITION_ENTRY_COUNT"
+            and (
+                entries in ([["0"]], [[0]])
+                or conditional_state_entries_are_empty_sentinel(entries)
+            )
             else len(entries)
         )
     return counts
@@ -7045,6 +7140,8 @@ def _validate_catalog_condition_subjects(
             raise ParseError(f"{label} references missing application {application_id}")
         if profiles_by_id[application["profile"]]["kind"] != "normal":
             raise ParseError(f"{label} must reference a normal-profile application")
+        if application["target"]["mode"] == "disabled":
+            raise ParseError(f"{label} application has no subject pool")
         return 0
     target = _catalog_object(value, label, {"mode", "match", "members"})
     member_count = _validate_catalog_target(target, label)
@@ -7144,7 +7241,6 @@ def _validate_catalog_condition_when(value: object, label: str) -> str:
     if kind == "notice-target":
         condition = _catalog_object(value, label, {
             "kind", "rangeKind", "rangeLength", "chancePercent",
-            "adjacentDirectionMasks",
         })
         _catalog_expression(condition["rangeKind"], f"{label}.rangeKind")
         _catalog_bounded_integer(
@@ -7152,9 +7248,6 @@ def _validate_catalog_condition_when(value: object, label: str) -> str:
         )
         _catalog_bounded_integer(
             condition["chancePercent"], f"{label}.chancePercent", 0, 100
-        )
-        _catalog_expression(
-            condition["adjacentDirectionMasks"], f"{label}.adjacentDirectionMasks"
         )
         return kind
     raise ParseError(f"{label}.kind must be terrain-motion or notice-target")
@@ -7302,6 +7395,9 @@ def _validate_behavior_catalog_v3(catalog: object) -> None:
             if condition_kind == "notice-target" \
                     and condition["target"]["kind"] == "none":
                 raise ParseError(f"{label} notice-target needs a player or actor target")
+            if condition_kind == "terrain-motion" \
+                    and condition["target"]["kind"] != "none":
+                raise ParseError(f"{label} terrain-motion must be targetless")
     if total_condition_count > MAX_CONDITION_ENTRIES:
         raise ParseError(
             f"behavior catalog supports at most {MAX_CONDITION_ENTRIES} condition entries"
@@ -7610,7 +7706,11 @@ def migrate_behavior_catalog_v2(catalog: dict) -> dict:
     return migrated
 
 
-def lower_behavior_catalog_v3(catalog: dict) -> dict:
+def lower_behavior_catalog_v3(
+    catalog: dict,
+    *,
+    allow_runtime_only: bool = False,
+) -> dict:
     """Lower canonical V3 data to the existing V2 compatibility graph."""
 
     _validate_behavior_catalog_v3(catalog)
@@ -7644,6 +7744,8 @@ def lower_behavior_catalog_v3(catalog: dict) -> dict:
                     or when["kind"] != "terrain-motion" \
                     or activation["mode"] != "while-true" \
                     or target["kind"] != "none":
+                if allow_runtime_only:
+                    continue
                 raise ParseError(
                     f"condition {condition['id']} is valid V3 authoring data but cannot be "
                     "lowered to the current terrain-only compatibility runtime"
@@ -8520,13 +8622,99 @@ def _format_catalog_class_rule(rule: dict, indent: str) -> str:
     )
 
 
+def _stable_condition_id(profile_id: str, condition_id: str) -> int:
+    value = 2166136261
+    for byte in f"{profile_id}:{condition_id}".encode("utf-8"):
+        value ^= byte
+        value = (value * 16777619) & 0xFFFFFFFF
+    result = value & 0xFFFF
+    return 0xFFFE if result == 0xFFFF else result
+
+
+def _catalog_condition_layout(catalog: dict) -> tuple[list[dict], list[dict]]:
+    profiles = {profile["id"]: profile for profile in catalog["profiles"]}
+    metadata = []
+    entries = []
+    numeric_ids: dict[int, str] = {}
+    for application_index, application in enumerate(catalog["applications"]):
+        profile = profiles[application["profile"]]
+        conditions = profile.get("conditions", [])
+        metadata.append({
+            "kind": profile["kind"],
+            "conditionStart": len(entries),
+            "conditionCount": len(conditions),
+        })
+        for condition in conditions:
+            numeric_id = _stable_condition_id(profile["id"], condition["id"])
+            owner = f"{profile['id']}:{condition['id']}"
+            if numeric_id in numeric_ids:
+                raise ParseError(
+                    f"condition id hash collision between {numeric_ids[numeric_id]} and {owner}"
+                )
+            numeric_ids[numeric_id] = owner
+            entries.append({
+                "profile": profile,
+                "application": application,
+                "applicationIndex": application_index,
+                "condition": condition,
+                "conditionId": numeric_id,
+            })
+    return metadata, entries
+
+
+def _format_catalog_condition_entry(entry: dict, indent: str) -> str:
+    inner = indent + "    "
+    values = (
+        entry["targetGroupMask"],
+        entry["terrainMask"],
+        entry["terrainOverrideMask"],
+        entry["durationFrames"],
+        entry["cooldownFrames"],
+        entry["subjectMemberStart"],
+        entry["subjectMemberCount"],
+        entry["targetMemberStart"],
+        entry["targetMemberCount"],
+        entry["conditionId"],
+        entry["applicationIndex"],
+        entry["subjectMode"],
+        entry["subjectApplicationIndex"],
+        entry["kind"],
+        entry["activationMode"],
+        entry["targetKind"],
+        entry["targetRoleMask"],
+        entry["targetSelection"],
+        entry["rangeKind"],
+        entry["rangeLength"],
+        entry["chancePercent"],
+        entry["minMovementSpeed"],
+        entry["maxMovementSpeed"],
+    )
+    tail = ",\n".join(f"{inner}{value}" for value in values)
+    return (
+        f"{indent}{{\n"
+        f"{inner}{format_match_initializer(entry['subjectMatch'], inner)},\n"
+        f"{tail},\n"
+        f"{indent}}}"
+    )
+
+
 def render_behavior_catalog(catalog: dict, raw_source: str) -> str:
     """Render named authoring data into the fixed-layout compatibility blob."""
     validate_behavior_catalog(catalog)
-    if catalog["catalogVersion"] == 3:
-        catalog = lower_behavior_catalog_v3(catalog)
-    if catalog["catalogVersion"] == 2:
-        catalog = lower_behavior_catalog_v2(catalog)
+    if catalog["catalogVersion"] == 1:
+        canonical_catalog = migrate_behavior_catalog_v2(
+            migrate_behavior_catalog_v1(catalog)
+        )
+    elif catalog["catalogVersion"] == 2:
+        canonical_catalog = migrate_behavior_catalog_v2(catalog)
+    else:
+        canonical_catalog = catalog
+    catalog = lower_behavior_catalog_v2(
+        lower_behavior_catalog_v3(
+            canonical_catalog,
+            allow_runtime_only=True,
+        )
+    )
     class_profiles = catalog.get("classProfiles")
     class_rules = catalog.get("classRules")
     species_rules = catalog.get("speciesClassRules")
@@ -8596,6 +8784,10 @@ def render_behavior_catalog(catalog: dict, raw_source: str) -> str:
     override_entry_indent = override_indent + "    "
     member_entry_indent = member_indent + "    "
     flat_members: list[str] = []
+    application_member_ranges: dict[str, tuple[int, int]] = {}
+    condition_metadata, condition_sources = _catalog_condition_layout(
+        canonical_catalog
+    )
     formatted_overrides = []
     for index, profile in enumerate(override_profiles):
         if not isinstance(profile, dict) or not isinstance(profile.get("target"), dict) \
@@ -8610,6 +8802,11 @@ def render_behavior_catalog(catalog: dict, raw_source: str) -> str:
             raise ParseError(f"override profile {index} has invalid or duplicate members")
         member_start = len(flat_members)
         flat_members.extend(members)
+        application_id = canonical_catalog["applications"][index]["id"]
+        application_member_ranges[application_id] = (
+            member_start,
+            len(members),
+        )
         authored_fields = profile["fields"]
         unknown_fields = set(authored_fields) - set(PROFILE_FIELDS)
         if unknown_fields:
@@ -8629,44 +8826,158 @@ def render_behavior_catalog(catalog: dict, raw_source: str) -> str:
             relative_fields=relative_override_fields_from_raws(raws),
             at_least_fields=at_least_override_fields_from_raws(raws),
             at_most_fields=at_most_override_fields_from_raws(raws),
+            profile_kind=condition_metadata[index]["kind"],
+            condition_start=condition_metadata[index]["conditionStart"],
+            condition_count=condition_metadata[index]["conditionCount"],
         ))
     formatted_overrides_text = ",\n".join(formatted_overrides)
     replacements.append((
         override_span[0], override_span[1],
         f"{{\n{formatted_overrides_text}\n{override_indent}}}",
     ))
+    application_indexes = {
+        application["id"]: index
+        for index, application in enumerate(canonical_catalog["applications"])
+    }
+    condition_entries = []
+    for source in condition_sources:
+        condition = source["condition"]
+        subjects = condition["subjects"]
+        if set(subjects) == {"application"}:
+            subject_application_id = subjects["application"]
+            subject_application = canonical_catalog["applications"][
+                application_indexes[subject_application_id]
+            ]
+            subject_target = subject_application["target"]
+            subject_start, subject_count = application_member_ranges[
+                subject_application_id
+            ]
+            subject_application_index = application_indexes[
+                subject_application_id
+            ]
+        else:
+            subject_target = subjects
+            subject_start = len(flat_members)
+            subject_members = [
+                clean_token(str(member)) for member in subjects["members"]
+            ]
+            flat_members.extend(subject_members)
+            subject_count = len(subject_members)
+            subject_application_index = (
+                "OW_WILD_BEHAVIOR_CONDITION_SUBJECT_APPLICATION_NONE"
+            )
+
+        target = condition["target"]
+        target_start = len(flat_members)
+        target_members = [
+            clean_token(str(member)) for member in target.get("members", [])
+        ]
+        flat_members.extend(target_members)
+        target_count = len(target_members)
+        when = condition["when"]
+        activation = condition["activation"]
+        if when["kind"] == "terrain-motion":
+            kind = "OW_WILD_BEHAVIOR_CONDITION_TERRAIN_SPEED"
+            terrain_mask = clean_token(str(when["terrainMask"]))
+            terrain_override_mask = clean_token(
+                str(when["terrainOverrideMask"])
+            )
+            range_kind = "0"
+            range_length = "0"
+            chance_percent = "100"
+            min_speed = str(when["minMovementSpeed"])
+            max_speed = str(when["maxMovementSpeed"])
+        else:
+            kind = (
+                "OW_WILD_BEHAVIOR_CONDITION_PLAYER_NOTICED"
+                if target["kind"] == "player"
+                else "OW_WILD_BEHAVIOR_CONDITION_POKEMON_NOTICED"
+            )
+            terrain_mask = "0"
+            terrain_override_mask = "0"
+            range_kind = clean_token(str(when["rangeKind"]))
+            range_length = str(when["rangeLength"])
+            chance_percent = str(when["chancePercent"])
+            min_speed = "0"
+            max_speed = "0"
+        role_symbols = {
+            "wild": "OW_WILD_BEHAVIOR_CONDITION_TARGET_ROLE_WILD",
+            "follower": "OW_WILD_BEHAVIOR_CONDITION_TARGET_ROLE_FOLLOWER",
+        }
+        target_role_mask = " | ".join(
+            role_symbols[role] for role in target.get("roles", [])
+        ) or "0"
+        target_kind = {
+            "none": "OW_WILD_BEHAVIOR_CONDITION_TARGET_NONE",
+            "player": "OW_WILD_BEHAVIOR_CONDITION_TARGET_PLAYER",
+            "actor": "OW_WILD_BEHAVIOR_CONDITION_TARGET_ACTOR",
+        }[target["kind"]]
+        condition_entries.append({
+            "subjectMatch": _catalog_match_raws(
+                subject_target["match"],
+                f"condition {condition['id']} subject match",
+            ),
+            "targetGroupMask": clean_token(str(target.get("groupMask", 0))),
+            "terrainMask": terrain_mask,
+            "terrainOverrideMask": terrain_override_mask,
+            "durationFrames": str(activation.get("durationFrames", 0)),
+            "cooldownFrames": str(activation.get("cooldownFrames", 0)),
+            "subjectMemberStart": str(subject_start),
+            "subjectMemberCount": str(subject_count),
+            "targetMemberStart": str(target_start),
+            "targetMemberCount": str(target_count),
+            "conditionId": str(source["conditionId"]),
+            "applicationIndex": str(source["applicationIndex"]),
+            "subjectMode": {
+                "members": "OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS",
+                "all": "OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL",
+            }[subject_target["mode"]],
+            "subjectApplicationIndex": str(subject_application_index),
+            "kind": kind,
+            "activationMode": (
+                "OW_WILD_BEHAVIOR_CONDITION_WHILE_TRUE"
+                if activation["mode"] == "while-true"
+                else "OW_WILD_BEHAVIOR_CONDITION_TIMED"
+            ),
+            "targetKind": target_kind,
+            "targetRoleMask": target_role_mask,
+            "targetSelection": (
+                "OW_WILD_BEHAVIOR_CONDITION_TARGET_SELECTION_NEAREST"
+                if target["kind"] == "actor"
+                else "0"
+            ),
+            "rangeKind": range_kind,
+            "rangeLength": range_length,
+            "chancePercent": chance_percent,
+            "minMovementSpeed": min_speed,
+            "maxMovementSpeed": max_speed,
+        })
+
     stored_members = flat_members or ["SPECIES_NONE"]
-    formatted_members_text = ",\n".join(member_entry_indent + member for member in stored_members)
+    formatted_members_text = ",\n".join(
+        member_entry_indent + member for member in stored_members
+    )
     replacements.append((
         member_span[0], member_span[1],
         f"{{\n{formatted_members_text}\n{member_indent}}}",
     ))
 
-    conditional_span = initializer_brace_span(raw_source, "sOverworldWildBehaviorConditionalStates")
-    conditional_indent = line_indent_before(raw_source, conditional_span[0])
-    conditional_entry_indent = conditional_indent + "    "
-    conditional_fields = (
-        "parentProfile", "overrideProfile", "terrainMask",
-        "terrainOverrideMask", "minMovementSpeed", "maxMovementSpeed",
+    condition_span = initializer_brace_span(
+        raw_source,
+        "sOverworldWildBehaviorConditionEntries",
     )
-    stored_states = conditional_states or [{
-        "parentProfile": CONDITIONAL_PROFILE_NONE_RAW,
-        "overrideProfile": CONDITIONAL_PROFILE_NONE_RAW,
-        "terrainMask": "0",
-        "terrainOverrideMask": "0",
-        "minMovementSpeed": "0",
-        "maxMovementSpeed": "0",
-    }]
-    formatted_states = []
-    for index, state in enumerate(stored_states):
-        if not isinstance(state, dict) or set(state) != set(conditional_fields):
-            raise ParseError(f"conditional state {index} must name all six fields")
-        values = ", ".join(clean_token(str(state[field])) for field in conditional_fields)
-        formatted_states.append(f"{conditional_entry_indent}{{{values}}}")
-    formatted_states_text = ",\n".join(formatted_states)
+    condition_indent = line_indent_before(raw_source, condition_span[0])
+    condition_entry_indent = condition_indent + "    "
+    if condition_entries:
+        formatted_conditions = ",\n".join(
+            _format_catalog_condition_entry(entry, condition_entry_indent)
+            for entry in condition_entries
+        )
+    else:
+        formatted_conditions = f"{condition_entry_indent}{{0}}"
     replacements.append((
-        conditional_span[0], conditional_span[1],
-        f"{{\n{formatted_states_text}\n{conditional_indent}}}",
+        condition_span[0], condition_span[1],
+        f"{{\n{formatted_conditions}\n{condition_indent}}}",
     ))
 
     rendered = raw_source
@@ -8685,7 +8996,7 @@ def render_behavior_catalog_header(raw_header: str, catalog: dict, raw_source: s
         }
         runtime_application_ids = catalog["runtimeBindings"]
     if catalog.get("catalogVersion") == 3:
-        catalog = lower_behavior_catalog_v3(catalog)
+        catalog = lower_behavior_catalog_v3(catalog, allow_runtime_only=True)
     if catalog.get("catalogVersion") == 2:
         catalog = lower_behavior_catalog_v2(catalog)
     class_profiles = catalog["classProfiles"]
@@ -9265,6 +9576,9 @@ def format_behavior_override_member_profile(
     relative_fields: set[str] | None = None,
     at_least_fields: set[str] | None = None,
     at_most_fields: set[str] | None = None,
+    profile_kind: str = "normal",
+    condition_start: int = 0,
+    condition_count: int = 0,
 ) -> str:
     mode_symbol = {
         "disabled": "OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED",
@@ -9277,12 +9591,19 @@ def format_behavior_override_member_profile(
     at_most_fields = at_most_fields or set()
     storage_raws = override_profile_storage_raws(profile_raws)
     compound_bound_raws = compound_bound_profile_storage_raws(profile_raws)
+    kind_symbol = {
+        "normal": "OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL",
+        "conditional": "OW_WILD_BEHAVIOR_PROFILE_KIND_CONDITIONAL",
+    }[profile_kind]
     return override_profile_name_comment(name, indent) + (
         f"{indent}{{\n"
         f"{inner}{format_match_initializer(match_raws, inner)},\n"
         f"{inner}{member_start},\n"
         f"{inner}{member_count},\n"
         f"{inner}{mode_symbol},\n"
+        f"{inner}{kind_symbol},\n"
+        f"{inner}{condition_start},\n"
+        f"{inner}{condition_count},\n"
         f"{inner}{format_mask_expression(mask_fields, inner, 1)},\n"
         f"{inner}{format_mask_expression(mask_fields, inner, 2)},\n"
         f"{inner}{format_mask_expression(mask_fields, inner, 3)},\n"
