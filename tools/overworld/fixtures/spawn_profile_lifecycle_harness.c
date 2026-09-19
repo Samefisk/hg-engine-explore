@@ -39,7 +39,9 @@ typedef struct Runtime {
     u8 movementBehaviorLimitKeys[OW_WILD_MAX_SPAWNS];
     struct {
         s16 lastKnownX[OW_WILD_MAX_SPAWNS], lastKnownY[OW_WILD_MAX_SPAWNS];
-        u16 managerRestoreMask; u8 farSamples[OW_WILD_MAX_SPAWNS];
+        u16 managerRestoreMask;
+        u16 distanceDespawnPendingMask;
+        u8 farSamples[OW_WILD_MAX_SPAWNS];
     } spawnPresentations;
 } Runtime;
 typedef struct OverworldWildSpawnState {
