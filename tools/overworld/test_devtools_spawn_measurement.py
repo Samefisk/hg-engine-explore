@@ -145,7 +145,7 @@ class PoolSpawnReceiptTests(unittest.TestCase):
         self.assertIsNotNone(compiler, "missing ARM compiler is not an ABI pass")
         program = '''#include "overworld_behavior_resolver.h"
 #include <stddef.h>
-_Static_assert(sizeof(BehaviorResolveResult) == 256, "result size");
+_Static_assert(sizeof(BehaviorResolveResult) == 276, "result size");
 _Static_assert(offsetof(BehaviorResolveResult, matchedOverrideMask) == 236, "Owner matches");
 _Static_assert(offsetof(BehaviorResolveResult, forcedOverrideMask) == 240, "Owner forced");
 _Static_assert(offsetof(BehaviorResolveResult, conditionalOverrideMask) == 244, "Owner conditional");
@@ -225,7 +225,7 @@ _Static_assert(offsetof(BehaviorResolveResult, primitives.attentiveTarget) == 22
                 elif fault == "species": spawn["publicSubject"]["species"] = 56
                 elif fault == "input-species": r["inputEncounter"]["species"] = 56
                 elif fault == "profile-source": r["resolverReceipts"][0]["sourceSha256"] = "b" * 64
-                elif fault == "profile-request": r["resolverReceipts"][0]["requestHex"] = "00" * 20
+                elif fault == "profile-request": r["resolverReceipts"][0]["requestHex"] = "00" * 44
                 elif fault == "profile-bytes": r["resolverReceipts"][0]["lanes"] = ["00" * 72] * 3
                 elif fault == "headbutt": spawn["terrain"] = r["terrain"] = 2
                 elif fault == "short-input": r["inputPrefixHex"] = r["inputPrefixHex"][:-2]

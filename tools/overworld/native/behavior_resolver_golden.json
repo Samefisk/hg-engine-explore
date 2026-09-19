@@ -459,6 +459,48 @@
           {"lane": 0, "kind": 3, "sourceIndex": 27, "requiredFlags": 3}
         ]
       }
+    },
+    {
+      "name": "explicit-canopy-conditional-application",
+      "request": {
+        "species": 56,
+        "level": 5,
+        "terrain": 0,
+        "conditionInputMode": "explicit",
+        "activeConditionalMask": 262144,
+        "winningConditionId": 1247
+      },
+      "expected": {
+        "status": 0,
+        "behaviorClass": 0,
+        "conditionalOverrideMask": 262144,
+        "requiredMatchedOverrideMask": 131076,
+        "requiredAppliedOverrideMask": 917508,
+        "fingerprint": 4146356538,
+        "winningConditionId": 1247,
+        "targetSourceApplication": 255,
+        "resolvedTargetConditionId": 65535,
+        "resolvedTarget": {
+          "kind": 0,
+          "actorSlot": 0,
+          "actorGeneration": 0,
+          "fieldEpoch": 0,
+          "mapGeneration": 0,
+          "encounterGeneration": 0
+        },
+        "profileFields": {
+          "owner.chillSpeed": 7,
+          "owner.hopAllowNonCardinal": 1,
+          "owner.hopMinDistance": 1,
+          "owner.hopMaxDistance": 6,
+          "owner.hopTime": 7,
+          "owner.hopAllowVerticalObstacles": 1
+        },
+        "traceContains": [
+          {"lane": 0, "kind": 3, "sourceIndex": 17, "requiredFlags": 3},
+          {"lane": 0, "kind": 4, "sourceIndex": 18, "requiredFlags": 10}
+        ]
+      }
     }
   ]
 }

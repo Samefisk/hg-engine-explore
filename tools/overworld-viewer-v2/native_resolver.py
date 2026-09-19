@@ -170,6 +170,42 @@ def build(
     return output
 
 
+def _condition_request_values(request: Mapping[str, Any]) -> tuple[int, ...]:
+    mode = request.get("conditionInputMode", "legacy")
+    if isinstance(mode, str):
+        try:
+            mode = {"legacy": 0, "explicit": 1}[mode]
+        except KeyError as error:
+            raise ValueError(f"unknown condition input mode: {mode}") from error
+    target = request.get("resolvedTarget") or {}
+    if not isinstance(target, Mapping):
+        raise ValueError("resolvedTarget must be an object")
+    kind = target.get("kind", "none")
+    if isinstance(kind, str):
+        try:
+            kind = {"none": 0, "player": 1, "actor": 2}[kind]
+        except KeyError as error:
+            raise ValueError(f"unknown resolved target kind: {kind}") from error
+    values = (
+        request.get("activeConditionalMask", 0),
+        mode,
+        kind,
+        target.get("actorSlot", 0),
+        target.get("actorGeneration", 0),
+        target.get("fieldEpoch", 0),
+        target.get("mapGeneration", 0),
+        target.get("encounterGeneration", 0),
+        target.get("actorReserved", 0),
+        request.get("winningConditionId", 0xFFFF),
+        request.get("targetSourceApplication", 0xFF),
+        request.get("resolvedTargetConditionId", 0xFFFF),
+    )
+    try:
+        return tuple(int(value) for value in values)
+    except (TypeError, ValueError) as error:
+        raise ValueError("native condition request values must be integers") from error
+
+
 def resolve(
     blob: Path | None,
     request: Mapping[str, Any],
@@ -182,6 +218,7 @@ def resolve(
     root = (root or _repo_root()).resolve()
     executable = executable or build(root)
     behavior_class = request.get("behaviorClass", "auto")
+    condition_values = _condition_request_values(request)
     arguments = [
         str(executable),
         "--species",
@@ -200,6 +237,30 @@ def resolve(
         str(request.get("forcedOverrideMask", 0)),
         "--behavior-class",
         str(behavior_class),
+        "--active-conditional-mask",
+        str(condition_values[0]),
+        "--condition-input",
+        "explicit" if condition_values[1] == 1 else "legacy",
+        "--target-kind",
+        str(condition_values[2]),
+        "--target-actor-slot",
+        str(condition_values[3]),
+        "--target-actor-generation",
+        str(condition_values[4]),
+        "--target-field-epoch",
+        str(condition_values[5]),
+        "--target-map-generation",
+        str(condition_values[6]),
+        "--target-encounter-generation",
+        str(condition_values[7]),
+        "--target-actor-reserved",
+        str(condition_values[8]),
+        "--winning-condition-id",
+        str(condition_values[9]),
+        "--target-source-application",
+        str(condition_values[10]),
+        "--resolved-target-condition-id",
+        str(condition_values[11]),
     ]
     if blob is not None:
         blob = blob.resolve()
@@ -259,7 +320,7 @@ def resolve_many(
             request.get("conditionTerrainMask", 0),
             request.get("forcedOverrideMask", 0),
             behavior_class,
-        )
+        ) + _condition_request_values(request)
         try:
             lines.append(" ".join(str(int(value)) for value in values))
         except (TypeError, ValueError) as error:

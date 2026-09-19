@@ -120,6 +120,11 @@ typedef struct OverworldBehaviorConditionEntryResult {
 typedef struct OverworldBehaviorConditionResult {
     u32 activeApplicationMask;
     u32 triggeredApplicationMask;
+    OverworldBehaviorConditionTargetReference resolvedTarget;
+    u16 resolvedTargetConditionId;
+    u8 resolvedTargetSourceApplication;
+    u8 winningConditionSourceApplication;
+    u16 winningConditionId;
     u16 winningConditionIds[OVERWORLD_BEHAVIOR_CONDITION_MAX_APPLICATIONS];
     OverworldBehaviorConditionTargetReference
         targets[OVERWORLD_BEHAVIOR_CONDITION_MAX_APPLICATIONS];
@@ -144,8 +149,8 @@ typedef char OverworldBehaviorConditionSystemStateBudgetMustRemain7680Bytes[
         == 7680
         ? 1
         : -1];
-typedef char OverworldBehaviorConditionResultSizeMustRemain520Bytes[
-    sizeof(OverworldBehaviorConditionResult) == 520 ? 1 : -1];
+typedef char OverworldBehaviorConditionResultSizeMustRemain540Bytes[
+    sizeof(OverworldBehaviorConditionResult) == 540 ? 1 : -1];
 
 OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluateEntry(
     const OverworldBehaviorConditionDefinition *definition,

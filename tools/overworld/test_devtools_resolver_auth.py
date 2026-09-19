@@ -19,7 +19,7 @@ class ResolverAuthTests(unittest.TestCase):
                 address=0x02300000, callbacks=dict(resolve=0x02301001, inspectClass=0x02302001))
             s.rt = SimpleNamespace(REPO=root, ACTOR_DESCRIPTOR={"privateServices": [service]})
             discovery = dict(blobAddress=0x02200000, blobSize=len(blob), fieldPointer=0x02210000,
-                             heapGeneration=7, status=0, requestHex=bytes(20).hex(),
+                             heapGeneration=7, status=0, requestHex=bytes(44).hex(),
                              entryNativeCycle=10, returnNativeCycle=11)
             s.native_observation = SimpleNamespace(resolver_discovery=deepcopy(discovery))
             s.native_heap_generation = 7

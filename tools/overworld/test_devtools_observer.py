@@ -313,7 +313,7 @@ class SharedNativeObserverTests(unittest.TestCase):
 
     def test_preboot_resolution_and_nested_spawn_are_framed_only_at_complete_queue(self):
         f = self.f
-        request, result = bytearray(20), bytearray(256)
+        request, result = bytearray(44), bytearray(256)
         request[:2] = struct.pack("<H", 165)
         result[:216] = bytes(range(72)) * 3
         struct.pack_into("<II", result, 248, 7, 44)
@@ -365,7 +365,7 @@ class SharedNativeObserverTests(unittest.TestCase):
 
     def resolve_profile(self, terrain_mask=0, *, sp=0x027E3740, lr=0x02001081):
         f = self.f
-        request, result = bytearray(20), bytearray(256)
+        request, result = bytearray(44), bytearray(256)
         struct.pack_into("<HH", request, 0, 165, terrain_mask)
         result[:216] = bytes(range(72)) * 3
         struct.pack_into("<II", result, 248, 7, 44)
@@ -892,7 +892,8 @@ class SpawnFinalizationObserverTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         source = (root / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c").read_text()
         declaration = re.search(
-            r"static BOOL __attribute__\(\(noinline, optimize\(\"Os\"\)\)\) "
+            r"static BOOL __attribute__\(\(noinline, optimize\(\"Os\""
+            r"(?:, \"tree-dominator-opts\")?\)\)\)\s+"
             r"OverworldWildSpawns_FinalizePreparedSpawn\([^;{]+\)\n", source)
         self.assertIsNotNone(declaration, "the observed native signature must remain explicit")
         compiler = shutil.which(os.environ.get("ARM_NONE_EABI_CC", "arm-none-eabi-gcc"))
@@ -1134,7 +1135,7 @@ class CallbackPoolPlacementTests(unittest.TestCase):
         f.put(pointer + 12, struct.pack("<I", f.actor["subjectIdentity"] ^ 0x10000000))
         args = dict(r0=f.rt.WILD_STATE, r1=0x02231000, r2=terrain, r3=0)
         f.enter("spawn-finalized", **args)
-        request, result = bytearray(20), bytearray(256)
+        request, result = bytearray(44), bytearray(256)
         struct.pack_into("<H", request, 0, f.actor["species"])
         request[8:10] = bytes((f.actor["level"], terrain))
         for lane in (0, 72, 144):

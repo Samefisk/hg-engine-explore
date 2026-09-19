@@ -8,7 +8,12 @@ from copy import deepcopy
 import hashlib
 import json
 
-from tools.overworld.devtools_resolver_parity import compare_resolver_parity, raw_hex
+from tools.overworld.devtools_resolver_parity import (
+    CASE_NAMES,
+    compare_resolver_parity,
+    raw_hex,
+)
+from tools.overworld.devtools_resolver_probe import REQUEST, RESULT, TRACE
 from tools.overworld.devtools_raw_chunk import validate_raw_chunk
 
 NAMES = ("packaged-resolver-entry", "packaged-behavior-blob", "status-parity",
@@ -55,7 +60,7 @@ def resolver_measurements(test, rows, record, repo, *, oracle):
 
 
 def negative_controls(test, rows, record, repo, *, oracle):
-    """Seven copied-data evaluator controls; never live observer-fault proof.
+    """Copied-data evaluator controls; never live observer-fault proof.
 
     Prove the original stream first. Each mutation uses the unchanged checker
     and controller oracle, and must fail for its specific changed evidence.
@@ -70,7 +75,7 @@ def negative_controls(test, rows, record, repo, *, oracle):
         "missing-probe": "resolver proof: native probe is missing",
         "wrong-result-byte": "resolver parity: full result bytes differ",
         "wrong-ordered-trace": "resolver parity: ordered provenance differs",
-        "missing-free": "resolver proof: exact allocation/seven resolves/free required",
+        "missing-free": "resolver proof: exact allocation/resolves/free required",
         "wrong-entry-argument": "resolver proof: native call or entry arguments differ",
         "wrong-service-hash": "resolver parity: native blob or service identity differs",
         "wrong-blob-hash": "resolver parity: native blob or service identity differs",
@@ -169,7 +174,7 @@ def _measure(test, rows, record, oracle):
     source = pointer(natural["blobAddress"], integer(blob["size"], 1, 1024*1024))
     require(natural.get("status") == 0 and type(natural.get("status")) is int
             and natural["blobSize"] == blob["size"], "natural resolver discovery differs")
-    raw_hex(natural["requestHex"], 20)
+    raw_hex(natural["requestHex"], 44)
     require(work+8000 <= source or source+blob["size"] <= work, "source overlaps work buffer")
     trampoline = receipt["trampoline"]
     trampoline_address = pointer(trampoline["address"], 1536)
@@ -199,9 +204,12 @@ def _measure(test, rows, record, oracle):
         require(isinstance(stream, str) and stream.isdecimal() and int(stream) > 0, "bad trace stream")
         integer(sequence)
     calls = receipt["calls"]
-    require(isinstance(calls, list) and len(calls) == 9, "exact allocation/seven resolves/free required")
+    require(isinstance(calls, list) and len(calls) == len(CASE_NAMES) + 2,
+            "exact allocation/resolves/free required")
     expected = [("allocate_work_memory", [11, 8000], work)] + [
-        ("resolve_behavior", [source, blob["size"], work+16, work+36, work+292], 0)]*7 + [
+        ("resolve_behavior", [source, blob["size"], work + REQUEST,
+                              work + RESULT, work + TRACE], 0)
+        ] * len(CASE_NAMES) + [
         ("free", [work], None)]
     addresses = oracle["callAddresses"]
     require(addresses["resolve_behavior"] | 1 == oracle["serviceIdentity"]["resolveAddress"],

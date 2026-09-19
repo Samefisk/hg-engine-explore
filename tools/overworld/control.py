@@ -229,9 +229,10 @@ def _packaged_resolver_oracle() -> dict[str, Any] | None:
             "conditional-rooftop-replay",
             "explicit-picked-up-class",
             "legacy-forced-asleep-match-token",
+            "explicit-canopy-conditional-application",
         )
         by_name = {item.get("name"): item for item in corpus["vectors"]}
-        if corpus.get("blobVersion") != 76 or any(name not in by_name for name in names):
+        if corpus.get("blobVersion") != 77 or any(name not in by_name for name in names):
             return None
         adapter_path = REPO / "tools/overworld-viewer-v2/native_resolver.py"
         module_spec = importlib.util.spec_from_file_location(
@@ -2815,8 +2816,10 @@ def _resolver_probe_oracle(repo):
     blob_path = repo / "build/OverworldWildBehaviorData.bin"
     blob = blob_path.read_bytes()
     corpus = json.loads((repo / "tools/overworld/native/behavior_resolver_golden.json").read_text())
-    vectors = corpus["vectors"]
-    if corpus["blobVersion"] != 76 or tuple(v["name"] for v in vectors) != CASE_NAMES:
+    by_name = {vector.get("name"): vector for vector in corpus["vectors"]}
+    vectors = [by_name.get(name) for name in CASE_NAMES]
+    if corpus["blobVersion"] != 77 \
+            or not all(isinstance(vector, dict) for vector in vectors):
         raise ValidationFailure("resolver golden cases changed")
     path = repo / "tools/overworld-viewer-v2/native_resolver.py"
     spec = importlib.util.spec_from_file_location("shared_resolver_oracle", path)

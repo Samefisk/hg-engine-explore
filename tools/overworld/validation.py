@@ -354,15 +354,15 @@ def _public_abi_address(address, size, *, allow_stack=False):
 '''),
     "read_resolver_request": _function_ast_shape('''
 def read_resolver_request(rt, emu, address):
-    """BehaviorResolveRequest: fixed 20-byte public service input at r2."""
-    value = rt.actor_memory_read(emu, _public_abi_address(address, 20, allow_stack=True), 20)
-    if len(value) != 20:
+    """BehaviorResolveRequest: fixed 44-byte conditional-profile input at r2."""
+    value = rt.actor_memory_read(emu, _public_abi_address(address, 44, allow_stack=True), 44)
+    if len(value) != 44:
         raise ObservationFailure("public resolver request byte count changed")
     return value
 '''),
     "read_resolver_result": _function_ast_shape('''
 def read_resolver_result(rt, emu, address):
-    """BehaviorResolveResult v76: 216 lane bytes plus 40 provenance bytes."""
+    """Stable 256-byte BehaviorResolveResult compatibility prefix."""
     value = rt.actor_memory_read(emu, _public_abi_address(address, 256, allow_stack=True), 256)
     if len(value) != 256:
         raise ObservationFailure("public resolver result byte count changed")

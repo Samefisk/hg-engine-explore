@@ -38,7 +38,7 @@ class Stream:
         for index, lane in enumerate(self.lanes): resolved[index * 72:(index + 1) * 72] = bytes.fromhex(lane)
         resolved[248:252] = (3).to_bytes(4, "little")
         resolved[252:256] = (12345).to_bytes(4, "little")
-        request = bytearray(20); request[:2] = (165).to_bytes(2, "little"); request[8] = 5
+        request = bytearray(44); request[:2] = (165).to_bytes(2, "little"); request[8] = 5
         self.profile = {"resolved": True, "requestHex": request.hex(), "resultHex": resolved.hex(),
                         "fingerprint": 12345, "sourceSha256": SOURCE, "lanes": self.lanes, "appliedOverrides": 3}
         self.actor = {"active": True, "species": 165, "form": 0, "level": 5, "role": "WILD",
@@ -490,10 +490,12 @@ class ChainMeasurementTests(unittest.TestCase):
 
     def test_same_profile_accepts_exact_live_rattata_requests_at_two_levels(self):
         items = deepcopy(self.good)
-        for request in ("1300000000000000030000000000000000000000",
-                        "1300000000000000020000000000000000000000"):
+        for level in (3, 2):
+            request = bytearray(44)
+            request[:2] = (19).to_bytes(2, "little")
+            request[8] = level
             profile = deepcopy(items[0][0]["nativeObservation"]["resolvedProfiles"][0])
-            profile["requestHex"] = request
+            profile["requestHex"] = request.hex()
             profile["fingerprint"] = 3990395777
             result = bytearray.fromhex(profile["resultHex"])
             result[252:256] = (3990395777).to_bytes(4, "little")

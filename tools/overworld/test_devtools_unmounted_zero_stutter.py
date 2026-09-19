@@ -43,7 +43,7 @@ PROFILE[21] = 6
 PROFILE[22] = 5
 PROFILE[248:252] = MATCHED_MASK.to_bytes(4, "little")
 PROFILE[252:256] = FINGERPRINT.to_bytes(4, "little")
-REQUEST = bytearray(20)
+REQUEST = bytearray(44)
 REQUEST[:2] = (56).to_bytes(2, "little")
 PROFILE_RECEIPT = {
     "requestHex": REQUEST.hex(), "resultHex": PROFILE.hex(),

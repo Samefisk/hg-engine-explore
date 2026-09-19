@@ -188,7 +188,7 @@ class DevtoolsCliTests(unittest.TestCase):
             "sourceSha256": format(index + 1, "064x"),
             "lanes": [(f"{index + 10:02x}" * 72)] * 3,
             "resultHex": f"{index + 20:02x}" * 256,
-            "requestHex": f"{index + 30:02x}" * 20,
+            "requestHex": f"{index + 30:02x}" * 44,
         } for index in range(6)]
         response = {"ok": True, "session": {"id": "session-profiles", "state": "ready"},
                     "result": {"frame": 12, "nativeObservation": {

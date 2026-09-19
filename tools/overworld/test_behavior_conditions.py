@@ -165,6 +165,12 @@ int main(void)
     assert(result.activeApplicationMask == ((1u << 5) | (1u << 6)));
     assert(result.winningConditionIds[5] == 301);
     assert(result.targets[5].actor.slot == 2);
+    assert(result.resolvedTarget.kind
+        == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_PLAYER);
+    assert(result.resolvedTargetSourceApplication == 6);
+    assert(result.resolvedTargetConditionId == 106);
+    assert(result.winningConditionSourceApplication == 6);
+    assert(result.winningConditionId == 106);
 
     /* The winning entry alone supplies the application trigger result. */
     definitions[0].activationMode = OVERWORLD_BEHAVIOR_CONDITION_TIMED;

@@ -92,7 +92,7 @@ def large_snapshot(frame=1):
         for x in range(15) for z in range(15)]}
     sample["nativeObservation"] = {"resolvedProfiles": [
         {"fingerprint": profile, "lanes": ["00" * 70] * 3,
-         "requestHex": "00" * 20, "resultHex": "00" * 256,
+         "requestHex": "00" * 44, "resultHex": "00" * 256,
          "sourceSha256": "a" * 64, "appliedOverrides": 0, "resolved": True}
         for profile in range(6)]}
     return sample

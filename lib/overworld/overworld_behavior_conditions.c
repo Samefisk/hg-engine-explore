@@ -433,6 +433,14 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_Evaluate(
         }
     }
     memset(result, 0, sizeof(*result));
+    result->resolvedTargetConditionId =
+        OVERWORLD_BEHAVIOR_CONDITION_NO_ENTRY;
+    result->resolvedTargetSourceApplication =
+        OVERWORLD_BEHAVIOR_CONDITION_MAX_APPLICATIONS;
+    result->winningConditionId = OVERWORLD_BEHAVIOR_CONDITION_NO_ENTRY;
+    result->winningConditionSourceApplication =
+        OVERWORLD_BEHAVIOR_CONDITION_MAX_APPLICATIONS;
+    OverworldBehaviorCondition_ClearTarget(&result->resolvedTarget);
     for (i = 0; i < OVERWORLD_BEHAVIOR_CONDITION_MAX_APPLICATIONS; i++) {
         result->winningConditionIds[i] =
             OVERWORLD_BEHAVIOR_CONDITION_NO_ENTRY;
@@ -459,6 +467,19 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_Evaluate(
         }
         result->winningConditionIds[application] = entry.conditionId;
         result->targets[application] = entry.target;
+    }
+    for (i = 0; i < OVERWORLD_BEHAVIOR_CONDITION_MAX_APPLICATIONS; i++) {
+        if ((result->activeApplicationMask & (1u << i)) == 0) {
+            continue;
+        }
+        result->winningConditionId = result->winningConditionIds[i];
+        result->winningConditionSourceApplication = (u8)i;
+        if (result->targets[i].kind
+                != OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE) {
+            result->resolvedTarget = result->targets[i];
+            result->resolvedTargetConditionId = result->winningConditionIds[i];
+            result->resolvedTargetSourceApplication = (u8)i;
+        }
     }
     return OVERWORLD_BEHAVIOR_CONDITION_OK;
 }

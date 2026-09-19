@@ -67,6 +67,9 @@ EXACT_KEYS = (
     "conditionalOverrideMask",
     "appliedOverrideMask",
     "fingerprint",
+    "winningConditionId",
+    "targetSourceApplication",
+    "resolvedTargetConditionId",
 )
 PROFILE_SCENARIOS = (
     "profile.resolve.override-order",
@@ -263,6 +266,12 @@ def _verify_result(result: dict[str, Any], expected: dict[str, Any]) -> None:
     for key in EXACT_KEYS:
         if key in expected and result.get(key) != expected[key]:
             raise AssertionError(f"{key}: expected {expected[key]}, got {result.get(key)}")
+    if "resolvedTarget" in expected \
+            and result.get("resolvedTarget") != expected["resolvedTarget"]:
+        raise AssertionError(
+            "resolvedTarget: expected "
+            f"{expected['resolvedTarget']}, got {result.get('resolvedTarget')}"
+        )
     for key in ("Matched", "Applied"):
         expected_key = f"required{key}OverrideMask"
         if expected_key not in expected:

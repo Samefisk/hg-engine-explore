@@ -110,7 +110,7 @@ class LedybaChainMeasurement:
         if receipt.get("resolved") is not True:
             return
         result = _bytes(receipt.get("resultHex"), 256, "resolved profile")
-        request = _bytes(receipt.get("requestHex"), 20, "resolver request").hex()
+        request = _bytes(receipt.get("requestHex"), 44, "resolver request").hex()
         fingerprint = _integer(receipt.get("fingerprint"), "profile fingerprint", 1)
         lanes = [result[offset:offset + 72].hex() for offset in (0, 72, 144)]
         if receipt.get("sourceSha256") != self.source_sha256 \

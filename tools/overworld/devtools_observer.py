@@ -1515,7 +1515,7 @@ class NativeObservation:
 
     def _resolver_before(self):
         regs = self.session.emu.memory.register_arm9
-        request = public_bytes(self.session, regs.r2, 20)
+        request = public_bytes(self.session, regs.r2, 44)
         return {"requestHex": request.hex(), "resultAddress": regs.r3 & 0xFFFFFFFF,
                 "blobAddress": regs.r0 & 0xFFFFFFFF, "blobSize": regs.r1 & 0xFFFFFFFF,
                 "fieldPointer": self.session.rt.unsigned(self.session.emu, self.session.rt.G_FIELD_SYS_PTR),

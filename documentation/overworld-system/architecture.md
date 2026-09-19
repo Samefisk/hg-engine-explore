@@ -114,7 +114,9 @@ Owns bounded condition truth, activation lifetime, cooldown, and target
 selection. It consumes value-only subject and world observations plus the
 current actor-system frame. It returns an active conditional-application mask,
 one winning condition-entry ID per active application, and zero or one captured
-target per active application.
+target per active application. It also reduces those winners in shared
+application order to one overall winning condition and one final target with
+its source application and condition.
 
 Condition entries are independent. The last listed active entry for one
 conditional profile wins. Different conditional profiles can be active at the
@@ -151,7 +153,8 @@ BehaviorResult BehaviorCatalog_Resolve(
 
 This is a private implementation interface. The resolver input contains
 subject, encounter terrain, behavior class inputs, an explicit forced layer
-set, active conditional applications, and captured target bindings. It does
+set, active conditional applications, the overall winning condition, and one
+already-resolved target with source provenance. It does
 not contain actor role, world pointers, timers, or condition predicates.
 
 Required order:
@@ -164,8 +167,8 @@ Required order:
 6. Apply a matching normal application.
 7. Apply a matching conditional application only when its active input bit is
    set.
-8. Resolve captured target bindings in the same order; a later target replaces
-   an earlier target, while a targetless application does not erase one.
+8. Validate the final target's source application and condition. Target
+   precedence was reduced by the evaluator using this same application order.
 9. Resolve the Tired lane reference once.
 10. Normalize both lanes.
 11. Resolve mechanical primitives.

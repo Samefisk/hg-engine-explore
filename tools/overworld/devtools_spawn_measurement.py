@@ -98,7 +98,7 @@ def check_pool_spawn_receipt(spawn, *, source_sha256, authored_profiles):
     resolved = profiles[-1]
     if resolved.get("resolved") is not True or resolved.get("sourceSha256") != source_sha256:
         raise ValueError("finalizer profile has missing or stale source identity")
-    request = _bytes(resolved.get("requestHex"), 20, "resolver request")
+    request = _bytes(resolved.get("requestHex"), 44, "resolver request")
     result = _bytes(resolved.get("resultHex"), 256, "resolver result")
     applied = int.from_bytes(result[248:252], "little")
     matched, forced, conditional = struct.unpack_from("<III", result, 236)

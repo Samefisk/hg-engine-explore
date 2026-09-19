@@ -5,6 +5,8 @@ from pathlib import Path
 import unittest
 
 from tools.overworld.devtools_resolver_proof import resolver_measurements, negative_controls, NAMES
+from tools.overworld.devtools_resolver_parity import CASE_NAMES
+from tools.overworld.devtools_resolver_probe import REQUEST, RESULT, TRACE
 from tools.overworld import test_devtools_resolver_parity as parity_tests
 
 
@@ -19,7 +21,8 @@ class ResolverProofTests(unittest.TestCase):
             n.update(dispatchClock=dict(frame=10,nativeCycle=25), returnClock=dict(frame=10,nativeCycle=25))
         calls=[]
         for name,args,result in [("allocate_work_memory",[11,8000],work)]+[
-                ("resolve_behavior",[source,100,work+16,work+36,work+292],0)]*7+[("free",[work],128)]:
+                ("resolve_behavior",[source,100,work+REQUEST,work+RESULT,work+TRACE],0)
+                ] * len(CASE_NAMES) + [("free",[work],128)]:
             calls.append(dict(routine=name,address=oracle["callAddresses"][name],requestedArguments=args[:],
                 entryArguments=args[:],entryStack=sp,entryLink=trampoline+0x4C,entryCpsr=63,
                 entryBoundary="native-trampoline-BLX-entry",returnValue=result))
@@ -28,7 +31,7 @@ class ResolverProofTests(unittest.TestCase):
             value=dict(completed=True,acceptedProof=False,receipts=natives,
                 allocation=dict(released=True,heapId=11,bytes=8000,pointer=work)),
             naturalDiscovery=dict(blobAddress=source,blobSize=100,fieldPointer=0x02230000,heapGeneration=0,
-                status=0,requestHex=bytes(20).hex(),entryNativeCycle=20,returnNativeCycle=20),
+                status=0,requestHex=bytes(44).hex(),entryNativeCycle=20,returnNativeCycle=20),
             trampoline=dict(address=trampoline,bytes=1536,heapId=11,lifetime="field-system-heap11",
                 fieldPointer=0x02230000,heapGeneration=0,codeSha256="c"*64),
             stackOwnership=dict(callSp=sp,hostRestoredFrameBytes=0,nativeFrameBytes=80,scratchBytes=268,
@@ -43,13 +46,13 @@ class ResolverProofTests(unittest.TestCase):
     def check(self,test,rows,oracle):
         return resolver_measurements(test,iter(rows),{},Path(__file__).resolve().parents[2],oracle=oracle)
 
-    def test_seven_same_cycle_calls_and_all_eight_original_measurements(self):
+    def test_same_cycle_calls_and_all_eight_original_measurements(self):
         t,r,o=self.fixture();before=deepcopy((t,r,o)); result=self.check(t,r,o)
         self.assertEqual([m["name"] for m in result["measurements"]],list(NAMES))
         self.assertEqual(result["observedFrames"],1)
         self.assertEqual(result["completedGameFrames"],0)
         self.assertNotIn("acceptedProof",result)
-        self.assertEqual(result["caseProof"]["caseCount"],7)
+        self.assertEqual(result["caseProof"]["caseCount"],len(CASE_NAMES))
         self.assertEqual((t,r,o),before)
 
     def test_damaged_native_evidence_cannot_authorize_parity(self):
@@ -61,7 +64,7 @@ class ResolverProofTests(unittest.TestCase):
             if fault=="return": p["calls"][1]["returnValue"]=1
             if fault=="count": v["receipts"].pop()
             if fault=="trace": n["trace"].reverse()
-            if fault=="request": n["requestHex"]="00"*20
+            if fault=="request": n["requestHex"]="00"*44
             if fault=="free": p["calls"].pop()
             if fault=="unreleased": v["allocation"]["released"]=False
             if fault=="entry": p["calls"][1]["entryArguments"][0]+=4
@@ -99,7 +102,7 @@ class ResolverProofTests(unittest.TestCase):
             [v["request"] for v in o["vectors"]],root=root,executable=executable)
         r[0]["initialSnapshot"]=dict(frame=732,nativeCycle=1857)
         r[1].update(receipt=p,snapshot=dict(frame=734,nativeCycle=1861))
-        self.assertEqual(self.check(t,r,o)["caseProof"]["caseCount"],7)
+        self.assertEqual(self.check(t,r,o)["caseProof"]["caseCount"],len(CASE_NAMES))
 
     def test_neutral_wait_raw_clock_checks_and_no_work_credit(self):
         t,r,o=self.fixture()

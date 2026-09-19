@@ -260,7 +260,7 @@ class UnmountedZeroStutterMeasurement:
                     and receipt.get("fingerprint") == fingerprint
                     and receipt.get("appliedOverrides") == mask
                     and len(raw) == 256
-                    and len(request) == 20
+                    and len(request) == 44
                     and int.from_bytes(request[:2], "little") == 56
                     and receipt.get("lanes") == lanes
                     and int.from_bytes(raw[248:252], "little") == mask

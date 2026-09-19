@@ -860,11 +860,43 @@ static u8 BehaviorResolver_SelectClassInternal(
     return behaviorClass;
 }
 
+static BOOL BehaviorResolver_ConditionMatches(
+    const OverworldWildBehaviorDataBlob *blob,
+    u8 application,
+    u16 conditionId,
+    u8 targetKind,
+    BOOL checkTargetKind)
+{
+    const OverworldWildBehaviorOverrideProfile *profile;
+    u16 end;
+    u16 i;
+
+    if (application >= blob->header.overrideProfileCount
+        || conditionId == BEHAVIOR_RESOLVER_NO_CONDITION) {
+        return FALSE;
+    }
+    profile = &blob->overrideProfiles[application];
+    end = (u16)(profile->conditionStart + profile->conditionCount);
+    if (end > blob->header.conditionEntryCount) {
+        return FALSE;
+    }
+    for (i = profile->conditionStart; i < end; i++) {
+        if (blob->conditionEntries[i].conditionId == conditionId
+            && (!checkTargetKind
+                || blob->conditionEntries[i].targetKind == targetKind)) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 static BOOL BehaviorResolver_RequestValid(
     const OverworldWildBehaviorDataBlob *blob,
     const BehaviorResolveRequest *request)
 {
     u32 validOverrideMask;
+    u8 winningApplication = BEHAVIOR_RESOLVER_NO_APPLICATION;
+    u16 i;
 
     if (request == NULL) {
         return FALSE;
@@ -872,10 +904,72 @@ static BOOL BehaviorResolver_RequestValid(
     validOverrideMask = blob->header.overrideProfileCount == 32
         ? 0xFFFFFFFFu
         : ((1u << blob->header.overrideProfileCount) - 1u);
-    return (request->forcedOverrideMask & ~validOverrideMask) == 0
-        && request->context.level <= 100
-        && request->context.terrain <= OW_WILD_SPAWN_TERRAIN_FISHING
-        && request->context.shiny <= 1;
+    if ((request->forcedOverrideMask & ~validOverrideMask) != 0
+        || request->context.level > 100
+        || request->context.terrain > OW_WILD_SPAWN_TERRAIN_FISHING
+        || request->context.shiny > 1
+        || request->conditionInputMode
+            > BEHAVIOR_RESOLVE_CONDITIONS_EXPLICIT) {
+        return FALSE;
+    }
+    if (request->conditionInputMode == BEHAVIOR_RESOLVE_CONDITIONS_LEGACY) {
+        return TRUE;
+    }
+    if ((request->activeConditionalMask & ~validOverrideMask) != 0
+        || request->resolvedTarget.kind
+            > BEHAVIOR_RESOLVE_TARGET_ACTOR) {
+        return FALSE;
+    }
+    for (i = 0; i < blob->header.overrideProfileCount; i++) {
+        u32 bit = 1u << i;
+
+        if ((request->activeConditionalMask & bit) != 0
+            && blob->overrideProfiles[i].profileKind
+                != OW_WILD_BEHAVIOR_PROFILE_KIND_CONDITIONAL) {
+            return FALSE;
+        }
+        if (request->activeConditionalMask & bit) {
+            winningApplication = (u8)i;
+        }
+        if ((request->forcedOverrideMask & bit) != 0
+            && blob->overrideProfiles[i].profileKind
+                == OW_WILD_BEHAVIOR_PROFILE_KIND_CONDITIONAL) {
+            return FALSE;
+        }
+    }
+    if (winningApplication == BEHAVIOR_RESOLVER_NO_APPLICATION) {
+        if (request->winningConditionId != BEHAVIOR_RESOLVER_NO_CONDITION) {
+            return FALSE;
+        }
+    } else if (!BehaviorResolver_ConditionMatches(
+                   blob,
+                   winningApplication,
+                   request->winningConditionId,
+                   0,
+                   FALSE)) {
+        return FALSE;
+    }
+    if (request->resolvedTarget.kind
+            == BEHAVIOR_RESOLVE_TARGET_NONE) {
+        return request->targetSourceApplication
+                == BEHAVIOR_RESOLVER_NO_APPLICATION
+            && request->resolvedTargetConditionId
+                == BEHAVIOR_RESOLVER_NO_CONDITION;
+    }
+    if (request->targetSourceApplication
+            >= blob->header.overrideProfileCount
+        || request->resolvedTargetConditionId
+            == BEHAVIOR_RESOLVER_NO_CONDITION
+        || (request->activeConditionalMask
+            & (1u << request->targetSourceApplication)) == 0) {
+        return FALSE;
+    }
+    return BehaviorResolver_ConditionMatches(
+        blob,
+        request->targetSourceApplication,
+        request->resolvedTargetConditionId,
+        request->resolvedTarget.kind,
+        TRUE);
 }
 
 BehaviorResolveStatus BehaviorResolver_InspectClass(
@@ -990,6 +1084,9 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
         return BEHAVIOR_RESOLVE_INVALID_ARGUMENT;
     }
     memset(result, 0, sizeof(*result));
+    result->winningConditionId = BEHAVIOR_RESOLVER_NO_CONDITION;
+    result->resolvedTargetConditionId = BEHAVIOR_RESOLVER_NO_CONDITION;
+    result->targetSourceApplication = BEHAVIOR_RESOLVER_NO_APPLICATION;
     if (trace != NULL) {
         trace->count = 0;
         trace->dropped = 0;
@@ -1043,61 +1140,131 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
             }
         }
 
-        /* Resolve the condition predicate from the ordinary Owner lane. */
-        for (i = 0; i < blob->header.overrideProfileCount; i++) {
-            if (applicableMask & (1u << i)) {
-                BehaviorResolver_ApplyOverride(&owner, &blob->overrideProfiles[i]);
-            }
-        }
-        conditionalMask = BehaviorResolver_SelectConditionalMask(
-            blob,
-            &context,
-            applicableMask,
-            owner.chillSpeed);
-
-        memcpy(&owner, &blob->classProfiles[behaviorClass], sizeof(owner));
-        BehaviorResolver_ResolveInheritedPolicies(&owner);
-        for (pass = 0; pass < 2; pass++) {
-            u32 applyMask = pass == 0
-                ? applicableMask & ~conditionalMask
-                : conditionalMask;
-
+        if (request->conditionInputMode
+                == BEHAVIOR_RESOLVE_CONDITIONS_EXPLICIT) {
+            conditionalMask = request->activeConditionalMask;
             for (i = 0; i < blob->header.overrideProfileCount; i++) {
+                const OverworldWildBehaviorOverrideProfile *overrideProfile =
+                    &blob->overrideProfiles[i];
                 u32 bit = 1u << i;
-                u8 flags;
+                u8 flags = 0;
+                u8 kind;
 
-                if ((applyMask & bit) == 0) {
-                    continue;
+                if (overrideProfile->profileKind
+                        == OW_WILD_BEHAVIOR_PROFILE_KIND_CONDITIONAL) {
+                    if ((conditionalMask & bit) == 0) {
+                        continue;
+                    }
+                    flags |= BEHAVIOR_RESOLUTION_STEP_CONDITIONAL;
+                    kind = BEHAVIOR_RESOLUTION_STEP_CONDITIONAL_OVERRIDE;
+                } else {
+                    if ((applicableMask & bit) == 0) {
+                        continue;
+                    }
+                    kind = BEHAVIOR_RESOLUTION_STEP_NORMAL_OVERRIDE;
                 }
-                flags = (result->matchedOverrideMask & bit)
-                        ? BEHAVIOR_RESOLUTION_STEP_MATCHED
-                        : 0;
+                if (result->matchedOverrideMask & bit) {
+                    flags |= BEHAVIOR_RESOLUTION_STEP_MATCHED;
+                }
                 if (request->forcedOverrideMask & bit) {
                     flags |= BEHAVIOR_RESOLUTION_STEP_FORCED;
                 }
-                if (pass != 0) {
-                    flags |= BEHAVIOR_RESOLUTION_STEP_CONDITIONAL;
-                }
                 BehaviorResolver_ApplyRecorded(
                     &owner,
-                    &blob->overrideProfiles[i],
+                    overrideProfile,
                     i,
                     BEHAVIOR_RESOLUTION_LANE_OWNER,
-                    pass == 0
-                        ? BEHAVIOR_RESOLUTION_STEP_NORMAL_OVERRIDE
-                        : BEHAVIOR_RESOLUTION_STEP_CONDITIONAL_OVERRIDE,
+                    kind,
                     flags,
                     result,
                     trace);
-                if (blob->overrideProfiles[i].mask
+                if (overrideProfile->mask
                     & OW_WILD_BEHAVIOR_OVERRIDE_OVERWORLD_LIMIT) {
                     result->behaviorLimitKey =
                         (u8)(RESOLVER_OVERRIDE_LIMIT_KEY_BASE + i);
                 }
             }
+        } else {
+            /* Resolve the legacy terrain predicate from the Owner lane. */
+            for (i = 0; i < blob->header.overrideProfileCount; i++) {
+                if (applicableMask & (1u << i)) {
+                    BehaviorResolver_ApplyOverride(
+                        &owner, &blob->overrideProfiles[i]);
+                }
+            }
+            conditionalMask = BehaviorResolver_SelectConditionalMask(
+                blob,
+                &context,
+                applicableMask,
+                owner.chillSpeed);
+
+            memcpy(&owner, &blob->classProfiles[behaviorClass], sizeof(owner));
+            BehaviorResolver_ResolveInheritedPolicies(&owner);
+            for (pass = 0; pass < 2; pass++) {
+                u32 applyMask = pass == 0
+                    ? applicableMask & ~conditionalMask
+                    : conditionalMask;
+
+                for (i = 0; i < blob->header.overrideProfileCount; i++) {
+                    u32 bit = 1u << i;
+                    u8 flags;
+
+                    if ((applyMask & bit) == 0) {
+                        continue;
+                    }
+                    flags = (result->matchedOverrideMask & bit)
+                            ? BEHAVIOR_RESOLUTION_STEP_MATCHED
+                            : 0;
+                    if (request->forcedOverrideMask & bit) {
+                        flags |= BEHAVIOR_RESOLUTION_STEP_FORCED;
+                    }
+                    if (pass != 0) {
+                        flags |= BEHAVIOR_RESOLUTION_STEP_CONDITIONAL;
+                    }
+                    BehaviorResolver_ApplyRecorded(
+                        &owner,
+                        &blob->overrideProfiles[i],
+                        i,
+                        BEHAVIOR_RESOLUTION_LANE_OWNER,
+                        pass == 0
+                            ? BEHAVIOR_RESOLUTION_STEP_NORMAL_OVERRIDE
+                            : BEHAVIOR_RESOLUTION_STEP_CONDITIONAL_OVERRIDE,
+                        flags,
+                        result,
+                        trace);
+                    if (blob->overrideProfiles[i].mask
+                        & OW_WILD_BEHAVIOR_OVERRIDE_OVERWORLD_LIMIT) {
+                        result->behaviorLimitKey =
+                            (u8)(RESOLVER_OVERRIDE_LIMIT_KEY_BASE + i);
+                    }
+                }
+            }
         }
     }
     result->conditionalOverrideMask = conditionalMask;
+    if (request->conditionInputMode
+            == BEHAVIOR_RESOLVE_CONDITIONS_EXPLICIT) {
+        for (i = 0; i < blob->header.overrideProfileCount; i++) {
+            u32 bit = 1u << i;
+
+            if ((conditionalMask & bit) != 0
+                && (result->appliedOverrideMask & bit) != 0) {
+                result->winningConditionId = request->winningConditionId;
+            }
+        }
+    }
+    if (request->conditionInputMode
+            == BEHAVIOR_RESOLVE_CONDITIONS_EXPLICIT
+        && request->resolvedTarget.kind
+            != BEHAVIOR_RESOLVE_TARGET_NONE
+        && (result->appliedOverrideMask
+            & (1u << request->targetSourceApplication)) != 0) {
+        result->resolvedTarget = request->resolvedTarget;
+        result->resolvedTargetConditionId =
+            request->resolvedTargetConditionId;
+        result->targetSourceApplication =
+            request->targetSourceApplication;
+    }
 
     activeIndex = owner.activeProfile;
     if (activeIndex >= blob->header.overrideProfileCount) {
@@ -1253,6 +1420,29 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
         sizeof(result->behaviorClass));
     hash = BehaviorResolver_FingerprintU32(hash, applicableMask);
     hash = BehaviorResolver_FingerprintU32(hash, conditionalMask);
+    if (request->conditionInputMode
+            == BEHAVIOR_RESOLVE_CONDITIONS_EXPLICIT) {
+        hash = BehaviorResolver_FingerprintBytes(
+            hash,
+            &request->conditionInputMode,
+            sizeof(request->conditionInputMode));
+        hash = BehaviorResolver_FingerprintBytes(
+            hash,
+            &result->resolvedTarget,
+            sizeof(result->resolvedTarget));
+        hash = BehaviorResolver_FingerprintBytes(
+            hash,
+            &result->winningConditionId,
+            sizeof(result->winningConditionId));
+        hash = BehaviorResolver_FingerprintBytes(
+            hash,
+            &result->targetSourceApplication,
+            sizeof(result->targetSourceApplication));
+        hash = BehaviorResolver_FingerprintBytes(
+            hash,
+            &result->resolvedTargetConditionId,
+            sizeof(result->resolvedTargetConditionId));
+    }
     hash = BehaviorResolver_FingerprintBytes(
         hash,
         &result->profile,
