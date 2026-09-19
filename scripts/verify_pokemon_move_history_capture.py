@@ -7019,7 +7019,7 @@ def packaged_components_from_bytes(
     selector = (REPO / "build/output_overworld_follower_selector_overlay.bin").read_bytes()
     require(selector == elf_bytes_at(REPO / "build/overworld_follower_selector_overlay_linked.o",
                                      0x023C0400, len(selector))
-            and 0 < len(selector) <= 0x1EA0,
+            and 0 < len(selector) <= 0x2C00,
             "Selector predecessor does not match its linked reservation")
     expected_metadata[152] = (0x023C0400, len(selector), 0, 0, 0, 152, 0,
                               0x41F600, 0x41F600 + len(selector))

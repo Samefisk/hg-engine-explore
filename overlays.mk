@@ -3,10 +3,14 @@ CODE_BUILD_DIRS += $(BUILD)
 THUMB_HELP := $(BUILD)/thumb_help.o
 LINKED_OUTPUTS = build/linked.o
 OVERWORLD_ACTOR_SYSTEM_PORTABLE_OBJS := \
+	$(BUILD)/overworld_actor_system_overlay/overworld_behavior_condition_shadow.o \
 	$(BUILD)/overworld_actor_system_overlay/overworld_behavior_resolver.o \
 	$(BUILD)/overworld_actor_system_overlay/overworld_motion_model.o \
 	$(BUILD)/overworld_actor_system_overlay/overworld_actor_transition_model.o \
 	$(BUILD)/overworld_actor_system_overlay/overworld_population_model.o
+OVERWORLD_FOLLOWER_SELECTOR_PORTABLE_OBJS := \
+	$(BUILD)/overworld_follower_selector_overlay/overworld_behavior_conditions.o \
+	$(BUILD)/overworld_follower_selector_overlay/overworld_behavior_condition_runtime.o
 OVERWORLD_TASK6_PORTABLE_OBJS := \
 	$(BUILD)/pokemon_move_history_task6_overlay/overworld_role_controller.o
 
@@ -25,7 +29,30 @@ INDIVIDUAL_OVERLAYS = $(basename $(notdir $(wildcard $(C_SUBDIR)/$(INDIVIDUAL)/*
 $(BUILD)/overworld_actor_system_overlay/overworld_behavior_resolver.o: \
 		lib/overworld/overworld_behavior_resolver.c $(BUILD)/.compile-config \
 		| $(BUILD)/overworld_actor_system_overlay venv toolchain-preflight
-	$(CC) -MMD -MF $(basename $@).d $(CFLAGS) -I$(INCLUDE_SUBDIR) -c $< -o $@
+	$(CC) -MMD -MF $(basename $@).d $(CFLAGS) -fno-tree-forwprop \
+		-DOVERWORLD_BEHAVIOR_RESOLVER_EXTERNAL_VALIDATOR=1 \
+		-I$(INCLUDE_SUBDIR) -c $< -o $@
+
+$(BUILD)/overworld_actor_system_overlay/overworld_behavior_condition_shadow.o: \
+		lib/overworld/overworld_behavior_condition_shadow.c $(BUILD)/.compile-config \
+		| $(BUILD)/overworld_actor_system_overlay venv toolchain-preflight
+	$(CC) -MMD -MF $(basename $@).d $(CFLAGS) -ffunction-sections \
+		-fno-tree-forwprop -fno-inline-small-functions \
+		-I$(INCLUDE_SUBDIR) -c $< -o $@
+
+$(BUILD)/overworld_follower_selector_overlay/overworld_behavior_conditions.o: \
+		lib/overworld/overworld_behavior_conditions.c $(BUILD)/.compile-config \
+		| $(BUILD)/overworld_follower_selector_overlay venv toolchain-preflight
+	$(CC) -MMD -MF $(basename $@).d $(CFLAGS) -ffunction-sections \
+		-fno-tree-dominator-opts -DOVERWORLD_BEHAVIOR_RUNTIME_ONLY=1 \
+		-I$(INCLUDE_SUBDIR) -c $< -o $@
+
+$(BUILD)/overworld_follower_selector_overlay/overworld_behavior_condition_runtime.o: \
+		lib/overworld/overworld_behavior_condition_runtime.c $(BUILD)/.compile-config \
+		| $(BUILD)/overworld_follower_selector_overlay venv toolchain-preflight
+	$(CC) -MMD -MF $(basename $@).d $(CFLAGS) -ffunction-sections \
+		-fno-tree-forwprop -fno-inline-small-functions \
+		-I$(INCLUDE_SUBDIR) -c $< -o $@
 
 $(BUILD)/overworld_actor_system_overlay/overworld_motion_model.o: \
 		lib/overworld/overworld_motion_model.c $(BUILD)/.compile-config \
@@ -49,6 +76,9 @@ $(BUILD)/pokemon_move_history_task6_overlay/overworld_role_controller.o: \
 		-I$(INCLUDE_SUBDIR) -c $< -o $@
 
 -include $(BUILD)/overworld_actor_system_overlay/overworld_behavior_resolver.d
+-include $(BUILD)/overworld_actor_system_overlay/overworld_behavior_condition_shadow.d
+-include $(BUILD)/overworld_follower_selector_overlay/overworld_behavior_conditions.d
+-include $(BUILD)/overworld_follower_selector_overlay/overworld_behavior_condition_runtime.d
 -include $(BUILD)/overworld_actor_system_overlay/overworld_motion_model.d
 -include $(BUILD)/overworld_actor_system_overlay/overworld_actor_transition_model.d
 -include $(BUILD)/overworld_actor_system_overlay/overworld_population_model.d
@@ -72,12 +102,12 @@ $1_C_OBJS := $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*
 $1_ASM_SRCS := $(wildcard $(ASM_SUBDIR)/$1/*.s)
 ALL_ASM_SRCS += $(wildcard $(ASM_SUBDIR)/$1/*.s)
 $1_ASM_OBJS := $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s))
-$1_OBJS := $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_actor_system_overlay,$1),$(OVERWORLD_ACTOR_SYSTEM_PORTABLE_OBJS)) $(if $(filter pokemon_move_history_task6_overlay,$1),$(OVERWORLD_TASK6_PORTABLE_OBJS)) $(if $(filter field overworld_actor_system_overlay overworld_mount_overlay overworld_wild_spawns_overlay overworld_wild_helper_overlay overworld_follower_release_overlay2 overworld_follower_selector_overlay overworld_follower_selector_icons_overlay2 pokemon_move_history_overlay pokemon_move_history_task6_overlay summary_move_relearn_overlay,$1),,$(THUMB_HELP))
+$1_OBJS := $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_actor_system_overlay,$1),$(OVERWORLD_ACTOR_SYSTEM_PORTABLE_OBJS)) $(if $(filter overworld_follower_selector_overlay,$1),$(OVERWORLD_FOLLOWER_SELECTOR_PORTABLE_OBJS)) $(if $(filter pokemon_move_history_task6_overlay,$1),$(OVERWORLD_TASK6_PORTABLE_OBJS)) $(if $(filter field overworld_actor_system_overlay overworld_mount_overlay overworld_wild_spawns_overlay overworld_wild_helper_overlay overworld_follower_release_overlay2 overworld_follower_selector_overlay overworld_follower_selector_icons_overlay2 pokemon_move_history_overlay pokemon_move_history_task6_overlay summary_move_relearn_overlay,$1),,$(THUMB_HELP))
 
 
-$(BUILD)/$1_linked.o:$(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_actor_system_overlay,$1),$(OVERWORLD_ACTOR_SYSTEM_PORTABLE_OBJS)) $(if $(filter pokemon_move_history_task6_overlay,$1),$(OVERWORLD_TASK6_PORTABLE_OBJS)) $(if $(filter field overworld_actor_system_overlay overworld_mount_overlay overworld_wild_spawns_overlay overworld_wild_helper_overlay overworld_follower_release_overlay2 overworld_follower_selector_overlay overworld_follower_selector_icons_overlay2 pokemon_move_history_overlay pokemon_move_history_task6_overlay summary_move_relearn_overlay,$1),,$(THUMB_HELP)) rom_gen.ld $(C_SUBDIR)/$1/linker.ld
+$(BUILD)/$1_linked.o:$(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_actor_system_overlay,$1),$(OVERWORLD_ACTOR_SYSTEM_PORTABLE_OBJS)) $(if $(filter overworld_follower_selector_overlay,$1),$(OVERWORLD_FOLLOWER_SELECTOR_PORTABLE_OBJS)) $(if $(filter pokemon_move_history_task6_overlay,$1),$(OVERWORLD_TASK6_PORTABLE_OBJS)) $(if $(filter field overworld_actor_system_overlay overworld_mount_overlay overworld_wild_spawns_overlay overworld_wild_helper_overlay overworld_follower_release_overlay2 overworld_follower_selector_overlay overworld_follower_selector_icons_overlay2 pokemon_move_history_overlay pokemon_move_history_task6_overlay summary_move_relearn_overlay,$1),,$(THUMB_HELP)) rom_gen.ld $(C_SUBDIR)/$1/linker.ld
 	@rm -f $(BUILD)/$1_linked.o.tmp
-	$(LD) rom_gen.ld -T $(C_SUBDIR)/$1/linker.ld $(if $(filter overworld_wild_spawns_overlay,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_LDFLAGS),$(if $(filter overworld_wild_helper_overlay,$1),$(OVERWORLD_WILD_HELPER_OVERLAY_LDFLAGS),)) -o $(BUILD)/$1_linked.o.tmp $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_actor_system_overlay,$1),$(OVERWORLD_ACTOR_SYSTEM_PORTABLE_OBJS)) $(if $(filter pokemon_move_history_task6_overlay,$1),$(OVERWORLD_TASK6_PORTABLE_OBJS)) $(if $(filter field overworld_actor_system_overlay overworld_mount_overlay overworld_wild_spawns_overlay overworld_wild_helper_overlay overworld_follower_release_overlay2 overworld_follower_selector_overlay overworld_follower_selector_icons_overlay2 pokemon_move_history_overlay pokemon_move_history_task6_overlay summary_move_relearn_overlay,$1),,$(THUMB_HELP)) && mv $(BUILD)/$1_linked.o.tmp $(BUILD)/$1_linked.o
+	$(LD) rom_gen.ld -T $(C_SUBDIR)/$1/linker.ld $(if $(filter overworld_wild_spawns_overlay,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_LDFLAGS),$(if $(filter overworld_wild_helper_overlay,$1),$(OVERWORLD_WILD_HELPER_OVERLAY_LDFLAGS),)) -o $(BUILD)/$1_linked.o.tmp $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(wildcard $(C_SUBDIR)/$1/*.c)) $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(wildcard $(ASM_SUBDIR)/$1/*.s)) $(if $(filter overworld_actor_system_overlay,$1),$(OVERWORLD_ACTOR_SYSTEM_PORTABLE_OBJS)) $(if $(filter overworld_follower_selector_overlay,$1),$(OVERWORLD_FOLLOWER_SELECTOR_PORTABLE_OBJS)) $(if $(filter pokemon_move_history_task6_overlay,$1),$(OVERWORLD_TASK6_PORTABLE_OBJS)) $(if $(filter field overworld_actor_system_overlay overworld_mount_overlay overworld_wild_spawns_overlay overworld_wild_helper_overlay overworld_follower_release_overlay2 overworld_follower_selector_overlay overworld_follower_selector_icons_overlay2 pokemon_move_history_overlay pokemon_move_history_task6_overlay summary_move_relearn_overlay,$1),,$(THUMB_HELP)) && mv $(BUILD)/$1_linked.o.tmp $(BUILD)/$1_linked.o
 
 $(BUILD)/output_$1.bin:$(BUILD)/$1_linked.o
 	$(OBJCOPY) -O binary $(BUILD)/$1_linked.o $(BUILD)/output_$1.bin

@@ -167,4 +167,13 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_Evaluate(
     const OverworldBehaviorConditionWorldView *world,
     OverworldBehaviorConditionResult *result);
 
+OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluateWithResults(
+    const OverworldBehaviorConditionDefinition *definitions,
+    const OverworldBehaviorConditionEntryInput *inputs,
+    OverworldBehaviorConditionEntryState *states,
+    u16 count,
+    const OverworldBehaviorConditionWorldView *world,
+    OverworldBehaviorConditionResult *result,
+    OverworldBehaviorConditionEntryResult *entryResults);
+
 #endif // OVERWORLD_BEHAVIOR_CONDITIONS_H

@@ -200,7 +200,8 @@ static inline void OverworldFollowerSelector_ClearYReleasePending(void)
 }
 
 #define OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY_ADDR 0x023C0400
-#define OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_END_ADDR 0x023C22A0
+#define OVERWORLD_FOLLOWER_SELECTOR_CALLBACK_END_ADDR 0x023C22A0
+#define OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_END_ADDR 0x023C3000
 #define OVERWORLD_FOLLOWER_SELECTOR_MAGIC 0x3153464F /* "OFS1" */
 #define OVERWORLD_FOLLOWER_SELECTOR_VERSION 5
 
@@ -306,7 +307,7 @@ static inline BOOL OverworldFollowerSelector_Validate(void)
         && entry->validate != NULL
         && (rawValidateAddress & 1u) != 0
         && validateAddress >= OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY_ADDR
-        && validateAddress < OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_END_ADDR
+        && validateAddress < OVERWORLD_FOLLOWER_SELECTOR_CALLBACK_END_ADDR
         && entry->validate();
 }
 
@@ -319,7 +320,7 @@ static inline BOOL OverworldFollowerSelector_CanCallInputCancel(void)
 
     return (rawCancelAddress & 1u) != 0
         && cancelAddress >= OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY_ADDR
-        && cancelAddress < OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_END_ADDR;
+        && cancelAddress < OVERWORLD_FOLLOWER_SELECTOR_CALLBACK_END_ADDR;
 }
 
 static inline void OverworldFollowerSelector_InputFilter(

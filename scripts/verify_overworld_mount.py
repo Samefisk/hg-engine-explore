@@ -635,7 +635,7 @@ def main() -> None:
 
     save_constants = (REPO / "include/constants/save.h").read_text()
     require(
-        re.search(r"^#define NEW_HEAP3_SIZE 0x106B00$", save_constants, re.MULTILINE)
+        re.search(r"^#define NEW_HEAP3_SIZE 0x106500$", save_constants, re.MULTILINE)
         is not None,
         "heap 3 does not reserve the actor and mount blocks",
     )

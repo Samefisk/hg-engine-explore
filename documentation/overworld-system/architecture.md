@@ -140,6 +140,20 @@ comparison is unsigned and wrap-safe. The role adapter prepares applicable
 entries at bind and supplies bounded observations only when it is ready to ask
 for a new intent.
 
+During CP4 shadow operation, Wild stores one bounded prepared-state block per
+actor slot. Bind prepares catalog indexes only. Despawn, slot reuse, actor
+identity change, and field-context loss clear the owned state. One actor roster
+is cached for each public actor frame and is invalidated immediately by a bind
+or clear. Full actor handles validate captured targets before resolution.
+
+The shadow call runs only after accepted motion has returned control at the
+idle decision boundary. It resolves an Owner profile and target but does not
+write them back to visible controller state. The legacy Alert, Emoting, and
+Active path remains authoritative until CP7. Trace-disabled calls do not walk
+condition trace records. Host comparison maps old and new results to five
+temporary migration meanings: no response, alert presentation, chase, flee,
+or ordinary Owner behavior.
+
 ### 3. Behavior Resolver
 
 Owns deterministic composition:
@@ -794,8 +808,10 @@ finalizer receipt across only one completed queue; stale receipts cannot pair.
 boolean form of private maintenance state; phase and dirty bits never leak
 through the public ABI.
 
-Overlay 158 is resident at `0x023B6B00-0x023BAB00`. The public actor facade
-remains at `0x023B6B00`, and the service directory keeps its fixed addresses.
+During CP4-CP6, overlay 158 loads at `0x023B6500-0x023BAB00`. A temporary
+`0x600`-byte condition-shadow bridge occupies the prefix. The public actor
+facade remains at `0x023B6B00`, and the service directory keeps its fixed
+addresses. CP7 removes this bridge after the legacy Active path is deleted.
 Actor and population code is bounded below `0x023BA170`. Actor state starts at
 `0x023BA170`, uses no more than `0x0990` bytes, and must end at or before overlay 157
 at `0x023BAB00`. The fixed capacities are 10 actors, 2 queued commands, 2
@@ -895,8 +911,10 @@ Planner families are private strategies, not public plugin APIs. Fixed overlay e
 The conceptual module uses one small resident code home and several unloadable
 engine adapters.
 
-- Overlay 158 is resident at `0x023B6B00-0x023BAB00`. The fixed facade and
-  resident actor/population code occupy the range through `0x023BA170`.
+- During CP4-CP6, overlay 158 loads at `0x023B6500-0x023BAB00`. A temporary
+  condition-shadow bridge owns `0x023B6500-0x023B6B00`. The fixed facade and
+  resident actor/population code still begin at `0x023B6B00` and occupy the
+  range through `0x023BA170`. CP7 removes the bridge with the old Active path.
   Bounded state starts there and ends before `0x023BAB00`.
 - The public facade, compatibility entry, debug layout, resolver, motion,
   population, and movement-policy entries have fixed addresses and
@@ -942,6 +960,11 @@ engine adapters.
   Selector is linked to Wild; all calls into Helper follow helper preparation
   or a live actor/profile, and teardown stops those calls before unloading.
   Slot limits, typed Thumb imports, and exact packaged bodies are checked.
+- During CP4-CP6, Selector also owns `0x023C22A0–0x023C3000` for the
+  condition evaluator service. Its existing callbacks stay below
+  `0x023C22A0`. Field teardown unloads Selector before another cold overlay
+  can use this shared tail. The behavior-data overlay begins at
+  `0x023C3000`, so the two images do not overlap.
 - ARM/Thumb interworking and `LONG_CALL` requirements remain explicit adapter
   contracts.
 - Normal field walking friendship uses a 34-byte wrapper at `0x023CCF90`.

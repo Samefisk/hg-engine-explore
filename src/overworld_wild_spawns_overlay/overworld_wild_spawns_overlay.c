@@ -1,6 +1,7 @@
 #include "../../include/overworld_wild_spawns_internal.h"
 
 #include "../../include/overworld_actor_system_internal.h"
+#include "../../include/overworld_behavior_condition_shadow.h"
 #include "../../include/overworld_wild_behavior_data.h"
 #include "../../include/overworld_mount_internal.h"
 
@@ -831,6 +832,7 @@ typedef struct OverworldWildOverlayRuntimeState {
         u16 movementRoutingMasks[6];
     };
     OverworldWildBehaviorSlotCache *movementBehaviorSlotCaches;
+    OverworldBehaviorConditionShadowRuntime *conditionShadow;
     OverworldWildPresentationState spawnPresentations;
     OverworldWildDespawnTelemetry despawnTelemetry;
     OverworldWildResidentData *residentData;
@@ -1108,6 +1110,9 @@ static void OverworldWildSpawns_GetFallbackBehaviorResolution(
     result->profile = OverworldWildSpawns_GetFallbackBehaviorProfile();
     result->behaviorClass = behaviorLimitKey;
     result->behaviorLimitKey = behaviorLimitKey;
+    result->winningConditionId = BEHAVIOR_RESOLVER_NO_CONDITION;
+    result->targetSourceApplication = BEHAVIOR_RESOLVER_NO_APPLICATION;
+    result->resolvedTargetConditionId = BEHAVIOR_RESOLVER_NO_CONDITION;
     /* This is the canonical resolver result for the fallback profile:
      * spawn state zero maps to no locomotion, Idle normalizes chill to
      * no locomotion/target, and every attentive, alert, and tired input is
@@ -1183,6 +1188,10 @@ static BOOL OverworldWildSpawns_CleanupResidentData(void)
             sys_FreeMemoryEz(runtime->movementBehaviorSlotCaches);
         }
         runtime->movementBehaviorSlotCaches = NULL;
+        if (runtime->conditionShadow != NULL) {
+            sys_FreeMemoryEz(runtime->conditionShadow);
+        }
+        runtime->conditionShadow = NULL;
         sys_FreeMemoryEz(runtime);
         state->movementRuntimeState = NULL;
     }
@@ -3444,6 +3453,149 @@ OverworldWildSpawns_GetSettledConditionTerrainForSlot(
     return cache->conditionTerrainMask;
 }
 
+static const OverworldBehaviorConditionShadowEntry *
+OverworldWildSpawns_GetConditionShadowEntry(void)
+{
+    const OverworldBehaviorConditionShadowEntry *entry =
+        OVERWORLD_BEHAVIOR_CONDITION_SHADOW_ENTRY;
+
+    if (entry->magic != OVERWORLD_BEHAVIOR_CONDITION_SHADOW_MAGIC
+        || entry->version != OVERWORLD_BEHAVIOR_CONDITION_SHADOW_VERSION
+        || entry->size != sizeof(*entry)) {
+        return NULL;
+    }
+    return entry;
+}
+
+static OverworldBehaviorConditionShadowRuntime *
+OverworldWildSpawns_EnsureConditionShadowRuntime(
+    OverworldWildSpawnState *state)
+{
+    OverworldWildOverlayRuntimeState *runtime;
+
+    runtime = OverworldWildSpawns_EnsureRuntimeState(state);
+    if (runtime == NULL) {
+        return NULL;
+    }
+    if (runtime->conditionShadow == NULL) {
+        runtime->conditionShadow = sys_AllocMemory(
+            HEAPID_WORLD,
+            sizeof(*runtime->conditionShadow));
+        if (runtime->conditionShadow != NULL) {
+            memset(
+                runtime->conditionShadow,
+                0,
+                sizeof(*runtime->conditionShadow));
+        }
+    }
+    return runtime->conditionShadow;
+}
+
+static void OverworldWildSpawns_ClearConditionShadowSlot(
+    OverworldWildSpawnState *state,
+    int slot)
+{
+    OverworldBehaviorConditionShadowRuntime *shadow;
+
+    if (state == NULL || state->movementRuntimeState == NULL
+        || (u32)slot >= OW_WILD_MAX_SPAWNS) {
+        return;
+    }
+    shadow = OW_WILD_RUNTIME(state)->conditionShadow;
+    if (shadow == NULL) {
+        return;
+    }
+    OVERWORLD_BEHAVIOR_CONDITION_SHADOW_ENTRY->clearSlot(shadow, (u8)slot);
+}
+
+static void __attribute__((noinline, optimize("Os")))
+OverworldWildSpawns_ClearAllConditionShadowState(
+    OverworldWildSpawnState *state)
+{
+    OverworldBehaviorConditionShadowRuntime *shadow;
+
+    if (state == NULL || state->movementRuntimeState == NULL) {
+        return;
+    }
+    shadow = OW_WILD_RUNTIME(state)->conditionShadow;
+    if (shadow != NULL) {
+        OVERWORLD_BEHAVIOR_CONDITION_SHADOW_ENTRY->clearAll(shadow);
+    }
+}
+
+static BOOL OverworldWildSpawns_PrepareConditionShadowForSlot(
+    OverworldWildSpawnState *state,
+    int slot,
+    const OverworldActorHandle *handle)
+{
+    const OverworldBehaviorConditionShadowEntry *entry;
+    const OverworldWildBehaviorDataBlob *behaviorData;
+    OverworldBehaviorConditionShadowRuntime *shadow;
+
+    if (state == NULL || handle == NULL || (u32)slot >= OW_WILD_MAX_SPAWNS
+        || !state->spawns[slot].active
+        || !OverworldFollowerSelector_IsDirectLoaded()) {
+        return FALSE;
+    }
+    entry = OverworldWildSpawns_GetConditionShadowEntry();
+    behaviorData = OverworldWildSpawns_GetBehaviorDataBlob();
+    shadow = OverworldWildSpawns_EnsureConditionShadowRuntime(state);
+    if (entry == NULL || behaviorData == NULL || shadow == NULL) {
+        return FALSE;
+    }
+    return entry->prepare(
+        state,
+        behaviorData,
+        shadow,
+        OverworldWildSpawns_BuildBehaviorContext,
+        handle,
+        (u8)slot);
+}
+
+static void __attribute__((noinline, optimize("Os")))
+OverworldWildSpawns_RunConditionShadowForSlot(
+    OverworldWildSpawnState *state,
+    FieldSystem *fieldSystem,
+    int slot,
+    const OverworldWildBehaviorProfile *oldProfile)
+{
+    const OverworldBehaviorConditionShadowEntry *entry;
+    const OverworldWildBehaviorDataBlob *behaviorData;
+    OverworldBehaviorConditionShadowRuntime *shadow;
+    OverworldBehaviorConditionShadowCall call;
+    OverworldWildBehaviorSlotCache *caches;
+
+    if (!OverworldFollowerSelector_IsDirectLoaded()) {
+        return;
+    }
+    entry = OverworldWildSpawns_GetConditionShadowEntry();
+    behaviorData = OverworldWildSpawns_GetBehaviorDataBlob();
+    shadow = OverworldWildSpawns_EnsureConditionShadowRuntime(state);
+    if (entry == NULL || behaviorData == NULL || shadow == NULL) {
+        return;
+    }
+    memset(&call, 0, sizeof(call));
+    call.state = state;
+    call.fieldSystem = fieldSystem;
+    call.behaviorData = behaviorData;
+    call.runtime = shadow;
+    call.buildContext = OverworldWildSpawns_BuildBehaviorContext;
+    call.isCurrentSpawn = OverworldWildSpawns_IsCurrentSpawnObject;
+    caches = OverworldWildSpawns_EnsureBehaviorSlotCaches(state);
+    if (caches != NULL) {
+        call.subjectTerrainMask =
+            OverworldWildSpawns_GetSettledConditionTerrainForSlot(
+                state, slot, &caches[slot]);
+    }
+    /* Legacy terrain conditions use the resolved Owner Walk time. Keep the
+     * shadow input identical until the old conditional path is removed. */
+    call.subjectMovementSpeed = oldProfile->owner.chillSpeed;
+    call.forcedOverrideProfileIndex = slot == OW_WILD_FOLLOWER_SLOT
+        ? OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON
+        : -1;
+    call.slot = (u8)slot;
+    entry->run(&call);
+}
 static BOOL OverworldWildSpawns_BehaviorSlotCacheMatches(
     const OverworldWildBehaviorSlotCache *cache,
     const OverworldWildSpawn *spawn,
@@ -5607,6 +5759,7 @@ static void OverworldWildSpawns_DetachAllMovementStateOnContextLoss(
         return;
     }
     runtime = OW_WILD_RUNTIME(state);
+    OverworldWildSpawns_ClearAllConditionShadowState(state);
     runtime->queuedSpawnSlotPlusOne = 0;
     runtime->refillTerrainMask = 0;
     runtime->refillPositionChecksRemaining = 0;
@@ -9938,7 +10091,6 @@ static void __attribute__((optimize("Os", "no-tree-forwprop"))) OverworldWildSpa
     if (frameTick) {
         OverworldWildSpawns_TickFrameMovementDecisionCounter();
     }
-
     if (!frameTick && runtime->throwState.targetMask == 0) {
         if (OverworldWildSpawns_TryBattleSettleRetry(state, fieldSystem)) {
             return;
@@ -10158,6 +10310,12 @@ static void __attribute__((optimize("Os", "no-tree-forwprop"))) OverworldWildSpa
                  * the shared owner returns IDLE. */
                 continue;
             }
+
+            OverworldWildSpawns_RunConditionShadowForSlot(
+                state,
+                fieldSystem,
+                i,
+                &profile);
 
             if (cooldown > 0) {
                 state->movementCooldowns[i] = cooldown - 1;
@@ -11624,6 +11782,7 @@ static void OverworldWildSpawns_ResetSlotState(
     state->movementBehaviorClasses[slot] = OW_WILD_BEHAVIOR_CLASS_DEFAULT;
     OW_WILD_RUNTIME(state)->movementBehaviorLimitKeys[slot] = OW_WILD_BEHAVIOR_CLASS_DEFAULT;
     OverworldWildSpawns_ClearCachedBehaviorProfile(state, slot);
+    OverworldWildSpawns_ClearConditionShadowSlot(state, slot);
     if (state->movementQueuedBattleSlot == slot) {
         state->movementQueuedBattleSlot = -1;
     }
@@ -16685,6 +16844,10 @@ static BOOL __attribute__((optimize("Os"))) OverworldWildSpawns_StartSpawnStartu
             fieldSystem, state, slot, &handle)) {
         return FALSE;
     }
+    (void)OverworldWildSpawns_PrepareConditionShadowForSlot(
+        state,
+        slot,
+        &handle);
     OverworldWildSpawns_SeedPreparedBehaviorProfile(
         state,
         slot,

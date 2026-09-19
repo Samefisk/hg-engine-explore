@@ -1,4 +1,7 @@
 #include "../../include/overworld_behavior_resolver.h"
+#ifdef OVERWORLD_BEHAVIOR_RESOLVER_EXTERNAL_VALIDATOR
+#include "../../include/overworld_behavior_condition_runtime.h"
+#endif
 
 #define RESOLVER_MATCH_ANY_SPECIES 0
 #define RESOLVER_MATCH_ANY_U8 0xFF
@@ -860,6 +863,7 @@ static u8 BehaviorResolver_SelectClassInternal(
     return behaviorClass;
 }
 
+#ifndef OVERWORLD_BEHAVIOR_RESOLVER_EXTERNAL_VALIDATOR
 static BOOL BehaviorResolver_ConditionMatches(
     const OverworldWildBehaviorDataBlob *blob,
     u8 application,
@@ -971,6 +975,20 @@ static BOOL BehaviorResolver_RequestValid(
         request->resolvedTarget.kind,
         TRUE);
 }
+#else
+static BOOL BehaviorResolver_RequestValid(
+    const OverworldWildBehaviorDataBlob *blob,
+    const BehaviorResolveRequest *request)
+{
+    const OverworldBehaviorConditionServiceEntry *service =
+        OVERWORLD_BEHAVIOR_CONDITION_SERVICE_ENTRY;
+
+    return service->magic == OVERWORLD_BEHAVIOR_CONDITION_SERVICE_MAGIC
+        && service->version == OVERWORLD_BEHAVIOR_CONDITION_RUNTIME_VERSION
+        && service->size == sizeof(*service)
+        && service->validateResolveRequest(blob, request);
+}
+#endif
 
 BehaviorResolveStatus BehaviorResolver_InspectClass(
     const void *blobBytes,
@@ -1143,47 +1161,6 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
         if (request->conditionInputMode
                 == BEHAVIOR_RESOLVE_CONDITIONS_EXPLICIT) {
             conditionalMask = request->activeConditionalMask;
-            for (i = 0; i < blob->header.overrideProfileCount; i++) {
-                const OverworldWildBehaviorOverrideProfile *overrideProfile =
-                    &blob->overrideProfiles[i];
-                u32 bit = 1u << i;
-                u8 flags = 0;
-                u8 kind;
-
-                if (overrideProfile->profileKind
-                        == OW_WILD_BEHAVIOR_PROFILE_KIND_CONDITIONAL) {
-                    if ((conditionalMask & bit) == 0) {
-                        continue;
-                    }
-                    flags |= BEHAVIOR_RESOLUTION_STEP_CONDITIONAL;
-                    kind = BEHAVIOR_RESOLUTION_STEP_CONDITIONAL_OVERRIDE;
-                } else {
-                    if ((applicableMask & bit) == 0) {
-                        continue;
-                    }
-                    kind = BEHAVIOR_RESOLUTION_STEP_NORMAL_OVERRIDE;
-                }
-                if (result->matchedOverrideMask & bit) {
-                    flags |= BEHAVIOR_RESOLUTION_STEP_MATCHED;
-                }
-                if (request->forcedOverrideMask & bit) {
-                    flags |= BEHAVIOR_RESOLUTION_STEP_FORCED;
-                }
-                BehaviorResolver_ApplyRecorded(
-                    &owner,
-                    overrideProfile,
-                    i,
-                    BEHAVIOR_RESOLUTION_LANE_OWNER,
-                    kind,
-                    flags,
-                    result,
-                    trace);
-                if (overrideProfile->mask
-                    & OW_WILD_BEHAVIOR_OVERRIDE_OVERWORLD_LIMIT) {
-                    result->behaviorLimitKey =
-                        (u8)(RESOLVER_OVERRIDE_LIMIT_KEY_BASE + i);
-                }
-            }
         } else {
             /* Resolve the legacy terrain predicate from the Owner lane. */
             for (i = 0; i < blob->header.overrideProfileCount; i++) {
@@ -1200,43 +1177,52 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
 
             memcpy(&owner, &blob->classProfiles[behaviorClass], sizeof(owner));
             BehaviorResolver_ResolveInheritedPolicies(&owner);
-            for (pass = 0; pass < 2; pass++) {
-                u32 applyMask = pass == 0
-                    ? applicableMask & ~conditionalMask
-                    : conditionalMask;
+        }
+        for (pass = 0;
+             pass < (request->conditionInputMode
+                    == BEHAVIOR_RESOLVE_CONDITIONS_EXPLICIT ? 1 : 2);
+             pass++) {
+            for (i = 0; i < blob->header.overrideProfileCount; i++) {
+                const OverworldWildBehaviorOverrideProfile *overrideProfile =
+                    &blob->overrideProfiles[i];
+                u32 bit = 1u << i;
+                BOOL conditional = request->conditionInputMode
+                        == BEHAVIOR_RESOLVE_CONDITIONS_EXPLICIT
+                    ? overrideProfile->profileKind
+                        == OW_WILD_BEHAVIOR_PROFILE_KIND_CONDITIONAL
+                    : pass != 0;
+                u32 applyMask = conditional
+                    ? conditionalMask
+                    : applicableMask & ~conditionalMask;
+                u8 flags;
 
-                for (i = 0; i < blob->header.overrideProfileCount; i++) {
-                    u32 bit = 1u << i;
-                    u8 flags;
-
-                    if ((applyMask & bit) == 0) {
-                        continue;
-                    }
-                    flags = (result->matchedOverrideMask & bit)
-                            ? BEHAVIOR_RESOLUTION_STEP_MATCHED
-                            : 0;
-                    if (request->forcedOverrideMask & bit) {
-                        flags |= BEHAVIOR_RESOLUTION_STEP_FORCED;
-                    }
-                    if (pass != 0) {
-                        flags |= BEHAVIOR_RESOLUTION_STEP_CONDITIONAL;
-                    }
-                    BehaviorResolver_ApplyRecorded(
-                        &owner,
-                        &blob->overrideProfiles[i],
-                        i,
-                        BEHAVIOR_RESOLUTION_LANE_OWNER,
-                        pass == 0
-                            ? BEHAVIOR_RESOLUTION_STEP_NORMAL_OVERRIDE
-                            : BEHAVIOR_RESOLUTION_STEP_CONDITIONAL_OVERRIDE,
-                        flags,
-                        result,
-                        trace);
-                    if (blob->overrideProfiles[i].mask
-                        & OW_WILD_BEHAVIOR_OVERRIDE_OVERWORLD_LIMIT) {
-                        result->behaviorLimitKey =
-                            (u8)(RESOLVER_OVERRIDE_LIMIT_KEY_BASE + i);
-                    }
+                if ((applyMask & bit) == 0) {
+                    continue;
+                }
+                flags = (result->matchedOverrideMask & bit)
+                        ? BEHAVIOR_RESOLUTION_STEP_MATCHED
+                        : 0;
+                if (request->forcedOverrideMask & bit) {
+                    flags |= BEHAVIOR_RESOLUTION_STEP_FORCED;
+                }
+                if (conditional) {
+                    flags |= BEHAVIOR_RESOLUTION_STEP_CONDITIONAL;
+                }
+                BehaviorResolver_ApplyRecorded(
+                    &owner,
+                    overrideProfile,
+                    i,
+                    BEHAVIOR_RESOLUTION_LANE_OWNER,
+                    conditional
+                        ? BEHAVIOR_RESOLUTION_STEP_CONDITIONAL_OVERRIDE
+                        : BEHAVIOR_RESOLUTION_STEP_NORMAL_OVERRIDE,
+                    flags,
+                    result,
+                    trace);
+                if (overrideProfile->mask
+                    & OW_WILD_BEHAVIOR_OVERRIDE_OVERWORLD_LIMIT) {
+                    result->behaviorLimitKey =
+                        (u8)(RESOLVER_OVERRIDE_LIMIT_KEY_BASE + i);
                 }
             }
         }
@@ -1244,13 +1230,8 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
     result->conditionalOverrideMask = conditionalMask;
     if (request->conditionInputMode
             == BEHAVIOR_RESOLVE_CONDITIONS_EXPLICIT) {
-        for (i = 0; i < blob->header.overrideProfileCount; i++) {
-            u32 bit = 1u << i;
-
-            if ((conditionalMask & bit) != 0
-                && (result->appliedOverrideMask & bit) != 0) {
-                result->winningConditionId = request->winningConditionId;
-            }
+        if ((conditionalMask & result->appliedOverrideMask) != 0) {
+            result->winningConditionId = request->winningConditionId;
         }
     }
     if (request->conditionInputMode

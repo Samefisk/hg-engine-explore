@@ -190,7 +190,7 @@ static BOOL OverworldFollowerSelector_IsCallable(const void *function)
 
     return (rawAddress & 1u) != 0
         && address >= OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY_ADDR
-        && address < OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_END_ADDR;
+        && address < OVERWORLD_FOLLOWER_SELECTOR_CALLBACK_END_ADDR;
 }
 
 static BOOL __attribute__((noinline))

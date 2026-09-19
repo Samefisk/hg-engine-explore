@@ -68,7 +68,8 @@ MOUNT_OVERLAY_ID = 157
 MOUNT_OVERLAY_BASE = 0x023BAB00
 MOUNT_OVERLAY_LIMIT = 0x023BC800
 ACTOR_OVERLAY_ID = 158
-ACTOR_OVERLAY_LOAD_BASE = 0x023B6B00
+ACTOR_OVERLAY_LOAD_BASE = 0x023B6500
+ACTOR_OVERLAY_BASE = 0x023B6B00
 ACTOR_OVERLAY_LIMIT = 0x023BAB00
 ACTOR_PLANNER_IMPORTS = {
     "OverworldActorHopPlanner_Plan": 0x023BD4F0,
@@ -1563,9 +1564,9 @@ def main() -> None:
     full_save_size = parse_define(save_constants, "FULL_SAVE_SIZE")
     heap3_size = parse_define(save_constants, "NEW_HEAP3_SIZE")
     require(
-        heap3_size == 0x106B00
-        and 0x110000 - heap3_size == 0x9500,
-        "heap 3 does not explicitly reserve 0x9500 for overlays 158/157/156/155/153",
+        heap3_size == 0x106500
+        and 0x110000 - heap3_size == 0x9B00,
+        "heap 3 does not explicitly reserve 0x9B00 for overlays 158/157/156/155/153",
     )
 
     def arm9_word(address: int, description: str) -> int:

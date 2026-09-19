@@ -278,6 +278,147 @@ int main(void)
 """
 
 
+RUNTIME_HARNESS = r"""
+#include <assert.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "overworld_behavior_condition_runtime.h"
+
+extern const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob;
+
+static OverworldActorHandle Handle(unsigned slot, unsigned generation)
+{
+    OverworldActorHandle handle = {0};
+    handle.slot = (u16)slot;
+    handle.generation = (u16)generation;
+    handle.fieldEpoch = 3;
+    handle.mapGeneration = 4;
+    handle.encounterGeneration = (u16)(generation + 10);
+    return handle;
+}
+
+static void SetAllSubject(
+    OverworldWildBehaviorDataBlob *blob,
+    OverworldWildBehaviorConditionEntry *entry,
+    unsigned application)
+{
+    OverworldWildBehaviorOverrideProfile *subject =
+        &blob->overrideProfiles[0];
+    memset(subject, 0, sizeof(*subject));
+    subject->targetMode = OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL;
+    subject->profileKind = OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL;
+    subject->match.terrain = 0xFF;
+    subject->match.shiny = 0xFF;
+    subject->match.behaviorClass = 0xFF;
+    memset(entry, 0, sizeof(*entry));
+    entry->conditionId = (u16)(500 + application);
+    entry->applicationIndex = (u8)application;
+    entry->subjectApplicationIndex = 0;
+    entry->subjectMode = OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL;
+    entry->chancePercent = 100;
+}
+
+int main(void)
+{
+    OverworldWildBehaviorDataBlob *blob = malloc(sizeof(*blob));
+    OverworldBehaviorConditionPreparedActor prepared;
+    OverworldBehaviorConditionScratch scratch;
+    OverworldBehaviorConditionResult result;
+    OverworldBehaviorConditionWorldView world = {0};
+    OverworldBehaviorConditionCandidate candidates[2] = {0};
+    OverworldWildBehaviorContext subjectContext = {0};
+    OverworldWildBehaviorConditionEntry *entry;
+
+    assert(blob != NULL);
+    memcpy(blob, &gOverworldWildBehaviorDataBlob, sizeof(*blob));
+    assert(blob->header.overrideProfileCount > 2);
+    blob->header.conditionEntryCount = 2;
+
+    entry = &blob->conditionEntries[0];
+    SetAllSubject(blob, entry, 1);
+    entry->kind = OW_WILD_BEHAVIOR_CONDITION_POKEMON_NOTICED;
+    entry->activationMode = OW_WILD_BEHAVIOR_CONDITION_WHILE_TRUE;
+    entry->targetKind = OW_WILD_BEHAVIOR_CONDITION_TARGET_ACTOR;
+    entry->targetRoleMask = OW_WILD_BEHAVIOR_CONDITION_TARGET_ROLE_WILD;
+    entry->targetSelection =
+        OW_WILD_BEHAVIOR_CONDITION_TARGET_SELECTION_NEAREST;
+    entry->rangeKind = OVERWORLD_BEHAVIOR_CONDITION_RANGE_RADIUS;
+    entry->rangeLength = 4;
+    entry->targetMemberStart = 0;
+    entry->targetMemberCount = 1;
+    blob->overrideMembers[0] = 25;
+
+    entry = &blob->conditionEntries[1];
+    SetAllSubject(blob, entry, 2);
+    entry->kind = OW_WILD_BEHAVIOR_CONDITION_TERRAIN_SPEED;
+    entry->activationMode = OW_WILD_BEHAVIOR_CONDITION_WHILE_TRUE;
+    entry->targetKind = OW_WILD_BEHAVIOR_CONDITION_TARGET_NONE;
+    entry->terrainMask = 4;
+    entry->terrainOverrideMask = 4;
+
+    subjectContext.species = 16;
+    subjectContext.level = 5;
+    subjectContext.terrain = OW_WILD_SPAWN_TERRAIN_LAND;
+    subjectContext.behaviorClass = OW_WILD_BEHAVIOR_CLASS_DEFAULT;
+    world.subject = Handle(0, 1);
+    assert(OverworldBehaviorCondition_PrepareActor(
+        blob, sizeof(*blob), &subjectContext, &world.subject, &prepared)
+        == OVERWORLD_BEHAVIOR_CONDITION_OK);
+    assert(prepared.valid && prepared.count == 2);
+
+    world.frame = 10;
+    world.subjectX = 10;
+    world.subjectY = 10;
+    world.subjectTerrainMask = 4;
+    world.subjectMovementSpeed = 8;
+    world.actorCount = 2;
+    world.actors[0].actor = Handle(1, 2);
+    world.actors[0].x = 11;
+    world.actors[0].y = 10;
+    world.actors[0].valid = 1;
+    candidates[0].context.species = 25;
+    candidates[0].roleMask =
+        OW_WILD_BEHAVIOR_CONDITION_TARGET_ROLE_WILD;
+    world.actors[1].actor = Handle(2, 3);
+    world.actors[1].x = 12;
+    world.actors[1].y = 10;
+    world.actors[1].valid = 1;
+    candidates[1].context.species = 25;
+    candidates[1].roleMask =
+        OW_WILD_BEHAVIOR_CONDITION_TARGET_ROLE_FOLLOWER;
+
+    assert(OverworldBehaviorCondition_EvaluatePrepared(
+        blob, sizeof(*blob), &prepared, &world, candidates, 2, world.frame,
+        &scratch, &result) == OVERWORLD_BEHAVIOR_CONDITION_OK);
+    assert(result.activeApplicationMask == ((1u << 1) | (1u << 2)));
+    assert(result.targets[1].kind == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR);
+    assert(result.targets[1].actor.slot == 1);
+    assert(scratch.entryResults[0].conditionTrue);
+    assert(scratch.entryResults[1].conditionTrue);
+
+    /* A reused candidate slot invalidates the captured complete actor handle. */
+    world.actors[0].actor = Handle(1, 9);
+    assert(OverworldBehaviorCondition_EvaluatePrepared(
+        blob, sizeof(*blob), &prepared, &world, candidates, 2, world.frame + 1,
+        &scratch, &result) == OVERWORLD_BEHAVIOR_CONDITION_OK);
+    assert(result.targets[1].kind == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE);
+    assert(OverworldBehaviorCondition_EvaluatePrepared(
+        blob, sizeof(*blob), &prepared, &world, candidates, 2, world.frame + 2,
+        &scratch, &result) == OVERWORLD_BEHAVIOR_CONDITION_OK);
+    assert(result.targets[1].actor.generation == 9);
+
+    world.subject = Handle(0, 7);
+    assert(OverworldBehaviorCondition_EvaluatePrepared(
+        blob, sizeof(*blob), &prepared, &world, candidates, 2, world.frame + 3,
+        &scratch, &result)
+        == OVERWORLD_BEHAVIOR_CONDITION_INVALID_DEFINITION);
+    free(blob);
+    return 0;
+}
+"""
+
+
 class BehaviorConditionTests(unittest.TestCase):
     def test_portable_evaluator(self):
         with tempfile.TemporaryDirectory(prefix="behavior-conditions-") as directory:
@@ -296,6 +437,43 @@ class BehaviorConditionTests(unittest.TestCase):
                 str(ROOT / "include"),
                 str(source),
                 str(ROOT / "lib/overworld/overworld_behavior_conditions.c"),
+                "-o",
+                str(binary),
+            ]
+            compiled = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(
+                compiled.returncode,
+                0,
+                compiled.stdout + compiled.stderr,
+            )
+            completed = subprocess.run(
+                [str(binary)], capture_output=True, text=True
+            )
+            self.assertEqual(
+                completed.returncode,
+                0,
+                completed.stdout + completed.stderr,
+            )
+
+    def test_prepared_runtime_adapter(self):
+        with tempfile.TemporaryDirectory(prefix="behavior-condition-runtime-") as directory:
+            source = Path(directory) / "condition_runtime.c"
+            binary = Path(directory) / "condition_runtime"
+            source.write_text(RUNTIME_HARNESS)
+            command = [
+                *shlex.split(os.environ.get("HOST_CC", "cc")),
+                "-std=c11",
+                "-O2",
+                "-Wall",
+                "-Wextra",
+                "-DOVERWORLD_BEHAVIOR_HOST",
+                "-DOVERWORLD_ACTOR_SYSTEM_HOST",
+                "-I",
+                str(ROOT / "include"),
+                str(source),
+                str(ROOT / "lib/overworld/overworld_behavior_conditions.c"),
+                str(ROOT / "lib/overworld/overworld_behavior_condition_runtime.c"),
+                str(ROOT / "data/OverworldWildBehaviorData.c"),
                 "-o",
                 str(binary),
             ]
@@ -334,6 +512,33 @@ class BehaviorConditionTests(unittest.TestCase):
                     str(ROOT / "include"),
                     "-c",
                     str(ROOT / "lib/overworld/overworld_behavior_conditions.c"),
+                    "-o",
+                    str(output),
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(
+                completed.returncode,
+                0,
+                completed.stdout + completed.stderr,
+            )
+
+        with tempfile.TemporaryDirectory(prefix="behavior-condition-runtime-arm-") as directory:
+            output = Path(directory) / "condition_runtime.o"
+            completed = subprocess.run(
+                [
+                    compiler,
+                    "-std=c11",
+                    "-mthumb",
+                    "-mcpu=arm7tdmi",
+                    "-fno-builtin",
+                    "-w",
+                    "-Werror=incompatible-pointer-types",
+                    "-I",
+                    str(ROOT / "include"),
+                    "-c",
+                    str(ROOT / "lib/overworld/overworld_behavior_condition_runtime.c"),
                     "-o",
                     str(output),
                 ],

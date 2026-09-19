@@ -5,6 +5,13 @@
 #include <string.h>
 #endif
 
+#if defined(__GNUC__) && !defined(__clang__)
+#define OVERWORLD_BEHAVIOR_CONDITION_SIZE_OPTIMIZED \
+    __attribute__((optimize("Os")))
+#else
+#define OVERWORLD_BEHAVIOR_CONDITION_SIZE_OPTIMIZED
+#endif
+
 typedef struct OverworldBehaviorConditionTruth {
     OverworldBehaviorConditionTargetReference target;
     u8 value;
@@ -118,7 +125,8 @@ static void OverworldBehaviorCondition_ClearTarget(
     target->kind = OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE;
 }
 
-static u8 OverworldBehaviorCondition_TargetValid(
+static u8 __attribute__((noinline)) OVERWORLD_BEHAVIOR_CONDITION_SIZE_OPTIMIZED
+OverworldBehaviorCondition_TargetValid(
     const OverworldBehaviorConditionTargetReference *target,
     const OverworldBehaviorConditionEntryInput *input,
     const OverworldBehaviorConditionWorldView *world)
@@ -145,7 +153,8 @@ static u8 OverworldBehaviorCondition_TargetValid(
     return 0;
 }
 
-static u8 OverworldBehaviorCondition_CapturedTargetInRange(
+static u8 __attribute__((noinline)) OVERWORLD_BEHAVIOR_CONDITION_SIZE_OPTIMIZED
+OverworldBehaviorCondition_CapturedTargetInRange(
     const OverworldBehaviorConditionDefinition *definition,
     const OverworldBehaviorConditionEntryInput *input,
     const OverworldBehaviorConditionWorldView *world,
@@ -180,7 +189,8 @@ static u8 OverworldBehaviorCondition_CapturedTargetInRange(
     return 0;
 }
 
-static OverworldBehaviorConditionTruth OverworldBehaviorCondition_Truth(
+static OverworldBehaviorConditionTruth __attribute__((noinline))
+OVERWORLD_BEHAVIOR_CONDITION_SIZE_OPTIMIZED OverworldBehaviorCondition_Truth(
     const OverworldBehaviorConditionDefinition *definition,
     const OverworldBehaviorConditionEntryInput *input,
     const OverworldBehaviorConditionWorldView *world)
@@ -308,7 +318,8 @@ static u8 OverworldBehaviorCondition_DefinitionValid(
     return 1;
 }
 
-static u8 OverworldBehaviorCondition_RequiredTargetAvailable(
+static u8 __attribute__((noinline)) OVERWORLD_BEHAVIOR_CONDITION_SIZE_OPTIMIZED
+OverworldBehaviorCondition_RequiredTargetAvailable(
     const OverworldBehaviorConditionDefinition *definition,
     const OverworldBehaviorConditionTruth *truth)
 {
@@ -406,6 +417,7 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluateEntry(
     return OVERWORLD_BEHAVIOR_CONDITION_OK;
 }
 
+#ifndef OVERWORLD_BEHAVIOR_RUNTIME_ONLY
 OverworldBehaviorConditionStatus OverworldBehaviorCondition_Evaluate(
     const OverworldBehaviorConditionDefinition *definitions,
     const OverworldBehaviorConditionEntryInput *inputs,
@@ -413,6 +425,26 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_Evaluate(
     u16 count,
     const OverworldBehaviorConditionWorldView *world,
     OverworldBehaviorConditionResult *result)
+{
+    return OverworldBehaviorCondition_EvaluateWithResults(
+        definitions,
+        inputs,
+        states,
+        count,
+        world,
+        result,
+        NULL);
+}
+#endif
+
+OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluateWithResults(
+    const OverworldBehaviorConditionDefinition *definitions,
+    const OverworldBehaviorConditionEntryInput *inputs,
+    OverworldBehaviorConditionEntryState *states,
+    u16 count,
+    const OverworldBehaviorConditionWorldView *world,
+    OverworldBehaviorConditionResult *result,
+    OverworldBehaviorConditionEntryResult *entryResults)
 {
     OverworldBehaviorConditionEntryResult entry;
     OverworldBehaviorConditionStatus status;
@@ -454,6 +486,9 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_Evaluate(
             &definitions[i], &inputs[i], world, &states[i], &entry);
         if (status != OVERWORLD_BEHAVIOR_CONDITION_OK) {
             return status;
+        }
+        if (entryResults != NULL) {
+            entryResults[i] = entry;
         }
         if (!entry.active) {
             continue;

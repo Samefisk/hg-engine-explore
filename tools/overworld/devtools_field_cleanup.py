@@ -2,7 +2,7 @@
 import struct
 
 ACTOR_ELF = "overworld_actor_system_overlay_linked.o"
-ACTOR_REGION = (0x023B6B00, 0x023BAB00)
+ACTOR_REGION = (0x023B6500, 0x023BAB00)
 ACTOR_STATE_ADDRESS = 0x023BA170
 
 DATA = (

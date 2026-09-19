@@ -69,7 +69,7 @@ def complete_fixture() -> tuple[list[Symbol], dict[str, bytes]]:
         "role_controller": 0x1000,
         "wild_helper": 0x4000,
         "wild_behavior_data": 0x1000,
-        "follower_selector": 0x1EA0,
+        "follower_selector": 0x2C00,
         "field": 0x5000,
         "follower_selector_icons": 0x8CC,
         "follower_release": 0x38C,
