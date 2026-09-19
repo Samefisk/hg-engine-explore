@@ -1,6 +1,6 @@
 {
-  "catalogVersion": 2,
-  "schema": "../tools/overworld/schemas/behavior-authoring-v2.schema.json",
+  "catalogVersion": 3,
+  "schema": "../tools/overworld/schemas/behavior-authoring-v3.schema.json",
   "fieldSchema": "../tools/overworld/behavior_schema.json",
   "generatedCompatibilityOutput": "OverworldWildBehaviorData.c",
   "rootProfile": "default",
@@ -9,6 +9,7 @@
       "id": "default",
       "name": "Default",
       "parent": null,
+      "kind": "normal",
       "fields": {
         "chillState": {
           "operator": "replace",
@@ -304,6 +305,7 @@
       "id": "aggressive-chase",
       "name": "Agressive Chase",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "alertState": {
           "operator": "replace",
@@ -383,6 +385,7 @@
       "id": "aggressive-ram",
       "name": "Aggressive Ram",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "alertEmote": {
           "operator": "replace",
@@ -450,6 +453,7 @@
       "id": "picked-up",
       "name": "Picked Up",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "chillState": {
           "operator": "replace",
@@ -545,6 +549,7 @@
       "id": "teleport-stalker-override",
       "name": "Teleport Stalker",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "range": {
           "operator": "replace",
@@ -572,6 +577,7 @@
       "id": "canopy-hopper",
       "name": "Canopy Hopper",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "chillAllowedTerrainMask": {
           "operator": "replace",
@@ -587,6 +593,28 @@
       "id": "canopy-hop-surface",
       "name": "Canopy Hopper · On Canopy",
       "parent": "canopy-hopper",
+      "kind": "conditional",
+      "conditions": [
+        {
+          "id": "condition-canopy-hopper-on-canopy",
+          "subjects": {
+            "application": "apply-canopy-hopper"
+          },
+          "when": {
+            "kind": "terrain-motion",
+            "terrainMask": "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY",
+            "terrainOverrideMask": "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY",
+            "minMovementSpeed": 0,
+            "maxMovementSpeed": 0
+          },
+          "activation": {
+            "mode": "while-true"
+          },
+          "target": {
+            "kind": "none"
+          }
+        }
+      ],
       "fields": {
         "hopAllowNonCardinal": {
           "operator": "replace",
@@ -626,6 +654,7 @@
       "id": "throwing",
       "name": "Throwing!",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "alertState": {
           "operator": "replace",
@@ -661,6 +690,7 @@
       "id": "playful",
       "name": "Playful!",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "alertState": {
           "operator": "replace",
@@ -692,6 +722,7 @@
       "id": "floaty-bounce",
       "name": "Floaty Bounce",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "spawnState": {
           "operator": "replace",
@@ -743,6 +774,7 @@
       "id": "bird",
       "name": "Bird",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "spawnState": {
           "operator": "replace",
@@ -830,6 +862,7 @@
       "id": "flying-insect",
       "name": "Flying insect",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "alertState": {
           "operator": "replace",
@@ -1005,6 +1038,7 @@
       "id": "gentle-grazer",
       "name": "Gentle grazer",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "chillSpeed": {
           "operator": "replace",
@@ -1088,6 +1122,7 @@
       "id": "runner",
       "name": "Runner",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "chillSpeed": {
           "operator": "replace",
@@ -1167,6 +1202,7 @@
       "id": "skittish",
       "name": "Skittish",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "chillState": {
           "operator": "replace",
@@ -1222,6 +1258,7 @@
       "id": "test",
       "name": "test",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "chillState": {
           "operator": "replace",
@@ -1253,6 +1290,7 @@
       "id": "forced-asleep",
       "name": "Forced asleep",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "stamina": {
           "operator": "replace",
@@ -1268,6 +1306,7 @@
       "id": "flower",
       "name": "Flower",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "spawnState": {
           "operator": "replace",
@@ -1295,6 +1334,28 @@
       "id": "bird-rooftop",
       "name": "Bird Rooftop",
       "parent": "default",
+      "kind": "conditional",
+      "conditions": [
+        {
+          "id": "condition-bird-rooftop",
+          "subjects": {
+            "application": "apply-bird"
+          },
+          "when": {
+            "kind": "terrain-motion",
+            "terrainMask": "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX",
+            "terrainOverrideMask": "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX",
+            "minMovementSpeed": 0,
+            "maxMovementSpeed": 0
+          },
+          "activation": {
+            "mode": "while-true"
+          },
+          "target": {
+            "kind": "none"
+          }
+        }
+      ],
       "fields": {
         "chillState": {
           "operator": "replace",
@@ -1322,6 +1383,7 @@
       "id": "nervous-scavenger",
       "name": "Scavenger",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "chillState": {
           "operator": "replace",
@@ -1473,6 +1535,7 @@
       "id": "hopping-scavenger",
       "name": "Hopping Scavenger",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "chillState": {
           "operator": "replace",
@@ -1656,6 +1719,7 @@
       "id": "follower-pokemon",
       "name": "Follower Pokemon",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "chillState": {
           "operator": "replace",
@@ -1699,6 +1763,7 @@
       "id": "aggressive-ram-override",
       "name": "Aggressive Ram Boost",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "chillState": {
           "operator": "replace",
@@ -1846,18 +1911,21 @@
       "id": "default-active",
       "name": "Default Active",
       "parent": "default",
+      "kind": "normal",
       "fields": {}
     },
     {
       "id": "default-tired",
       "name": "Default Tired",
       "parent": "default",
+      "kind": "normal",
       "fields": {}
     },
     {
       "id": "baby-pokemon",
       "name": "Baby Pokemon",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "activeProfile": {
           "operator": "replace",
@@ -1869,6 +1937,7 @@
       "id": "swaying-plant",
       "name": "Swaying Plant",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "chillState": {
           "operator": "replace",
@@ -1952,6 +2021,7 @@
       "id": "swaying-plant-active",
       "name": "Swaying Plant Active",
       "parent": "swaying-plant",
+      "kind": "normal",
       "fields": {
         "chillState": {
           "operator": "replace",
@@ -1999,6 +2069,7 @@
       "id": "swaying-plant-tired",
       "name": "Swaying Plant Tired",
       "parent": "swaying-plant",
+      "kind": "normal",
       "fields": {
         "chillState": {
           "operator": "replace",
@@ -2050,6 +2121,7 @@
       "id": "ambush-plant",
       "name": "Ambush Plant",
       "parent": "default",
+      "kind": "normal",
       "fields": {
         "chillState": {
           "operator": "replace",
@@ -2113,6 +2185,7 @@
       "id": "ambush-plant-active",
       "name": "Ambush Plant Active",
       "parent": "ambush-plant",
+      "kind": "normal",
       "fields": {
         "chillState": {
           "operator": "replace",
@@ -2160,6 +2233,7 @@
       "id": "ambush-plant-tired",
       "name": "Ambush Plant Tired",
       "parent": "ambush-plant",
+      "kind": "normal",
       "fields": {
         "chillState": {
           "operator": "replace",
@@ -4464,26 +4538,6 @@
         },
         "members": []
       }
-    }
-  ],
-  "conditionalStates": [
-    {
-      "id": "condition-canopy-hopper-on-canopy",
-      "parentApplication": "apply-canopy-hopper",
-      "application": "apply-canopy-hop-surface",
-      "terrainMask": "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY",
-      "terrainOverrideMask": "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY",
-      "minMovementSpeed": "0",
-      "maxMovementSpeed": "0"
-    },
-    {
-      "id": "condition-bird-rooftop",
-      "parentApplication": "apply-bird",
-      "application": "apply-bird-rooftop",
-      "terrainMask": "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX",
-      "terrainOverrideMask": "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX",
-      "minMovementSpeed": "0",
-      "maxMovementSpeed": "0"
     }
   ],
   "runtimeBindings": {

@@ -56,7 +56,7 @@ HELPER_SOURCE = ROOT / "src/overworld_wild_helper_overlay/overworld_wild_helper_
 BEHAVIOR_DATA_SOURCE = ROOT / "data/OverworldWildBehaviorData.c"
 BEHAVIOR_DATA_HEADER = ROOT / "include/overworld_wild_behavior_data.h"
 BEHAVIOR_CATALOG_SOURCE = ROOT / "data/overworld_behavior_profiles.json"
-BEHAVIOR_AUTHORING_SCHEMA = ROOT / "tools/overworld/schemas/behavior-authoring-v2.schema.json"
+BEHAVIOR_AUTHORING_SCHEMA = ROOT / "tools/overworld/schemas/behavior-authoring-v3.schema.json"
 BEHAVIOR_CATALOG_GENERATOR = ROOT / "scripts/generate_overworld_behavior_catalog.py"
 BEHAVIOR_SCHEMA_SOURCE = ROOT / "tools/overworld/behavior_schema.json"
 BEHAVIOR_SCHEMA_METADATA = ROOT / "tools/overworld/generated/behavior_schema.json"
@@ -5485,7 +5485,7 @@ def _canonical_profile_edit_options(
 def build_profile_deck_data() -> dict:
     """Build the canonical Profile Deck payload without native resolution."""
 
-    catalog = load_behavior_catalog_v2()
+    catalog = load_behavior_catalog_v3()
     expressions, species_order = parse_define_expressions(DEFINE_SOURCE_FILES)
     macros = evaluate_defines(expressions)
     macros.update(evaluate_armips_equ([ARMIPS_CONFIG, ARMIPS_CONSTANTS]))
@@ -5623,8 +5623,8 @@ def build_data(
     include_spawn_settings: bool | None = None,
 ) -> dict:
     capabilities = source_capabilities()
-    profile_catalog = load_behavior_catalog_v2()
-    catalog = lower_behavior_catalog_v2(profile_catalog)
+    profile_catalog = load_behavior_catalog_v3()
+    catalog = lower_behavior_catalog_v2(lower_behavior_catalog_v3(profile_catalog))
     if include_routes is None:
         include_routes = capabilities["routes"]["available"]
     if include_spawn_settings is None:
@@ -6722,8 +6722,11 @@ def _validate_behavior_catalog_v1(catalog: object) -> None:
 
 
 BEHAVIOR_CATALOG_V2_SCHEMA = "../tools/overworld/schemas/behavior-authoring-v2.schema.json"
+BEHAVIOR_CATALOG_V3_SCHEMA = "../tools/overworld/schemas/behavior-authoring-v3.schema.json"
 BEHAVIOR_FIELD_SCHEMA = "../tools/overworld/behavior_schema.json"
 CATALOG_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
+MAX_CONDITION_ENTRIES = 32
+MAX_CONDITIONS_PER_PROFILE = 32
 
 
 class _CompatibilityCatalog(dict):
@@ -7014,8 +7017,301 @@ def _validate_behavior_catalog_v2(catalog: object) -> None:
     _catalog_expression(runtime["forcedAsleepClassToken"], "runtimeBindings.forcedAsleepClassToken")
 
 
+def _catalog_bounded_integer(
+    value: object,
+    label: str,
+    minimum: int,
+    maximum: int,
+) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ParseError(f"{label} must be an integer")
+    if value < minimum or value > maximum:
+        raise ParseError(f"{label} must be in the range {minimum}..{maximum}")
+    return value
+
+
+def _validate_catalog_condition_subjects(
+    value: object,
+    label: str,
+    applications_by_id: dict[str, dict],
+    profiles_by_id: dict[str, dict],
+) -> int:
+    if not isinstance(value, dict):
+        raise ParseError(f"{label} must be an object")
+    if set(value) == {"application"}:
+        application_id = _validate_catalog_id(value["application"], f"{label}.application")
+        application = applications_by_id.get(application_id)
+        if application is None:
+            raise ParseError(f"{label} references missing application {application_id}")
+        if profiles_by_id[application["profile"]]["kind"] != "normal":
+            raise ParseError(f"{label} must reference a normal-profile application")
+        return 0
+    target = _catalog_object(value, label, {"mode", "match", "members"})
+    member_count = _validate_catalog_target(target, label)
+    if target["mode"] == "disabled":
+        raise ParseError(f"{label}.mode must be members or all")
+    return member_count
+
+
+def _validate_catalog_condition_target(value: object, label: str) -> int:
+    if not isinstance(value, dict):
+        raise ParseError(f"{label} must be an object")
+    kind = value.get("kind")
+    if kind in {"none", "player"}:
+        _catalog_object(value, label, {"kind"})
+        return 0
+    if kind != "actor":
+        raise ParseError(f"{label}.kind must be none, player, or actor")
+    target = _catalog_object(
+        value,
+        label,
+        {"kind", "roles", "selection", "groupMask", "members"},
+    )
+    roles = target["roles"]
+    if not isinstance(roles, list) or not roles:
+        raise ParseError(f"{label}.roles must contain wild or follower")
+    if any(role not in {"wild", "follower"} for role in roles):
+        raise ParseError(f"{label}.roles contains an unsupported role")
+    if len(roles) != len(set(roles)):
+        raise ParseError(f"{label}.roles must be unique")
+    if target["selection"] != "nearest":
+        raise ParseError(f"{label}.selection must be nearest")
+    _catalog_expression(target["groupMask"], f"{label}.groupMask")
+    members = target["members"]
+    if not isinstance(members, list):
+        raise ParseError(f"{label}.members must be an array")
+    member_keys = []
+    for index, member in enumerate(members):
+        _catalog_expression(member, f"{label}.members[{index}]")
+        member_keys.append((type(member).__name__, str(member)))
+    if len(member_keys) != len(set(member_keys)):
+        raise ParseError(f"{label}.members must be unique")
+    return len(members)
+
+
+def _validate_catalog_condition_activation(value: object, label: str) -> None:
+    if not isinstance(value, dict):
+        raise ParseError(f"{label} must be an object")
+    mode = value.get("mode")
+    if mode == "while-true":
+        _catalog_object(value, label, {"mode"})
+        return
+    if mode != "timed":
+        raise ParseError(f"{label}.mode must be while-true or timed")
+    activation = _catalog_object(
+        value,
+        label,
+        {"mode", "durationFrames", "cooldownFrames"},
+    )
+    _catalog_bounded_integer(
+        activation["durationFrames"], f"{label}.durationFrames", 1, 0xFFFF
+    )
+    _catalog_bounded_integer(
+        activation["cooldownFrames"], f"{label}.cooldownFrames", 0, 0xFFFF
+    )
+
+
+def _validate_catalog_condition_when(value: object, label: str) -> str:
+    if not isinstance(value, dict):
+        raise ParseError(f"{label} must be an object")
+    kind = value.get("kind")
+    if kind == "terrain-motion":
+        condition = _catalog_object(value, label, {
+            "kind", "terrainMask", "terrainOverrideMask",
+            "minMovementSpeed", "maxMovementSpeed",
+        })
+        for field in ("terrainMask", "terrainOverrideMask"):
+            raw = condition[field]
+            _catalog_expression(raw, f"{label}.{field}")
+            if isinstance(raw, int) and (raw < 0 or raw > 0x03FF):
+                raise ParseError(f"{label}.{field} must fit the current terrain bits")
+        terrain_mask = condition["terrainMask"]
+        terrain_override_mask = condition["terrainOverrideMask"]
+        if isinstance(terrain_mask, int) and isinstance(terrain_override_mask, int) \
+                and terrain_mask & ~terrain_override_mask:
+            raise ParseError(f"{label} enabled terrains must also be explicit")
+        minimum = _catalog_bounded_integer(
+            condition["minMovementSpeed"], f"{label}.minMovementSpeed", 0, 32
+        )
+        maximum = _catalog_bounded_integer(
+            condition["maxMovementSpeed"], f"{label}.maxMovementSpeed", 0, 32
+        )
+        if minimum and maximum and minimum > maximum:
+            raise ParseError(f"{label} movement-speed range is reversed")
+        if terrain_override_mask == 0 and minimum == 0 and maximum == 0:
+            raise ParseError(f"{label} must select a terrain or Walk-time condition")
+        return kind
+    if kind == "notice-target":
+        condition = _catalog_object(value, label, {
+            "kind", "rangeKind", "rangeLength", "chancePercent",
+            "adjacentDirectionMasks",
+        })
+        _catalog_expression(condition["rangeKind"], f"{label}.rangeKind")
+        _catalog_bounded_integer(
+            condition["rangeLength"], f"{label}.rangeLength", 0, 0xFF
+        )
+        _catalog_bounded_integer(
+            condition["chancePercent"], f"{label}.chancePercent", 0, 100
+        )
+        _catalog_expression(
+            condition["adjacentDirectionMasks"], f"{label}.adjacentDirectionMasks"
+        )
+        return kind
+    raise ParseError(f"{label}.kind must be terrain-motion or notice-target")
+
+
+def _validate_behavior_catalog_v3(catalog: object) -> None:
+    """Validate the conditional-profile authoring contract."""
+
+    top_fields = {
+        "catalogVersion", "schema", "fieldSchema", "generatedCompatibilityOutput",
+        "rootProfile", "profiles", "selectors", "applications", "runtimeBindings",
+    }
+    catalog = _catalog_object(catalog, "behavior catalog", top_fields)
+    if catalog["catalogVersion"] != 3:
+        raise ParseError("behavior catalog version must be 3")
+    if catalog["schema"] != BEHAVIOR_CATALOG_V3_SCHEMA:
+        raise ParseError("behavior catalog names an unexpected authoring schema")
+
+    profiles = catalog["profiles"]
+    if not isinstance(profiles, list) or not profiles:
+        raise ParseError("behavior catalog needs at least one profile")
+    profiles_by_id: dict[str, dict] = {}
+    stripped_profiles = []
+    for index, raw_profile in enumerate(profiles):
+        label = f"profile {index}"
+        if not isinstance(raw_profile, dict):
+            raise ParseError(f"{label} must be an object")
+        kind = raw_profile.get("kind")
+        if kind == "normal":
+            profile = _catalog_object(
+                raw_profile, label, {"id", "name", "parent", "kind", "fields"}
+            )
+        elif kind == "conditional":
+            profile = _catalog_object(
+                raw_profile,
+                label,
+                {"id", "name", "parent", "kind", "conditions", "fields"},
+            )
+        else:
+            raise ParseError(f"{label}.kind must be normal or conditional")
+        profile_id = _validate_catalog_id(profile["id"], f"{label}.id")
+        profiles_by_id[profile_id] = profile
+        stripped_profiles.append({
+            "id": profile["id"],
+            "name": profile["name"],
+            "parent": profile["parent"],
+            "fields": copy.deepcopy(profile["fields"]),
+        })
+
+    v2_shell = {
+        "catalogVersion": 2,
+        "schema": BEHAVIOR_CATALOG_V2_SCHEMA,
+        "fieldSchema": catalog["fieldSchema"],
+        "generatedCompatibilityOutput": catalog["generatedCompatibilityOutput"],
+        "rootProfile": catalog["rootProfile"],
+        "profiles": stripped_profiles,
+        "selectors": copy.deepcopy(catalog["selectors"]),
+        "applications": copy.deepcopy(catalog["applications"]),
+        "conditionalStates": [],
+        "runtimeBindings": copy.deepcopy(catalog["runtimeBindings"]),
+    }
+    _validate_behavior_catalog_v2(v2_shell)
+
+    root = profiles_by_id[catalog["rootProfile"]]
+    if root["kind"] != "normal":
+        raise ParseError("the root profile must be normal")
+    class_profiles = {
+        binding["profile"] for binding in catalog["runtimeBindings"]["classOrder"]
+    }
+    for profile_id in class_profiles:
+        if profiles_by_id[profile_id]["kind"] != "normal":
+            raise ParseError(f"runtime class profile {profile_id} must be normal")
+    for selector in catalog["selectors"]:
+        if profiles_by_id[selector["profile"]]["kind"] != "normal":
+            raise ParseError(f"selector {selector['id']} must select a normal profile")
+
+    applications_by_id = {
+        application["id"]: application for application in catalog["applications"]
+    }
+    applications_by_profile: dict[str, list[dict]] = {}
+    combined_member_count = sum(
+        len(application["target"]["members"])
+        for application in catalog["applications"]
+    )
+    for application in catalog["applications"]:
+        applications_by_profile.setdefault(application["profile"], []).append(application)
+
+    total_condition_count = 0
+    for profile in profiles:
+        if profile["kind"] == "normal":
+            continue
+        parent = profile["parent"]
+        if parent is None or profiles_by_id[parent]["kind"] != "normal":
+            raise ParseError(
+                f"conditional profile {profile['id']} must inherit from a normal profile"
+            )
+        owned_applications = applications_by_profile.get(profile["id"], [])
+        if len(owned_applications) != 1:
+            raise ParseError(
+                f"conditional profile {profile['id']} must have exactly one application"
+            )
+        if owned_applications[0]["target"]["mode"] != "disabled":
+            raise ParseError(
+                f"conditional profile {profile['id']} application target must be disabled"
+            )
+        conditions = profile["conditions"]
+        if not isinstance(conditions, list) or not conditions:
+            raise ParseError(f"conditional profile {profile['id']} needs at least one condition")
+        if len(conditions) > MAX_CONDITIONS_PER_PROFILE:
+            raise ParseError(
+                f"conditional profile {profile['id']} supports at most "
+                f"{MAX_CONDITIONS_PER_PROFILE} conditions"
+            )
+        total_condition_count += len(conditions)
+        condition_ids = set()
+        for index, raw_condition in enumerate(conditions):
+            label = f"conditional profile {profile['id']} condition {index}"
+            condition = _catalog_object(
+                raw_condition,
+                label,
+                {"id", "subjects", "when", "activation", "target"},
+            )
+            condition_id = _validate_catalog_id(condition["id"], f"{label}.id")
+            if condition_id in condition_ids:
+                raise ParseError(
+                    f"conditional profile {profile['id']} condition id is duplicated: "
+                    f"{condition_id}"
+                )
+            condition_ids.add(condition_id)
+            combined_member_count += _validate_catalog_condition_subjects(
+                condition["subjects"],
+                f"{label}.subjects",
+                applications_by_id,
+                profiles_by_id,
+            )
+            condition_kind = _validate_catalog_condition_when(
+                condition["when"], f"{label}.when"
+            )
+            _validate_catalog_condition_activation(
+                condition["activation"], f"{label}.activation"
+            )
+            combined_member_count += _validate_catalog_condition_target(
+                condition["target"], f"{label}.target"
+            )
+            if condition_kind == "notice-target" \
+                    and condition["target"]["kind"] == "none":
+                raise ParseError(f"{label} notice-target needs a player or actor target")
+    if total_condition_count > MAX_CONDITION_ENTRIES:
+        raise ParseError(
+            f"behavior catalog supports at most {MAX_CONDITION_ENTRIES} condition entries"
+        )
+    if combined_member_count > 0xFFFF:
+        raise ParseError("combined application and condition member table exceeds u16 storage")
+
+
 def validate_behavior_catalog(catalog: object) -> None:
-    """Validate a canonical V2 catalog or a legacy V1 migration input."""
+    """Validate a canonical V3 catalog or a read-only legacy migration input."""
 
     if not isinstance(catalog, dict):
         raise ParseError("behavior catalog must be an object")
@@ -7026,7 +7322,10 @@ def validate_behavior_catalog(catalog: object) -> None:
     if version == 2:
         _validate_behavior_catalog_v2(catalog)
         return
-    raise ParseError("behavior catalog version must be 1 or 2")
+    if version == 3:
+        _validate_behavior_catalog_v3(catalog)
+        return
+    raise ParseError("behavior catalog version must be 1, 2, or 3")
 
 
 def _unique_catalog_id(raw: object, used: set[str], fallback: str) -> str:
@@ -7240,6 +7539,138 @@ def migrate_behavior_catalog_v1(catalog: dict) -> dict:
     }
     _validate_behavior_catalog_v2(migrated)
     return migrated
+
+
+def _legacy_condition_integer(value: object, label: str) -> int:
+    if isinstance(value, bool):
+        raise ParseError(f"{label} must be an integer")
+    try:
+        return int(clean_token(str(value)), 0)
+    except ValueError as error:
+        raise ParseError(f"{label} cannot migrate to a bounded V3 integer") from error
+
+
+def migrate_behavior_catalog_v2(catalog: dict) -> dict:
+    """Convert a validated V2 catalog into the canonical V3 model."""
+
+    _validate_behavior_catalog_v2(catalog)
+    migrated = {
+        "catalogVersion": 3,
+        "schema": BEHAVIOR_CATALOG_V3_SCHEMA,
+        "fieldSchema": catalog["fieldSchema"],
+        "generatedCompatibilityOutput": catalog["generatedCompatibilityOutput"],
+        "rootProfile": catalog["rootProfile"],
+        "profiles": [],
+        "selectors": copy.deepcopy(catalog["selectors"]),
+        "applications": copy.deepcopy(catalog["applications"]),
+        "runtimeBindings": copy.deepcopy(catalog["runtimeBindings"]),
+    }
+    migrated_profiles = {}
+    for profile in catalog["profiles"]:
+        result = copy.deepcopy(profile)
+        result["kind"] = "normal"
+        migrated["profiles"].append(result)
+        migrated_profiles[result["id"]] = result
+    applications_by_id = {
+        application["id"]: application for application in migrated["applications"]
+    }
+    for state in catalog["conditionalStates"]:
+        application_id = state["application"]
+        if application_id is None:
+            raise ParseError(
+                f"conditional state {state['id']} has no application and cannot migrate to V3"
+            )
+        application = applications_by_id[application_id]
+        if application["target"]["mode"] != "disabled":
+            raise ParseError(
+                f"conditional state {state['id']} application target must be disabled for V3"
+            )
+        profile = migrated_profiles[application["profile"]]
+        if profile["kind"] == "normal":
+            profile["kind"] = "conditional"
+            profile["conditions"] = []
+        profile["conditions"].append({
+            "id": state["id"],
+            "subjects": {"application": state["parentApplication"]},
+            "when": {
+                "kind": "terrain-motion",
+                "terrainMask": copy.deepcopy(state["terrainMask"]),
+                "terrainOverrideMask": copy.deepcopy(state["terrainOverrideMask"]),
+                "minMovementSpeed": _legacy_condition_integer(
+                    state["minMovementSpeed"], f"conditional state {state['id']} minimum speed"
+                ),
+                "maxMovementSpeed": _legacy_condition_integer(
+                    state["maxMovementSpeed"], f"conditional state {state['id']} maximum speed"
+                ),
+            },
+            "activation": {"mode": "while-true"},
+            "target": {"kind": "none"},
+        })
+    _validate_behavior_catalog_v3(migrated)
+    return migrated
+
+
+def lower_behavior_catalog_v3(catalog: dict) -> dict:
+    """Lower canonical V3 data to the existing V2 compatibility graph."""
+
+    _validate_behavior_catalog_v3(catalog)
+    profiles = []
+    conditional_states = []
+    application_by_profile = {
+        application["profile"]: application
+        for application in catalog["applications"]
+        if next(
+            profile for profile in catalog["profiles"]
+            if profile["id"] == application["profile"]
+        )["kind"] == "conditional"
+    }
+    for profile in catalog["profiles"]:
+        lowered_profile = {
+            "id": profile["id"],
+            "name": profile["name"],
+            "parent": profile["parent"],
+            "fields": copy.deepcopy(profile["fields"]),
+        }
+        profiles.append(lowered_profile)
+        if profile["kind"] != "conditional":
+            continue
+        application = application_by_profile[profile["id"]]
+        for condition in profile["conditions"]:
+            subjects = condition["subjects"]
+            when = condition["when"]
+            activation = condition["activation"]
+            target = condition["target"]
+            if set(subjects) != {"application"} \
+                    or when["kind"] != "terrain-motion" \
+                    or activation["mode"] != "while-true" \
+                    or target["kind"] != "none":
+                raise ParseError(
+                    f"condition {condition['id']} is valid V3 authoring data but cannot be "
+                    "lowered to the current terrain-only compatibility runtime"
+                )
+            conditional_states.append({
+                "id": condition["id"],
+                "parentApplication": subjects["application"],
+                "application": application["id"],
+                "terrainMask": copy.deepcopy(when["terrainMask"]),
+                "terrainOverrideMask": copy.deepcopy(when["terrainOverrideMask"]),
+                "minMovementSpeed": when["minMovementSpeed"],
+                "maxMovementSpeed": when["maxMovementSpeed"],
+            })
+    lowered = {
+        "catalogVersion": 2,
+        "schema": BEHAVIOR_CATALOG_V2_SCHEMA,
+        "fieldSchema": catalog["fieldSchema"],
+        "generatedCompatibilityOutput": catalog["generatedCompatibilityOutput"],
+        "rootProfile": catalog["rootProfile"],
+        "profiles": profiles,
+        "selectors": copy.deepcopy(catalog["selectors"]),
+        "applications": copy.deepcopy(catalog["applications"]),
+        "conditionalStates": conditional_states,
+        "runtimeBindings": copy.deepcopy(catalog["runtimeBindings"]),
+    }
+    _validate_behavior_catalog_v2(lowered)
+    return lowered
 
 
 def _lower_profile_reference(authored: dict, application_indexes: dict[str, int]) -> dict:
@@ -7657,23 +8088,43 @@ def _catalog_match_raws(entry: object, label: str) -> dict[str, str]:
     return {field: clean_token(str(entry[field])) for field in MATCH_FIELDS}
 
 
-def load_behavior_catalog_v2() -> dict:
-    """Load the only editable behavior catalog in canonical V2 form."""
+def _read_behavior_catalog() -> dict:
+    """Read and validate one supported catalog version."""
 
     try:
         catalog = json.loads(BEHAVIOR_CATALOG_SOURCE.read_text())
     except json.JSONDecodeError as error:
         raise ParseError(f"behavior catalog is not valid JSON: {error}") from error
     validate_behavior_catalog(catalog)
+    return catalog
+
+
+def load_behavior_catalog_v3() -> dict:
+    """Load the only editable behavior catalog in canonical V3 form."""
+
+    catalog = _read_behavior_catalog()
     if catalog["catalogVersion"] == 1:
         catalog = migrate_behavior_catalog_v1(catalog)
+    if catalog["catalogVersion"] == 2:
+        catalog = migrate_behavior_catalog_v2(catalog)
+    return catalog
+
+
+def load_behavior_catalog_v2() -> dict:
+    """Load a read-only V2 view for legacy callers and migration tests."""
+
+    catalog = _read_behavior_catalog()
+    if catalog["catalogVersion"] == 1:
+        return migrate_behavior_catalog_v1(catalog)
+    if catalog["catalogVersion"] == 3:
+        return lower_behavior_catalog_v3(catalog)
     return catalog
 
 
 def load_behavior_catalog() -> dict:
     """Return the retired V1-shaped view used by legacy HTTP handlers."""
 
-    return lower_behavior_catalog_v2(load_behavior_catalog_v2())
+    return lower_behavior_catalog_v2(lower_behavior_catalog_v3(load_behavior_catalog_v3()))
 
 
 def behavior_authoring_context() -> tuple[dict[str, str], list[str], dict[str, int]]:
@@ -8072,6 +8523,8 @@ def _format_catalog_class_rule(rule: dict, indent: str) -> str:
 def render_behavior_catalog(catalog: dict, raw_source: str) -> str:
     """Render named authoring data into the fixed-layout compatibility blob."""
     validate_behavior_catalog(catalog)
+    if catalog["catalogVersion"] == 3:
+        catalog = lower_behavior_catalog_v3(catalog)
     if catalog["catalogVersion"] == 2:
         catalog = lower_behavior_catalog_v2(catalog)
     class_profiles = catalog.get("classProfiles")
@@ -8225,12 +8678,15 @@ def render_behavior_catalog(catalog: dict, raw_source: str) -> str:
 def render_behavior_catalog_header(raw_header: str, catalog: dict, raw_source: str) -> str:
     runtime_application_orders = None
     runtime_application_ids = None
-    if catalog.get("catalogVersion") == 2:
+    if catalog.get("catalogVersion") in {2, 3}:
         runtime_application_orders = {
             application["id"]: order
             for order, application in enumerate(catalog["applications"])
         }
         runtime_application_ids = catalog["runtimeBindings"]
+    if catalog.get("catalogVersion") == 3:
+        catalog = lower_behavior_catalog_v3(catalog)
+    if catalog.get("catalogVersion") == 2:
         catalog = lower_behavior_catalog_v2(catalog)
     class_profiles = catalog["classProfiles"]
     symbols = [clean_token(str(profile.get("symbol", ""))) for profile in class_profiles]
@@ -8303,7 +8759,9 @@ def write_behavior_catalog(catalog: dict) -> None:
         if catalog.get("catalogVersion") == 1
         else copy.deepcopy(catalog)
     )
-    _validate_behavior_catalog_v2(canonical)
+    if canonical.get("catalogVersion") == 2:
+        canonical = migrate_behavior_catalog_v2(canonical)
+    _validate_behavior_catalog_v3(canonical)
     raw_source = render_behavior_catalog(canonical, BEHAVIOR_DATA_SOURCE.read_text())
     raw_header = render_behavior_catalog_header(
         BEHAVIOR_DATA_HEADER.read_text(), canonical, raw_source
@@ -8844,7 +9302,7 @@ def format_behavior_override_member_profile(
 
 
 def apply_profile_catalog_changes(body: bytes) -> dict:
-    """Validate and save one complete canonical V2 profile catalog."""
+    """Validate and save one complete canonical V3 profile catalog."""
 
     try:
         payload = json.loads(body.decode())
@@ -8865,21 +9323,21 @@ def apply_profile_catalog_changes(body: bytes) -> dict:
     if not isinstance(catalog, dict):
         raise ValueError("profile catalog must be an object")
     try:
-        _validate_behavior_catalog_v2(catalog)
+        _validate_behavior_catalog_v3(catalog)
     except ParseError as exc:
         raise ValueError(str(exc)) from exc
-    current = load_behavior_catalog_v2()
+    current = load_behavior_catalog_v3()
     if catalog == current:
         return {
             "saved": False,
             "message": "No changes",
-            "catalogVersion": 2,
+            "catalogVersion": 3,
         }
     write_behavior_catalog(catalog)
     return {
         "saved": True,
         "message": "Saved profile catalog",
-        "catalogVersion": 2,
+        "catalogVersion": 3,
     }
 
 
