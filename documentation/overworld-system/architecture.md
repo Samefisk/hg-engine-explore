@@ -89,12 +89,15 @@ generated ROM compatibility output and are not an authoring source.
 
 ```text
 profile
+  kind
+    normal
+    conditional
+      condition entries
   spawn
-  alert
+  presentation
   battle
   lanes
     owner
-    active
     tired
       controller
       locomotion
@@ -105,7 +108,37 @@ profile
       presentation
 ```
 
-### 2. Behavior Resolver
+### 2. Behavior Condition Evaluator
+
+Owns bounded condition truth, activation lifetime, cooldown, and target
+selection. It consumes value-only subject and world observations plus the
+current actor-system frame. It returns an active conditional-application mask,
+one winning condition-entry ID per active application, and zero or one captured
+target per active application.
+
+Condition entries are independent. The last listed active entry for one
+conditional profile wins. Different conditional profiles can be active at the
+same time. The evaluator does not compose profile fields and does not start,
+cancel, or inspect motion.
+
+The first condition kinds are player noticed, Pokémon noticed, and physical
+terrain/speed. They use fixed records; there is no Boolean expression language.
+While-true entries capture one target when they become true and keep it until
+they become false. Timed entries capture one target when they trigger and keep
+it through duration. Cooldown starts at that trigger. When cooldown ends while
+the predicate remains true, the entry triggers again, selects a fresh target,
+and restarts duration and cooldown.
+
+Target-required activation fails when no valid target exists. If a captured
+actor handle becomes stale, the complete activation ends before resolution.
+The evaluator never keeps a slot number or engine pointer as target identity.
+
+All timer values use the public actor-system frame returned by Inspect. Expiry
+comparison is unsigned and wrap-safe. The role adapter prepares applicable
+entries at bind and supplies bounded observations only when it is ready to ask
+for a new intent.
+
+### 3. Behavior Resolver
 
 Owns deterministic composition:
 
@@ -116,9 +149,10 @@ BehaviorResult BehaviorCatalog_Resolve(
     BehaviorResolutionTrace *trace);
 ```
 
-This is a private implementation interface. The resolver input contains subject,
-encounter terrain, conditional physical-surface state, behavior class inputs,
-and an explicit forced layer set. It does not contain actor role.
+This is a private implementation interface. The resolver input contains
+subject, encounter terrain, behavior class inputs, an explicit forced layer
+set, active conditional applications, and captured target bindings. It does
+not contain actor role, world pointers, timers, or condition predicates.
 
 Required order:
 
@@ -126,13 +160,17 @@ Required order:
 2. Resolve the ordered profile selectors.
 3. Materialize the selected profile from the complete root and its parent chain.
 4. Resolve inherited policy.
-5. Match normal profile applications.
-6. Select conditional layers from the pre-condition Owner travel time and surface state.
-7. Apply normal layers, then conditional layers, in source order.
-8. Resolve Active and Tired lane references once.
-9. Normalize all lanes.
-10. Resolve mechanical primitives.
-11. Produce a fingerprint and ordered provenance.
+5. Iterate the shared application list once.
+6. Apply a matching normal application.
+7. Apply a matching conditional application only when its active input bit is
+   set.
+8. Resolve captured target bindings in the same order; a later target replaces
+   an earlier target, while a targetless application does not erase one.
+9. Resolve the Tired lane reference once.
+10. Normalize both lanes.
+11. Resolve mechanical primitives.
+12. Produce a fingerprint and ordered provenance, including the winning
+    condition entry and target source.
 
 The resolver is one portable C source compiled for ARM and for the Workshop
 host adapter. Both read the same generated compact behavior layout. The
@@ -151,8 +189,9 @@ Mounted is not a resolver role. The mounted controller later chooses which
 resolved values it consumes and ignores AI-only chain decisions.
 
 The public actor view keeps lane and controller state separate. Native Chill
-and Emoting project to Owner, Active to Active, and Tired to Tired. Mounted
-control projects to Owner. An unknown native state has no resolved lane
+and Emoting project to Owner, and Tired projects to Tired. Conditional
+activation does not change lane. Mounted control projects to Owner. An unknown
+native state has no resolved lane
 (`BEHAVIOR_RESOLUTION_LANE_NONE`); it must not be labeled as valid behavior.
 `controllerState` retains the raw native value (Chill while mounted).
 
@@ -162,16 +201,21 @@ policy. No cache hit may rely on a profile binding erased by a later bind.
 Rejected binds leave the previous actor untouched; a failed startup Hop unbinds
 only its newly accepted handle before the normal spawn rollback.
 
-### 3. Role Controllers
+### 4. Role Controllers
 
 Controllers decide what an actor wants. They never change coordinates or presentation.
 
-- Wild controller: alert, chase, flee, wander, chain, Ram, rest, and battle intent.
+- Wild controller: condition observation, chase, flee, wander, chain, Ram,
+  rest, and battle intent.
 - Follower controller: follow and release intent.
 - Mounted controller: player input to intent. It uses the same resolved behavior as the follower and the Owner lane.
 - Script controller: explicit scripted intent.
 
 Ram is controller policy that emits Walk intents with direction lock, acceleration, stomp, and crash reactions. It is not a locomotion engine.
+
+Wild and Follower adapters evaluate conditions only when the actor can request
+a new intent. A condition change cannot interrupt an accepted motion. A chained
+movement returns to the same boundary before requesting its next intent.
 
 During migration, the fixed Wild runtime service entry exposes the value-only
 `reduceRole` callback. It points at the same portable
@@ -179,7 +223,7 @@ During migration, the fixed Wild runtime service entry exposes the value-only
 packaged in audited boot-resident compatibility space; the service entry keeps
 its 64-byte ABI. Wild and Mount call-site migration is a separate phase.
 
-### 4. Motion Module: Policy
+### 5. Motion Module: Policy
 
 The stateful policy reducer owns momentum, acceleration counters, the resolved
 per-event acceleration rule, skid selection, chain eligibility, and feedback
@@ -215,7 +259,7 @@ can send the same request before entering Chill. The shared Walk policy then
 applies the current speed-based stop skid. Movement Chain movement, pause, and
 action selection do not start, plan, or gate this stop skid.
 
-### 5. Motion Module: Planner
+### 6. Motion Module: Planner
 
 The planner converts one intent and one world revision into an accepted plan or a typed rejection.
 
@@ -299,7 +343,7 @@ the public actor policy service, and the wild adapter uses public policy
 inspection before it attempts the next reposition motion. Neither Wild nor
 Mounted calls task-6 Hop code directly.
 
-### 6. Motion Module: Executor
+### 7. Motion Module: Executor
 
 Walk, Hop, and Teleport share one execution lifecycle. Specialized planners can choose different paths, but interpolation, streaming, presentation synchronization, cancellation, and commit are shared.
 
@@ -394,7 +438,7 @@ matching terminal boundary. A flat Walk must therefore remain a Walk while it
 is `COMMIT_PENDING`; clearing it early would route completion through the
 legacy reducer and leave the actor without control return.
 
-### 7. Path Advance, Commit, and Reactions
+### 8. Path Advance, Commit, and Reactions
 
 The executor emits a path advance when authority crosses a tile boundary. A
 multi-tile Hop or Teleport can emit several advances but still has one terminal
@@ -534,7 +578,7 @@ After internal commit, publication is role-specific:
 4. Suspend immediately if the callback changed context.
 5. Emit safe post-commit presentation and feedback reactions.
 
-### 8. Presentation Adapters
+### 9. Presentation Adapters
 
 Presentation mirrors motion. It does not own it.
 
@@ -575,7 +619,7 @@ readers and writers use only the low half for the hidden flag. A missing,
 stale, malformed, or inactive response means no position override. No Wild
 private-state pointer crosses this service boundary.
 
-### 9. Population and Lifecycle
+### 10. Population and Lifecycle
 
 Population controls encounter preparation, spawn timing, despawn, identity,
 capture, and battle handoff. It consumes path advances for player-centered
@@ -824,7 +868,7 @@ resident mount adapter before it invokes wild transition work. The throw helper
 receives a separate typed presentation command through its existing fixed
 callback slot. Negative slot numbers are not lifecycle commands.
 
-### 10. Observation
+### 11. Observation
 
 Observation is a first-class module, not temporary diagnostic code. `Inspect`,
 the generated debug descriptor, and a bounded trace ring expose semantic state

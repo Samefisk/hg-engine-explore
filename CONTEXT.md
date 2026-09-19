@@ -39,8 +39,9 @@ _Avoid as a synonym_: Mount profile, riding mode
 ## Behavior
 
 **Profile**:
-One named behavior definition with a stable ID, one parent, and local field
-operators. All profiles use this shape.
+One named behavior definition with a stable ID, one parent, one kind, and local
+field operators. A normal profile always contributes when its application
+matches. A conditional profile also owns the entries that can activate it.
 _Avoid as a synonym_: Mount profile, movement config
 
 **Root profile**:
@@ -58,16 +59,63 @@ An ordered target and match that applies one profile's local operators. A
 profile can be used by more than one application.
 _Avoid as a synonym_: Profile, per-Pokémon copy
 
+**Conditional profile**:
+An override profile whose local operators contribute only while one of its
+condition entries is active. Conditional and normal applications share one
+source order and later values override earlier values.
+_Avoid as a synonym_: Motivation, Active profile, attentive state
+
+**Condition entry**:
+One independent predicate, subject pool, activation mode, timer policy, and
+target query owned by a conditional profile. Entries do not combine. If more
+than one entry in one profile is active for one subject, the last listed active
+entry wins.
+_Avoid as a synonym_: Layer, state, condition group
+
+**Subject pool**:
+The authored set of Pokémon identities to which one condition entry can apply.
+It filters the subject, not the possible target.
+_Avoid as a synonym_: Target pool, application
+
+**Activation mode**:
+The lifetime rule for one condition entry. While-true follows current predicate
+truth. Timed holds for its duration and cannot retrigger until cooldown ends.
+_Avoid as a synonym_: Active state
+
+**Captured target**:
+The one player or generation-safe actor selected when an entry activates. A
+target-required entry cannot activate without one. A stale captured target ends
+that activation.
+_Avoid as a synonym_: Object pointer, target slot
+
+**Duration**:
+The number of actor-system frames that a timed condition remains active after
+it triggers.
+_Avoid as a synonym_: Stamina
+
+**Cooldown**:
+The number of actor-system frames after a trigger during which that condition
+entry cannot trigger again. Cooldown starts at the trigger.
+_Avoid as a synonym_: Rest state
+
+**Active conditional application**:
+A conditional profile application admitted by the condition evaluator for the
+current intent decision. This is a resolver input, not an actor state or lane.
+_Avoid as a synonym_: Active lane, attentive state
+
 **Layer**:
 One applied profile contribution that can change selected profile values.
 _Avoid as a synonym_: Patch, rule row
 
 **Lane**:
-One resolved behavior state: Owner, Active, or Tired. Mounted control uses the Owner lane; Active and Tired remain AI lanes.
+One resolved behavior state: Owner or Tired. Mounted control uses the Owner
+lane. The legacy Active lane is removed by the conditional-profile cutover.
 _Avoid as a synonym_: Chill/Active/Tired speed, mode profile
 
 **Resolved behavior**:
-The immutable lanes, primitives, provenance, and fingerprint produced for one subject, resolver context, and forced layer set. Role projection happens afterward.
+The immutable lanes, captured target, primitives, provenance, and fingerprint
+produced for one subject, resolver context, forced layer set, and active
+conditional application set. Role projection happens afterward.
 _Avoid as a synonym_: Effective settings, final config
 
 **Primitive**:

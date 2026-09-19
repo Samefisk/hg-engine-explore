@@ -1,7 +1,16 @@
 # Conditional Profiles Implementation Plan
 
-Status: Proposed implementation plan. No product code has changed. The current
-architecture and runtime stay authoritative until the CP7 cutover gate passes.
+Status: Implementation in progress. The legacy runtime stays authoritative
+until the CP7 cutover gate passes.
+
+## Implementation status
+
+| Slice | State | Evidence and next action |
+| --- | --- | --- |
+| CP0 | Complete | Baseline schema, catalog, catalog tests, resolver goldens, actor view, and spawn lifecycle pass. The migration inventory reports 1,746 classified findings, zero unclassified findings, seven activeProfile references, and two legacy conditional states. |
+| CP1 | In progress | Target terms and ownership are in CONTEXT.md and architecture.md. Add catalog V3 and generated condition records next. |
+| CP2 | In progress | The portable evaluator and host proof cover while-true, timed duration, cooldown, refresh, player and actor targets, overlap order, stale targets, terrain/speed, and frame wrap. Generated catalog wiring is still pending. |
+| CP3–CP8 | Not started | The old runtime path still owns visible behavior. |
 
 This plan changes who owns alert and active behavior. It does not design a
 general condition language.
