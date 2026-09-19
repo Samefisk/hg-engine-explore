@@ -5716,7 +5716,12 @@ def build_data(
 ) -> dict:
     capabilities = source_capabilities()
     profile_catalog = load_behavior_catalog_v3()
-    catalog = lower_behavior_catalog_v2(lower_behavior_catalog_v3(profile_catalog))
+    catalog = lower_behavior_catalog_v2(
+        lower_behavior_catalog_v3(
+            profile_catalog,
+            allow_runtime_only=True,
+        )
+    )
     if include_routes is None:
         include_routes = capabilities["routes"]["available"]
     if include_spawn_settings is None:
@@ -6822,6 +6827,16 @@ BEHAVIOR_FIELD_SCHEMA = "../tools/overworld/behavior_schema.json"
 CATALOG_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 MAX_CONDITION_ENTRIES = 32
 MAX_CONDITIONS_PER_PROFILE = 32
+CONDITION_RANGE_KINDS = {
+    "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE",
+    "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS",
+    "OW_WILD_BEHAVIOR_ALERT_RANGE_CARDINAL_LINE",
+    "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS",
+}
+CONDITION_TERRAIN_BITS = {
+    raw: 1 << index
+    for index, (_key, _label, raw) in enumerate(ALLOWED_TERRAIN_OPTIONS)
+}
 
 
 class _CompatibilityCatalog(dict):
@@ -7125,6 +7140,28 @@ def _catalog_bounded_integer(
     return value
 
 
+def _catalog_terrain_expression(value: object, label: str) -> int:
+    if isinstance(value, bool):
+        raise ParseError(f"{label} must be a terrain expression")
+    if isinstance(value, int):
+        if value < 0 or value > 0x03FF:
+            raise ParseError(f"{label} must fit the current terrain bits")
+        return value
+    if not isinstance(value, str) or not value.strip():
+        raise ParseError(f"{label} must be a terrain expression")
+    tokens = [token.strip() for token in value.split("|")]
+    if tokens == ["0"]:
+        return 0
+    if any(token not in CONDITION_TERRAIN_BITS for token in tokens):
+        raise ParseError(f"{label} contains an unknown terrain symbol")
+    if len(tokens) != len(set(tokens)):
+        raise ParseError(f"{label} contains a duplicate terrain symbol")
+    result = 0
+    for token in tokens:
+        result |= CONDITION_TERRAIN_BITS[token]
+    return result
+
+
 def _validate_catalog_condition_subjects(
     value: object,
     label: str,
@@ -7217,15 +7254,15 @@ def _validate_catalog_condition_when(value: object, label: str) -> str:
             "kind", "terrainMask", "terrainOverrideMask",
             "minMovementSpeed", "maxMovementSpeed",
         })
-        for field in ("terrainMask", "terrainOverrideMask"):
-            raw = condition[field]
-            _catalog_expression(raw, f"{label}.{field}")
-            if isinstance(raw, int) and (raw < 0 or raw > 0x03FF):
-                raise ParseError(f"{label}.{field} must fit the current terrain bits")
-        terrain_mask = condition["terrainMask"]
-        terrain_override_mask = condition["terrainOverrideMask"]
-        if isinstance(terrain_mask, int) and isinstance(terrain_override_mask, int) \
-                and terrain_mask & ~terrain_override_mask:
+        terrain_mask = _catalog_terrain_expression(
+            condition["terrainMask"],
+            f"{label}.terrainMask",
+        )
+        terrain_override_mask = _catalog_terrain_expression(
+            condition["terrainOverrideMask"],
+            f"{label}.terrainOverrideMask",
+        )
+        if terrain_mask & ~terrain_override_mask:
             raise ParseError(f"{label} enabled terrains must also be explicit")
         minimum = _catalog_bounded_integer(
             condition["minMovementSpeed"], f"{label}.minMovementSpeed", 0, 32
@@ -7242,7 +7279,16 @@ def _validate_catalog_condition_when(value: object, label: str) -> str:
         condition = _catalog_object(value, label, {
             "kind", "rangeKind", "rangeLength", "chancePercent",
         })
-        _catalog_expression(condition["rangeKind"], f"{label}.rangeKind")
+        range_kind = condition["rangeKind"]
+        if (
+            isinstance(range_kind, bool)
+            or not (
+                isinstance(range_kind, int) and 1 <= range_kind <= 4
+                or isinstance(range_kind, str)
+                    and range_kind in CONDITION_RANGE_KINDS
+            )
+        ):
+            raise ParseError(f"{label}.rangeKind is not a supported range")
         _catalog_bounded_integer(
             condition["rangeLength"], f"{label}.rangeLength", 0, 0xFF
         )
@@ -7673,9 +7719,7 @@ def migrate_behavior_catalog_v2(catalog: dict) -> dict:
     for state in catalog["conditionalStates"]:
         application_id = state["application"]
         if application_id is None:
-            raise ParseError(
-                f"conditional state {state['id']} has no application and cannot migrate to V3"
-            )
+            continue
         application = applications_by_id[application_id]
         if application["target"]["mode"] != "disabled":
             raise ParseError(

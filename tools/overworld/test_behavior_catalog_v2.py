@@ -104,6 +104,26 @@ class BehaviorCatalogV3Tests(unittest.TestCase):
         self.assertEqual(migrated, self.catalog)
         self.assertEqual(VIEWER.load_behavior_catalog_v2(), v2)
 
+        no_op = copy.deepcopy(v2)
+        no_op["conditionalStates"].append({
+            "id": "condition-no-op",
+            "parentApplication": "apply-bird",
+            "application": None,
+            "terrainMask": 1,
+            "terrainOverrideMask": 1,
+            "minMovementSpeed": 0,
+            "maxMovementSpeed": 0,
+        })
+        migrated = VIEWER.migrate_behavior_catalog_v2(no_op)
+        self.assertNotIn(
+            "condition-no-op",
+            {
+                condition["id"]
+                for profile in migrated["profiles"]
+                for condition in profile.get("conditions", [])
+            },
+        )
+
     def test_condition_order_and_overlapping_subject_pools_are_valid(self) -> None:
         changed = copy.deepcopy(self.catalog)
         profile = self.condition_profile(changed)
@@ -152,6 +172,17 @@ class BehaviorCatalogV3Tests(unittest.TestCase):
         )
         self.assertEqual(len(entries), 4)
         self.assertTrue(all(len(entry) == 24 for entry in entries))
+
+        with mock.patch.object(
+            VIEWER,
+            "load_behavior_catalog_v3",
+            return_value=changed,
+        ):
+            payload = VIEWER.build_data(
+                include_routes=False,
+                include_spawn_settings=False,
+            )
+        self.assertEqual(payload["profileCatalog"], changed)
 
     def test_condition_reorder_changes_precedence_without_changing_ids(self) -> None:
         changed = copy.deepcopy(self.catalog)
@@ -507,6 +538,12 @@ class BehaviorCatalogV3Tests(unittest.TestCase):
         with self.assertRaisesRegex(VIEWER.ParseError, "fit the current terrain bits"):
             VIEWER.validate_behavior_catalog(terrain)
 
+        terrain_string = copy.deepcopy(self.catalog)
+        condition = self.condition_profile(terrain_string)["conditions"][0]
+        condition["when"]["terrainMask"] = "1024"
+        with self.assertRaisesRegex(VIEWER.ParseError, "unknown terrain symbol"):
+            VIEWER.validate_behavior_catalog(terrain_string)
+
         speed = copy.deepcopy(self.catalog)
         condition = self.condition_profile(speed)["conditions"][0]
         condition["when"]["maxMovementSpeed"] = 33
@@ -539,6 +576,15 @@ class BehaviorCatalogV3Tests(unittest.TestCase):
         condition["when"]["terrainOverrideMask"] = 0
         with self.assertRaisesRegex(VIEWER.ParseError, "must select a terrain or Walk-time"):
             VIEWER.validate_behavior_catalog(empty)
+
+    def test_notice_range_kind_is_bounded(self) -> None:
+        invalid = copy.deepcopy(self.catalog)
+        profile = self.condition_profile(invalid)
+        condition = self.notice_condition("condition-bird-invalid-range")
+        condition["when"]["rangeKind"] = "OW_WILD_BEHAVIOR_ALERT_RANGE_NONE"
+        profile["conditions"].append(condition)
+        with self.assertRaisesRegex(VIEWER.ParseError, "not a supported range"):
+            VIEWER.validate_behavior_catalog(invalid)
 
     def test_condition_subject_application_must_exist_and_be_normal(self) -> None:
         missing = copy.deepcopy(self.catalog)

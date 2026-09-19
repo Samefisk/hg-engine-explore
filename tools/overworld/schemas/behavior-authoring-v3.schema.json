@@ -55,7 +55,10 @@
     "terrainExpression": {
       "oneOf": [
         { "type": "integer", "minimum": 0, "maximum": 1023 },
-        { "type": "string", "minLength": 1 }
+        {
+          "type": "string",
+          "pattern": "^(0|OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_[A-Z_]+(?:\\s*\\|\\s*OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_[A-Z_]+)*)$"
+        }
       ]
     },
     "operatorValue": {
@@ -238,7 +241,19 @@
       ],
       "properties": {
         "kind": { "const": "notice-target" },
-        "rangeKind": { "$ref": "#/$defs/expression" },
+        "rangeKind": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1, "maximum": 4 },
+            {
+              "enum": [
+                "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE",
+                "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS",
+                "OW_WILD_BEHAVIOR_ALERT_RANGE_CARDINAL_LINE",
+                "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS"
+              ]
+            }
+          ]
+        },
         "rangeLength": { "type": "integer", "minimum": 0, "maximum": 255 },
         "chancePercent": { "type": "integer", "minimum": 0, "maximum": 100 }
       }

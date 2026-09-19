@@ -817,7 +817,7 @@ function createDraftId() {
 
 function canonicalCatalogFromDeck(input) {
   const value = input?.profileCatalog?.catalog ?? input?.profileCatalog;
-  return value?.catalogVersion === 2 ? value : null;
+  return value?.catalogVersion === 3 ? value : null;
 }
 
 function canonicalCompactLookup(value) {
@@ -1154,7 +1154,7 @@ function projectCanonicalProfileDeck(input, catalogOverride = null) {
 }
 
 function canonicalCatalogStructuralErrors(catalog, input = {}) {
-  if (!catalog) return ["The V2 profile catalog is unavailable"];
+  if (!catalog) return ["The V3 profile catalog is unavailable"];
   const errors = [];
   const duplicateIds = (items, label) => {
     const seen = new Set();
@@ -1253,7 +1253,7 @@ export function createProfilesController({
 
   let rawDeckData = state.profileData || state.data || state.appData || {};
   let sourceCatalog = canonicalCatalogFromDeck(rawDeckData) ? cloneDraftJson(canonicalCatalogFromDeck(rawDeckData)) : null;
-  let structuralCatalogDraft = state.profileCatalogDraft?.catalogVersion === 2 ? cloneDraftJson(state.profileCatalogDraft) : null;
+  let structuralCatalogDraft = state.profileCatalogDraft?.catalogVersion === 3 ? cloneDraftJson(state.profileCatalogDraft) : null;
   let data = projectCanonicalProfileDeck(rawDeckData, structuralCatalogDraft || sourceCatalog);
   const drafts = state.profileDrafts?.version === 2 ? state.profileDrafts : newDraftStore();
   if (!("conditionalStates" in drafts)) drafts.conditionalStates = null;

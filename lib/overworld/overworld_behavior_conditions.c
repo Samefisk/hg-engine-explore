@@ -273,9 +273,9 @@ static u8 OverworldBehaviorCondition_DefinitionValid(
         || definition->chance > 100
         || (definition->kind != OVERWORLD_BEHAVIOR_CONDITION_TERRAIN_SPEED
             && (definition->rangeKind
-                    < OVERWORLD_BEHAVIOR_CONDITION_RANGE_RADIUS
+                    < OVERWORLD_BEHAVIOR_CONDITION_RANGE_FACING_LINE
                 || definition->rangeKind
-                    > OVERWORLD_BEHAVIOR_CONDITION_RANGE_FACING_LINE))
+                    > OVERWORLD_BEHAVIOR_CONDITION_RANGE_RADIUS))
         || (definition->activationMode
                 == OVERWORLD_BEHAVIOR_CONDITION_TIMED
             && definition->durationFrames == 0)
