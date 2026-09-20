@@ -101,6 +101,9 @@ SECTIONS {
                     "Walk DecelerateTime helper moved");
                 ASSERT(. <= ORIGIN(rom) + 0x105C,
                     "Walk DecelerateTime helper exceeds its slot");
+                KEEP(*(.overworld_condition_trace))
+                ASSERT(. <= ORIGIN(rom) + 0x105C,
+                    "condition trace formatter exceeds retired Walk slot");
                 . = ORIGIN(rom) + 0x105C;
                 KEEP(*(.overworld_walk_propose_step))
                 ASSERT(OverworldWalk_ProposeStep == ORIGIN(rom) + 0x105C,

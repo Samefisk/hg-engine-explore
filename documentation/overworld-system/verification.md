@@ -178,7 +178,7 @@ off-screen spawn, it also proves the real spawn motion reaches its valid
 target and returns control. Move From Off Screen proof must also show that the
 origin is between1 and16 cardinal tiles from its selected spawn tile and at least four tiles
 beyond the current player-relative inclusive8-by6 view, and the fixed spawn tile is only a target substitution in the normal
-Active chase. A missing eligible origin must reject the spawn; an on-screen
+Owner destination trip. A missing eligible origin must reject the spawn; an on-screen
 fallback fails.
 Static acceptance rejects a separate entry scheduler or completion path and
 rejects entry-only changes to Walk pause, Movement Chain, stamina, tired
@@ -385,8 +385,9 @@ its own graph can never satisfy.
 | Field transition (`world.transition`) | World lifecycle | Wild, Follower, Mounted | S3, S5 |
 | Warp gating (`world.warp-gating`) | World reactions | Mounted | S3 |
 | Wild population (`population`) | Population module | Wild | S1, S3, S5 |
-| Behavior state lanes (`profile.state`) | Behavior Resolver | Wild, Follower, Mounted | S0, S1 |
-| Alert behavior (`alert`) | Role controllers | Wild, Follower | S0, S1 |
+| Conditional profile activation (`condition.evaluation`) | Behavior Condition Evaluator | Wild, Follower | S0, S1, S3 |
+| Owner and Tired behavior lanes (`profile.state`) | Behavior Resolver | Wild, Follower, Mounted | S0, S1 |
+| Condition-triggered presentation (`alert`) | Role controllers (presentation) | Wild, Follower | S0, S1 |
 | Spawn policy (`spawn`) | Population module | Wild | S0, S1, S3 |
 | Battle profile policy (`battle`) | World reactions | Wild | S0, S1 |
 | Terrain policy (`terrain`) | World adapter | Wild, Follower, Mounted | S0, S1, S3 |
@@ -741,21 +742,25 @@ still batches queries or repeats preparation is a real red result; do not label
 it a checker failure or skip it to reach a live test.
 
 After the host checks pass, run the bounded
-`population.spawn-work-budget` scenario on the current ROM. Its fixed Route 30
-path must keep the player moving through the scan. It must observe
-one natural helper-to-explicit-scanner handoff, one complete explicit scan,
+`population.spawn-work-budget` scenario on the current ROM. Its fixed route
+crosses the map seam from Route 30 into Cherrygrove. Its strict window starts on the
+first completed update after that seam and keeps the player moving through the
+scan. It must observe one natural helper-to-explicit-scanner handoff, one
+complete explicit scan,
 exactly one profile receipt for the attempt, completed game-update boundaries,
 zero terrain-matcher queries on setup, exactly 20 resumed batches, no update
 above the 12-query cap, no resumed finalizer above its guest-work
-budget, and one successful prepared Wild actor on the next update. It also
-measures every main
-loop from the start of the action through the loop after actor creation. Zero
+budget, and one successful prepared Hoothoot on the next update. That actor
+must use its normal spawn Hop from the retained off-screen origin to the
+retained target. The test measures every main loop from the first strict
+post-seam update through the loop after actor creation. Zero
 late loops is the only pass: `gSystem.frameCounter` must stay at or below `2`,
 native-cycle and frame-sequence intervals must stay at or below `2`. The ARM9
 clock cross-check allows only the sub-VBlank hook offset and must stay below
 `2800950` ticks. It must also record at least
-120 in-transit player samples, with an exact sub-tile position change on every
-one. One late loop or one frozen in-transit position fails the test even when
+120 post-seam in-transit player samples, with an exact sub-tile position change
+on every one. One late loop or one frozen in-transit position fails the test
+even when
 all spawn-work counters pass. The extracted-C
 checks own the full 240-candidate matrix and selection/RNG parity. The live
 scenario is

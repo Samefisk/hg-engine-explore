@@ -3,7 +3,7 @@ CODE_BUILD_DIRS += $(BUILD)
 THUMB_HELP := $(BUILD)/thumb_help.o
 LINKED_OUTPUTS = build/linked.o
 OVERWORLD_ACTOR_SYSTEM_PORTABLE_OBJS := \
-	$(BUILD)/overworld_actor_system_overlay/overworld_behavior_condition_shadow.o \
+	$(BUILD)/overworld_actor_system_overlay/overworld_behavior_condition_adapter.o \
 	$(BUILD)/overworld_actor_system_overlay/overworld_behavior_resolver.o \
 	$(BUILD)/overworld_actor_system_overlay/overworld_motion_model.o \
 	$(BUILD)/overworld_actor_system_overlay/overworld_actor_transition_model.o \
@@ -14,7 +14,8 @@ OVERWORLD_FOLLOWER_SELECTOR_PORTABLE_OBJS := \
 OVERWORLD_TASK6_PORTABLE_OBJS := \
 	$(BUILD)/pokemon_move_history_task6_overlay/overworld_role_controller.o
 
-OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS := -frename-registers -fno-inline-small-functions -finline-functions-called-once -fno-partial-inlining -fno-short-enums -fno-tree-dominator-opts -ftree-forwprop -fno-tree-loop-ivcanon -fno-tree-loop-im -fno-move-loop-invariants -fno-ipa-sra -fexpensive-optimizations -fno-schedule-insns2 -mcpu=arm946e-s -mtune=arm946e-s -march=armv5te
+OVERWORLD_ACTOR_SYSTEM_OVERLAY_CFLAGS := -fno-tree-dominator-opts -mcpu=arm946e-s -mtune=arm946e-s -march=armv5te
+OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS := -frename-registers -fno-inline-small-functions -finline-functions-called-once -fno-partial-inlining -fno-short-enums -fno-tree-dominator-opts -fno-tree-forwprop -fno-tree-loop-ivcanon -fno-tree-loop-im -fmove-loop-invariants -fno-ipa-sra -fexpensive-optimizations -fno-schedule-insns2 -fno-ipa-pta -fno-tree-tail-merge -fno-tree-bit-ccp -fno-jump-tables -mcpu=arm946e-s -mtune=arm946e-s -march=armv5te
 OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS := -frename-registers -fno-inline-small-functions
 FIELD_ENEMY_PARTY_CFLAGS := -fconserve-stack
 FIELD_MAP_TELEPORT_CFLAGS := -fno-tree-forwprop
@@ -33,18 +34,21 @@ $(BUILD)/overworld_actor_system_overlay/overworld_behavior_resolver.o: \
 		-DOVERWORLD_BEHAVIOR_RESOLVER_EXTERNAL_VALIDATOR=1 \
 		-I$(INCLUDE_SUBDIR) -c $< -o $@
 
-$(BUILD)/overworld_actor_system_overlay/overworld_behavior_condition_shadow.o: \
-		lib/overworld/overworld_behavior_condition_shadow.c $(BUILD)/.compile-config \
+$(BUILD)/overworld_actor_system_overlay/overworld_behavior_condition_adapter.o: \
+		lib/overworld/overworld_behavior_condition_adapter.c $(BUILD)/.compile-config \
 		| $(BUILD)/overworld_actor_system_overlay venv toolchain-preflight
 	$(CC) -MMD -MF $(basename $@).d $(CFLAGS) -ffunction-sections \
-		-fno-tree-forwprop -fno-inline-small-functions \
+		-fno-tree-forwprop -fno-tree-dominator-opts \
+		-fno-inline-small-functions -frename-registers \
+		-mcpu=arm946e-s -mtune=arm946e-s -march=armv5te \
 		-I$(INCLUDE_SUBDIR) -c $< -o $@
 
 $(BUILD)/overworld_follower_selector_overlay/overworld_behavior_conditions.o: \
 		lib/overworld/overworld_behavior_conditions.c $(BUILD)/.compile-config \
 		| $(BUILD)/overworld_follower_selector_overlay venv toolchain-preflight
 	$(CC) -MMD -MF $(basename $@).d $(CFLAGS) -ffunction-sections \
-		-fno-tree-dominator-opts -DOVERWORLD_BEHAVIOR_RUNTIME_ONLY=1 \
+		-fno-tree-dominator-opts -frename-registers -fno-tree-tail-merge \
+		-DOVERWORLD_BEHAVIOR_RUNTIME_ONLY=1 \
 		-I$(INCLUDE_SUBDIR) -c $< -o $@
 
 $(BUILD)/overworld_follower_selector_overlay/overworld_behavior_condition_runtime.o: \
@@ -76,7 +80,7 @@ $(BUILD)/pokemon_move_history_task6_overlay/overworld_role_controller.o: \
 		-I$(INCLUDE_SUBDIR) -c $< -o $@
 
 -include $(BUILD)/overworld_actor_system_overlay/overworld_behavior_resolver.d
--include $(BUILD)/overworld_actor_system_overlay/overworld_behavior_condition_shadow.d
+-include $(BUILD)/overworld_actor_system_overlay/overworld_behavior_condition_adapter.d
 -include $(BUILD)/overworld_follower_selector_overlay/overworld_behavior_conditions.d
 -include $(BUILD)/overworld_follower_selector_overlay/overworld_behavior_condition_runtime.d
 -include $(BUILD)/overworld_actor_system_overlay/overworld_motion_model.d

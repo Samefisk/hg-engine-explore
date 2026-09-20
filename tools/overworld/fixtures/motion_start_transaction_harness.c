@@ -82,7 +82,7 @@ static BOOL MapObject_UpdateMovementCommand(LocalMapObject *object)
     return TRUE;
 }
 /* @IMMEDIATE@ */
-static const OverworldWildBehaviorProfileData *OverworldWildSpawns_GetBehaviorStateLane(const OverworldWildBehaviorProfile *profile, u8 state)
+static const OverworldWildBehaviorProfileData *OverworldWildSpawns_GetControllerLane(const OverworldWildBehaviorProfile *profile, u8 state)
 { (void)state; return &profile->lane; }
 static u8 OverworldWalk_DirectionKey(u8 direction) { return direction; }
 static u8 OverworldWalk_DiagonalFacing(LocalMapObject *object, u8 direction, u8 key)

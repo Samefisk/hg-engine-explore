@@ -37,6 +37,7 @@ POOL_MEASUREMENTS = frozenset({"pool-spawn-v1", "pool-spawn-surface-v1"})
 HEIGHT_CONTROL = "live-spawn-height-control-v1"
 ROUTE_CONTROL = "live-route-control-v1"
 RESOLVER_PARITY = "packaged-resolver-parity-v1"
+CONDITION_SERVICE = "packaged-condition-service-v1"
 ACTOR_INSPECT = "actor-inspect-handle-v1"
 CHAIN_RETRY = "chain-retry-v1"
 ACCELERATION = "acceleration-parity-v1"
@@ -79,6 +80,7 @@ CRASH_CONTROL = "live-crash-control-v1"
 CRASH_KINDS = {CRASH, CRASH_CONTROL}
 TURN_SKID = "turn-skid-v1"
 WILD_BATTLE_HANDOFF = "wild-battle-handoff-v1"
+CONDITION_CONTROLLER = "live-condition-controller-v1"
 RAW_BOUNDARY_MEASUREMENTS = frozenset({
     WALK_POLICY_CONTROL, MOUNT_PACING, MOUNT_CONTROL_STRESS,
     MOUNTED_HOP_ARC, MOUNTED_NEAREST_DIAGONAL, MOUNT_POSE_CONTROL,
@@ -87,10 +89,11 @@ RAW_BOUNDARY_MEASUREMENTS = frozenset({
     MOUNTED_HOP_TRANSITION, LAND_SURF, SPAWN_WORK_BUDGET, UNMOUNTED_ZERO_STUTTER,
     POPULATION_FAST_TRAVEL, MOUNTED_TELEPORT_MATRIX,
     WILD_CLEAR_CONTROL, TURN_SKID, WILD_BATTLE_HANDOFF, WARP_GATE,
+    CONDITION_CONTROLLER,
     *CORNER_KINDS, *MATRIX_KINDS, *STOMP_KINDS, *CRASH_KINDS,
 })
 PROFILE_MEASUREMENTS = POOL_MEASUREMENTS | {HEIGHT_CONTROL}
-RAW_MEASUREMENTS = frozenset({"unmounted-cadence-v1", "unmounted-game-cadence-v1", "center-entry-exit-v1", "cyndaquil-normal-setup-v1", ROUTE_CONTROL, RESOLVER_PARITY, ACTOR_INSPECT, ACCELERATION, WALK_POLICY_CONTROL, MOUNT_PACING, MOUNT_CONTROL_STRESS, MOUNTED_HOP_ARC, MOUNTED_NEAREST_DIAGONAL, MOUNT_POSE_CONTROL, WILD_WALK, WILD_LEDGE, WILD_TELEPORT, RUNNER_STOP_SKID, RUNNER_TURN_RUNWAY, WILD_TRANSITION, FOLLOWER_TRANSITION, MOUNTED_STREAMING, MOUNTED_CARDINAL_STREAMING, MOUNTED_WALK_TRANSITION, MOUNTED_HOP_TRANSITION, LAND_SURF, SPAWN_WORK_BUDGET, UNMOUNTED_ZERO_STUTTER, POPULATION_FAST_TRAVEL, MOUNTED_TELEPORT_MATRIX, WILD_CLEAR_CONTROL, TURN_SKID, WILD_BATTLE_HANDOFF, *CORNER_KINDS, *MATRIX_KINDS, *STOMP_KINDS, *CRASH_KINDS})
+RAW_MEASUREMENTS = frozenset({"unmounted-cadence-v1", "unmounted-game-cadence-v1", "center-entry-exit-v1", "cyndaquil-normal-setup-v1", ROUTE_CONTROL, RESOLVER_PARITY, CONDITION_SERVICE, ACTOR_INSPECT, ACCELERATION, WALK_POLICY_CONTROL, MOUNT_PACING, MOUNT_CONTROL_STRESS, MOUNTED_HOP_ARC, MOUNTED_NEAREST_DIAGONAL, MOUNT_POSE_CONTROL, WILD_WALK, WILD_LEDGE, WILD_TELEPORT, RUNNER_STOP_SKID, RUNNER_TURN_RUNWAY, WILD_TRANSITION, FOLLOWER_TRANSITION, MOUNTED_STREAMING, MOUNTED_CARDINAL_STREAMING, MOUNTED_WALK_TRANSITION, MOUNTED_HOP_TRANSITION, LAND_SURF, SPAWN_WORK_BUDGET, UNMOUNTED_ZERO_STUTTER, POPULATION_FAST_TRAVEL, MOUNTED_TELEPORT_MATRIX, WILD_CLEAR_CONTROL, TURN_SKID, WILD_BATTLE_HANDOFF, CONDITION_CONTROLLER, *CORNER_KINDS, *MATRIX_KINDS, *STOMP_KINDS, *CRASH_KINDS})
 MEASUREMENTS = frozenset({"ledyba-chain-v1", "live-observer-control-v1", "actor-binding-context-v1",
     HEIGHT_CONTROL, CHAIN_RETRY, MOUNT_CONTROL_STRESS, MOUNTED_HOP_ARC,
     MOUNTED_NEAREST_DIAGONAL, APPEAR_HOP}) | POOL_MEASUREMENTS | RAW_MEASUREMENTS
@@ -263,6 +266,7 @@ def validate_predicate(value, subject_ids):
                   POPULATION_FAST_TRAVEL: ("refilled",),
                   MOUNTED_TELEPORT_MATRIX: ("case-started", "case-complete"),
                   WARP_GATE: ("case-started", "case-complete", "teleports-complete", "walk-started", "arrived"),
+                  CONDITION_CONTROLLER: ("stale-target-observed",),
                   CHAIN_RETRY: ("baseline", "complete"),
                   ROUTE_CONTROL: ("baseline", "cpu-detected", "player-detected", "complete")}
         if value["stage"] not in stages.get(value["measurement"], ()):
@@ -331,8 +335,9 @@ def validate_test(value):
             raise ValueError("spawn observer cost is diagnostic-only prepared work with no requirements")
     value["budgets"] = _budget(value["budgets"], overall=True)
     resolver_case = value.get("measurements") == [{"kind": RESOLVER_PARITY}]
+    condition_case = value.get("measurements") == [{"kind": CONDITION_SERVICE}]
     inspect_case = value.get("measurements") == [{"kind": ACTOR_INSPECT, "subject": "mankey"}]
-    minimum_subjects = 1 if requirements and not resolver_case else 0
+    minimum_subjects = 1 if requirements and not (resolver_case or condition_case) else 0
     if not isinstance(value["subjects"], list) or not minimum_subjects <= len(value["subjects"]) <= 10:
         raise ValueError("test needs 1..10 declared subjects when it claims requirements; tools-only tests may use none")
     subjects = set()
@@ -397,6 +402,17 @@ def validate_test(value):
                 if phase != "actions" or value["mode"] != "prepared" \
                         or (op.endswith("arm") and action["args"]["subject"] not in subjects):
                     raise ValueError("wild ledge reader requires its bound prepared window")
+            elif op in ("condition-controller.fixture", "condition-controller.arm",
+                        "condition-controller.close"):
+                needs_subject = op.endswith("arm")
+                _shape(action["args"], {"subject"} if needs_subject else set(),
+                       label="condition controller args")
+                valid_phase = (op == "condition-controller.fixture" and phase == "setup"
+                               or op != "condition-controller.fixture" and phase == "actions")
+                if (not valid_phase or value["mode"] != "prepared"
+                        or needs_subject and action["args"]["subject"] not in subjects):
+                    raise ValueError(
+                        "condition controller requires its bound prepared window")
             elif op in ("mount-pacing.arm", "mount-pacing.recovery", "mount-pacing.close", "mount-pacing.calibrate"):
                 _shape(action["args"], {"subject"} if op.endswith("arm") else set(), label="mounted pacing args")
                 if phase != "actions" or value["mode"] not in ("prepared", "observer-control") or (op.endswith("arm") and action["args"]["subject"] not in subjects):
@@ -480,7 +496,8 @@ def validate_test(value):
                 action["args"] = validate_command(op, raw_args)
                 if until is not None: action["args"]["until"] = until
                 resolver_action = resolver_case and op == "resolver.probe" and phase == "actions" and value["mode"] == "prepared"
-                if op in PREPARED_OPS and not resolver_action and (phase != "setup" or value["mode"] == "normal"):
+                condition_action = condition_case and op == "condition.probe" and phase == "actions" and value["mode"] == "prepared"
+                if op in PREPARED_OPS and not (resolver_action or condition_action) and (phase != "setup" or value["mode"] == "normal"):
                     raise ValueError("prepared operations are allowed only in declared non-normal setup")
                 if op == "step" and action["args"]["frames"] > action["budget"]["maxFrames"]:
                     raise ValueError("step exceeds its frame budget")
@@ -514,6 +531,52 @@ def validate_test(value):
     if not isinstance(measurements, list) or len(measurements) > 1:
         raise ValueError("test permits at most one implemented measurement")
     for measurement in measurements:
+        if (isinstance(measurement, dict)
+                and measurement.get("kind") == CONDITION_CONTROLLER):
+            _shape(measurement, {"kind", "subject"},
+                   label="condition controller measurement")
+            subject = measurement["subject"]
+            expected_wait = {
+                "kind": "measurement-stage",
+                "measurement": CONDITION_CONTROLLER,
+                "stage": "stale-target-observed",
+                "when": "final",
+            }
+            if (value["mode"] != "prepared"
+                    or value["requirements"] != ["current.live-condition-controller"]
+                    or value["subjects"] != [{
+                        "id": subject, "species": 70,
+                        "role": "WILD", "acquire": "spawn",
+                    }]
+                    or value["budgets"]["maxFrames"] > 600
+                    or [action["op"] for action in value["setup"]] != [
+                        "teleport", "spawn", "spawn", "bind",
+                        "condition-controller.fixture",
+                    ]
+                    or [action["op"] for action in value["actions"]] != [
+                        "condition-controller.arm", "wait",
+                        "condition-controller.close",
+                    ]
+                    or value["actions"][0]["args"] != {"subject": subject}
+                    or value["actions"][1]["args"] != {"predicate": expected_wait}
+                    or value["actions"][2]["args"] != {}
+                    or value["assertions"] != [{
+                        "kind": "measurement-complete",
+                        "measurement": CONDITION_CONTROLLER,
+                        "when": "final",
+                    }]):
+                raise ValueError(
+                    "condition controller requires its exact Wild caller fixture")
+            follower = value["setup"][1]["args"]
+            wild = value["setup"][2]["args"]
+            if (value["setup"][4]["args"] != {}
+                    or follower.get("species") != 174
+                    or follower.get("role") != "follower"
+                    or wild.get("species") != 70
+                    or wild.get("role") != "wild"
+                    or value["setup"][3]["args"] != {"subject": subject}):
+                raise ValueError("condition controller actor setup differs")
+            continue
         if isinstance(measurement, dict) and measurement.get("kind") == WARP_GATE:
             from tools.overworld.devtools_warp_gate_recipe import validate_recipe
             validate_recipe(value, measurement)
@@ -852,14 +915,11 @@ def validate_test(value):
             expected_stage = {"kind": "measurement-stage", "measurement": SPAWN_WORK_BUDGET,
                               "stage": "complete", "when": "final"}
             route = [
-                ("move-up", "UP", 10, 96),
-                ("move-left-1", "LEFT", 19, 96),
-                ("move-right-1", "RIGHT", 30, 112),
-                ("move-down-2", "DOWN", 40, 112),
-                ("move-up-3", "UP", 50, 112),
-                ("move-down-3", "DOWN", 60, 112),
-                ("move-up-4", "UP", 70, 112),
-                ("move-down-4", "DOWN", 80, 112),
+                ("route-up", "UP", 8, 64),
+                ("route-left-city", "LEFT", 28, 128),
+                ("route-up-city", "UP", 33, 64),
+                ("route-left-window", "LEFT", 55, 128),
+                ("route-down-window", "DOWN", 64, 64),
             ]
             if value["mode"] != "normal" \
                     or value["requirements"] != ["shared.spawn-work-budget-v1"] \
@@ -1179,6 +1239,12 @@ def validate_test(value):
                     or len(value["actions"]) != 1 or value["actions"][0]["op"] != "resolver.probe":
                 raise ValueError("resolver parity requires one fixed prepared probe and no actor/setup detour")
             continue
+        if isinstance(measurement, dict) and measurement.get("kind") == CONDITION_SERVICE:
+            _shape(measurement, {"kind"}, label="condition service measurement")
+            if value["subjects"] or value["setup"] or value["mode"] != "prepared" \
+                    or len(value["actions"]) != 1 or value["actions"][0]["op"] != "condition.probe":
+                raise ValueError("condition service requires one fixed prepared probe and no actor/setup detour")
+            continue
         if isinstance(measurement, dict) and measurement.get("kind") == ROUTE_CONTROL:
             _shape(measurement, {"kind", "subject", "setupTransitions"}, label="route control measurement")
             from tools.overworld.devtools_route_control_measurement import LiveRouteControlMeasurement
@@ -1247,6 +1313,10 @@ def validate_test(value):
             raise ValueError("wild Walk action needs its exact measurement")
         if op.startswith("wild-ledge.") and WILD_LEDGE not in declared:
             raise ValueError("wild ledge action needs its exact measurement")
+        if (op.startswith("condition-controller.")
+                and CONDITION_CONTROLLER not in declared):
+            raise ValueError(
+                "condition controller action needs its exact measurement")
         if op.startswith("mount-pacing.") and not {MOUNT_PACING, MOUNT_POSE_CONTROL}.intersection(declared):
             raise ValueError("mounted pacing action needs its exact measurement")
         if op.startswith("hop-arc.") and not {MOUNTED_HOP_ARC, MOUNTED_NEAREST_DIAGONAL}.intersection(declared):
@@ -1436,6 +1506,16 @@ class TestEvaluator:
                 from tools.overworld.devtools_wild_ledge_measurement import WildLedgeMeasurement
                 self.measurements[kind] = WildLedgeMeasurement(max_frames=self.test["budgets"]["maxFrames"])
                 continue
+            if kind == CONDITION_CONTROLLER:
+                if source != {"contractVersion": 1}:
+                    raise ValueError(
+                        "condition controller contract input is missing")
+                from tools.overworld.devtools_condition_controller_measurement import (
+                    ConditionControllerMeasurement,
+                )
+                self.measurements[kind] = ConditionControllerMeasurement(
+                    self.test, max_frames=self.test["budgets"]["maxFrames"])
+                continue
             if kind == WILD_TELEPORT:
                 if source != {"contractVersion": 1}:
                     raise ValueError("wild Teleport contract input is missing")
@@ -1590,6 +1670,12 @@ class TestEvaluator:
                 from tools.overworld.devtools_resolver_measurement import ResolverMeasurement
                 self.measurements[kind] = ResolverMeasurement(self.test)
                 continue
+            if kind == CONDITION_SERVICE:
+                if source != {"contractVersion": 1}:
+                    raise ValueError("condition service raw-record contract input is missing")
+                from tools.overworld.devtools_condition_measurement import ConditionMeasurement
+                self.measurements[kind] = ConditionMeasurement(self.test)
+                continue
             if kind == ACTOR_INSPECT:
                 if source != {"contractVersion": 1}:
                     raise ValueError("actor Inspect raw-record contract input is missing")
@@ -1698,6 +1784,34 @@ class TestEvaluator:
                     self.latest = deepcopy(snapshot)
                 # This controlled service contract measures native cycles that
                 # contain its seven calls, not rendered frames or boot padding.
+                self.frames = measured["observedFrames"]
+                self.sampled_frames = measured["observedFrames"]
+                return self.result(full_report=full_report)
+            if meter_kind == CONDITION_SERVICE:
+                if not isinstance(record, dict):
+                    raise ValueError("condition service raw record must be an object")
+                if record.get("command") is not None:
+                    action = self.test["actions"][0]
+                    if record.get("command") != "condition.probe" \
+                            or record.get("phase") != "observe" \
+                            or record.get("action") != action["id"] \
+                            or self.latest is None:
+                        raise ValueError(
+                            "condition receipt must name its exact declared action")
+                elif "initialSnapshot" in record:
+                    if self.latest is not None:
+                        raise ValueError("duplicate condition initial boundary")
+                else:
+                    raise ValueError("unexpected condition service raw record")
+                measured = meter.observe_record(record)
+                if measured["failures"]:
+                    self.fail("measurement-failed", meter_kind,
+                              measured["failures"])
+                snapshot = record.get("snapshot", record.get("initialSnapshot"))
+                if snapshot is not None:
+                    self.latest = deepcopy(snapshot)
+                # This subjectless service contract measures only native
+                # cycles occupied by its fixed prepare/evaluate calls.
                 self.frames = measured["observedFrames"]
                 self.sampled_frames = measured["observedFrames"]
                 return self.result(full_report=full_report)
@@ -1960,6 +2074,14 @@ class TestEvaluator:
         return validate_command("wild-ledge.arm", {
             "subject": select_current_actor(snapshot, self.subjects[subject]),
             "maxFrames": self.test["budgets"]["maxFrames"]})
+
+    def condition_controller_args(self, subject, snapshot):
+        if CONDITION_CONTROLLER not in self.measurements or subject not in self.subjects:
+            raise ValueError("condition controller requires its bound subject")
+        return validate_command("condition-controller.arm", {
+            "subject": select_current_actor(snapshot, self.subjects[subject]),
+            "maxFrames": self.test["budgets"]["maxFrames"],
+        })
 
     def hop_arc_args(self, subject, snapshot):
         if not {MOUNTED_HOP_ARC, MOUNTED_NEAREST_DIAGONAL}.intersection(self.measurements) \
@@ -2252,6 +2374,40 @@ class TestEvaluator:
                     meter.arm(expected["subject"], snapshot, receipt, trace_sequences=self.last_sequence)
                 else:
                     meter.close(receipt, snapshot)
+            elif command == "condition-controller.fixture" \
+                    and meter_kind == CONDITION_CONTROLLER:
+                if (phase != "setup" or meter.initial is not None
+                        or not _same_mounted_reader_boundary(self.latest, snapshot)):
+                    raise ValueError(
+                        "condition controller fixture changed its completed boundary")
+                fixture = receipt.get("conditionController", {})
+                if (receipt.get("prepared") is not True
+                        or receipt.get("advancedFrames") != 0
+                        or receipt.get("acceptedProof") is not False
+                        or fixture.get("catalogPatch", {}).get("applied") is not True
+                        or fixture["catalogPatch"].get("restored") is not False
+                        or fixture.get("guestMemoryWriteBytes") != 3
+                        or fixture.get("guestMemoryWriteOperations") != 3):
+                    raise ValueError("condition controller fixture receipt differs")
+            elif command in ("condition-controller.arm",
+                              "condition-controller.close") \
+                    and meter_kind == CONDITION_CONTROLLER:
+                if (phase != "observe"
+                        or not _same_mounted_reader_boundary(self.latest, snapshot)):
+                    raise ValueError(
+                        "condition controller command changed its completed boundary")
+                if command.endswith("arm"):
+                    expected = self.condition_controller_args(
+                        action["args"]["subject"], snapshot)
+                    reader = receipt.get("conditionController", {})
+                    if (receipt.get("armed") is not True
+                            or receipt.get("advancedFrames") != 0
+                            or reader.get("subject") != expected["subject"]
+                            or reader.get("maxFrames") != expected["maxFrames"]):
+                        raise ValueError("condition controller arm receipt differs")
+                    meter.arm(expected["subject"], snapshot, receipt)
+                else:
+                    meter.close(snapshot, receipt)
             elif command.startswith("mount-pacing.") and meter_kind in (MOUNT_PACING, MOUNT_POSE_CONTROL):
                 if phase != "observe" or not _same_mounted_reader_boundary(snapshot, self.latest):
                     raise ValueError("mounted pacing command advanced or changed the boundary")
@@ -2381,6 +2537,14 @@ class TestEvaluator:
                     # saved follower and permits only an exact next-field
                     # rebind. Publish that current canonical selection before
                     # the shared replay callback verifies engine membership.
+                    subject_id = self.test["measurements"][0]["subject"]
+                    self.subjects[subject_id] = select_current_actor(
+                        snapshot, report["subject"])
+                if meter_kind == SPAWN_WORK_BUDGET and report.get("subject"):
+                    # This meter owns the reviewed Route 30 -> Cherrygrove
+                    # crossing and proves the same follower identity on both
+                    # sides. Publish its current handle before the independent
+                    # replay callback checks field and engine membership.
                     subject_id = self.test["measurements"][0]["subject"]
                     self.subjects[subject_id] = select_current_actor(
                         snapshot, report["subject"])

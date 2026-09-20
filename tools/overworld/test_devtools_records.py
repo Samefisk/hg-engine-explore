@@ -91,8 +91,8 @@ def large_snapshot(frame=1):
              "terrainAttributesPointer": None}}
         for x in range(15) for z in range(15)]}
     sample["nativeObservation"] = {"resolvedProfiles": [
-        {"fingerprint": profile, "lanes": ["00" * 70] * 3,
-         "requestHex": "00" * 44, "resultHex": "00" * 256,
+        {"fingerprint": profile, "lanes": ["00" * 72] * 2,
+         "requestHex": "00" * 44, "resultHex": "00" * 200,
          "sourceSha256": "a" * 64, "appliedOverrides": 0, "resolved": True}
         for profile in range(6)]}
     return sample

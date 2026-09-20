@@ -6,6 +6,7 @@
 #include "../../include/map_events_internal.h"
 #include "../../include/overlay.h"
 #include "../../include/overworld_actor_system_internal.h"
+#include "../../include/overworld_behavior_condition_adapter.h"
 #include "../../include/overworld_mount_internal.h"
 #include "../../include/overworld_wild_spawns_internal.h"
 #include "../../include/overworld_wild_runtime.h"
@@ -63,6 +64,26 @@ OverworldWalk_DecelerateTime(
         "bx r3\n"
         ".align 2\n"
         "1: .word OverworldWalk_DecelerateTimeBody + 1\n");
+}
+
+void WALK_PUBLIC_CODE(".overworld_condition_trace")
+OverworldBehaviorConditionTrace_Record(
+    const OverworldActorHandle *subject,
+    const OverworldBehaviorConditionResult *result,
+    const OverworldBehaviorConditionEntryState *entryState,
+    u16 entryStateBits)
+{
+    OVERWORLD_ACTOR_SYSTEM_COMPAT_ENTRY->recordTrace(
+        subject,
+        OVERWORLD_ACTOR_EVENT_CONDITIONAL_RESOLVED,
+        result->winningConditionSourceApplication
+            | ((u16)result->resolvedTargetSourceApplication << 5)
+            | ((u16)result->resolvedTarget.kind << 10)
+            | entryStateBits,
+        result->winningConditionId
+            | ((u32)result->resolvedTarget.actor.slot << 16),
+        (u16)entryState->activeUntil
+            | ((u32)(u16)entryState->cooldownUntil << 16));
 }
 
 void __attribute__((naked)) WALK_PUBLIC_CODE(".overworld_walk_propose_step")
@@ -549,7 +570,7 @@ OverworldWalk_FilterMountedInput(
         || !Walk_MountCanControl(state, avatar)
         || (avatar->unk14 != WALK_PLAYER_MOVE_STATE_NONE
             && avatar->unk14 != WALK_PLAYER_MOVE_STATE_END)
-        || policy.pendingStep == OVERWORLD_ACTOR_WALK_PENDING_ACTIVE) {
+        || policy.pendingStep == OVERWORLD_ACTOR_WALK_PENDING_ACCEPTED) {
         return;
     }
     if (policy.pendingStep == OVERWORLD_ACTOR_WALK_PENDING_PROPOSAL) {

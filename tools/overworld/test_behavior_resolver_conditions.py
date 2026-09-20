@@ -109,7 +109,13 @@ int main(void)
     memcpy(blob, &gOverworldWildBehaviorDataBlob, sizeof(*blob));
     assert(blob->header.overrideProfileCount >= 4);
     assert(blob->header.conditionEntryCount >= 2);
+    memset(&request, 0, sizeof(request));
+    request.requestVersion = BEHAVIOR_RESOLVE_REQUEST_VERSION;
+    assert(BehaviorResolver_Resolve(
+        blob, sizeof(*blob), &request, &first, NULL)
+        == BEHAVIOR_RESOLVE_INVALID_CONTEXT);
     request = ExplicitRequest(0);
+    Resolve(blob, &request, &first, NULL);
     blob->header.version = OVERWORLD_WILD_BEHAVIOR_DATA_VERSION - 1;
     assert(BehaviorResolver_Resolve(
         blob, sizeof(*blob), &request, &first, NULL)

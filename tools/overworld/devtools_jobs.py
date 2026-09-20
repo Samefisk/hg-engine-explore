@@ -472,6 +472,10 @@ class TestJobs:
                                     receipt = self._command(op, evaluator.wild_walk_args(args["subject"], snapshot))
                                 elif op == "wild-ledge.arm":
                                     receipt = self._command(op, evaluator.wild_ledge_args(args["subject"], snapshot))
+                                elif op == "condition-controller.arm":
+                                    receipt = self._command(
+                                        op, evaluator.condition_controller_args(
+                                            args["subject"], snapshot))
                                 elif op == "mount-pacing.arm":
                                     receipt = self._command(op, evaluator.mount_pacing_args(args["subject"], snapshot))
                                 elif op == "hop-arc.arm":
@@ -517,7 +521,7 @@ class TestJobs:
                                     elif op == "mount-teleport.restore":
                                         args = evaluator.mount_teleport_restore_args(args, snapshot)
                                     receipt = self._command(op, args)
-                                endpoint = (deepcopy(snapshot) if op in ("acceleration.end", "walk-intent.close", "walk-policy-control.close", "mount-pacing.close", "hop-arc.close", "wild-walk.close", "wild-ledge.close", "walk-corner.close", "walk-matrix.close", "stomp.close") else
+                                endpoint = (deepcopy(snapshot) if op in ("acceleration.end", "walk-intent.close", "walk-policy-control.close", "mount-pacing.close", "hop-arc.close", "wild-walk.close", "wild-ledge.close", "condition-controller.close", "walk-corner.close", "walk-matrix.close", "stomp.close") else
                                             deepcopy(receipt["snapshot"]) if RAW_BOUNDARY_READERS.intersection(evaluator.measurements) else
                                             _command_snapshot(op, receipt, self.service.snapshot))
                                 command_record = {"phase": phase, "action": action["id"], "command": op,

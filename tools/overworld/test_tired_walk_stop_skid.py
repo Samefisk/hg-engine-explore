@@ -66,7 +66,6 @@ typedef struct OverworldWildBehaviorProfileData {
 typedef struct OverworldWildBehaviorProfile {
     u8 tiredState;
     OverworldWildBehaviorProfileData owner;
-    OverworldWildBehaviorProfileData active;
     OverworldWildBehaviorProfileData tired;
 } OverworldWildBehaviorProfile;
 typedef struct OverworldWildBehaviorPrimitives { u8 tiredLocomotion; } OverworldWildBehaviorPrimitives;
@@ -88,7 +87,7 @@ static BOOL OverworldWildSpawns_BehaviorKindUsesMovement(u8 tiredState)
     return tiredState == 1;
 }
 
-static const OverworldWildBehaviorProfileData *OverworldWildSpawns_GetBehaviorStateLane(
+static const OverworldWildBehaviorProfileData *OverworldWildSpawns_GetControllerLane(
     const OverworldWildBehaviorProfile *profile, u8 spotState)
 {
     return spotState == OW_WILD_SPAWNER_SPOT_STATE_TIRED

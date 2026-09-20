@@ -108,7 +108,8 @@ int main(void) {
                            capture_output=True, check=True)
             native = subprocess.run([executable], capture_output=True, check=True).stdout
         host = dict(zip(METADATA, range(3,12)))
-        host.update(profileHex="11"*144, primitivesHex="22"*8,
+        host.update(profileHex="11"*144,
+                    primitivesHex="22"*8,
                     resolvedTarget=dict(kind=0, actorSlot=0, actorGeneration=0,
                                         fieldEpoch=0, mapGeneration=0,
                                         encounterGeneration=0),

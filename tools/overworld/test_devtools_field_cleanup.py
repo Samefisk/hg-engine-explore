@@ -29,7 +29,7 @@ def elf_fixture(file, base, fault=None):
             (1 if section == ".text" else 2) if fault != "section" else 4)
         memory[address] = bytes(size)
         if key == "actorState":
-            memory[address] = struct.pack("<IHH", 0x5353574F, 1, size) + bytes(size - 8)
+            memory[address] = struct.pack("<IHH", 0x5353574F, 2, size) + bytes(size - 8)
     blob = bytearray(52)
     rows = [(0,) * 10]
     for name, kind, flags, address, content, size, link, entry in (
@@ -124,7 +124,7 @@ class CleanupReaderTests(unittest.TestCase):
         self.assertEqual(sum({"u32": 4, "u16": 2, "u8": 1}[t] for t, _ in fields), 24)
         self.assertIn("OVERWORLD_ACTOR_SYSTEM_OVERLAY_ID 158", public)
         self.assertIn("OVERWORLD_ACTOR_SYSTEM_STATE_MAGIC 0x5353574F", public)
-        self.assertIn("OVERWORLD_ACTOR_SYSTEM_ABI_VERSION 1", public)
+        self.assertIn("OVERWORLD_ACTOR_SYSTEM_ABI_VERSION 2", public)
         body = transition.split("typedef struct OverworldActorTransitionState {", 1)[1].split(
             "} OverworldActorTransitionState;", 1)[0]
         self.assertEqual(re.findall(r"(u32|u16|u8)\s+(\w+);", body), [

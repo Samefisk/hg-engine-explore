@@ -13,17 +13,19 @@ from tools.overworld.devtools_records import select_current_actor
 class Session:
     def __init__(self, role="WILD"):
         self.rt = SimpleNamespace(ACTOR_DESCRIPTOR={
+            "facade": dict(version=2),
             "state": dict(address=0x02010000, size=2448, actorStride=172,
                           actorPolicyOffset=140, offsets=dict(actors=68)),
             "structures": dict(actorPolicyState=32),
             "capacities": dict(actors=10), "privateServices": [dict(name="movementPolicy", status="available",
-                version=4, size=16, reserved=0, address=0x02030000, policy=0x02030100)]})
+                version=5, size=16, conditionAdapter=0x02030300,
+                address=0x02030000, policy=0x02030100)]})
         self.native_trampoline = {"address": 0x02040000}
         self.native_heap_generation = 1
         self.emu = object()
         self.memory, self.writes = {}, []
         self.put(0x02010000, bytes(2448))
-        self.put(0x02010000, struct.pack("<IHH", 0x5353574F, 1, 2448))
+        self.put(0x02010000, struct.pack("<IHH", 0x5353574F, 2, 2448))
         self.slot = 7 if role == "MOUNTED" else 0
         self.policy_address = 0x02010000 + 68 + self.slot * 172 + 140
         policy = bytearray(range(32))
@@ -51,7 +53,8 @@ class Session:
         assert name == "reduce_walk"
         return 0x02030200
     def packaged_code(self, address, size):
-        return {0x02030000: struct.pack("<IHHII", 0x504D574F, 4, 16, 0x02030100, 0),
+        return {0x02030000: struct.pack(
+                    "<IHHII", 0x504D574F, 5, 16, 0x02030100, 0x02030300),
                 0x02030100: self.table, 0x02030200: bytes(32)}[address]
     def require_quiescent(self): pass
     def _snapshot(self, *args, **kwargs):

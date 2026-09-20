@@ -13,8 +13,8 @@
   ],
   "budgets": {
     "maxSeconds": 180,
-    "maxFrames": 520,
-    "noProgressFrames": 480,
+    "maxFrames": 360,
+    "noProgressFrames": 320,
     "minObservedFrames": 120
   },
   "subjects": [
@@ -56,60 +56,42 @@
   ],
   "actions": [
     {
-      "id": "move-up",
+      "id": "route-up",
       "op": "step",
       "args": {
-        "frames": 96,
+        "frames": 64,
         "keys": ["UP"],
         "until": {
           "kind": "player-step-count",
           "operator": "eq",
-          "value": 10
+          "value": 8
         }
       },
-      "budget": {"maxSeconds": 40, "maxFrames": 96, "noProgressFrames": 32}
+      "budget": {"maxSeconds": 30, "maxFrames": 64, "noProgressFrames": 32}
     },
     {
-      "id": "move-left-1", "op": "step",
-      "args": {"frames": 96, "keys": ["LEFT"], "until": {
-        "kind": "player-step-count", "operator": "eq", "value": 19}},
-      "budget": {"maxSeconds": 40, "maxFrames": 96, "noProgressFrames": 32}
+      "id": "route-left-city", "op": "step",
+      "args": {"frames": 128, "keys": ["LEFT"], "until": {
+        "kind": "player-step-count", "operator": "eq", "value": 28}},
+      "budget": {"maxSeconds": 50, "maxFrames": 128, "noProgressFrames": 32}
     },
     {
-      "id": "move-right-1", "op": "step",
-      "args": {"frames": 112, "keys": ["RIGHT"], "until": {
-        "kind": "player-step-count", "operator": "eq", "value": 30}},
-      "budget": {"maxSeconds": 45, "maxFrames": 112, "noProgressFrames": 32}
+      "id": "route-up-city", "op": "step",
+      "args": {"frames": 64, "keys": ["UP"], "until": {
+        "kind": "player-step-count", "operator": "eq", "value": 33}},
+      "budget": {"maxSeconds": 30, "maxFrames": 64, "noProgressFrames": 32}
     },
     {
-      "id": "move-down-2", "op": "step",
-      "args": {"frames": 112, "keys": ["DOWN"], "until": {
-        "kind": "player-step-count", "operator": "eq", "value": 40}},
-      "budget": {"maxSeconds": 45, "maxFrames": 112, "noProgressFrames": 32}
+      "id": "route-left-window", "op": "step",
+      "args": {"frames": 128, "keys": ["LEFT"], "until": {
+        "kind": "player-step-count", "operator": "eq", "value": 55}},
+      "budget": {"maxSeconds": 50, "maxFrames": 128, "noProgressFrames": 32}
     },
     {
-      "id": "move-up-3", "op": "step",
-      "args": {"frames": 112, "keys": ["UP"], "until": {
-        "kind": "player-step-count", "operator": "eq", "value": 50}},
-      "budget": {"maxSeconds": 45, "maxFrames": 112, "noProgressFrames": 32}
-    },
-    {
-      "id": "move-down-3", "op": "step",
-      "args": {"frames": 112, "keys": ["DOWN"], "until": {
-        "kind": "player-step-count", "operator": "eq", "value": 60}},
-      "budget": {"maxSeconds": 45, "maxFrames": 112, "noProgressFrames": 32}
-    },
-    {
-      "id": "move-up-4", "op": "step",
-      "args": {"frames": 112, "keys": ["UP"], "until": {
-        "kind": "player-step-count", "operator": "eq", "value": 70}},
-      "budget": {"maxSeconds": 45, "maxFrames": 112, "noProgressFrames": 32}
-    },
-    {
-      "id": "move-down-4", "op": "step",
-      "args": {"frames": 112, "keys": ["DOWN"], "until": {
-        "kind": "player-step-count", "operator": "eq", "value": 80}},
-      "budget": {"maxSeconds": 45, "maxFrames": 112, "noProgressFrames": 32}
+      "id": "route-down-window", "op": "step",
+      "args": {"frames": 64, "keys": ["DOWN"], "until": {
+        "kind": "player-step-count", "operator": "eq", "value": 64}},
+      "budget": {"maxSeconds": 30, "maxFrames": 64, "noProgressFrames": 32}
     }
   ],
   "assertions": [

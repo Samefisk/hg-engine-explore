@@ -2276,7 +2276,7 @@ export function createProfilesController({
         ? { ...option, label: "0 — None" }
         : (valueRaw(option) === "33" ? { ...option, label: "/2 — Old rule" } : option));
     }
-    if (["chillAction", "movementStyle", "specialAction"].includes(fieldKey)
+    if (fieldKey === "chillAction"
         && TELEPORT_LOCOMOTIONS.has(String(currentRaw))) {
       options = options.filter((option) => {
         const raw = valueRaw(option);

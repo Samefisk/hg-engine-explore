@@ -45,7 +45,8 @@
 #define OW_WILD_FIELD_IDLE_FOLLOWER_REFILL_PENDING 0x04
 #define OW_WILD_SPAWN_AGGRO_FLAG 0x02
 #define OW_WILD_SPAWN_AGGRO_PENDING_FLAG 0x04
-#define OW_WILD_SPOT_STATE_ACTIVE 2
+#define OW_WILD_SPOT_STATE_OWNER 0
+#define OW_WILD_SPOT_STATE_RESERVED 2
 #define OW_WILD_SPOT_STATE_TIRED 3
 
 #define OW_WILD_FOLLOWER_RELEASE_NONE 0
@@ -198,8 +199,6 @@ typedef struct OverworldWildSpawnState {
     u8 movementEmoteBubbleIds[OW_WILD_MAX_SPAWNS];
     u8 movementEmoteShowBubbleEachJump[OW_WILD_MAX_SPAWNS];
     u8 movementEmotePlayCryOnHop[OW_WILD_MAX_SPAWNS];
-    u8 movementActiveSteps[OW_WILD_MAX_SPAWNS];
-    u8 movementSpotCooldowns[OW_WILD_MAX_SPAWNS];
     u8 movementBehaviorClasses[OW_WILD_MAX_SPAWNS];
     s16 movementPreviousTileX[OW_WILD_MAX_SPAWNS];
     s16 movementPreviousTileY[OW_WILD_MAX_SPAWNS];
@@ -253,6 +252,17 @@ typedef struct OverworldWildSpawnState {
     s16 followerReleaseY;
     u8 followerReleaseState;
 } OverworldWildSpawnState;
+
+typedef char OverworldWildActiveFollowerPartySlotOffsetMustRemain3A5[
+    offsetof(OverworldWildSpawnState, activeFollowerPartySlot) == 0x3A5
+        ? 1
+        : -1];
+typedef char OverworldWildCaptureTargetMaskOffsetMustRemain3A6[
+    offsetof(OverworldWildSpawnState, captureTargetMask) == 0x3A6 ? 1 : -1];
+typedef char OverworldWildFollowerReleaseStateOffsetMustRemain3AC[
+    offsetof(OverworldWildSpawnState, followerReleaseState) == 0x3AC
+        ? 1
+        : -1];
 
 u8 OverworldWildSpawns_ResolveWalkPause(
     const OverworldWildBehaviorProfileData *lane);

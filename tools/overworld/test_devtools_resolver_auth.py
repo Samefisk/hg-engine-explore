@@ -15,7 +15,7 @@ class ResolverAuthTests(unittest.TestCase):
             blob = b"test blob"
             (root / "build/OverworldWildBehaviorData.bin").write_bytes(blob)
             s = DevtoolsSession.__new__(DevtoolsSession)
-            service = dict(name="resolver", status="available", version=1, size=16,
+            service = dict(name="resolver", status="available", version=2, size=16,
                 address=0x02300000, callbacks=dict(resolve=0x02301001, inspectClass=0x02302001))
             s.rt = SimpleNamespace(REPO=root, ACTOR_DESCRIPTOR={"privateServices": [service]})
             discovery = dict(blobAddress=0x02200000, blobSize=len(blob), fieldPointer=0x02210000,
@@ -25,7 +25,7 @@ class ResolverAuthTests(unittest.TestCase):
             s.native_heap_generation = 7
             s.field_pointer = lambda: 0x02210000
             s.target = lambda name: 0x02301000
-            memory = {0x02300000: struct.pack("<IHHII", 0x5250574F,1,16,0x02301001,0x02302001),
+            memory = {0x02300000: struct.pack("<IHHII", 0x5250574F,2,16,0x02301001,0x02302001),
                       0x02301000: b"C"*32, 0x02200000: blob}
             s.packaged_code = lambda address, size: memory[address][:size]
             s.read = lambda address, size: memory[address][:size]

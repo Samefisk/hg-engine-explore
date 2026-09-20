@@ -4274,7 +4274,6 @@ static BOOL OverworldWildHelper_StartCarriedThrowTarget(
     targetObject = state->spawns[targetSlot].object;
     state->movementSpotStates[targetSlot] = 0;
     state->movementEmoteTimers[targetSlot] = 0;
-    state->movementActiveSteps[targetSlot] = 0;
     state->movementBehaviorClasses[targetSlot] = OW_WILD_BEHAVIOR_CLASS_PICKED_UP;
     MapObject_SetBits(targetObject, MAPOBJECTFLAG_UNK18);
     MapObject_ClearBits(targetObject, BIT_VANISH);

@@ -6,6 +6,8 @@ selected live follower is the actor used by mounted control.
 ## Sub-features
 
 - `profile-order` proves ordered override composition.
+- `condition-evaluation` proves the packaged condition service keeps the fixed
+  conditional-profile activation and target rules.
 - `profile-mounted-parity` proves the mounted Owner lane uses follower resolution.
 - `mount-current-follower` proves Select mounts the current highlighted follower.
 
@@ -28,6 +30,12 @@ Preconditions:
   Workshop results, including full bytes and ordered provenance. It has no
   actor subject. Its clock unit is native cycles containing resolver work,
   not completed game frames or movement soak. It does not prove live role callers.
+- **Packaged conditions.** Run `scripts/owctl scenario run profile.condition.packaged-rom-evaluator --json`.
+  This subjectless service test authenticates the ROM service and source blob,
+  then evaluates seven fixed cases over one guarded owned copy. It proves
+  overlap last-wins, application stacking, timed hold/cooldown/retrigger,
+  player and actor targets, stale/fresh handles, and copied-input Wild/Follower
+  parity. It does not prove either live role controller called the service.
 - **Mounted parity.** Run `scripts/owctl scenario run profile.resolve.follower-mounted-parity --json`. The resolved Owner lane and forced follower layer match.
 - **Current follower.** Run `scripts/owctl scenario run mount.begin-current-follower --json`. The live subject identity, encounter generation, unique object identity, resolved species, and control release all pass.
 - **Proof.** Read each returned manifest. A source-only resolver pass does not replace the current-follower S3 run.

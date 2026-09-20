@@ -447,7 +447,11 @@ def main() -> int:
     parser.add_argument("--force-host-build", action="store_true")
     parser.add_argument("--rule-removal-control", action="store_true",
                         help="omit one covered unconditional application and require unchanged goldens to reject it")
-    parser.add_argument("--scenario", choices=PROFILE_SCENARIOS)
+    parser.add_argument("--profile-case", dest="scenario",
+                        choices=PROFILE_SCENARIOS)
+    parser.add_argument("--scenario", dest="scenario",
+                        choices=PROFILE_SCENARIOS,
+                        help=argparse.SUPPRESS)
     arguments = parser.parse_args()
 
     root = Path(__file__).resolve().parents[1]

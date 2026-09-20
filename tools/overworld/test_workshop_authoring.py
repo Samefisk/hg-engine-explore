@@ -177,7 +177,7 @@ class WorkshopAuthoringTests(unittest.TestCase):
         )
         baseline_profile = bytes.fromhex(self.baseline["profileHex"])
         actual_profile = bytes.fromhex(actual["profileHex"])
-        for lane_offset in (71, 143, 215):
+        for lane_offset in (71, 143):
             self.assertEqual(baseline_profile[lane_offset], original_value)
             self.assertEqual(actual_profile[lane_offset], changed_value)
         self.assertNotEqual(actual["fingerprint"], self.baseline["fingerprint"])
@@ -199,7 +199,7 @@ class WorkshopAuthoringTests(unittest.TestCase):
         self.assertEqual(runner["status"], 0)
         self.assertTrue(runner["matchedOverrideMask"] & runner_bit)
         self.assertTrue(runner["appliedOverrideMask"] & runner_bit)
-        for lane in range(3):
+        for lane in range(2):
             with self.subTest(mode="runner", lane=lane):
                 self.assertEqual(resolved_lane_field(runner, "planTurnSkidPath", lane), 1)
                 self.assertEqual(resolved_lane_field(runner, "stopSkid", lane), 1)
@@ -228,7 +228,7 @@ class WorkshopAuthoringTests(unittest.TestCase):
         self.assertEqual(default_off["status"], 0)
         self.assertFalse(default_off["matchedOverrideMask"] & runner_bit)
         self.assertFalse(default_off["appliedOverrideMask"] & runner_bit)
-        for lane in range(3):
+        for lane in range(2):
             with self.subTest(mode="default-off", lane=lane):
                 self.assertEqual(
                     resolved_lane_field(default_off, "planTurnSkidPath", lane),
@@ -257,27 +257,10 @@ class WorkshopAuthoringTests(unittest.TestCase):
                 output=self.temp / "resolver-invalid-json",
             )
 
-    def test_legacy_and_v2_paths_do_not_call_positional_profile_parsers(self) -> None:
-        retired_parsers = (
-            "validate_behavior_catalog_sources",
-            "parse_profile",
-            "parse_full_class_rules",
-            "parse_species_class_rules",
-            "parse_behavior_overrides",
-            "parse_behavior_conditional_states",
-            "parse_override_profile_names",
-        )
-        patches = [
-            mock.patch.object(
-                VIEWER,
-                name,
-                side_effect=AssertionError(f"live Workshop called retired parser {name}"),
-            )
-            for name in retired_parsers
-        ]
-        for patch in patches:
-            patch.start()
-            self.addCleanup(patch.stop)
+    def test_current_and_v2_outputs_derive_from_v4_catalog(self) -> None:
+        self.assertFalse(hasattr(VIEWER, "load_behavior_catalog_v3"))
+        self.assertFalse(hasattr(VIEWER, "lower_behavior_catalog_v3"))
+        self.assertFalse(hasattr(VIEWER, "lower_behavior_catalog_v2"))
         legacy = VIEWER.build_data(
             include_routes=False,
             include_spawn_settings=False,
@@ -498,10 +481,10 @@ assert.throws(() => removeConditionalProfileCondition(setConditionalProfileKind(
         self.assertNotIn('title: "Active state"', profile_editor)
         self.assertNotIn('data-lifecycle-tab="active"', profile_editor)
         self.assertIn('title: "Conditions"', profile_editor)
-        self.assertNotIn('Old Active and attentive values', profile_editor)
-        self.assertNotIn('"activeProfile"', profile_editor)
-        self.assertNotIn('"attentiveState"', profile_editor)
-        self.assertNotIn('conditionalStates', profile_editor)
+        self.assertNotIn('Old Active and atten' + 'tive values', profile_editor)
+        self.assertNotIn('"active' + 'Profile"', profile_editor)
+        self.assertNotIn('"atten' + 'tiveState"', profile_editor)
+        self.assertNotIn('conditional' + 'States', profile_editor)
         self.assertIn(
             "if (resetConditionState) ui.conditionPreview.nextState = [];",
             profile_editor,

@@ -817,7 +817,7 @@
       "evaluator": "spawn-work-budget-v1",
       "proofLevel": "S3",
       "mode": "normal",
-      "recipeSha256": "c12394512225217cfb28c8bc677944a3d2e68fe2e5ab9f0c01c0f701948d6d4d",
+      "recipeSha256": "1d917c10384fe6b38948e9ad47809af6c6a5580247597df0ffaf1c36b26ad408",
       "requirements": [
         "shared.spawn-work-budget-v1"
       ],
@@ -844,7 +844,7 @@
             "operator": "eq",
             "type": "array",
             "validator": "meaningful-observation",
-            "expected": [1, "WILD", 19, 1]
+            "expected": [1, "WILD", 163, 1]
           }
         ],
         "profile-resolution": [
@@ -932,11 +932,11 @@
             "minimum": 4
           },
           {
-            "name": "spawn-work-entry-normal-walk-evidence",
+            "name": "spawn-work-entry-normal-hop-evidence",
             "operator": "eq",
             "type": "array",
             "validator": "meaningful-observation",
-            "expected": [3, 1, 1, 1, 1, 1, 1, 1]
+            "expected": [4, 1]
           },
           {
             "name": "spawn-work-entry-distance-progress",
@@ -1009,7 +1009,7 @@
       },
       "minimumObservedFrames": 120,
       "recorderControlRequirement": null,
-      "scope": "Unchanged direct save load at Route 30 (585,406), read-only binding of the saved Mankey follower, then travel north and east to the clear lane and keep moving north-south through the first automatic population scan. One natural helper-owned queue attempt must resolve and prepare its profile once, begin an explicit destination scan with zero terrain-matcher queries, then resume the same prepared attempt with no repeated profile work across 20 batches of at most 12 observed terrain-matcher queries per completed game update. The next update must create one prepared Rattata at A between 1 and 16 cardinal tiles from B, with A at least four tiles beyond the player-relative camera extent. The exact actor must use normal Walk base speed, acceleration, Movement Chain, turn, pause, resume, and tired behavior while logical and rendered positions progress at least four tiles toward B. At least 120 measured player samples must be in transit. Every measured main loop must stay at or below two native cycles; one late loop fails. The extracted-C checks own the exact 240-candidate mask coverage. Setup gives no population, scan, movement, or pacing credit."
+      "scope": "Unchanged direct save load at Route 30 (585,406), read-only binding of the saved Mankey follower, then the reviewed natural crossing into Cherrygrove and continued held movement through the first automatic explicit destination scan. One natural helper-owned queue attempt must resolve and prepare its profile once, begin with zero terrain-matcher queries, then resume the same prepared attempt with no repeated profile work across 20 batches of at most 12 observed terrain-matcher queries per completed game update. The next update must create one prepared Hoothoot at A between 1 and 16 cardinal tiles from B, with A at least four tiles beyond the player-relative camera extent. Its normal spawn Hop must move logical and rendered positions at least four tiles toward B. At least 120 measured player samples must be in transit. Every measured main loop must stay at or below two native cycles; one late loop fails. The extracted-C checks own the exact 240-candidate mask coverage. Setup gives no population, scan, movement, or pacing credit."
     },
     "profile.owner-reader-control": {
       "evaluator": "owner-reader-control-v1",
@@ -1046,7 +1046,7 @@
       "evaluator": "packaged-resolver-parity-v1",
       "proofLevel": "S3",
       "mode": "prepared",
-      "recipeSha256": "c7fe5b6e027fd526c27738cecea6da8624e0392c3e0ae78663ed0090b27a2dff",
+      "recipeSha256": "64419ce1803f883ba0e9c0e740dd1f2dd3c1eee51ee691f5bb3316e519a4b952",
       "requirements": [
         "legacy.packaged-resolver-parity"
       ],
@@ -1054,7 +1054,56 @@
         "profile-resolution"
       ],
       "minimumObservedFrames": 1,
-      "scope": "Seven authenticated native resolver calls compared byte-for-byte and by ordered provenance with Workshop on the same blob. Observed frame unit is native cycles containing resolver work, not completed queues, boot padding, actor identity, or movement soak."
+      "scope": "Eight authenticated native resolver calls compared byte-for-byte and by ordered provenance with Workshop on the same blob. Observed frame unit is native cycles containing resolver work, not completed queues, boot padding, actor identity, or movement soak."
+    },
+    "profile.condition.packaged-rom-evaluator": {
+      "evaluator": "packaged-condition-service-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "3d725e3f5fed8c6a0db2e8d50187d30afb8965684d6f7a109540ab49b171f267",
+      "requirements": [
+        "shared.packaged-condition-service-v1"
+      ],
+      "claims": [
+        "profile-resolution"
+      ],
+      "minimumObservedFrames": 1,
+      "recorderControlRequirement": null,
+      "measurementContract": {
+        "profile-resolution": [
+          {"name": "packaged-condition-service-entry", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+          {"name": "authenticated-condition-source-blob", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+          {"name": "condition-overlap-last-wins", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+          {"name": "conditional-application-stacking", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+          {"name": "timed-hold-cooldown-retrigger", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+          {"name": "condition-player-target", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+          {"name": "condition-actor-target-lifecycle", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+          {"name": "copied-subject-role-parity", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+          {"name": "owned-condition-buffer-cleanup", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+          {"name": "condition-native-call-boundaries", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}
+        ]
+      },
+      "scope": "Seven authenticated native condition-service cases use one guarded 1,536-byte input/output buffer and a temporary three-range catalog fixture that must restore the complete source blob before cleanup. This proves overlap order, application stacking, timed hold/cooldown/retrigger, player and actor target handling, stale/fresh handles and copied-input Wild/Follower parity. It grants no live role-caller, intent, movement or soak credit."
+    },
+    "profile.condition.live-wild-controller": {
+      "evaluator": "live-condition-controller-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "79c9ac1bc3ab8d28fdad19152e48cfd3edf96d92a0a225df1eaba69a000df50a",
+      "requirements": [
+        "current.live-condition-controller"
+      ],
+      "claims": [
+        "live-actor-identity",
+        "profile-resolution",
+        "engine-boundary",
+        "controlled-action",
+        "logical-commit",
+        "control-release"
+      ],
+      "minimumObservedFrames": 8,
+      "recorderControlRequirement": null,
+      "scope": "One controlled live Wild Weepinbell caller resolves the unchanged Ambush Plant conditional profile against one live Follower target at idle intent boundaries, completes one 11-frame two-tile Hop from the authored hopTime 6 toward it, then rejects one condition-owned stale target after control returns. The disposable fixture changes three target-predicate bytes, clears only that condition's retained state before its first observed call, and restores the catalog bytes before cleanup. This grants no Follower-caller or mounted-target-exclusion credit."
     },
     "world.unmounted.long-travel-cadence": {
       "evaluator": "unmounted-cadence-v1",
@@ -1456,6 +1505,8 @@
     "legacy.mounted-transition": "controlled-case",
     "legacy.mounted-walk-transition": "controlled-case",
     "legacy.packaged-resolver-parity": "controlled-case",
+    "shared.packaged-condition-service-v1": "controlled-case",
+    "current.live-condition-controller": "controlled-case",
     "legacy.population-after-fast-travel": "controlled-case",
     "legacy.stomp": "controlled-case",
     "legacy.teleport-timing": "controlled-case",
@@ -1654,6 +1705,17 @@
     ],
     "legacy.packaged-resolver-parity": [
       "profile-resolution"
+    ],
+    "shared.packaged-condition-service-v1": [
+      "profile-resolution"
+    ],
+    "current.live-condition-controller": [
+      "live-actor-identity",
+      "profile-resolution",
+      "engine-boundary",
+      "controlled-action",
+      "logical-commit",
+      "control-release"
     ],
     "legacy.population-after-fast-travel": [
       "natural-input",
@@ -4096,6 +4158,76 @@
           "type": "array",
           "validator": "packaged-resolver-parity-v1",
           "aspect": "provenance"
+        }
+      ]
+    },
+    "shared.packaged-condition-service-v1": {
+      "profile-resolution": [
+        {"name": "packaged-condition-service-entry", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "authenticated-condition-source-blob", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "condition-overlap-last-wins", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "conditional-application-stacking", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "timed-hold-cooldown-retrigger", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "condition-player-target", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "condition-actor-target-lifecycle", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "copied-subject-role-parity", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "owned-condition-buffer-cleanup", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "condition-native-call-boundaries", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}
+      ]
+    },
+    "current.live-condition-controller": {
+      "live-actor-identity": [
+        {
+          "name": "live-wild-condition-subject",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "conditional-profile-and-target-used",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "engine-boundary": [
+        {
+          "name": "conditions-only-at-intent-boundaries",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "controlled-action": [
+        {
+          "name": "stale-condition-target-fails-closed",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "conditional-hop-commit",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "control-release": [
+        {
+          "name": "control-return-before-stale-recheck",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
         }
       ]
     },

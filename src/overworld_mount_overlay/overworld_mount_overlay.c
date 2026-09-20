@@ -904,7 +904,7 @@ OverworldMount_CommitWalkBoundary(FIELD_PLAYER_AVATAR *avatar)
     output.operation = OVERWORLD_ACTOR_WALK_POLICY_COMMIT;
     output.direction = policy.walkMomentum.direction;
     output.distance = 1;
-    output.flags = OVERWORLD_ACTOR_WALK_POLICY_FLAG_WALK_ACTIVE;
+    output.flags = OVERWORLD_ACTOR_WALK_POLICY_FLAG_WALK_ACCEPTED;
     if (!OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY->policy
             ->terminalWalk(
                 &output,
@@ -961,7 +961,7 @@ OverworldMount_CompletePendingStep(FIELD_PLAYER_AVATAR *avatar)
 
     (void)OverworldActorPolicy_Inspect(OW_WILD_FOLLOWER_SLOT, &policy);
     if (policy.pendingStep
-            != OVERWORLD_ACTOR_WALK_PENDING_ACTIVE
+            != OVERWORLD_ACTOR_WALK_PENDING_ACCEPTED
         || avatar == NULL
         || (endState & OVERWORLD_MOUNT_WALK_END_PENDING) == 0) {
         return FALSE;
@@ -1976,7 +1976,7 @@ OverworldMount_TryHandleDiagonalWalk(
         return FALSE;
     }
     if (policy.pendingStep
-        == OVERWORLD_ACTOR_WALK_PENDING_ACTIVE) {
+        == OVERWORLD_ACTOR_WALK_PENDING_ACCEPTED) {
         /* A flat diagonal tile still owns the stock movement-end boundary.
          * Do not start its successor before that boundary updates skid and
          * acceleration state. */
@@ -2331,7 +2331,7 @@ static BOOL __attribute__((used)) OverworldMount_Tick(
     OverworldMount_ResumeCustomMotionAfterMapTransition();
     (void)OverworldActorPolicy_Inspect(OW_WILD_FOLLOWER_SLOT, &policy);
     if (policy.pendingStep
-            == OVERWORLD_ACTOR_WALK_PENDING_ACTIVE
+            == OVERWORLD_ACTOR_WALK_PENDING_ACCEPTED
         && policy.walkMomentum.skidRemaining == 0) {
         u8 requestedDirection = OverworldMount_GetInputDirection(physicalKeys);
 

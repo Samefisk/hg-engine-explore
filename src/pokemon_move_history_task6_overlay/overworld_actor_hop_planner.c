@@ -36,9 +36,6 @@ OverworldActorHopPlanner_GetLane(
     const OverworldWildBehaviorProfile *profile,
     u8 spotState)
 {
-    if (spotState == OW_WILD_SPAWNER_SPOT_STATE_ACTIVE) {
-        return &profile->active;
-    }
     if (spotState == OW_WILD_SPAWNER_SPOT_STATE_TIRED) {
         return &profile->tired;
     }

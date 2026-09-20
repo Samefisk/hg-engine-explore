@@ -223,10 +223,10 @@ static OverworldMotionDecision HostPlan(HostRequest *request)
         request->candidateCount++;
         decision = CandidateDecision(candidate.rejectionFlags, call->flags);
         if (decision == OVERWORLD_MOTION_DECISION_ACCEPTED) {
-            u8 movementStyle = call->lane->bytes[12];
+            u8 locomotion = call->lane->bytes[12];
             u16 duration = call->lane->bytes[23];
 
-            if (movementStyle >= 10) {
+            if (locomotion >= 10) {
                 duration = (u16)(duration * distance);
             }
             memset(request->plan, 0, sizeof(*request->plan));
@@ -243,7 +243,7 @@ static OverworldMotionDecision HostPlan(HostRequest *request)
             request->plan->duration = duration;
             request->plan->direction = direction;
             request->plan->distance = distance;
-            request->plan->visibilityPolicy = (u8)(2 - (movementStyle & 1));
+            request->plan->visibilityPolicy = (u8)(2 - (locomotion & 1));
             request->plan->pauseFrames = call->lane->bytes[24];
             request->plan->pathAdvancePolicy = call->pathAdvancePolicy;
             request->selectedIndex = index;

@@ -43,8 +43,7 @@ capabilities, attitudes, style traits, Follower/Mount, and modifiers last. A
 later layer may refine an earlier result, so do not append a capability after
 an attitude merely to avoid moving an existing application. The resolver uses
 the application array order; profile definition order does not compose the
-behavior. Keep a conditional or lane-only helper beside the layer that owns
-it.
+behavior. Keep a conditional helper beside the layer that owns it.
 
 Profiles compose only through their local operators. A parent supplies
 authoring inheritance; profile applications create the behavior stack. One
@@ -57,19 +56,18 @@ already cleanly separated. Inspect a reused profile's local operators. Preserve
 its established result unless the requested behavior needs a split; do not
 turn ordinary behavior work into an unrelated taxonomy cleanup.
 
-### State lanes
+### Conditions and lanes
 
-Design the Owner, Active, and Tired results, not only the Owner result. Normal
-matching applications contribute to all three lanes. The applications selected
-by `activeProfile` and `tiredProfile` are then reapplied after the normal
-applications in their linked lanes. Conditional applications are applied after
-those lane references, so a conditional capability can still change all three
-lanes.
+Design the Owner and Tired results. There is no Active lane. A conditional
+profile changes the same resolved Owner/Tired behavior only while one of its
+owned conditions is active. Entries inside one profile are independent and the
+last listed active entry wins. Different conditional profiles compose in normal
+application order.
 
-Decide which states should keep each archetype, capability, attitude, or style
-change. Change a lane reference only when that precedence is intended; do not
-self-link every new profile by habit. Resolve all three lanes and confirm that
-an overlapping linked profile did not erase the desired result.
+Decide whether a response is while-true or timed. For timed responses, choose
+duration and cooldown separately. Choose whether the condition targets the
+player, one matching Pokémon, or no target. The controller evaluates at the
+next intent boundary and never interrupts an accepted motion.
 
 ### Archetype
 
@@ -143,7 +141,8 @@ For an implementation request, read and follow
 [`author-overworld-profile`](../author-overworld-profile/SKILL.md). Use the
 named catalog, selectors, applications, and resolver proof from that skill.
 Keep the application's order consistent with the full layer model and inspect
-the final Active and Tired lanes. If a requested behavior needs a mechanic that the
+the final Owner and Tired lanes plus condition and target provenance. If a
+requested behavior needs a mechanic that the
 profile schema or runtime does not support, name that product gap; do not fake
 it with an unrelated field.
 

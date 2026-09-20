@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "population.spawn-work-budget",
-  "title": "Automatic spawn work and Move entry keep normal behavior",
+  "title": "Automatic spawn work stays bounded through a field crossing",
   "status": "active",
   "capabilities": [
     "profile.composition",
@@ -14,8 +14,8 @@
     "kind": "normal-play",
     "expectationSource": "documentation/overworld-system/verification.md#spawn-work-budget-and-proof-freshness",
     "actor": "One ordinary automatic Wild population attempt using its current resolved profile and explicit destination mask; any successful spawn remains bound to its own encounter identity and site.",
-    "trigger": "Load the unchanged Route 30 save, reach the clear north-south lane, then keep moving through the first natural explicit destination scan.",
-    "observable": "The player keeps changing exact sub-tile position while the first scan runs. The scan resolves and prepares its profile, metadata, and class exactly once. It starts with zero terrain-matcher queries, then completes 20 resumed batches with at most 12 observed terrain-matcher queries each. The next update creates the prepared actor at A between 1 and 16 cardinal tiles from B, with A at least four tiles beyond the player-relative camera extent. The exact actor uses normal Walk base speed, acceleration, Movement Chain, turn, pause, resume, and tired behavior while its logical and rendered positions progress toward B. Every measured main loop stays at the normal two-cycle pace.",
+    "trigger": "Load the unchanged Route 30 save, cross into Cherrygrove through normal input, then keep moving through the first natural explicit destination scan.",
+    "observable": "The player keeps changing exact sub-tile position while the first scan runs. The scan resolves and prepares its profile, metadata, and class exactly once. It starts with zero terrain-matcher queries, then completes 20 resumed batches with at most 12 observed terrain-matcher queries each. The next update creates the prepared Hoothoot at A between 1 and 16 cardinal tiles from B, with A at least four tiles beyond the player-relative camera extent. Its normal spawn Hop moves its logical and rendered positions toward B. Every measured main loop stays at the normal two-cycle pace.",
     "setupAudit": "complete",
     "setupMutations": [
       {
@@ -29,7 +29,7 @@
       "A population count, idle route, helper-only attempt, or host wall-clock sample cannot pass this claim. The run must observe one real helper-to-explicit-scanner handoff and the complete explicit scan.",
       "The route must include at least 120 in-transit samples. One unchanged exact player position during an admitted movement fails.",
       "Known-bad controls with 13 candidate queries in one update, repeated profile/metadata/class preparation, an over-budget resumed finalizer, one late main loop, or a missing post-spawn pacing sample must fail for the matching reason before this scenario can become active.",
-      "A known-bad control that changes Move entry to a special locomotion path must fail before this scenario can become active.",
+      "A known-bad control that changes the authored spawn locomotion path must fail before this scenario can become active.",
       "A known-bad control that moves A onto the screen must fail before this scenario can become active.",
       "Zero late loops is the only pacing pass. One three-VBlank loop fails even if spawn budgets and population counts pass.",
       "The extracted-C host checks keep exact masks 8, 448, 512, and 15, row-major reservoir selection, RNG parity, failure output, and the legacy Pool scanner in scope. Repeating that matrix in a random live wait is redundant."
@@ -59,7 +59,7 @@
     {
       "at": 0,
       "kind": "setup",
-      "value": "Load the unchanged Route 30 save, walk north to the clear row, move east to the clear lane, then keep moving north and south while ordinary automatic population refill runs."
+      "value": "Load the unchanged Route 30 save, use normal input to cross into Cherrygrove, then keep moving while ordinary automatic population refill runs."
     },
     {
       "at": 1,
@@ -69,12 +69,12 @@
     {
       "at": 2,
       "kind": "lifecycle",
-      "value": "Require at most 16 candidate queries per resumed update, no repeated profile preparation, then bind the created actor and observe normal Walk acceleration, chain, turn, pause, resume, and tired behavior while it progresses from A toward B."
+      "value": "Require at most 12 candidate queries per resumed update, no repeated profile preparation, then bind the created Hoothoot and observe its normal spawn Hop progress from A toward B."
     }
   ],
   "stop": {
-    "frameBudget": 520,
-    "condition": "At least 120 in-transit updates and one natural 21-update explicit destination scan complete; its exact Move actor then proves normal Walk policy and progress from A toward B; or the first budget, identity, progress, or observation failure ends the run."
+    "frameBudget": 360,
+    "condition": "At least 120 in-transit updates and one natural 21-update explicit destination scan complete; its exact Hoothoot then proves normal spawn Hop progress from A toward B; or the first budget, identity, progress, or observation failure ends the run."
   },
   "expect": {
     "requiredEvents": [],
@@ -89,9 +89,9 @@
       "The update after the scan creates the prepared Wild actor without repeating profile work",
       "Observed spawn work belongs to the current resolved profile, destination mask, field epoch and encounter",
       "The successful scan creates its prepared Wild actor",
-      "Move creates the exact Wild actor at A between 1 and 16 cardinal tiles from B and at least four tiles beyond the player-relative camera extent",
-      "The Move actor starts at its normal Walk base speed and then shows normal acceleration, Movement Chain, turn, walk pause, resume, and tired behavior",
-      "The Move actor makes at least four tiles of logical and rendered progress toward B",
+      "The spawn creates the exact Wild actor at A between 1 and 16 cardinal tiles from B and at least four tiles beyond the player-relative camera extent",
+      "The created Hoothoot uses its normal spawn Hop",
+      "The created Hoothoot makes at least four tiles of logical and rendered progress toward B",
       "No measured main loop exceeds two VBlanks or two native cycles",
       "Four loops after spawn completion are measured and stay at normal pace",
       "At least 120 scan-window samples are in transit and none repeats the prior exact player position"

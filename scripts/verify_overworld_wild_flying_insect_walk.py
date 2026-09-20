@@ -92,10 +92,10 @@ def verify_walk_start_requires_idle_motion(spawns: str) -> None:
 def verify_blocked_flee_has_fallback(spawns: str, helper: str) -> None:
     """A blocked flee may recover inward, but cannot reverse straight back."""
     body = function_bodies(spawns).get(
-        "OverworldWildSpawns_TryStartFrameDrivenActiveMovementCommand"
+        "OverworldWildSpawns_TryStartFrameDrivenOwnerMovementCommand"
     )
     if body is None:
-        raise SystemExit("missing frame-driven active movement owner")
+        raise SystemExit("missing frame-driven Owner movement owner")
     clean = strip_c_noncode(body)
     if "OW_WILD_HELPER_HOP_PLAN_FLEE" not in clean:
         raise SystemExit("blocked flee movement has no distance-preserving fallback")
@@ -268,10 +268,6 @@ def main() -> int:
         item for item in overview["classes"] if item.get("name") == "Flying insect"
     )
     profile = profile_entry["profile"]
-    application_indexes = {
-        application["id"]: index
-        for index, application in enumerate(catalog["applications"])
-    }
     expected = {
         "chillSpeed": 5,
         "walkTimeVariance": 5,
@@ -282,8 +278,11 @@ def main() -> int:
         "hopPause": 0,
         "ramAccelerationSteps": 8,
         "chainMovementVariance": 6,
-        "activeProfile": application_indexes["apply-default-active"],
-        "tiredProfile": application_indexes["apply-default-tired"],
+        "tiredProfile": next(
+            index
+            for index, application in enumerate(catalog["applications"])
+            if application["id"] == "apply-default-tired"
+        ),
         "chainPauseAction": 5,
         "chainPauseActionChance": 60,
         "avoidPreviousTile": 1,
@@ -348,7 +347,6 @@ def main() -> int:
     )
     for lane_name, lane in (
         ("Owner", resolved_ledyba),
-        ("Active", resolved_ledyba["_activeProfileData"]),
         ("Tired", resolved_ledyba["_tiredProfileData"]),
     ):
         if profile_viewer.numeric(lane["chillState"]) != macros[
@@ -390,8 +388,7 @@ def main() -> int:
         forced_results[0]["profileHex"],
     )
     for lane_name, lane in (
-        ("Chill", resolved_ledyba_follower),
-        ("Active", resolved_ledyba_follower["_activeProfileData"]),
+        ("Owner", resolved_ledyba_follower),
         ("Tired", resolved_ledyba_follower["_tiredProfileData"]),
     ):
         if profile_viewer.numeric(lane["chillSpeed"]) != 5:
@@ -541,7 +538,7 @@ def main() -> int:
     if not re.search(
         r"if \(!commandFinished && MapObject_IsSingleMovementActive\(object\)\) \{\s*"
         r"/\*.*?\*/\s*"
-        r"OverworldWildSpawns_FinishActivePresentationCommand\(object\);\s*\}",
+        r"OverworldWildSpawns_FinishPresentationCommand\(object\);\s*\}",
         spawns,
         re.DOTALL,
     ):

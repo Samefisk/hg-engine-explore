@@ -259,6 +259,7 @@ $(COMPILE_CONFIG_STAMP): FORCE_COMPILE_CONFIG | $(BUILD)
 		printf '%s\n' 'CC=$(CC)' \
 			"CC_ID=$$($(CC) -dumpmachine)@$$($(CC) -dumpfullversion -dumpversion)" \
 			'CFLAGS=$(CFLAGS)' \
+			'OVERWORLD_ACTOR_SYSTEM_OVERLAY_CFLAGS=$(OVERWORLD_ACTOR_SYSTEM_OVERLAY_CFLAGS)' \
 			'AS=$(AS)' "AS_ID=$$($(AS) --version | sed -n '1p')" \
 			'ASFLAGS=$(ASFLAGS)' \
 			'LD=$(LD)' "LD_ID=$$($(LD) --version | sed -n '1p')" \
@@ -298,7 +299,7 @@ GENERATED_TEST_BATTLE_C_SRCS := src/test_battle.c
 define SRC_OBJ_INC_DEFINE
 # this generates the objects as part of generating the dependency list which will just be massive files of rules
 $1: $2 $(if $(filter $2,$(GENERATED_LEARNSET_C_SRCS)),$(LEARNSETS_HEADER)) $(if $(filter $2,$(GENERATED_TEST_BATTLE_C_SRCS)),$(BATTLETESTS_HEADER)) $(COMPILE_CONFIG_STAMP) | $(CODE_BUILD_DIRS) venv toolchain-preflight
-	$(CC) -MMD -MF $(basename $1).d $(CFLAGS) $(if $(filter build/overlay.o,$1),-fno-ira-loop-pressure -fno-tree-fre) $(if $(filter build/save.o,$1),-fno-tree-forwprop) $(if $(filter build/field/enemy_party.o,$1),$(FIELD_ENEMY_PARTY_CFLAGS)) $(if $(filter build/field/map_teleport.o,$1),$(FIELD_MAP_TELEPORT_CFLAGS)) $(if $(filter build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS),$(if $(filter build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o,$1),$(OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS))) -c $2 -o $1
+	$(CC) -MMD -MF $(basename $1).d $(CFLAGS) $(if $(filter build/overlay.o,$1),-fno-ira-loop-pressure -fno-tree-fre) $(if $(filter build/save.o,$1),-fno-tree-forwprop) $(if $(filter build/field/enemy_party.o,$1),$(FIELD_ENEMY_PARTY_CFLAGS)) $(if $(filter build/field/map_teleport.o,$1),$(FIELD_MAP_TELEPORT_CFLAGS)) $(if $(filter build/overworld_actor_system_overlay/overworld_actor_system_overlay.o,$1),$(OVERWORLD_ACTOR_SYSTEM_OVERLAY_CFLAGS)) $(if $(filter build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o,$1),$(OVERWORLD_WILD_SPAWNS_OVERLAY_CFLAGS),$(if $(filter build/overworld_wild_helper_overlay/overworld_wild_helper_overlay.o,$1),$(OVERWORLD_WILD_HELPER_OVERLAY_CFLAGS))) -c $2 -o $1
 	@#printf "\t$(CC) $(CFLAGS) -c $2 -o $1" >> $(basename $1).d
 
 -include $(basename $1).d

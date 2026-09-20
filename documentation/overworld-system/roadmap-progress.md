@@ -20,43 +20,43 @@ One accepted contract does not close a whole slice.
 | Slice | Owner | State | Evidence / remaining work | Next action |
 | --- | --- | --- | --- | --- |
 | D0 — proof workflow | root | verified | Shared checked jobs, retained evidence, failure records, and proof-input identity are in place | Reopen only for a concrete tool fault |
-| D1 — reported faults | root | verified | The retained spawn-work gates pass, and the user confirms the current ROM no longer stutters | Preserve through final acceptance |
-| D2 — schema/resolver/facade | root | verified | Binding, resolver, Inspect, owner-control, transfer, ABI, and packaged checks passed | Preserve through final acceptance |
+| D1 — reported faults | root | source-ready | Current-ROM spawn-work and zero-stutter gates pass | User checks the same ROM for the reported stutter |
+| D2 — schema/resolver/facade | root | source-ready | Conditional-profile resolver, evaluator, live controller, ABI, and packaged checks pass | Run the affected roadmap gate after the user check |
 | D3 — Walk/chains/roles/Ram | root | source-ready | `NONE` and `PAUSE` are separate chain actions. Rattata look-around now converts chain ticks to its authored field-frame time; exact-C and ROM3145 memory checks pass | User checks normal bird and Rattata chain timing; preserve the regressions |
 | D4 — Hop/Teleport/mount | root | source-ready | Shared Motion owns Walk, Hop, and Teleport. Due actors can start together. A directed Hop now requires a strictly closer landing | User checks bird rooftop behavior; preserve the exact-C planner regression |
-| D5 — world/transition/population | root | verified | Warp, mounted-Walk transition, Wild battle handoff, and the 5,000-frame mounted-Hop transition pass | Preserve through final acceptance |
-| D6 — remove old paths | root | verified | All 40 migration rows are ported or obsolete. ROM3150 passes every linked ownership and packaged overlay deletion check | Preserve through final acceptance |
-| D7 — final acceptance | root | active | ROM3150 is the frozen code candidate. D1, D5, and D6 are verified | Run only stale or missing required proofs, then the roadmap gate |
+| D5 — world/transition/population | root | source-ready | Current-ROM spawn pacing passes; older transition and battle proofs predate the conditional-profile cutover | Run only affected stale proofs at the final gate |
+| D6 — remove old paths | root | source-ready | Active, attentive, and the condition shadow bridge are removed; the linked deletion/build checks pass | Preserve through the affected roadmap gate |
+| D7 — final acceptance | root | active | ROM3287 is the current candidate; automated conditional-profile and pacing acceptance passes | Finish user checks, then run the affected roadmap gate |
 
 States: queued, active, paused, source-ready, open, verified, blocked.
 Verified means the whole slice has current evidence; source-ready does not.
 
 ## Active issue and next action
 
+- D1 needs the user's stutter check on ROM3287.
 - D3 and D4 still need the user's normal bird-chain and rooftop checks.
-- Next action: inspect the final gate and run only stale or missing proofs.
+- Next action: finish those user checks, then run only stale or missing proofs.
 
 ## Current candidate and checks
 
 - Workspace ROM: `test.nds`, SHA256
-  `047bb6bb8bab4b824570eca6b6b5c87cad8a25b7121a6a108dcc4fac615346ea`.
-- Delta: `test3150.nds`, same SHA256. Workshop open-after-build is off.
-- The [Wild battle handoff proof](../../build/overworld-devtools/test-944bd15d61684a34bbc0f90c4b069292/manifest.json)
-  passes on ROM3150: the same live Rattata completes a natural Walk, receives
-  the natural A edge, and enters one successful battle request.
-- The [mounted-Hop transition proof](../../build/overworld-devtools/test-9ebab17b07054c34a6807d02946c13c0/manifest.json)
-  passes on ROM3150 with 5,000 post-transition input frames and 10,832 observed
-  frames. The current linked/package legacy-owner deletion check also passes.
+  `e3783bbbac6a4c042dcd59e3b81a91f63c08f520380770644cc3214c0a8b9633`.
+- Delta: `test3287.nds`, same SHA256. Workshop open-after-build is off.
 - The build passed Actor, Wild, Field terrain, mount, spawn identity, occupancy,
-  move-history, and packaged-ROM gates.
-- The retained [spawn-work proof](../../build/overworld-devtools/test-1847baa9d74f4855970a4da14aa43c26/manifest.json)
-  passed: 340 frames, 240 candidate queries, one profile
-  and metadata preparation, at most 16 queries per update, and no late frame
-  or render stall.
-- The retained [zero-stutter proof](../../build/overworld-devtools/test-2ad7edfb32a947cbb3792f842ae80381/manifest.json)
-  passed on its unchanged Continue save: 2600 strict frames,
-  1935 moving frames, 272 joined spawn-work witnesses, at most 16 scan frames,
-  and zero late loops or render stalls.
+  move-history, conditional-profile, and packaged-ROM gates.
+- The [spawn-work proof](../../build/overworld-devtools/test-720a1d96329e4641a7d09f706364d1aa/manifest.json)
+  passed and was accepted on ROM3287: 21 destination updates, 169 candidate
+  queries, at most 12 per update, one profile/metadata/class preparation, one
+  normal Hoothoot spawn Hop, 137 moving frames, and zero late loops or render
+  stalls.
+- The [zero-stutter proof](../../build/overworld-devtools/test-ec8c77e3840c4f89ae44ef8bfff56952/manifest.json)
+  passed and was accepted on the same ROM and unchanged Continue save: 2,620
+  observed frames, 1,935 moving frames, and zero late loops or render stalls.
+- [Packaged resolver parity](../../build/overworld-devtools/test-706d2f9f2d9b4224bcc3b63afec00671/manifest.json),
+  [packaged condition evaluation](../../build/overworld-devtools/test-b2c466b24fbd4df9806ef832282d27a0/manifest.json),
+  and the [live Wild condition controller](../../build/overworld-devtools/test-d16169e8d70741088748bfcf026a99d9/manifest.json)
+  passed and were accepted on this ROM. The live controller proof includes
+  trigger, held activation, and stale-target fail-close behavior.
 - The ROM3143 [Hoothoot chain data](../../build/overworld-devtools/session-ml43dg3r/recording-ec49a9f3e111.json.gz)
   is memory evidence, not acceptance proof. The resolved Bird profile used
   action `PAUSE` (`6`); after its linked movement, the actor entered a 24-tick

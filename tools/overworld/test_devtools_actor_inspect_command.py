@@ -46,14 +46,14 @@ class ActorInspectCommandTests(unittest.TestCase):
 class ActorInspectAuthTests(unittest.TestCase):
     def fixture(self):
         session = DevtoolsSession.__new__(DevtoolsSession)
-        facade = {"address": 0x02300000, "version": 1, "size": 24,
+        facade = {"address": 0x02300000, "version": 2, "size": 24,
                   "callbacks": dict(validate=0x02300101, apply=0x02300201,
                                     tick=0x02300301, inspect=0x02300401)}
         state = {"address": 0x02200000, "size": 2400}
         session.rt = SimpleNamespace(ACTOR_DESCRIPTOR={"facade": deepcopy(facade), "state": state})
-        header = struct.pack("<IHH4I", 0x5341574F, 1, 24, *facade["callbacks"].values())
+        header = struct.pack("<IHH4I", 0x5341574F, 2, 24, *facade["callbacks"].values())
         memory = {facade["address"]: header, 0x02300400: b"C" * 32,
-                  state["address"]: struct.pack("<IHH", 0x5353574F, 1, 2400)}
+                  state["address"]: struct.pack("<IHH", 0x5353574F, 2, 2400)}
         session.packaged_code = lambda address, size: memory[address][:size]
         session.read = lambda address, size: memory[address][:size]
         session.target = lambda name: 0x02300400 if name == "inspect_actor" else self.fail(name)

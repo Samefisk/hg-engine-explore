@@ -60,7 +60,7 @@ def contract():
             {
                 "name": "spawn-work-entry-actor-identity", "operator": "eq",
                 "type": "array", "validator": "meaningful-observation",
-                "expected": [1, "WILD", 19, 1],
+                "expected": [1, "WILD", 163, 1],
             },
         ],
         "profile-resolution": [
@@ -127,9 +127,9 @@ def contract():
                 "minimum": ENTRY_OFFSCREEN_MARGIN_TILES,
             },
             {
-                "name": "spawn-work-entry-normal-walk-evidence", "operator": "eq",
+                "name": "spawn-work-entry-normal-hop-evidence", "operator": "eq",
                 "type": "array", "validator": "meaningful-observation",
-                "expected": [3, 1, 1, 1, 1, 1, 1, 1],
+                "expected": [4, 1],
             },
             {
                 "name": "spawn-work-entry-distance-progress", "operator": "gte",
@@ -203,19 +203,16 @@ def measurements(replay, record):
             and attempt.get("metadataReceiptCount") == 1
             and attempt.get("classSelectionReceiptCount") == 1
             and attempt.get("successfulSpawnCount") == 1
-            and entry.get("locomotion") == 3
-            and entry.get("species") == 19
+            and meter.get("contextTransition", {}).get("from", {}).get("mapId") == 33
+            and meter.get("contextTransition", {}).get("to", {}).get("mapId") == 67
+            and entry.get("locomotion") == 4
+            and entry.get("species") == 163
             and type(entry.get("targetDistance")) is int
             and 1 <= entry["targetDistance"] <= ENTRY_TARGET_MAX_DISTANCE_TILES
             and type(entry.get("offscreenClearance")) is int
             and entry["offscreenClearance"] >= ENTRY_OFFSCREEN_MARGIN_TILES
-            and entry.get("startedAtBaseSpeed") is True
-            and entry.get("accelerationObserved") is True
-            and entry.get("chainObserved") is True
-            and entry.get("turnObserved") is True
-            and entry.get("walkPauseObserved") is True
-            and entry.get("resumedAfterPause") is True
-            and entry.get("tiredObserved") is True
+            and entry.get("spawnHopObserved") is True
+            and entry.get("ownerHopFrames", 0) > 0
             and entry.get("distanceProgress", 0) >= MINIMUM_ENTRY_PROGRESS
             and entry.get("maximumRenderDisplacement", 0) >= MINIMUM_ENTRY_PROGRESS
             and type(attempt.get("maxResumedFinalizerArm9Ticks")) is int
@@ -246,8 +243,8 @@ def measurements(replay, record):
             "claim": "live-actor-identity", "name": "spawn-work-entry-actor-identity",
             "value": [1, "WILD", entry["species"],
                       int(bool(entry.get("subjectIdentity")))],
-            "operator": "eq", "expected": [1, "WILD", 19, 1],
-            "passed": entry["species"] == 19 and bool(entry.get("subjectIdentity")),
+            "operator": "eq", "expected": [1, "WILD", 163, 1],
+            "passed": entry["species"] == 163 and bool(entry.get("subjectIdentity")),
         },
         {
             "claim": "profile-resolution", "name": "spawn-work-profile-receipt-count",
@@ -311,12 +308,9 @@ def measurements(replay, record):
             "passed": entry["offscreenClearance"] >= ENTRY_OFFSCREEN_MARGIN_TILES,
         },
         {
-            "claim": "logical-commit", "name": "spawn-work-entry-normal-walk-evidence",
-            "value": [entry["locomotion"], int(entry["startedAtBaseSpeed"]),
-                      int(entry["accelerationObserved"]), int(entry["chainObserved"]),
-                      int(entry["turnObserved"]), int(entry["walkPauseObserved"]),
-                      int(entry["resumedAfterPause"]), int(entry["tiredObserved"])],
-            "operator": "eq", "expected": [3, 1, 1, 1, 1, 1, 1, 1],
+            "claim": "logical-commit", "name": "spawn-work-entry-normal-hop-evidence",
+            "value": [entry["locomotion"], int(entry["spawnHopObserved"])],
+            "operator": "eq", "expected": [4, 1],
             "passed": True,
         },
         {
@@ -384,6 +378,8 @@ class SpawnWorkBudgetNegative:
         self.metadata_template = None
         self.class_selection_template = None
         self.previous_player_pose = None
+        self.destination_context_seen = False
+        self.strict_pacing_samples = 0
 
     @staticmethod
     def _destination(event):
@@ -396,22 +392,31 @@ class SpawnWorkBudgetNegative:
             return row
         changed = deepcopy(row)
         events = changed.get("events", [])
+        strict_window = self.destination_context_seen
+        samples = changed.get("samples", [])
+        if any(sample.get("context", {}).get("mapId") == 67
+               for sample in samples):
+            self.destination_context_seen = True
         if self.fault == "spawn-work-budget-player-render-stall":
-            for sample in changed.get("samples", []):
+            for sample in samples:
                 player = sample.get("player", {})
                 pose = [player.get("pos_x"), player.get("pos_z")]
-                if self.previous_player_pose is not None \
+                if strict_window and self.previous_player_pose is not None \
                         and (player.get("x") != player.get("x_prev")
                              or player.get("y") != player.get("y_prev")):
                     player["pos_x"], player["pos_z"] = self.previous_player_pose
                     self.applied = True
                     return changed
-                if all(type(value) is int for value in pose):
+                if self.destination_context_seen \
+                        and all(type(value) is int for value in pose):
                     self.previous_player_pose = pose
         pacing = [event for event in events
                   if event.get("kind") == "native-observation"
                   and event.get("data", {}).get("observation") == "stock-main-loop-pacing"]
-        if self.fault == "spawn-work-budget-late-main-loop":
+        if strict_window:
+            self.strict_pacing_samples += len(pacing)
+        if self.fault == "spawn-work-budget-late-main-loop" \
+                and self.strict_pacing_samples >= 2:
             for event in pacing:
                 interval = event["data"].get("intervalFromPrevious")
                 if interval is None:
@@ -460,8 +465,10 @@ class SpawnWorkBudgetNegative:
                          and event.get("data", {}).get("returnValue") == 1]
             if prepared and creates and completed:
                 target = prepared[0]["data"]["startup"]["target"]
-                completed[0]["data"]["position"] = [target[0], target[1] - 1]
-                creates[0]["data"]["arguments"][1:3] = [target[0], target[1] - 1]
+                origin = [target[0], target[1] - 1]
+                prepared[0]["data"]["startup"]["origin"] = origin
+                completed[0]["data"]["startup"]["origin"] = origin
+                creates[0]["data"]["arguments"][1:3] = origin
                 self.applied = True
                 return changed
         for index, event in enumerate(events):
@@ -567,7 +574,7 @@ def validate_negative_result(result, fault):
         "spawn-work-budget-late-main-loop": "main loop missed normal frame pace",
         "spawn-work-budget-missing-post-spawn-pacing": "lacks one main-loop pacing sample",
         "spawn-work-budget-missing-natural-spawn": "did not create its prepared wild actor",
-        "spawn-work-budget-entry-special-path": "Move entry did not retain its exact A and B",
+        "spawn-work-budget-entry-special-path": "entry did not retain its exact A and B",
         "spawn-work-budget-entry-onscreen-origin": "A is not safely outside player view",
         "spawn-work-budget-player-render-stall": "player render froze during admitted movement",
     }[fault]

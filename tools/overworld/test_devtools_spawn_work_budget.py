@@ -25,16 +25,17 @@ HANDLE = {"value": "0x00010001", "slot": 1, "generation": 1}
 SPAWN_HANDLE = {"value": 0x00010002, "slot": 2, "generation": 1}
 SUBJECT = {
     "id": "mankey", "species": 56, "role": "FOLLOWER",
-    "handle": HANDLE, "identityVerified": True,
+    "handle": HANDLE, "subjectIdentity": 9876, "identityVerified": True,
 }
 WORLD = {
     "fieldPointer": 0x02231000,
     "statePointer": 0x023DEF48,
-    "mapId": 33,
-    "fieldEpoch": 2,
-    "mapGeneration": 2,
+    "mapId": 67,
+    "fieldEpoch": 3,
+    "mapGeneration": 3,
 }
-ENCOUNTER = {"species": 19, "form": 0, "level": 3, "personality": 12345}
+INITIAL_CONTEXT = {"mapId": 33, "fieldEpoch": 2, "mapGeneration": 2}
+ENCOUNTER = {"species": 163, "form": 0, "level": 3, "personality": 12345}
 RESUMED_QUERY_COUNTS = (12,) + (10,) * 8 + (9,) * 11
 
 
@@ -51,9 +52,11 @@ def recipe():
 
 def snapshot(index):
     frame = 100 + index
-    x = 585 + index
+    x = 585 if index == 0 else 574 + index
+    y = 406 if index == 0 else 398
     actors = [{
         "handle": HANDLE,
+        "subjectIdentity": SUBJECT["subjectIdentity"],
         "active": True,
         "species": 56,
         "role": "FOLLOWER",
@@ -61,16 +64,7 @@ def snapshot(index):
     }]
     if index >= EXPECTED_DESTINATION_UPDATES + 1:
         stage = index - (EXPECTED_DESTINATION_UPDATES + 1)
-        state = [
-            (631, "OWNER", "WALK", 7, 0, 0),
-            (630, "OWNER", "WALK", 7, 0, 0),
-            (629, "OWNER", "WALK", 6, 1, 1),
-            (628, "OWNER", "WALK", 5, 2, 0),
-            (628, "OWNER", "NONE", 5, 0, 0),
-            (627, "OWNER", "WALK", 5, 1, 0),
-            (626, "TIRED", "WALK", 4, 1, 1),
-        ][min(stage, 6)]
-        actor_x, lane, motion, speed, chain, turn = state
+        actor_y = [382, 383, 384, 385, 386, 387][min(stage, 5)]
         actors.append({
             "handle": SPAWN_HANDLE,
             "subjectIdentity": ENCOUNTER["personality"],
@@ -78,22 +72,20 @@ def snapshot(index):
             "species": ENCOUNTER["species"],
             "role": "WILD",
             "identityVerified": True,
-            "logical": {"x": actor_x, "y": 406},
-            "render": {"x": actor_x, "y": 406},
-            "lane": lane,
-            "motionKind": motion,
-            "movementPolicy": {
-                "base": 7, "speed": speed, "chain": chain, "turn": turn,
-            },
+            "logical": {"x": 596, "y": actor_y},
+            "render": {"x": 596, "y": actor_y},
+            "lane": "OWNER",
+            "motionKind": "HOP",
         })
     return {
         "frame": frame,
         "nativeCycle": 1000 + index,
-        "actorFrame": 200 + index,
-        "context": {key: WORLD[key] for key in ("mapId", "fieldEpoch", "mapGeneration")},
-        "player": {"x": x, "y": 406, "x_prev": x if index == 0 else x - 1,
-                   "y_prev": 406, "pos_x": (585 << 16) + 32768 + index * 16384,
-                   "pos_z": (406 << 16) + 32768, "movement_cmd": 91,
+        "actorFrame": 200 if index <= 1 else 199 + index,
+        "context": INITIAL_CONTEXT if index == 0 else {
+            key: WORLD[key] for key in ("mapId", "fieldEpoch", "mapGeneration")},
+        "player": {"x": x, "y": y, "x_prev": x if index == 0 else x - 1,
+                   "y_prev": y, "pos_x": (x << 16) + 32768,
+                   "pos_z": (y << 16) + 32768, "movement_cmd": 91,
                    "movement_step": 1},
         "observationBoundary": "main-task-queue-completion",
         "fieldAvailable": True,
@@ -145,13 +137,13 @@ def events(index):
             "resolverReceipts": [],
             "guestTiming": {"arm9Ticks": 600},
             "returnValue": 1,
-            "position": [631, 406],
-            "startup": {"target": [615, 406], "locomotion": 3},
+            "position": [596, 398],
+            "startup": {"target": [596, 398], "origin": [596, 382], "locomotion": 4},
         }}, {"kind": "native-observation", "data": {
             "observation": "spawn-object-create",
             "slot": 0,
             "returnValue": 0x02240000,
-            "arguments": [0x02230000, 631, 406, 1],
+            "arguments": [0x02230000, 596, 382, 1],
         }}, {"kind": "native-observation", "data": {
             "observation": "spawn-prepared",
             "slot": 0,
@@ -161,7 +153,7 @@ def events(index):
             "finalization": {"status": "matched", "receipt": {
                 "finalizationId": finalization_id,
             }},
-            "startup": {"target": [615, 406], "locomotion": 3},
+            "startup": {"target": [596, 398], "origin": [596, 382], "locomotion": 4},
             "publicSubject": {
                 "handle": SPAWN_HANDLE,
                 "subjectIdentity": ENCOUNTER["personality"],
@@ -247,6 +239,59 @@ def replay(fault=None):
 
 
 class SpawnWorkBudgetTests(unittest.TestCase):
+    @staticmethod
+    def _control_row(context, *, x, x_prev, pos_x):
+        return {
+            "phase": "observe",
+            "samples": [{
+                "context": context,
+                "player": {
+                    "x": x, "x_prev": x_prev, "y": 398, "y_prev": 398,
+                    "pos_x": pos_x, "pos_z": 398 << 16,
+                },
+            }],
+            "events": [{"kind": "native-observation", "data": {
+                "observation": "stock-main-loop-pacing",
+                "frameCounter": 2,
+                "intervalFromPrevious": {
+                    "arm9Ticks": NORMAL_MAIN_LOOP_ARM9_TICKS,
+                    "nativeCycles": NORMAL_MAIN_LOOP_NATIVE_CYCLES,
+                    "frameSequence": NORMAL_MAIN_LOOP_NATIVE_CYCLES,
+                },
+            }}],
+        }
+
+    def test_pacing_controls_begin_after_the_route_transition(self):
+        pre = self._control_row(INITIAL_CONTEXT, x=576, x_prev=577, pos_x=576 << 16)
+        transition = self._control_row(
+            {key: WORLD[key] for key in ("mapId", "fieldEpoch", "mapGeneration")},
+            x=575, x_prev=575, pos_x=575 << 16)
+        post = self._control_row(
+            {key: WORLD[key] for key in ("mapId", "fieldEpoch", "mapGeneration")},
+            x=574, x_prev=575, pos_x=574 << 16)
+        post_two = self._control_row(
+            {key: WORLD[key] for key in ("mapId", "fieldEpoch", "mapGeneration")},
+            x=573, x_prev=574, pos_x=573 << 16)
+
+        late = SpawnWorkBudgetNegative("spawn-work-budget-late-main-loop")
+        late.mutate(pre, {"mankey": SUBJECT})
+        late.mutate(transition, {"mankey": SUBJECT})
+        self.assertFalse(late.applied)
+        late.mutate(post, {"mankey": SUBJECT})
+        self.assertFalse(late.applied)
+        late_result = late.mutate(post_two, {"mankey": SUBJECT})
+        self.assertTrue(late.applied)
+        self.assertEqual(late_result["events"][0]["data"]["frameCounter"], 3)
+
+        stall = SpawnWorkBudgetNegative("spawn-work-budget-player-render-stall")
+        stall.mutate(pre, {"mankey": SUBJECT})
+        stall.mutate(transition, {"mankey": SUBJECT})
+        self.assertFalse(stall.applied)
+        stall_result = stall.mutate(post, {"mankey": SUBJECT})
+        self.assertTrue(stall.applied)
+        self.assertEqual(
+            stall_result["samples"][0]["player"]["pos_x"], 575 << 16)
+
     def test_complete_incremental_scan_produces_acceptance_rows(self):
         result = replay()
         self.assertTrue(result["passed"])
@@ -262,13 +307,9 @@ class SpawnWorkBudgetTests(unittest.TestCase):
         self.assertEqual(result["attempt"]["successfulSpawnCount"], 1)
         self.assertEqual(result["entry"]["startDistance"], 16)
         self.assertEqual(result["entry"]["targetDistance"], 16)
-        self.assertEqual(result["entry"]["offscreenClearance"], 16)
-        self.assertTrue(result["entry"]["accelerationObserved"])
-        self.assertTrue(result["entry"]["chainObserved"])
-        self.assertTrue(result["entry"]["turnObserved"])
-        self.assertTrue(result["entry"]["walkPauseObserved"])
-        self.assertTrue(result["entry"]["resumedAfterPause"])
-        self.assertTrue(result["entry"]["tiredObserved"])
+        self.assertEqual(result["entry"]["offscreenClearance"], 10)
+        self.assertTrue(result["entry"]["spawnHopObserved"])
+        self.assertGreater(result["entry"]["ownerHopFrames"], 0)
         self.assertGreaterEqual(result["entry"]["distanceProgress"], 4)
         self.assertGreaterEqual(result["entry"]["maximumRenderDisplacement"], 4)
         self.assertEqual(result["pacing"]["lateMainLoopCount"], 0)

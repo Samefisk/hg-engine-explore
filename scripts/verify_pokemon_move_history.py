@@ -29,6 +29,7 @@ OVERLAY_RETIRED_WALK_TABLES_START = OVERLAY_BASE + 0x1000
 OVERLAY_RETIRED_WALK_TABLES_END = OVERLAY_BASE + 0x1088
 OVERLAY_WALK_HELPERS = {
     "OverworldWalk_DecelerateTime": OVERLAY_BASE + 0x1000,
+    "OverworldBehaviorConditionTrace_Record": OVERLAY_BASE + 0x1008,
     "OverworldWalk_ProposeStep": OVERLAY_BASE + 0x105C,
     "OverworldWalk_ClampTime": OVERLAY_BASE + 0x1088,
     "OverworldWalk_AccelerateTime": OVERLAY_BASE + 0x109E,
@@ -68,7 +69,7 @@ MOUNT_OVERLAY_ID = 157
 MOUNT_OVERLAY_BASE = 0x023BAB00
 MOUNT_OVERLAY_LIMIT = 0x023BC800
 ACTOR_OVERLAY_ID = 158
-ACTOR_OVERLAY_LOAD_BASE = 0x023B6500
+ACTOR_OVERLAY_LOAD_BASE = 0x023B65A0
 ACTOR_OVERLAY_BASE = 0x023B6B00
 ACTOR_OVERLAY_LIMIT = 0x023BAB00
 ACTOR_PLANNER_IMPORTS = {
@@ -1564,9 +1565,9 @@ def main() -> None:
     full_save_size = parse_define(save_constants, "FULL_SAVE_SIZE")
     heap3_size = parse_define(save_constants, "NEW_HEAP3_SIZE")
     require(
-        heap3_size == 0x106500
-        and 0x110000 - heap3_size == 0x9B00,
-        "heap 3 does not explicitly reserve 0x9B00 for overlays 158/157/156/155/153",
+        heap3_size == 0x106730
+        and 0x110000 - heap3_size == 0x98D0,
+        "heap 3 does not explicitly reserve 0x98D0 for overlays 158/157/156/155/153",
     )
 
     def arm9_word(address: int, description: str) -> int:

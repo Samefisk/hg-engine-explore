@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.condition.packaged-rom-evaluator",
+  "title": "Packaged condition service passes fixed copied-input cases",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "tests/overworld/scenarios/profile.condition.packaged-rom-evaluator.json",
+  "requirements": ["shared.packaged-condition-service-v1"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 4000, "noProgressFrames": 120, "minObservedFrames": 1},
+  "subjects": [],
+  "setup": [],
+  "actions": [
+    {
+      "id": "evaluate-fixed-condition-cases",
+      "op": "condition.probe",
+      "args": {},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}
+    }
+  ],
+  "assertions": [
+    {"kind": "measurement-complete", "measurement": "packaged-condition-service-v1", "when": "final"}
+  ],
+  "measurements": [{"kind": "packaged-condition-service-v1"}]
+}

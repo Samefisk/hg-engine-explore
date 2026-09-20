@@ -65,8 +65,12 @@ SECTIONS {
                 ASSERT(gOverworldBehaviorConditionServiceEntry
                         == ORIGIN(rom) + 0x1EA0,
                     "condition service entry moved");
-                ASSERT(. == ORIGIN(rom) + 0x1EB4,
+                ASSERT(. == ORIGIN(rom) + 0x1EB8,
                     "condition service entry size changed");
+                KEEP(*(.overworld_behavior_condition_service_gate))
+                ASSERT(OverworldBehaviorConditionService_Get
+                        == ORIGIN(rom) + 0x1EB8,
+                    "condition service gate moved");
                 *(.text.OverworldBehaviorCondition_*)
                 ASSERT(. <= ORIGIN(rom) + LENGTH(rom),
                     "condition service exceeds field-linked overlay tail");

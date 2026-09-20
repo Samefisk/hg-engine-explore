@@ -1903,9 +1903,11 @@ def validate_scenario(document: Any, path: Path) -> dict[str, Any]:
         _integer(fixture.get("seed"), f"{path}.fixture.seed", errors, 0, 0xFFFFFFFF)
 
     subjects = root.get("subjects", [])
-    resolver_subjectless = root.get("id") == "profile.resolve.packaged-rom-parity" \
-        and (root.get("adapter") or {}).get("kind") == "devtools-test"
-    if not isinstance(subjects, list) or ("subjects" in root and not subjects and not resolver_subjectless):
+    subjectless_service = root.get("id") in (
+        "profile.resolve.packaged-rom-parity",
+        "profile.condition.packaged-rom-evaluator",
+    ) and (root.get("adapter") or {}).get("kind") == "devtools-test"
+    if not isinstance(subjects, list) or ("subjects" in root and not subjects and not subjectless_service):
         _fail(errors, f"{path}.subjects", "must be a non-empty array")
         subjects = []
     subject_ids: list[str] = []
@@ -2158,6 +2160,10 @@ def validate_scenario(document: Any, path: Path) -> dict[str, Any]:
             resolver_service = root.get("id") == "profile.resolve.packaged-rom-parity" \
                 and test_name == root.get("id") and claims == ["profile-resolution"] \
                 and proof_level == "S3" and subjects == []
+            condition_service = root.get("id") == "profile.condition.packaged-rom-evaluator" \
+                and test_name == root.get("id") and claims == ["profile-resolution"] \
+                and proof_level == "S3" and subjects == [] \
+                and (root.get("verification") or {}).get("kind") == "controlled-case"
             inspect_service = root.get("id") == "actor.inspect-current-and-stale" \
                 and test_name == root.get("id") and claims == ["controlled-action"] \
                 and proof_level == "S3" and subjects == [{"id": "mankey", "species": 56,
@@ -2170,7 +2176,7 @@ def validate_scenario(document: Any, path: Path) -> dict[str, Any]:
                     "role": "FOLLOWER", "acquisition": "follower", "minimum": 1, "maximum": 1,
                     "motionActor": False, "requirePresentation": True}] \
                 and (root.get("verification") or {}).get("kind") == "controlled-case"
-            if not (resolver_service or inspect_service or population_service) \
+            if not (resolver_service or condition_service or inspect_service or population_service) \
                     and (not subjects or not claims or "live-actor-identity" not in claims):
                 _fail(errors, f"{path}.subjects", "shared actor tests need structured live subjects")
             if fixture is None or not fixture.get("rom") or not fixture.get("save"):
@@ -3173,8 +3179,23 @@ def cross_validate(
                 "behavior schema featureIds must be an array of strings"
             )
         else:
+            fields = behavior_schema.get("fields")
+            reserved_only_feature_ids = set()
+            if isinstance(fields, list):
+                used_feature_ids = {
+                    field.get("featureId")
+                    for field in fields
+                    if isinstance(field, dict) and field.get("reserved") is not True
+                }
+                reserved_only_feature_ids = {
+                    field.get("featureId")
+                    for field in fields
+                    if isinstance(field, dict) and field.get("reserved") is True
+                } - used_feature_ids
             missing_capabilities = sorted(
-                set(schema_feature_ids) - capability_ids
+                set(schema_feature_ids)
+                - reserved_only_feature_ids
+                - capability_ids
             )
             if missing_capabilities:
                 errors.append(

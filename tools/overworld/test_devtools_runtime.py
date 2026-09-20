@@ -16,6 +16,8 @@ from tools.overworld.devtools_runtime import (
     STOCK_CALLS, STOCK_CALLBACKS, _crypt, _elf_function_extent, actor_identity_checks, decode_party, integer,
     native_callback_cpu_observation, owned_path,
     native_trampoline_code, TRAMPOLINE_BYTES, TRAMPOLINE_GUARD, PARTY_WORK_HEAP_SITES,
+    WILD_ACTIVE_FOLLOWER_PARTY_SLOT_OFFSET, WILD_CAPTURE_TARGET_MASK_OFFSET,
+    WILD_FOLLOWER_RELEASE_STATE_OFFSET,
 )
 from tools.overworld.test_devtools_trace import NativeRing, natives, notices
 from tools.overworld.devtools_engine import Hooks, SUBSTRUCT_OFFSETS
@@ -141,19 +143,19 @@ class BridgeFixture:
             control = base + 0x100
             if self.native_saved is None:
                 self.native_saved = [getattr(self.regs, f"r{i}") & 0xFFFFFFFF for i in range(15)]
-                self.native_saved[3] = struct.unpack("<I", self.read(control + 44, 4))[0]
-                self.native_cpsr = struct.unpack("<I", self.read(control + 48, 4))[0]
+                self.native_saved[3] = struct.unpack("<I", self.read(control + 48, 4))[0]
+                self.native_cpsr = struct.unpack("<I", self.read(control + 52, 4))[0]
                 self.regs.sp -= 80
                 self.regs.r4, self.regs.r5 = self.native_cpsr, control
                 self.regs.cpsr &= ~0x20
                 self.hooks[base + 0x18](base + 0x18, 4)
-            command = struct.unpack("<9I", self.read(control, 36))
+            command = struct.unpack("<10I", self.read(control, 40))
             if command[0] == 0:
                 self.native_return()
                 return
             for index, value in enumerate(command[1:5]):
                 setattr(self.regs, f"r{index}", value)
-            self.write(self.regs.sp, struct.pack("<4I", *command[5:9]))
+            self.write(self.regs.sp, struct.pack("<5I", *command[5:10]))
             self.regs.lr = base + 0x4C
             self.regs.cpsr |= 0x20
             if not self.skip_entry:
@@ -161,11 +163,11 @@ class BridgeFixture:
             if hasattr(self, "on_callee"):
                 self.on_callee()
             self.invocations.append({"registers": [getattr(self.regs, f"r{i}") for i in range(4)],
-                                     "stack": self.read(self.regs.sp, 16)})
+                                     "stack": self.read(self.regs.sp, 20)})
             self.regs.r0 = self.result
             if self.corrupt:
                 self.thread["topGuard"] = 1
-            self.write(control + 36, struct.pack("<II", self.result, 1))
+            self.write(control + 40, struct.pack("<II", self.result, 1))
             self.regs.cpsr &= ~0x20
             self.hooks[base + 0x18](base + 0x18, 4)
             if struct.unpack("<I", self.read(control, 4))[0] == 0:
@@ -175,7 +177,7 @@ class BridgeFixture:
         for index, value in enumerate(self.native_saved):
             setattr(self.regs, f"r{index}", value)
         self.regs.cpsr = self.native_cpsr
-        continuation = struct.unpack("<I", self.read(self.native_trampoline["address"] + 0x134, 4))[0]
+        continuation = struct.unpack("<I", self.read(self.native_trampoline["address"] + 0x138, 4))[0]
         self.regs.pc = continuation & ~1
         self.hooks[continuation & ~1](continuation & ~1, 2)
 
@@ -204,19 +206,19 @@ command_loop:
 ldr r12, [r5]
 cmp r12, #0
 beq finished
-ldr r0, [r5, #20]
-str r0, [sp]
-ldr r0, [r5, #24]
-str r0, [sp, #4]
-ldr r0, [r5, #28]
-str r0, [sp, #8]
-ldr r0, [r5, #32]
-str r0, [sp, #12]
+add r0, r5, #20
+ldmia r0, {r6-r10}
+stmia sp, {r6-r10}
+nop
+nop
+nop
+nop
+nop
 ldmib r5, {r0-r3}
 blx r12
-str r0, [r5, #36]
-mov r0, #1
 str r0, [r5, #40]
+mov r0, #1
+str r0, [r5, #44]
 b command_loop
 finished:
 add sp, sp, #24
@@ -227,7 +229,7 @@ control_literal:
 .word control
 .org 0x100
 control:
-.space 44
+.space 48
 saved_r3:
 .word 0
 saved_cpsr:
@@ -765,6 +767,21 @@ continuation:
         self.assertEqual(ownership["callSp"] + 80, fixture.initial[13])
         self.assertEqual(ownership["scratchBytes"], 268)
 
+    def test_nine_argument_native_call_uses_five_stack_words(self):
+        fixture = BridgeFixture()
+        arguments = tuple(range(1, 10))
+
+        def recipe(_scratch):
+            yield Call("evaluate_conditions", arguments)
+
+        result = FieldReturnBridge(fixture).run(recipe)
+        self.assertEqual(result["calls"][0]["entryArguments"], list(arguments))
+        self.assertEqual(fixture.invocations[0]["registers"], [1, 2, 3, 4])
+        self.assertEqual(
+            struct.unpack("<5I", fixture.invocations[0]["stack"]),
+            (5, 6, 7, 8, 9),
+        )
+
     def test_expected_native_rejection_restores_at_completed_return(self):
         fixture = BridgeFixture(result=0)
         def recipe(_scratch):
@@ -967,6 +984,7 @@ class FreshObservationTests(unittest.TestCase):
             ACTOR_DESCRIPTOR={"state": {"address": 0x02300000}},
             player_ptr=lambda _emu: 123, object_state=lambda *_args: {"x": 12, "y": 13},
             loaded_terrain_cell=lambda *_args: None, loaded_warp_events=lambda _emu: [],
+            loaded_surface_cell=lambda *_args: None,
             field_map_id=lambda _emu: 33, unsigned=lambda _emu, _address, _size: 2)
         value = session.terrain(0)["terrain"]
         self.assertEqual(value["observation"]["boundary"], "paused-native-cycle-end")
@@ -985,6 +1003,7 @@ class FreshObservationTests(unittest.TestCase):
         session.rt = SimpleNamespace(EXECUTED_FRAME_COUNT=83,
             ACTOR_DESCRIPTOR={"state": {"address": 0x02300000}},
             loaded_terrain_cell=read_cell, loaded_warp_events=lambda _emu: [],
+            loaded_surface_cell=lambda *_args: None,
             field_map_id=lambda _emu: 34, unsigned=lambda _emu, _address, _size: 2)
         value = session.terrain(0, x=558, z=373)["terrain"]
         self.assertEqual(reads, [(558, 373)])
@@ -992,7 +1011,7 @@ class FreshObservationTests(unittest.TestCase):
         self.assertEqual(value["observation"]["lastCompletedGameFrame"], 40)
         self.assertEqual(value["cells"], [{"x": 558, "y": 373, "z": 373,
             "loaded": True, "attribute": 0x8002, "behavior": 2, "collision": True,
-            "attribute_address": 0x02214040}])
+            "attribute_address": 0x02214040, "surface": None}])
 
     def test_terrain_center_validation_precedes_native_reads(self):
         session = self.fixture()
@@ -1295,6 +1314,11 @@ class SelectorInputTests(unittest.TestCase):
 
 
 class NativeFollowerSetupTests(unittest.TestCase):
+    def test_live_follower_lifecycle_offsets_match_current_state_layout(self):
+        self.assertEqual(WILD_ACTIVE_FOLLOWER_PARTY_SLOT_OFFSET, 0x3A5)
+        self.assertEqual(WILD_CAPTURE_TARGET_MASK_OFFSET, 0x3A6)
+        self.assertEqual(WILD_FOLLOWER_RELEASE_STATE_OFFSET, 0x3AC)
+
     def fixture(self, *, role=None, pid=123, rejected=False):
         session = DevtoolsSession.__new__(DevtoolsSession)
         session.emu = SimpleNamespace(memory=SimpleNamespace(register_write=lambda *_args, **_kwargs: None))

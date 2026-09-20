@@ -11,13 +11,16 @@ import struct
 
 from tools.overworld.devtools_resolver_parity import CASE_NAMES, request_bytes
 
-BUFFER_BYTES = 8000
-CAPACITY = 96
+BUFFER_BYTES = 1536
+CAPACITY = 14
 REQUEST = 16
 RESULT = 64
 TRACE = 340
 STEPS = 352
 GUARD = b"ResolverGuard-v1"
+
+if STEPS + CAPACITY * 80 > BUFFER_BYTES - len(GUARD):
+    raise RuntimeError("resolver probe trace overlaps its ending guard")
 
 
 class ResolverProbeError(ValueError):
@@ -112,7 +115,7 @@ class ResolverProbe:
                 require(steps == pointer + STEPS and capacity == CAPACITY and reserved == 0,
                         "resolver trace header changed")
                 require(0 < count <= CAPACITY and dropped == 0, "resolver trace missing, overflowed or dropped")
-                require(type(status) is int and 0 <= status <= 4, "invalid resolver return status")
+                require(type(status) is int and 0 <= status <= 5, "invalid resolver return status")
                 require(returned["nativeCycle"] >= dispatched["nativeCycle"]
                         and returned["frame"] >= dispatched["frame"], "resolver clocks moved backwards")
                 trace = []

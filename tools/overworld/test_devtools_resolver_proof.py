@@ -6,7 +6,7 @@ import unittest
 
 from tools.overworld.devtools_resolver_proof import resolver_measurements, negative_controls, NAMES
 from tools.overworld.devtools_resolver_parity import CASE_NAMES
-from tools.overworld.devtools_resolver_probe import REQUEST, RESULT, TRACE
+from tools.overworld.devtools_resolver_probe import BUFFER_BYTES, REQUEST, RESULT, TRACE
 from tools.overworld import test_devtools_resolver_parity as parity_tests
 
 
@@ -20,7 +20,7 @@ class ResolverProofTests(unittest.TestCase):
         for n in natives:
             n.update(dispatchClock=dict(frame=10,nativeCycle=25), returnClock=dict(frame=10,nativeCycle=25))
         calls=[]
-        for name,args,result in [("allocate_work_memory",[11,8000],work)]+[
+        for name,args,result in [("allocate_work_memory",[11,BUFFER_BYTES],work)]+[
                 ("resolve_behavior",[source,100,work+REQUEST,work+RESULT,work+TRACE],0)
                 ] * len(CASE_NAMES) + [("free",[work],128)]:
             calls.append(dict(routine=name,address=oracle["callAddresses"][name],requestedArguments=args[:],
@@ -29,7 +29,7 @@ class ResolverProofTests(unittest.TestCase):
         receipt=dict(preparedOnly=True,acceptedProof=False,boundary="native-field-command-trampoline",
             firstBadCheckpoint=None,firstInvalidThreadSwitch=None,nativeHeapAdaptation=[],calls=calls,
             value=dict(completed=True,acceptedProof=False,receipts=natives,
-                allocation=dict(released=True,heapId=11,bytes=8000,pointer=work)),
+                allocation=dict(released=True,heapId=11,bytes=BUFFER_BYTES,pointer=work)),
             naturalDiscovery=dict(blobAddress=source,blobSize=100,fieldPointer=0x02230000,heapGeneration=0,
                 status=0,requestHex=bytes(44).hex(),entryNativeCycle=20,returnNativeCycle=20),
             trampoline=dict(address=trampoline,bytes=1536,heapId=11,lifetime="field-system-heap11",

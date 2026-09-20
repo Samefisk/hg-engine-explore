@@ -19,7 +19,7 @@
   "capture": "none",
   "adapter": {
     "kind": "command-sequence",
-    "commands": [["{python}", "scripts/verify_overworld_behavior_resolver.py", "--scenario", "profile.resolve.override-order"]],
+    "commands": [["{python}", "scripts/verify_overworld_behavior_resolver.py", "--profile-case", "profile.resolve.override-order"]],
     "result": "json-passed"
   }
 }

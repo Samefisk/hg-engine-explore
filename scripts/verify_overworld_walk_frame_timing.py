@@ -310,9 +310,9 @@ def main() -> int:
         raise SystemExit("runtime momentum still calls the retired Walk table")
     if "call->lane->walkAccelerationStep" not in runtime_source:
         raise SystemExit("runtime momentum does not use the resolved acceleration amount")
-    if "#define OVERWORLD_WILD_RUNTIME_VERSION 16" not in runtime_header:
+    if "#define OVERWORLD_WILD_RUNTIME_VERSION 17" not in runtime_header:
         raise SystemExit("runtime Walk ABI version was not advanced")
-    if "expected_header = (0x3152574F, 16, expected_entry_size)" \
+    if "expected_header = (0x3152574F, 17, expected_entry_size)" \
             not in packager_source:
         raise SystemExit("ROM packager expects a stale runtime Walk ABI version")
 

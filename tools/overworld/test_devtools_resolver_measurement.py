@@ -4,6 +4,7 @@ import unittest
 
 from tools.overworld.devtools_resolver_measurement import ResolverMeasurement
 from tools.overworld.devtools_resolver_parity import CASE_NAMES
+from tools.overworld.devtools_resolver_probe import BUFFER_BYTES, REQUEST, RESULT, TRACE
 
 
 class ResolverMeasurementTests(unittest.TestCase):
@@ -14,16 +15,19 @@ class ResolverMeasurementTests(unittest.TestCase):
                       blobIdentity={"size":100}, serviceIdentity={"version":2},
                       dispatchClock={"frame":900,"nativeCycle":2000}, returnClock={"frame":900,"nativeCycle":2000})
                  for name in CASE_NAMES]
-        calls = [dict(routine="allocate_work_memory", requestedArguments=[11,8000], returnValue=pointer)]
+        calls = [dict(routine="allocate_work_memory",
+                      requestedArguments=[11, BUFFER_BYTES], returnValue=pointer)]
         for _ in cases:
-            args = [0x02020000,100,pointer+16,pointer+64,pointer+340]
+            args = [0x02020000, 100, pointer + REQUEST, pointer + RESULT,
+                    pointer + TRACE]
             calls.append(dict(routine="resolve_behavior", requestedArguments=args, entryArguments=args[:],returnValue=0))
         calls.append(dict(routine="free", requestedArguments=[pointer],returnValue=0))
         snapshot = {"frame":901,"nativeCycle":2002}
         receipt = dict(snapshot=snapshot,events=[],setupBoundary=dict(frame=901,nativeCycle=2002,eventsDrained=True),
             boundary="native-field-command-trampoline",preparedOnly=True,calls=calls,value=dict(
                 completed=True,acceptedProof=False,receipts=cases,
-                allocation=dict(pointer=pointer,heapId=11,bytes=8000,released=True)))
+                allocation=dict(pointer=pointer, heapId=11,
+                                bytes=BUFFER_BYTES, released=True)))
         return dict(command="resolver.probe",phase="observe",action="parity",receipt=receipt,snapshot=snapshot)
 
     def test_one_native_cycle_no_boot_padding_and_detached_result(self):

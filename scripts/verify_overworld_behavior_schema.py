@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove the generated v77 behavior schema matches C and Workshop contracts."""
+"""Prove the generated v79 behavior schema matches C and Workshop contracts."""
 
 from __future__ import annotations
 
@@ -70,6 +70,7 @@ def load_viewer_module():
 def main() -> int:
     schema = load_schema()
     fields = schema["fields"]
+    authoring_fields = [field for field in fields if not field.get("reserved")]
     rendered_header = render_c_header(schema)
     rendered_metadata = render_metadata_json(schema)
     if GENERATED_HEADER_PATH.read_text(encoding="utf-8") != rendered_header:
@@ -78,8 +79,8 @@ def main() -> int:
         fail("committed generated host metadata is stale")
     header_text = HEADER.read_text(encoding="utf-8")
     actual_layout = parse_c_layout(header_text, schema["compactCType"])
-    # v74 through v77 each add one logical field to an existing physical
-    # byte. The schema assigns non-overlapping bit ranges to each packed pair.
+    # Logical fields can share one physical byte. The schema assigns
+    # non-overlapping bit ranges to each packed group.
     expected_layout = []
     seen_storage = set()
     for field in fields:
@@ -92,7 +93,7 @@ def main() -> int:
         fail("generated field order or offsets do not match the compact C layout")
 
     actual_masks = parse_c_masks(header_text)
-    for field in fields:
+    for field in authoring_fields:
         expected = (field["mask"]["word"], field["mask"]["bit"])
         actual = actual_masks.get(field["mask"]["symbol"])
         if actual != expected:
@@ -101,8 +102,11 @@ def main() -> int:
     generated_header = rendered_header
     for field in fields:
         constant = re.sub(r"(?<!^)(?=[A-Z])", "_", field["key"]).upper()
+        if f"OW_BEHAVIOR_FIELD_{constant} = {field['id']}" not in generated_header:
+            fail(f"generated C field ID is missing for {field['key']}")
+    for field in authoring_fields:
+        constant = re.sub(r"(?<!^)(?=[A-Z])", "_", field["key"]).upper()
         required = (
-            f"OW_BEHAVIOR_FIELD_{constant} = {field['id']}",
             f"OW_BEHAVIOR_FIELD_OFFSET_{constant} {field['offset']}",
             f"OW_BEHAVIOR_FIELD_MASK_WORD_{constant} {field['mask']['word']}",
             f"OW_BEHAVIOR_FIELD_MASK_{constant} (1u << {field['mask']['bit']})",
@@ -111,24 +115,26 @@ def main() -> int:
             fail(f"generated C metadata is incomplete for {field['key']}")
 
     validator = validator_metadata(schema)
-    for word, expected in {"1": 0x07FFFFFF, "2": 0x00007FFF, "3": 0x3FFFFFFF}.items():
+    for word, expected in {"1": 0x07FEBFED, "2": 0x00007FFF, "3": 0x3FFFFFFB}.items():
         if validator["allowedOverrideMasks"][word] != expected:
             fail(f"generated allowed mask {word} is wrong")
 
     viewer = load_viewer_module()
     editor = editor_metadata(schema)
-    keys = [field["key"] for field in fields]
+    keys = [field["key"] for field in authoring_fields]
+    editor_fields_by_key = {field["key"]: field for field in editor["fields"]}
     if viewer.PROFILE_FIELDS != keys:
         fail("Workshop field order does not use the generated schema")
-    if set(viewer.OVERRIDE_SYMBOL_BY_FIELD) != set(keys):
+    authoring_keys = {field["key"] for field in authoring_fields}
+    if set(viewer.OVERRIDE_SYMBOL_BY_FIELD) != authoring_keys:
         fail("Workshop override field set differs from the schema")
-    for field in fields:
+    for field in authoring_fields:
         key = field["key"]
         if viewer.OVERRIDE_SYMBOL_BY_FIELD[key] != field["mask"]["symbol"]:
             fail(f"Workshop override symbol differs for {key}")
         if viewer.OVERRIDE_WORD_BY_FIELD[key] != field["mask"]["word"]:
             fail(f"Workshop override word differs for {key}")
-        generated_field = editor["fields"][field["id"]]
+        generated_field = editor_fields_by_key[key]
         if viewer.FIELD_LABELS[key] != generated_field["label"]:
             fail(f"Workshop label differs for {key}")
         if viewer.FIELD_UNITS.get(key, "") != generated_field["unit"]:
@@ -163,7 +169,7 @@ def main() -> int:
     if any(fragment not in header_text for fragment in required_turn_skid_macros):
         fail("C header does not publish the packed turn-skid option contract")
 
-    print("behavior schema: 72 logical fields match compact v77 C layout, masks, and Workshop metadata")
+    print("behavior schema: 72 storage fields and 67 authoring fields match compact v79 contracts")
     return 0
 
 

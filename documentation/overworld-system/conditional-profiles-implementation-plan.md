@@ -1,34 +1,44 @@
 # Conditional Profiles Implementation Plan
 
-Status: Implementation in progress. The legacy runtime stays authoritative
-until the CP7 cutover gate passes.
+Status: Implemented. This file retains the delivery order and its exit gates;
+the completion record below describes the authoritative result.
 
 ## Implementation status
 
 | Slice | State | Evidence and next action |
 | --- | --- | --- |
 | CP0 | Complete | Baseline schema, catalog, catalog tests, resolver goldens, actor view, and spawn lifecycle pass. The migration inventory reports 1,746 classified findings, zero unclassified findings, seven activeProfile references, and two legacy conditional states. |
-| CP1 | Complete | Catalog V3 owns profile kinds and condition entries. Generated storage V78 emits fixed profile-owned condition records. V1/V2 remain read-only migration inputs. |
+| CP1 | Complete | Catalog V3 owns profile kinds and condition entries. The final V79 generated storage emits fixed profile-owned condition records. V1/V2 remain read-only import inputs. |
 | CP2 | Complete | The portable evaluator covers while-true, timed duration, cooldown, refresh, player and actor targets, overlap order, stale targets, terrain/speed, and frame wrap. Its fixed result includes per-application winners and one final target. |
-| CP3 | Complete | The 44-byte request and 276-byte result support explicit conditions. Ordered resolver tests, 15 goldens, and host/package fixtures prove the new one-pass path. Legacy callers remain on the compatibility mode. |
-| CP4 | Complete | The role adapter prepares bounded condition entries at bind, clears them with actor identity, evaluates at the idle decision boundary, resolves in shadow mode, and emits armed-only trace facts. The old path still owns visible behavior. |
+| CP3 | Complete | The V2/44-byte request and 200-byte result support explicit conditions. Ordered resolver tests, 15 goldens, and host/package fixtures prove the one-pass path. |
+| CP4 | Complete | The role adapter prepares bounded condition entries at bind, clears them with actor identity, evaluates at intent boundaries, and emits armed-only trace facts. CP7 made this path authoritative and removed the shadow bridge. |
 | CP5 | Complete | The Workshop authors ordered, profile-owned conditions and previews draft data through the shared portable evaluator and resolver. The Active tab is gone; Conditions replaces Alert authoring. |
 | CP6 | Complete | All seven old Active-profile sources and both terrain conditions have profile-owned condition homes. Migration fixtures cover chase, flee, presentation-only alert, and terrain response. The inventory reports 1,784 classified findings, zero unclassified findings, seven mapped legacy sources, and zero unmapped sources. |
-| CP7–CP8 | Not started | Make the evaluator authoritative, remove the old Active/attentive path and compatibility formats, then run host, ROM, live, and pacing acceptance. |
+| CP7 | Complete | Wild and Follower intent boundaries use the condition adapter. Active and attentive runtime state, lane data, counters, transitions, shadow bridge, and public projection are removed. Alert remains presentation only. |
+| CP8 | Complete | Host checks, packaged resolver/evaluator proof, live Wild condition proof, current-ROM build, spawn-work pacing, and zero-stutter acceptance pass. The separate user playtest gate remains a roadmap concern, not a conditional-profile implementation gap. |
 
-## Latest handoff
+## Completion record
 
-- Current slice: CP6 complete; its exit gate is green.
-- Named catalog, generated catalog, Workshop compatibility views, migration
-  inventory, resolver goldens, and migration fixtures changed.
-- Generated schema and catalog checks pass. Workshop authoring passes 15
-  tests. The focused catalog, evaluator, resolver, inventory, and migration
-  set passes 46 tests. All 15 resolver goldens and the actual-C rule-removal
-  control pass.
-- Catalog storage stays V78 and semantic fingerprints stay V77 through CP6.
-- The old runtime path still owns visible behavior.
-- First CP7 action: make the Wild/Follower idle boundary consume evaluator and
-  resolver output before deleting the shadow and legacy state paths.
+- Catalog storage is V79, semantic behavior is V78, the resolver request is
+  V2/44 bytes, and its result is 200 bytes. The condition service is V8 and
+  the role adapter is V10.
+- Wild allocates one 2,044-byte condition workspace from `HEAPID_WORLD` only
+  when needed. Each of its ten 52-byte prepared actor records owns an exact
+  per-entry state allocation. Wild frees those child blocks itself, including
+  when the adapter overlay is unavailable.
+- Conditions run at every new intent boundary. The resolver runs again only
+  when the active conditional-application mask changes. Accepted motion is
+  never interrupted.
+- A timed refresh restarts duration. It requests Alert presentation only when
+  that trigger also changes resolved behavior. Tired can start only after the
+  last timed conditional application ends.
+- The adapter-private `PROFILE_CHANGED` flag never crosses the Wild public
+  outcome boundary, where the same bit means `FAIL_CLOSED`.
+- The current ROM passed `profile.resolve.packaged-rom-parity`,
+  `profile.condition.packaged-rom-evaluator`,
+  `profile.condition.live-wild-controller`,
+  `population.spawn-work-budget`, and
+  `world.unmounted.spawn-zero-stutter`.
 
 This plan changes who owns alert and active behavior. It does not design a
 general condition language.
@@ -65,8 +75,9 @@ The completed system has these properties:
 - When cooldown ends and the condition is still true, it triggers again,
   selects a fresh target, and restarts duration and cooldown.
 - A while-true condition has no held duration. It applies only while true.
-- Existing profile migration is a later delivery slice. The migration mapping
-  is not decided by this plan.
+- No broad behavior redesign or reusable migration framework is part of this
+  change. Existing catalog entries moved only as required for the ownership
+  cutover.
 
 ## Non-goals
 
@@ -180,10 +191,9 @@ These decisions are now part of the architecture contract for Slice CP4.
    targetless profile does not erase it. The resolver receives and validates
    that one target, its condition, and its source application.
 5. Binary compatibility.
-   Catalog storage is V78 and semantic fingerprints remain V77. The resolver
-   request is 44 bytes and the result is 276 bytes. The old 256-byte result
-   prefix keeps its exact offsets during migration. Host, package-parity, and
-   observation adapters use the new request extent explicitly.
+   The completed cutover uses catalog storage V79 and semantic behavior V78.
+   The resolver request is V2/44 bytes and the result is 200 bytes. Host,
+   package-parity, and observation adapters use those exact extents.
 
 ## Delivery rules
 

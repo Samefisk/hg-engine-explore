@@ -1,5 +1,10 @@
 #include "../../include/overworld_behavior_condition_runtime.h"
 
+#if !defined(OVERWORLD_BEHAVIOR_HOST) \
+    && !defined(OVERWORLD_ACTOR_SYSTEM_HOST)
+#include "../../include/constants/file.h"
+#endif
+
 #if defined(OVERWORLD_BEHAVIOR_HOST) \
     || defined(OVERWORLD_ACTOR_SYSTEM_HOST)
 #include <string.h>
@@ -258,11 +263,11 @@ static u8 OverworldBehaviorCondition_TargetPoolMatches(
     return groupMatch || memberMatch;
 }
 
-static void OverworldBehaviorCondition_BuildDefinition(
+static void __attribute__((noinline, optimize("Os")))
+OverworldBehaviorCondition_BuildDefinition(
     const OverworldWildBehaviorConditionEntry *entry,
     OverworldBehaviorConditionDefinition *definition)
 {
-    memset(definition, 0, sizeof(*definition));
     definition->conditionId = entry->conditionId;
     definition->durationFrames = entry->durationFrames;
     definition->cooldownFrames = entry->cooldownFrames;
@@ -277,6 +282,7 @@ static void OverworldBehaviorCondition_BuildDefinition(
     definition->chance = entry->chancePercent;
     definition->minMovementSpeed = entry->minMovementSpeed;
     definition->maxMovementSpeed = entry->maxMovementSpeed;
+    definition->reserved = 0;
 }
 
 static u8 OverworldBehaviorCondition_ChanceRoll(
@@ -304,12 +310,18 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_PrepareActor(
 {
     const OverworldWildBehaviorDataBlob *blob =
         (const OverworldWildBehaviorDataBlob *)blobBytes;
+    OverworldBehaviorConditionEntryState *states;
+    u16 stateCapacity;
     u16 i;
 
     if (subjectContext == NULL || subject == NULL || prepared == NULL) {
         return OVERWORLD_BEHAVIOR_CONDITION_INVALID_ARGUMENT;
     }
+    states = prepared->states;
+    stateCapacity = prepared->stateCapacity;
     memset(prepared, 0, sizeof(*prepared));
+    prepared->states = states;
+    prepared->stateCapacity = stateCapacity;
     if (!OverworldBehaviorCondition_BlobValid(blob, blobSize)) {
         return OVERWORLD_BEHAVIOR_CONDITION_INVALID_DEFINITION;
     }
@@ -323,6 +335,30 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_PrepareActor(
             return OVERWORLD_BEHAVIOR_CONDITION_INVALID_DEFINITION;
         }
         prepared->catalogEntryIndexes[prepared->count++] = i;
+    }
+    if (prepared->count > prepared->stateCapacity
+        || (prepared->count != 0 && prepared->states == NULL)) {
+#if defined(OVERWORLD_BEHAVIOR_HOST) \
+    || defined(OVERWORLD_ACTOR_SYSTEM_HOST)
+        return OVERWORLD_BEHAVIOR_CONDITION_STORAGE_REQUIRED;
+#else
+        if (prepared->states != NULL) {
+            return OVERWORLD_BEHAVIOR_CONDITION_STORAGE_REQUIRED;
+        }
+        prepared->states = sys_AllocMemory(
+            HEAPID_WORLD,
+            prepared->count * sizeof(*prepared->states));
+        if (prepared->states == NULL) {
+            return OVERWORLD_BEHAVIOR_CONDITION_STORAGE_REQUIRED;
+        }
+        prepared->stateCapacity = prepared->count;
+#endif
+    }
+    if (prepared->count != 0) {
+        memset(
+            prepared->states,
+            0,
+            prepared->count * sizeof(*prepared->states));
     }
     prepared->valid = 1;
     return OVERWORLD_BEHAVIOR_CONDITION_OK;
@@ -341,6 +377,10 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluatePrepared(
 {
     const OverworldWildBehaviorDataBlob *blob =
         (const OverworldWildBehaviorDataBlob *)blobBytes;
+    OverworldBehaviorConditionDefinition definition;
+    OverworldBehaviorConditionEntryInput input;
+    OverworldBehaviorConditionEntryResult entryResult;
+    OverworldBehaviorConditionStatus status;
     u16 i;
 
     if (prepared == NULL || world == NULL || candidates == NULL
@@ -356,40 +396,107 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluatePrepared(
         return OVERWORLD_BEHAVIOR_CONDITION_INVALID_DEFINITION;
     }
     memset(scratch, 0, sizeof(*scratch));
+    memset(result, 0, sizeof(*result));
+    result->resolvedTargetConditionId =
+        OVERWORLD_BEHAVIOR_CONDITION_NO_ENTRY;
+    result->resolvedTargetSourceApplication =
+        OVERWORLD_BEHAVIOR_CONDITION_NO_APPLICATION;
+    result->winningConditionId = OVERWORLD_BEHAVIOR_CONDITION_NO_ENTRY;
+    result->winningConditionSourceApplication =
+        OVERWORLD_BEHAVIOR_CONDITION_NO_APPLICATION;
+    result->resolvedTarget.kind =
+        OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE;
+    for (i = 0; i < OVERWORLD_BEHAVIOR_CONDITION_MAX_APPLICATIONS; i++) {
+        result->winningConditionIds[i] =
+            OVERWORLD_BEHAVIOR_CONDITION_NO_ENTRY;
+        result->targets[i].kind =
+            OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE;
+    }
+    /* Validate the complete prepared batch before any timer or target state
+     * is changed. This keeps malformed later entries atomic with the portable
+     * evaluator. */
     for (i = 0; i < prepared->count; i++) {
-        const OverworldWildBehaviorConditionEntry *entry;
         u16 sourceIndex = prepared->catalogEntryIndexes[i];
-        u8 candidateIndex;
 
         if (sourceIndex >= blob->header.conditionEntryCount) {
             return OVERWORLD_BEHAVIOR_CONDITION_INVALID_DEFINITION;
         }
-        entry = &blob->conditionEntries[sourceIndex];
         OverworldBehaviorCondition_BuildDefinition(
-            entry, &scratch->definitions[i]);
-        scratch->inputs[i].chanceRoll =
+            &blob->conditionEntries[sourceIndex], &definition);
+        if (!OverworldBehaviorCondition_DefinitionValid(&definition)) {
+            return OVERWORLD_BEHAVIOR_CONDITION_INVALID_DEFINITION;
+        }
+    }
+    for (i = 0; i < prepared->count; i++) {
+        const OverworldWildBehaviorConditionEntry *entry;
+        u16 sourceIndex = prepared->catalogEntryIndexes[i];
+        u8 candidateIndex;
+        u8 application;
+        u8 flags = 0;
+
+        entry = &blob->conditionEntries[sourceIndex];
+        OverworldBehaviorCondition_BuildDefinition(entry, &definition);
+        memset(&input, 0, sizeof(input));
+        input.chanceRoll =
             OverworldBehaviorCondition_ChanceRoll(
                 chanceSeed, &prepared->subject, entry->conditionId);
         if (entry->targetKind
-                != OW_WILD_BEHAVIOR_CONDITION_TARGET_ACTOR) {
-            continue;
-        }
-        for (candidateIndex = 0;
-             candidateIndex < candidateCount;
-             candidateIndex++) {
-            if (OverworldBehaviorCondition_TargetPoolMatches(
-                    blob, entry, &candidates[candidateIndex])) {
-                scratch->inputs[i].eligibleActorMask |=
-                    1u << candidateIndex;
+                == OW_WILD_BEHAVIOR_CONDITION_TARGET_ACTOR) {
+            for (candidateIndex = 0;
+                 candidateIndex < candidateCount;
+                 candidateIndex++) {
+                if (OverworldBehaviorCondition_TargetPoolMatches(
+                        blob, entry, &candidates[candidateIndex])) {
+                    input.eligibleActorMask |= 1u << candidateIndex;
+                }
             }
         }
+        status = OverworldBehaviorCondition_EvaluateEntry(
+            &definition,
+            &input,
+            world,
+            &prepared->states[i],
+            &entryResult);
+        if (status != OVERWORLD_BEHAVIOR_CONDITION_OK) {
+            return status;
+        }
+        if (entryResult.active) {
+            flags |= OVERWORLD_BEHAVIOR_CONDITION_SCRATCH_ACTIVE;
+        }
+        if (entryResult.conditionTrue) {
+            flags |= OVERWORLD_BEHAVIOR_CONDITION_SCRATCH_TRUE;
+        }
+        if (entryResult.triggered) {
+            flags |= OVERWORLD_BEHAVIOR_CONDITION_SCRATCH_TRIGGERED;
+        }
+        scratch->entryFlags[i] = flags;
+        if (!entryResult.active) {
+            continue;
+        }
+        application = definition.applicationIndex;
+        result->activeApplicationMask |= 1u << application;
+        if (entryResult.triggered) {
+            result->triggeredApplicationMask |= 1u << application;
+        } else {
+            result->triggeredApplicationMask &= ~(1u << application);
+        }
+        result->winningConditionIds[application] =
+            entryResult.conditionId;
+        result->targets[application] = entryResult.target;
     }
-    return OverworldBehaviorCondition_EvaluateWithResults(
-        scratch->definitions,
-        scratch->inputs,
-        prepared->states,
-        prepared->count,
-        world,
-        result,
-        scratch->entryResults);
+    for (i = 0; i < OVERWORLD_BEHAVIOR_CONDITION_MAX_APPLICATIONS; i++) {
+        if ((result->activeApplicationMask & (1u << i)) == 0) {
+            continue;
+        }
+        result->winningConditionId = result->winningConditionIds[i];
+        result->winningConditionSourceApplication = (u8)i;
+        if (result->targets[i].kind
+                != OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE) {
+            result->resolvedTarget = result->targets[i];
+            result->resolvedTargetConditionId =
+                result->winningConditionIds[i];
+            result->resolvedTargetSourceApplication = (u8)i;
+        }
+    }
+    return OVERWORLD_BEHAVIOR_CONDITION_OK;
 }

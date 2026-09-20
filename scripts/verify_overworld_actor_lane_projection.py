@@ -23,7 +23,7 @@ SPEC.loader.exec_module(view_fixture)
 
 DRIVER = r'''
 /* Expectations come from the public lane contract: the Owner lane handles
- * Chill and Emoting; AI Active/Tired select their respective resolved lanes.
+ * Chill and Emoting; Tired selects its resolved lane.
  * Mounted control always selects Owner. Native controller state stays raw.
  * ExpectedView supplies the prior fixture's exact preservation expectations;
  * only these two independently specified projection fields are replaced.
@@ -33,14 +33,14 @@ int main(void)
     const unsigned nativeStates[] = {
         OW_WILD_SPAWNER_SPOT_STATE_CHILL,
         OW_WILD_SPAWNER_SPOT_STATE_EMOTING,
-        OW_WILD_SPAWNER_SPOT_STATE_ACTIVE,
+        OW_WILD_SPAWNER_SPOT_STATE_RESERVED,
         OW_WILD_SPAWNER_SPOT_STATE_TIRED,
         4, 255,
     };
     const unsigned semanticLanes[] = {
         BEHAVIOR_RESOLUTION_LANE_OWNER,
         BEHAVIOR_RESOLUTION_LANE_OWNER,
-        BEHAVIOR_RESOLUTION_LANE_ACTIVE,
+        BEHAVIOR_RESOLUTION_LANE_NONE,
         BEHAVIOR_RESOLUTION_LANE_TIRED,
         BEHAVIOR_RESOLUTION_LANE_NONE, BEHAVIOR_RESOLUTION_LANE_NONE,
     };
@@ -106,7 +106,9 @@ int main(void)
         before.role = (u8)role;
         before.inputOwnership = (u8)mounted;
         before.presentationAttached = TRUE;
-        before.lane = (u8)((expectedLane + 1) % 3);
+        before.lane = (u8)(expectedLane == BEHAVIOR_RESOLUTION_LANE_OWNER
+            ? BEHAVIOR_RESOLUTION_LANE_TIRED
+            : BEHAVIOR_RESOLUTION_LANE_OWNER);
         gOverworldActorSystemState.slots[slot].snapshot = before;
         expected = ExpectedView(before, slot, phase, 0, 0);
         expected.lane = (u8)expectedLane;

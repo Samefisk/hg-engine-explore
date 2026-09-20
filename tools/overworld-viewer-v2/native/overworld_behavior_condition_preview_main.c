@@ -81,6 +81,35 @@ static void PrintTarget(
         (unsigned)target->actor.encounterGeneration);
 }
 
+static void TargetFromState(
+    const OverworldBehaviorConditionEntryState *state,
+    const OverworldBehaviorConditionWorldView *world,
+    OverworldBehaviorConditionTargetReference *target)
+{
+    int i;
+
+    memset(target, 0, sizeof(*target));
+    target->kind = state->targetKind;
+    if (state->targetKind
+            != OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR) {
+        return;
+    }
+    for (i = 0; i < world->actorCount; i++) {
+        const OverworldBehaviorConditionActorObservation *actor =
+            &world->actors[i];
+
+        if (actor->valid
+            && actor->actor.slot == state->targetSlot
+            && actor->actor.generation == state->targetGeneration
+            && actor->actor.encounterGeneration
+                == state->targetEncounterGeneration) {
+            target->actor = actor->actor;
+            return;
+        }
+    }
+    target->kind = OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE;
+}
+
 static void PrintResolver(
     const BehaviorResolveResult *result,
     BehaviorResolveStatus status,
@@ -145,6 +174,8 @@ int main(void)
     long long header[PREVIEW_HEADER_VALUES];
     OverworldWildBehaviorContext subjectContext;
     OverworldBehaviorConditionPreparedActor prepared;
+    OverworldBehaviorConditionEntryState
+        preparedStates[OVERWORLD_BEHAVIOR_CONDITION_MAX_ENTRIES];
     OverworldBehaviorConditionWorldView world;
     OverworldBehaviorConditionCandidate candidates[OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS];
     OverworldBehaviorConditionScratch scratch;
@@ -244,6 +275,9 @@ int main(void)
         world.actors[i].valid = (u8)values[14];
     }
 
+    memset(&prepared, 0, sizeof(prepared));
+    prepared.states = preparedStates;
+    prepared.stateCapacity = OVERWORLD_BEHAVIOR_CONDITION_MAX_ENTRIES;
     conditionStatus = OverworldBehaviorCondition_PrepareActor(
         blob, sizeof(*blob), &subjectContext, &world.subject, &prepared);
     if (conditionStatus != OVERWORLD_BEHAVIOR_CONDITION_OK) {
@@ -263,14 +297,24 @@ int main(void)
         preparedIndex = FindPreparedCondition(blob, &prepared, (u16)values[0]);
         if (preparedIndex < 0) continue;
         entryState = &prepared.states[preparedIndex];
-        entryState->active = (u8)values[1];
-        entryState->hasTriggered = (u8)values[2];
+        entryState->flags = 0;
+        if (values[1]) {
+            entryState->flags |= OVERWORLD_BEHAVIOR_CONDITION_STATE_ACTIVE;
+        }
+        if (values[2]) {
+            entryState->flags |=
+                OVERWORLD_BEHAVIOR_CONDITION_STATE_HAS_TRIGGERED;
+        }
         entryState->activeUntil = (u32)values[3];
         entryState->cooldownUntil = (u32)values[4];
-        entryState->target.kind = (u8)values[5];
-        if (entryState->target.kind == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR
+        entryState->targetKind = (u8)values[5];
+        if (entryState->targetKind == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR
             && values[6] >= 0 && values[6] < candidateCount) {
-            entryState->target.actor = world.actors[values[6]].actor;
+            entryState->targetSlot = world.actors[values[6]].actor.slot;
+            entryState->targetGeneration =
+                world.actors[values[6]].actor.generation;
+            entryState->targetEncounterGeneration =
+                world.actors[values[6]].actor.encounterGeneration;
         }
     }
 
@@ -325,8 +369,13 @@ int main(void)
     printf(",\"entries\":[");
     for (i = 0; i < prepared.count; i++) {
         u16 sourceIndex = prepared.catalogEntryIndexes[i];
-        const OverworldBehaviorConditionEntryResult *entry = &scratch.entryResults[i];
+        const OverworldWildBehaviorConditionEntry *entry =
+            &blob->conditionEntries[sourceIndex];
         const OverworldBehaviorConditionEntryState *entryState = &prepared.states[i];
+        OverworldBehaviorConditionTargetReference entryTarget;
+        u8 entryFlags = scratch.entryFlags[i];
+
+        TargetFromState(entryState, &world, &entryTarget);
 
         if (i != 0) putchar(',');
         printf("{\"sourceCatalogIndex\":%u,\"conditionId\":%u,"
@@ -337,16 +386,21 @@ int main(void)
             (unsigned)sourceIndex,
             (unsigned)entry->conditionId,
             (unsigned)entry->applicationIndex,
-            (unsigned)entry->conditionTrue,
-            (unsigned)entry->triggered,
-            (unsigned)entry->active,
-            (unsigned)(entry->active
+            (unsigned)((entryFlags
+                & OVERWORLD_BEHAVIOR_CONDITION_SCRATCH_TRUE) != 0),
+            (unsigned)((entryFlags
+                & OVERWORLD_BEHAVIOR_CONDITION_SCRATCH_TRIGGERED) != 0),
+            (unsigned)((entryFlags
+                & OVERWORLD_BEHAVIOR_CONDITION_SCRATCH_ACTIVE) != 0),
+            (unsigned)((entryFlags
+                    & OVERWORLD_BEHAVIOR_CONDITION_SCRATCH_ACTIVE) != 0
                 && conditionResult.winningConditionIds[entry->applicationIndex]
                     == entry->conditionId),
             (unsigned)entryState->activeUntil,
             (unsigned)entryState->cooldownUntil,
-            (unsigned)entryState->hasTriggered);
-        PrintTarget(&entry->target);
+            (unsigned)((entryState->flags
+                & OVERWORLD_BEHAVIOR_CONDITION_STATE_HAS_TRIGGERED) != 0));
+        PrintTarget(&entryTarget);
         printf("}");
     }
     printf("],\"resolver\":");

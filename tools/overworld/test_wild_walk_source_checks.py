@@ -203,15 +203,15 @@ static void finish(int slot) {
         with self.assertRaises(SystemExit):
             pause.function_body("static void finish(int slot);\nvoid other(void) {}", "finish")
 
-    def test_current_three_lane_routing(self):
+    def test_current_two_lane_routing(self):
         pause.verify_walk_pause_routing(self.spawns)
-        self.assertEqual(pause.function_body(self.spawns, COMPLETION).count("lane->walkPause"), 3)
+        self.assertEqual(pause.function_body(self.spawns, COMPLETION).count("lane->walkPause"), 2)
 
     def test_each_missing_lane_and_follower_special_case_fail(self):
         body = pause.function_body(self.spawns, COMPLETION)
         pieces = body.split("lane->walkPause")
-        self.assertEqual(len(pieces), 4)
-        for lane in range(3):
+        self.assertEqual(len(pieces), 3)
+        for lane in range(2):
             changed = pieces[0]
             for index, piece in enumerate(pieces[1:]):
                 changed += ("0" if index == lane else "lane->walkPause") + piece
@@ -225,19 +225,20 @@ static void finish(int slot) {
         insect.verify_face_player_call_gating(self.spawns)
         body = insect.function_bodies(self.spawns)[TICK]
         changed = body.replace(
-            "&& (!actorPolicyKnown",
-            "&& /* active chain owner */\n (!actorPolicyKnown",
+            "&& policy.motionPhase > OVERWORLD_MOTION_PHASE_IDLE",
+            "&& /* shared motion owner */\n policy.motionPhase > OVERWORLD_MOTION_PHASE_IDLE",
             1,
         )
         self.assertNotEqual(body, changed)
         insect.verify_face_player_call_gating(self.spawns.replace(body, changed, 1))
 
-    def test_weakened_option_grid_guard_or_ungated_call_fail(self):
+    def test_wrong_face_option_or_ungated_call_fails(self):
         body = insect.function_bodies(self.spawns)[TICK]
         for before, after in (
-            ("if (OW_WILD_BEHAVIOR_WALK_FACES_PLAYER(profile.owner.walkOptions)", "if (1"),
-            ("&& (!actorPolicyKnown", "|| (!actorPolicyKnown"),
-            ("!= OW_WILD_SPAWNER_CHAIN_REPOSITION_GRID_MARKER)", "== OW_WILD_SPAWNER_CHAIN_REPOSITION_GRID_MARKER)"),
+            (
+                "OW_WILD_BEHAVIOR_WALK_FACES_PLAYER(profile.owner.walkOptions)",
+                "OW_WILD_BEHAVIOR_WALK_FACES_PLAYER(profile.tired.walkOptions)",
+            ),
         ):
             self.assertIn(before, body)
             changed = body.replace(before, after, 1)

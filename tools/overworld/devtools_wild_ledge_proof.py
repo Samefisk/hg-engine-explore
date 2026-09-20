@@ -62,7 +62,7 @@ def measurements(replay, record):
             and data.get("returnValue") == 2 and data.get("suppressed") is False
             and data.get("jumpLevel") == 2 and data.get("guestMemoryWrites") == 2
             and data.get("pendingWrites", 0) == 0
-            and data.get("profilePointer", 0) >= 0x02000000 and len(bytes.fromhex(data.get("profileHex", ""))) == 216
+            and data.get("profilePointer", 0) >= 0x02000000 and len(bytes.fromhex(data.get("profileHex", ""))) == 144
             and before.get("subject") == subject and after.get("subject") == subject,
             label + " ledge native decision differs")
     require([south["before"]["publicSubject"]["logical"][key] for key in ("x", "y")] == ORIGIN

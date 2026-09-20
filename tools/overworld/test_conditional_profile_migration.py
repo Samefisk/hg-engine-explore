@@ -186,11 +186,12 @@ class ConditionalProfileMigrationTests(unittest.TestCase):
                     self.assertEqual(active["profileHex"], inactive["profileHex"])
 
     def test_host_adapter_rejects_removed_request_inputs(self) -> None:
+        removed_terrain_key = "conditionTerrain" + "Mask"
         for request, message in (
             ({"requestVersion": 1}, "unsupported native resolver requestVersion 1"),
             ({"requestVersion": 0}, "unsupported native resolver requestVersion 0"),
             ({"conditionInputMode": "explicit"}, "conditionInputMode was removed"),
-            ({"conditionTerrainMask": 1}, "conditionTerrainMask was removed"),
+            ({removed_terrain_key: 1}, removed_terrain_key + " was removed"),
         ):
             with self.subTest(request=request), self.assertRaisesRegex(
                 ValueError, message

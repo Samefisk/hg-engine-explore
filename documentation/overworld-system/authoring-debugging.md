@@ -141,10 +141,12 @@ and only its local field operators. A field operator is `replace`, `relative`,
 `atLeast`, `atMost`, or a supported combined relative bound.
 
 `selectors` choose the initial profile. Ordered `applications` hold targets,
-members, and shared matches. They use profile IDs and do not define another
-profile type. Conditional links and Active/Tired references use stable
-application IDs. Names are display text and can change without breaking these
-references.
+members, and shared matches. An application is normal or conditional. A
+conditional application names one profile and owns an ordered list of
+independent conditions. Each condition can use its own subject pool. The last
+active condition in one application wins; active applications still compose in
+the shared application order. Tired references use stable application IDs.
+Names are display text and can change without breaking these references.
 
 `data/OverworldWildBehaviorData.c` and
 `include/overworld_wild_behavior_data.h` are generated ROM-compatibility
@@ -184,9 +186,11 @@ do not create a second composition implementation.
 
 The resolve endpoint accepts the complete resolver context. In addition to
 species, level, terrain, and shiny state, agents can pass
-`conditionTerrainMask`, `forcedOverrideMask`, and `behaviorClass`. Values can
-be integers or known C symbols and flag expressions. Omit `behaviorClass`, or
-use `auto`, to run class rules.
+`forcedOverrideMask`, `activeConditionalApplicationMask`, condition winners,
+the resolved condition target, and `behaviorClass`. The Workshop condition
+preview prepares world facts and calls the same portable evaluator before it
+calls the resolver. Values can be integers or known C symbols and flag
+expressions. Omit `behaviorClass`, or use `auto`, to run class rules.
 
 `scripts/verify_overworld_behavior_resolver.py` runs the committed golden
 corpus through both single and batch Workshop adapters. It also checks that the
@@ -203,7 +207,7 @@ A resolution explanation must show:
 - Every layer in source order.
 - Applied, skipped, and conditionally selected layers.
 - Each changed field with old value, operator, and new value.
-- Active and Tired linked profile selection.
+- Winning condition entries, target source, and Tired profile selection.
 - Normalization changes.
 - Mechanical primitives.
 - Final fingerprint.

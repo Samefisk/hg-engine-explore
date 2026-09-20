@@ -13,20 +13,21 @@ from tools.overworld.control import _walk_reset_oracle
 class WalkResetOracleTests(unittest.TestCase):
     def check(self, fault=None):
         base, address = 0x023B0000, 0x023B0080
-        entry = struct.pack("<IHHII", 0x504D574F, 4, 16, base + 32, 0)
+        entry = struct.pack("<IHHII", 0x504D574F, 5, 16, base + 32, base + 64)
         table = bytearray(24)
         struct.pack_into("<I", table, 12, address | 1)
         code = bytes(range(32))
         image = bytearray(160)
         image[:16], image[32:56], image[128:] = entry, table, code
         descriptor = dict(privateServices=[dict(name="movementPolicy", address=base,
-            policy=base + 32, version=4, size=16, reserved=0, status="available")],
+            policy=base + 32, conditionAdapter=base + 64,
+            version=5, size=16, status="available")],
             overlay=dict(id=158, base=base, fileSize=len(image), sha256=hashlib.sha256(image).hexdigest()))
         linked = deepcopy(image)
         if fault == "package": image[128] ^= 1
         elif fault == "elf": linked[128] ^= 1
         elif fault == "callback": struct.pack_into("<I", linked, 44, address + 5)
-        elif fault == "version": descriptor["privateServices"][0]["version"] = 3
+        elif fault == "version": descriptor["privateServices"][0]["version"] = 4
         elif fault == "duplicate": descriptor["privateServices"] *= 2
         elif fault == "bounds": descriptor["privateServices"][0]["address"] = base - 4
         with tempfile.TemporaryDirectory() as directory:

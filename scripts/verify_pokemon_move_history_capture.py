@@ -114,8 +114,8 @@ OVERWORLD_CORE_THUMB_HELPERS = {
 }
 OVERWORLD_CORE_HELPER_CLIENTS = {
     158: ("overworld_actor_system_overlay", ("memcpy", "memset", "__aeabi_uidivmod", "__aeabi_lmul", "__aeabi_idiv", "__aeabi_uidiv", "__gnu_thumb1_case_uqi", "__aeabi_idivmod")),
-    152: ("overworld_follower_selector_overlay", ("__gnu_thumb1_case_uhi", "__aeabi_idivmod", "memcpy", "__aeabi_lmul", "__aeabi_idiv", "memset")),
-    149: ("overworld_wild_spawns_overlay", ("__aeabi_uidivmod", "memset", "__aeabi_idivmod", "__gnu_thumb1_case_uhi", "__aeabi_idiv", "OverworldWildSpawns_ApplyFacePlayerFacing", "__gnu_thumb1_case_uqi", "memcpy")),
+    152: ("overworld_follower_selector_overlay", ("__gnu_thumb1_case_uhi", "__aeabi_idivmod", "memcpy", "__aeabi_lmul", "__aeabi_idiv", "memset", "__aeabi_uidivmod", "__aeabi_uidiv", "__gnu_thumb1_case_uqi")),
+    149: ("overworld_wild_spawns_overlay", ("__aeabi_uidivmod", "memset", "__aeabi_idivmod", "__aeabi_idiv", "memcpy")),
     153: ("pokemon_move_history_overlay", ("memset",)),
 }
 OVERWORLD_CORE_PRESERVED_BODIES = {
@@ -152,7 +152,7 @@ OVERLAY153_CORE_CALL_INVENTORY_SHA256 = (
 OVERLAY155_BASE = 0x023BD400
 OVERLAY155_LIMIT = 0x1000
 OVERLAY155_CALL_INVENTORY_SHA256 = (
-    "618008667911384b39e43dbb1936eb84aed2dd1f51c73b901933ed8a7c192df5"
+    "4a84f70cb3586c282c500d85cd6d6df924364c2bd100b8d0aa8abeeb6c689393"
 )
 # The planner reserve contains the current Hop and Teleport calls, including
 # Teleport's ARM9 BLX classifier callback.
@@ -178,7 +178,7 @@ OVERLAY155_RETIRED_HOP_SYMBOLS = {
     "OverworldWild_IsChainActionReady",
 }
 EXPECTED_MAKEFILE_SHA256 = (
-    "82647a1254f31b572fde2f51c9ac38f31c155bbb6c44a70be68c65a7f409d5a5"
+    "dbfe4a67159dfb6d325c3e8f960ef493292d75b4adf589ac5d2a6162bb24f9f1"
 )
 EXPECTED_BUILD_WRAPPER_SHA256 = (
     "96a807bb9033336361b2da6c57eb0b55a3dcc18e19b900007bdf416c11833e1c"
@@ -195,7 +195,7 @@ EXPECTED_INCLUDED_MAKE_SOURCES = {
     "narcs.mk":
         "df964fe5b5822e230ab179e45eb53e23fbf9adab46afbe89167495b4f96e467a",
     "overlays.mk":
-        "f0a124ef0d19e26f09d7784e2976accce1ae6c8360010a74af5c55bf8050d0a1",
+        "80aad102489966e2d234a043e585652bbae3b624d969e6b4dfc7421020f9b68a",
 }
 MANAGED_BUILD_PATH = (
     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -5926,8 +5926,12 @@ def overworld_core_client_objects(client: str) -> list[Path]:
     objects = {REPO / "build" / client / (source.stem + ".o") for source in sources}
     if client == "overworld_actor_system_overlay":
         objects.update(REPO / "build" / client / (name + ".o") for name in (
-            "overworld_behavior_resolver", "overworld_motion_model",
+            "overworld_behavior_condition_adapter", "overworld_behavior_resolver",
+            "overworld_motion_model",
             "overworld_actor_transition_model", "overworld_population_model"))
+    if client == "overworld_follower_selector_overlay":
+        objects.update(REPO / "build" / client / (name + ".o") for name in (
+            "overworld_behavior_conditions", "overworld_behavior_condition_runtime"))
     require(bool(sources) and all(path.is_file() for path in objects),
             f"overworld helper client {client} lacks current source/caller objects")
     return sorted(objects)

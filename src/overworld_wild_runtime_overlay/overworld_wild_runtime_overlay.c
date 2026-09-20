@@ -413,14 +413,14 @@ OverworldWildRuntime_FillActorView(
     view->controllerState = mounted
         ? OW_WILD_SPAWNER_SPOT_STATE_CHILL
         : state->movementSpotStates[slot];
-    /* Native Emoting is not the Active lane. Preserve the raw controller
-     * state separately; an unknown state must not invent a resolved lane. */
-    view->lane = view->controllerState > OW_WILD_SPAWNER_SPOT_STATE_TIRED
-        ? BEHAVIOR_RESOLUTION_LANE_NONE
-        : view->controllerState < OW_WILD_SPAWNER_SPOT_STATE_ACTIVE
-            ? BEHAVIOR_RESOLUTION_LANE_OWNER
-            : view->controllerState - OW_WILD_SPAWNER_SPOT_STATE_ACTIVE
-                + BEHAVIOR_RESOLUTION_LANE_ACTIVE;
+    /* Emoting is presentation over the Owner lane. Reserved and unknown
+     * controller values must not invent a resolved lane. */
+    view->lane = view->controllerState == OW_WILD_SPAWNER_SPOT_STATE_TIRED
+        ? BEHAVIOR_RESOLUTION_LANE_TIRED
+        : view->controllerState == OW_WILD_SPAWNER_SPOT_STATE_CHILL
+            || view->controllerState == OW_WILD_SPAWNER_SPOT_STATE_EMOTING
+        ? BEHAVIOR_RESOLUTION_LANE_OWNER
+        : BEHAVIOR_RESOLUTION_LANE_NONE;
     view->presentationState = 0;
     if (object != NULL
         && (object->flags & BIT_VANISH) == 0
@@ -649,7 +649,7 @@ static void OverworldActorWalkPolicy_ReduceStartResult(
         }
         return;
     }
-    policy->pendingStep = OVERWORLD_ACTOR_WALK_PENDING_ACTIVE;
+    policy->pendingStep = OVERWORLD_ACTOR_WALK_PENDING_ACCEPTED;
     if ((call->stepFlags & OVERWORLD_ACTOR_WALK_STEP_SKID) != 0) {
         state->speed = OverworldWalk_ClampTime(call->travelTime);
         if ((call->stepFlags & OVERWORLD_ACTOR_WALK_STEP_CONTINUATION) == 0) {
@@ -695,12 +695,12 @@ static void OverworldActorWalkPolicy_ReduceCommit(
     u8 fastestTime;
     BOOL wasSkidding = policy->pendingSkid;
 
-    if (policy->pendingStep != OVERWORLD_ACTOR_WALK_PENDING_ACTIVE) {
+    if (policy->pendingStep != OVERWORLD_ACTOR_WALK_PENDING_ACCEPTED) {
         return;
     }
     policy->pendingStep = OVERWORLD_ACTOR_WALK_PENDING_NONE;
     baseSpeed = OverworldWalk_ClampTime(call->lane->chillSpeed);
-    if ((call->flags & OVERWORLD_ACTOR_WALK_POLICY_FLAG_WALK_ACTIVE) == 0
+    if ((call->flags & OVERWORLD_ACTOR_WALK_POLICY_FLAG_WALK_ACCEPTED) == 0
         || state->speed == 0 || state->baseSpeed != baseSpeed
         || state->spotState != call->laneState) {
         OverworldActorWalkPolicy_ResetState(policy, FALSE, 0, 0);

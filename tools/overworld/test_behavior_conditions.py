@@ -76,6 +76,8 @@ int main(void)
     OverworldBehaviorConditionEntryResult entry;
     OverworldBehaviorConditionResult result;
 
+    assert(sizeof(OverworldBehaviorConditionEntryState) == 16);
+
     world.subject = Handle(0, 1);
     world.subjectX = 10;
     world.subjectY = 10;
@@ -143,7 +145,7 @@ int main(void)
     world.actors[0].valid = 0;
     assert(OverworldBehaviorCondition_EvaluateEntry(
         &definitions[1], &inputs[1], &world, &states[1], &entry)
-        == OVERWORLD_BEHAVIOR_CONDITION_OK);
+        == OVERWORLD_BEHAVIOR_CONDITION_STALE_TARGET);
     assert(!entry.active);
 
     memset(states, 0, sizeof(states));
@@ -203,9 +205,24 @@ int main(void)
     world.frame = 106;
     assert(OverworldBehaviorCondition_EvaluateEntry(
         &definitions[0], &inputs[0], &world, &states[0], &entry)
-        == OVERWORLD_BEHAVIOR_CONDITION_OK);
+        == OVERWORLD_BEHAVIOR_CONDITION_STALE_TARGET);
     assert(!entry.active);
     world.actors[0].actor = Handle(1, 2);
+
+    /* The compact target still rejects an actor from another field epoch. */
+    memset(&states[0], 0, sizeof(states[0]));
+    world.frame = 200;
+    assert(OverworldBehaviorCondition_EvaluateEntry(
+        &definitions[0], &inputs[0], &world, &states[0], &entry)
+        == OVERWORLD_BEHAVIOR_CONDITION_OK);
+    assert(entry.active && entry.target.actor.slot == 1);
+    world.actors[0].actor.fieldEpoch = 9;
+    world.frame = 201;
+    assert(OverworldBehaviorCondition_EvaluateEntry(
+        &definitions[0], &inputs[0], &world, &states[0], &entry)
+        == OVERWORLD_BEHAVIOR_CONDITION_STALE_TARGET);
+    assert(!entry.active);
+    world.actors[0].actor.fieldEpoch = 3;
 
     memset(&states[0], 0, sizeof(states[0]));
     definitions[0] = PlayerTimed(7);
@@ -266,7 +283,9 @@ int main(void)
     assert(OverworldBehaviorCondition_Evaluate(
         definitions, inputs, states, 2, &world, &result)
         == OVERWORLD_BEHAVIOR_CONDITION_INVALID_DEFINITION);
-    assert(!states[0].active && !states[0].hasTriggered);
+    assert((states[0].flags
+        & (OVERWORLD_BEHAVIOR_CONDITION_STATE_ACTIVE
+            | OVERWORLD_BEHAVIOR_CONDITION_STATE_HAS_TRIGGERED)) == 0);
 
     assert(OverworldBehaviorCondition_Evaluate(
         definitions, inputs, states,
@@ -322,7 +341,8 @@ static void SetAllSubject(
 int main(void)
 {
     OverworldWildBehaviorDataBlob *blob = malloc(sizeof(*blob));
-    OverworldBehaviorConditionPreparedActor prepared;
+    OverworldBehaviorConditionPreparedActor prepared = {0};
+    OverworldBehaviorConditionEntryState preparedStates[2];
     OverworldBehaviorConditionScratch scratch;
     OverworldBehaviorConditionResult result;
     OverworldBehaviorConditionWorldView world = {0};
@@ -330,6 +350,8 @@ int main(void)
     OverworldWildBehaviorContext subjectContext = {0};
     BehaviorResolveRequest request = {0};
     OverworldWildBehaviorConditionEntry *entry;
+
+    assert(sizeof(preparedStates) == 32);
 
     assert(blob != NULL);
     memcpy(blob, &gOverworldWildBehaviorDataBlob, sizeof(*blob));
@@ -376,6 +398,12 @@ int main(void)
     world.subject = Handle(0, 1);
     assert(OverworldBehaviorCondition_PrepareActor(
         blob, sizeof(*blob), &subjectContext, &world.subject, &prepared)
+        == OVERWORLD_BEHAVIOR_CONDITION_STORAGE_REQUIRED);
+    assert(!prepared.valid && prepared.count == 2);
+    prepared.states = preparedStates;
+    prepared.stateCapacity = 2;
+    assert(OverworldBehaviorCondition_PrepareActor(
+        blob, sizeof(*blob), &subjectContext, &world.subject, &prepared)
         == OVERWORLD_BEHAVIOR_CONDITION_OK);
     assert(prepared.valid && prepared.count == 2);
 
@@ -406,15 +434,31 @@ int main(void)
     assert(result.activeApplicationMask == ((1u << 1) | (1u << 2)));
     assert(result.targets[1].kind == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR);
     assert(result.targets[1].actor.slot == 1);
-    assert(scratch.entryResults[0].conditionTrue);
-    assert(scratch.entryResults[1].conditionTrue);
+    assert(scratch.entryFlags[0]
+        & OVERWORLD_BEHAVIOR_CONDITION_SCRATCH_TRUE);
+    assert(scratch.entryFlags[1]
+        & OVERWORLD_BEHAVIOR_CONDITION_SCRATCH_TRUE);
+
+    /* Reject the prepared batch before an invalid later entry mutates the
+     * first condition's state. */
+    memset(prepared.states, 0, sizeof(preparedStates));
+    blob->conditionEntries[1].conditionId =
+        OVERWORLD_BEHAVIOR_CONDITION_NO_ENTRY;
+    assert(OverworldBehaviorCondition_EvaluatePrepared(
+        blob, sizeof(*blob), &prepared, &world, candidates, 2, world.frame,
+        &scratch, &result)
+        == OVERWORLD_BEHAVIOR_CONDITION_INVALID_DEFINITION);
+    assert(prepared.states[0].flags == 0);
+    blob->conditionEntries[1].conditionId = 502;
+    assert(OverworldBehaviorCondition_EvaluatePrepared(
+        blob, sizeof(*blob), &prepared, &world, candidates, 2, world.frame,
+        &scratch, &result) == OVERWORLD_BEHAVIOR_CONDITION_OK);
 
     /* A reused candidate slot invalidates the captured complete actor handle. */
     world.actors[0].actor = Handle(1, 9);
     assert(OverworldBehaviorCondition_EvaluatePrepared(
         blob, sizeof(*blob), &prepared, &world, candidates, 2, world.frame + 1,
-        &scratch, &result) == OVERWORLD_BEHAVIOR_CONDITION_OK);
-    assert(result.targets[1].kind == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE);
+        &scratch, &result) == OVERWORLD_BEHAVIOR_CONDITION_STALE_TARGET);
     assert(OverworldBehaviorCondition_EvaluatePrepared(
         blob, sizeof(*blob), &prepared, &world, candidates, 2, world.frame + 2,
         &scratch, &result) == OVERWORLD_BEHAVIOR_CONDITION_OK);
@@ -432,6 +476,230 @@ int main(void)
 
 
 class BehaviorConditionTests(unittest.TestCase):
+    def test_wild_controller_uses_the_idle_intent_boundary(self):
+        source = (
+            ROOT
+            / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
+        ).read_text()
+        boundary = source.index("            if (actorMotionOwnsFacing) {")
+        cooldown = source.index("            if (cooldown > 0) {", boundary)
+        no_intent = source.index(
+            "            if (!shouldIssueLookCommand) {", cooldown
+        )
+        evaluation = source.index(
+            "            if (OverworldWildSpawns_IssueIdleIntent(", no_intent
+        )
+        self.assertLess(cooldown, no_intent)
+        self.assertLess(no_intent, evaluation)
+
+    def test_wild_controller_validates_the_condition_adapter(self):
+        source = (
+            ROOT
+            / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
+        ).read_text()
+        helper_start = source.index("OverworldWildSpawns_GetConditionAdapter(void)")
+        helper_end = source.index(
+            "OverworldWildSpawns_ClearConditionSlot(", helper_start
+        )
+        helper = source[helper_start:helper_end]
+        for required in (
+            "OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_MAGIC",
+            "OVERWORLD_ACTOR_MOVEMENT_POLICY_SERVICE_VERSION",
+            "service->size != sizeof(*service)",
+            "service->conditionAdapter == NULL",
+            "OVERWORLD_BEHAVIOR_CONDITION_ADAPTER_MAGIC",
+            "OVERWORLD_BEHAVIOR_CONDITION_ADAPTER_VERSION",
+        ):
+            self.assertIn(required, helper)
+        actor = (
+            ROOT
+            / "src/overworld_actor_system_overlay/overworld_actor_system_overlay.c"
+        ).read_text()
+        for required in (
+            "gOverworldBehaviorConditionAdapterEntry.prepareActor == NULL",
+            "gOverworldBehaviorConditionAdapterEntry.clearActor == NULL",
+            "gOverworldBehaviorConditionAdapterEntry.clearAll == NULL",
+            "gOverworldBehaviorConditionAdapterEntry.clearResolution == NULL",
+            "gOverworldBehaviorConditionAdapterEntry.evaluateActor == NULL",
+            "gOverworldActorSystemMovementPolicyServiceEntry.conditionAdapter",
+        ):
+            self.assertIn(required, actor)
+
+    def test_wild_condition_state_is_allocated_lazily(self):
+        source = (
+            ROOT
+            / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
+        ).read_text()
+        self.assertIn(
+            "OverworldWildBehaviorConditionRuntime *conditions;",
+            source,
+        )
+        ensure_start = source.index(
+            "OverworldWildSpawns_EnsureConditionRuntime("
+        )
+        ensure_end = source.index(
+            "#define OW_WILD_CUSTOM_JUMP_DIRECTION_COUNT",
+            ensure_start,
+        )
+        ensure = source[ensure_start:ensure_end]
+        self.assertIn(
+            "sys_AllocMemory(\n            HEAPID_WORLD,",
+            ensure,
+        )
+        self.assertIn("sizeof(*runtime->conditions)", ensure)
+        self.assertIn(
+            "sizeof(OverworldWildBehaviorConditionRuntime) == 2044",
+            (ROOT / "include/overworld_behavior_condition_adapter.h")
+            .read_text(),
+        )
+        prepare_start = source.index(
+            "OverworldWildSpawns_PrepareConditionsForSlot("
+        )
+        prepare_end = source.index(
+            "#define OW_WILD_CONDITION_RESULT_TRIGGERED",
+            prepare_start,
+        )
+        self.assertIn(
+            "OverworldWildSpawns_EnsureConditionRuntime(state)",
+            source[prepare_start:prepare_end],
+        )
+        self.assertIn("sys_FreeMemoryEz(runtime->conditions);", source)
+
+    def test_every_chain_intent_boundary_rechecks_conditions(self):
+        source = (
+            ROOT
+            / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
+        ).read_text()
+        deferred_start = source.index(
+            "static void __attribute__((noinline, optimize(\"Os\"))) OverworldWildSpawns_CommitDeferredChainMovementPause("
+        )
+        deferred_end = source.index(
+            "OverworldWildSpawns_TryStartWalkStopSkid(", deferred_start
+        )
+        deferred = source[deferred_start:deferred_end]
+        self.assertIn(
+            "OverworldWildSpawns_ResolveChainConditionsAtIntentBoundary(",
+            deferred,
+        )
+        self.assertLess(
+            deferred.index("OverworldWildSpawns_IsChainActionReady(slot)"),
+            deferred.index(
+                "OverworldWildSpawns_ResolveChainConditionsAtIntentBoundary("
+            ),
+        )
+        finished_start = source.index(
+            "static void __attribute__((optimize(\"Os\"))) OverworldWildSpawns_HandleFinishedMovementCommand("
+        )
+        finished_end = source.index(
+            "OverworldWildSpawns_CompleteTeleportMovement(", finished_start
+        )
+        chain_start = source.index(
+            "if ((policy.chainStepsRemaining", finished_start, finished_end
+        )
+        reposition_start = source.index(
+            "OverworldWildSpawns_RunChainReposition(", chain_start, finished_end
+        )
+        self.assertIn(
+            "OverworldWildSpawns_ResolveChainConditionsAtIntentBoundary(",
+            source[chain_start:reposition_start],
+        )
+
+    def test_condition_allocation_failure_rejects_bind(self):
+        source = (
+            ROOT
+            / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
+        ).read_text()
+        startup_start = source.index("OverworldWildSpawns_StartSpawnStartup(")
+        startup_end = source.index(
+            "OverworldWildSpawns_CountActiveBehaviorLimitKey(", startup_start
+        )
+        startup = source[startup_start:startup_end]
+        self.assertIn(
+            "if (!OverworldWildSpawns_PrepareConditionsForSlot(", startup
+        )
+        self.assertIn("->unbind(", startup)
+
+        transition_start = source.index(
+            "static BOOL __attribute__((optimize(\"Os\"))) OverworldWildSpawns_ApplyTransitionWork("
+        )
+        transition_end = source.index(
+            "OverworldWildSpawns_StartTiredEmoteWithProfile(", transition_start
+        )
+        transition = source[transition_start:transition_end]
+        self.assertIn(
+            "if (!OverworldWildSpawns_PrepareConditionsForSlot(", transition
+        )
+
+    def test_wild_timed_completion_tracks_only_winning_conditions(self):
+        source = (
+            ROOT
+            / "lib/overworld/overworld_behavior_condition_adapter.c"
+        ).read_text()
+        evaluation_start = source.index(
+            "OverworldBehaviorConditionAdapter_EvaluateActor("
+        )
+        evaluation_end = source.index(
+            "const OverworldBehaviorConditionAdapterEntry",
+            evaluation_start,
+        )
+        evaluation = source[evaluation_start:evaluation_end]
+        self.assertIn(
+            "runtime->result.winningConditionIds[", evaluation
+        )
+        self.assertIn("== entry->conditionId", evaluation)
+
+    def test_wild_uses_tired_only_after_the_last_timed_profile_ends(self):
+        source = (
+            ROOT
+            / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
+        ).read_text()
+        evaluation_start = source.index(
+            "OverworldWildSpawns_EvaluateConditionsForSlot("
+        )
+        evaluation_end = source.index(
+            "OverworldWildSpawns_BehaviorSlotCacheMatches(", evaluation_start
+        )
+        evaluation = source[evaluation_start:evaluation_end]
+        self.assertIn(
+            "& (OVERWORLD_BEHAVIOR_CONDITION_OUTCOME_TRIGGERED\n"
+            "                | OVERWORLD_BEHAVIOR_CONDITION_OUTCOME_TIMED_ENDED)",
+            evaluation,
+        )
+        self.assertNotIn("return outcome.flags |", evaluation)
+        self.assertNotIn("endingRequest", evaluation)
+        self.assertNotIn("endedTimedApplicationMask", evaluation)
+        boundary_start = source.index(
+            'static BOOL __attribute__((noinline, optimize("Os")))\n'
+            "OverworldWildSpawns_ResolveConditionsAtIntentBoundary("
+        )
+        boundary_end = source.index(
+            "OverworldWildSpawns_ResolveChainConditionsAtIntentBoundary(",
+            boundary_start,
+        )
+        boundary = source[boundary_start:boundary_end]
+        self.assertIn(
+            "OverworldWildSpawns_GetActiveConditionApplications(state, slot) == 0",
+            boundary,
+        )
+
+    def test_alert_completion_rechecks_conditions_before_owner_work(self):
+        source = (
+            ROOT
+            / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
+        ).read_text()
+        resume_start = source.index("OverworldWildSpawns_ResumeOwnerAfterAlert(")
+        resume_end = source.index("OverworldWildSpawns_TickSpotEmote(", resume_start)
+        resume = source[resume_start:resume_end]
+        evaluation = resume.index(
+            "OverworldWildSpawns_ResolveConditionsAtIntentBoundary("
+        )
+        teleport = resume.index(
+            "OverworldWildSpawns_PrepareConditionalTeleport("
+        )
+        pickup = resume.index("OverworldWildSpawns_TryStartPickupThrowAction(")
+        self.assertLess(evaluation, teleport)
+        self.assertLess(evaluation, pickup)
+
     def test_portable_evaluator(self):
         with tempfile.TemporaryDirectory(prefix="behavior-conditions-") as directory:
             source = Path(directory) / "conditions.c"

@@ -2,11 +2,11 @@
 import struct
 
 ACTOR_ELF = "overworld_actor_system_overlay_linked.o"
-ACTOR_REGION = (0x023B6500, 0x023BAB00)
+ACTOR_REGION = (0x023B65A0, 0x023BAB00)
 ACTOR_STATE_ADDRESS = 0x023BA170
 
 DATA = (
-    ("fieldTransition", "field_linked.o", "sOverworldFieldTransition", ".bss", 20),
+    ("fieldTransition", "field_linked.o", "sOverworldFieldTransition", ".bss", 24),
     ("readyTaskMapId", "linked.o", "sFieldReadyTaskMapId", ".text", 2),
     ("selectorState", "field_linked.o", "gOverworldFollowerSelectorStateStorage", ".text", 1),
     ("wildFlags", "overworld_wild_spawns_overlay_linked.o", "sOverworldWildFlags", ".bss", 6),
@@ -111,7 +111,7 @@ def observe_field_cleanup(read, authenticate, load_elf, loaded_overlays, frame, 
             "movementFrameDecisionCounter", "movementFrameTaskExecuting", "spawnHopPreparing"), value("wildFlags")))
         # Public internal layout: 24-byte state prefix, then 20-byte transition.
         actor = value("actorState", 44)
-        if struct.unpack_from("<IHH", actor) != (0x5353574F, 1, bindings["actorState"][1]):
+        if struct.unpack_from("<IHH", actor) != (0x5353574F, 2, bindings["actorState"][1]):
             raise ValueError("actor-state-header-mismatch")
         result["actorTransition"] = dict(zip(("sequence", "previousMapId", "currentMapId",
             "previousFieldEpoch", "previousMapGeneration", "actorMask", "resumeMotionMask",

@@ -154,7 +154,7 @@ typedef struct OverworldWildDirectionStepContext {
     const OverworldWildBehaviorProfileData *profile;
     u8 slot;
 } OverworldWildDirectionStepContext;
-static const OverworldWildBehaviorProfileData *OverworldWildSpawns_GetBehaviorStateLane(
+static const OverworldWildBehaviorProfileData *OverworldWildSpawns_GetControllerLane(
     const OverworldWildBehaviorProfileData *profile, u8 spotState)
 { (void)spotState; return profile; }
 static BOOL OverworldActorPolicy_Inspect(u8 slot, OverworldActorPolicyView *view)
@@ -235,7 +235,7 @@ int main(int argc, char **argv)
                 if (variant&4) selected.walkMomentum.spotState=2;
                 if (variant&8) {
                     selected.bufferedDirection=5; selected.stopPending=TRUE;
-                    selected.pendingStep=OVERWORLD_ACTOR_WALK_PENDING_ACTIVE;
+                    selected.pendingStep=OVERWORLD_ACTOR_WALK_PENDING_ACCEPTED;
                     selected.pendingSkid=TRUE; selected.walkMomentum.skidRemaining=2;
                 }
                 u8 direction = index + (mode ? 4 : 0);
@@ -265,12 +265,12 @@ int main(int argc, char **argv)
         Seed(); lane.hopAllowNonCardinal=OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_DIAGONAL_ONLY;
         lane.chillSpeed=12;
         OverworldActorWalkPolicyCall call=Input(5);
-        call.laneState=OW_WILD_SPAWNER_SPOT_STATE_ACTIVE;
+        call.laneState=OW_WILD_SPAWNER_SPOT_STATE_TIRED;
         OverworldActorWalkPolicy_ReduceInput(&selected, &call);
         Check(call.decision==OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP && call.stepDirection==5
             && call.travelTime==12 && call.stepFlags==OVERWORLD_ACTOR_WALK_STEP_CLEAR_PRESENTATION
             && selected.walkMomentum.speed==12 && selected.walkMomentum.baseSpeed==12
-            && selected.walkMomentum.spotState==OW_WILD_SPAWNER_SPOT_STATE_ACTIVE
+            && selected.walkMomentum.spotState==OW_WILD_SPAWNER_SPOT_STATE_TIRED
             && selected.chainStepsRemaining==0 && selected.deferredChainPauseTicks==0
             && selected.deferredChainPauseAction==0, "allowed lane change no longer initializes policy");
     } else if (!strcmp(argv[1], "none")) {
@@ -602,7 +602,7 @@ int main(int argc, char **argv)
         call.direction = 3;
         call.distance = 1;
         call.laneState = 0;
-        call.flags = OVERWORLD_ACTOR_WALK_POLICY_FLAG_WALK_ACTIVE
+        call.flags = OVERWORLD_ACTOR_WALK_POLICY_FLAG_WALK_ACCEPTED
             | OVERWORLD_ACTOR_WALK_POLICY_FLAG_CHAIN_ENABLED;
         ReduceWalk(&call);
         Check(call.decision == OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP
@@ -621,7 +621,7 @@ int main(int argc, char **argv)
         call.startResult = OVERWORLD_ACTOR_WALK_POLICY_START_ACCEPTED;
         ReduceWalk(&call);
         Check(selected.walkMomentum.direction == 0 && !selected.pendingSkid
-                && selected.pendingStep == OVERWORLD_ACTOR_WALK_PENDING_ACTIVE,
+                && selected.pendingStep == OVERWORLD_ACTOR_WALK_PENDING_ACCEPTED,
             "Runner post-skid step did not commit the requested direction");
     } else return 2;
     printf("candidate rejection: %s %u checks passed\n", argv[1], checks);

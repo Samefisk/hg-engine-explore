@@ -260,6 +260,47 @@
       ]
     },
     {
+      "id": "host.behavior-conditions",
+      "title": "Compile and verify the portable behavior condition evaluator",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_behavior_conditions.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_behavior_conditions.h",
+        "include/overworld_behavior_condition_runtime.h",
+        "include/overworld_behavior_condition_adapter.h",
+        "lib/overworld/overworld_behavior_conditions.c",
+        "lib/overworld/overworld_behavior_condition_runtime.c",
+        "lib/overworld/overworld_behavior_condition_adapter.c",
+        "tools/overworld/test_behavior_conditions.py"
+      ]
+    },
+    {
+      "id": "host.condition-live-controller-proof",
+      "title": "Check the bounded live Wild condition-controller proof contract",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_devtools_condition_controller.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/devtools_condition_controller*.py",
+        "tools/overworld/test_devtools_condition_controller.py",
+        "tests/overworld/test-recipes/profile.condition.live-wild-controller.json",
+        "tests/overworld/scenarios/profile.condition.live-wild-controller.json"
+      ]
+    },
+    {
       "id": "host.workshop-authoring",
       "title": "Check canonical Workshop authoring and resolver input",
       "proofLevel": "S1",
@@ -2246,8 +2287,66 @@
       ]
     },
     {
+      "id": "condition.evaluation",
+      "title": "Conditional profile activation",
+      "owner": "Behavior Condition Evaluator",
+      "roles": [
+        "Wild",
+        "Follower"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "include/overworld_behavior_conditions.h",
+        "include/overworld_behavior_condition_runtime.h",
+        "include/overworld_behavior_condition_adapter.h",
+        "lib/overworld/overworld_behavior_conditions.c",
+        "lib/overworld/overworld_behavior_condition_runtime.c",
+        "lib/overworld/overworld_behavior_condition_adapter.c",
+        "tools/overworld/devtools_condition_*.py",
+        "tests/overworld/test-recipes/profile.condition.packaged-rom-evaluator.json",
+        "tests/overworld/scenarios/profile.condition.packaged-rom-evaluator.json",
+        "tests/overworld/test-recipes/profile.condition.live-wild-controller.json",
+        "tests/overworld/scenarios/profile.condition.live-wild-controller.json",
+        "src/overworld_wild_spawns_overlay/**"
+      ],
+      "checks": [
+        "host.behavior-catalog",
+        "host.behavior-conditions",
+        "host.condition-live-controller-proof",
+        "host.behavior-resolver",
+        "host.actor-lane-projection",
+        "host.spawn-profile-lifecycle"
+      ],
+      "scenarios": [
+        "profile.condition.packaged-rom-evaluator",
+        "profile.condition.live-wild-controller"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md",
+        "documentation/overworld-system/authoring-debugging.md",
+        "documentation/overworld-system/verification.md"
+      ],
+      "traceGroups": [
+        "profile",
+        "intent"
+      ],
+      "minimumProof": [
+        "S0",
+        "S1",
+        "S3"
+      ],
+      "roleProof": [
+        {
+          "proofLevel": "S3",
+          "roles": [
+            "Wild"
+          ]
+        }
+      ]
+    },
+    {
       "id": "profile.state",
-      "title": "Behavior state lanes",
+      "title": "Owner and Tired behavior lanes",
       "owner": "Behavior Resolver",
       "roles": [
         "Wild",
@@ -2285,8 +2384,8 @@
     },
     {
       "id": "alert",
-      "title": "Alert behavior",
-      "owner": "Role controllers",
+      "title": "Condition-triggered presentation",
+      "owner": "Role controllers (presentation)",
       "roles": [
         "Wild",
         "Follower"
@@ -2298,6 +2397,7 @@
       ],
       "checks": [
         "host.behavior-schema",
+        "host.behavior-conditions",
         "host.behavior-resolver"
       ],
       "scenarios": [],

@@ -6,7 +6,7 @@ is required. Only cycles occupied by retained resolver calls receive credit.
 from copy import deepcopy
 
 from tools.overworld.devtools_resolver_parity import CASE_NAMES, raw_hex, checked_trace
-from tools.overworld.devtools_resolver_probe import REQUEST, RESULT, TRACE
+from tools.overworld.devtools_resolver_probe import BUFFER_BYTES, REQUEST, RESULT, TRACE
 
 
 def require(ok, reason):
@@ -63,9 +63,10 @@ class ResolverMeasurement:
                     and probe.get("acceptedProof") is False, "probe is incomplete")
             allocation = probe.get("allocation", {})
             pointer = number(allocation.get("pointer"))
-            require(allocation.get("heapId") == 11 and allocation.get("bytes") == 8000
+            require(allocation.get("heapId") == 11 and allocation.get("bytes") == BUFFER_BYTES
                     and allocation.get("released") is True and not pointer & 3
-                    and 0x02000000 <= pointer <= 0x02400000 - 8000, "owned allocation not freed")
+                    and 0x02000000 <= pointer <= 0x02400000 - BUFFER_BYTES,
+                    "owned allocation not freed")
             cases = probe.get("receipts")
             require(isinstance(cases, list) and len(cases) == len(CASE_NAMES)
                     and tuple(case.get("name") for case in cases if isinstance(case, dict)) == CASE_NAMES,
@@ -74,7 +75,7 @@ class ResolverMeasurement:
             require(isinstance(calls, list) and [c.get("routine") for c in calls] ==
                     ["allocate_work_memory"] + ["resolve_behavior"] * len(CASE_NAMES) + ["free"],
                     "native call list differs")
-            require(calls[0].get("requestedArguments") == [11, 8000]
+            require(calls[0].get("requestedArguments") == [11, BUFFER_BYTES]
                     and calls[0].get("returnValue") == pointer
                     and calls[-1].get("requestedArguments") == [pointer]
                     and "returnValue" in calls[-1], "allocation/free call receipt differs")

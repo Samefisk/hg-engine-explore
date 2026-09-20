@@ -54,6 +54,12 @@
     ((1u << 1) | (1u << 4) | (1u << 14) | (1u << 16))
 #define RESOLVER_RESERVED_OVERRIDE_MASK3 (1u << 2)
 
+#if defined(__arm__)
+#define RESOLVER_SECTION(name) __attribute__((section(name)))
+#else
+#define RESOLVER_SECTION(name)
+#endif
+
 static const u8 sRelativeFieldMaximums[] = {
     0, 0, 0, 255, 64, 64, 64, 32, 64, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0,
     0, 12, 12, 255, 64, 255, 0, 10, 8, 8, 32, 255, 0, 0, 0, 64, 32, 32,
@@ -61,8 +67,12 @@ static const u8 sRelativeFieldMaximums[] = {
     32, 5, 0, 0, 0, 0, 0, 0, 255, 32, 32, 33, 32, 32, 0, 0,
 };
 
-static const u8 sSpawnLocomotion[] = {0, 3, 4, 7};
-static const u8 sDefaultTarget[] = {
+static const u8 sSpawnLocomotion[]
+    RESOLVER_SECTION(".overworld_actor_tail_constants") = {
+        0, 3, 4, 7,
+    };
+static const u8 sDefaultTarget[]
+    RESOLVER_SECTION(".overworld_condition_adapter_constants") = {
     RESOLVER_TARGET_NONE,
     RESOLVER_TARGET_NONE,
     RESOLVER_TARGET_RANDOM_NEARBY,
@@ -72,6 +82,7 @@ static const u8 sDefaultTarget[] = {
     RESOLVER_TARGET_TOWARD_PLAYER,
     RESOLVER_TARGET_TREE_TOP,
 };
+#undef RESOLVER_SECTION
 typedef char BehaviorResolverRelativeFieldCountMustRemain72[
     sizeof(sRelativeFieldMaximums) == 72 ? 1 : -1];
 typedef char BehaviorResolverProfileDataSizeMustRemain72[

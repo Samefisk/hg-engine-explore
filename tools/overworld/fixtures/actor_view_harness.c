@@ -145,7 +145,7 @@ static void Arrange(OverworldWildSpawnState *state, FieldSystem *field,
     player->posVec[0] = -113 * 65536;
     player->posVec[2] = 95 * 65536;
     state->mapGeneration = 73;
-    state->movementSpotStates[slot] = OW_WILD_SPAWNER_SPOT_STATE_ACTIVE;
+    state->movementSpotStates[slot] = OW_WILD_SPAWNER_SPOT_STATE_CHILL;
     OverworldWildSpawn *spawn = &state->spawns[slot];
     spawn->object = visibility == 3 ? NULL : pokemon;
     spawn->personality = 0x76543210;
@@ -178,8 +178,8 @@ static OverworldActorStateSnapshot ExpectedView(OverworldActorStateSnapshot befo
     before.level = 19;
     before.role = rider ? OVERWORLD_ACTOR_ROLE_MOUNTED
         : slot == OW_WILD_FOLLOWER_SLOT ? OVERWORLD_ACTOR_ROLE_FOLLOWER : OVERWORLD_ACTOR_ROLE_WILD;
-    before.lane = rider ? BEHAVIOR_RESOLUTION_LANE_OWNER : BEHAVIOR_RESOLUTION_LANE_ACTIVE;
-    before.controllerState = rider ? OW_WILD_SPAWNER_SPOT_STATE_CHILL : OW_WILD_SPAWNER_SPOT_STATE_ACTIVE;
+    before.lane = BEHAVIOR_RESOLUTION_LANE_OWNER;
+    before.controllerState = OW_WILD_SPAWNER_SPOT_STATE_CHILL;
     before.presentationState = visibility == 0 ? OVERWORLD_ACTOR_PRESENTATION_READY : 0;
     before.presentationAttached = visibility == 0;
     before.active = TRUE;
@@ -255,7 +255,7 @@ static void CheckSync(void)
         before.subjectIdentity = 0x76543210;
         before.role = priorMount ? OVERWORLD_ACTOR_ROLE_MOUNTED : OVERWORLD_ACTOR_ROLE_FOLLOWER;
         before.inputOwnership = (u8)priorMount;
-        before.lane = priorMount ? BEHAVIOR_RESOLUTION_LANE_OWNER : BEHAVIOR_RESOLUTION_LANE_ACTIVE;
+        before.lane = BEHAVIOR_RESOLUTION_LANE_OWNER;
         before.presentationAttached = (u8)priorVisible;
         gOverworldActorSystemState.slots[slot].snapshot = before;
         mounted = (BOOL)mount;
@@ -269,14 +269,14 @@ static void CheckSync(void)
         ActorSystem_SyncLegacyActor(&field, &state, slot);
         CheckSnapshot(&gOverworldActorSystemState.slots[slot].snapshot, &expected);
         CHECK(bindCalls == 0 && unbindCalls == 0);
-        CHECK(traceCount == 3 * (mount != priorMount) + (visible != priorVisible));
+        CHECK(traceCount == 2 * (mount != priorMount) + (visible != priorVisible));
         unsigned counts[OVERWORLD_ACTOR_EVENT_ACTOR_REBOUND + 1] = {0};
         for (unsigned index = 0; index < traceCount; index++) {
             CHECK(memcmp(&traces[index].handle, &before.handle, sizeof(before.handle)) == 0);
             CHECK(traces[index].event <= OVERWORLD_ACTOR_EVENT_ACTOR_REBOUND);
             counts[traces[index].event]++;
         }
-        CHECK(counts[OVERWORLD_ACTOR_EVENT_LANE_CHANGED] == (mount != priorMount));
+        CHECK(counts[OVERWORLD_ACTOR_EVENT_LANE_CHANGED] == 0);
         CHECK(counts[OVERWORLD_ACTOR_EVENT_ACTOR_REBOUND] == (mount != priorMount));
         CHECK(counts[OVERWORLD_ACTOR_EVENT_CONTROL_REBOUND] == (mount != priorMount));
         CHECK(counts[OVERWORLD_ACTOR_EVENT_PRESENTATION_SYNCED] == (visible != priorVisible));

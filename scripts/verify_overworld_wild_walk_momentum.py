@@ -538,7 +538,7 @@ def main() -> int:
             "call->startResult != OVERWORLD_ACTOR_WALK_POLICY_START_ACCEPTED",
             "call->effect = OVERWORLD_ACTOR_WORLD_EFFECT_CRASH",
             "OverworldWalkDirectionPolicy_ApplyStartResult(",
-            "policy->pendingStep = OVERWORLD_ACTOR_WALK_PENDING_ACTIVE",
+            "policy->pendingStep = OVERWORLD_ACTOR_WALK_PENDING_ACCEPTED",
             "call->reserved[0]",
         ),
         "typed Walk engine START_RESULT transition",
@@ -561,7 +561,7 @@ def main() -> int:
     require(
         commit,
         (
-            "policy->pendingStep != OVERWORLD_ACTOR_WALK_PENDING_ACTIVE",
+            "policy->pendingStep != OVERWORLD_ACTOR_WALK_PENDING_ACCEPTED",
             "call->distance != 1",
             "call->direction != state->direction",
             "OverworldWalk_StompApplies(",
@@ -860,7 +860,7 @@ def main() -> int:
             "        &call,\n"
             "        slot,\n"
             "        OVERWORLD_ACTOR_WALK_POLICY_COMMIT);",
-            "call.flags = OVERWORLD_ACTOR_WALK_POLICY_FLAG_WALK_ACTIVE\n"
+            "call.flags = OVERWORLD_ACTOR_WALK_POLICY_FLAG_WALK_ACCEPTED\n"
             "        | OVERWORLD_ACTOR_WALK_POLICY_FLAG_CHAIN_ENABLED;",
             "->terminalWalk(",
             "OVERWORLD_ACTOR_BOUNDARY_REQUIRED_ACKS",
@@ -921,7 +921,8 @@ def main() -> int:
             "OverworldWildSpawns_ObjectCurrentY(object)",
             "state->movementSpotStates[slot] = OW_WILD_SPAWNER_SPOT_STATE_CHILL;",
             "OverworldWildSpawns_ClearSpawnRunState(state, slot);",
-            "OverworldWildSpawns_EnterActiveStateFromGenericAlert(state, slot, object);",
+            "OverworldWildSpawns_ClearWalkMovementState(state, slot, object);",
+            "OverworldWildSpawns_SetPostSpawnStartupCooldown(state, slot);",
         ),
         "move-from-off-screen target lifecycle",
     )
@@ -932,7 +933,6 @@ def main() -> int:
     reject(
         spawn_step,
         (
-            "OverworldWildSpawns_TryStartFrameDrivenActiveMovementCommand(",
             "OverworldWildSpawns_TryStartDirectedBehaviorHopCommand(",
             "OverworldWildSpawns_TryStartSpawnMoveTeleport(",
             "OverworldWildSpawns_AppendFrameDrivenChaseFallbackDirections(",
@@ -945,14 +945,15 @@ def main() -> int:
         ("OverworldWildSpawns_TryStartSpawnRunStep",),
         "dedicated move-from-off-screen scheduler",
     )
-    active_chase = function_body(
+    owner_motion = function_body(
         source,
-        "OverworldWildSpawns_TryStartFrameDrivenActiveMovementCommand",
+        "OverworldWildSpawns_TryStartFrameDrivenOwnerMovementCommand",
     )
     require(
-        active_chase,
+        owner_motion,
         (
             "throwTarget = runtime->throwState.targets[slot];",
+            "OverworldWildSpawns_GetActiveConditionApplications(state, slot)",
             "movementTarget = state->movementSpawnRunActive[slot] == OW_WILD_SPAWN_ENTRY_MOVE",
             "? OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER",
             "? state->movementSpawnRunTargetX[slot]",
@@ -962,12 +963,12 @@ def main() -> int:
         "move-from-off-screen fixed chase target",
     )
     reject(
-        active_chase,
+        owner_motion,
         (
             "? OW_WILD_SPAWNER_THROW_TARGET_NONE",
             "(!state->movementSpawnRunActive[slot]",
         ),
-        "move-from-off-screen Active policy exception",
+        "move-from-off-screen Owner policy exception",
     )
     movement_command = function_body(
         source,
@@ -975,7 +976,7 @@ def main() -> int:
     )
     require(
         movement_command,
-        ("avoidPreviousTile = OverworldWildSpawns_ShouldAvoidPreviousTileForActiveProfile(",),
+        ("avoidPreviousTile = OverworldWildSpawns_ShouldAvoidPreviousTileForResolvedProfile(",),
         "authored backtrack policy",
     )
     reject(
@@ -1088,10 +1089,10 @@ def main() -> int:
         move_start,
         (
             "OW_WILD_SPAWN_ENTRY_MOVE",
-            "state->movementSpotStates[slot] = OW_WILD_SPAWNER_SPOT_STATE_ACTIVE;",
-            "OverworldWildSpawns_EnterActiveStateFromGenericAlert(",
+            "state->movementSpotStates[slot] = OW_WILD_SPAWNER_SPOT_STATE_CHILL;",
+            "OverworldWildSpawns_ResumeOwnerAfterAlert(",
         ),
-        "move-from-off-screen active chase lane",
+        "move-from-off-screen Owner lane",
     )
     require(
         spawn_clear,
@@ -1106,7 +1107,6 @@ def main() -> int:
         spawn_clear,
         (
             "movementSpotStates[slot]",
-            "movementActiveSteps[slot]",
             "OverworldWildSpawns_ClearWalkMovementState",
         ),
         "spawn entry cleanup policy mutation",
@@ -1133,14 +1133,14 @@ def main() -> int:
         ("hopAllowNonCardinal == OW_WILD_BEHAVIOR_BOOL_YES",),
         "old diagonal-only exclusion",
     )
-    active = function_body(
+    owner_motion = function_body(
         source,
-        "OverworldWildSpawns_TryStartFrameDrivenActiveMovementCommand",
+        "OverworldWildSpawns_TryStartFrameDrivenOwnerMovementCommand",
     )
     require(
-        active,
+        owner_motion,
         (
-            "primitives->attentiveLocomotion\n"
+            "primitives->chillLocomotion\n"
             "                == OW_WILD_BEHAVIOR_LOCOMOTION_WANDER",
             "OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(",
             "OverworldWildSpawns_TryStartDirectedBehaviorHopCommand(",
@@ -1153,8 +1153,7 @@ def main() -> int:
         (
             "#define OW_WILD_SPAWNER_MOVEMENT_SPEED_DEFAULT "
             "OW_WILD_BEHAVIOR_WALK_TIME_DEFAULT",
-            "boostedProfile.attentiveSpeed > "
-            "profile->attentiveChaseBoostSpeed",
+            "boostedProfile.chillSpeed > profile->chaseBoostSpeed",
         ),
         "wild frame-time fallback and scheduler",
     )
@@ -1163,7 +1162,6 @@ def main() -> int:
         (
             "OverworldWildSpawns_GetFrameMovementDecisionIntervalForSpeed",
             "OverworldWildSpawns_ShouldRunFrameMovementDecisionForSpeed",
-            "boostedProfile.attentiveSpeed > OW_WILD_SPAWNER_MOVEMENT_SPEED_4",
         ),
         "old tier-only wild speed policy",
     )

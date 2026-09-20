@@ -2,6 +2,10 @@
 
 Run the actual portable C resolver and Workshop parser. These host checks do
 not establish spawn motion or physical landing behavior in the game.
+
+The removed copy-form tests belonged to the retired pre-v4 editor. The v4
+Workshop writes one complete validated catalog, so resolver cases below own
+the remaining POOL compatibility proof.
 """
 
 from __future__ import annotations
@@ -13,7 +17,6 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -44,8 +47,8 @@ def authored(**values):
 def lane_fields(result, lane):
     raw = bytes.fromhex(result["profileHex"])
     size = SCHEMA["compactSize"]
-    if len(raw) != size * 3:
-        raise AssertionError("native resolver did not return three complete public lanes")
+    if len(raw) != size * 2:
+        raise AssertionError("native resolver did not return two complete public lanes")
     raw = raw[lane * size:(lane + 1) * size]
     return {
         key: int.from_bytes(raw[field["offset"]:field["offset"] +
@@ -66,11 +69,14 @@ class PoolSpawnResolutionTests(unittest.TestCase):
         cls.native = native_resolver.build(ROOT, force=True, output=cls.temp / "actual-resolver")
         # Keep the real catalog's ABI counts, targets and base profiles. Only
         # override bodies change; explicit request bits choose test layers.
-        matrix = copy.deepcopy(cls.catalog)
+        matrix = json.loads(VIEWER.BEHAVIOR_CATALOG_SOURCE.read_text())
+        matrix_profiles = {
+            profile["id"]: profile for profile in matrix["profiles"]
+        }
         # An empty override is a true inheritance-only layer.
         neutral = {}
-        for profile in matrix["overrideProfiles"]:
-            profile["fields"] = copy.deepcopy(neutral)
+        for application in matrix["applications"]:
+            matrix_profiles[application["profile"]]["fields"] = copy.deepcopy(neutral)
         layers = [
             authored(spawnDestination=LAND),
             authored(spawnDestinationMask=4, spawnDestinationOverrideMask=1023),
@@ -78,12 +84,13 @@ class PoolSpawnResolutionTests(unittest.TestCase):
             authored(spawnDestinationMask=15, spawnDestinationOverrideMask=1023),
             neutral,
             authored(spawnDestinationMask=0, spawnDestinationOverrideMask=0),
-            authored(activeProfile=7, tiredProfile=8),
+            authored(tiredProfile="apply-default-active"),
             authored(spawnDestination=POOL),
             authored(spawnDestinationMask=8, spawnDestinationOverrideMask=1023),
         ]
         for index, fields in enumerate(layers):
-            matrix["overrideProfiles"][index]["fields"] = fields
+            application = matrix["applications"][index]
+            matrix_profiles[application["profile"]]["fields"] = fields
         matrix_path = cls.temp / "layer-catalog.json"
         matrix_path.write_text(json.dumps(matrix))
         cls.matrix_native = native_resolver.build(
@@ -109,23 +116,7 @@ class PoolSpawnResolutionTests(unittest.TestCase):
                     "spawnDestinationOverrideMask": explicit,
                 })
 
-    def copy_through_editor(self, fields):
-        behavior = VIEWER.catalog_behavior_override(fields, self.macros)
-        edit = VIEWER.override_edit_profile(behavior, self.macros)
-        # The Workshop copy form submits only nonblank edit-profile values.
-        copied_raw = {key: value["raw"] for key, value in edit.items() if value["raw"]}
-        payload = json.dumps({"changes": {"add": [{
-            "name": "POOL host copy", "fields": copied_raw,
-        }]}}).encode()
-        # Exercise the real parser/canonicalizer without writing source data.
-        with mock.patch.object(VIEWER, "load_behavior_catalog", return_value=copy.deepcopy(self.catalog)), \
-                mock.patch.object(VIEWER, "write_behavior_catalog") as write:
-            result = VIEWER.apply_profile_override_changes(payload)
-        self.assertTrue(result["saved"])
-        write.assert_called_once()
-        return write.call_args.args[0]["overrideProfiles"][-1]["fields"]
-
-    def test_actual_ledyba_owner_active_tired_preserve_own_pool_site(self):
+    def test_actual_ledyba_owner_and_tired_preserve_own_pool_site(self):
         flying = next(profile for profile in self.catalog["overrideProfiles"]
                       if profile["name"] == "Flying insect")
         flying_index = self.catalog["overrideProfiles"].index(flying)
@@ -135,7 +126,7 @@ class PoolSpawnResolutionTests(unittest.TestCase):
                                              root=ROOT, executable=self.native)
             self.assertEqual(result["status"], 0)
             self.assertTrue(result["matchedOverrideMask"] & (1 << flying_index))
-            for lane in range(3):
+            for lane in range(2):
                 with self.subTest(terrain=terrain, lane=lane):
                     self.assertEqual(lane_fields(result, lane), {
                         "spawnDestination": self.macros[POOL],
@@ -143,59 +134,31 @@ class PoolSpawnResolutionTests(unittest.TestCase):
                         "spawnDestinationOverrideMask": 0,
                     })
 
-    def test_editor_pool_projection_does_not_invent_modern_mask_fields(self):
-        behavior = VIEWER.catalog_behavior_override(authored(spawnDestination=POOL), self.macros)
-        edit = VIEWER.override_edit_profile(behavior, self.macros)
-        self.assertEqual(edit["spawnDestination"]["raw"], POOL)
-        self.assertEqual(edit["spawnDestinationMask"]["raw"], "")
-        self.assertEqual(edit["spawnDestinationOverrideMask"]["raw"], "")
-
     def test_pool_clears_prior_legacy_land_in_all_lanes(self):
-        self.assert_destinations(self.resolve_layers(0), [(LAND, 1, 1023)] * 3)
-        self.assert_destinations(self.resolve_layers(0, 2), [(POOL, 15, 0)] * 3)
+        self.assert_destinations(self.resolve_layers(0), [(LAND, 1, 1023)] * 2)
+        self.assert_destinations(self.resolve_layers(0, 2), [(POOL, 15, 0)] * 2)
 
     def test_pool_clears_prior_modern_mask_in_all_lanes(self):
-        self.assert_destinations(self.resolve_layers(1), [(POOL, 4, 1023)] * 3)
-        self.assert_destinations(self.resolve_layers(1, 2), [(POOL, 15, 0)] * 3)
+        self.assert_destinations(self.resolve_layers(1), [(POOL, 4, 1023)] * 2)
+        self.assert_destinations(self.resolve_layers(1, 2), [(POOL, 15, 0)] * 2)
 
     def test_later_explicit_modern_all_surface_selection_is_retained(self):
         for earlier in ((), (0,), (1,)):
             with self.subTest(earlier=earlier):
-                self.assert_destinations(self.resolve_layers(*earlier, 2, 3), [(POOL, 15, 1023)] * 3)
+                self.assert_destinations(self.resolve_layers(*earlier, 2, 3), [(POOL, 15, 1023)] * 2)
 
     def test_base_empty_and_zero_explicit_inheritance_are_unchanged(self):
-        self.assert_destinations(self.resolve_layers(), [(POOL, 15, 0)] * 3)
+        self.assert_destinations(self.resolve_layers(), [(POOL, 15, 0)] * 2)
         for prior in ((), (0,), (1,)):
             for unchanged in ((4,), (5,), (4, 5)):
                 with self.subTest(prior=prior, unchanged=unchanged):
                     self.assertEqual(self.resolve_layers(*prior)["profileHex"],
                                      self.resolve_layers(*prior, *unchanged)["profileHex"])
 
-    def test_active_pool_reset_and_tired_modern_selection_remain_lane_local(self):
+    def test_tired_modern_selection_remains_lane_local(self):
         self.assert_destinations(self.resolve_layers(0, 6), [
-            (LAND, 1, 1023), (POOL, 15, 0), (LAND, 8, 1023),
+            (LAND, 1, 1023), (LAND, 8, 1023),
         ])
-
-    def test_copy_canonicalization_preserves_explicit_pool_reset(self):
-        self.assertEqual(self.copy_through_editor(authored(spawnDestination=POOL)),
-                         authored(spawnDestination=POOL))
-
-    def test_copy_canonicalization_keeps_explicit_and_inherited_modern_pairs(self):
-        for values, explicit in ((15, 1023), (4, 1023), (0, 0)):
-            with self.subTest(values=values, explicit=explicit):
-                fields = authored(spawnDestinationMask=values, spawnDestinationOverrideMask=explicit)
-                self.assertEqual(self.copy_through_editor(fields), fields)
-
-    def test_modern_copy_canonicalization_still_removes_legacy_enum(self):
-        fields = authored(spawnDestinationMask=15, spawnDestinationOverrideMask=1023)
-        self.assertEqual(self.copy_through_editor({**authored(spawnDestination=POOL), **fields}), fields)
-
-    def test_non_pool_legacy_editor_projection_stays_explicit(self):
-        behavior = VIEWER.catalog_behavior_override(authored(spawnDestination=LAND), self.macros)
-        edit = VIEWER.override_edit_profile(behavior, self.macros)
-        self.assertEqual(edit["spawnDestinationMask"]["raw"], "1")
-        self.assertEqual(edit["spawnDestinationOverrideMask"]["raw"], "1023")
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -116,6 +116,8 @@ def main():
                     result = session.route_control_close()
                 elif operation == "resolver.probe":
                     result = session.resolver_probe(args)
+                elif operation == "condition.probe":
+                    result = session.condition_probe(args)
                 elif operation == "actor-inspect.probe":
                     result = session.actor_inspect_probe(args)
                 elif operation == "walk-policy.reset":
@@ -194,6 +196,14 @@ def main():
                     if args:
                         raise ValueError("wild-ledge.close takes no arguments")
                     result = session.wild_ledge_close()
+                elif operation == "condition-controller.fixture":
+                    result = session.condition_controller_fixture(args)
+                elif operation == "condition-controller.arm":
+                    result = session.condition_controller_arm(args)
+                elif operation == "condition-controller.close":
+                    if args:
+                        raise ValueError("condition-controller.close takes no arguments")
+                    result = session.condition_controller_close()
                 elif operation == "mount-pacing.calibrate":
                     if args:
                         raise ValueError("mount-pacing.calibrate takes no arguments")

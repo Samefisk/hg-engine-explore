@@ -72,8 +72,8 @@ class CrashPresentationTests(unittest.TestCase):
             reader = crash.CrashPresentationReader(lambda _: b"elf", lambda a,n: code)
         owner = 0x02210000; slot = 7
         memory = {0x023CD000: code, reader.state + slot*20: struct.pack("<I",owner),
-            reader.state+734+slot: b"\x0a", reader.state+744+slot*4: struct.pack("<i",38174720),
-            reader.state+784+slot*4: struct.pack("<i",26050560)}
+            reader.state+714+slot: b"\x0a", reader.state+724+slot*4: struct.pack("<i",38174720),
+            reader.state+764+slot*4: struct.pack("<i",26050560)}
         actor = {"identityVerified":True,"handle":{"slot":slot,"value":131079},
                  "engineIdentity":{"pointer":owner},"sourceIdentity":{"object":owner}}
         return reader, memory, actor
@@ -81,7 +81,7 @@ class CrashPresentationTests(unittest.TestCase):
     def test_known_active_and_inactive_keep_exact_owner_and_clock(self):
         reader, memory, actor = self.fixture()
         for timer in (10,0):
-            memory[reader.state+734+7] = bytes([timer])
+            memory[reader.state+714+7] = bytes([timer])
             reader.boundary(lambda a,n: memory[a])
             value = reader.observe(lambda a,n: memory[a],actor,848,2113)
             self.assertTrue(value["known"])
@@ -99,7 +99,7 @@ class CrashPresentationTests(unittest.TestCase):
     def test_short_data_and_changed_or_unverified_owner_are_unknown(self):
         for fault in ("short","owner","unverified"):
             reader,memory,actor = self.fixture()
-            if fault=="short": memory[reader.state+734+7] = b""
+            if fault=="short": memory[reader.state+714+7] = b""
             elif fault=="owner": memory[reader.state+140] = struct.pack("<I",0x02220000)
             else: actor["identityVerified"] = False
             value=reader.observe(lambda a,n: memory[a],actor,848,2113)
@@ -112,7 +112,7 @@ class CrashPresentationTests(unittest.TestCase):
             with self.subTest(fault=fault):
                 def lookup(image,name,kind,**kwargs):
                     if fault=="size": raise ValueError("wrong-symbol-size")
-                    return (0x02200000,964,None) if kind==1 else (0x023CD000,4,code)
+                    return (0x02200000,944,None) if kind==1 else (0x023CD000,4,code)
                 digest=hashlib.sha256(b"bad" if fault=="layout-code" else code).hexdigest()
                 with patch.object(crash,"symbol",side_effect=lookup), patch.object(crash,"CODE",(("test",4,digest),)):
                     with self.assertRaises(ValueError):

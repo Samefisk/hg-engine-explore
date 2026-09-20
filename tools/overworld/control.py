@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 import secrets
+import struct
 import subprocess
 import sys
 import time
@@ -1401,6 +1402,10 @@ _STOMP_CONTROL_KIND = "live-stomp-control-v1"
 _STOMP_CONTROL_REQUIREMENT = "shared.stomp-recorder-control-v1"
 _RESOLVER_KIND = "packaged-resolver-parity-v1"
 _RESOLVER_REQUIREMENT = "legacy.packaged-resolver-parity"
+_CONDITION_KIND = "packaged-condition-service-v1"
+_CONDITION_REQUIREMENT = "shared.packaged-condition-service-v1"
+_CONDITION_CONTROLLER_KIND = "live-condition-controller-v1"
+_CONDITION_CONTROLLER_REQUIREMENT = "current.live-condition-controller"
 _ACTOR_INSPECT_KIND = "actor-inspect-handle-v1"
 _ACTOR_INSPECT_REQUIREMENT = "shared.actor-inspect-handle-v1"
 _ACTOR_INSPECT_NAMES = ("packaged-inspect-entry", "bound-subject-identity",
@@ -1502,6 +1507,52 @@ def _shared_test_registration(test: dict[str, Any], repo: Path) -> tuple[dict[st
                 or test["subjects"] or test.get("measurements") != [{"kind": _RESOLVER_KIND}] \
                 or registration.get("recorderControlRequirement") is not None:
             raise ValidationFailure("resolver test changed its original eight deployment measurements")
+    elif registration.get("evaluator") == _CONDITION_KIND:
+        from tools.overworld.devtools_condition_proof import NAMES
+        expected = {"profile-resolution": [
+            {"name": name, "operator": "eq", "type": "integer",
+             "validator": "meaningful-observation", "expected": 1}
+            for name in NAMES
+        ]}
+        if registry.get("measurementContracts", {}).get(_CONDITION_REQUIREMENT) != expected \
+                or registry.get("runners", {}).get(_CONDITION_REQUIREMENT) != ["profile-resolution"] \
+                or registry.get("runnerKinds", {}).get(_CONDITION_REQUIREMENT) != "controlled-case" \
+                or registration.get("measurementContract") != expected \
+                or registration.get("proofLevel") != "S3" \
+                or registration.get("claims") != ["profile-resolution"] \
+                or registration.get("requirements") != [_CONDITION_REQUIREMENT] \
+                or test["requirements"] != [_CONDITION_REQUIREMENT] \
+                or test["mode"] != "prepared" or test["subjects"] \
+                or test.get("measurements") != [{"kind": _CONDITION_KIND}] \
+                or registration.get("recorderControlRequirement") is not None:
+            raise ValidationFailure("condition service test changed its exact copied-input contract")
+    elif registration.get("evaluator") == _CONDITION_CONTROLLER_KIND:
+        from tools.overworld.devtools_condition_controller_proof import (
+            CLAIMS, contract,
+        )
+        if (registry.get("measurementContracts", {}).get(
+                _CONDITION_CONTROLLER_REQUIREMENT) != contract()
+                or registry.get("runners", {}).get(
+                    _CONDITION_CONTROLLER_REQUIREMENT) != list(CLAIMS)
+                or registry.get("runnerKinds", {}).get(
+                    _CONDITION_CONTROLLER_REQUIREMENT) != "controlled-case"
+                or registration.get("proofLevel") != "S3"
+                or registration.get("claims") != list(CLAIMS)
+                or registration.get("requirements")
+                    != [_CONDITION_CONTROLLER_REQUIREMENT]
+                or test["requirements"] != [_CONDITION_CONTROLLER_REQUIREMENT]
+                or test["mode"] != "prepared"
+                or registration.get("recorderControlRequirement") is not None
+                or test["subjects"] != [{
+                    "id": "weepinbell", "species": 70,
+                    "role": "WILD", "acquire": "spawn",
+                }]
+                or test.get("measurements") != [{
+                    "kind": _CONDITION_CONTROLLER_KIND,
+                    "subject": "weepinbell",
+                }]):
+            raise ValidationFailure(
+                "live condition controller changed its exact Wild caller contract")
     elif registration.get("evaluator") in (_ROLE_TRANSFER_KIND, _ROLE_CONTROL_KIND):
         is_control = registration["evaluator"] == _ROLE_CONTROL_KIND
         if registration.get("proofLevel") != "S3" \
@@ -2117,6 +2168,11 @@ def _replay_shared_test(test: dict[str, Any], rows: list[dict[str, Any]], *, fau
     elif fault is not None and _WILD_LEDGE_KIND in evaluator.measurements:
         from tools.overworld.devtools_wild_ledge_proof import WildLedgeNegative
         route_control = WildLedgeNegative(fault)
+    elif fault is not None and _CONDITION_CONTROLLER_KIND in evaluator.measurements:
+        from tools.overworld.devtools_condition_controller_proof import (
+            ConditionControllerNegative,
+        )
+        route_control = ConditionControllerNegative(fault)
     elif fault is not None and _WILD_TELEPORT_KIND in evaluator.measurements:
         from tools.overworld.devtools_wild_teleport_proof import WildTeleportNegative
         route_control = WildTeleportNegative(fault)
@@ -2841,6 +2897,68 @@ def _resolver_probe_oracle(repo):
                           "free": STOCK_CALLS["free"][0], "resolve_behavior": address}}
 
 
+def _condition_probe_oracle(repo):
+    """Bind condition calls to the exact ROM overlay, ELF and behavior blob."""
+    from scripts.verify_overworld_runtime_fixture import packaged_overlay
+    from tools.overworld.devtools_condition_probe import (
+        build_test_blob,
+        fixture_patch_plan,
+    )
+    from tools.overworld.devtools_runtime import _elf_code, STOCK_CALLS
+    from tools.overworld.devtools_engine import linked_symbols, linked_symbol
+
+    blob = (repo / "build/OverworldWildBehaviorData.bin").read_bytes()
+    test_blob = build_test_blob(blob)
+    elf = repo / "build/overworld_follower_selector_overlay_linked.o"
+    symbols = linked_symbols(elf)
+    service_address = linked_symbol(symbols, "gOverworldBehaviorConditionServiceEntry")
+    prepare = linked_symbol(symbols, "OverworldBehaviorCondition_PrepareActor") & ~1
+    evaluate = linked_symbol(symbols, "OverworldBehaviorCondition_EvaluatePrepared") & ~1
+    validate = linked_symbol(symbols, "OverworldBehaviorCondition_ValidateResolveRequest") & ~1
+    entry = struct.pack("<IHHIIII", 0x4342574F, 8, 24,
+                        prepare | 1, evaluate | 1, validate | 1, 0)
+    image = packaged_overlay((repo / "test.nds").read_bytes(), 152)
+    linked_image = (repo / "build/output_overworld_follower_selector_overlay.bin").read_bytes()
+    base = 0x023C0400
+    if image != linked_image or service_address != 0x023C22A0 \
+            or image[service_address - base:service_address - base + 24] != entry \
+            or _elf_code(elf, service_address, 24) != entry:
+        raise ValidationFailure("condition service differs between ROM, linked overlay and ELF")
+    for address in (prepare, evaluate, validate):
+        code = _elf_code(elf, address, 32)
+        offset = address - base
+        if offset < 0 or offset + 32 > len(image) or image[offset:offset + 32] != code:
+            raise ValidationFailure("condition callback differs between ROM and linked ELF")
+    service = {
+        "magic": 0x4342574F,
+        "version": 8,
+        "size": 24,
+        "serviceAddress": service_address,
+        "prepareAddress": prepare | 1,
+        "evaluateAddress": evaluate | 1,
+        "validateAddress": validate | 1,
+        "serviceSha256": hashlib.sha256(entry).hexdigest(),
+        "prepareEntrySha256": hashlib.sha256(_elf_code(elf, prepare, 32)).hexdigest(),
+        "evaluateEntrySha256": hashlib.sha256(_elf_code(elf, evaluate, 32)).hexdigest(),
+        "validateEntrySha256": hashlib.sha256(_elf_code(elf, validate, 32)).hexdigest(),
+    }
+    return {
+        "sourceBlobIdentity": {"size": len(blob),
+                               "sha256": hashlib.sha256(blob).hexdigest()},
+        "testBlobIdentity": {"size": len(test_blob),
+                             "sha256": hashlib.sha256(test_blob).hexdigest(),
+                             "fixtureVersion": 2},
+        "fixturePlan": fixture_patch_plan(blob, test_blob),
+        "serviceIdentity": service,
+        "callAddresses": {
+            "allocate_work_memory": STOCK_CALLS["allocate_work_memory"][0],
+            "prepare_conditions": prepare,
+            "evaluate_conditions": evaluate,
+            "free": STOCK_CALLS["free"][0],
+        },
+    }
+
+
 def _actor_inspect_probe_oracle(repo):
     """Bind the public facade and Inspect entry to this exact packaged ELF."""
     import struct
@@ -2852,7 +2970,7 @@ def _actor_inspect_probe_oracle(repo):
     image = packaged_overlay((repo / "test.nds").read_bytes(), 158)
     if overlay["id"] != 158 or len(image) != overlay["fileSize"] \
             or hashlib.sha256(image).hexdigest() != overlay["sha256"] \
-            or facade["version"] != 1 or facade["size"] != 24:
+            or facade["version"] != 2 or facade["size"] != 24:
         raise ValidationFailure("actor Inspect package/descriptor differs")
     elf = repo / "build/overworld_actor_system_overlay_linked.o"
     symbols = linked_symbols(elf)
@@ -2860,7 +2978,7 @@ def _actor_inspect_probe_oracle(repo):
                  for name in ("validate", "apply", "tick", "inspect")}
     if facade["callbacks"] != callbacks:
         raise ValidationFailure("actor Inspect facade callbacks differ from linked symbols")
-    entry = struct.pack("<IHH4I", 0x5341574F, 1, 24,
+    entry = struct.pack("<IHH4I", 0x5341574F, 2, 24,
                         *(callbacks[name] for name in ("validate", "apply", "tick", "inspect")))
     address = callbacks["inspect"] & ~1
     code = _elf_code(elf, address, 32)
@@ -2870,7 +2988,7 @@ def _actor_inspect_probe_oracle(repo):
                 or image[offset:offset + len(expected)] != expected \
                 or _elf_code(elf, start, len(expected)) != expected:
             raise ValidationFailure("actor Inspect bytes differ between package and ELF")
-    return {"serviceIdentity": {"address": facade["address"], "version": 1, "size": 24,
+    return {"serviceIdentity": {"address": facade["address"], "version": 2, "size": 24,
                 "facadeHex": entry.hex(), "inspectAddress": address | 1,
                 "entrySha256": hashlib.sha256(code).hexdigest()},
             "callAddresses": {"allocate_work_memory": STOCK_CALLS["allocate_work_memory"][0],
@@ -2891,12 +3009,16 @@ def _walk_reset_oracle(repo):
     image = packaged_overlay((repo / "test.nds").read_bytes(), 158)
     if overlay["id"] != 158 or len(image) != overlay["fileSize"] \
             or hashlib.sha256(image).hexdigest() != overlay["sha256"] \
-            or service["status"] != "available" or service["version"] != 4 \
-            or service["size"] != 16 or service["reserved"] != 0:
+            or service["status"] != "available" or service["version"] != 5 \
+            or service["size"] != 16 \
+            or type(service.get("conditionAdapter")) is not int \
+            or service["conditionAdapter"] == 0:
         raise ValidationFailure("Walk RESET package/descriptor differs")
     elf = repo / "build/overworld_actor_system_overlay_linked.o"
     address = linked_symbol(linked_symbols(elf), "ActorSystem_ReduceWalk") & ~1
-    entry = struct.pack("<IHHII", 0x504D574F, 4, 16, service["policy"], 0)
+    entry = struct.pack(
+        "<IHHII", 0x504D574F, 5, 16, service["policy"],
+        service["conditionAdapter"])
     table = _elf_code(elf, service["policy"], 24)
     code = _elf_code(elf, address, 32)
     if len(table) != 24 or struct.unpack_from("<I", table, 12)[0] != address | 1:
@@ -3301,6 +3423,44 @@ def _finalize_shared_test_uncached(test: dict[str, Any], record: dict[str, Any],
                 "claims": ["profile-resolution"], "requirements": [_RESOLVER_REQUIREMENT],
                 "scope": registration["scope"], "source": preflight["source"],
                 "subjects": {}, "controls": negatives["controls"], "controlScope": negatives["scope"], **evidence}}
+        if registration["evaluator"] == _CONDITION_KIND:
+            from tools.overworld.devtools_condition_proof import (
+                NAMES,
+                condition_measurements,
+                negative_controls,
+            )
+            oracle = _condition_probe_oracle(repo)
+            evidence = condition_measurements(
+                test, rows, record, repo, oracle=oracle)
+            expected = [
+                {"claim": "profile-resolution", "name": name, "value": 1,
+                 "operator": "eq", "expected": 1}
+                for name in NAMES
+            ]
+            if evidence.get("measurements") != expected \
+                    or evidence.get("observedFrames") != replay["observedFrames"] \
+                    or evidence.get("observedFrameUnit") \
+                        != "native-condition-service-cycles":
+                raise ValidationFailure(
+                    "condition service evidence differs from exact copied-input rules")
+            negatives = negative_controls(
+                test, rows, record, repo, oracle=oracle)
+            if len(negatives.get("controls", {})) != 11 \
+                    or any(item.get("rejected") is not True
+                           for item in negatives["controls"].values()):
+                raise ValidationFailure(
+                    "condition service wrong-data controls are missing or failed")
+            if record.get("sessionCleanup") != {
+                    "sessionId": session_id, "closed": True, "errors": []}:
+                raise ValidationFailure(
+                    "condition service private session cleanup is missing or failed")
+            return {"passed": True, "acceptedProof": True, "proofAcceptance": {
+                "eligible": True, "proofLevel": "S3", "mode": "prepared",
+                "claims": ["profile-resolution"],
+                "requirements": [_CONDITION_REQUIREMENT],
+                "scope": registration["scope"], "source": preflight["source"],
+                "subjects": {}, "controls": negatives["controls"],
+                "controlScope": negatives["scope"], **evidence}}
         if registration["proofLevel"] == "S5":
             measured = [sample["frame"] for row in rows if row.get("phase") == "observe"
                         for sample in row.get("samples", [])]
@@ -3364,6 +3524,15 @@ def _finalize_shared_test_uncached(test: dict[str, Any], record: dict[str, Any],
         elif registration["evaluator"] == _WILD_LEDGE_KIND:
             from tools.overworld.devtools_wild_ledge_proof import measurements, FAULTS
             additional["measurements"] = measurements(replay, record)
+            controls = list(FAULTS)
+        elif registration["evaluator"] == _CONDITION_CONTROLLER_KIND:
+            from tools.overworld.devtools_condition_controller_proof import (
+                FAULTS, condition_controller_measurements,
+            )
+            measured, details = condition_controller_measurements(
+                test, rows, record, repo)
+            additional["measurements"] = measured
+            additional.update(details)
             controls = list(FAULTS)
         elif registration["evaluator"] == _WILD_TELEPORT_KIND:
             from tools.overworld.devtools_wild_teleport_proof import measurements, FAULTS
@@ -3544,6 +3713,12 @@ def _finalize_shared_test_uncached(test: dict[str, Any], record: dict[str, Any],
                 validate_negative_result(name, result)
         if registration["evaluator"] == "acceleration-parity-v1":
             from tools.overworld.devtools_acceleration_acceptance import validate_negative_result
+            for name, result in negatives.items():
+                validate_negative_result(result, name)
+        if registration["evaluator"] == _CONDITION_CONTROLLER_KIND:
+            from tools.overworld.devtools_condition_controller_proof import (
+                validate_negative_result,
+            )
             for name, result in negatives.items():
                 validate_negative_result(result, name)
         if registration["evaluator"] == _MOUNT_PACING_KIND:
@@ -3789,10 +3964,12 @@ def _scenario_run(args: argparse.Namespace) -> int:
 
 def _scenario_inputs(scenario: dict[str, Any]) -> dict[str, Any]:
     fixture = scenario.get("fixture", {})
-    paths = [Path(fixture.get("rom", "test.nds")),
-             Path("build/pokemon_move_history_capture_build.json"), DEBUG_DESCRIPTOR,
+    rom = fixture.get("rom", "test.nds")
+    paths = [Path("build/pokemon_move_history_capture_build.json"), DEBUG_DESCRIPTOR,
              *(item[3] for item in OVERWORLD_PRODUCT_OUTPUTS),
              *(item[1] for item in OVERWORLD_LINKED_OUTPUTS)]
+    if rom is not None:
+        paths.insert(0, Path(rom))
     if fixture.get("save"):
         paths.append(Path(fixture["save"]["path"]))
     return {"source": source_record(REPO),
@@ -5082,22 +5259,32 @@ def _roadmap_contract_audit(
             continue
         adapter = scenario.get("adapter")
         reasons = []
+        subjectless_service = False
         if isinstance(adapter, dict) and adapter.get("kind") == "devtools-test":
             try:
                 test = json.loads((REPO / "tests/overworld/test-recipes" / (adapter["test"] + ".json")).read_text())
                 registered, _ = _shared_test_registration(test, REPO)
                 declared = [{key: item[key] for key in ("id", "species", "role")} for item in scenario.get("subjects", [])]
                 expected = [{key: item[key] for key in ("id", "species", "role")} for item in test["subjects"]]
-                if (registered is None or registered["proofLevel"] != scenario["proofLevel"]
+                subjectless_service = (
+                    registered is not None
+                    and registered.get("evaluator") == _CONDITION_KIND
+                    and registered["proofLevel"] == scenario["proofLevel"]
+                    and registered["claims"] == adapter["claims"]
+                    and not declared
+                    and not expected
+                )
+                if (not subjectless_service and (
+                        registered is None or registered["proofLevel"] != scenario["proofLevel"]
                         or registered["claims"] != adapter["claims"] or not declared or declared != expected
                         or any(item.get("minimum") != 1 or item.get("maximum") != 1
-                               or item.get("requirePresentation") is not True for item in scenario["subjects"])):
+                               or item.get("requirePresentation") is not True for item in scenario["subjects"]))):
                     reasons.append("shared test lacks the exact registered live-subject contract")
             except (OSError, ValueError, KeyError, TypeError, ValidationFailure) as error:
                 reasons.append("shared actor test registration is invalid: " + str(error))
         elif not isinstance(adapter, dict) or adapter.get("kind") != "actor-observation":
             reasons.append("adapter is not actor-observation")
-        if not scenario.get("subjects"):
+        if not scenario.get("subjects") and not subjectless_service:
             reasons.append("structured subjects are missing")
         if reasons:
             weak_actor_scoped_scenarios.append(

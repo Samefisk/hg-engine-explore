@@ -132,7 +132,7 @@ LAND_MANAGER_TILE_WIDTH_OFFSET = 0xCC
 LAND_CHUNK_MATRIX_INDEX_OFFSET = 0x860
 LAND_CHUNK_MODEL_LOADED_OFFSET = 0x864
 BEHAVIOR_DATA_MAGIC = 0x4F574244
-BEHAVIOR_DATA_VERSION = 75
+BEHAVIOR_DATA_VERSION = 79
 BEHAVIOR_DATA_HEADER_SIZE = 84
 SURFACE_TYPE_NAMES = ("rooftop", "signpost", "mailbox", "flowerbed", "canopy")
 SURFACE_HEIGHT_PAGE_NATIVE_GROUND = 0x1F
@@ -780,10 +780,10 @@ def _wild_staged_layout():
     """Immutable worker package binding; ARM header tests anchor these offsets."""
     from tools.overworld.devtools_field_cleanup import symbol
     address, _, _ = symbol((REPO / "build/linked.o").read_bytes(),
-                           "sOverworldWildSpawnState", 1, expected_size=964)
+                           "sOverworldWildSpawnState", 1, expected_size=944)
     image = (REPO / "build/overworld_wild_spawns_overlay_linked.o").read_bytes()
     entry, _, code = symbol(image,
-                           "OverworldWildSpawns_ClearStagedHopTargetLocal", 2, expected_size=116)
+                           "OverworldWildSpawns_ClearStagedHopTargetLocal", 2, expected_size=108)
     # Only these two Thumb BL displacements may change as linked code moves.
     # All loads, stores, offsets, literals and other instructions stay exact.
     calls = ((14, "OverworldWildSpawns_ClearStagedHopMovementListTask"),
@@ -791,7 +791,7 @@ def _wild_staged_layout():
     shape = bytearray(code)
     for offset, _ in calls:
         shape[offset:offset + 4] = bytes(4)
-    if len(code) != 116 or hashlib.sha256(shape).hexdigest() != "dabbe8cd1025a4646982d766850ce2ebdd57af308dde2c6132014f55deacf6b5":
+    if len(code) != 108 or hashlib.sha256(shape).hexdigest() != "32640eb55adfe6067a92dc0a10d6dd5c0df7796ca514765a3c7a702872edb8c3":
         raise ValueError("staged-motion-layout-code-unknown")
     for offset, name in calls:
         high, low = struct.unpack_from("<HH", code, offset)
@@ -813,7 +813,7 @@ def wild_staged_motion(emu, slot):
         if type(slot) is not int or not 0 <= slot < 10:
             raise ValueError("staged-motion-slot-out-of-bounds")
         address, entry, code = _wild_staged_layout()
-        if address != WILD_STATE or address & 3 or not 0x02000000 <= address <= 0x02400000 - 964:
+        if address != WILD_STATE or address & 3 or not 0x02000000 <= address <= 0x02400000 - 944:
             raise ValueError("staged-motion-state-owner-differs")
         def read(pointer, size):
             data = bytes(emu.memory.unsigned[pointer:pointer + size:1])
@@ -823,10 +823,10 @@ def wild_staged_motion(emu, slot):
         if read(entry, len(code)) != code:
             raise ValueError("staged-motion-live-code-differs-or-overlay-absent")
         # A single bounded state read also retains the slot's current object.
-        data = read(address, 964)
-        pending, distance = data[704 + slot], data[684 + slot]
+        data = read(address, 944)
+        pending, distance = data[684 + slot], data[664 + slot]
         result.update(known=True, reason="observed", pending=pending, distance=distance,
-                      pendingDirection=data[434 + slot], pendingDistance=data[444 + slot],
+                      pendingDirection=data[414 + slot], pendingDistance=data[424 + slot],
                       objectPointer=int.from_bytes(data[slot * 20:slot * 20 + 4], "little"),
                       idle=pending == 0 and distance == 0)
     except (ValueError, TypeError, KeyError, OSError) as error:

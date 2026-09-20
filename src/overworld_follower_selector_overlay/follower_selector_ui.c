@@ -15,6 +15,9 @@ __asm__(
     ".global memcpy\n.thumb_func\n.thumb_set memcpy, 0x023DEEBE\n"
     ".global __aeabi_lmul\n.thumb_func\n.thumb_set __aeabi_lmul, 0x023DEEC6\n"
     ".global __aeabi_idiv\n.thumb_func\n.thumb_set __aeabi_idiv, 0x023DEE44\n"
+    ".global __aeabi_uidivmod\n.thumb_func\n.thumb_set __aeabi_uidivmod, 0x023DEE4C\n"
+    ".global __aeabi_uidiv\n.thumb_func\n.thumb_set __aeabi_uidiv, 0x023DEE4C\n"
+    ".global __gnu_thumb1_case_uqi\n.thumb_func\n.thumb_set __gnu_thumb1_case_uqi, 0x023DEE54\n"
     ".global memset\n.thumb_func\n.thumb_set memset, 0x023DEEA2\n");
 
 #define FOLLOWER_SELECTOR_PARTY_SIZE 6

@@ -74,7 +74,6 @@ typedef int BOOL;
 #define OW_WILD_BEHAVIOR_LOCOMOTION_HOP 2
 #define OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT 6
 #define OW_WILD_SPAWNER_SPOT_STATE_CHILL 0
-#define OW_WILD_SPAWNER_SPOT_STATE_ACTIVE 2
 #define OW_WILD_SPAWNER_SPOT_STATE_TIRED 3
 #define OW_WILD_BEHAVIOR_WALK_ALLOWS_TURNING(options) (((options) & 1) != 0)
 
@@ -92,14 +91,15 @@ typedef struct OverworldWildBehaviorProfileData {
 } OverworldWildBehaviorProfileData;
 
 typedef struct OverworldWildBehaviorProfile {
-    OverworldWildBehaviorProfileData lane;
-    OverworldWildBehaviorProfileData active;
+    union {
+        OverworldWildBehaviorProfileData lane;
+        OverworldWildBehaviorProfileData owner;
+    };
     OverworldWildBehaviorProfileData tired;
 } OverworldWildBehaviorProfile;
 
 typedef struct OverworldWildBehaviorPrimitives {
     u8 chillLocomotion;
-    u8 attentiveLocomotion;
     u8 tiredLocomotion;
 } OverworldWildBehaviorPrimitives;
 
@@ -158,19 +158,16 @@ static BOOL ReduceWalk(OverworldActorWalkPolicyCall *call)
 }
 static BOOL OverworldWildSpawns_ReduceWalk(OverworldActorWalkPolicyCall *call)
 { return ReduceWalk(call); }
-static const OverworldWildBehaviorProfileData *OverworldWildSpawns_GetBehaviorStateLane(
+static const OverworldWildBehaviorProfileData *OverworldWildSpawns_GetControllerLane(
     const OverworldWildBehaviorProfile *profile, u8 spotState)
 {
-    return spotState == OW_WILD_SPAWNER_SPOT_STATE_ACTIVE ? &profile->active
-        : spotState == OW_WILD_SPAWNER_SPOT_STATE_TIRED ? &profile->tired
+    return spotState == OW_WILD_SPAWNER_SPOT_STATE_TIRED ? &profile->tired
         : &profile->lane;
 }
 static u8 OverworldWildSpawns_GetCurrentMovementLocomotion(
     const OverworldWildBehaviorPrimitives *primitives, u8 spotState)
 {
-    return spotState == OW_WILD_SPAWNER_SPOT_STATE_ACTIVE
-        ? primitives->attentiveLocomotion
-        : spotState == OW_WILD_SPAWNER_SPOT_STATE_TIRED
+    return spotState == OW_WILD_SPAWNER_SPOT_STATE_TIRED
         ? primitives->tiredLocomotion : primitives->chillLocomotion;
 }
 static void OverworldWildSpawns_InitPolicyCall(

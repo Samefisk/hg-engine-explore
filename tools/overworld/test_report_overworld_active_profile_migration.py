@@ -1,4 +1,4 @@
-"""Focused tests for the CP0 Active-profile migration inventory."""
+"""Focused tests for the completed conditional-profile migration gate."""
 
 from __future__ import annotations
 
@@ -44,29 +44,20 @@ class ActiveProfileMigrationInventoryTests(unittest.TestCase):
     def test_current_tree_is_complete_and_classified(self) -> None:
         self.assertGreater(self.report["summary"]["findingCount"], 100)
         self.assertEqual(self.report["summary"]["unclassifiedCount"], 0)
-        self.assertEqual(self.report["summary"]["mappedLegacySourceCount"], 7)
+        self.assertEqual(self.report["summary"]["mappedLegacySourceCount"], 0)
         self.assertEqual(self.report["summary"]["unmappedLegacySourceCount"], 0)
+        self.assertEqual(self.report["summary"]["forbiddenAtCp7Count"], 0)
         self.assertEqual(self.report["unmappedLegacySourceFindingIds"], [])
         self.assertEqual(self.report["unclassifiedFindingIds"], [])
         observed = set(self.report["summary"]["byClassification"])
-        self.assertEqual(observed, set(INVENTORY.CLASSIFICATIONS))
+        self.assertTrue(observed.issubset(set(INVENTORY.CLASSIFICATIONS)))
+        self.assertTrue({"condition_input", "presentation_state", "compatibility_adapter", "test"}.issubset(observed))
 
     def test_catalog_semantics_name_every_migration_record(self) -> None:
-        self.assertEqual(len(self.findings_for(kind="catalog_active_profile_reference")), 7)
-        self.assertEqual(len(self.findings_for(kind="catalog_default_active_binding")), 1)
+        self.assertEqual(len(self.findings_for(kind="catalog_active_profile_reference")), 0)
+        self.assertEqual(len(self.findings_for(kind="catalog_default_active_binding")), 0)
         self.assertEqual(len(self.findings_for(kind="catalog_conditional_state_entry")), 0)
-        response_profiles = {
-            finding["symbol"]
-            for finding in self.findings_for(kind="catalog_active_response_profile")
-        }
-        self.assertEqual(response_profiles, {
-            "default-active",
-            "nervous-scavenger",
-            "hopping-scavenger",
-            "skittish",
-            "swaying-plant-active",
-            "ambush-plant-active",
-        })
+        self.assertEqual(self.findings_for(kind="catalog_active_response_profile"), [])
         self.assertEqual(
             {
                 profile["id"]
@@ -87,11 +78,9 @@ class ActiveProfileMigrationInventoryTests(unittest.TestCase):
 
     def test_report_covers_runtime_workshop_packages_traces_and_tests(self) -> None:
         required = (
-            ("condition_input", "lib/overworld/overworld_behavior_resolver.c"),
-            ("profile_response", "include/overworld_wild_behavior_data.h"),
+            ("condition_input", "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"),
             ("presentation_state", "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"),
             ("compatibility_adapter", "scripts/overworld_behavior_profile_viewer.py"),
-            ("compatibility_adapter", "tools/overworld/devtools_resolver_parity.py"),
             ("compatibility_adapter", "tools/overworld-viewer-v2/reliability.py"),
             ("test", "tools/overworld/test_devtools_spawn_measurement.py"),
             ("dead_code", "design_previews/overworld-tools-v2/index.html"),
@@ -103,12 +92,10 @@ class ActiveProfileMigrationInventoryTests(unittest.TestCase):
             )
 
         symbols = {finding["symbol"] for finding in self.findings}
-        self.assertIn("BEHAVIOR_RESOLUTION_LANE_ACTIVE", symbols)
-        self.assertIn("OW_WILD_SPAWNER_SPOT_STATE_ACTIVE", symbols)
-        self.assertIn("OverworldWildBehaviorProfileSizeMustRemain216Bytes", symbols)
-        self.assertTrue(self.findings_for(kind="primitive_binary_record"))
-        self.assertTrue(self.findings_for(kind="resolve_result_binary_record"))
-        self.assertTrue(self.findings_for(kind="three_lane_package"))
+        self.assertNotIn("BEHAVIOR_RESOLUTION_LANE_ACTIVE", symbols)
+        self.assertNotIn("OW_WILD_SPAWNER_SPOT_STATE_ACTIVE", symbols)
+        self.assertNotIn("OverworldWildBehaviorProfileSizeMustRemain216Bytes", symbols)
+        self.assertFalse(any(finding["forbiddenAtCp7"] for finding in self.findings))
         self.assertTrue(self.findings_for(kind="behavior_version_record"))
         self.assertTrue(self.findings_for(kind="catalog_version_record"))
 
@@ -148,9 +135,9 @@ class ActiveProfileMigrationInventoryTests(unittest.TestCase):
             text=True,
             check=False,
         )
-        self.assertEqual(forbidden.returncode, 2, forbidden.stderr)
+        self.assertEqual(forbidden.returncode, 0, forbidden.stderr)
         forbidden_report = json.loads(forbidden.stdout)
-        self.assertGreater(forbidden_report["summary"]["forbiddenAtCp7Count"], 0)
+        self.assertEqual(forbidden_report["summary"]["forbiddenAtCp7Count"], 0)
         self.assertEqual(forbidden_report["summary"]["unclassifiedCount"], 0)
 
     def test_catalog_semantics_accept_complete_cp7_removal(self) -> None:

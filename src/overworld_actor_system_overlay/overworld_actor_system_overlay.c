@@ -1,4 +1,5 @@
 #include "../../include/overworld_actor_system_internal.h"
+#include "../../include/overworld_behavior_condition_adapter.h"
 #include "../../include/overworld_wild_runtime.h"
 #include "../../include/overworld_mount_internal.h"
 #include "../../include/overworld_walk_module.h"
@@ -58,7 +59,8 @@ static u8 OverworldActorSystem_PopulationControlImpl(
     u8 operation,
     u16 refillDelay);
 
-static void ActorSystem_Zero(void *destination, u32 size)
+static void __attribute__((section(".overworld_condition_adapter_zero")))
+ActorSystem_Zero(void *destination, u32 size)
 {
     u8 *bytes = destination;
 
@@ -69,33 +71,25 @@ static void ActorSystem_Zero(void *destination, u32 size)
 }
 
 u8 __attribute__((noinline, optimize("Os"),
-    section(".overworld_actor_lane_policy")))
+    section(".overworld_actor_locomotion_policy")))
 OverworldActorSystem_SelectMovementLocomotion(
     const OverworldWildBehaviorPrimitives *primitives,
     u8 laneState)
 {
-    if (laneState == OW_WILD_SPAWNER_SPOT_STATE_CHILL) {
-        return primitives->chillLocomotion;
-    }
-    if (laneState == OW_WILD_SPAWNER_SPOT_STATE_ACTIVE) {
-        return primitives->attentiveLocomotion;
-    }
-    return primitives->tiredLocomotion;
+    return laneState == OW_WILD_SPAWNER_SPOT_STATE_TIRED
+        ? primitives->tiredLocomotion
+        : primitives->chillLocomotion;
 }
 
 u8 __attribute__((noinline, optimize("Os"),
-    section(".overworld_actor_lane_policy")))
+    section(".overworld_actor_target_policy")))
 OverworldActorSystem_SelectMovementTarget(
     const OverworldWildBehaviorPrimitives *primitives,
     u8 laneState)
 {
-    if (laneState == OW_WILD_SPAWNER_SPOT_STATE_CHILL) {
-        return primitives->chillTarget;
-    }
-    if (laneState == OW_WILD_SPAWNER_SPOT_STATE_ACTIVE) {
-        return primitives->attentiveTarget;
-    }
-    return primitives->tiredTarget;
+    return laneState == OW_WILD_SPAWNER_SPOT_STATE_TIRED
+        ? primitives->tiredTarget
+        : primitives->chillTarget;
 }
 
 static void __attribute__((noinline, section(".overworld_actor_population_adapter")))
@@ -239,7 +233,7 @@ static void ActorSystem_EnsureInitialized(void)
     state->mapGeneration = 1;
     state->lastReason = OVERWORLD_ACTOR_REASON_OK;
     state->trace.magic = OVERWORLD_ACTOR_TRACE_MAGIC;
-    state->trace.version = OVERWORLD_ACTOR_SYSTEM_ABI_VERSION;
+    state->trace.version = OVERWORLD_ACTOR_TRACE_VERSION;
     state->trace.size = sizeof(state->trace);
     state->trace.fieldEpoch = state->fieldEpoch;
     state->trace.filterActorSlot = OVERWORLD_ACTOR_TRACE_ALL_SLOTS;
@@ -1622,6 +1616,27 @@ OverworldActorSystem_ValidateImpl(void)
             return OVERWORLD_ACTOR_RESULT_ERROR;
         }
     }
+    if (gOverworldBehaviorConditionAdapterEntry.magic
+            != OVERWORLD_BEHAVIOR_CONDITION_ADAPTER_MAGIC
+        || gOverworldBehaviorConditionAdapterEntry.version
+            != OVERWORLD_BEHAVIOR_CONDITION_ADAPTER_VERSION
+        || gOverworldBehaviorConditionAdapterEntry.size
+            != sizeof(gOverworldBehaviorConditionAdapterEntry)
+        || gOverworldBehaviorConditionAdapterEntry.prepareActor == NULL
+        || gOverworldBehaviorConditionAdapterEntry.clearActor == NULL
+        || gOverworldBehaviorConditionAdapterEntry.clearAll == NULL
+        || gOverworldBehaviorConditionAdapterEntry.clearResolution == NULL
+        || gOverworldBehaviorConditionAdapterEntry.evaluateActor == NULL
+        || gOverworldActorSystemMovementPolicyServiceEntry.magic
+            != OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_MAGIC
+        || gOverworldActorSystemMovementPolicyServiceEntry.version
+            != OVERWORLD_ACTOR_MOVEMENT_POLICY_SERVICE_VERSION
+        || gOverworldActorSystemMovementPolicyServiceEntry.size
+            != sizeof(gOverworldActorSystemMovementPolicyServiceEntry)
+        || gOverworldActorSystemMovementPolicyServiceEntry.conditionAdapter
+            != &gOverworldBehaviorConditionAdapterEntry) {
+        return OVERWORLD_ACTOR_RESULT_ERROR;
+    }
     return OVERWORLD_ACTOR_RESULT_OK;
 }
 
@@ -2103,5 +2118,5 @@ const OverworldActorMovementPolicyServiceEntry
         OVERWORLD_ACTOR_MOVEMENT_POLICY_SERVICE_VERSION,
         sizeof(OverworldActorMovementPolicyServiceEntry),
         &sActorMovementPolicy,
-        0,
+        &gOverworldBehaviorConditionAdapterEntry,
     };

@@ -33,6 +33,13 @@ only their profile's local operators. Later matching applications consume the
 earlier result. A parent supplies inherited authoring values; it does not turn
 one profile into a second profile type.
 
+A profile can be normal or conditional. A conditional profile owns one or
+more independent condition entries. Each entry can use a different subject
+pool. If several entries in one profile are active, the last listed entry wins.
+Different conditional applications still compose in application order, field
+by field. Conditions choose when a profile applies; they do not create another
+behavior lane.
+
 ## Make the edit
 
 The canonical file is
@@ -65,10 +72,12 @@ Preserve these rules:
 - Keep applications in layer order: archetype, capabilities, attitude, style
   traits, Follower/Mount, then modifiers. Archetypes are first and modifiers
   are last. The resolver uses application order, not profile definition order.
-  Keep a conditional or lane-only helper beside the layer that owns it. At
+  Keep a conditional helper beside the layer that owns it. At
   most 32 applications can reach the current runtime mask.
-- Keep runtime-owned Picked Up, Follower, Default Active, and Default Tired
-  bindings valid.
+- Keep runtime-owned Picked Up, Follower, and Default Tired bindings valid.
+- Give each conditional profile at least one valid condition. Keep its target,
+  activation mode, duration, cooldown, and subject pool explicit. Timed
+  conditions restart duration only when they retrigger after cooldown.
 
 The generator lowers this one authoring model into the existing ROM tables.
 Those tables are compatibility data, not authoring profile types.
@@ -85,7 +94,8 @@ python3 scripts/verify_overworld_behavior_resolver.py --rule-removal-control
 ```
 
 Resolve each affected subject again. Confirm selection, application order,
-changed fields, Active/Tired links, normalization, primitives, and fingerprint.
+condition winners and target source, changed fields, Tired links,
+normalization, primitives, and fingerprint.
 Confirm the chosen non-target subject is unchanged.
 
 Behavior-profile changes stale spawn-work pacing proof. Run the extracted-C

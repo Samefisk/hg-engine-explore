@@ -438,7 +438,7 @@ class DevtoolsCliTests(unittest.TestCase):
         actors = []
         for slot in range(8):
             actors.append({
-                "version": 1, "size": 88, "active": True, "species": 165 + slot,
+                "version": 2, "size": 88, "active": True, "species": 165 + slot,
                 "form": 0, "level": 5, "role": "FOLLOWER" if slot == 7 else "WILD", "roleId": 1,
                 "handle": {"value": 131072 + slot, "slot": slot, "generation": 2,
                            "fieldEpoch": 3, "mapGeneration": 4, "encounterGeneration": 5},

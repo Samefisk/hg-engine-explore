@@ -23,7 +23,7 @@ class SharedResolverControllerTests(unittest.TestCase):
         (self.f.root/'tools/overworld/runtime_proof_registry.json').write_text(json.dumps(registry))
         _, self.rows, self.oracle = native_fixtures.ResolverProofTests().fixture()
         self.rows[0]['initialSnapshot'].update(prepared=False,fieldAvailable=True,actors=[])
-        row=self.rows[1]; row.update(phase='observe',action='resolve-seven-cases')
+        row=self.rows[1]; row.update(phase='observe',action='resolve-eight-cases')
         row['snapshot'].update(prepared=True,fieldAvailable=True,actors=[])
         row['receipt']['snapshot']=deepcopy(row['snapshot'])
         row['receipt']['events']=[]

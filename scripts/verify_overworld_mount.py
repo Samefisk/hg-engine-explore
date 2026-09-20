@@ -291,7 +291,7 @@ def mounted_chain_source_contract(mount: str, actor: str, walk: str, runtime: st
     require("ActorSystem_Zero(output, sizeof(*output));" in mounted_finish
             and "PokemonMoveHistory_OverlayMemset(&call, 0, sizeof(call));" in mounted_input
             and "memset(&output, 0, sizeof(output));" in mounted_commit
-            and "output.flags = OVERWORLD_ACTOR_WALK_POLICY_FLAG_WALK_ACTIVE;" in mounted_commit
+            and "output.flags = OVERWORLD_ACTOR_WALK_POLICY_FLAG_WALK_ACCEPTED;" in mounted_commit
             and all("OVERWORLD_ACTOR_WALK_POLICY_FLAG_CHAIN_ENABLED" not in body
                     for body in (mount, mounted_input, mounted_finish)),
             "mounted Walk enables chain handling")
@@ -309,7 +309,7 @@ def mounted_chain_source_fixtures(mount: str, actor: str, walk: str, runtime: st
     mounted_chain_source_contract(*sources)
     for index, old, new in (
         (1, "&& actor->role != OVERWORLD_ACTOR_ROLE_MOUNTED", "&& TRUE"),
-        (0, "output.flags = OVERWORLD_ACTOR_WALK_POLICY_FLAG_WALK_ACTIVE;",
+        (0, "output.flags = OVERWORLD_ACTOR_WALK_POLICY_FLAG_WALK_ACCEPTED;",
          "output.flags = OVERWORLD_ACTOR_WALK_POLICY_FLAG_CHAIN_ENABLED;"),
         (1, "ActorSystem_Zero(output, sizeof(*output));", "/* missing initialization */"),
         (3, "if ((call->flags & OVERWORLD_ACTOR_WALK_POLICY_FLAG_CHAIN_ENABLED) == 0",
@@ -635,7 +635,7 @@ def main() -> None:
 
     save_constants = (REPO / "include/constants/save.h").read_text()
     require(
-        re.search(r"^#define NEW_HEAP3_SIZE 0x106500$", save_constants, re.MULTILINE)
+        re.search(r"^#define NEW_HEAP3_SIZE 0x106730$", save_constants, re.MULTILINE)
         is not None,
         "heap 3 does not reserve the actor and mount blocks",
     )
@@ -730,10 +730,8 @@ def main() -> None:
         and "OVERWORLD_MOUNT_OVERLAY_ENTRY->begin" in spawns,
         "selected-follower profile bridge is missing",
     )
-    shared_profile_resolver = (
-        "OverworldWildSpawns_GetBehaviorProfileAndPrimitivesForSlot("
-        in spawns
-        and re.search(
+    shared_profile_snapshot = (
+        re.search(
             r"ResolveBehaviorProfileForContext\(\s*&context,\s*"
             r"slot == OW_WILD_FOLLOWER_SLOT\s*\?\s*"
             r"OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON.*?"
@@ -742,11 +740,33 @@ def main() -> None:
             re.DOTALL,
         )
         is not None
-        and "OverworldWildSpawns_GetSettledConditionTerrainForSlot" in spawns
+        and re.search(
+            r"if \(spawn != NULL && spawn->active\).*?"
+            r"context->terrain = spawn->terrain;",
+            spawns,
+            re.DOTALL,
+        )
+        is not None
+        and re.search(
+            r"OverworldWildSpawns_BeginMountSelectedFollower\(.*?"
+            r"OverworldWildSpawns_GetBehaviorProfileAndPrimitivesForSlot\(\s*"
+            r"state,\s*OW_WILD_FOLLOWER_SLOT,\s*&profile,\s*&primitives\s*\);"
+            r".*?OVERWORLD_MOUNT_OVERLAY_ENTRY->begin\(\s*"
+            r"fieldSystem,\s*&binding,\s*&profile,\s*&primitives,",
+            spawns,
+            re.DOTALL,
+        )
+        is not None
+        and re.search(
+            r"slot == OW_WILD_FOLLOWER_SLOT\s*"
+            r"&& OverworldWildSpawns_MountIsActive\(\)\) \{\s*return 0;",
+            spawns,
+        )
+        is not None
     )
     require(
-        shared_profile_resolver,
-        "mount does not use the follower's override stack and current terrain",
+        shared_profile_snapshot,
+        "mount does not snapshot resolved follower behavior and current terrain",
     )
     mount_source = (
         REPO
@@ -1166,7 +1186,7 @@ def main() -> None:
             mount_source,
             re.DOTALL,
         ) is not None
-        and "policy->pendingStep = OVERWORLD_ACTOR_WALK_PENDING_ACTIVE;"
+        and "policy->pendingStep = OVERWORLD_ACTOR_WALK_PENDING_ACCEPTED;"
             in runtime_source,
         "mounted flat Walk does not finish player and mount presentation together",
     )

@@ -29,7 +29,7 @@ class BindingEvidenceRoundTripTests(unittest.TestCase):
         actor_size = struct.calcsize(actor_format)
         actor_address, header_address, events_address = 32, 128, 192
         descriptor = {
-            "formatVersion": 1, "facade": {"version": 1},
+            "formatVersion": 1, "facade": {"version": 2},
             "overlay": {"sha256": "0" * 64},
             "state": {"address": 0, "actorStride": 96,
                       "offsets": {"fieldEpoch": 0, "actors": actor_address,
@@ -48,7 +48,7 @@ class BindingEvidenceRoundTripTests(unittest.TestCase):
         struct.pack_into("<H", memory, 0, 2)
         # Public actor handle: slot 0, generation 1, field/map 2, encounter 3.
         values = (
-            1, actor_size, 0, 1, 2, 2, 3, 0,
+            2, actor_size, 0, 1, 2, 2, 3, 0,
             0xF0000001, 0x1234, 0x56, 4, 9, 1, 1, 1,
             585, 406, 585, 406, 584, 406, 585, 406,
             8, 8, 41, 19,

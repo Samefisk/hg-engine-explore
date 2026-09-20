@@ -51,7 +51,8 @@ typedef struct OverworldWildSpawnState {
 } OverworldWildSpawnState;
 #define OW_WILD_RUNTIME(state) (&(state)->runtime)
 
-static unsigned checks, cases, bindCalls, unbindCalls, lookups, misses, hits;
+static unsigned checks, cases, bindCalls, unbindCalls, conditionPrepareCalls;
+static unsigned lookups, misses, hits;
 static unsigned runCalls, hopCalls, appearCalls, activeSlot;
 static BOOL actorActive, rejectBind, hopAccepted, cacheValid;
 static u32 fingerprint, matchedMask;
@@ -84,6 +85,15 @@ static void __attribute__((unused)) OverworldWildSpawns_SetObjectTile(LocalMapOb
 { object->xCurr = x; object->yCurr = y; }
 static void OverworldWildSpawns_ApplySpawnPassThroughFlag(OverworldWildSpawnState *state, int slot, LocalMapObject *object)
 { (void)state; (void)slot; (void)object; }
+static BOOL OverworldWildSpawns_PrepareConditionsForSlot(
+    OverworldWildSpawnState *state, int slot, const OverworldActorHandle *handle)
+{
+    (void)state;
+    conditionPrepareCalls++;
+    CHECK(actorActive && bindCalls == 1 && slot == (int)activeSlot);
+    CHECK(memcmp(handle, &acceptedHandle, sizeof(*handle)) == 0);
+    return TRUE;
+}
 static void OverworldWildSpawns_UpdateMankeyTreeTopPriorityBits(OverworldWildSpawnState *state, FieldSystem *field, int slot, LocalMapObject *object)
 { (void)state; (void)field; (void)object; HarnessProfileLookup(slot); }
 static void __attribute__((unused)) OverworldWildSpawns_SeedPreparedBehaviorProfile(
@@ -158,7 +168,8 @@ static void RunCase(int slot, int mode, BOOL reject, BOOL hopSucceeds, u16 oldGe
     cacheValid = TRUE;
     fingerprint = 0xABCDEF;
     matchedMask = 0x55;
-    bindCalls = unbindCalls = lookups = misses = hits = 0;
+    bindCalls = unbindCalls = conditionPrepareCalls = 0;
+    lookups = misses = hits = 0;
     runCalls = hopCalls = appearCalls = 0;
     memset(&acceptedHandle, 0, sizeof(acceptedHandle));
     state.spawns[slot].encounterGeneration = oldGeneration;
@@ -170,10 +181,12 @@ static void RunCase(int slot, int mode, BOOL reject, BOOL hopSucceeds, u16 oldGe
     CHECK(state.spawns[slot].encounterGeneration == (oldGeneration == 65535 ? 1 : oldGeneration + 1));
     if (reject) {
         CHECK(!started && actorActive && unbindCalls == 0);
+        CHECK(conditionPrepareCalls == 0);
         CHECK(lookups == 0 && fingerprint == 0xABCDEF && matchedMask == 0x55);
         CHECK(runCalls == 0 && hopCalls == 0 && appearCalls == 0);
         return;
     }
+    CHECK(conditionPrepareCalls == 1);
     CHECK(misses == 0 && fingerprint == (3976342989u ^ activeSlot) && matchedMask == 192);
     CHECK(hopCalls == (mode == OW_WILD_BEHAVIOR_LOCOMOTION_HOP_FROM_OFF_SCREEN));
     CHECK(runCalls == (mode == OW_WILD_BEHAVIOR_LOCOMOTION_MOVE_FROM_OFF_SCREEN));

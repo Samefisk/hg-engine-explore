@@ -305,9 +305,8 @@ OverworldWildSpawns_EnterAggroState(
     LocalMapObject *spawnedFollower)
 {
     state->spawns[slot].active = TRUE | OW_WILD_SPAWN_AGGRO_FLAG;
-    state->movementActiveSteps[slot] = 0;
     if (spawnedFollower != NULL) {
         spawnedFollower->flags |= BIT_VANISH;
-        state->movementSpotStates[slot] = 2;
+        state->movementSpotStates[slot] = OW_WILD_SPOT_STATE_OWNER;
     }
 }

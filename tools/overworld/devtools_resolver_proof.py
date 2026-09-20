@@ -13,7 +13,7 @@ from tools.overworld.devtools_resolver_parity import (
     compare_resolver_parity,
     raw_hex,
 )
-from tools.overworld.devtools_resolver_probe import REQUEST, RESULT, TRACE
+from tools.overworld.devtools_resolver_probe import BUFFER_BYTES, REQUEST, RESULT, TRACE
 from tools.overworld.devtools_raw_chunk import validate_raw_chunk
 
 NAMES = ("packaged-resolver-entry", "packaged-behavior-blob", "status-parity",
@@ -167,15 +167,17 @@ def _measure(test, rows, record, oracle):
     require(value.get("completed") is True and value.get("acceptedProof") is False, "probe did not complete")
     allocation = value["allocation"]
     require(allocation.get("released") is True and allocation.get("heapId") == 11
-            and allocation.get("bytes") == 8000, "owned allocation was not released")
-    work = pointer(allocation["pointer"], 8000)
+            and allocation.get("bytes") == BUFFER_BYTES,
+            "owned allocation was not released")
+    work = pointer(allocation["pointer"], BUFFER_BYTES)
     natural = receipt["naturalDiscovery"]
     blob = oracle["blobIdentity"]
     source = pointer(natural["blobAddress"], integer(blob["size"], 1, 1024*1024))
     require(natural.get("status") == 0 and type(natural.get("status")) is int
             and natural["blobSize"] == blob["size"], "natural resolver discovery differs")
     raw_hex(natural["requestHex"], 44)
-    require(work+8000 <= source or source+blob["size"] <= work, "source overlaps work buffer")
+    require(work + BUFFER_BYTES <= source or source + blob["size"] <= work,
+            "source overlaps work buffer")
     trampoline = receipt["trampoline"]
     trampoline_address = pointer(trampoline["address"], 1536)
     require(trampoline.get("bytes") == 1536 and trampoline.get("heapId") == 11
@@ -183,7 +185,8 @@ def _measure(test, rows, record, oracle):
             and trampoline["fieldPointer"] == pointer(natural["fieldPointer"])
             and trampoline["heapGeneration"] == integer(natural["heapGeneration"]), "stale field/heap owner")
     raw_hex(trampoline["codeSha256"], 32)
-    require(work+8000 <= trampoline_address or trampoline_address+1536 <= work, "work overlaps trampoline")
+    require(work + BUFFER_BYTES <= trampoline_address
+            or trampoline_address + 1536 <= work, "work overlaps trampoline")
     stack = receipt["stackOwnership"]
     sp = integer(stack["callSp"], 0x02000000, 0x02800000-32)
     require(sp % 8 == 0 and stack["hostRestoredFrameBytes"] == 0
@@ -206,7 +209,7 @@ def _measure(test, rows, record, oracle):
     calls = receipt["calls"]
     require(isinstance(calls, list) and len(calls) == len(CASE_NAMES) + 2,
             "exact allocation/resolves/free required")
-    expected = [("allocate_work_memory", [11, 8000], work)] + [
+    expected = [("allocate_work_memory", [11, BUFFER_BYTES], work)] + [
         ("resolve_behavior", [source, blob["size"], work + REQUEST,
                               work + RESULT, work + TRACE], 0)
         ] * len(CASE_NAMES) + [

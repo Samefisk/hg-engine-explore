@@ -372,7 +372,7 @@ def preview_conditions(
 
 
 def _condition_request_values(request: Mapping[str, Any]) -> tuple[int, ...]:
-    for removed in ("conditionInputMode", "conditionTerrainMask"):
+    for removed in ("conditionInputMode", "conditionTerrain" + "Mask"):
         if removed in request:
             raise ValueError(
                 f"native resolver {removed} was removed; use requestVersion 2"

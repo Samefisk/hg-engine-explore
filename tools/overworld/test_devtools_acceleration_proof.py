@@ -12,7 +12,8 @@ def proof_fixture(role="WILD"):
     _snapshot, inner, _rows = fixture(role)
     target, address, field, sp = 0x02030202, 0x02040000, 0x02060000, 0x0207F000
     service = dict(address=0x02030000,
-        entryHex=struct.pack("<IHHII", 0x504D574F, 4, 16, 0x02030100, 0).hex(),
+        entryHex=struct.pack(
+            "<IHHII", 0x504D574F, 5, 16, 0x02030100, 0x02030300).hex(),
         tableHex=struct.pack("<6I", 1, 3, 5, target | 1, 7, 9).hex(),
         reduceWalkAddress=target | 1, entrySha256="ab" * 32)
     inner.update(serviceIdentity=service, fieldPointer=field, heapGeneration=0)

@@ -46,7 +46,7 @@ def harness_source():
         source,
         "typedef struct OverworldWildBehaviorProfile { OverworldWildBehaviorProfileData lane; } OverworldWildBehaviorProfile;",
         "typedef struct OverworldWildBehaviorProfile { union { OverworldWildBehaviorProfileData lane; OverworldWildBehaviorProfileData owner; }; "
-        "OverworldWildBehaviorProfileData active, tired; u8 jumpLevel, stamina, tiredState; } OverworldWildBehaviorProfile;",
+        "OverworldWildBehaviorProfileData tired; u8 jumpLevel, stamina, tiredState; } OverworldWildBehaviorProfile;",
     )
     source = replace_once(source, "u8 chainStepsRemaining, chainPauseTicks, chainPauseAction, motionPhase, actorActive;",
                           "u8 chainStepsRemaining, chainPauseTicks, chainPauseAction, motionPhase, actorActive; "
@@ -74,7 +74,6 @@ def harness_source():
     s16 movementStagedHopAvoidX[10], movementStagedHopAvoidY[10];
     s16 movementPreviousTileX[10], movementPreviousTileY[10];
     u8 movementStagedHopFinishWithTired[10], movementStagedHopAvoidValid[10];
-    u8 movementActiveSteps[10];
     """)
     # Keep the real portable admission model; the engine bridge supplies its
     # kind/arc/pause contract, with distinct ordinary-Hop timing as a control.
@@ -108,6 +107,7 @@ def harness_source():
         ("OverworldWildSpawns_ApplyChainRepositionResult", "BOOL"),
         ("OverworldWildSpawns_RunChainReposition", "BOOL"),
         ("OverworldWildSpawns_GetLookAroundFrames", "u8"),
+        ("OverworldWildSpawns_ResetEmotePresentationStyle", "void"),
         ("OverworldWildSpawns_TryStartChainForwardHop", "u8"),
         ("OverworldWildSpawns_TryStartChainPauseAction", "u8"),
         ("OverworldWildSpawns_CommitDeferredChainMovementPause", "void"),
@@ -301,6 +301,9 @@ static BOOL OverworldWildSpawns_TryStartManualHopEmote(OverworldWildSpawnState *
   (void)count; (void)frames; (void)bubble; (void)each; (void)sound; return FALSE; }
 static void OverworldWildSpawns_StartNextSpotEmoteStep(OverworldWildSpawnState *state, int slot, LocalMapObject *object)
 { (void)state; (void)slot; (void)object; }
+static BOOL OverworldWildSpawns_ResolveChainConditionsAtIntentBoundary(
+    OverworldWildSpawnState *state, int slot, OverworldWildBehaviorProfile *profile)
+{ (void)state; (void)slot; (void)profile; return TRUE; }
 static void OverworldWildSpawns_HandleFinishedMovementCommand(OverworldWildSpawnState *, int);
 """
 
@@ -410,7 +413,7 @@ int main(int argc, char **argv)
             && selectedPolicy.walkMomentum.speed == 4);
         FinishLeg(&state, &object);
         OverworldWildSpawns_FinishPendingStagedHop(
-            &state, 0, &object, &testProfile);
+            &state, 0, &object);
         CHECK(state.movementStagedHopPending[0] == 0
             && state.movementCooldowns[0] == 0
             && completionCalls == 0);

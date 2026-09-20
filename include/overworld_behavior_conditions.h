@@ -10,11 +10,15 @@
 #define OVERWORLD_BEHAVIOR_CONDITION_NO_ENTRY 0xFFFF
 #define OVERWORLD_BEHAVIOR_CONDITION_NO_APPLICATION 0xFF
 #define OVERWORLD_BEHAVIOR_CONDITION_TERRAIN_MASK_MAX 0x03FF
+#define OVERWORLD_BEHAVIOR_CONDITION_STATE_ACTIVE (1u << 0)
+#define OVERWORLD_BEHAVIOR_CONDITION_STATE_HAS_TRIGGERED (1u << 1)
 
 typedef enum OverworldBehaviorConditionStatus {
     OVERWORLD_BEHAVIOR_CONDITION_OK = 0,
     OVERWORLD_BEHAVIOR_CONDITION_INVALID_ARGUMENT = 1,
     OVERWORLD_BEHAVIOR_CONDITION_INVALID_DEFINITION = 2,
+    OVERWORLD_BEHAVIOR_CONDITION_STALE_TARGET = 3,
+    OVERWORLD_BEHAVIOR_CONDITION_STORAGE_REQUIRED = 4,
 } OverworldBehaviorConditionStatus;
 
 typedef enum OverworldBehaviorConditionKind {
@@ -104,9 +108,11 @@ typedef struct OverworldBehaviorConditionEntryInput {
 typedef struct OverworldBehaviorConditionEntryState {
     u32 activeUntil;
     u32 cooldownUntil;
-    OverworldBehaviorConditionTargetReference target;
-    u8 active;
-    u8 hasTriggered;
+    u16 targetSlot;
+    u16 targetGeneration;
+    u16 targetEncounterGeneration;
+    u8 targetKind;
+    u8 flags;
 } OverworldBehaviorConditionEntryState;
 
 typedef struct OverworldBehaviorConditionEntryResult {
@@ -135,23 +141,26 @@ typedef char OverworldBehaviorConditionTargetReferenceSizeMustRemain14Bytes[
     sizeof(OverworldBehaviorConditionTargetReference) == 14 ? 1 : -1];
 typedef char OverworldBehaviorConditionDefinitionSizeMustRemain20Bytes[
     sizeof(OverworldBehaviorConditionDefinition) == 20 ? 1 : -1];
-typedef char OverworldBehaviorConditionEntryStateSizeMustRemain24Bytes[
-    sizeof(OverworldBehaviorConditionEntryState) == 24 ? 1 : -1];
-typedef char OverworldBehaviorConditionActorStateBudgetMustRemain768Bytes[
+typedef char OverworldBehaviorConditionEntryStateSizeMustRemain16Bytes[
+    sizeof(OverworldBehaviorConditionEntryState) == 16 ? 1 : -1];
+typedef char OverworldBehaviorConditionActorStateBudgetMustRemain512Bytes[
     sizeof(OverworldBehaviorConditionEntryState)
             * OVERWORLD_BEHAVIOR_CONDITION_MAX_ENTRIES
-        == 768
+        == 512
         ? 1
         : -1];
-typedef char OverworldBehaviorConditionSystemStateBudgetMustRemain7680Bytes[
+typedef char OverworldBehaviorConditionSystemStateBudgetMustRemain5120Bytes[
     sizeof(OverworldBehaviorConditionEntryState)
             * OVERWORLD_BEHAVIOR_CONDITION_MAX_ENTRIES
             * OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS
-        == 7680
+        == 5120
         ? 1
         : -1];
 typedef char OverworldBehaviorConditionResultSizeMustRemain540Bytes[
     sizeof(OverworldBehaviorConditionResult) == 540 ? 1 : -1];
+
+u8 OverworldBehaviorCondition_DefinitionValid(
+    const OverworldBehaviorConditionDefinition *definition);
 
 OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluateEntry(
     const OverworldBehaviorConditionDefinition *definition,

@@ -361,6 +361,7 @@ def VerifyOverworldFollowerSelectorOverlay(
         'OverworldBehaviorCondition_EvaluatePrepared',
         'OverworldBehaviorCondition_ValidateResolveRequest',
     ]
+    condition_gate_name = 'OverworldBehaviorConditionService_Get'
     symbols = {}
     output = subprocess.check_output([OBJDUMP, '-t', linked_path]).decode()
     for line in output.splitlines():
@@ -370,6 +371,7 @@ def VerifyOverworldFollowerSelectorOverlay(
                 *callback_names,
                 condition_entry_name,
                 *condition_callback_names,
+                condition_gate_name,
         ]:
             symbols[parts[-1]] = (int(parts[0], 16), int(parts[-2], 16))
 
@@ -380,6 +382,7 @@ def VerifyOverworldFollowerSelectorOverlay(
             *callback_names,
             condition_entry_name,
             *condition_callback_names,
+            condition_gate_name,
         ]
         if name not in symbols
     ]
@@ -411,7 +414,7 @@ def VerifyOverworldFollowerSelectorOverlay(
             )
 
     condition_entry_address, condition_entry_size = symbols[condition_entry_name]
-    if (condition_entry_address != callback_end or condition_entry_size != 20):
+    if (condition_entry_address != callback_end or condition_entry_size != 24):
         raise RuntimeError(
             'overlay 152 condition service entry changed: '
             f'address=0x{condition_entry_address:08X} '
@@ -419,11 +422,17 @@ def VerifyOverworldFollowerSelectorOverlay(
         )
     for name in condition_callback_names:
         callback_address, _ = symbols[name]
-        if not condition_entry_address < callback_address < overlay_end:
+        if not expected_entry_address < callback_address < overlay_end:
             raise RuntimeError(
                 f'overlay 152 condition callback {name} is outside its owned range: '
                 f'0x{callback_address:08X}'
             )
+    gate_address, _ = symbols[condition_gate_name]
+    if gate_address != 0x023C22B8:
+        raise RuntimeError(
+            'overlay 152 condition service gate moved: '
+            f'address=0x{gate_address:08X}'
+        )
 
     with open(output_path, 'rb') as file:
         overlay = file.read()
@@ -463,7 +472,7 @@ def VerifyOverworldFollowerSelectorOverlay(
         raise RuntimeError('overlay 152 exported a callback outside its range')
 
     condition_header = struct.unpack_from(
-        '<IHH3I',
+        '<IHH4I',
         overlay,
         condition_entry_address - expected_entry_address,
     )
@@ -473,9 +482,10 @@ def VerifyOverworldFollowerSelectorOverlay(
     )
     if condition_header != (
             0x4342574F,
-            2,
+            8,
             condition_entry_size,
             *expected_condition_callbacks,
+            0,
     ):
         raise RuntimeError('overlay 152 condition service ABI does not match')
 
@@ -600,7 +610,7 @@ def VerifyOverworldWildRuntimeOverlay(
         raise RuntimeError('overlay 156 is shorter than its exported ABI entries')
 
     actual_header = struct.unpack_from('<IHH', overlay)
-    expected_header = (0x3152574F, 16, expected_entry_size)
+    expected_header = (0x3152574F, 17, expected_entry_size)
     if actual_header != expected_header:
         raise RuntimeError(
             'overlay 156 exported ABI magic/version/size does not match'

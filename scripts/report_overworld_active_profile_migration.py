@@ -136,7 +136,7 @@ PATTERNS = (
     _pattern(
         "active_lane_member",
         r"\bOverworldWildBehaviorProfileData\s+active\b|"
-        r"\bprofile(?:->|\.)active\b",
+        r"(?<!override-)\bprofile(?:->|\.)active\b",
     ),
     _pattern(
         "active_lane_enum",
@@ -180,7 +180,8 @@ PATTERNS = (
         r"sizeof\(BehaviorResolveResult\)\s*==\s*256|"
         r"\bresultHex\b[^\n]{0,48}\b256\b|"
         r"\b256\b[^\n]{0,48}\bresultHex\b|"
-        r"offsetof\(BehaviorResolveResult\s*,|"
+        r"offsetof\(BehaviorResolveResult\s*,[^)]*\)\s*==\s*"
+        r"(?:218|222|236|240|244|248)\b|"
         r"\bresult\[(?:218|222|236|240|244|248)(?::|\])|"
         r"struct\.unpack_from\([^\n]*\bresult\b[^\n]*\b236\b",
     ),
@@ -339,6 +340,8 @@ def discover_source_files(root: Path) -> list[Path]:
             continue
         value = raw.decode(errors="strict")
         path = Path(value)
+        if not (root / path).is_file():
+            continue
         if path in {SELF_PATH, TEST_PATH}:
             continue
         if value.startswith(EXCLUDED_PREFIXES):

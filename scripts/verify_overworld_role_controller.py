@@ -737,14 +737,14 @@ def main() -> int:
     print("Follower Release adapter mutation checks passed", flush=True)
     require(runtime, "OverworldRoleController_Reduce", "portable runtime adapter")
     require(runtime_header, "OverworldWildRuntimeReduceRoleFunc reduceRole", "fixed runtime role-controller slot")
-    require(runtime_header, "#define OVERWORLD_WILD_RUNTIME_VERSION 16", "runtime service version")
+    require(runtime_header, "#define OVERWORLD_WILD_RUNTIME_VERSION 17", "runtime service version")
     require(runtime_header, "OverworldWildRuntimeBindActorFunc bindActor", "single-actor binding callback")
     forbid(runtime_header, "reservedResolverCallbacks", "retired resolver callback slots")
     require(runtime, "entry->reduceRole == OverworldRoleController_Reduce", "runtime role-controller validation")
     require(runtime_linker, "OverworldRoleController_Reduce = 0x023BE240 | 1", "resident role-controller import")
     require(task6_linker, "KEEP(*(.text.OverworldRoleController_Reduce))", "resident role-controller code home")
     require(overlays, "OVERWORLD_TASK6_PORTABLE_OBJS", "portable role-controller build input")
-    require(packager, "expected_header = (0x3152574F, 16, expected_entry_size)", "runtime package version")
+    require(packager, "expected_header = (0x3152574F, 17, expected_entry_size)", "runtime package version")
     audit = SourceAudit()
     audit.require_semantic_path(
         wild,

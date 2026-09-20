@@ -25,12 +25,17 @@ def source_paths(root):
                            if path.suffix in (".cpp", ".h", ".py", ".txt"))}))
 
 KEYS = ("A", "B", "X", "Y", "START", "SELECT", "UP", "DOWN", "LEFT", "RIGHT", "L", "R")
-PREPARED_OPS = frozenset({"teleport", "spawn", "party", "resolver.probe", "actor-inspect.probe", "walk-policy.reset", "mount-walk.configure", "mount-teleport.configure", "walk-corner.probe", "walk-corner.arm", "walk-corner.close", "walk-corner.calibrate", "walk-matrix.arm", "walk-matrix.close", "walk-matrix.calibrate", "walk-intent.arm", "walk-intent.close", "walk-policy-control.arm", "walk-policy-control.close", "mount-pacing.arm", "mount-pacing.close", "mount-pacing.calibrate", "wild-walk.arm", "wild-walk.close", "wild-walk.calibrate"})
+PREPARED_OPS = frozenset({"teleport", "spawn", "party", "resolver.probe", "condition.probe", "actor-inspect.probe", "walk-policy.reset", "mount-walk.configure", "mount-teleport.configure", "walk-corner.probe", "walk-corner.arm", "walk-corner.close", "walk-corner.calibrate", "walk-matrix.arm", "walk-matrix.close", "walk-matrix.calibrate", "walk-intent.arm", "walk-intent.close", "walk-policy-control.arm", "walk-policy-control.close", "mount-pacing.arm", "mount-pacing.close", "mount-pacing.calibrate", "wild-walk.arm", "wild-walk.close", "wild-walk.calibrate"})
 PREPARED_OPS = PREPARED_OPS | {"stomp.arm", "stomp.close", "stomp.calibrate"}
 PREPARED_OPS = PREPARED_OPS | {"crash.arm", "crash.close", "crash.calibrate"}
 PREPARED_OPS = PREPARED_OPS | {"hop-candidate.probe", "hop-arc.arm", "hop-arc.close"}
 PREPARED_OPS = PREPARED_OPS | {"wild-ledge.arm", "wild-ledge.close"}
 PREPARED_OPS = PREPARED_OPS | {"mount-teleport.restore"}
+PREPARED_OPS = PREPARED_OPS | {
+    "condition-controller.fixture",
+    "condition-controller.arm",
+    "condition-controller.close",
+}
 
 
 def integer(low, high, default=None, required=False):
@@ -71,6 +76,7 @@ OPERATIONS = {
     "cpu-work.start": {"maxNativeFrames": integer(1, 1200, 600)},
     "cpu-work.read": {},
     "resolver.probe": {},
+    "condition.probe": {},
     "actor-inspect.probe": {"handle": integer(1, 0xffffffff, required=True)},
     "walk-policy.reset": {"subject": {"type": "object", "required": True}},
     "mount-walk.configure": {"subject": {"type": "object", "required": True},
@@ -122,6 +128,12 @@ OPERATIONS = {
     "wild-ledge.arm": {"subject": {"type": "object", "required": True},
                        "maxFrames": integer(1, 1200, required=True)},
     "wild-ledge.close": {},
+    "condition-controller.fixture": {},
+    "condition-controller.arm": {
+        "subject": {"type": "object", "required": True},
+        "maxFrames": integer(1, 600, required=True),
+    },
+    "condition-controller.close": {},
     "terrain": {"radius": integer(0, 12, 6), "x": integer(0, 32767), "z": integer(0, 32767)},
     "test.list": {}, "test.validate": {"test": {"type": "object", "required": True}},
     "test.save": {"name": string(required=True), "test": {"type": "object", "required": True}},
@@ -200,7 +212,7 @@ def validate_command(op, args=None):
         raise ValueError("name must use 1..64 lowercase letters, digits, dot, dash or underscore; no double dots")
     if op == "party" and len(result) == 1:
         raise ValueError("party needs at least one field to change")
-    if op in ("walk-policy.reset", "mount-walk.configure", "mount-teleport.configure", "mount-teleport.restore", "walk-corner.probe", "walk-corner.arm", "walk-matrix.arm", "stomp.arm", "crash.arm", "walk-intent.arm", "walk-policy-control.arm", "mount-pacing.arm", "hop-arc.arm", "wild-walk.arm", "wild-ledge.arm"):
+    if op in ("walk-policy.reset", "mount-walk.configure", "mount-teleport.configure", "mount-teleport.restore", "walk-corner.probe", "walk-corner.arm", "walk-matrix.arm", "stomp.arm", "crash.arm", "walk-intent.arm", "walk-policy-control.arm", "mount-pacing.arm", "hop-arc.arm", "wild-walk.arm", "wild-ledge.arm", "condition-controller.arm"):
         # Import here: records uses this module's prepared-operation catalog.
         from tools.overworld.devtools_records import _subject, _copy_json, GENERATION_FIELDS
         selected = result["subject"]

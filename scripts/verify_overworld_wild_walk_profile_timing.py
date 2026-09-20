@@ -338,7 +338,7 @@ def main() -> None:
         and changed_reparsed["stopSkid"]["raw"] == "OW_WILD_BEHAVIOR_BOOL_YES",
         "packed turn-skid options did not round-trip independently",
     )
-    require("OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 77" in header, "behavior blob version is not current")
+    require("OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 79" in header, "behavior blob version is not current")
     require("u8 walkStompTime;" in header, "profile ABI lacks separate stomp time")
     require("OW_WILD_BEHAVIOR_OVERRIDE3_WALK_STOMP_TIME" in header, "stomp time cannot be overridden")
     require("u8 walkAccelerationStep;" in header, "profile ABI lacks acceleration amount")

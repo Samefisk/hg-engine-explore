@@ -17,6 +17,15 @@ typedef struct OverworldBehaviorConditionTruth {
     u8 value;
 } OverworldBehaviorConditionTruth;
 
+_Static_assert(
+    OVERWORLD_BEHAVIOR_CONDITION_PLAYER_NOTICED + 1
+        == OVERWORLD_BEHAVIOR_CONDITION_TARGET_PLAYER,
+    "player condition target ordering changed");
+_Static_assert(
+    OVERWORLD_BEHAVIOR_CONDITION_POKEMON_NOTICED + 1
+        == OVERWORLD_BEHAVIOR_CONDITION_TARGET_MATCHED_ACTOR,
+    "Pokemon condition target ordering changed");
+
 static u16 OverworldBehaviorCondition_Abs(s32 value)
 {
     return (u16)(value < 0 ? -value : value);
@@ -125,64 +134,109 @@ static void OverworldBehaviorCondition_ClearTarget(
     target->kind = OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE;
 }
 
-static u8 __attribute__((noinline)) OVERWORLD_BEHAVIOR_CONDITION_SIZE_OPTIMIZED
-OverworldBehaviorCondition_TargetValid(
-    const OverworldBehaviorConditionTargetReference *target,
-    const OverworldBehaviorConditionEntryInput *input,
-    const OverworldBehaviorConditionWorldView *world)
+static u8 OverworldBehaviorCondition_StateActive(
+    const OverworldBehaviorConditionEntryState *state)
 {
-    u8 i;
-
-    if (target->kind == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE) {
-        return 1;
-    }
-    if (target->kind == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_PLAYER) {
-        return world->playerValid != 0;
-    }
-    if (target->kind != OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR) {
-        return 0;
-    }
-    for (i = 0; i < world->actorCount; i++) {
-        if ((input->eligibleActorMask & (1u << i)) != 0
-            && world->actors[i].valid
-            && OverworldBehaviorCondition_SameHandle(
-                &target->actor, &world->actors[i].actor)) {
-            return 1;
-        }
-    }
-    return 0;
+    return (state->flags & OVERWORLD_BEHAVIOR_CONDITION_STATE_ACTIVE) != 0;
 }
 
-static u8 __attribute__((noinline)) OVERWORLD_BEHAVIOR_CONDITION_SIZE_OPTIMIZED
-OverworldBehaviorCondition_CapturedTargetInRange(
-    const OverworldBehaviorConditionDefinition *definition,
+static void OverworldBehaviorCondition_SetStateActive(
+    OverworldBehaviorConditionEntryState *state,
+    u8 active)
+{
+    if (active) {
+        state->flags |= OVERWORLD_BEHAVIOR_CONDITION_STATE_ACTIVE;
+    } else {
+        state->flags &= ~OVERWORLD_BEHAVIOR_CONDITION_STATE_ACTIVE;
+    }
+}
+
+static u8 OverworldBehaviorCondition_StateHasTriggered(
+    const OverworldBehaviorConditionEntryState *state)
+{
+    return (state->flags
+        & OVERWORLD_BEHAVIOR_CONDITION_STATE_HAS_TRIGGERED) != 0;
+}
+
+static void OverworldBehaviorCondition_SetStateHasTriggered(
+    OverworldBehaviorConditionEntryState *state)
+{
+    state->flags |= OVERWORLD_BEHAVIOR_CONDITION_STATE_HAS_TRIGGERED;
+}
+
+static void OverworldBehaviorCondition_ClearStoredTarget(
+    OverworldBehaviorConditionEntryState *state)
+{
+    state->targetSlot = 0;
+    state->targetGeneration = 0;
+    state->targetEncounterGeneration = 0;
+    state->targetKind = OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE;
+}
+
+static void OverworldBehaviorCondition_CaptureTarget(
+    OverworldBehaviorConditionEntryState *state,
+    const OverworldBehaviorConditionTargetReference *target)
+{
+    OverworldBehaviorCondition_ClearStoredTarget(state);
+    state->targetKind = target->kind;
+    if (target->kind == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR) {
+        state->targetSlot = target->actor.slot;
+        state->targetGeneration = target->actor.generation;
+        state->targetEncounterGeneration =
+            target->actor.encounterGeneration;
+    }
+}
+
+static u8 OverworldBehaviorCondition_StoredTargetMatchesActor(
+    const OverworldBehaviorConditionEntryState *state,
+    const OverworldBehaviorConditionWorldView *world,
+    const OverworldActorHandle *actor)
+{
+    return state->targetKind == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR
+        && actor->slot == state->targetSlot
+        && actor->generation == state->targetGeneration
+        && actor->encounterGeneration == state->targetEncounterGeneration
+        && actor->fieldEpoch == world->subject.fieldEpoch
+        && actor->mapGeneration == world->subject.mapGeneration;
+}
+
+static u8 OverworldBehaviorCondition_RestoreTarget(
+    const OverworldBehaviorConditionEntryState *state,
     const OverworldBehaviorConditionEntryInput *input,
     const OverworldBehaviorConditionWorldView *world,
-    const OverworldBehaviorConditionTargetReference *target)
+    OverworldBehaviorConditionTargetReference *target,
+    s16 *targetX,
+    s16 *targetY)
 {
     u8 i;
 
-    if (target->kind == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE) {
+    OverworldBehaviorCondition_ClearTarget(target);
+    *targetX = world->subjectX;
+    *targetY = world->subjectY;
+    if (state->targetKind == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE) {
         return 1;
     }
-    if (target->kind == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_PLAYER) {
-        return world->playerValid
-            && OverworldBehaviorCondition_InRange(
-                definition, world, world->playerX, world->playerY);
+    if (state->targetKind == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_PLAYER) {
+        if (!world->playerValid) {
+            return 0;
+        }
+        target->kind = OVERWORLD_BEHAVIOR_TARGET_REFERENCE_PLAYER;
+        *targetX = world->playerX;
+        *targetY = world->playerY;
+        return 1;
     }
-    if (target->kind != OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR) {
+    if (state->targetKind != OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR) {
         return 0;
     }
     for (i = 0; i < world->actorCount; i++) {
         if ((input->eligibleActorMask & (1u << i)) != 0
             && world->actors[i].valid
-            && OverworldBehaviorCondition_SameHandle(
-                &target->actor, &world->actors[i].actor)
-            && OverworldBehaviorCondition_InRange(
-                definition,
-                world,
-                world->actors[i].x,
-                world->actors[i].y)) {
+            && OverworldBehaviorCondition_StoredTargetMatchesActor(
+                state, world, &world->actors[i].actor)) {
+            target->kind = OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR;
+            target->actor = world->actors[i].actor;
+            *targetX = world->actors[i].x;
+            *targetY = world->actors[i].y;
             return 1;
         }
     }
@@ -268,7 +322,7 @@ OVERWORLD_BEHAVIOR_CONDITION_SIZE_OPTIMIZED OverworldBehaviorCondition_Truth(
     return truth;
 }
 
-static u8 OverworldBehaviorCondition_DefinitionValid(
+u8 OverworldBehaviorCondition_DefinitionValid(
     const OverworldBehaviorConditionDefinition *definition)
 {
     if (definition->conditionId == OVERWORLD_BEHAVIOR_CONDITION_NO_ENTRY
@@ -301,18 +355,9 @@ static u8 OverworldBehaviorCondition_DefinitionValid(
             && definition->maxMovementSpeed != 0
             && definition->minMovementSpeed
                 > definition->maxMovementSpeed)
-        || (definition->kind
-                == OVERWORLD_BEHAVIOR_CONDITION_TERRAIN_SPEED
-            && definition->targetKind
-                != OVERWORLD_BEHAVIOR_CONDITION_TARGET_NONE)
-        || (definition->kind
-                == OVERWORLD_BEHAVIOR_CONDITION_PLAYER_NOTICED
-            && definition->targetKind
-                == OVERWORLD_BEHAVIOR_CONDITION_TARGET_MATCHED_ACTOR)
-        || (definition->kind
-                == OVERWORLD_BEHAVIOR_CONDITION_POKEMON_NOTICED
-            && definition->targetKind
-                == OVERWORLD_BEHAVIOR_CONDITION_TARGET_PLAYER)) {
+        || (definition->targetKind
+                != OVERWORLD_BEHAVIOR_CONDITION_TARGET_NONE
+            && definition->targetKind != definition->kind + 1)) {
         return 0;
     }
     return 1;
@@ -338,7 +383,9 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluateEntry(
     OverworldBehaviorConditionEntryResult *result)
 {
     OverworldBehaviorConditionTruth truth;
-    u8 targetValid;
+    OverworldBehaviorConditionTargetReference activeTarget;
+    s16 targetX = 0;
+    s16 targetY = 0;
     u8 cooldownFinished;
     u8 wasActive;
 
@@ -356,42 +403,47 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluateEntry(
         return OVERWORLD_BEHAVIOR_CONDITION_INVALID_DEFINITION;
     }
 
-    wasActive = state->active;
+    wasActive = OverworldBehaviorCondition_StateActive(state);
+    OverworldBehaviorCondition_ClearTarget(&activeTarget);
     truth = OverworldBehaviorCondition_Truth(definition, input, world);
     result->conditionTrue = truth.value;
-    targetValid = OverworldBehaviorCondition_TargetValid(
-        &state->target, input, world);
-    if (state->active && !targetValid) {
-        state->active = 0;
-        OverworldBehaviorCondition_ClearTarget(&state->target);
+    if (wasActive
+        && !OverworldBehaviorCondition_RestoreTarget(
+            state, input, world, &activeTarget, &targetX, &targetY)) {
+        OverworldBehaviorCondition_SetStateActive(state, 0);
+        OverworldBehaviorCondition_ClearStoredTarget(state);
+        return OVERWORLD_BEHAVIOR_CONDITION_STALE_TARGET;
     }
 
     if (definition->activationMode
         == OVERWORLD_BEHAVIOR_CONDITION_WHILE_TRUE) {
-        if (state->active
-            && !OverworldBehaviorCondition_CapturedTargetInRange(
-                definition, input, world, &state->target)) {
-            state->active = 0;
-            OverworldBehaviorCondition_ClearTarget(&state->target);
+        if (OverworldBehaviorCondition_StateActive(state)
+            && state->targetKind != OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE
+            && !OverworldBehaviorCondition_InRange(
+                definition, world, targetX, targetY)) {
+            OverworldBehaviorCondition_SetStateActive(state, 0);
+            OverworldBehaviorCondition_ClearStoredTarget(state);
         }
         if (!truth.value
             || !OverworldBehaviorCondition_RequiredTargetAvailable(
                 definition, &truth)) {
-            state->active = 0;
-            OverworldBehaviorCondition_ClearTarget(&state->target);
-        } else if (!state->active && !wasActive) {
-            state->active = 1;
-            state->target = truth.target;
+            OverworldBehaviorCondition_SetStateActive(state, 0);
+            OverworldBehaviorCondition_ClearStoredTarget(state);
+        } else if (!OverworldBehaviorCondition_StateActive(state)
+            && !wasActive) {
+            OverworldBehaviorCondition_SetStateActive(state, 1);
+            OverworldBehaviorCondition_CaptureTarget(state, &truth.target);
+            activeTarget = truth.target;
             result->triggered = 1;
         }
     } else {
-        if (state->active
+        if (OverworldBehaviorCondition_StateActive(state)
             && OverworldBehaviorCondition_Reached(
                 world->frame, state->activeUntil)) {
-            state->active = 0;
-            OverworldBehaviorCondition_ClearTarget(&state->target);
+            OverworldBehaviorCondition_SetStateActive(state, 0);
+            OverworldBehaviorCondition_ClearStoredTarget(state);
         }
-        cooldownFinished = !state->hasTriggered
+        cooldownFinished = !OverworldBehaviorCondition_StateHasTriggered(state)
             || definition->cooldownFrames == 0
             || OverworldBehaviorCondition_Reached(
                 world->frame, state->cooldownUntil);
@@ -399,20 +451,21 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluateEntry(
             && truth.value
             && OverworldBehaviorCondition_RequiredTargetAvailable(
                 definition, &truth)) {
-            state->active = 1;
+            OverworldBehaviorCondition_SetStateActive(state, 1);
             state->activeUntil =
                 world->frame + definition->durationFrames;
             state->cooldownUntil =
                 world->frame + definition->cooldownFrames;
-            state->target = truth.target;
-            state->hasTriggered = 1;
+            OverworldBehaviorCondition_CaptureTarget(state, &truth.target);
+            OverworldBehaviorCondition_SetStateHasTriggered(state);
+            activeTarget = truth.target;
             result->triggered = 1;
         }
     }
 
-    result->active = state->active;
-    if (state->active) {
-        result->target = state->target;
+    result->active = OverworldBehaviorCondition_StateActive(state);
+    if (result->active) {
+        result->target = activeTarget;
     }
     return OVERWORLD_BEHAVIOR_CONDITION_OK;
 }
@@ -435,7 +488,6 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_Evaluate(
         result,
         NULL);
 }
-#endif
 
 OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluateWithResults(
     const OverworldBehaviorConditionDefinition *definitions,
@@ -518,3 +570,4 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluateWithResults(
     }
     return OVERWORLD_BEHAVIOR_CONDITION_OK;
 }
+#endif

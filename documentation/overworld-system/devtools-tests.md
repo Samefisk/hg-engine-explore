@@ -234,6 +234,21 @@ own reason. Those are evaluator controls, not game observer faults. Its one-
 cycle floor counts native cycles containing resolver work and cannot provide
 completed-game-frame, actor identity, role-caller or movement-soak credit.
 
+`profile.condition.packaged-rom-evaluator` is a separate subjectless S3
+service test. One fixed `condition.probe` action authenticates the ROM
+condition-service table, all three linked callback entries, and the live
+behavior blob captured by natural resolver discovery. It allocates one guarded
+1,536-byte heap11 input/output block. It temporarily changes three declared
+catalog ranges, 1,042 bytes in total, for seven fixed cases. It then restores
+the complete source blob exactly before cleanup. The controller requires exact
+native arguments and returns, complete input/state/scratch/result readback,
+guard preservation, exact catalog restoration, free, private-session cleanup
+and eleven wrong-data controls. It proves overlap last-wins, application
+stacking, timed hold/cooldown/duration restart, player and actor targets,
+stale/fresh complete handles, and byte-identical copied-input Wild/Follower
+results. The role labels are not live actors or caller proof, and its native-
+cycle floor grants no intent, movement, presentation or soak credit.
+
 `actor.inspect-current-and-stale` is a separate S3 native facade lookup test.
 It binds the existing saved FOLLOWER Mankey, then resolves the bound handle for
 one `actor-inspect.probe` action. Checked recipes name the subject, not a raw
@@ -776,7 +791,8 @@ The finalizer tap retains initialized input bytes before placement and the
 successful prepared output afterward. One same-frame, single-use receipt must
 match the spawn's exact buffer, slot, world context, encounter and final PID.
 The final PID may legitimately differ from the input PID. The winning Owner
-layer comes from matched/forced masks, not Active/Tired's combined applied mask.
+layer comes from matched/forced and active-conditional application masks, not
+from a controller-state lane.
 Only unconditional legacy POOL with no tree-top exception is in scope.
 The test compares the incoming site, finalized site and actual completed Hop;
 it cannot call a new site correct merely because startup copied that new site.
@@ -946,13 +962,17 @@ batching error:
 2. Run `python3 tools/overworld/test_spawn_destination_scan.py`.
 3. Stop if either extracted-C check finds more than one costly candidate query
    in one update. Fix the production scanner before starting melonDS.
-4. Run `population.spawn-work-budget` on the current ROM. Its fixed Route 30
-   path must keep the player moving during the scan. Require exactly one
-   profile resolution and one metadata/class preparation for the complete
-   automatic attempt. Later scan updates must reuse that prepared result. The
-   copied repeated-preparation controls and the slow-resumed-finalizer control
+4. Run `population.spawn-work-budget` on the current ROM. Its fixed route
+   crosses from Route 30 into Cherrygrove, then starts the strict window on the
+   first completed post-seam update. The player must keep moving during the
+   scan. Require exactly one profile resolution and one metadata/class
+   preparation for the complete automatic attempt. Later scan updates must
+   reuse that prepared result. The completed attempt must create Hoothoot with
+   its normal off-screen spawn Hop. The copied repeated-preparation controls
+   and the slow-resumed-finalizer control
    must fail for their matching reasons. The same short run must record every
-   stock main-loop wait through the first post-spawn loop. Require zero loops
+   stock main-loop wait in the strict window through the first post-spawn
+   loop. Require zero loops
    above two native cycles and reject ARM9 intervals above the sub-VBlank hook
    margin (`2800950` scheduler ticks), at least 120 in-transit
    player samples, and zero repeated exact player positions during those

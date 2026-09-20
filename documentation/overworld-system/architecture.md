@@ -57,7 +57,14 @@ movement-policy state. Wild refreshes the snapshot through a bounded value
 view; it does not expose or retain Actor storage. An active motion keeps its
 Actor-owned logical tile while the engine object supplies render position.
 Wild retains only engine-adapter state such as prepared spawn work, refill work,
-and staged presentation handles.
+staged presentation handles, and prepared condition state.
+
+The resident condition adapter builds bounded value-only observations for the
+portable evaluator and records armed semantic trace events. It does not decide
+condition truth, compose profiles, or own intent and motion. The movement-policy
+service entry publishes this adapter because that fixed 16-byte entry had one
+available data pointer; this is deployment placement, not movement-policy
+ownership.
 
 A retryable `Apply` result means the command was not queued or acknowledged.
 A retryable motion decision leaves the intent pending and does not consume
@@ -140,19 +147,31 @@ comparison is unsigned and wrap-safe. The role adapter prepares applicable
 entries at bind and supplies bounded observations only when it is ready to ask
 for a new intent.
 
-During CP4 shadow operation, Wild stores one bounded prepared-state block per
-actor slot. Bind prepares catalog indexes only. Despawn, slot reuse, actor
-identity change, and field-context loss clear the owned state. One actor roster
-is cached for each public actor frame and is invalidated immediately by a bind
-or clear. Full actor handles validate captured targets before resolution.
+Wild lazily allocates one 2,044-byte condition workspace from `HEAPID_WORLD`.
+It contains ten fixed 52-byte prepared actor records. Bind prepares only the
+catalog indexes that can apply to that subject, then allocates exactly the
+required entry-state array from the same heap. Despawn, slot reuse, actor
+identity change, and field-context loss clear the owned state. Wild owns and
+frees each nested state allocation even when the adapter overlay is
+unavailable. One actor roster is cached for each public actor frame and is
+invalidated immediately by a bind or clear. Full actor handles validate
+captured targets before resolution.
 
-The shadow call runs only after accepted motion has returned control at the
-idle decision boundary. It resolves an Owner profile and target but does not
-write them back to visible controller state. The legacy Alert, Emoting, and
-Active path remains authoritative until CP7. Trace-disabled calls do not walk
-condition trace records. Host comparison maps old and new results to five
-temporary migration meanings: no response, alert presentation, chase, flee,
-or ordinary Owner behavior.
+Authoritative evaluation runs whenever the controller can request a new
+intent: initial idle choice, completed motion, completed presentation, and the
+next step of a movement chain. The resulting application mask and captured
+target feed the resolver before the controller selects that intent. The
+adapter resolves again only when the active application mask changes; an
+unchanged mask reuses the cached resolution. A stale captured actor handle
+clears the conditional result and that intent decision fails closed.
+Trace-disabled calls do not walk condition trace records.
+
+A timed retrigger always restarts its duration. It requests Alert presentation
+only when the trigger also changes the resolved application mask. When one
+timed profile ends, Tired starts only if no other timed conditional application
+remains active. Adapter-private outcome bits are masked at the role boundary;
+in particular, private `PROFILE_CHANGED` never escapes as Wild's public
+`FAIL_CLOSED` bit.
 
 ### 3. Behavior Resolver
 
@@ -233,6 +252,9 @@ Ram is controller policy that emits Walk intents with direction lock, accelerati
 Wild and Follower adapters evaluate conditions only when the actor can request
 a new intent. A condition change cannot interrupt an accepted motion. A chained
 movement returns to the same boundary before requesting its next intent.
+Mounted follower control does not evaluate autonomous conditions. Alert is a
+presentation response to a qualifying trigger, not a controller state or a
+condition predicate.
 
 During migration, the fixed Wild runtime service entry exposes the value-only
 `reduceRole` callback. It points at the same portable
@@ -694,15 +716,15 @@ least four tiles beyond the player-relative inclusive8-by6 camera extent. Land a
 any walkable land tile; the spawn destination still keeps its authored terrain
 rule. If no eligible off-screen origin exists, the spawn is rejected. It never
 falls back to an on-screen appearance. Otherwise,
-it enters the normal active chase lane and replaces the player target with the
-immutable spawn tile. The shared chase controller selects and
-runs each Walk, Hop, or Teleport segment with the profile's active movement
+it starts an Owner-lane destination trip and replaces the player target with
+the immutable spawn tile. The shared chase controller selects and
+runs each Walk, Hop, or Teleport segment with the resolved Owner movement
 parameters. Each segment must complete its normal Motion transaction before
 the next segment starts. Move From Off Screen has no movement-policy
 exceptions: Walk pause, Movement Chain actions, stamina, tired effects, turn
 skid, battle rules, and the authored previous-tile rule work exactly as they
-do for any other active chase. A normal tired cycle can pause the trip and the
-same active chase resumes afterward. On arrival, and only after the normal
+do for any other destination trip. A normal tired cycle can pause the trip and
+the same Owner trip resumes afterward. On arrival, and only after the normal
 movement completion pipeline is idle, the actor returns to Chill and never
 snaps to the target.
 
@@ -808,11 +830,9 @@ finalizer receipt across only one completed queue; stale receipts cannot pair.
 boolean form of private maintenance state; phase and dirty bits never leak
 through the public ABI.
 
-During CP4-CP6, overlay 158 loads at `0x023B6500-0x023BAB00`. A temporary
-`0x600`-byte condition-shadow bridge occupies the prefix. The public actor
-facade remains at `0x023B6B00`, and the service directory keeps its fixed
-addresses. CP7 removes this bridge after the legacy Active path is deleted.
-Actor and population code is bounded below `0x023BA170`. Actor state starts at
+Overlay 158 loads at `0x023B6B00-0x023BAB00`. The public actor facade and
+service directory keep their fixed addresses. Actor and population code is
+bounded below `0x023BA170`. Actor state starts at
 `0x023BA170`, uses no more than `0x0990` bytes, and must end at or before overlay 157
 at `0x023BAB00`. The fixed capacities are 10 actors, 2 queued commands, 2
 acknowledgements, and 16 trace events. This layout preserves the full field
@@ -911,14 +931,17 @@ Planner families are private strategies, not public plugin APIs. Fixed overlay e
 The conceptual module uses one small resident code home and several unloadable
 engine adapters.
 
-- During CP4-CP6, overlay 158 loads at `0x023B6500-0x023BAB00`. A temporary
-  condition-shadow bridge owns `0x023B6500-0x023B6B00`. The fixed facade and
-  resident actor/population code still begin at `0x023B6B00` and occupy the
-  range through `0x023BA170`. CP7 removes the bridge with the old Active path.
-  Bounded state starts there and ends before `0x023BAB00`.
+- Overlay 158 loads at `0x023B6B00-0x023BAB00`. The fixed facade and resident
+  actor/population code occupy the range through `0x023BA170`. Bounded state
+  starts there and ends before `0x023BAB00`.
 - The public facade, compatibility entry, debug layout, resolver, motion,
   population, and movement-policy entries have fixed addresses and
   magic/version/size checks.
+- The version-5 movement-policy entry publishes the private Walk policy table
+  and the version-1 condition adapter. Actor validation checks the adapter's
+  magic, version, and 16-byte size. The adapter builds condition frames and
+  records condition trace facts; the portable evaluator remains the only
+  condition-truth owner.
 - Walk client overlays link to individual fixed helper functions from
   `0x023BF400` through `0x023BF9A0`. The old Walk service-table range at
   `0x023BF400..0x023BF487` now hosts the direct `DecelerateTime` and
@@ -960,8 +983,8 @@ engine adapters.
   Selector is linked to Wild; all calls into Helper follow helper preparation
   or a live actor/profile, and teardown stops those calls before unloading.
   Slot limits, typed Thumb imports, and exact packaged bodies are checked.
-- During CP4-CP6, Selector also owns `0x023C22A0–0x023C3000` for the
-  condition evaluator service. Its existing callbacks stay below
+- Selector owns `0x023C22A0–0x023C3000` for the condition evaluator service.
+  Its existing callbacks stay below
   `0x023C22A0`. Field teardown unloads Selector before another cold overlay
   can use this shared tail. The behavior-data overlay begins at
   `0x023C3000`, so the two images do not overlap.
@@ -1055,7 +1078,8 @@ Cancel is idempotent. It leaves authority on a complete tile, releases reservati
 
 - No per-frame heap allocation.
 - Fixed candidate arrays and bounded actor loops.
-- Profile resolution cached by source revision, subject, forced layers, and relevant resolver context such as conditional physical-surface state.
+- Profile resolution is cached by source revision, subject, forced layers,
+  active conditional applications, and the captured target source.
 - Spawn metadata uses one validated, reusable blob. The build generator and
   runtime loader share `OVERWORLD_WILD_SPAWN_METADATA_MAX_BLOB_SIZE`; generated
   data above that bound must fail the build, not silently force file reads for

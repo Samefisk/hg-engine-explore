@@ -30,6 +30,7 @@ OVERLAY_ROW_SIZE = 0x20
 PACKAGED_TYPES = frozenset("TtDdRrVvWw")
 DEFINED_TYPES = frozenset("TtBbDdRrSsVvWw")
 
+ACTOR_LOAD_BASE = 0x023B65A0
 ACTOR_BASE = 0x023B6B00
 ACTOR_END = 0x023BAB00
 ACTOR_FACADE_ENTRY = ACTOR_BASE
@@ -66,7 +67,7 @@ class ModuleSpec:
 
 
 MODULES = (
-    ModuleSpec("actor_system", "build/overworld_actor_system_overlay_linked.o", "build/output_overworld_actor_system_overlay.bin", 158, ACTOR_BASE),
+    ModuleSpec("actor_system", "build/overworld_actor_system_overlay_linked.o", "build/output_overworld_actor_system_overlay.bin", 158, ACTOR_LOAD_BASE),
     ModuleSpec("mount", "build/overworld_mount_overlay_linked.o", "build/output_overworld_mount_overlay.bin", 157, 0x023BAB00),
     # Wild spawns is overlay 149. Overlay 131 is the field overlay.
     ModuleSpec("wild_spawns", "build/overworld_wild_spawns_overlay_linked.o", "build/output_overworld_wild_spawns_overlay.bin", 149, 0x023CCFD8),
@@ -362,7 +363,7 @@ def audit_structure(
                 module=spec.key,
             )
 
-    facade = header("facade", "actor_system", ACTOR_FACADE_ENTRY, 0x5341574F, 1, 24, "actor facade entry")
+    facade = header("facade", "actor_system", ACTOR_FACADE_ENTRY, 0x5341574F, 2, 24, "actor facade entry")
     for offset, name in ((8, "OverworldActorSystem_ValidateImpl"), (12, "OverworldActorSystem_ApplyImpl"), (16, "OverworldActorSystem_TickImpl"), (20, "OverworldActorSystem_InspectImpl")):
         named_pointer("facade", facade, offset, "actor_system", name, name)
     compat = header("facade", "actor_system", ACTOR_COMPAT_ENTRY, 0x4341574F, 3, 32, "actor compatibility entry")
@@ -408,12 +409,16 @@ def audit_structure(
         named_pointer("population", population, 12, "actor_system", "OverworldActorSystem_PopulationControlImpl", "population control"),
     ) if item is not None]
 
-    movement = header("movement-policy", "actor_system", ACTOR_MOVEMENT_POLICY_ENTRY, 0x504D574F, 4, 16, "movement-policy service entry")
+    movement = header("movement-policy", "actor_system", ACTOR_MOVEMENT_POLICY_ENTRY, 0x504D574F, 5, 16, "movement-policy service entry")
     policy_address = named_pointer("movement-policy", movement, 8, "actor_system", "sActorMovementPolicy", "movement-policy table")
-    if movement is not None:
-        states_pointer = struct.unpack_from("<I", movement, 12)[0]
-        if states_pointer != 0:
-            issue("movement-policy", "exported-private-state", f"movement-policy entry still exports private policy state at 0x{states_pointer:08X}", module="actor_system", address=ACTOR_MOVEMENT_POLICY_ENTRY + 12, pointer=states_pointer)
+    adapter_address = named_pointer(
+        "movement-policy",
+        movement,
+        12,
+        "actor_system",
+        "gOverworldBehaviorConditionAdapterEntry",
+        "condition-adapter table",
+    )
     policy = _read_at(linked_images, specs, "actor_system", policy_address, 24) if policy_address is not None else None
     if policy is None:
         issue("movement-policy", "invalid-policy-table", "movement-policy table is outside the actor overlay", module="actor_system", address=policy_address)
@@ -422,8 +427,33 @@ def audit_structure(
         target = named_pointer("movement-policy", policy, offset, "actor_system", name, name)
         if target is not None:
             policy_targets.append(target)
+    adapter = (
+        header(
+            "movement-policy",
+            "actor_system",
+            adapter_address,
+            0x4143574F,
+            6,
+            28,
+            "condition-adapter table",
+        )
+        if adapter_address is not None
+        else None
+    )
+    adapter_targets: list[int] = []
+    for offset, name in (
+        (8, "OverworldBehaviorConditionAdapter_PrepareActor"),
+        (12, "OverworldBehaviorConditionAdapter_ClearActor"),
+        (16, "OverworldBehaviorConditionAdapter_ClearAll"),
+        (20, "OverworldBehaviorConditionAdapter_ClearResolution"),
+        (24, "OverworldBehaviorConditionAdapter_EvaluateActor"),
+    ):
+        target = named_pointer(
+            "movement-policy", adapter, offset, "actor_system", name, name)
+        if target is not None:
+            adapter_targets.append(target)
 
-    runtime = header("walk-owner", "wild_runtime", WILD_RUNTIME_ENTRY, 0x3152574F, 16, 52, "wild runtime adapter entry")
+    runtime = header("walk-owner", "wild_runtime", WILD_RUNTIME_ENTRY, 0x3152574F, 17, 52, "wild runtime adapter entry")
     owner = header("walk-owner", "wild_runtime", WALK_OWNER_ENTRY, 0x5057574F, 1, 12, "Walk policy owner entry")
     walk_target: int | None = None
     if owner is not None:
@@ -579,7 +609,7 @@ def audit_structure(
     owner_ranges = (
         ("motion", "actor_system", motion_targets),
         ("population", "actor_system", population_targets),
-        ("movement-policy", "actor_system", policy_targets),
+        ("movement-policy", "actor_system", policy_targets + adapter_targets),
         ("walk-owner", "wild_runtime", [] if walk_target is None else [walk_target]),
     )
     for capability, owner_module, targets in owner_ranges:
