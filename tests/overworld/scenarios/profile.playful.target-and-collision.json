@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.playful.target-and-collision",
+  "title": "Playful captures player or compatible actor without collision",
+  "status": "active",
+  "capabilities": ["condition.evaluation", "alert", "chase"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "data/overworld_behavior_profiles.json",
+    "actor": "One prepared WILD Clefairy (species 35) as the Playful subject and one prepared WILD Clefable (species 36) as a compatible actor target, both current and presentation-attached.",
+    "trigger": "Run one idle-boundary case with only Clefable visible, then move the player into Vision for the later player-target case; keep the selected target stationary until Clefairy stops at its non-collision boundary.",
+    "observable": "Requirement current.playful-target-and-collision: condition-playful-notices-compatible-actor captures the nearest compatible Clefable when the player case is false, and condition-playful-notices-player captures PLAYER when its later entry is active. In both cases Clefairy approaches or circles the captured target, completes motion, and never commits onto the target's occupied tile.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use one disposable test.sav with checked teleport, native Clefairy and Clefable spawns, exact binds, and a clear lane with the player initially outside Vision. Do not patch condition state, profile values, collision results, target selection, timers, or movement."
+      }
+    ],
+    "limits": [
+      "The bound runtime observer retains both authored target entries, complete motions, commits, and control returns. Its copied-data controls reject missing subject and missing feature evidence.",
+      "Both conditions use the playful-pokemon subject pool, current Vision, 420-frame duration, 430-frame cooldown, and 100 percent chance. The player condition is last and wins when both are active.",
+      "Prepared spawn and placement do not prove natural population selection or every compatible actor species."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [
+    {"id": "clefairy", "species": 35, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true},
+    {"id": "clefable", "species": 36, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": false, "requirePresentation": true}
+  ],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Bind current Clefairy and compatible Clefable in the actor-target arrangement with the player outside Clefairy's Vision."},
+    {"at": 1, "kind": "lifecycle", "value": "Observe compatible-actor capture, Playful approach or circle motion, target-tile rejection, terminal commit, and control return."},
+    {"at": 2, "kind": "setup", "value": "Start the separate player-target arrangement with the same species and authored profile contract."},
+    {"at": 3, "kind": "lifecycle", "value": "Observe player capture, Playful approach or circle motion, player-tile rejection, terminal commit, and control return."}
+  ],
+  "stop": {"frameBudget": 900, "condition": "Both target kinds are captured in their declared case and both complete without occupying the selected target tile."},
+  "expect": {
+    "requiredEvents": ["INTENT_CREATED", "MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["MOTION_CANCELED", "ACTOR_REBOUND", "CONTEXT_CHANGED"],
+    "invariants": [
+      "Each condition captures at most one current target",
+      "The compatible-actor case captures Clefable and the player case captures PLAYER",
+      "The player entry wins when both Playful entries are active",
+      "Clefairy never commits onto the captured actor or player tile"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "profile.playful.target-and-collision",
+    "claims": ["live-actor-identity", "profile-resolution", "collision-decision", "logical-commit", "rendered-motion", "control-release"],
+    "minimumFrames": 1
+  }
+}

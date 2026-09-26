@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "id": "walk.wild.sprint-obstacle-approach",
+  "title": "A Wild Sprint Stantler Hops the Route 29 signpost from rest",
+  "status": "active",
+  "capabilities": ["walk.momentum", "hop", "profile.state"],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "One prepared current Wild Stantler (species 234) idle at map 33 tile (580,397), with the resolved Sprint lane and attached presentation",
+    "trigger": "At the common Wild direction-choice entry, choose East for one obstacle request from (580,397); leave the stock collision and motion code unchanged",
+    "observable": "One two-tile Hop crosses the static blocked signpost at (581,397), lands at (582,397), and returns control. Native terrain reports an open takeoff and landing tile.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {"phase": "before-observation", "target": "fixture", "change": "Use a disposable save, checked map 33 teleport to player (584,397), native Wild Stantler spawn at (580,397), and exact-subject bind."},
+      {"phase": "during-observation", "target": "control-result", "change": "The bounded native control changes only r1 to East at one Wild direction-choice call from (580,397). It does not write game memory, force a return value, change the Sprint lane or admit a motion."}
+    ],
+    "limits": [
+      "This controlled direction choice proves the shared Wild caller and Sprint movement policy for one static obstacle. It does not prove a planned Walk-to-Hop route, natural Wander RNG, Chase targeting, Flee targeting or natural population spawning.",
+      "A prior two-step controlled test changed the candidate direction after the caller computed its turn permission. It therefore did not represent one coherent planned route; this case starts idle beside the obstacle.",
+      "Copied-data controls reject false terrain, changed actor, altered direction register, wrong start, short Hop and missing Hop commit. Registration alone is not accepted runtime proof."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "stantler", "species": 234, "role": "WILD", "acquisition": "spawn",
+    "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Place the player near the signpost, spawn and bind Wild Sprint Stantler idle at (580,397)"},
+    {"at": 1, "kind": "lifecycle", "value": "Arm the bounded East direction control at the shared Wild step entry"},
+    {"at": 2, "kind": "lifecycle", "value": "Observe one two-tile Hop and its terminal commit under neutral input"},
+    {"at": 3, "kind": "lifecycle", "value": "Close the control after the two-tile landing"}
+  ],
+  "stop": {"frameBudget": 120, "condition": "The same Stantler commits one two-tile Hop at (582,397)"},
+  "expect": {
+    "requiredEvents": ["MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["MOTION_CANCELED", "CONTEXT_CHANGED", "ACTOR_REBOUND", "CONTROL_REBOUND"],
+    "invariants": [
+      "Only the candidate direction register is changed; the game still accepts or rejects each motion",
+      "The takeoff tile is open, the next tile is a static collision, and the two-tile landing is open",
+      "The Hop commits exactly once on the same current actor",
+      "The trace and completed game frames remain contiguous without a canceled motion"
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "walk.wild.sprint-obstacle-approach",
+    "claims": ["controlled-action", "live-actor-identity", "profile-resolution", "collision-decision", "logical-commit", "rendered-motion", "control-release"],
+    "minimumFrames": 16}
+}

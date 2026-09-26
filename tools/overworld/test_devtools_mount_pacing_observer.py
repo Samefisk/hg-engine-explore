@@ -45,12 +45,27 @@ class MountPacingTests(unittest.TestCase):
         s.rt.signed = lambda emu, address, size=4: -7 if address % 0x100 == 0x90 else 3
         s.rt.player_ptr = lambda emu: player
         poses = {player:dict(pos_x=100,pos_y=200,pos_z=300,x=1,y=2), source["object"]:dict(pos_x=100,pos_y=200,pos_z=300,x=1,y=2)}
+        values.update({0x01FFA500 + 60: 1, 0x01FFA500 + 64: player,
+                       0x01FFA500 + 68: 1, 0x023BC744 + 0x60: 1,
+                       0x023BC744 + 0x18: 0x5A})
+        previous_signed = s.rt.signed
+        def signed(emu, address, size=4):
+            if 0x01FFA500 <= address < 0x01FFA500 + 56:
+                offset = (address - 0x01FFA500) % 28
+                return 100 if offset == 0 else 300 if offset == 4 else 0
+            if address in (player + 0x70, player + 0x78):
+                return poses[player]['pos_x' if address == player + 0x70 else 'pos_z']
+            return previous_signed(emu, address, size)
+        s.rt.signed = signed
         s.rt.object_state = lambda emu,pointer: deepcopy(poses[pointer])
         names = {"OverworldMount_SyncPresentation":0x02300000,"OverworldMount_PlayerStepBridge":0x02300100}
         s.rt.MOUNT_SYMBOLS = names
         code = bytes(range(32))
         s.code_regions = [(a,code) for a in names.values()]
         for address in names.values(): put(address,code)
+        from scripts.verify_pokemon_move_history_capture import elf_bytes_at
+        gait_object = s.rt.REPO / 'build/overworld_mount_chain_overlay_linked.o'
+        s.rt.actor_memory_read = lambda emu,address,size: elf_bytes_at(gait_object,address,size)
         regs.lr=0x02010001
         observer = NativeObservation(s, _.observer.hooks, lambda path,address,size:code)
         s.native_observation=observer

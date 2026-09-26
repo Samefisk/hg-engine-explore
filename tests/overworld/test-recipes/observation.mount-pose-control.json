@@ -15,6 +15,7 @@
     {"id": "mount-own-pokemon", "op": "spawn", "args": {"species": 155, "role": "mounted", "slot": 0}, "budget": {"maxSeconds": 30, "maxFrames": 180, "noProgressFrames": 120}},
     {"id": "bind-mount", "op": "bind", "args": {"subject": "cyndaquil"}, "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
     {"id": "excluded-warmup", "op": "step", "args": {"frames": 10, "keys": ["UP"]}, "budget": {"maxSeconds": 10, "maxFrames": 10, "noProgressFrames": 10}},
+    {"id": "finish-warmup-stop-skid", "op": "step", "args": {"frames": 32, "keys": []}, "budget": {"maxSeconds": 15, "maxFrames": 32, "noProgressFrames": 32}},
     {"id": "settle-warmup", "op": "wait", "args": {"predicate": {"kind": "actor-field", "subject": "cyndaquil", "path": "motionPhase", "operator": "eq", "value": "IDLE"}}, "budget": {"maxSeconds": 10, "maxFrames": 30, "noProgressFrames": 30}}
   ],
   "actions": [

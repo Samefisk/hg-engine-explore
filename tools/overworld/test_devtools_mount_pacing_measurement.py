@@ -4,12 +4,15 @@ import unittest
 
 from tools.overworld.devtools_mount_pacing_measurement import MountedPacingMeasurement, check_pair_pose
 from tools.overworld.devtools_mount_pacing_observer import ENGINE
+from tools.overworld.devtools_mount_speed_slew_measurement import EasedMountedMotionRecorder, walk_step_fx32
 from tools.overworld.test_devtools_acceleration_measurement import fixture
 
 
-def pacing_fixture(durations=(8, 8, 8, 7, 7, 7, 6, 8)):
-    baseline, reset, rows = fixture(role="MOUNTED", species=155, durations=durations,
-                                    counters=(0,)*8, speeds=durations)
+def pacing_fixture(durations=(16, 16, 16, 15, 15, 15, 14, 16), *, species=155,
+                   initial_commit=0):
+    baseline, reset, rows = fixture(role="MOUNTED", species=species, durations=durations,
+                                    counters=(0,)*len(durations), speeds=durations,
+                                    initial_commit=initial_commit)
     subject = reset["subject"]
     meter_receipt = dict(armed=True, closed=False, failure=None, acceptedProof=False,
         guestMemoryWrites=0, subject=deepcopy(subject), startFrame=baseline["frame"],
@@ -18,6 +21,13 @@ def pacing_fixture(durations=(8, 8, 8, 7, 7, 7, 6, 8)):
     counts = dict(presentation=0,playerStep=0)
     for snapshot, events in rows:
         actor = snapshot["actors"][0]
+        if actor["motionKind"] == "WALK" and actor["motionPhase"] == "MOVING":
+            index = actor["commitSequence"] - initial_commit
+            # Recovery is a separate input window. Its Walk starts fresh
+            # after control release, not from the held run's final speed.
+            prior = durations[index-1] if 0 < index < 7 else 0
+            snapshot["player"]["pos_x"] = (actor["origin"]["x"] << 16) + 32768 \
+                + walk_step_fx32(actor["motionElapsed"], actor["motionDuration"], prior)
         player = deepcopy(snapshot["player"])
         for prefix in ("face_", "unk88_", "unk94_"):
             for axis in "xyz":
@@ -52,20 +62,30 @@ def pacing_fixture(durations=(8, 8, 8, 7, 7, 7, 6, 8)):
 
 
 class MountedPacingTests(unittest.TestCase):
-    def test_pair_offset_follows_native_cardinal_facing(self):
+    def test_eased_successor_has_exact_first_pose(self):
+        recorder = EasedMountedMotionRecorder()
+        actor = dict(origin=dict(x=9, y=4), target=dict(x=10, y=4), motionDuration=15)
+        pose = recorder._successor_pose(actor, dict(duration=16))
+        self.assertEqual(pose, [(9 << 16) + 32768 + walk_step_fx32(1, 15, 16),
+                                (4 << 16) + 32768])
+        self.assertNotEqual(pose[0], (9 << 16) + 32768 + 65536 // 15)
+
+    def test_pair_offset_follows_native_facing(self):
         _, _, _, rows = pacing_fixture()
         pose = deepcopy(rows[0][0]["mountPacing"]["latestCompletedPose"])
-        for facing, x, z in ((0,0,32768),(1,0,-32768),(2,32768,0),(3,-32768,0)):
+        for facing, x, z in ((0,0,32768),(1,0,-40960),(2,32768,0),(3,-32768,0),
+                             (4,32768,32768),(5,-32768,32768),
+                             (6,32768,-32768),(7,-32768,-32768)):
             pose["player"]["facing"] = pose["mount"]["facing"] = facing
             pose["player"]["face_x"], pose["player"]["face_z"] = x,z
             with self.subTest(facing=facing): self.assertTrue(check_pair_pose(pose))
         pose["player"]["face_x"], pose["player"]["face_z"] = 0,32768
         with self.assertRaisesRegex(ValueError,"rider offset differs"): check_pair_pose(pose)
 
-    def replay(self, mutate=None, durations=(8, 8, 8, 7, 7, 7, 6, 8)):
+    def replay(self, mutate=None, durations=(16, 16, 16, 15, 15, 15, 14, 16)):
         baseline, subject, receipt, rows = pacing_fixture(durations)
         if mutate: mutate(rows)
-        meter = MountedPacingMeasurement(100)
+        meter = MountedPacingMeasurement(200)
         meter.arm(subject, baseline, receipt)
         for snapshot, events in rows:
             meter.observe(snapshot, events)
@@ -108,10 +128,23 @@ class MountedPacingTests(unittest.TestCase):
     def test_constant_speed_stream_rejected_at_first_acceleration_boundary(self):
         # All positions, elapsed samples, lifecycle events and callback clocks
         # agree with these durations. Only the required acceleration is absent.
-        meter, _, _ = self.replay(durations=(8,)*8)
+        meter, _, _ = self.replay(durations=(16,)*8)
         self.assertEqual(meter.failures, ["mounted Cyndaquil acceleration duration differs"])
         self.assertEqual(meter.windows[0]["joined"], 3)
         self.assertFalse(meter.ready)
+
+    def test_linear_speed_change_pose_is_rejected(self):
+        def linear(rows):
+            snapshot = next(snapshot for snapshot, _ in rows
+                            if snapshot["actors"][0]["motionKind"] == "WALK"
+                            and snapshot["actors"][0]["commitSequence"] == 3
+                            and snapshot["actors"][0]["motionElapsed"] == 1)
+            actor = snapshot["actors"][0]
+            snapshot["player"]["pos_x"] = (actor["origin"]["x"] << 16) + 32768 \
+                + 65536 // actor["motionDuration"]
+
+        meter, _, _ = self.replay(linear)
+        self.assertIn("mounted Walk pose differs from eased path", meter.failures)
 
     def test_missing_completed_pose_fails(self):
         meter, _, _ = self.replay(lambda rows: rows[0][0].pop("mountPacing"))

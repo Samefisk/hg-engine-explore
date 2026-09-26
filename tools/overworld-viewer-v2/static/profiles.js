@@ -16,26 +16,61 @@ const DEFAULT_MATCH = Object.freeze({
   behaviorClass: "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS",
 });
 
-const CONDITIONAL_PROFILE_NONE = "OW_WILD_BEHAVIOR_CONDITIONAL_PROFILE_NONE";
-const CONDITION_ON_ROOFTOP = "OW_WILD_BEHAVIOR_CONDITION_ON_ROOFTOP_OR_SIGNPOST";
-const LEGACY_CONDITION_ON_ROOFTOP = "OW_WILD_BEHAVIOR_CONDITION_ON_ROOFTOP";
-const CONDITION_ON_ROOFTOP_BIT = 1;
-const CONDITIONAL_DEFAULT_TERRAIN_BITS = 64 | 128;
-const CONDITIONAL_MOVEMENT_SPEED_MAX = 32;
 const WALK_TIME_FIELDS = Object.freeze(new Set([
   "chillSpeed",
-  "attentiveSpeed",
   "tiredSpeed",
   "maxWalkSpeed",
   "chaseBoostSpeed",
-  "attentiveChaseBoostSpeed",
   "chainRepositionSpeed",
   "walkStompTime",
 ]));
-const CONDITIONAL_PROFILE_NONE_VALUE = 0xFF;
-const CONDITIONS_LIFECYCLE_SECTION_ID = "conditions";
-const CONDITIONAL_LIFECYCLE_SECTION_PREFIX = "conditional:";
+const CONDITIONS_LIFECYCLE_SECTION_ID = "alert";
 const APPLICATION_DRAFT_PREFIX = "@application:";
+const PROFILE_CLASSIFICATIONS = Object.freeze([
+  Object.freeze({ value: "", label: "No classification" }),
+  Object.freeze({ value: "routine", label: "Routine" }),
+  Object.freeze({ value: "placement", label: "Placement" }),
+  Object.freeze({ value: "capability", label: "Capability" }),
+  Object.freeze({ value: "attitude", label: "Attitude" }),
+  Object.freeze({ value: "style", label: "Style" }),
+  Object.freeze({ value: "follower-mount", label: "Follower/Mount" }),
+  Object.freeze({ value: "modifier", label: "Modifier" }),
+]);
+const PROFILE_CLASSIFICATION_VALUES = new Set(PROFILE_CLASSIFICATIONS.slice(1).map((item) => item.value));
+const PROFILE_CLASSIFICATION_RANKS = new Map(
+  PROFILE_CLASSIFICATIONS.slice(1).map((item, index) => [item.value, index]),
+);
+
+function profileClassificationRank(value) {
+  const normalized = value === "archetype" ? "routine" : String(value || "");
+  return PROFILE_CLASSIFICATION_RANKS.get(normalized) ?? PROFILE_CLASSIFICATION_RANKS.size;
+}
+
+function profileClassificationLabel(value) {
+  const normalized = value === "archetype" ? "routine" : value;
+  return PROFILE_CLASSIFICATIONS.find((item) => item.value === normalized)?.label || "";
+}
+
+function profileTagIcon(value) {
+  const paths = {
+    unclassified: '<circle cx="12" cy="12" r="7"/><path d="M8 12h8"/>',
+    conditional: '<path d="M6 5v4c0 1.7 1.3 3 3 3h6c1.7 0 3 1.3 3 3v4M6 19v-4c0-1.7 1.3-3 3-3M3.5 5H8.5M15.5 19h5"/>',
+    system: '<path d="M12 3 5 6v5c0 4.5 2.8 8 7 10 4.2-2 7-5.5 7-10V6l-7-3Z"/><path d="m9.5 12 1.7 1.7 3.6-4"/>',
+    routine: '<circle cx="12" cy="12" r="7"/><path d="m12 7 2 5-2 5-2-5 2-5Z"/>',
+    placement: '<path d="M12 21s6-5.2 6-11a6 6 0 1 0-12 0c0 5.8 6 11 6 11Z"/><circle cx="12" cy="10" r="2"/>',
+    capability: '<path d="m13 2-7 12h6l-1 8 7-12h-6l1-8Z"/>',
+    attitude: '<path d="M12 20S4 15.2 4 9.5A4.5 4.5 0 0 1 12 6.7a4.5 4.5 0 0 1 8 2.8C20 15.2 12 20 12 20Z"/>',
+    style: '<path d="M4 19c4-1 5-4 5-7l7-7 3 3-7 7c-3 0-6 1-7 5l-1-1Z"/><path d="m14 7 3 3"/>',
+    "follower-mount": '<path d="M8.5 8.5 6 11a3.5 3.5 0 0 0 5 5l2.5-2.5M15.5 15.5 18 13a3.5 3.5 0 0 0-5-5l-2.5 2.5"/>',
+    modifier: '<path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h8M16 18h4"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="14" cy="18" r="2"/>',
+  };
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${paths[value] || paths.modifier}</svg>`;
+}
+
+const VISION_CURRENT_RANGE = "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CURRENT";
+const VISION_CUSTOM_RANGE = "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CUSTOM";
+const VISION_DEFAULT_OPTIONS = 5;
+const VISION_ADJACENT_BIT = 4;
 
 const TARGET_KINDS = Object.freeze([
   ["pokemon", "Pokémon"],
@@ -64,7 +99,6 @@ const MATCH_FIELDS = Object.freeze([
 const PROFILE_FIELD_RANGES = Object.freeze([
   Object.freeze({ min: "spawnDestinationMinDistance", max: "spawnDestinationMaxDistance", label: "Spawn distance", unit: "tiles" }),
   Object.freeze({ min: "hopMinDistance", max: "hopMaxDistance", label: "Hop distance", unit: "tiles" }),
-  Object.freeze({ min: "attentiveHopMinDistance", max: "attentiveHopMaxDistance", label: "Hop distance", unit: "tiles" }),
   Object.freeze({ min: "tiredHopMinDistance", max: "tiredHopMaxDistance", label: "Hop distance", unit: "tiles" }),
 ]);
 
@@ -92,38 +126,15 @@ const TERRAIN_POLICY_CONFIGS = Object.freeze({
 
 const HIDDEN_PROFILE_EDITOR_FIELDS = Object.freeze([
   "spawnDestination",
+  "stamina",
+  "alertEmote",
+  "alertTime",
+  "alertSpecialAction",
 ]);
 
 const PROFILE_FIELD_RANGE_BY_MIN = new Map(PROFILE_FIELD_RANGES.map((range) => [range.min, range]));
 
 const PROFILE_FIELD_COMPOSITES = Object.freeze({
-  "alert-response": Object.freeze({
-    id: "alert-response",
-    label: "Alert response",
-    fields: Object.freeze([
-      Object.freeze({ key: "alertState", label: "Mode", unit: "" }),
-      Object.freeze({ key: "alertEmote", label: "Emote", unit: "" }),
-      Object.freeze({ key: "alertTime", label: "Time", unit: "frames" }),
-      Object.freeze({ key: "alertChance", label: "Chance", unit: "%" }),
-    ]),
-  }),
-  "active-chase-boost": Object.freeze({
-    id: "active-chase-boost",
-    label: "Chase boost",
-    fields: Object.freeze([
-      Object.freeze({ key: "attentiveChaseBoostDistance", label: "Distance", unit: "tiles" }),
-      Object.freeze({ key: "attentiveChaseBoostSpeed", label: "Walk time", unit: "frames" }),
-    ]),
-  }),
-  "active-target-tiles": Object.freeze({
-    id: "active-target-tiles",
-    label: "Target & tiles",
-    fields: Object.freeze([
-      Object.freeze({ key: "targetSelector", label: "Target", unit: "" }),
-      Object.freeze({ key: "attentiveAllowedTile", label: "Allowed tile", unit: "" }),
-      Object.freeze({ key: "attentiveAllowedTile2", label: "Allowed tile 2", unit: "" }),
-    ]),
-  }),
   "movement-chain": Object.freeze({
     id: "movement-chain",
     label: "Movement chain",
@@ -132,8 +143,8 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
       Object.freeze({ key: "chainMovementVariance", label: "Move variance", unit: "moves", note: "Adds a random 0 through this value to each new movement chain" }),
       Object.freeze({ key: "ramMaxSpeed", label: "Pause", unit: "frames" }),
       Object.freeze({ key: "chainPauseVariance", label: "Pause variance", unit: "frames", note: "Adds a random 0 through this value to passive and Look around pauses, or to the total Reposition jumps duration; ignored by Reposition steps, Reposition skids, and successful Hop in place actions" }),
-      Object.freeze({ key: "chainPauseAction", label: "Pause action", unit: "", note: "None skips the pause. Pause waits without playing an action" }),
-      Object.freeze({ key: "chainPauseActionChance", label: "Action chance", unit: "%", note: "Chance to run a visual action. This is ignored for None and Pause. A failed roll starts a new movement chain" }),
+      Object.freeze({ key: "chainPauseAction", label: "Pause actions", unit: "", note: "When several actions are on, one is picked at random. No selected action skips the pause" }),
+      Object.freeze({ key: "chainPauseActionChance", label: "Action chance", unit: "%", note: "Overall chance to run one selected action. A failed roll starts a new movement chain" }),
       Object.freeze({ key: "chainRepositionJumpCount", label: "Reposition moves", unit: "moves", note: "Number of fixed-facing random jumps, steps, or skids. Steps and skids finish the pause after the final move" }),
       Object.freeze({ key: "chainRepositionSpeed", label: "Reposition Walk time", unit: "frames", note: "Travel time for Reposition steps and skids; jumps use Hop timing" }),
       Object.freeze({ key: "chainRepositionDistance", label: "Skid distance", unit: "tiles", note: "Tiles travelled by each Reposition skid" }),
@@ -172,15 +183,15 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
       }),
       Object.freeze({
         key: "chainPauseAction",
-        label: "Chain pause action",
+        label: "Chain pause actions",
         unit: "",
-        note: "None skips the pause. Pause waits without playing an action",
+        note: "When several actions are on, one is picked at random. No selected action skips the pause",
       }),
       Object.freeze({
         key: "chainPauseActionChance",
         label: "Pause action chance",
         unit: "%",
-        note: "Chance to run a visual action. This is ignored for None and Pause. A failed roll skips the pause and starts a new movement chain",
+        note: "Overall chance to run one selected action. A failed roll skips the pause and starts a new movement chain",
       }),
       Object.freeze({
         key: "chainRepositionJumpCount",
@@ -211,17 +222,6 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
       Object.freeze({ key: "hopMaxDistance", label: "Max distance", unit: "tiles" }),
     ]),
   }),
-  "hop-path-active": Object.freeze({
-    id: "hop-path-active",
-    label: "Hop path",
-    range: Object.freeze({ min: "attentiveHopMinDistance", max: "attentiveHopMaxDistance", label: "Hop distance", unit: "tiles" }),
-    fields: Object.freeze([
-      Object.freeze({ key: "attentiveHopAllowNonCardinal", label: "Directions", unit: "", note: "Allowed cardinal and diagonal movement groups" }),
-      Object.freeze({ key: "hopAllowVerticalObstacles", label: "Cross vertical obstacles", unit: "", note: "Shared policy from the linked profile. On raises intersecting arcs to clear catalogued obstacles" }),
-      Object.freeze({ key: "attentiveHopMinDistance", label: "Min distance", unit: "tiles" }),
-      Object.freeze({ key: "attentiveHopMaxDistance", label: "Max distance", unit: "tiles" }),
-    ]),
-  }),
   "hop-path-tired": Object.freeze({
     id: "hop-path-tired",
     label: "Hop path",
@@ -240,21 +240,9 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
       Object.freeze({ key: "hopTime", label: "Travel time", unit: "frames/tile", note: "Shared by all movement states. Zero is immediate" }),
       Object.freeze({ key: "hopElevationTimeScale", label: "Elevation time scaling", unit: "%", note: "Added airtime for elevation changes. 0 disables it; 100 matches travel speed; higher values feel heavier" }),
       Object.freeze({ key: "hopElevationArcScale", label: "Elevation arc scaling", unit: "%", note: "Added arc height for elevation changes. 0 keeps the level-jump arc; 100 clears the higher endpoint; higher values feel floatier" }),
-      Object.freeze({ key: "hopPause", label: "Pause", unit: "frames", note: "Chill only. Zero removes the pause" }),
-      Object.freeze({ key: "hopSpinSpeed", label: "Spin interval", unit: "frames/turn", note: "Shared by Chill and Tired. Zero disables spinning" }),
+      Object.freeze({ key: "hopPause", label: "Pause", unit: "frames", note: "Zero removes the pause" }),
+      Object.freeze({ key: "hopSpinSpeed", label: "Spin interval", unit: "frames/turn", note: "Shared with Tired. Zero disables spinning" }),
       Object.freeze({ key: "hopSwayWidth", label: "Horizontal sway", unit: "px", note: "Side-to-side drift during each hop. Zero disables sway" }),
-    ]),
-  }),
-  "hop-timing-active": Object.freeze({
-    id: "hop-timing-active",
-    label: "Hop timing",
-    fields: Object.freeze([
-      Object.freeze({ key: "hopTime", label: "Travel time", unit: "frames/tile", note: "Shared by all movement states. Zero is immediate" }),
-      Object.freeze({ key: "hopElevationTimeScale", label: "Elevation time scaling", unit: "%", note: "Added airtime for elevation changes. 0 disables it; 100 matches travel speed; higher values feel heavier" }),
-      Object.freeze({ key: "hopElevationArcScale", label: "Elevation arc scaling", unit: "%", note: "Added arc height for elevation changes. 0 keeps the level-jump arc; 100 clears the higher endpoint; higher values feel floatier" }),
-      Object.freeze({ key: "attentiveHopPause", label: "Pause", unit: "frames", note: "Active only. Zero removes the pause" }),
-      Object.freeze({ key: "attentiveHopSpinSpeed", label: "Spin interval", unit: "frames/turn", note: "Active only. Zero disables spinning" }),
-      Object.freeze({ key: "hopSwayWidth", label: "Horizontal sway", unit: "px", note: "Shared setting from the linked profile. Zero disables sway" }),
     ]),
   }),
   "hop-timing-tired": Object.freeze({
@@ -265,7 +253,7 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
       Object.freeze({ key: "hopElevationTimeScale", label: "Elevation time scaling", unit: "%", note: "Added airtime for elevation changes. 0 disables it; 100 matches travel speed; higher values feel heavier" }),
       Object.freeze({ key: "hopElevationArcScale", label: "Elevation arc scaling", unit: "%", note: "Added arc height for elevation changes. 0 keeps the level-jump arc; 100 clears the higher endpoint; higher values feel floatier" }),
       Object.freeze({ key: "tiredHopPause", label: "Pause", unit: "frames", note: "Tired only. Zero removes the pause" }),
-      Object.freeze({ key: "hopSpinSpeed", label: "Spin interval", unit: "frames/turn", note: "Shared by Chill and Tired. Zero disables spinning" }),
+      Object.freeze({ key: "hopSpinSpeed", label: "Spin interval", unit: "frames/turn", note: "Shared with the profile's Movement style. Zero disables spinning" }),
       Object.freeze({ key: "hopSwayWidth", label: "Horizontal sway", unit: "px", note: "Shared setting from the linked profile. Zero disables sway" }),
     ]),
   }),
@@ -275,14 +263,6 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
     fields: Object.freeze([
       Object.freeze({ key: "teleportTime", label: "Travel time", unit: "frames", note: "Zero is immediate" }),
       Object.freeze({ key: "teleportPause", label: "Post-teleport pause", unit: "frames", note: "Zero removes the pause" }),
-    ]),
-  }),
-  "teleport-timing-active": Object.freeze({
-    id: "teleport-timing-active",
-    label: "Teleport timing",
-    fields: Object.freeze([
-      Object.freeze({ key: "attentiveTeleportTime", label: "Travel time", unit: "frames", note: "Zero is immediate" }),
-      Object.freeze({ key: "attentiveTeleportPause", label: "Post-teleport pause", unit: "frames", note: "Zero removes the pause" }),
     ]),
   }),
   "teleport-timing-tired": Object.freeze({
@@ -311,16 +291,31 @@ const FIELD_SECTIONS = Object.freeze([
     ],
   },
   {
-    id: "chill",
-    title: "Chill state",
-    hint: "Default behavior and movement before the Pokémon becomes alert.",
-    sharedMovement: true,
-    subtabs: Object.freeze([
-      Object.freeze({ id: "behavior", label: "Behavior" }),
-      Object.freeze({ id: "movement", label: "Movement style" }),
-    ]),
+    id: "behavior",
+    title: "Behavior",
+    hint: "Choose what the Pokémon does and what it reacts to.",
     fields: [
       "chillState", "chillTarget", "chillAllowedTerrainMask", "chillAllowedTerrainOverrideMask",
+      "battleTrigger", "chaseBoostDistance", "chaseBoostSpeed",
+      "circleRadius", "continueWhenArrived", "avoidPreviousTile", "playerAdjacentDirectionMasks",
+    ],
+    nodes: [
+      { kind: "branch", field: "chillState", branch: "chill-behavior" },
+      {
+        kind: "fields",
+        fields: [
+          "battleTrigger", "chaseBoostDistance", "chaseBoostSpeed",
+          "circleRadius", "continueWhenArrived", "avoidPreviousTile",
+        ],
+      },
+    ],
+  },
+  {
+    id: "movement",
+    title: "Movement Style",
+    hint: "Choose how the Pokémon moves and tune that movement.",
+    sharedMovement: true,
+    fields: [
       "chillAction", "chillSpeed", "hopAllowNonCardinal", "hopMinDistance",
       "hopAllowVerticalObstacles", "hopMaxDistance", "hopTime", "hopElevationTimeScale", "hopElevationArcScale", "hopSpinSpeed", "hopSwayWidth", "hopPause", "teleportTime",
       "teleportPause", "ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction", "chainPauseActionChance",
@@ -329,49 +324,22 @@ const FIELD_SECTIONS = Object.freeze([
       "chainRepositionDistance", "chainRepositionDust",
       "chainRepositionAllowCardinal", "chainRepositionAllowDiagonal",
       "tilesToAccelerate", "walkAccelerationStep", "walkTimeVariance", "maxWalkSpeed", "walkOptions", "walkStompTime", "wanderStraightChance", "walkPause", "walkPauseVariance", "tilesBeforeTurnSkid", "planTurnSkidPath", "stopSkid",
-      "battleTrigger", "chaseBoostDistance", "chaseBoostSpeed",
-      "circleRadius", "continueWhenArrived", "avoidPreviousTile", "playerAdjacentDirectionMasks",
-      "alertSpecialAction",
+      "mountBounce", "mountStride", "mountSettle", "mountLean",
     ],
     nodes: [
-      { kind: "branch", field: "chillState", branch: "chill-behavior", subtab: "behavior" },
-      {
-        kind: "fields",
-        fields: [
-          "battleTrigger", "chaseBoostDistance", "chaseBoostSpeed",
-          "circleRadius", "continueWhenArrived", "avoidPreviousTile",
-        ],
-        subtab: "behavior",
-      },
-      { kind: "branch", field: "alertSpecialAction", branch: "scoped-action", scope: "active", virtual: "scoped-action" },
-      { kind: "branch", field: "chillAction", branch: "movement", scope: "chill", subtab: "movement" },
+      { kind: "branch", field: "chillAction", branch: "movement", scope: "chill" },
     ],
   },
   {
-    id: "alert",
-    title: "Alert",
-    hint: "Detection, reaction, range, and alert-time action.",
-    scopedAction: "alert",
-    fields: [
-      "alertState", "alertEmote", "alertTime", "alertness", "alertRange", "alertChance",
-      "alertSpecialAction",
-    ],
-    nodes: [
-      { kind: "fields", composite: "alert-response", fields: ["alertState", "alertEmote", "alertTime", "alertChance"] },
-      { kind: "branch", field: "alertRange", branch: "alert-range", virtual: "alert-range-type" },
-      { kind: "branch", field: "alertSpecialAction", branch: "scoped-action", scope: "alert", virtual: "scoped-action" },
-    ],
-  },
-  {
-    id: "active",
-    title: "Active state",
-    hint: "Choose the override profile applied while this Pokémon is active.",
-    stateProfileField: "activeProfile",
-    fields: ["stamina", "activeProfile"],
+    id: "vision",
+    title: "Vision",
+    hint: "Set how far this Pokémon sees and what counts as visible.",
+    fields: ["visionRange", "visionCone", "visionAdjacentAwareness"],
+    nodes: [{ kind: "fields", fields: ["visionRange", "visionCone", "visionAdjacentAwareness"] }],
   },
   {
     id: "tired",
-    title: "Tired state",
+    title: "Tired",
     hint: "Choose the override profile applied while this Pokémon is tired.",
     stateProfileField: "tiredProfile",
     fields: ["restTime", "tiredProfile"],
@@ -392,38 +360,29 @@ const FIELD_SECTIONS = Object.freeze([
   },
 ]);
 
-const LIFECYCLE_SECTION_IDS = Object.freeze(["spawn", "chill", "alert", "active", "tired"]);
+const LIFECYCLE_SECTION_IDS = Object.freeze(["spawn", "behavior", "movement", "vision", "tired"]);
 const LIFECYCLE_SECTION_ID_SET = new Set(LIFECYCLE_SECTION_IDS);
 const LIFECYCLE_TAB_SUMMARY_FIELDS = Object.freeze({
-  chill: Object.freeze([
-    Object.freeze({ field: "chillState", tabId: "behavior" }),
-    Object.freeze({ field: "chillAction", tabId: "movement" }),
-  ]),
-  active: Object.freeze([
-    Object.freeze({ field: "activeProfile", profileReference: true }),
-  ]),
+  behavior: Object.freeze([Object.freeze({ field: "chillState" })]),
+  movement: Object.freeze([Object.freeze({ field: "chillAction" })]),
   tired: Object.freeze([
     Object.freeze({ field: "tiredProfile", profileReference: true }),
   ]),
 });
 
-// Active and Tired now execute another profile's Chill state. Keep the Chill
-// value catalog broad enough to author values that previously appeared only in
-// the state-specific editors, while retaining the existing stored field names.
-const LINKED_CHILL_OPTION_SOURCES = Object.freeze({
-  chillState: Object.freeze(["attentiveState", "tiredState"]),
-  chillTarget: Object.freeze(["targetSelector"]),
-  chillAction: Object.freeze(["movementStyle", "specialAction"]),
-  chillSpeed: Object.freeze(["attentiveSpeed", "tiredSpeed"]),
-  hopAllowNonCardinal: Object.freeze(["attentiveHopAllowNonCardinal", "tiredHopAllowNonCardinal"]),
-  hopMinDistance: Object.freeze(["attentiveHopMinDistance", "tiredHopMinDistance"]),
-  hopMaxDistance: Object.freeze(["attentiveHopMaxDistance", "tiredHopMaxDistance"]),
-  hopPause: Object.freeze(["attentiveHopPause", "tiredHopPause"]),
-  hopSpinSpeed: Object.freeze(["attentiveHopSpinSpeed"]),
-  teleportTime: Object.freeze(["attentiveTeleportTime", "tiredTeleportTime"]),
-  teleportPause: Object.freeze(["attentiveTeleportPause", "tiredTeleportPause"]),
-  ramAccelerationSteps: Object.freeze(["attentiveRamAccelerationSteps", "tiredRamAccelerationSteps"]),
-  ramMaxSpeed: Object.freeze(["attentiveRamMaxSpeed", "tiredRamMaxSpeed"]),
+// Tired executes another profile's behavior and movement. Keep its option
+// catalog broad while retaining the existing stored field names.
+const LINKED_PROFILE_OPTION_SOURCES = Object.freeze({
+  chillState: Object.freeze(["tiredState"]),
+  chillSpeed: Object.freeze(["tiredSpeed"]),
+  hopAllowNonCardinal: Object.freeze(["tiredHopAllowNonCardinal"]),
+  hopMinDistance: Object.freeze(["tiredHopMinDistance"]),
+  hopMaxDistance: Object.freeze(["tiredHopMaxDistance"]),
+  hopPause: Object.freeze(["tiredHopPause"]),
+  teleportTime: Object.freeze(["tiredTeleportTime"]),
+  teleportPause: Object.freeze(["tiredTeleportPause"]),
+  ramAccelerationSteps: Object.freeze(["tiredRamAccelerationSteps"]),
+  ramMaxSpeed: Object.freeze(["tiredRamMaxSpeed"]),
 });
 
 const TARGETABLE_BEHAVIORS = Object.freeze(new Set([
@@ -491,6 +450,56 @@ const HOP_LOCOMOTIONS = Object.freeze(new Set([
   LOCOMOTION.flutter,
 ]));
 
+const CHAIN_PAUSE_ACTION_PREFIX = "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_";
+const CHAIN_PAUSE_CHOICE_PREFIX = "OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_";
+const CHAIN_PAUSE_RANDOM_CHOICE_RAW = "OW_WILD_BEHAVIOR_CHAIN_PAUSE_RANDOM_CHOICE";
+const CHAIN_PAUSE_ACTION_RAWS = Object.freeze([
+  "HOP_IN_PLACE",
+  "LOOK_AROUND",
+  "REPOSITION_JUMPS",
+  "REPOSITION_STEPS",
+  "REPOSITION_SKIDS",
+  "PAUSE",
+  "HOP_FORWARD",
+].map((suffix) => `${CHAIN_PAUSE_ACTION_PREFIX}${suffix}`));
+
+export function decodeChainPauseActionSelection(raw) {
+  const source = String(raw || "");
+  const numeric = typeof raw === "number"
+    ? raw
+    : (/^(?:0x[0-9a-f]+|\d+)$/i.test(source.trim()) ? Number(source) : NaN);
+  if (Number.isInteger(numeric)) {
+    if ((numeric & 0x80) !== 0) {
+      return CHAIN_PAUSE_ACTION_RAWS.filter((_actionRaw, index) => (
+        numeric & (1 << index)
+      ) !== 0);
+    }
+    return numeric >= 1 && numeric <= CHAIN_PAUSE_ACTION_RAWS.length
+      ? [CHAIN_PAUSE_ACTION_RAWS[numeric - 1]]
+      : [];
+  }
+  if (source.includes(CHAIN_PAUSE_RANDOM_CHOICE_RAW)) {
+    return CHAIN_PAUSE_ACTION_RAWS.filter((actionRaw) => source.includes(
+      actionRaw.replace(CHAIN_PAUSE_ACTION_PREFIX, CHAIN_PAUSE_CHOICE_PREFIX),
+    ));
+  }
+  return CHAIN_PAUSE_ACTION_RAWS.includes(source) ? [source] : [];
+}
+
+export function encodeChainPauseActionSelection(selectedRaws) {
+  const selected = new Set(selectedRaws || []);
+  const actions = CHAIN_PAUSE_ACTION_RAWS.filter((raw) => selected.has(raw));
+  if (!actions.length) return `${CHAIN_PAUSE_ACTION_PREFIX}NONE`;
+  if (actions.length === 1) return actions[0];
+  return [
+    CHAIN_PAUSE_RANDOM_CHOICE_RAW,
+    ...actions.map((raw) => raw.replace(
+      CHAIN_PAUSE_ACTION_PREFIX,
+      CHAIN_PAUSE_CHOICE_PREFIX,
+    )),
+  ].join(" | ");
+}
+
 const RAW_LABEL_OVERRIDES = Object.freeze({
   [LOCOMOTION.wander]: "Walk",
   [LOCOMOTION.teleport]: "Teleport",
@@ -510,6 +519,7 @@ const RAW_LABEL_OVERRIDES = Object.freeze({
 
 const MOVEMENT_FIELDS = Object.freeze({
   chill: Object.freeze({
+    mountGait: Object.freeze(["mountBounce", "mountStride", "mountSettle", "mountLean"]),
     speed: "chillSpeed",
     maxWalkSpeed: "maxWalkSpeed",
     walkAcceleration: "tilesToAccelerate",
@@ -528,26 +538,8 @@ const MOVEMENT_FIELDS = Object.freeze({
     chain: ["ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction", "chainPauseActionChance", "chainRepositionJumpCount", "chainRepositionSpeed", "chainRepositionDistance", "chainRepositionDust", "chainRepositionAllowCardinal", "chainRepositionAllowDiagonal"],
     teleportTiming: Object.freeze({ composite: "teleport-timing-chill", fields: Object.freeze(["teleportTime", "teleportPause"]) }),
   }),
-  active: Object.freeze({
-    speed: "attentiveSpeed",
-    maxWalkSpeed: "maxWalkSpeed",
-    walkAcceleration: "tilesToAccelerate",
-    walkAccelerationStep: "walkAccelerationStep",
-    walkTimeVariance: "walkTimeVariance",
-    walkPauseVariance: "walkPauseVariance",
-    walkOptions: "walkOptions",
-    walkStompTime: "walkStompTime",
-    wanderStraightChance: "wanderStraightChance",
-    walkPause: "walkPause",
-    tilesBeforeTurnSkid: "tilesBeforeTurnSkid",
-    planTurnSkidPath: "planTurnSkidPath",
-    stopSkid: "stopSkid",
-    hopPath: Object.freeze({ composite: "hop-path-active", fields: Object.freeze(["attentiveHopAllowNonCardinal", "hopAllowVerticalObstacles", "attentiveHopMinDistance", "attentiveHopMaxDistance"]) }),
-    hopTiming: Object.freeze({ composite: "hop-timing-active", fields: Object.freeze(["hopTime", "hopElevationTimeScale", "hopElevationArcScale", "attentiveHopPause", "attentiveHopSpinSpeed", "hopSwayWidth"]) }),
-    chain: ["ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction", "chainPauseActionChance", "chainRepositionJumpCount", "chainRepositionSpeed", "chainRepositionDistance", "chainRepositionDust", "chainRepositionAllowCardinal", "chainRepositionAllowDiagonal"],
-    teleportTiming: Object.freeze({ composite: "teleport-timing-active", fields: Object.freeze(["attentiveTeleportTime", "attentiveTeleportPause"]) }),
-  }),
   tired: Object.freeze({
+    mountGait: Object.freeze(["mountBounce", "mountStride", "mountSettle", "mountLean"]),
     speed: "tiredSpeed",
     maxWalkSpeed: "maxWalkSpeed",
     walkAcceleration: "tilesToAccelerate",
@@ -568,15 +560,70 @@ const MOVEMENT_FIELDS = Object.freeze({
   }),
 });
 
+// Group raw nodes before combining controls, so related pairs stay together.
+// Unmatched nodes remain visible when new movement fields are added.
+export function movementEditorGroups(nodes, scope = "chill") {
+  const f = MOVEMENT_FIELDS[scope];
+  if (!f) return [{ id: "other", label: "Movement settings", groups: [{ label: "", nodes }] }];
+  const definitions = [
+    { id: "direction", label: "Direction", note: "Choose the directions the Pokémon can move in.", groups: [
+      { label: "", fields: [f.hopPath.fields[0], f.wanderStraightChance] },
+    ] },
+    { id: "walk", label: "Walk", note: "Set the pace, turns and feel of each step.", groups: [
+      { label: "Pace", note: "Lower time means faster movement.", fields: [f.speed, f.walkTimeVariance] },
+      { label: "Acceleration", fields: [f.maxWalkSpeed, f.walkAcceleration, f.walkAccelerationStep] },
+      { label: "Walk rules and appearance", fields: [f.walkOptions, f.walkStompTime] },
+      { label: "Mounted riding rhythm", note: "Body motion while riding. The camera, ground position, and movement speed stay unchanged.", fields: f.mountGait },
+      { label: "Turn and stop skids", fields: [f.tilesBeforeTurnSkid, f.planTurnSkidPath, f.stopSkid] },
+      { label: "Pause after each step", note: "Use zero for continuous walking. Use a movement chain below for pauses after several moves.", fields: [f.walkPause, f.walkPauseVariance] },
+    ] },
+    { id: "hop", label: "Hop", note: "Set the path first, then the timing and motion.", groups: [
+      { label: "Path and distance", fields: f.hopPath.fields.slice(1) },
+      { label: "Travel and pause", fields: [f.hopTiming.fields[0], f.hopTiming.fields[3]] },
+      { label: "Elevation", fields: [f.hopTiming.fields[1], f.hopTiming.fields[2]] },
+      { label: "Spin and sway", fields: f.hopTiming.fields.slice(4) },
+    ] },
+    { id: "teleport", label: "Teleport", note: "Choose how travel time is measured, then set the duration.", groups: [
+      { label: "", virtual: "teleport-options", fields: f.teleportTiming.fields },
+    ] },
+    { id: "chain", label: "Movement chain", note: "Repeat a set of moves, then choose what happens at the pause.", groups: [
+      { label: "", fields: f.chain },
+    ] },
+  ];
+  const remaining = new Set(nodes);
+  const result = definitions.map((section) => ({
+    ...section,
+    groups: section.groups.map((group) => {
+      const selected = [
+        ...nodes.filter((node) => group.virtual && node.virtual === group.virtual),
+        ...group.fields.flatMap((field) => nodes.filter((node) => node.field === field && node.virtual !== "teleport-options")),
+      ].filter((node) => remaining.delete(node));
+      return { ...group, nodes: selected };
+    }).filter((group) => group.nodes.length),
+  })).filter((section) => section.groups.length);
+  if (remaining.size) result.push({ id: "other", label: "More movement settings", groups: [{ label: "", nodes: [...remaining] }] });
+  return result;
+}
+
+export function movementWalkControlAvailability(raw, inherited, inheritedCandidates = []) {
+  // System-owned profiles have no Pokémon target, so an inherited movement
+  // style has no candidates to inspect. Its Walk fields must remain editable.
+  const unknownInheritedStyle = inherited && inheritedCandidates.length === 0;
+  return {
+    speed: inherited
+      ? unknownInheritedStyle || inheritedCandidates.some((candidate) => (
+        candidate === LOCOMOTION.wander || candidate === LOCOMOTION.ram || candidate === LOCOMOTION.flutter
+      ))
+      : raw === LOCOMOTION.wander || raw === LOCOMOTION.ram || raw === LOCOMOTION.flutter,
+    walk: inherited
+      ? unknownInheritedStyle || inheritedCandidates.includes(LOCOMOTION.wander)
+      : raw === LOCOMOTION.wander,
+  };
+}
+
 const CIRCLE_PLAYER_TARGET = "OW_WILD_BEHAVIOR_TARGET_CIRCLE_PLAYER";
 const NEXT_TO_PLAYER_TARGET = "OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER";
 const SPAWN_HOP_FROM_OFF_SCREEN = "OW_WILD_BEHAVIOR_SPAWN_STATE_HOP_FROM_OFF_SCREEN";
-const ALERT_SPECIAL = Object.freeze({
-  none: "OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE",
-  call: "OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP",
-  throw: "OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW",
-});
-
 const ANY_MATCH_PREFIXES = Object.freeze([
   "OW_WILD_BEHAVIOR_MATCH_ANY_",
   "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
@@ -670,7 +717,6 @@ function normalizeData(input) {
     assignments: [],
     speciesOptions: [],
     typeOptions: [],
-    conditionalStates: [],
     defaultClassIndex: 0,
     profilesAvailable: true,
     profileError: null,
@@ -690,24 +736,10 @@ function newDraftStore() {
     memberships: new Map(),
     overrideNames: new Map(),
     overrideTargets: new Map(),
-    conditionalStates: null,
     removedOverrides: new Set(),
     newOverrides: [],
     overrideOrder: [],
   };
-}
-
-function draftEntryList(value, label) {
-  if (!Array.isArray(value)) throw new TypeError(`${label} must be an array.`);
-  const keys = new Set();
-  return value.map((entry) => {
-    if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== "string") {
-      throw new TypeError(`${label} contains an invalid entry.`);
-    }
-    if (keys.has(entry[0])) throw new TypeError(`${label} contains a duplicate key.`);
-    keys.add(entry[0]);
-    return entry;
-  });
 }
 
 function cloneDraftJson(value) {
@@ -803,6 +835,7 @@ function cloneRawMatch(match) {
 }
 
 function cloneTarget(target = {}) {
+  if (target.pool) return { pool: String(target.pool) };
   return {
     members: unique((target.members || []).map((member) => valueRaw(member?.symbol || member)).filter(Boolean)),
     match: cloneRawMatch(target.match),
@@ -817,7 +850,131 @@ function createDraftId() {
 
 function canonicalCatalogFromDeck(input) {
   const value = input?.profileCatalog?.catalog ?? input?.profileCatalog;
-  return value?.catalogVersion === 2 ? value : null;
+  return [4, 5].includes(value?.catalogVersion) ? value : null;
+}
+
+function namedPoolById(catalog, poolId) {
+  return (catalog?.pools || []).find((pool) => pool.id === poolId) || null;
+}
+
+function inlinePool(pool = {}) {
+  return {
+    mode: ["members", "all"].includes(pool.mode) ? pool.mode : "members",
+    match: cloneRawMatch(pool.match),
+    members: unique((pool.members || []).map(String)),
+  };
+}
+
+export function resolveProfilePoolSelection(selection, catalog) {
+  if (selection?.pool) {
+    const pool = namedPoolById(catalog, selection.pool);
+    return pool ? inlinePool(pool) : null;
+  }
+  return selection ? inlinePool(selection) : null;
+}
+
+export function createProfileNamedPool(catalog, name, source = {}) {
+  const next = cloneDraftJson(catalog);
+  const trimmed = String(name || "").trim();
+  if (!trimmed) throw new TypeError("A named pool needs a name.");
+  const usedIds = new Set((next.pools || []).map((pool) => pool.id));
+  const id = canonicalStableId(trimmed, usedIds, "pool");
+  next.pools = [...(next.pools || []), { id, name: trimmed, ...inlinePool(source) }];
+  return { catalog: next, poolId: id };
+}
+
+export function updateProfileNamedPool(catalog, poolId, changes = {}) {
+  const next = cloneDraftJson(catalog);
+  const pool = namedPoolById(next, poolId);
+  if (!pool) throw new TypeError("The selected named pool is unavailable.");
+  if (Object.hasOwn(changes, "name")) {
+    const name = String(changes.name || "").trim();
+    if (!name) throw new TypeError("A named pool needs a name.");
+    pool.name = name;
+  }
+  if (Object.hasOwn(changes, "mode")) pool.mode = changes.mode === "all" ? "all" : "members";
+  if (Object.hasOwn(changes, "members")) pool.members = unique((changes.members || []).map(String));
+  if (Object.hasOwn(changes, "match")) pool.match = cloneRawMatch(changes.match);
+  return next;
+}
+
+export function systemOwnershipForApplication(catalog, applicationId) {
+  const bindings = catalog?.runtimeBindings || {};
+  if (bindings.followerApplication === applicationId) return "Follower";
+  if (bindings.mountedApplication === applicationId) return "Mounted";
+  if (bindings.forcedAsleepApplication === applicationId) return "Asleep";
+  return "";
+}
+
+function visionCondition(condition) {
+  return ["notice-target", "target-cannot-see-subject"].includes(condition?.when?.kind);
+}
+
+function defaultConditionWhen(kind, catalogVersion) {
+  if (catalogVersion === 5) {
+    return { kind, vision: { mode: "current" }, chancePercent: 100 };
+  }
+  return { kind, rangeKind: VISION_CURRENT_RANGE, rangeLength: 0, chancePercent: 100 };
+}
+
+export function conditionVisionMode(condition, catalogVersion = null) {
+  const when = condition?.when || {};
+  if (catalogVersion === 5 || Object.hasOwn(when, "vision")) {
+    return when.vision?.mode === "custom" ? "custom" : "current";
+  }
+  return [6, VISION_CUSTOM_RANGE].includes(when.rangeKind) ? "custom" : "current";
+}
+
+function conditionVisionRange(condition, catalogVersion) {
+  return catalogVersion === 5
+    ? condition?.when?.vision?.range
+    : condition?.when?.rangeLength;
+}
+
+function conditionVisionHasAdjacentAwareness(condition, catalogVersion) {
+  return catalogVersion === 5
+    ? condition?.when?.vision?.adjacentAwareness === true
+    : (Number(condition?.when?.visionOptions) & VISION_ADJACENT_BIT) !== 0;
+}
+
+function setConditionVisionSelection(condition, mode, catalogVersion) {
+  if (!visionCondition(condition)) throw new TypeError("The selected condition does not use Vision.");
+  if (!["current", "custom"].includes(mode)) throw new TypeError("Vision mode must be current or custom.");
+
+  if (catalogVersion === 5) {
+    condition.when.vision = mode === "custom"
+      ? {
+        mode: "custom",
+        range: Math.max(1, Number(condition.when.vision?.range) || 3),
+        cone: "forward-90",
+        adjacentAwareness: condition.when.vision?.mode === "custom"
+          ? condition.when.vision.adjacentAwareness === true
+          : true,
+      }
+      : { mode: "current" };
+    delete condition.when.rangeKind;
+    delete condition.when.rangeLength;
+    delete condition.when.visionOptions;
+    return;
+  }
+
+  condition.when.rangeKind = mode === "custom" ? VISION_CUSTOM_RANGE : VISION_CURRENT_RANGE;
+  if (mode === "custom") {
+    condition.when.rangeLength = Math.max(1, Number(condition.when.rangeLength) || 3);
+    condition.when.visionOptions = Number(condition.when.visionOptions) || VISION_DEFAULT_OPTIONS;
+  } else {
+    condition.when.rangeLength = 0;
+    delete condition.when.visionOptions;
+  }
+}
+
+export function setConditionVisionMode(catalog, applicationId, conditionId, mode) {
+  const next = cloneDraftJson(catalog);
+  const { profile } = canonicalProfileAndApplication(next, applicationId);
+  const condition = (profile.conditions || []).find((item) => item.id === conditionId);
+  if (!condition) throw new TypeError("The selected condition is unavailable.");
+  setConditionVisionSelection(condition, mode, next.catalogVersion);
+  return next;
 }
 
 function canonicalCompactLookup(value) {
@@ -837,6 +994,160 @@ function canonicalStableId(name, used, prefix) {
   while (used.has(id)) id = `${base}-${suffix++}`;
   used.add(id);
   return id;
+}
+
+function canonicalConditionSubjectFromTarget(target) {
+  if (target?.pool) return { pool: String(target.pool) };
+  if (!target || !["members", "all"].includes(target.mode)) return null;
+  return {
+    mode: target.mode,
+    match: cloneRawMatch(target.match),
+    members: unique((target.members || []).map(String)),
+  };
+}
+
+function canonicalTargetFromConditionSubjects(subjects, catalog) {
+  if (subjects?.pool) return { pool: String(subjects.pool) };
+  if (subjects?.application) {
+    const source = (catalog.applications || []).find((application) => application.id === subjects.application);
+    return source?.target ? cloneDraftJson(source.target) : null;
+  }
+  if (!["members", "all"].includes(subjects?.mode)) return null;
+  return {
+    mode: subjects.mode,
+    match: cloneRawMatch(subjects.match),
+    members: unique((subjects.members || []).map(String)),
+  };
+}
+
+function canonicalDefaultCondition(profile, application, usedIds, catalogVersion) {
+  const subjects = canonicalConditionSubjectFromTarget(application.target);
+  if (!subjects) throw new TypeError(`${profile.name || profile.id} needs a subject pool before it can become conditional.`);
+  return {
+    id: canonicalStableId(`condition-${profile.id}-notice-player`, usedIds, "condition"),
+    subjects,
+    when: defaultConditionWhen("notice-target", catalogVersion),
+    activation: { mode: "while-true" },
+    target: { kind: "player" },
+  };
+}
+
+function canonicalProfileAndApplication(catalog, applicationId) {
+  const application = (catalog.applications || []).find((candidate) => candidate.id === applicationId);
+  const profile = application && (catalog.profiles || []).find((candidate) => candidate.id === application.profile);
+  if (!application || !profile) throw new TypeError("The selected override profile is unavailable.");
+  return { profile, application };
+}
+
+function sortCatalogApplicationsByClassification(catalog) {
+  const profilesById = new Map((catalog.profiles || []).map((profile) => [profile.id, profile]));
+  catalog.applications = (catalog.applications || [])
+    .map((application, sourceIndex) => ({ application, sourceIndex }))
+    .sort((left, right) => {
+      const leftRank = profileClassificationRank(profilesById.get(left.application.profile)?.classification);
+      const rightRank = profileClassificationRank(profilesById.get(right.application.profile)?.classification);
+      return leftRank - rightRank || left.sourceIndex - right.sourceIndex;
+    })
+    .map(({ application }) => application);
+  return catalog;
+}
+
+export function sortProfileApplicationsByClassification(catalog) {
+  return sortCatalogApplicationsByClassification(cloneDraftJson(catalog));
+}
+
+function classificationOrderDraft(catalog) {
+  if (!catalog) return null;
+  const sorted = sortProfileApplicationsByClassification(catalog);
+  const before = (catalog.applications || []).map((application) => application.id);
+  const after = (sorted.applications || []).map((application) => application.id);
+  return JSON.stringify(before) === JSON.stringify(after) ? null : sorted;
+}
+
+export function setProfileClassification(catalog, applicationId, classification) {
+  if (classification && !PROFILE_CLASSIFICATION_VALUES.has(classification)) {
+    throw new TypeError("Profile classification is not supported.");
+  }
+  const next = cloneDraftJson(catalog);
+  const { profile } = canonicalProfileAndApplication(next, applicationId);
+  if (classification) profile.classification = classification;
+  else delete profile.classification;
+  return sortCatalogApplicationsByClassification(next);
+}
+
+export function setConditionalProfileKind(catalog, applicationId, kind) {
+  if (!["normal", "conditional"].includes(kind)) throw new TypeError("Profile kind must be normal or conditional.");
+  const next = cloneDraftJson(catalog);
+  const { profile, application } = canonicalProfileAndApplication(next, applicationId);
+  if (systemOwnershipForApplication(next, applicationId)) {
+    throw new TypeError("System-owned profiles cannot change profile kind.");
+  }
+  if (profile.id === next.rootProfile || (next.runtimeBindings?.classOrder || []).some((binding) => binding.profile === profile.id)) {
+    throw new TypeError("Base profiles cannot become conditional.");
+  }
+  if (profile.kind === kind) return next;
+  if (kind === "conditional") {
+    const usedIds = new Set((next.profiles || []).flatMap((item) => (item.conditions || []).map((condition) => condition.id)));
+    profile.kind = "conditional";
+    profile.conditions = [canonicalDefaultCondition(profile, application, usedIds, next.catalogVersion)];
+    if (next.catalogVersion === 5) delete application.target;
+    else application.target = { mode: "disabled", match: { ...DEFAULT_MATCH }, members: [] };
+    return next;
+  }
+  const targets = (profile.conditions || []).map((condition) => canonicalTargetFromConditionSubjects(condition.subjects, next));
+  if (!targets.length || targets.some((target) => !target)) throw new TypeError("This conditional profile has no usable subject pool.");
+  const first = JSON.stringify(targets[0]);
+  if (targets.some((target) => JSON.stringify(target) !== first)) {
+    throw new TypeError("Conditions use different subject pools. Make them the same before changing this profile to normal.");
+  }
+  profile.kind = "normal";
+  delete profile.conditions;
+  application.target = targets[0];
+  return next;
+}
+
+export function addConditionalProfileCondition(catalog, applicationId, sourceConditionId = "") {
+  const next = cloneDraftJson(catalog);
+  const { profile } = canonicalProfileAndApplication(next, applicationId);
+  if (profile.kind !== "conditional") throw new TypeError("Only conditional profiles can own conditions.");
+  const usedIds = new Set((next.profiles || []).flatMap((item) => (item.conditions || []).map((condition) => condition.id)));
+  const source = sourceConditionId
+    ? (profile.conditions || []).find((condition) => condition.id === sourceConditionId)
+    : null;
+  const condition = source
+    ? cloneDraftJson(source)
+    : {
+      subjects: { mode: "members", match: { ...DEFAULT_MATCH }, members: [] },
+      when: defaultConditionWhen("notice-target", next.catalogVersion),
+      activation: { mode: "while-true" },
+      target: { kind: "player" },
+    };
+  condition.id = canonicalStableId(
+    source ? `${source.id}-copy` : `condition-${profile.id}`,
+    usedIds,
+    "condition",
+  );
+  profile.conditions = [...(profile.conditions || []), condition];
+  return next;
+}
+
+export function removeConditionalProfileCondition(catalog, applicationId, conditionId) {
+  const next = cloneDraftJson(catalog);
+  const { profile } = canonicalProfileAndApplication(next, applicationId);
+  if (profile.kind !== "conditional") throw new TypeError("Only conditional profiles can own conditions.");
+  if ((profile.conditions || []).length <= 1) throw new TypeError("A conditional profile needs at least one condition.");
+  profile.conditions = profile.conditions.filter((condition) => condition.id !== conditionId);
+  return next;
+}
+
+export function moveConditionalProfileCondition(catalog, applicationId, conditionId, direction) {
+  const next = cloneDraftJson(catalog);
+  const { profile } = canonicalProfileAndApplication(next, applicationId);
+  const index = (profile.conditions || []).findIndex((condition) => condition.id === conditionId);
+  const destination = index + Number(direction);
+  if (index < 0 || destination < 0 || destination >= profile.conditions.length) return next;
+  [profile.conditions[index], profile.conditions[destination]] = [profile.conditions[destination], profile.conditions[index]];
+  return next;
 }
 
 function canonicalExpressionNumber(raw) {
@@ -862,10 +1173,32 @@ function canonicalExpressionNumber(raw) {
   return 0;
 }
 
+function canonicalTerrainExpressionValid(raw) {
+  if (Number.isInteger(raw)) return raw >= 0 && raw <= 1023;
+  const text = String(raw || "").trim();
+  if (text === "0") return true;
+  const known = new Set([
+    "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_LAND",
+    "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER",
+    "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY",
+    "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_GRASS",
+    "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER",
+    "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER_FRONT",
+    "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP",
+    "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST",
+    "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX",
+    "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_FLOWERBED",
+    "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL",
+  ]);
+  const tokens = text.split("|").map((token) => token.trim()).filter(Boolean);
+  return tokens.length > 0 && tokens.length === new Set(tokens).size
+    && tokens.every((token) => known.has(token));
+}
+
 function canonicalAuthoredRaw(authored, fieldKey, applicationIndex) {
   if (!authored) return "";
   if (authored.operator === "replace") {
-    if (["activeProfile", "tiredProfile"].includes(fieldKey) && applicationIndex.has(String(authored.value))) {
+    if (fieldKey === "tiredProfile" && applicationIndex.has(String(authored.value))) {
       return String(applicationIndex.get(String(authored.value)));
     }
     return String(authored.value);
@@ -882,7 +1215,7 @@ function canonicalAuthoredRaw(authored, fieldKey, applicationIndex) {
 
 function canonicalAuthoredFromEditorRaw(raw, fieldKey, catalog, input) {
   const value = String(raw ?? "").trim();
-  if (["activeProfile", "tiredProfile"].includes(fieldKey)) {
+  if (fieldKey === "tiredProfile") {
     if (value.startsWith(APPLICATION_DRAFT_PREFIX)) {
       return { operator: "replace", value: value.slice(APPLICATION_DRAFT_PREFIX.length) };
     }
@@ -972,7 +1305,7 @@ function projectCanonicalProfileDeck(input, catalogOverride = null) {
     return result;
   };
   const viewFields = (raws) => Object.fromEntries(Object.entries(raws).map(([key, raw]) => {
-    const displayRaw = ["activeProfile", "tiredProfile"].includes(key) && applicationIndex.has(String(raw))
+    const displayRaw = key === "tiredProfile" && applicationIndex.has(String(raw))
       ? String(applicationIndex.get(String(raw)))
       : raw;
     return [key, canonicalRawView(displayRaw, key, source)];
@@ -1054,11 +1387,14 @@ function projectCanonicalProfileDeck(input, catalogOverride = null) {
     return {
       catalogKey: `profile:${binding.profile}`,
       catalogProfileId: binding.profile,
+      catalogKind: item?.kind || "normal",
+      catalogClassification: item?.classification || "",
+      catalogConditions: cloneDraftJson(item?.conditions || []),
       index,
       symbol: binding.symbol,
       name: item?.name || humanizeRaw(binding.symbol),
       canRename: binding.profile !== catalog.rootProfile,
-      canDelete: binding.profile !== catalog.rootProfile && binding.profile !== catalog.runtimeBindings.pickedUpProfile,
+      canDelete: binding.profile !== catalog.rootProfile,
       override: { mask: emptyMask(), profile: viewFields(raws) },
       profile: viewFields(raws),
       primitives: {},
@@ -1072,14 +1408,15 @@ function projectCanonicalProfileDeck(input, catalogOverride = null) {
 
   const runtimeApplicationIds = new Set([
     catalog.runtimeBindings.followerApplication,
-    catalog.runtimeBindings.defaultActiveApplication,
+    catalog.runtimeBindings.mountedApplication,
     catalog.runtimeBindings.defaultTiredApplication,
     catalog.runtimeBindings.forcedAsleepApplication,
   ]);
   for (const [index, application] of catalog.applications.entries()) {
     const item = profilesById.get(application.profile);
     const localRaws = Object.fromEntries(Object.entries(item?.fields || {}).map(([key, authored]) => [key, canonicalAuthoredRaw(authored, key, applicationIndex)]));
-    const target = application.target || { mode: "disabled", match: DEFAULT_MATCH, members: [] };
+    const resolvedTarget = resolveProfilePoolSelection(application.target, catalog);
+    const target = resolvedTarget || { mode: "disabled", match: DEFAULT_MATCH, members: [] };
     const members = [...new Set(target.members || [])].map((symbol) => assignmentSpeciesBySymbol.get(symbol)).filter(Boolean);
     const relativeFields = Object.entries(item?.fields || {}).filter(([, value]) => ["relative", "relativeThenAtLeast", "relativeThenAtMost"].includes(value.operator)).map(([key]) => key);
     const atLeastFields = Object.entries(item?.fields || {}).filter(([, value]) => ["atLeast", "relativeThenAtLeast"].includes(value.operator)).map(([key]) => key);
@@ -1088,6 +1425,11 @@ function projectCanonicalProfileDeck(input, catalogOverride = null) {
       catalogKey: `application:${application.id}`,
       catalogProfileId: application.profile,
       catalogApplicationId: application.id,
+      catalogKind: item?.kind || "normal",
+      catalogClassification: item?.classification || "",
+      catalogConditions: cloneDraftJson(item?.conditions || []),
+      catalogTarget: cloneDraftJson(application.target || null),
+      catalogSystem: systemOwnershipForApplication(catalog, application.id),
       index: `override:${index + 1}`,
       order: index + 1,
       orders: [index + 1],
@@ -1121,15 +1463,6 @@ function projectCanonicalProfileDeck(input, catalogOverride = null) {
     });
   }
 
-  const conditions = (catalog.conditionalStates || []).map((state) => ({
-    catalogConditionalId: state.id,
-    parentProfile: applicationIndex.get(state.parentApplication) ?? CONDITIONAL_PROFILE_NONE_VALUE,
-    overrideProfile: state.application === null ? CONDITIONAL_PROFILE_NONE_VALUE : (applicationIndex.get(state.application) ?? CONDITIONAL_PROFILE_NONE_VALUE),
-    terrainMask: canonicalExpressionNumber(state.terrainMask),
-    terrainOverrideMask: canonicalExpressionNumber(state.terrainOverrideMask),
-    minMovementSpeed: canonicalExpressionNumber(state.minMovementSpeed),
-    maxMovementSpeed: canonicalExpressionNumber(state.maxMovementSpeed),
-  }));
   const typeBySymbol = new Map();
   for (const assignment of assignments) {
     for (const type of assignment.species?.types || []) if (!typeBySymbol.has(type.symbol)) typeBySymbol.set(type.symbol, type);
@@ -1146,15 +1479,14 @@ function projectCanonicalProfileDeck(input, catalogOverride = null) {
     labels,
     classes,
     classRules: selectors,
-    conditionalStates: conditions,
     assignments,
     defaultClassIndex: rootClassIndex,
     defaultProfile: viewFields(effectiveFields(catalog.rootProfile)),
   });
 }
 
-function canonicalCatalogStructuralErrors(catalog, input = {}) {
-  if (!catalog) return ["The V2 profile catalog is unavailable"];
+export function canonicalCatalogStructuralErrors(catalog, input = {}) {
+  if (!catalog) return ["The profile catalog is unavailable"];
   const errors = [];
   const duplicateIds = (items, label) => {
     const seen = new Set();
@@ -1166,10 +1498,16 @@ function canonicalCatalogStructuralErrors(catalog, input = {}) {
   };
   duplicateIds(catalog.profiles, "Profile");
   duplicateIds(catalog.selectors, "Selector");
+  duplicateIds(catalog.pools, "Named pool");
   duplicateIds(catalog.applications, "Application");
-  duplicateIds(catalog.conditionalStates, "Conditional state");
   const profiles = new Map((catalog.profiles || []).map((profile) => [profile.id, profile]));
-  const applications = new Set((catalog.applications || []).map((application) => application.id));
+  const applicationList = catalog.applications || [];
+  const applications = new Set(applicationList.map((application) => application.id));
+  const applicationsByProfile = new Map();
+  for (const application of applicationList) {
+    if (!applicationsByProfile.has(application.profile)) applicationsByProfile.set(application.profile, []);
+    applicationsByProfile.get(application.profile).push(application);
+  }
   const selectors = new Set((catalog.selectors || []).map((selector) => selector.id));
   const root = profiles.get(catalog.rootProfile);
   if (!root) errors.push("The root profile is missing");
@@ -1178,11 +1516,16 @@ function canonicalCatalogStructuralErrors(catalog, input = {}) {
   const knownFields = new Set((input.fields || []).map((field) => field.key));
   const relativeFields = new Set(input.numericOverrideOperatorFieldKeys || []);
   const boundedFields = new Set(input.boundedOverrideOperatorFieldKeys || []);
+  let totalConditionCount = 0;
   for (const profile of catalog.profiles || []) {
     const foldedName = String(profile.name || "").trim().toLowerCase();
     if (!foldedName) errors.push(`Profile ${profile.id || "without an ID"} needs a name`);
     else if (profileNames.has(foldedName)) errors.push("Profile names must be unique");
     profileNames.add(foldedName);
+    const legacyClassification = catalog.catalogVersion === 4 && profile.classification === "archetype";
+    if (profile.classification && !legacyClassification && !PROFILE_CLASSIFICATION_VALUES.has(profile.classification)) {
+      errors.push(`${profile.name || profile.id} has an unsupported classification`);
+    }
     if (profile.id !== catalog.rootProfile && !profiles.has(profile.parent)) errors.push(`${profile.name || profile.id} has a missing parent`);
     const walked = new Set();
     let cursor = profile;
@@ -1205,26 +1548,142 @@ function canonicalCatalogStructuralErrors(catalog, input = {}) {
         errors.push(`${profile.name || profile.id} cannot use a bound operator for ${fieldKey}`);
       }
     }
+    if (profile.kind === "normal") {
+      if (Object.hasOwn(profile, "conditions")) errors.push(`${profile.name || profile.id} is normal and cannot own conditions`);
+    } else if (profile.kind === "conditional") {
+      if (profile.id === catalog.rootProfile) errors.push("The root profile cannot be conditional");
+      if (!profiles.has(profile.parent) || profiles.get(profile.parent)?.kind !== "normal") errors.push(`${profile.name || profile.id} must inherit from a normal profile`);
+      const ownedApplications = applicationsByProfile.get(profile.id) || [];
+      if (ownedApplications.length !== 1) errors.push(`${profile.name || profile.id} needs exactly one application`);
+      else if (catalog.catalogVersion === 5 && Object.hasOwn(ownedApplications[0], "target")) errors.push(`${profile.name || profile.id} must use condition subject pools, not an application target`);
+      else if (catalog.catalogVersion === 4 && ownedApplications[0].target?.mode !== "disabled") errors.push(`${profile.name || profile.id} must use condition subject pools, not an application target`);
+      if (!Array.isArray(profile.conditions) || !profile.conditions.length) errors.push(`${profile.name || profile.id} needs at least one condition`);
+      if ((profile.conditions || []).length > 32) errors.push(`${profile.name || profile.id} supports at most 32 conditions`);
+      totalConditionCount += (profile.conditions || []).length;
+      const conditionIds = new Set();
+      for (const condition of profile.conditions || []) {
+        if (!condition?.id) errors.push(`${profile.name || profile.id} has a condition without an ID`);
+        else if (conditionIds.has(condition.id)) errors.push(`${profile.name || profile.id} has duplicate condition ID ${condition.id}`);
+        conditionIds.add(condition?.id);
+        const subjects = condition?.subjects;
+        if (subjects?.pool) {
+          if (!namedPoolById(catalog, subjects.pool)) errors.push(`${condition?.id || "A condition"} uses an unavailable named pool`);
+        } else if (subjects?.application) {
+          const source = applicationList.find((application) => application.id === subjects.application);
+          const sourceProfile = source && profiles.get(source.profile);
+          if (!source || sourceProfile?.kind !== "normal" || source.target?.mode === "disabled") errors.push(`${condition?.id || "A condition"} has an unavailable subject application`);
+        } else if (!["members", "all"].includes(subjects?.mode)) {
+          errors.push(`${condition?.id || "A condition"} needs a subject pool`);
+        } else if (subjects.mode === "members" && !(subjects.members || []).length) {
+          errors.push(`${condition?.id || "A condition"} needs at least one subject member`);
+        }
+        const whenKind = condition?.when?.kind;
+        if (!["terrain-motion", "notice-target", "target-cannot-see-subject"].includes(whenKind)) errors.push(`${condition?.id || "A condition"} has an unsupported condition kind`);
+        if (whenKind === "terrain-motion") {
+          const terrainMask = canonicalExpressionNumber(condition.when.terrainMask);
+          const terrainOverrideMask = canonicalExpressionNumber(condition.when.terrainOverrideMask);
+          const minimum = Number(condition.when.minMovementSpeed);
+          const maximum = Number(condition.when.maxMovementSpeed);
+          if (!canonicalTerrainExpressionValid(condition.when.terrainMask)
+              || !canonicalTerrainExpressionValid(condition.when.terrainOverrideMask)) {
+            errors.push(`${condition?.id || "A condition"} has an invalid terrain mask`);
+          } else if (terrainMask & ~terrainOverrideMask) {
+            errors.push(`${condition?.id || "A condition"} enabled terrains must also be checked`);
+          }
+          if (!Number.isInteger(minimum) || minimum < 0 || minimum > 32
+              || !Number.isInteger(maximum) || maximum < 0 || maximum > 32) {
+            errors.push(`${condition?.id || "A condition"} has an invalid Walk-time range`);
+          } else if (minimum && maximum && minimum > maximum) {
+            errors.push(`${condition?.id || "A condition"} has a reversed Walk-time range`);
+          }
+          if (!terrainOverrideMask && !minimum && !maximum) errors.push(`${condition?.id || "A condition"} needs a terrain or Walk-time condition`);
+        }
+        if (["notice-target", "target-cannot-see-subject"].includes(whenKind)) {
+          const chance = Number(condition.when.chancePercent);
+          if (!Number.isInteger(chance) || chance < 0 || chance > 100) errors.push(`${condition?.id || "A condition"} has an invalid notice chance`);
+          if (catalog.catalogVersion === 5) {
+            const vision = condition.when.vision;
+            const legacyVisionKeys = ["rangeKind", "rangeLength", "visionOptions"].filter((key) => Object.hasOwn(condition.when, key));
+            if (legacyVisionKeys.length) errors.push(`${condition?.id || "A condition"} must use the V5 Vision shape`);
+            if (!vision || typeof vision !== "object" || Array.isArray(vision) || !["current", "custom"].includes(vision.mode)) {
+              errors.push(`${condition?.id || "A condition"} has an invalid Vision source`);
+            } else if (vision.mode === "current") {
+              if (Object.keys(vision).some((key) => key !== "mode")) errors.push(`${condition?.id || "A condition"} current Vision must not store custom values`);
+            } else {
+              const range = vision.range;
+              const allowedKeys = new Set(["mode", "range", "cone", "adjacentAwareness"]);
+              if (!Number.isInteger(range) || range < 1 || range > 32
+                  || vision.cone !== "forward-90"
+                  || typeof vision.adjacentAwareness !== "boolean"
+                  || Object.keys(vision).some((key) => !allowedKeys.has(key))) {
+                errors.push(`${condition?.id || "A condition"} has invalid custom Vision`);
+              }
+            }
+          } else {
+            const allowedRanges = new Set([
+              1, 2, 3, 4, 5, 6,
+              "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE",
+              "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS",
+              "OW_WILD_BEHAVIOR_ALERT_RANGE_CARDINAL_LINE",
+              "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS",
+              VISION_CURRENT_RANGE,
+              VISION_CUSTOM_RANGE,
+            ]);
+            const rangeLength = Number(condition.when.rangeLength);
+            const visionOptions = Number(condition.when.visionOptions || 0);
+            if (!allowedRanges.has(condition.when.rangeKind)) errors.push(`${condition?.id || "A condition"} has an invalid notice shape`);
+            if (!Number.isInteger(rangeLength) || rangeLength < 0 || rangeLength > 255) errors.push(`${condition?.id || "A condition"} has an invalid notice range`);
+            if (!Number.isInteger(visionOptions) || visionOptions < 0 || visionOptions > 7) errors.push(`${condition?.id || "A condition"} has invalid custom Vision options`);
+            const currentVision = [5, VISION_CURRENT_RANGE].includes(condition.when.rangeKind);
+            const customVision = [6, VISION_CUSTOM_RANGE].includes(condition.when.rangeKind);
+            if (currentVision && (rangeLength !== 0 || visionOptions !== 0)) errors.push(`${condition?.id || "A condition"} current Vision must not store custom values`);
+            if (customVision && (!(rangeLength >= 1 && rangeLength <= 32) || (visionOptions & 3) !== 1)) errors.push(`${condition?.id || "A condition"} has invalid custom Vision`);
+          }
+        }
+        if (condition?.activation?.mode === "timed") {
+          const duration = Number(condition.activation.durationFrames);
+          const cooldown = Number(condition.activation.cooldownFrames);
+          if (!Number.isInteger(duration) || duration < 1 || duration > 65535) errors.push(`${condition?.id || "A condition"} has an invalid duration`);
+          if (!Number.isInteger(cooldown) || cooldown < 0 || cooldown > 65535) errors.push(`${condition?.id || "A condition"} has an invalid cooldown`);
+        } else if (condition?.activation?.mode !== "while-true") {
+          errors.push(`${condition?.id || "A condition"} has an unsupported activation mode`);
+        }
+        if (["notice-target", "target-cannot-see-subject"].includes(whenKind) && !["player", "actor"].includes(condition?.target?.kind)) errors.push(`${condition?.id || "A condition"} needs a player or actor target`);
+        if (whenKind === "terrain-motion" && condition?.target?.kind !== "none") errors.push(`${condition?.id || "A condition"} terrain checks must be targetless`);
+        if (condition?.target?.kind === "actor") {
+          const roles = condition.target.roles || [];
+          if (!roles.length || roles.some((role) => !["wild", "follower"].includes(role)) || new Set(roles).size !== roles.length) errors.push(`${condition?.id || "A condition"} has invalid actor roles`);
+          if (condition.target.selection !== "nearest") errors.push(`${condition?.id || "A condition"} has an invalid actor selection`);
+          if (condition.target.pool) {
+            if (!namedPoolById(catalog, condition.target.pool)) errors.push(`${condition?.id || "A condition"} uses an unavailable actor pool`);
+          } else {
+            if ((typeof condition.target.groupMask !== "string" && !Number.isInteger(condition.target.groupMask)) || String(condition.target.groupMask).trim() === "") errors.push(`${condition?.id || "A condition"} has an invalid actor group mask`);
+            if (!Array.isArray(condition.target.members) || new Set(condition.target.members || []).size !== (condition.target.members || []).length) errors.push(`${condition?.id || "A condition"} has invalid actor members`);
+          }
+        }
+      }
+    } else {
+      errors.push(`${profile.name || profile.id} must be normal or conditional`);
+    }
   }
+  if (totalConditionCount > 32) errors.push("The catalog supports at most 32 condition entries");
   for (const selector of catalog.selectors || []) {
     if (!profiles.has(selector.profile)) errors.push(`Selector ${selector.id} has a missing profile`);
+    else if (profiles.get(selector.profile)?.kind !== "normal") errors.push(`Selector ${selector.id} must select a normal profile`);
   }
   for (const application of catalog.applications || []) {
     if (!profiles.has(application.profile)) errors.push(`Application ${application.id} has a missing profile`);
-    const target = application.target || {};
+    if (catalog.catalogVersion === 5 && !Object.hasOwn(application, "target")) continue;
+    const target = resolveProfilePoolSelection(application.target, catalog) || {};
     if (target.mode === "members" && !(target.members || []).length) errors.push(`Application ${application.id} needs at least one member`);
     const sharedMatch = MATCH_FIELDS.some(([field]) => field !== "species" && String(target.match?.[field] ?? DEFAULT_MATCH[field]) !== DEFAULT_MATCH[field]);
     if (target.mode === "all" && !sharedMatch) errors.push(`Application ${application.id} needs at least one shared condition`);
   }
-  for (const state of catalog.conditionalStates || []) {
-    if (!applications.has(state.parentApplication)) errors.push(`Conditional state ${state.id} has a missing parent application`);
-    if (state.application !== null && !applications.has(state.application)) errors.push(`Conditional state ${state.id} has a missing application`);
-  }
   const bindings = catalog.runtimeBindings || {};
   for (const binding of bindings.classOrder || []) if (!profiles.has(binding.profile)) errors.push(`Runtime class ${binding.symbol} has a missing profile`);
+  for (const binding of bindings.classOrder || []) if (profiles.get(binding.profile)?.kind !== "normal") errors.push(`Runtime class ${binding.symbol} must use a normal profile`);
   for (const selectorId of bindings.speciesSelectors || []) if (!selectors.has(selectorId)) errors.push(`Runtime species selector ${selectorId} is missing`);
-  if (!profiles.has(bindings.pickedUpProfile)) errors.push("The Picked Up profile is missing");
-  for (const key of ["followerApplication", "defaultActiveApplication", "defaultTiredApplication", "forcedAsleepApplication"]) {
+  for (const key of ["followerApplication", "mountedApplication", "defaultTiredApplication", "forcedAsleepApplication"]) {
     if (!applications.has(bindings[key])) errors.push(`Runtime application ${bindings[key] || key} is missing`);
   }
   return unique(errors);
@@ -1253,10 +1712,12 @@ export function createProfilesController({
 
   let rawDeckData = state.profileData || state.data || state.appData || {};
   let sourceCatalog = canonicalCatalogFromDeck(rawDeckData) ? cloneDraftJson(canonicalCatalogFromDeck(rawDeckData)) : null;
-  let structuralCatalogDraft = state.profileCatalogDraft?.catalogVersion === 2 ? cloneDraftJson(state.profileCatalogDraft) : null;
+  let structuralCatalogDraft = [4, 5].includes(state.profileCatalogDraft?.catalogVersion)
+    ? sortProfileApplicationsByClassification(state.profileCatalogDraft)
+    : classificationOrderDraft(sourceCatalog);
+  state.profileCatalogDraft = structuralCatalogDraft;
   let data = projectCanonicalProfileDeck(rawDeckData, structuralCatalogDraft || sourceCatalog);
   const drafts = state.profileDrafts?.version === 2 ? state.profileDrafts : newDraftStore();
-  if (!("conditionalStates" in drafts)) drafts.conditionalStates = null;
   state.profileDrafts = drafts;
   const invalidNumericOperatorInputs = new Set();
   let formulaRefreshTimer = null;
@@ -1271,10 +1732,18 @@ export function createProfilesController({
   state.profileLifecycleSection = String(
     state.profileLifecycleSection || legacyLifecycleSections?.get(initialProfileKey) || "",
   );
+  const lifecycleTabSelections = state.profileLifecycleTabs instanceof Map
+    ? state.profileLifecycleTabs
+    : new Map();
+  state.profileLifecycleTabs = lifecycleTabSelections;
   const branchTabSelections = state.profileModeTabs instanceof Map
     ? state.profileModeTabs
     : new Map(legacyBranchTabs?.get(initialProfileKey) || []);
   state.profileModeTabs = branchTabSelections;
+  const conditionBranchDrafts = state.profileConditionBranchDrafts instanceof Map
+    ? state.profileConditionBranchDrafts
+    : new Map();
+  state.profileConditionBranchDrafts = conditionBranchDrafts;
   delete state.profileConditionalStateDrafts;
   delete state.profileLifecycleSections;
   delete state.profileBranchTabs;
@@ -1289,6 +1758,14 @@ export function createProfilesController({
       terrain: "",
       level: "20",
       shiny: false,
+    },
+    conditionPreview: {
+      frame: "0", subjectX: "10", subjectY: "10", facing: "3",
+      terrainMask: "1", movementSpeed: "0",
+      playerX: "12", playerY: "10", playerValid: true,
+      activeUntil: "0", cooldownUntil: "0", candidates: "",
+      nextState: [],
+      ...(state.profileConditionPreview || {}),
     },
     contextResult: null,
     contextError: "",
@@ -1399,6 +1876,9 @@ export function createProfilesController({
       isOverrideProfile: true,
       symbol: `DRAFT_OVERRIDE_${draft.draftId}`,
       orders: [],
+      catalogKind: draft.catalogKind || "normal",
+      catalogClassification: draft.catalogClassification || "",
+      catalogConditions: cloneDraftJson(draft.conditions || []),
       profile: Object.fromEntries(Object.entries(draft.fields).map(([field, raw]) => [field, { raw }])),
       editProfile: Object.fromEntries(Object.entries(draft.fields).map(([field, raw]) => [field, { raw }])),
       target: cloneTarget(draft.target),
@@ -1417,8 +1897,19 @@ export function createProfilesController({
     return ordered;
   }
 
+  function sortOverrideViewsByClassification(profiles) {
+    return profiles
+      .map((profile, sourceIndex) => ({ profile, sourceIndex }))
+      .sort((left, right) => (
+        profileClassificationRank(left.profile.catalogClassification)
+        - profileClassificationRank(right.profile.catalogClassification)
+        || left.sourceIndex - right.sourceIndex
+      ))
+      .map(({ profile }) => profile);
+  }
+
   function overrideProfiles() {
-    return [...orderedSavedOverrides(), ...newOverrideProfiles()];
+    return sortOverrideViewsByClassification([...orderedSavedOverrides(), ...newOverrideProfiles()]);
   }
 
   function allProfiles() {
@@ -1431,7 +1922,6 @@ export function createProfilesController({
     drafts.memberships.clear();
     drafts.overrideNames.clear();
     drafts.overrideTargets.clear();
-    drafts.conditionalStates = null;
     drafts.removedOverrides.clear();
     drafts.newOverrides = [];
     drafts.overrideOrder = [];
@@ -1482,7 +1972,6 @@ export function createProfilesController({
       if (view?.catalogProfileId) removedProfileIds.add(view.catalogProfileId);
     }
     next.applications = next.applications.filter((application) => !removedApplicationIds.has(application.id));
-    next.conditionalStates = next.conditionalStates.filter((state) => !removedApplicationIds.has(state.parentApplication) && !removedApplicationIds.has(state.application));
 
     const usedProfileIds = new Set(next.profiles.map((item) => item.id));
     const usedApplicationIds = new Set(next.applications.map((item) => item.id));
@@ -1491,8 +1980,20 @@ export function createProfilesController({
       const profileId = canonicalStableId(draft.name, usedProfileIds, "profile");
       const applicationId = canonicalStableId(`apply-${profileId}`, usedApplicationIds, "application");
       const fields = Object.fromEntries(Object.entries(draft.fields || {}).filter(([, raw]) => String(raw || "").trim()).map(([fieldKey, raw]) => [fieldKey, canonicalAuthoredFromEditorRaw(raw, fieldKey, sourceReferenceCatalog, rawDeckData)]));
-      next.profiles.push({ id: profileId, name: draft.name, parent: next.rootProfile, fields });
-      next.applications.push({ id: applicationId, profile: profileId, target: { mode: draft.target.targetMode, match: cloneRawMatch(draft.target.match), members: [...draft.target.members] } });
+      const kind = draft.catalogKind === "conditional" ? "conditional" : "normal";
+      const profile = { id: profileId, name: draft.name, parent: next.rootProfile, kind, fields };
+      if (draft.catalogClassification) profile.classification = draft.catalogClassification;
+      if (kind === "conditional") profile.conditions = cloneDraftJson(draft.conditions || []);
+      next.profiles.push(profile);
+      next.applications.push({
+        id: applicationId,
+        profile: profileId,
+        ...(kind === "conditional" && next.catalogVersion === 5
+          ? {}
+          : { target: kind === "conditional"
+            ? { mode: "disabled", match: { ...DEFAULT_MATCH }, members: [] }
+            : { mode: draft.target.targetMode, match: cloneRawMatch(draft.target.match), members: [...draft.target.members] } }),
+      });
       newApplicationByDraftId.set(draft.draftId, applicationId);
     }
 
@@ -1524,25 +2025,8 @@ export function createProfilesController({
       selector.profile = target.catalogProfileId;
     }
 
-    if (drafts.conditionalStates !== null) {
-      const usedConditionalIds = new Set(next.conditionalStates.map((state) => state.id));
-      next.conditionalStates = currentConditionalStates().map((state) => {
-        const parent = findProfile(state.parentKey);
-        const linked = state.overrideKey ? findProfile(state.overrideKey) : null;
-        return {
-          id: state.catalogConditionalId || canonicalStableId(`conditional-${parent?.catalogApplicationId || "state"}`, usedConditionalIds, "conditional-state"),
-          parentApplication: parent?.catalogApplicationId,
-          application: linked?.catalogApplicationId || null,
-          terrainMask: String(state.terrainMask),
-          terrainOverrideMask: String(state.terrainOverrideMask),
-          minMovementSpeed: String(state.minMovementSpeed),
-          maxMovementSpeed: String(state.maxMovementSpeed),
-        };
-      }).filter((state) => state.parentApplication);
-    }
 
     const boundProfiles = new Set((next.runtimeBindings.classOrder || []).map((binding) => binding.profile));
-    boundProfiles.add(next.runtimeBindings.pickedUpProfile);
     const appliedProfiles = new Set(next.applications.map((application) => application.profile));
     const parentProfiles = new Set(next.profiles.map((item) => item.parent).filter(Boolean));
     next.profiles = next.profiles.filter((item) => (
@@ -1552,15 +2036,217 @@ export function createProfilesController({
       || parentProfiles.has(item.id)
       || item.id === next.rootProfile
     ));
-    return next;
+    return sortCatalogApplicationsByClassification(next);
   }
 
   function adoptStructuralCatalog(nextCatalog) {
-    structuralCatalogDraft = cloneDraftJson(nextCatalog);
+    structuralCatalogDraft = sortProfileApplicationsByClassification(nextCatalog);
     state.profileCatalogDraft = structuralCatalogDraft;
+    ui.conditionPreview.nextState = [];
     clearLegacyDrafts();
     data = projectCanonicalProfileDeck(rawDeckData, structuralCatalogDraft);
     invalidateDerivedIndexes();
+  }
+
+  function canonicalApplicationForView(catalog, profile) {
+    if (profile?.catalogApplicationId) {
+      return catalog.applications.find((application) => application.id === profile.catalogApplicationId) || null;
+    }
+    if (!profile?.draftId) return null;
+    const namedProfile = catalog.profiles.find((item) => item.name === nameFor(profile));
+    return namedProfile
+      ? catalog.applications.find((application) => application.profile === namedProfile.id) || null
+      : null;
+  }
+
+  function mutateCanonicalOverride(profile, mutation) {
+    const next = canonicalDraftFromLegacy();
+    if (!next) throw new TypeError("Profile changes need a profile catalog.");
+    const application = canonicalApplicationForView(next, profile);
+    if (!application) throw new TypeError("The selected override profile is unavailable.");
+    const changed = mutation(next, application) || next;
+    const selectedApplication = changed.applications.find((candidate) => candidate.id === application.id) || application;
+    adoptStructuralCatalog(changed);
+    ui.selectedKey = `application:${selectedApplication.id}`;
+    state.profileLifecycleSection = CONDITIONS_LIFECYCLE_SECTION_ID;
+    lifecycleTabSelections.set(ui.selectedKey, CONDITIONS_LIFECYCLE_SECTION_ID);
+    return selectedApplication.id;
+  }
+
+  function mutateCanonicalCondition(profile, conditionId, mutation) {
+    return mutateCanonicalOverride(profile, (next, application) => {
+      const owner = next.profiles.find((item) => item.id === application.profile);
+      const condition = owner?.conditions?.find((item) => item.id === conditionId);
+      if (!condition) throw new TypeError("The selected condition is unavailable.");
+      mutation(condition, owner, next);
+      return next;
+    });
+  }
+
+  function mutatePoolOwner(profile, owner, conditionId, mutation) {
+    return mutateCanonicalOverride(profile, (next, application) => {
+      const profileOwner = next.profiles.find((item) => item.id === application.profile);
+      const condition = conditionId
+        ? profileOwner?.conditions?.find((item) => item.id === conditionId)
+        : null;
+      let selection;
+      if (owner === "application") selection = application.target;
+      else if (owner === "subjects") selection = condition?.subjects;
+      else if (owner === "target") selection = condition?.target?.pool ? { pool: condition.target.pool } : {
+        mode: "members",
+        match: { ...DEFAULT_MATCH, groupMask: condition?.target?.groupMask || DEFAULT_MATCH.groupMask },
+        members: condition?.target?.members || [],
+      };
+      else throw new TypeError("The selected pool owner is unavailable.");
+      if (!selection || (conditionId && !condition)) throw new TypeError("The selected pool is unavailable.");
+      const changed = mutation(next, selection, { application, condition });
+      const nextSelection = changed || selection;
+      if (owner === "application") application.target = nextSelection;
+      else if (owner === "subjects") condition.subjects = nextSelection;
+      else if (nextSelection.pool) {
+        delete condition.target.groupMask;
+        delete condition.target.members;
+        condition.target.pool = nextSelection.pool;
+      } else {
+        delete condition.target.pool;
+        condition.target.groupMask = nextSelection.match?.groupMask || DEFAULT_MATCH.groupMask;
+        condition.target.members = [...(nextSelection.members || [])];
+      }
+      return next;
+    });
+  }
+
+  function conditionMemberList(raw) {
+    return unique(String(raw || "").split(/[\n,;]+/).map((item) => item.trim()).filter(Boolean));
+  }
+
+  function setCanonicalConditionField(profile, conditionId, path, raw) {
+    mutateCanonicalCondition(profile, conditionId, (condition, owner, catalog) => {
+      const branchKey = (branch, value) => `${profileKey(profile)}:${conditionId}:${branch}:${value}`;
+      if (path === "id") {
+        const id = String(raw || "").trim();
+        if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(id)) throw new TypeError("Condition IDs use lowercase words joined with hyphens.");
+        if (owner.conditions.some((candidate) => candidate !== condition && candidate.id === id)) throw new TypeError(`Condition ID ${id} is already used in this profile.`);
+        for (const [key, value] of [...conditionBranchDrafts.entries()]) {
+          const prefix = `${profileKey(profile)}:${conditionId}:`;
+          if (!key.startsWith(prefix)) continue;
+          conditionBranchDrafts.delete(key);
+          conditionBranchDrafts.set(`${profileKey(profile)}:${id}:${key.slice(prefix.length)}`, value);
+        }
+        for (const sectionId of [...ui.openSections]) {
+          if (!sectionId.includes(`:${profileKey(profile)}:${conditionId}`)) continue;
+          ui.openSections.delete(sectionId);
+          ui.openSections.add(sectionId.replace(`:${profileKey(profile)}:${conditionId}`, `:${profileKey(profile)}:${id}`));
+        }
+        condition.id = id;
+        return;
+      }
+      if (path === "subjects.kind") {
+        const currentKind = condition.subjects.pool ? "pool" : (condition.subjects.application ? "application" : (condition.subjects.mode || "members"));
+        conditionBranchDrafts.set(branchKey("subjects", currentKind), cloneDraftJson(condition.subjects));
+        const saved = conditionBranchDrafts.get(branchKey("subjects", raw));
+        if (saved) {
+          condition.subjects = cloneDraftJson(saved);
+          return;
+        }
+        condition.subjects = { mode: raw === "all" ? "all" : "members", match: { ...DEFAULT_MATCH }, members: [] };
+        return;
+      }
+      if (path === "subjects.application") {
+        condition.subjects = { application: String(raw) };
+        return;
+      }
+      if (path === "subjects.members") {
+        condition.subjects.members = conditionMemberList(raw);
+        return;
+      }
+      if (path.startsWith("subjects.match.")) {
+        const field = path.slice("subjects.match.".length);
+        condition.subjects.match[field] = String(raw || DEFAULT_MATCH[field]);
+        return;
+      }
+      if (path === "when.kind") {
+        conditionBranchDrafts.set(branchKey("trigger", condition.when.kind), cloneDraftJson({ when: condition.when, target: condition.target }));
+        const saved = conditionBranchDrafts.get(branchKey("trigger", raw));
+        if (saved) {
+          condition.when = cloneDraftJson(saved.when);
+          condition.target = cloneDraftJson(saved.target);
+          return;
+        }
+        if (raw === "terrain-motion") {
+          condition.when = { kind: "terrain-motion", terrainMask: 1, terrainOverrideMask: 1, minMovementSpeed: 0, maxMovementSpeed: 0 };
+          condition.target = { kind: "none" };
+        } else {
+          condition.when = defaultConditionWhen(raw, catalog.catalogVersion);
+          condition.target = { kind: "player" };
+        }
+        return;
+      }
+      if (path === "when.visionMode") {
+        setConditionVisionSelection(condition, raw, catalog.catalogVersion);
+        return;
+      }
+      if (path === "activation.mode") {
+        conditionBranchDrafts.set(branchKey("activation", condition.activation.mode), cloneDraftJson(condition.activation));
+        const saved = conditionBranchDrafts.get(branchKey("activation", raw));
+        if (saved) {
+          condition.activation = cloneDraftJson(saved);
+          return;
+        }
+        condition.activation = raw === "timed"
+          ? { mode: "timed", durationFrames: 60, cooldownFrames: 0 }
+          : { mode: "while-true" };
+        return;
+      }
+      if (path === "target.kind") {
+        if (condition.when.kind === "terrain-motion") condition.target = { kind: "none" };
+        else {
+          conditionBranchDrafts.set(branchKey("target", condition.target.kind), cloneDraftJson(condition.target));
+          const saved = conditionBranchDrafts.get(branchKey("target", raw));
+          if (saved) condition.target = cloneDraftJson(saved);
+          else if (raw === "actor") condition.target = { kind: "actor", roles: ["wild"], selection: "nearest", groupMask: "OW_WILD_BEHAVIOR_GROUP_NONE", members: [] };
+          else condition.target = { kind: "player" };
+        }
+        return;
+      }
+      const numericPaths = new Set([
+        "when.terrainMask", "when.terrainOverrideMask", "when.minMovementSpeed", "when.maxMovementSpeed",
+        "when.rangeLength", "when.chancePercent", "when.visionOptions", "when.vision.range",
+        "activation.durationFrames", "activation.cooldownFrames",
+      ]);
+      if (catalog.catalogVersion === 5 && ["when.rangeLength", "when.visionOptions"].includes(path)) {
+        throw new TypeError("V5 conditions store custom values inside when.vision.");
+      }
+      if (catalog.catalogVersion !== 5 && path === "when.vision.range") {
+        throw new TypeError("V4 conditions use the legacy notice range fields.");
+      }
+      const memberPaths = new Set(["target.members"]);
+      const parts = path.split(".");
+      let target = condition;
+      for (const part of parts.slice(0, -1)) target = target[part];
+      target[parts.at(-1)] = numericPaths.has(path)
+        ? Number(raw)
+        : (memberPaths.has(path) ? conditionMemberList(raw) : String(raw));
+    });
+  }
+
+  function setConditionTerrainPolicyState(profile, conditionId, bit, stateValue) {
+    mutateCanonicalCondition(profile, conditionId, (condition) => {
+      if (condition.when?.kind !== "terrain-motion") return;
+      const allMask = terrainPolicyAllMask();
+      let valueMask = terrainPolicyMaskNumber(condition.when.terrainMask);
+      let explicitMask = terrainPolicyMaskNumber(condition.when.terrainOverrideMask);
+      if (stateValue === "inherit") {
+        explicitMask &= ~bit;
+        valueMask &= ~bit;
+      } else {
+        explicitMask |= bit;
+        if (stateValue === "on") valueMask |= bit;
+        else valueMask &= ~bit;
+      }
+      condition.when.terrainMask = valueMask & allMask;
+      condition.when.terrainOverrideMask = explicitMask & allMask;
+    });
   }
 
   function stateReferenceProfiles() {
@@ -1592,150 +2278,6 @@ export function createProfilesController({
     return laneReferenceProfiles().find((profile) => ordersFor(profile).includes(expected + 1)) || null;
   }
 
-  function normalConditionalProfile(profile) {
-    return isOverrideProfile(profile)
-      && !profile?.draftId
-      && !drafts.removedOverrides.has(profileKey(profile));
-  }
-
-  function conditionalProfileCandidates(parentProfile) {
-    return savedOverrideProfiles().filter((candidate) => (
-      normalConditionalProfile(candidate) && profileKey(candidate) !== profileKey(parentProfile)
-    ));
-  }
-
-  function conditionStorageNumber(raw) {
-    const value = valueRaw(raw).trim();
-    if (value === CONDITION_ON_ROOFTOP || value === LEGACY_CONDITION_ON_ROOFTOP) {
-      return CONDITION_ON_ROOFTOP_BIT;
-    }
-    const numeric = Number(value);
-    return Number.isInteger(numeric) && numeric >= 0 ? numeric : null;
-  }
-
-  function conditionBits(raw) {
-    return conditionStorageNumber(raw) ?? 0;
-  }
-
-  function conditionalProfileIsNone(raw) {
-    const value = valueRaw(raw).trim();
-    return !value || value === CONDITIONAL_PROFILE_NONE || Number(value) === CONDITIONAL_PROFILE_NONE_VALUE;
-  }
-
-  function conditionalProfileForRaw(raw) {
-    if (conditionalProfileIsNone(raw)) return null;
-    const expected = Number(valueRaw(raw));
-    if (!Number.isFinite(expected)) return null;
-    return savedOverrideProfiles().find((profile) => ordersFor(profile).includes(expected + 1)) || null;
-  }
-
-  function conditionalMovementSpeed(raw) {
-    const numeric = Number(valueRaw(raw));
-    return Number.isInteger(numeric) && numeric >= 0 && numeric <= CONDITIONAL_MOVEMENT_SPEED_MAX ? numeric : 0;
-  }
-
-  function conditionalStateKey(terrainMaskOrEntry, terrainOverrideMask, minMovementSpeed, maxMovementSpeed) {
-    const entry = terrainMaskOrEntry && typeof terrainMaskOrEntry === "object"
-      ? terrainMaskOrEntry
-      : { terrainMask: terrainMaskOrEntry, terrainOverrideMask, minMovementSpeed, maxMovementSpeed };
-    const explicit = terrainPolicyMaskNumber(entry.terrainOverrideMask);
-    const accepted = terrainPolicyMaskNumber(entry.terrainMask) & explicit;
-    return `${accepted}:${explicit}:${conditionalMovementSpeed(entry.minMovementSpeed)}:${conditionalMovementSpeed(entry.maxMovementSpeed)}`;
-  }
-
-  function cloneConditionalState(entry = {}) {
-    let explicit = terrainPolicyMaskNumber(entry.terrainOverrideMask);
-    let accepted = terrainPolicyMaskNumber(entry.terrainMask) & explicit;
-    if ((entry.terrainMask === undefined || entry.terrainMask === null)
-        && (entry.terrainOverrideMask === undefined || entry.terrainOverrideMask === null)) {
-      const legacyMask = conditionBits(entry.conditionMask) & 0xFF;
-      if (legacyMask & CONDITION_ON_ROOFTOP_BIT) {
-        explicit = CONDITIONAL_DEFAULT_TERRAIN_BITS;
-        accepted = conditionBits(entry.conditionValue) & CONDITION_ON_ROOFTOP_BIT
-          ? CONDITIONAL_DEFAULT_TERRAIN_BITS
-          : 0;
-      }
-    }
-    return {
-      catalogConditionalId: entry.catalogConditionalId ? String(entry.catalogConditionalId) : "",
-      parentKey: String(entry.parentKey || ""),
-      overrideKey: entry.overrideKey ? String(entry.overrideKey) : null,
-      terrainMask: String(accepted),
-      terrainOverrideMask: String(explicit),
-      minMovementSpeed: String(conditionalMovementSpeed(entry.minMovementSpeed)),
-      maxMovementSpeed: String(conditionalMovementSpeed(entry.maxMovementSpeed)),
-    };
-  }
-
-  function sourceConditionalStates() {
-    return (Array.isArray(data.conditionalStates) ? data.conditionalStates : []).map((entry) => {
-      const parent = conditionalProfileForRaw(entry?.parentProfile);
-      const linked = conditionalProfileForRaw(entry?.referencedProfile ?? entry?.overrideProfile);
-      return cloneConditionalState({
-        catalogConditionalId: entry?.catalogConditionalId,
-        parentKey: parent ? profileKey(parent) : "",
-        overrideKey: linked ? profileKey(linked) : null,
-        terrainMask: entry?.terrainMask,
-        terrainOverrideMask: entry?.terrainOverrideMask,
-        minMovementSpeed: entry?.minMovementSpeed,
-        maxMovementSpeed: entry?.maxMovementSpeed,
-        conditionMask: entry?.conditionMask,
-        conditionValue: entry?.conditionValue,
-      });
-    }).filter((entry) => entry.parentKey);
-  }
-
-  function currentConditionalStates() {
-    return (drafts.conditionalStates === null ? sourceConditionalStates() : drafts.conditionalStates)
-      .map(cloneConditionalState);
-  }
-
-  function conditionalStatesEqual(left, right) {
-    return JSON.stringify(left.map(cloneConditionalState)) === JSON.stringify(right.map(cloneConditionalState));
-  }
-
-  function setConditionalStates(entries) {
-    const normalized = entries.map(cloneConditionalState);
-    drafts.conditionalStates = conditionalStatesEqual(normalized, sourceConditionalStates()) ? null : normalized;
-  }
-
-  function updateConditionalState(parentKey, stateKey, updater) {
-    let updated = null;
-    const next = currentConditionalStates().map((entry) => {
-      if (entry.parentKey !== parentKey || conditionalStateKey(entry) !== stateKey) return entry;
-      updated = cloneConditionalState(updater(cloneConditionalState(entry)));
-      return updated;
-    });
-    if (!updated) return null;
-    const duplicate = next.some((entry) => entry !== updated
-      && entry.parentKey === parentKey
-      && conditionalStateKey(entry) === conditionalStateKey(updated));
-    if (duplicate) return false;
-    setConditionalStates(next);
-    return updated;
-  }
-
-  function conditionalStatesFor(profile) {
-    const parentKey = profileKey(profile);
-    return currentConditionalStates()
-      .filter((entry) => entry.parentKey === parentKey)
-      .map((entry) => ({
-        ...entry,
-        linkedConditionalProfile: entry.overrideKey ? findProfile(entry.overrideKey) : null,
-      }));
-  }
-
-  function conditionalStatesChangedFor(profile) {
-    if (drafts.conditionalStates === null) return false;
-    const parentKey = profileKey(profile);
-    const forParent = (entries) => entries.filter((entry) => entry.parentKey === parentKey).map(cloneConditionalState);
-    return !conditionalStatesEqual(forParent(currentConditionalStates()), forParent(sourceConditionalStates()));
-  }
-
-  function conditionalLifecycleBaseId(entry) {
-    return `${CONDITIONAL_LIFECYCLE_SECTION_PREFIX}${conditionalStateKey(entry).replaceAll(":", "-")}`;
-  }
-
   function findProfile(key = ui.selectedKey) {
     return allProfiles().find((profile) => profileKey(profile) === key) || null;
   }
@@ -1758,6 +2300,29 @@ export function createProfilesController({
       if (sharedDraft) return drafts.overrideNames.get(profileKey(sharedDraft));
     }
     return profile.name ?? profile.symbol ?? "Profile";
+  }
+
+  function classificationFor(profile) {
+    const raw = String(profile?.catalogClassification || "");
+    const value = raw === "archetype" ? "routine" : raw;
+    return PROFILE_CLASSIFICATION_VALUES.has(value) ? value : "";
+  }
+
+  function renderProfileTags(profile, { labels = false } = {}) {
+    if (!isOverrideProfile(profile)) return "";
+    const classification = classificationFor(profile);
+    const tags = [];
+    if (classification) {
+      const label = profileClassificationLabel(classification);
+      tags.push(`<span class="pv2-profile-tag is-classification" data-profile-tag="${escapeHtml(classification)}" role="img" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${profileTagIcon(classification)}${labels ? `<span>${escapeHtml(label)}</span>` : ""}</span>`);
+    }
+    if (profile.catalogKind === "conditional") {
+      tags.push(`<span class="pv2-profile-tag is-conditional" data-profile-tag="conditional" role="img" aria-label="Conditional profile" title="Conditional profile">${profileTagIcon("conditional")}${labels ? "<span>Conditional</span>" : ""}</span>`);
+    }
+    if (profile.catalogSystem) {
+      tags.push(`<span class="pv2-profile-tag is-system" data-profile-tag="system" role="img" aria-label="System profile: ${escapeHtml(profile.catalogSystem)}" title="System profile · ${escapeHtml(profile.catalogSystem)}">${profileTagIcon("system")}${labels ? `<span>System · ${escapeHtml(profile.catalogSystem)}</span>` : ""}</span>`);
+    }
+    return tags.length ? `<span class="pv2-profile-tags" aria-label="Profile tags">${tags.join("")}</span>` : "";
   }
 
   function overrideNameAvailable(name, excludedProfile = null) {
@@ -1797,7 +2362,7 @@ export function createProfilesController({
 
   function storedFieldDraftRaw(raw, fieldKey) {
     const value = String(raw ?? "");
-    if (!["activeProfile", "tiredProfile"].includes(fieldKey) || value.startsWith(APPLICATION_DRAFT_PREFIX)) return value;
+    if (fieldKey !== "tiredProfile" || value.startsWith(APPLICATION_DRAFT_PREFIX)) return value;
     const index = Number(value);
     const catalog = structuralCatalogDraft || sourceCatalog;
     const applicationId = Number.isInteger(index) ? catalog?.applications?.[index]?.id : "";
@@ -1806,7 +2371,7 @@ export function createProfilesController({
 
   function editorFieldDraftRaw(raw, fieldKey) {
     const value = String(raw ?? "");
-    if (!["activeProfile", "tiredProfile"].includes(fieldKey) || !value.startsWith(APPLICATION_DRAFT_PREFIX)) return value;
+    if (fieldKey !== "tiredProfile" || !value.startsWith(APPLICATION_DRAFT_PREFIX)) return value;
     const applicationId = value.slice(APPLICATION_DRAFT_PREFIX.length);
     const catalog = structuralCatalogDraft || sourceCatalog;
     const index = catalog?.applications?.findIndex((application) => application.id === applicationId) ?? -1;
@@ -2060,12 +2625,54 @@ export function createProfilesController({
 
   function potentialAssignmentsFor(profile) {
     if (!isOverrideProfile(profile)) return [];
-    const target = targetFor(profile);
+    return potentialAssignmentsForTarget(targetFor(profile));
+  }
+
+  function potentialAssignmentsForTarget(rawTarget) {
+    const target = cloneTarget({
+      members: rawTarget?.members || [],
+      match: rawTarget?.match,
+      targetMode: rawTarget?.targetMode || rawTarget?.mode || "disabled",
+    });
     if (target.targetMode === "disabled") return [];
     const memberSet = new Set(target.members);
     return data.assignments.filter((assignment) =>
       (target.targetMode === "all" || memberSet.has(assignment.species?.symbol))
       && matchCanTargetAssignment(target.match, assignment));
+  }
+
+  function conditionSubjectTarget(condition) {
+    const subjects = condition?.subjects;
+    if (!subjects) return null;
+    const catalog = structuralCatalogDraft || sourceCatalog;
+    if (subjects.pool) return resolveProfilePoolSelection(subjects, catalog);
+    if (!subjects.application) {
+      return {
+        targetMode: subjects.mode,
+        match: subjects.match,
+        members: subjects.members || [],
+      };
+    }
+    const sourceProfile = overrideProfiles().find((candidate) => (
+      candidate.catalogApplicationId === subjects.application
+    ));
+    if (sourceProfile) return targetFor(sourceProfile);
+    const application = (catalog?.applications || []).find((item) => item.id === subjects.application);
+    return resolveProfilePoolSelection(application?.target, catalog);
+  }
+
+  function conditionalPreviewSpecies(profile, limit = 20) {
+    if (profile?.catalogKind !== "conditional") return [];
+    const bySymbol = new Map();
+    for (const condition of profile.catalogConditions || []) {
+      for (const assignment of potentialAssignmentsForTarget(conditionSubjectTarget(condition))) {
+        const species = assignment.species;
+        if (species?.symbol && species.iconUrl && !bySymbol.has(species.symbol)) {
+          bySymbol.set(species.symbol, species);
+        }
+      }
+    }
+    return [...bySymbol.values()].slice(0, limit);
   }
 
   function matchingContextFor(profile, assignment) {
@@ -2103,7 +2710,6 @@ export function createProfilesController({
       || drafts.memberships.size
       || drafts.overrideNames.size
       || drafts.overrideTargets.size
-      || drafts.conditionalStates !== null
       || drafts.removedOverrides.size
       || drafts.newOverrides.length
       || orderChanged()
@@ -2118,7 +2724,6 @@ export function createProfilesController({
       + drafts.memberships.size
       + drafts.overrideNames.size
       + drafts.overrideTargets.size
-      + (drafts.conditionalStates === null ? 0 : 1)
       + drafts.removedOverrides.size
       + drafts.newOverrides.length
       + (orderChanged() ? 1 : 0);
@@ -2231,7 +2836,7 @@ export function createProfilesController({
         ? { ...option, label: "0 — None" }
         : (valueRaw(option) === "33" ? { ...option, label: "/2 — Old rule" } : option));
     }
-    if (["chillAction", "movementStyle", "specialAction"].includes(fieldKey)
+    if (fieldKey === "chillAction"
         && TELEPORT_LOCOMOTIONS.has(String(currentRaw))) {
       options = options.filter((option) => {
         const raw = valueRaw(option);
@@ -2240,7 +2845,7 @@ export function createProfilesController({
       options.push({ raw: currentRaw, label: "Teleport", value: Number(currentRaw) || 6 });
     }
     const optionRaws = new Set(options.map(valueRaw));
-    (LINKED_CHILL_OPTION_SOURCES[fieldKey] || []).forEach((sourceField) => {
+    (LINKED_PROFILE_OPTION_SOURCES[fieldKey] || []).forEach((sourceField) => {
       (data.editOptions?.[sourceField] || []).forEach((option) => {
         const raw = valueRaw(option);
         if (!raw || optionRaws.has(raw)) return;
@@ -2457,75 +3062,6 @@ export function createProfilesController({
     </span>`;
   }
 
-  function alertRangeBaseRaw(raw) {
-    return String(raw || "").replace(/_CLOSE_RADIUS$/, "");
-  }
-
-  function alertRangeIsClose(raw) {
-    return /_CLOSE_RADIUS$/.test(String(raw || ""));
-  }
-
-  function alertRangeTypeOptions() {
-    const seen = new Map();
-    (data.editOptions?.alertRange || []).forEach((option) => {
-      const baseRaw = alertRangeBaseRaw(valueRaw(option));
-      if (seen.has(baseRaw)) return;
-      const baseOption = (data.editOptions?.alertRange || []).find((candidate) => valueRaw(candidate) === baseRaw) || option;
-      const label = valueLabel(baseOption).replace(/\s*\+\s*close radius$/i, "");
-      seen.set(baseRaw, { ...baseOption, raw: baseRaw, label });
-    });
-    return [...seen.values()];
-  }
-
-  function alertRangeSupportsClose(raw) {
-    const baseRaw = alertRangeBaseRaw(raw);
-    return (data.editOptions?.alertRange || []).some((option) => (
-      alertRangeBaseRaw(valueRaw(option)) === baseRaw && alertRangeIsClose(valueRaw(option))
-    ));
-  }
-
-  function alertRangeRawWithClose(raw, close) {
-    const baseRaw = alertRangeBaseRaw(raw);
-    const options = data.editOptions?.alertRange || [];
-    if (!close) return valueRaw(options.find((option) => valueRaw(option) === baseRaw)) || baseRaw;
-    return valueRaw(options.find((option) => (
-      alertRangeBaseRaw(valueRaw(option)) === baseRaw && alertRangeIsClose(valueRaw(option))
-    ))) || baseRaw;
-  }
-
-  function scopedActionOwns(scope, raw) {
-    return scope === "alert" ? raw === ALERT_SPECIAL.call : raw === ALERT_SPECIAL.throw;
-  }
-
-  function scopedActionIsKnown(raw) {
-    return ["", ALERT_SPECIAL.none, ALERT_SPECIAL.call, ALERT_SPECIAL.throw].includes(String(raw || ""));
-  }
-
-  function scopedActionRaw(scope, raw) {
-    if (!raw) return "";
-    if (!scopedActionIsKnown(raw)) return raw;
-    return scopedActionOwns(scope, raw) ? raw : ALERT_SPECIAL.none;
-  }
-
-  function scopedActionCountRaw(scope, raw) {
-    return raw === ALERT_SPECIAL.none || !scopedActionIsKnown(raw) || scopedActionOwns(scope, raw) ? raw : "";
-  }
-
-  function scopedActionClearRaw(scope, currentRaw, originalRaw) {
-    if (currentRaw === ALERT_SPECIAL.none) return "";
-    if (!scopedActionIsKnown(currentRaw)) return "";
-    if (!scopedActionOwns(scope, currentRaw)) return currentRaw;
-    const otherScope = scope === "alert" ? "active" : "alert";
-    if (scopedActionOwns(otherScope, originalRaw) && !scopedActionOwns(scope, originalRaw)) return originalRaw;
-    return "";
-  }
-
-  function activeActionShowsThrowRange(profile) {
-    const raw = fieldRaw(profile, "alertSpecialAction");
-    const displayRaw = scopedActionRaw("active", raw);
-    return raw === ALERT_SPECIAL.throw || (isOverrideProfile(profile) && !displayRaw);
-  }
-
   function profileSearchText(profile) {
     const assignments = isOverrideProfile(profile) ? potentialAssignmentsFor(profile) : membersFor(profile);
     const members = assignments.flatMap((item) => [
@@ -2539,7 +3075,10 @@ export function createProfilesController({
     const fields = data.fields.flatMap((field) => [field.label, fieldRaw(profile, field.key), valueLabel(profile?.profile?.[field.key])]);
     const rules = (profile.classRules || []).flatMap((rule) => [rule.summary, rule.className]);
     const primitives = Object.values(profile.primitives || {}).flatMap((primitive) => [valueRaw(primitive), valueLabel(primitive)]);
-    return [nameFor(profile), profile.symbol, profile.summary, ...members, ...targetValues, ...fields, ...rules, ...primitives]
+    const tags = isOverrideProfile(profile)
+      ? [profileClassificationLabel(classificationFor(profile)), profile.catalogKind === "conditional" ? "conditional" : ""]
+      : [];
+    return [nameFor(profile), profile.symbol, profile.summary, ...tags, ...members, ...targetValues, ...fields, ...rules, ...primitives]
       .filter(Boolean).join(" ").toLowerCase();
   }
 
@@ -2576,30 +3115,36 @@ export function createProfilesController({
   function renderProfileRow(profile, index, total, override = false) {
     const key = profileKey(profile);
     const selected = key === ui.selectedKey;
+    const classification = override ? classificationFor(profile) : "";
+    const classificationLabel = profileClassificationLabel(classification) || "No classification";
     const removed = drafts.removedOverrides.has(key);
     const changed = profile.draftId
       || fieldDraftMap(profile)?.size
       || drafts.overrideNames.has(key)
       || drafts.overrideTargets.has(key)
-      || conditionalStatesChangedFor(profile)
       || removed;
     const dragEnabled = override && !profile.draftId && !filtered() && !ui.busy;
     const orderControls = override
-      ? `<span class="profile-row-drag-handle" role="button" tabindex="${dragEnabled ? "0" : "-1"}" draggable="${dragEnabled}" data-reorder-handle data-profile-key="${escapeHtml(key)}" aria-label="Reorder ${escapeHtml(nameFor(profile))}" title="${dragEnabled ? "Drag or use keyboard controls" : "Clear filters to reorder"}"><span class="profile-index" aria-hidden="true">${String(index + 1).padStart(2, "0")}</span><span class="pv2-drag-grip" aria-hidden="true">⋮⋮</span></span>`
+      ? `<span class="profile-row-drag-handle" role="button" tabindex="${dragEnabled ? "0" : "-1"}" draggable="${dragEnabled}" data-reorder-handle data-profile-key="${escapeHtml(key)}" aria-label="Reorder ${escapeHtml(nameFor(profile))} within ${escapeHtml(classificationLabel)}" title="${dragEnabled ? `Drag within ${classificationLabel}` : "Clear filters to reorder"}"><span class="profile-index" aria-hidden="true">${String(index + 1).padStart(2, "0")}</span><span class="pv2-drag-grip" aria-hidden="true">⋮⋮</span></span>`
       : "";
-    const previewSpecies = profilePreviewSpecies(profile, override);
+    const previewSpecies = profilePreviewSpecies(profile, override).map((species) => ({ species, conditional: false }));
+    const previewSymbols = new Set(previewSpecies.map((item) => item.species.symbol));
+    conditionalPreviewSpecies(profile, Math.max(0, 20 - previewSpecies.length)).forEach((species) => {
+      if (!previewSymbols.has(species.symbol)) previewSpecies.push({ species, conditional: true });
+    });
     const previewIcons = previewSpecies.length ? `
-      <span class="pv2-profile-icons" aria-label="Open Pokémon records">
-        ${previewSpecies.map((species) => `<button type="button" data-action="open-pokemon" data-species="${escapeHtml(species.symbol)}" aria-label="Open ${escapeHtml(species.name)} in Pokémon Editor"><img src="${escapeHtml(species.iconUrl)}" alt="" width="16" height="16" loading="lazy" decoding="async" draggable="false"></button>`).join("")}
+      <span class="pv2-profile-icons" aria-label="Open Pokémon records${previewSpecies.some((item) => item.conditional) ? ". Faded icons are included by conditions." : ""}">
+        ${previewSpecies.map(({ species, conditional }) => `<button class="${conditional ? "is-conditional-member" : ""}" type="button" data-action="open-pokemon" data-species="${escapeHtml(species.symbol)}" aria-label="Open ${escapeHtml(species.name)} in Pokémon Editor${conditional ? "; included by a condition" : ""}" ${conditional ? "title=\"Included by a profile condition\"" : ""}><img src="${escapeHtml(species.iconUrl)}" alt="" width="16" height="16" loading="lazy" decoding="async" draggable="false"></button>`).join("")}
       </span>` : "";
     return `
-      <li class="profile-row pv2-profile-row${selected ? " is-active is-selected" : ""}${removed ? " is-removed" : ""}${changed ? " is-changed" : ""}${override ? " override-profile" : ""}" data-profile-row data-profile-key="${escapeHtml(key)}">
+      <li class="profile-row pv2-profile-row${selected ? " is-active is-selected" : ""}${removed ? " is-removed" : ""}${changed ? " is-changed" : ""}${override ? " override-profile" : ""}${classification ? " has-classification" : ""}${profile.catalogKind === "conditional" ? " is-conditional-profile" : ""}" data-profile-row data-profile-key="${escapeHtml(key)}"${classification ? ` data-profile-classification="${escapeHtml(classification)}"` : ""}>
         ${orderControls}
         <button class="profile-select pv2-profile-select" type="button" data-action="select-profile" data-profile-key="${escapeHtml(key)}" aria-current="${selected ? "true" : "false"}">
           <span class="pv2-profile-heading">
             <span class="pv2-profile-copy">
               <strong>${escapeHtml(nameFor(profile))}</strong>
             </span>
+            ${renderProfileTags(profile)}
           </span>
         </button>
         ${previewIcons}
@@ -2607,10 +3152,41 @@ export function createProfilesController({
       </li>`;
   }
 
+  function renderOverrideClassificationGroups(profiles) {
+    const groups = [];
+    profiles.forEach((profile, index) => {
+      const classification = classificationFor(profile);
+      const groupKey = classification || "unclassified";
+      let group = groups[groups.length - 1];
+      if (!group || group.key !== groupKey) {
+        group = {
+          key: groupKey,
+          classification,
+          label: profileClassificationLabel(classification) || "No classification",
+          rows: [],
+        };
+        groups.push(group);
+      }
+      group.rows.push({ profile, index });
+    });
+    return groups.map((group, groupIndex) => {
+      const count = group.rows.length;
+      return `
+        <li class="pv2-profile-classification-divider" data-profile-classification="${escapeHtml(group.key)}">
+          <span class="pv2-profile-classification-divider__identity">
+            <span class="pv2-profile-tag is-classification" aria-hidden="true">${profileTagIcon(group.key)}</span>
+            <strong>${escapeHtml(group.label)}</strong>
+          </span>
+          <small><span>Group ${groupIndex + 1}</span><span>${count} ${count === 1 ? "profile" : "profiles"}</span></small>
+        </li>
+        ${group.rows.map(({ profile, index }) => renderProfileRow(profile, index, profiles.length, true)).join("")}`;
+    }).join("");
+  }
+
   function renderList() {
     const bases = visibleProfiles(baseProfiles(), "base");
     const overrides = visibleProfiles(overrideProfiles(), "override");
-    const filterMessage = filtered() ? `<p class="order-help pv2-filter-note">Reordering is paused while the library is filtered.</p>` : `<p class="order-help">Drag the dotted grip; keyboard reordering is also supported. Later matching layers apply last.</p>`;
+    const filterMessage = filtered() ? `<p class="order-help pv2-filter-note">Reordering is paused while the library is filtered.</p>` : `<p class="order-help">Profiles are grouped by type. Drag within a section; later sections and profiles apply last.</p>`;
     listElement.innerHTML = `
       ${ui.kind !== "override" ? `
         <section class="profile-group profile-group--base pv2-library-group" data-profile-group="base" aria-labelledby="pv2-base-heading">
@@ -2621,7 +3197,7 @@ export function createProfilesController({
         <section class="profile-group profile-group--overrides pv2-library-group" data-profile-group="overrides" aria-labelledby="pv2-override-heading">
           <header><span><i aria-hidden="true">O</i><strong id="pv2-override-heading">Ordered overrides</strong></span><small>${overrides.length}</small></header>
           ${filterMessage}
-          <ol class="profile-list override-deck" data-profile-list="overrides">${overrides.map((profile, index) => renderProfileRow(profile, index, overrides.length, true)).join("") || `<li class="empty-state empty-state--small">No override profiles match this filter.</li>`}</ol>
+          <ol class="profile-list override-deck" data-profile-list="overrides">${renderOverrideClassificationGroups(overrides) || `<li class="empty-state empty-state--small">No override profiles match this filter.</li>`}</ol>
         </section>` : ""}
     `;
   }
@@ -2629,6 +3205,7 @@ export function createProfilesController({
   function profileCanEditField(profile, fieldKey) {
     const known = data.fields.some((field) => field.key === fieldKey);
     if (!known) return false;
+    if (profile.catalogKind === "conditional" && ["visionRange", "visionCone", "visionAdjacentAwareness"].includes(fieldKey)) return false;
     return !isOverrideProfile(profile) || new Set(data.overrideFieldKeys || []).has(fieldKey);
   }
 
@@ -2650,12 +3227,6 @@ export function createProfilesController({
         target: "chillTarget",
         tiles: ["chillAllowedTerrainMask"],
       },
-      "active-behavior": {
-        parent: "attentiveState",
-        target: "targetSelector",
-        tiles: ["attentiveAllowedTile", "attentiveAllowedTile2"],
-        chase: ["attentiveChaseBoostDistance", "attentiveChaseBoostSpeed"],
-      },
       "tired-behavior": {
         parent: "tiredState",
         tiles: ["tiredAllowedTile", "tiredAllowedTile2"],
@@ -2672,12 +3243,7 @@ export function createProfilesController({
       const targetRaw = fieldRaw(profile, definition.target);
       const targetInherited = isOverrideProfile(profile) && !targetRaw;
       const targetChildren = [];
-      if (definition.target === "targetSelector") {
-        targetChildren.push(...["attentiveCircleRadius", "attentiveContinueWhenArrived"]
-          .map((field) => explicitInactiveNode(profile, field, targetInherited || targetRaw === CIRCLE_PLAYER_TARGET))
-          .filter(Boolean));
-      }
-      if (["targetSelector", "chillTarget"].includes(definition.target)) {
+      if (definition.target === "chillTarget") {
         const targetCandidates = targetInherited
           ? effectiveFieldCandidates(profile, definition.target)
           : [targetRaw];
@@ -2696,19 +3262,13 @@ export function createProfilesController({
         ? { field: definition.target, inactive: true, children: targetChildren }
         : explicitInactiveNode(profile, definition.target, canTarget, { children: targetChildren });
       if (targetNode) {
-        if (branch === "active-behavior") targetNode.composite = "active-target-tiles";
         nodes.push(targetNode);
       }
     }
     (definition.tiles || []).forEach((field) => {
       const node = explicitInactiveNode(profile, field, usesTiles, {
-        composite: branch === "active-behavior" && definition.target ? "active-target-tiles" : "",
         virtual: field === "chillAllowedTerrainMask" ? "allowed-terrain-policy" : "",
       });
-      if (node) nodes.push(node);
-    });
-    (definition.chase || []).forEach((field) => {
-      const node = explicitInactiveNode(profile, field, canTarget, { composite: "active-chase-boost" });
       if (node) nodes.push(node);
     });
     const onlyInactive = nodes.length && nodes.every((node) => node.inactive);
@@ -2735,12 +3295,9 @@ export function createProfilesController({
     // hiding them makes it impossible to prepare this layer beforehand.
     const inheritedMovementUnknown = inherited && inheritedMovementCandidates.length === 0;
     const inheritedMovementAmbiguous = inherited && inheritedMovementUnknown;
-    const usesMovementSpeed = inherited
-      ? inheritedMovementCandidates.some((candidate) => candidate === LOCOMOTION.wander || candidate === LOCOMOTION.ram || candidate === LOCOMOTION.flutter)
-      : raw === LOCOMOTION.wander || raw === LOCOMOTION.ram || raw === LOCOMOTION.flutter;
-    const usesWalkAcceleration = inherited
-      ? inheritedMovementCandidates.includes(LOCOMOTION.wander)
-      : raw === LOCOMOTION.wander;
+    const walkAvailability = movementWalkControlAvailability(raw, inherited, inheritedMovementCandidates);
+    const usesMovementSpeed = walkAvailability.speed;
+    const usesWalkAcceleration = walkAvailability.walk;
     const usesTeleport = inherited
       ? inheritedMovementCandidates.some((candidate) => TELEPORT_LOCOMOTIONS.has(String(candidate)))
       : TELEPORT_LOCOMOTIONS.has(String(raw));
@@ -2801,6 +3358,20 @@ export function createProfilesController({
         unit: "frames",
       });
     }
+    if (fields.mountGait) {
+      append([fields.mountGait[0]], usesWalkAcceleration, {
+        label: "Mount bounce", unit: "px", note: "Moves mount and rider together each stride. Zero disables bounce.",
+      });
+      append([fields.mountGait[1]], usesWalkAcceleration, {
+        label: "Stride length", note: "Distance per bounce cycle. At high speed, bounce is limited to one cycle per eight updates.",
+      });
+      append([fields.mountGait[2]], usesWalkAcceleration, {
+        label: "Rider settling", unit: "level", note: "Strength of the rider's soft settling motion. Zero keeps the rider rigidly seated.",
+      });
+      append([fields.mountGait[3]], usesWalkAcceleration, {
+        label: "Rider lean", unit: "px", note: "Maximum lean on acceleration and braking. Zero disables lean.",
+      });
+    }
     const movementDirectionField = fields.hopPath.fields[0];
     append([movementDirectionField], inherited || usesWalkAcceleration || HOP_LOCOMOTIONS.has(raw), {
       virtual: "movement-directions",
@@ -2837,13 +3408,11 @@ export function createProfilesController({
         note: "Check the full skid path and the first step after the turn before starting the skid",
       });
     }
-    const throwUsesStandaloneRange = scope === "active"
-      && activeActionShowsThrowRange(profile)
-      && !inherited
-      && !HOP_LOCOMOTIONS.has(raw);
+    if (fields.stopSkid) {
+      append([fields.stopSkid], usesWalkAcceleration);
+    }
     const hopPathFields = fields.hopPath.fields.filter((field) => (
       field !== movementDirectionField
-      && !(throwUsesStandaloneRange && field === "attentiveHopMaxDistance")
     ));
     append(hopPathFields, inherited || HOP_LOCOMOTIONS.has(raw), {
       beforeLabel: "Hop options",
@@ -2874,7 +3443,7 @@ export function createProfilesController({
     return {
       nodes: [...nodes.values()],
       context: showInactiveUnset
-        ? "All Chill movement settings are available for this linked state profile."
+        ? "All movement settings are available for this linked state profile."
         : inherited
         ? "Available while movement style inherits."
         : (raw === LOCOMOTION.none
@@ -2885,30 +3454,13 @@ export function createProfilesController({
   }
 
   function branchChildren(profile, descriptor) {
-    if (["chill-behavior", "active-behavior", "tired-behavior"].includes(descriptor.branch)) {
+    if (["chill-behavior", "tired-behavior"].includes(descriptor.branch)) {
       return behaviorBranch(profile, descriptor.branch);
     }
     const raw = fieldRaw(profile, descriptor.field);
     const inherited = isOverrideProfile(profile) && !raw;
     if (descriptor.branch === "movement") {
       return movementBranch(profile, descriptor.field, descriptor.scope, descriptor.showInactiveUnset);
-    }
-    if (descriptor.branch === "scoped-action") {
-      const showsThrowRange = descriptor.scope === "active" && activeActionShowsThrowRange(profile);
-      const movementRaw = fieldRaw(profile, "movementStyle");
-      const sharedWithHop = HOP_LOCOMOTIONS.has(movementRaw) || (isOverrideProfile(profile) && !movementRaw);
-      return {
-        nodes: showsThrowRange && !sharedWithHop ? [{
-          field: "attentiveHopMaxDistance",
-          label: "Throw range",
-        }] : [],
-        context: showsThrowRange && sharedWithHop
-          ? "Throw range uses the Hop distance maximum below."
-          : (showsThrowRange
-            ? "Maximum aligned throw distance for the active action."
-            : "This action has no additional options."),
-        inherited: isOverrideProfile(profile) && !scopedActionCountRaw(descriptor.scope, raw),
-      };
     }
     if (descriptor.branch === "spawn-state") {
       const usesHopTime = inherited || raw === SPAWN_HOP_FROM_OFF_SCREEN
@@ -2933,20 +3485,6 @@ export function createProfilesController({
         nodes: ["spawnDestinationMinDistance", "spawnDestinationMaxDistance"].map((field) => ({ field })),
         context: "Minimum and maximum distance used by Player tile and Player front destinations.",
         inherited: destinationInherited,
-      };
-    }
-    if (descriptor.branch === "alert-range") {
-      const needsLength = inherited || (!/_NONE$/.test(raw) && !/_TERRAIN_ONLY$/.test(raw));
-      const nodes = [];
-      if (raw && alertRangeSupportsClose(raw)) nodes.push({ field: "alertRange", virtual: "alert-range-close" });
-      const lengthNode = explicitInactiveNode(profile, "alertness", needsLength);
-      if (lengthNode) nodes.push(lengthNode);
-      return {
-        nodes,
-        context: inherited
-          ? "Available while range type inherits."
-          : (needsLength ? "Length used by the selected range shape." : (nodes.length ? "Stored range length is inactive for this shape." : "The selected range shape has no length option.")),
-        inherited,
       };
     }
     return { nodes: [], context: "", inherited };
@@ -3019,6 +3557,9 @@ export function createProfilesController({
   }
 
   function renderFieldControl(profile, fieldKey, presentation = {}) {
+    if (fieldKey === "chainPauseAction") {
+      return renderChainPauseActions(profile, presentation);
+    }
     const raw = fieldRaw(profile, fieldKey);
     const original = originalFieldRaw(profile, fieldKey);
     return renderSelectField(
@@ -3041,11 +3582,6 @@ export function createProfilesController({
   function profileFieldRangeError(profile, range) {
     const minimumRaw = fieldRaw(profile, range.min);
     const maximumRaw = fieldRaw(profile, range.max);
-    const standaloneThrowRange = range.max === "attentiveHopMaxDistance"
-      && activeActionShowsThrowRange(profile)
-      && fieldRaw(profile, "movementStyle")
-      && !HOP_LOCOMOTIONS.has(fieldRaw(profile, "movementStyle"));
-    if (standaloneThrowRange) return "";
     if (isNumericOverrideRaw(minimumRaw) || isNumericOverrideRaw(maximumRaw)) return "";
 
     let pairs = [{ minimumRaw, maximumRaw }];
@@ -3174,7 +3710,7 @@ export function createProfilesController({
     const rangeErrorId = `pv2-range-error-${String(presentation.instance || compositeNode.composite.id).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
     const controls = compositeNode.composite.fields.map((definition) => {
       const node = compositeNode.nodes.find((candidate) => candidate.field === definition.key) || {};
-      const teleportTimeField = ["teleportTime", "attentiveTeleportTime", "tiredTeleportTime"]
+      const teleportTimeField = ["teleportTime", "tiredTeleportTime"]
         .includes(definition.key);
       const teleportSettings = teleportTimeField
         ? teleportLocomotionSettings(effectiveTeleportLocomotionRaw(profile, node.parentField || "chillAction"))
@@ -3237,30 +3773,56 @@ export function createProfilesController({
     const compositeState = override
       ? (changed ? "changed" : (hasOverride ? "override" : "inherited"))
       : (changed ? "changed" : "saved");
-    return `
-      <div class="field-row profile-field pv2-field pv2-composite-field${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${inactive ? " is-inactive" : ""}${rangeError ? " is-invalid" : ""}" data-profile-key="${escapeHtml(profileKey(profile))}" data-field-row="${escapeHtml(compositeNode.composite.id)}" data-field-state="${compositeState}" data-field-depth="${presentation.depth || 0}">
-        <span class="field-copy pv2-field-copy"><strong>${escapeHtml(compositeNode.composite.label)}</strong>${inactive ? `<small class="pv2-field-meta"><span class="pv2-field-note">inactive</span></small>` : ""}</span>
-        <span class="pv2-composite-controls" role="group" aria-label="${escapeHtml(compositeNode.composite.label)}" style="--composite-columns:${controls.length}">
-          ${controls.map((control) => `
-            <div class="pv2-composite-control" data-composite-state="${escapeHtml(control.state)}">
+    const renderControl = (control) => `
+            <div class="pv2-composite-control" data-chain-control="${escapeHtml(control.key)}" data-composite-state="${escapeHtml(control.state)}">
               <span><b>${escapeHtml(control.label)}</b>${control.unit ? `<small>${escapeHtml(control.unit)}</small>` : ""}${control.operatorNote ? `<small class="pv2-field-note">${escapeHtml(control.operatorNote)}</small>` : ""}${control.hasContextBase ? `<small class="field-base base-value pv2-field-base">(${escapeHtml(control.baseLabel)})</small>` : ""}</span>
               <span id="${escapeHtml(control.descriptionId)}" class="sr-only">${escapeHtml(control.description)}</span>
               <span class="pv2-value-control">
-                ${renderProfileValueEditor(
-                  profile,
-                  control.key,
-                  control.options,
-                  control.raw,
-                  control.instance,
-                  `${compositeNode.composite.label}, ${control.label.toLowerCase()}`,
-                  control.descriptionId,
-                  override,
-                  `aria-label="${escapeHtml(`${compositeNode.composite.label}, ${control.label.toLowerCase()}`)}" aria-describedby="${escapeHtml(`${control.descriptionId}${rangeError && control.rangeMember ? ` ${rangeErrorId}` : ""}`)}" aria-invalid="${Boolean(rangeError && control.rangeMember)}"`,
-                )}
+                ${control.key === "chainPauseAction"
+                  ? renderChainPauseActionInputs(profile, control.raw, override)
+                  : renderProfileValueEditor(
+                    profile,
+                    control.key,
+                    control.options,
+                    control.raw,
+                    control.instance,
+                    `${compositeNode.composite.label}, ${control.label.toLowerCase()}`,
+                    control.descriptionId,
+                    override,
+                    `aria-label="${escapeHtml(`${compositeNode.composite.label}, ${control.label.toLowerCase()}`)}" aria-describedby="${escapeHtml(`${control.descriptionId}${rangeError && control.rangeMember ? ` ${rangeErrorId}` : ""}`)}" aria-invalid="${Boolean(rangeError && control.rangeMember)}"`,
+                  )}
               </span>
-            </div>`).join("")}
+            </div>`;
+    const isChain = ["movement-chain", "movement-chain-or-ram"].includes(compositeNode.composite.id);
+    const chainGroups = [
+      { id: "move", label: "Move", note: "Complete these moves before a pause.", fields: ["ramAccelerationSteps", "chainMovementVariance"] },
+      { id: "pause", label: "Pause", note: "One selected action is picked at random. If the chance fails, movement continues.", fields: ["chainPauseAction", "chainPauseActionChance", "ramMaxSpeed", "chainPauseVariance"] },
+      { id: "reposition", label: "Reposition", note: "Settings for Reposition jumps, steps and skids.", groups: [
+        { label: "Movement", fields: ["chainRepositionJumpCount", "chainRepositionSpeed"] },
+        { label: "Directions", fields: ["chainRepositionAllowCardinal", "chainRepositionAllowDiagonal"] },
+        { label: "Skids", fields: ["chainRepositionDistance", "chainRepositionDust"] },
+      ] },
+    ];
+    const renderChainFields = (keys) => keys.map((key) => controls.find((control) => control.key === key)).filter(Boolean).map(renderControl).join("");
+    const chainContent = isChain ? chainGroups.map((group) => {
+      const content = group.groups
+        ? group.groups.map((subgroup) => {
+          const fields = renderChainFields(subgroup.fields);
+          return fields ? `<div class="pv2-chain-subgroup" role="group" aria-label="${subgroup.label}"><strong>${subgroup.label}</strong><div class="pv2-chain-fields">${fields}</div></div>` : "";
+        }).join("")
+        : renderChainFields(group.fields);
+      return content ? `<section class="pv2-chain-group pv2-chain-${group.id}" aria-label="${group.label}">
+        <header><strong>${group.label}</strong><small>${group.note}</small></header>
+        <div class="pv2-chain-fields">${content}</div>
+      </section>` : "";
+    }).join("") : "";
+    return `
+      <div class="field-row profile-field pv2-field pv2-composite-field${isChain ? " pv2-chain-field" : ""}${changed ? " is-changed" : ""}${override && hasOverride ? " is-overridden" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${inactive ? " is-inactive" : ""}${rangeError ? " is-invalid" : ""}" data-profile-key="${escapeHtml(profileKey(profile))}" data-field-row="${escapeHtml(compositeNode.composite.id)}" data-field-state="${compositeState}" data-field-depth="${presentation.depth || 0}">
+        <span class="field-copy pv2-field-copy"><strong>${escapeHtml(compositeNode.composite.label)}</strong>${inactive ? `<small class="pv2-field-meta"><span class="pv2-field-note">inactive</span></small>` : ""}</span>
+        <div class="pv2-composite-controls${isChain ? " pv2-chain-layout" : ""}" role="group" aria-label="${escapeHtml(compositeNode.composite.label)}" style="--composite-columns:${controls.length}">
+          ${isChain ? chainContent : controls.map(renderControl).join("")}
           ${rangeError ? `<small id="${escapeHtml(rangeErrorId)}" class="pv2-range-error">${escapeHtml(rangeError)}</small>` : ""}
-        </span>
+        </div>
       </div>`;
   }
 
@@ -3523,6 +4085,73 @@ export function createProfilesController({
     return valueRaw(option) || String(value);
   }
 
+  function chainPauseActionOptions() {
+    return (data.editOptions?.chainPauseAction || []).filter((option) => {
+      const raw = valueRaw(option);
+      const value = Number(option?.value);
+      return raw.startsWith(CHAIN_PAUSE_ACTION_PREFIX)
+        && Number.isInteger(value)
+        && value >= 1
+        && value <= 7;
+    });
+  }
+
+  function chainPauseActionSelection(profile, raw) {
+    let source = String(raw || "");
+    if (!source && isOverrideProfile(profile)) {
+      source = String(effectiveFieldCandidates(profile, "chainPauseAction")[0] || "");
+    }
+    const decoded = decodeChainPauseActionSelection(source);
+    if (decoded.length) return new Set(decoded);
+    const options = chainPauseActionOptions();
+    const numericSource = fieldNumericValue("chainPauseAction", source);
+    const selected = options.find((option) => valueRaw(option) === source
+      || Number(option?.value) === numericSource);
+    return new Set(selected ? [valueRaw(selected)] : []);
+  }
+
+  function chainPauseActionRaw(selected) {
+    const actions = chainPauseActionOptions()
+      .map((option) => valueRaw(option))
+      .filter((raw) => selected.has(raw));
+    return encodeChainPauseActionSelection(actions);
+  }
+
+  function renderChainPauseActionInputs(profile, raw, override) {
+    const selected = chainPauseActionSelection(profile, raw);
+    const inherited = override && !raw;
+    const profileKeyValue = escapeHtml(profileKey(profile));
+    return `<span class="pv2-direction-options" role="group" aria-label="Movement Chain pause actions">
+      ${chainPauseActionOptions().map((option) => {
+        const actionRaw = valueRaw(option);
+        return `<label class="pv2-direction-option"><input type="checkbox" data-chain-pause-action data-profile-key="${profileKeyValue}" data-field-key="chainPauseAction" data-action-raw="${escapeHtml(actionRaw)}" ${selected.has(actionRaw) ? "checked" : ""}><span>${escapeHtml(valueLabel(option))}</span></label>`;
+      }).join("")}
+      ${override ? `<button type="button" class="pv2-direction-inherit" data-action="inherit-chain-pause-actions" data-profile-key="${profileKeyValue}" ${inherited ? "disabled" : ""}>Inherit</button>` : ""}
+    </span>`;
+  }
+
+  function renderChainPauseActions(profile, presentation) {
+    const fieldKey = "chainPauseAction";
+    const raw = fieldRaw(profile, fieldKey);
+    const original = originalFieldRaw(profile, fieldKey);
+    const selected = chainPauseActionSelection(profile, raw);
+    const override = isOverrideProfile(profile);
+    const inherited = override && !raw;
+    const changed = profile.draftId ? Boolean(raw) : raw !== original;
+    const state = override
+      ? (changed ? "changed" : (inherited ? "inherited" : "override"))
+      : (changed ? "changed" : "saved");
+    const profileKeyValue = escapeHtml(profileKey(profile));
+    const note = selected.size > 1
+      ? `one of ${selected.size} is picked at random`
+      : (selected.size === 1 ? "the selected action runs when the chance passes" : "no action; the chain continues");
+    return `
+      <div class="field-row profile-field pv2-field pv2-direction-field${changed ? " is-changed" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.inactive ? " is-inactive" : ""}" data-profile-key="${profileKeyValue}" data-field-row="${fieldKey}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
+        <span class="field-copy pv2-field-copy"><strong>${escapeHtml(fieldLabelForProfile(profile, fieldKey, presentation))}</strong><small class="pv2-field-meta"><span class="pv2-field-note">${escapeHtml(note)}</span>${presentation.inactive ? `<span class="pv2-field-note">inactive</span>` : ""}</small></span>
+        ${renderChainPauseActionInputs(profile, raw, override)}
+      </div>`;
+  }
+
   function renderMovementDirections(profile, node, presentation) {
     const fieldKey = node.field;
     const raw = fieldRaw(profile, fieldKey);
@@ -3567,16 +4196,20 @@ export function createProfilesController({
     const profileKeyValue = escapeHtml(profileKey(profile));
     const common = `data-walk-option-part data-profile-key="${profileKeyValue}" data-field-key="${fieldKey}"`;
     return `
-      <div class="field-row profile-field pv2-field pv2-composite-field${changed ? " is-changed" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.inactive ? " is-inactive" : ""}" data-profile-key="${profileKeyValue}" data-field-row="${fieldKey}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
+      <div class="field-row profile-field pv2-field pv2-composite-field pv2-walk-options-field${changed ? " is-changed" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.inactive ? " is-inactive" : ""}" data-profile-key="${profileKeyValue}" data-field-row="${fieldKey}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
         <span class="field-copy pv2-field-copy"><strong>Walk options</strong><small class="pv2-field-meta"><span class="pv2-field-note">shared movement policy</span>${presentation.inactive ? `<span class="pv2-field-note">inactive</span>` : ""}</small></span>
-        <span class="pv2-composite-controls" role="group" aria-label="Walk options" style="--composite-columns:5">
+        <div class="pv2-walk-options-groups">
+          <fieldset><legend>Movement rules</legend><div class="pv2-composite-controls">
           <label class="pv2-composite-control"><span><b>Allow turning</b></span><input type="checkbox" ${common} data-walk-option="turning" ${allowTurning ? "checked" : ""}></label>
           <label class="pv2-composite-control"><span><b>Allow acceleration</b></span><input type="checkbox" ${common} data-walk-option="acceleration" ${allowAcceleration ? "checked" : ""}></label>
+          <label class="pv2-composite-control"><span><b>Facing</b></span><select class="field-control" ${common} data-walk-option="facing"><option value="movement" ${!fixedFacing && !playerFacing ? "selected" : ""}>Face movement</option><option value="fixed" ${fixedFacing ? "selected" : ""}>Fixed until pause action</option><option value="player" ${playerFacing ? "selected" : ""}>Face player</option></select></label>
+          </div></fieldset><fieldset><legend>Motion and sound</legend><div class="pv2-composite-controls">
           <label class="pv2-composite-control"><span><b>Horizontal sway</b></span><input class="field-control" type="number" min="0" max="7" step="1" value="${swayWidth}" ${common} data-walk-option="sway" aria-label="Walk horizontal sway in pixels"></label>
           <label class="pv2-composite-control"><span><b>Crash sound</b></span><select class="field-control" ${common} data-walk-option="crash"><option value="0" ${crashSound === 0 ? "selected" : ""}>None</option><option value="1" ${crashSound === 1 ? "selected" : ""}>Wall hit</option></select></label>
-          <label class="pv2-composite-control"><span><b>Facing</b></span><select class="field-control" ${common} data-walk-option="facing"><option value="movement" ${!fixedFacing && !playerFacing ? "selected" : ""}>Face movement</option><option value="fixed" ${fixedFacing ? "selected" : ""}>Fixed until pause action</option><option value="player" ${playerFacing ? "selected" : ""}>Face player</option></select></label>
-          ${override ? `<button type="button" class="pv2-direction-inherit" data-action="inherit-walk-options" data-profile-key="${profileKeyValue}" ${inherited ? "disabled" : ""}>Inherit</button>` : ""}
-        </span>
+
+          </div></fieldset>
+          ${override ? `<button type="button" class="pv2-direction-inherit" data-action="inherit-walk-options" data-profile-key="${profileKeyValue}" ${inherited ? "disabled" : ""}>Inherit Walk options</button>` : ""}
+        </div>
       </div>`;
   }
 
@@ -3635,47 +4268,24 @@ export function createProfilesController({
     if (node.virtual === "spawn-destination-policy") {
       return renderTerrainPolicy(profile, node, presentation, "spawn");
     }
-    if (node.virtual === "alert-range-type") {
-      return renderSelectField(profile, fieldKey, {
-        ...presentation,
-        label: "Range type",
-        compound: node.virtual,
-        baseLabel: (baseRaw) => valueLabel(alertRangeTypeOptions().find((option) => valueRaw(option) === alertRangeBaseRaw(baseRaw)) || alertRangeBaseRaw(baseRaw)),
-      }, alertRangeTypeOptions(), alertRangeBaseRaw(raw), raw, original);
-    }
-    if (node.virtual === "alert-range-close") {
-      return renderSelectField(profile, fieldKey, {
-        ...presentation,
-        label: "Close range",
-        compound: node.virtual,
-        allowInherit: false,
-        baseLabel: (baseRaw) => alertRangeIsClose(baseRaw) ? "Yes" : "No",
-      }, [{ raw: "0", label: "No" }, { raw: "1", label: "Yes" }], alertRangeIsClose(raw) ? "1" : "0", raw, original);
-    }
-    if (node.virtual === "scoped-action") {
-      const scope = node.scope;
-      const scopedRaw = scopedActionCountRaw(scope, raw);
-      const originalScopedRaw = scopedActionCountRaw(scope, original);
-      const displayRaw = scopedActionRaw(scope, raw);
-      const actionRaw = scope === "alert" ? ALERT_SPECIAL.call : ALERT_SPECIAL.throw;
-      const actionOption = (data.editOptions?.alertSpecialAction || []).find((option) => valueRaw(option) === actionRaw) || { raw: actionRaw };
-      const noneOption = (data.editOptions?.alertSpecialAction || []).find((option) => valueRaw(option) === ALERT_SPECIAL.none) || { raw: ALERT_SPECIAL.none, label: "None" };
-      const unknownOption = raw && !scopedActionIsKnown(raw)
-        ? { raw, label: `Unsupported stored action · ${valueLabel(raw)}` }
-        : null;
-      const contextBaseRaw = valueRaw(ui.contextResult?.baseProfile?.alertSpecialAction);
-      return renderSelectField(profile, fieldKey, {
-        ...presentation,
-        label: scope === "alert" ? "Alert action" : "Active action",
-        compound: node.virtual,
-        scope,
-        contextBase: contextBaseRaw,
-        baseLabel: (baseRaw) => !scopedActionIsKnown(baseRaw)
-          ? `Unsupported stored action · ${valueLabel(baseRaw)}`
-          : valueLabel(scopedActionOwns(scope, baseRaw) ? actionOption : noneOption),
-      }, [noneOption, actionOption, unknownOption].filter(Boolean), displayRaw, scopedRaw, originalScopedRaw);
-    }
     return renderFieldControl(profile, fieldKey, presentation);
+  }
+
+  function renderMovementGroups(profile, nodes, scope, sectionId, path, depth = 1) {
+    const sections = movementEditorGroups(nodes, scope);
+    if (!sections.length) return "";
+    return `<div class="pv2-movement-layout">${sections.map((section) => `
+      <section class="pv2-movement-section" data-movement-section="${section.id}" aria-label="${escapeHtml(section.label)}">
+        <header><strong>${escapeHtml(section.label)}</strong>${section.note ? `<small>${escapeHtml(section.note)}</small>` : ""}</header>
+        <div class="pv2-movement-groups">${section.groups.map((group, groupIndex) => {
+          const controls = consolidateSiblingControls(group.nodes.map((node) => ({ ...node, beforeLabel: "" })));
+          const markup = controls.map((node, index) => renderHierarchyNode(profile, node, sectionId, `${path}.${section.id}.${groupIndex}.${index}`, depth)).join("");
+          return `<div class="pv2-movement-group${controls.length === 1 && controls[0].composite ? " is-single-composite" : ""}">
+            ${group.label ? `<div class="pv2-movement-group-heading"><strong>${escapeHtml(group.label)}</strong>${group.note ? `<small>${escapeHtml(group.note)}</small>` : ""}</div>` : ""}
+            <div class="pv2-movement-fields">${markup}</div>
+          </div>`;
+        }).join("")}</div>
+      </section>`).join("")}</div>`;
   }
 
   function renderHierarchyNode(profile, node, sectionId, path, depth = 0, parentInactive = false) {
@@ -3736,7 +4346,9 @@ export function createProfilesController({
     if (!profileCanEditField(profile, node.field)) return "";
     const inactive = Boolean(parentInactive || node.inactive);
     const instance = `${sectionId}:${path}:${node.field}`;
-    const childMarkup = consolidateSiblingControls(node.children || [])
+    const childMarkup = node.movementScope
+      ? renderMovementGroups(profile, node.children || [], node.movementScope, sectionId, path, depth + 1)
+      : consolidateSiblingControls(node.children || [])
       .map((child, index) => renderHierarchyNode(profile, child, sectionId, `${path}.${index}`, depth + 1, inactive))
       .filter(Boolean)
       .join("");
@@ -3774,6 +4386,7 @@ export function createProfilesController({
         context: branch.context,
         virtual: descriptor.virtual,
         scope: descriptor.scope,
+        movementScope: descriptor.branch === "movement" ? descriptor.scope : "",
       },
     };
   }
@@ -3806,7 +4419,9 @@ export function createProfilesController({
   function renderBranchTabBody(profile, descriptor, sectionId, path) {
     const parts = branchParts(profile, descriptor);
     if (!parts) return "";
-    const childMarkup = consolidateSiblingControls(parts.children)
+    const childMarkup = descriptor.branch === "movement"
+      ? renderMovementGroups(profile, parts.children, descriptor.scope, sectionId, path)
+      : consolidateSiblingControls(parts.children)
       .map((child, index) => renderHierarchyNode(profile, child, sectionId, `${path}.${index}`, 1))
       .filter(Boolean)
       .join("");
@@ -3869,6 +4484,9 @@ export function createProfilesController({
   }
 
   function renderSectionContent(profile, section) {
+    if (section.id === "vision" && profile.catalogKind === "conditional") {
+      return `<section class="pv2-system-lock"><span><strong>Uses current Vision</strong><small>Conditional profiles cannot change Vision. Set Vision on a normal profile, or choose Custom Vision inside a vision-based condition.</small></span></section>`;
+    }
     if (!section.nodes) {
       return `<div class="pv2-root-field-grid">${section.fields.map((field, index) => renderFieldControl(profile, field, { instance: `${section.id}:field-${index}:${field}` })).join("")}</div>`;
     }
@@ -3907,25 +4525,28 @@ export function createProfilesController({
       ? `<option value="${escapeHtml(raw)}" selected disabled>Unavailable override profile · #${escapeHtml(Number(raw) + 1)}</option>`
       : "";
     const state = changed ? "changed" : (override ? (raw ? "override" : "inherited") : "saved");
-    const chillSection = FIELD_SECTIONS.find((candidate) => candidate.id === "chill");
-    const stateValueField = fieldKey === "activeProfile" ? "stamina" : "restTime";
-    const stateValueLabel = fieldKey === "activeProfile" ? "Active stamina" : "Tired rest time";
-    const linkedFields = linkedProfile && chillSection
-      ? sectionFields(chillSection, linkedProfile).filter((field) => field !== "stamina" && field !== "restTime")
-      : [];
-    const linkedSection = chillSection ? {
-      ...chillSection,
-      id: `${section.id}-linked-chill`,
-      fields: linkedFields,
-      nodes: chillSection.nodes?.map((descriptor) => {
-        const linkedDescriptor = descriptor.fields ? {
-          ...descriptor,
-          fields: descriptor.fields.filter((field) => field !== "stamina" && field !== "restTime"),
-        } : { ...descriptor };
-        if (descriptor.branch === "movement") linkedDescriptor.showInactiveUnset = true;
-        return linkedDescriptor;
-      }),
-    } : null;
+    const stateValueField = "restTime";
+    const stateValueLabel = "Tired rest time";
+    const linkedSections = linkedProfile ? ["behavior", "movement"].map((sourceSectionId) => {
+      const sourceSection = FIELD_SECTIONS.find((candidate) => candidate.id === sourceSectionId);
+      if (!sourceSection) return null;
+      const fields = sectionFields(sourceSection, linkedProfile);
+      const fieldSet = new Set(fields);
+      return {
+        ...sourceSection,
+        sourceSectionId,
+        id: `${section.id}-linked-${sourceSectionId}`,
+        fields,
+        nodes: sourceSection.nodes?.map((descriptor) => {
+          const linkedDescriptor = descriptor.fields ? {
+            ...descriptor,
+            fields: descriptor.fields.filter((field) => fieldSet.has(field)),
+          } : { ...descriptor };
+          if (descriptor.branch === "movement") linkedDescriptor.showInactiveUnset = true;
+          return linkedDescriptor;
+        }),
+      };
+    }).filter((candidate) => candidate?.fields.length) : [];
     return `<div class="pv2-state-profile-link${changed ? " is-changed" : ""}${missing ? " is-missing" : ""}" data-profile-key="${escapeHtml(profileKey(profile))}" data-field-state="${escapeHtml(state)}">
       <div class="pv2-state-owned-value">
         <p><strong>${escapeHtml(stateValueLabel)}</strong><small>Stored on ${escapeHtml(nameFor(profile))}; this value does not come from the selected override profile.</small></p>
@@ -3937,10 +4558,10 @@ export function createProfilesController({
           ${emptyOption}${missingOption}${selectOptions}
         </select>
       </label>
-      ${linkedProfile && linkedSection ? `<div class="pv2-linked-chill-editor" data-linked-profile-key="${escapeHtml(profileKey(linkedProfile))}">
-        <header><span><strong>${escapeHtml(nameFor(linkedProfile))} · Chill state</strong><small>These are the selected override profile's Chill values. Editing them updates that override everywhere it is referenced.</small></span><em>Linked globally</em></header>
-        ${linkedFields.length ? renderSectionContent(linkedProfile, linkedSection) : `<p class="pv2-linked-state-empty">This override profile has no editable Chill fields.</p>`}
-      </div>` : `<p class="pv2-linked-state-empty">${missing ? "The referenced override profile is unavailable. Choose a replacement before saving." : "Choose an override profile to edit the Chill values used by this state."}</p>`}
+      ${linkedProfile ? `<div class="pv2-linked-profile-editor" data-linked-profile-key="${escapeHtml(profileKey(linkedProfile))}">
+        <header><span><strong>${escapeHtml(nameFor(linkedProfile))} · Profile settings</strong><small>These are the selected override profile's Behavior and Movement Style values. Editing them updates that override everywhere it is referenced.</small></span><em>Linked globally</em></header>
+        ${linkedSections.length ? `<div class="pv2-linked-profile-sections">${linkedSections.map((linkedSection) => `<section class="pv2-linked-profile-section" data-linked-section="${escapeHtml(linkedSection.sourceSectionId)}"><header><strong>${escapeHtml(linkedSection.title)}</strong><small>${escapeHtml(linkedSection.hint)}</small></header><div class="profile-fields pv2-field-hierarchy">${renderSectionContent(linkedProfile, linkedSection)}</div></section>`).join("")}</div>` : `<p class="pv2-linked-state-empty">This override profile has no editable behavior or movement fields.</p>`}
+      </div>` : `<p class="pv2-linked-state-empty">${missing ? "The referenced override profile is unavailable. Choose a replacement before saving." : "Choose an override profile to edit the behavior and movement used by this state."}</p>`}
     </div>`;
   }
 
@@ -3951,19 +4572,10 @@ export function createProfilesController({
   }
 
   function sectionFieldRaw(section, profile, fieldKey) {
-    const raw = fieldRaw(profile, fieldKey);
-    if (fieldKey === "alertSpecialAction" && section?.scopedAction) {
-      return scopedActionCountRaw(section.scopedAction, raw);
-    }
-    return raw;
+    return fieldRaw(profile, fieldKey);
   }
 
   function clearSectionField(section, profile, fieldKey) {
-    if (fieldKey === "alertSpecialAction" && section?.scopedAction) {
-      const raw = scopedActionClearRaw(section.scopedAction, fieldRaw(profile, fieldKey), originalFieldRaw(profile, fieldKey));
-      setField(profile, fieldKey, raw);
-      return;
-    }
     setField(profile, fieldKey, "");
   }
 
@@ -3979,11 +4591,10 @@ export function createProfilesController({
   }
 
   function sectionCountInfo(section, override) {
-    if (section.conditionPanel || section.conditionalStatePanel) {
-      const noun = section.conditionPanel ? "state" : "override";
+    if (section.conditionPanel) {
       return {
         compact: String(section.overrideCount),
-        spoken: `${section.overrideCount} ${noun}${section.overrideCount === 1 ? "" : "s"}`,
+        spoken: `${section.overrideCount} rule${section.overrideCount === 1 ? "" : "s"}`,
       };
     }
     return {
@@ -4013,123 +4624,172 @@ export function createProfilesController({
       </details>`;
   }
 
-  function conditionalTerrainNames(mask) {
-    return allowedTerrainCatalog()
-      .filter((terrain) => mask & Number(terrain.bit))
-      .map((terrain) => terrain.label);
-  }
-
-  function conditionalStateSummary(entry) {
-    const explicit = terrainPolicyMaskNumber(entry.terrainOverrideMask);
-    const accepted = terrainPolicyMaskNumber(entry.terrainMask) & explicit;
-    const excluded = explicit & ~accepted;
-    const acceptedNames = conditionalTerrainNames(accepted);
-    const excludedNames = conditionalTerrainNames(excluded);
-    const terrainParts = [];
-    if (acceptedNames.length) terrainParts.push(acceptedNames.join(" or "));
-    if (excludedNames.length) terrainParts.push(`not ${excludedNames.join(" or ")}`);
-    const minSpeed = conditionalMovementSpeed(entry.minMovementSpeed);
-    const maxSpeed = conditionalMovementSpeed(entry.maxMovementSpeed);
-    const time = !minSpeed && !maxSpeed
-      ? ""
-      : (minSpeed === maxSpeed ? `${minSpeed} frames/tile` : `${minSpeed}–${maxSpeed} frames/tile`);
-    return [...terrainParts, time].filter(Boolean).join(" and ") || "No conditions";
-  }
-
-  function renderConditionalTerrainPolicy(profile, conditionalState) {
-    const valueMask = terrainPolicyMaskNumber(conditionalState.terrainMask);
-    const explicitMask = terrainPolicyMaskNumber(conditionalState.terrainOverrideMask);
-    const stateKey = conditionalStateKey(conditionalState);
-    return `<div class="pv2-conditional-terrain">
-      <span><strong>Tiles</strong><small>Green accepts any selected tile, red excludes it, grey ignores it.</small></span>
-      <span class="pv2-terrain-policy" role="group" aria-label="Conditional terrain policy">
-        ${allowedTerrainCatalog().map((terrain) => {
-          const bit = Number(terrain.bit);
-          const terrainState = terrainPolicyState(valueMask, explicitMask, bit);
-          const nextState = nextTerrainPolicyState(terrainState);
-          return `<button type="button" class="pv2-terrain-toggle is-${terrainState}" data-action="set-conditional-terrain" data-profile-key="${escapeHtml(profileKey(profile))}" data-condition-state-key="${escapeHtml(stateKey)}" data-terrain-label="${escapeHtml(terrain.label)}" data-terrain-bit="${bit}" data-next-terrain-state="${nextState}" aria-label="${escapeHtml(`Condition, ${terrain.label}: ${terrainState}. Click for ${nextState}.`)}" title="${escapeHtml(`${terrain.label} · ${terrainState}`)}">${allowedTerrainIcon(terrain.key)}<span>${escapeHtml(terrain.label)}</span><small class="sr-only">${escapeHtml(terrainState)}</small></button>`;
-        }).join("")}
-      </span>
-    </div>`;
-  }
-
-  function conditionalSpeedMode(entry) {
-    const min = conditionalMovementSpeed(entry.minMovementSpeed);
-    const max = conditionalMovementSpeed(entry.maxMovementSpeed);
-    if (!min && !max) return "any";
-    return min === max ? "exact" : "range";
-  }
-
-  function movementTimeOptions(selected) {
-    return Array.from({ length: CONDITIONAL_MOVEMENT_SPEED_MAX }, (_, index) => index + 1)
-      .map((time) => `<option value="${time}" ${time === selected ? "selected" : ""}>${time} frames</option>`)
-      .join("");
-  }
-
-  function renderConditionalSpeed(profile, conditionalState) {
-    const stateKey = conditionalStateKey(conditionalState);
-    const mode = conditionalSpeedMode(conditionalState);
-    const min = conditionalMovementSpeed(conditionalState.minMovementSpeed) || 1;
-    const max = conditionalMovementSpeed(conditionalState.maxMovementSpeed) || (mode === "range" ? CONDITIONAL_MOVEMENT_SPEED_MAX : min);
-    return `<div class="pv2-conditional-speed">
-      <span><strong>Walk time</strong><small>Match the resolved Chill travel time before this conditional override: any, exact, or an inclusive range.</small></span>
-      <label><span>Match</span><select class="field-control" data-condition-speed-mode data-profile-key="${escapeHtml(profileKey(profile))}" data-condition-state-key="${escapeHtml(stateKey)}"><option value="any" ${mode === "any" ? "selected" : ""}>Any</option><option value="exact" ${mode === "exact" ? "selected" : ""}>Exact</option><option value="range" ${mode === "range" ? "selected" : ""}>Range</option></select></label>
-      ${mode !== "any" ? `<label><span>${mode === "exact" ? "Time" : "Fastest time"}</span><select class="field-control" data-condition-speed-min data-profile-key="${escapeHtml(profileKey(profile))}" data-condition-state-key="${escapeHtml(stateKey)}">${movementTimeOptions(min)}</select></label>` : ""}
-      ${mode === "range" ? `<label><span>Slowest time</span><select class="field-control" data-condition-speed-max data-profile-key="${escapeHtml(profileKey(profile))}" data-condition-state-key="${escapeHtml(stateKey)}">${movementTimeOptions(max)}</select></label>` : ""}
-    </div>`;
-  }
-
   function renderConditionsPanel(profile) {
-    const states = conditionalStatesFor(profile);
-    const configuredStates = states.map((conditionalState) => {
-      const child = conditionalState.linkedConditionalProfile;
-      const stateKey = conditionalStateKey(conditionalState);
-      return `<li class="pv2-conditional-state-card"><header><span><strong>${escapeHtml(conditionalStateSummary(conditionalState))}</strong><small>${escapeHtml(child ? nameFor(child) : "Inherit")}</small></span><button type="button" data-action="remove-conditional-state" data-condition-state-key="${escapeHtml(stateKey)}">Remove state</button></header>${renderConditionalTerrainPolicy(profile, conditionalState)}${renderConditionalSpeed(profile, conditionalState)}</li>`;
+    const conditional = profile.catalogKind === "conditional";
+    const conditions = profile.catalogConditions || [];
+    const catalog = structuralCatalogDraft || sourceCatalog;
+    const profilesById = new Map((catalog?.profiles || []).map((item) => [item.id, item]));
+    const application = (catalog?.applications || []).find((item) => item.id === profile.catalogApplicationId);
+    const systemOwner = profile.catalogSystem || systemOwnershipForApplication(catalog, application?.id);
+    const namedPools = catalog?.pools || [];
+    const matchInputs = (condition, match) => `<div class="pv2-condition-match-grid">
+      ${MATCH_FIELDS.map(([field, label]) => `<label><span>${escapeHtml(label)}</span><input class="field-control" data-condition-field="subjects.match.${field}" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(match?.[field] ?? DEFAULT_MATCH[field]))}" autocomplete="off"></label>`).join("")}
+    </div>`;
+    const pokemonPicker = (condition, pool, members) => {
+      const selected = new Set(members || []);
+      const speciesBySymbol = new Map(speciesEntries().map((species) => [species.symbol, species]));
+      const available = speciesEntries().filter((species) => !selected.has(species.symbol));
+      const chips = [...selected].map((symbol) => {
+        const species = speciesBySymbol.get(symbol) || { symbol, name: humanizeRaw(symbol) };
+        return `<span class="pv2-condition-pokemon-chip">${species.iconUrl ? `<img src="${escapeHtml(species.iconUrl)}" alt="" loading="lazy">` : ""}<span>${escapeHtml(species.name)}</span><button type="button" data-action="remove-condition-member" data-condition-id="${escapeHtml(condition.id)}" data-condition-pool="${escapeHtml(pool)}" data-species="${escapeHtml(symbol)}" aria-label="Remove ${escapeHtml(species.name)}" ${pool === "subjects" && selected.size <= 1 ? "disabled title=\"A rule needs at least one affected Pokémon\"" : ""}>×</button></span>`;
+      }).join("");
+      return `<div class="pv2-condition-pokemon-picker pv2-condition-wide">
+        <div class="pv2-condition-pokemon-chips">${chips || `<small>No specific Pokémon selected.</small>`}</div>
+        <div class="pv2-condition-pokemon-add"><select class="field-control" data-condition-member-choice data-condition-id="${escapeHtml(condition.id)}" data-condition-pool="${escapeHtml(pool)}" aria-label="Pokémon to add">${available.map((species) => `<option value="${escapeHtml(species.symbol)}">${escapeHtml(species.name)}</option>`).join("")}</select><button type="button" data-action="add-condition-member" data-condition-id="${escapeHtml(condition.id)}" data-condition-pool="${escapeHtml(pool)}" ${available.length ? "" : "disabled"}>Add Pokémon</button></div>
+      </div>`;
+    };
+    const renderNamedPoolEditor = (pool) => pool ? `<details class="pv2-named-pool-editor pv2-condition-wide"><summary>Edit ${escapeHtml(pool.name)}</summary><div class="pv2-condition-grid">
+      <label><span>Pool name</span><input class="field-control" data-named-pool-field="name" data-named-pool-id="${escapeHtml(pool.id)}" value="${escapeHtml(pool.name)}"></label>
+      <label><span>Selection</span><select class="field-control" data-named-pool-field="mode" data-named-pool-id="${escapeHtml(pool.id)}"><option value="members" ${pool.mode === "members" ? "selected" : ""}>Listed Pokémon</option><option value="all" ${pool.mode === "all" ? "selected" : ""}>All matching Pokémon</option></select></label>
+      <label class="pv2-condition-wide"><span>Pokémon symbols</span><textarea class="field-control" rows="3" data-named-pool-field="members" data-named-pool-id="${escapeHtml(pool.id)}">${escapeHtml((pool.members || []).join("\n"))}</textarea><small>One symbol per line. Every use of this pool updates together.</small></label>
+      <details class="pv2-condition-subdetails pv2-condition-wide"><summary>Optional Pokémon filters</summary><div class="pv2-condition-match-grid">${MATCH_FIELDS.map(([field, label]) => `<label><span>${escapeHtml(label)}</span><input class="field-control" data-named-pool-field="match.${field}" data-named-pool-id="${escapeHtml(pool.id)}" value="${escapeHtml(String(pool.match?.[field] ?? DEFAULT_MATCH[field]))}" autocomplete="off"></label>`).join("")}</div></details>
+    </div></details>` : "";
+    const renderPoolControl = (selection, owner, conditionId = "") => {
+      const poolId = String(selection?.pool || "");
+      const pool = namedPoolById(catalog, poolId);
+      return `<div class="pv2-pool-control pv2-condition-wide" data-pool-owner="${escapeHtml(owner)}">
+        <label><span>Pokémon pool</span><select class="field-control" data-pool-selection data-pool-owner="${escapeHtml(owner)}" data-condition-id="${escapeHtml(conditionId)}"><option value="" ${poolId ? "" : "selected"}>One-off pool</option>${namedPools.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === poolId ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("")}</select></label>
+        <span class="pv2-new-pool"><input class="field-control" data-new-pool-name data-pool-owner="${escapeHtml(owner)}" data-condition-id="${escapeHtml(conditionId)}" placeholder="New pool name" aria-label="New named pool name"><button type="button" data-action="create-named-pool" data-pool-owner="${escapeHtml(owner)}" data-condition-id="${escapeHtml(conditionId)}">Create pool</button></span>
+        ${renderNamedPoolEditor(pool)}
+      </div>`;
+    };
+    const activationChoice = systemOwner ? `<section class="pv2-system-lock"><span class="pv2-profile-tag is-system" aria-hidden="true">${profileTagIcon("system")}</span><span><strong>System · ${escapeHtml(systemOwner)}</strong><small>The game owns this profile link. It cannot be assigned to Pokémon or changed to a conditional profile.</small></span></section>` : `<fieldset class="pv2-profile-activation-choice">
+      <legend>When does this profile apply?</legend>
+      <label class="${conditional ? "" : "is-selected"}"><input type="radio" name="profile-kind-${escapeHtml(profileKey(profile))}" data-profile-kind value="normal" ${conditional ? "" : "checked"}><span><strong>Always applies</strong><small>Use the profile's Pokémon list whenever this override is reached.</small></span></label>
+      <label class="${conditional ? "is-selected" : ""}"><input type="radio" name="profile-kind-${escapeHtml(profileKey(profile))}" data-profile-kind value="conditional" ${conditional ? "checked" : ""}><span><strong>Only when a rule is active</strong><small>Each rule chooses its own Pokémon, trigger, active time, and target.</small></span></label>
+    </fieldset>`;
+    if (!conditional) {
+      return `<div class="pv2-state-profile-link pv2-condition-profile-link" data-profile-key="${escapeHtml(profileKey(profile))}">
+        ${activationChoice}
+        ${systemOwner ? "" : `<section class="pv2-condition-normal-target"><header><span><strong>Pokémon affected</strong><small>This profile stays active for the Pokémon selected below.</small></span></header>${renderPoolControl(application?.target, "application")}${application?.target?.pool ? "" : renderOverrideTarget(profile)}${renderAffected(profile)}</section>`}
+      </div>`;
+    }
+    const subjectSummary = (condition) => {
+      const subjects = condition.subjects || {};
+      if (subjects.pool) return namedPoolById(catalog, subjects.pool)?.name || "Missing named pool";
+      if (subjects.application) {
+        const application = (catalog?.applications || []).find((item) => item.id === subjects.application);
+        return profilesById.get(application?.profile)?.name || "Another profile's Pokémon";
+      }
+      if (subjects.mode === "all") return "All matching Pokémon";
+      const members = subjects.members || [];
+      if (members.length === 1) return humanizeRaw(members[0]);
+      return members.length ? `${members.length} Pokémon` : "No Pokémon selected";
+    };
+    const triggerSummary = (condition) => {
+      if (condition.when?.kind === "terrain-motion") return "Terrain or movement matches";
+      if (condition.when?.kind === "target-cannot-see-subject") return "Target cannot see this Pokémon";
+      return condition.target?.kind === "actor" ? "Notices another Pokémon" : "Notices the player";
+    };
+    const timingNote = (activation) => {
+      if (activation.mode !== "timed") return "The profile stops as soon as the trigger is no longer true.";
+      const duration = Number(activation.durationFrames || 0);
+      const cooldown = Number(activation.cooldownFrames || 0);
+      if (cooldown < duration) return "A new trigger can restart the active time after the cooldown ends.";
+      if (cooldown === duration) return "The rule can trigger again when its active time ends.";
+      const gap = cooldown - duration;
+      return `After the active time ends, the rule waits ${gap} more frame${gap === 1 ? "" : "s"} before it can trigger again.`;
+    };
+    const frameHelp = (frames) => {
+      const seconds = Number(frames || 0) / 60;
+      return `${seconds.toFixed(seconds < 10 && !Number.isInteger(seconds) ? 1 : 0)} seconds at 60 FPS`;
+    };
+    const displayConditions = conditions.map((condition, sourceIndex) => ({ condition, sourceIndex })).reverse();
+    const ruleSectionPrefix = `condition-rule:${profileKey(profile)}:`;
+    if (displayConditions.length && ![...ui.openSections].some((sectionId) => sectionId.startsWith(ruleSectionPrefix))) {
+      ui.openSections.add(`${ruleSectionPrefix}${displayConditions[0].condition.id}`);
+    }
+    const cards = displayConditions.map(({ condition, sourceIndex }, displayIndex) => {
+      const subjects = condition.subjects || {};
+      const subjectMode = subjects.pool ? "pool" : (subjects.application ? "application" : (subjects.mode || "members"));
+      const when = condition.when || {};
+      const activation = condition.activation || { mode: "while-true" };
+      const target = condition.target || { kind: "none" };
+      const terrain = when.kind === "terrain-motion";
+      const usesVision = visionCondition(condition);
+      const visionMode = conditionVisionMode(condition, catalog?.catalogVersion);
+      const actorTarget = target.kind === "actor";
+      const terrainValueMask = terrainPolicyMaskNumber(when.terrainMask);
+      const terrainExplicitMask = terrainPolicyMaskNumber(when.terrainOverrideMask);
+      const terrainEnabled = terrainExplicitMask !== 0;
+      const speedEnabled = Number(when.minMovementSpeed || 0) !== 0 || Number(when.maxMovementSpeed || 0) !== 0;
+      const sectionId = `${ruleSectionPrefix}${condition.id}`;
+      const filterSectionId = `condition-filters:${profileKey(profile)}:${condition.id}`;
+      const technicalSectionId = `condition-technical:${profileKey(profile)}:${condition.id}`;
+      const expanded = ui.openSections.has(sectionId);
+      return `<li class="pv2-conditional-state-card" data-condition-card="${escapeHtml(condition.id)}"><details data-section-id="${escapeHtml(sectionId)}" ${expanded ? "open" : ""}>
+        <summary><span class="pv2-condition-priority">${displayIndex + 1}</span><span><strong>${escapeHtml(`${subjectSummary(condition)} · ${triggerSummary(condition)}`)}</strong><small>${displayIndex === 0 ? "Highest priority" : `Priority ${displayIndex + 1}`} · ${activation.mode === "timed" ? `Active for ${activation.durationFrames ?? 60} frames` : "Active while true"}</small></span><span class="pv2-condition-expand" aria-hidden="true">⌄</span></summary>
+        <div class="pv2-condition-card-body"><span class="pv2-condition-actions">
+          <button type="button" data-action="raise-condition-priority" data-condition-id="${escapeHtml(condition.id)}" aria-label="Move ${escapeHtml(subjectSummary(condition))} to a higher priority" ${sourceIndex + 1 < conditions.length ? "" : "disabled"}>Higher</button>
+          <button type="button" data-action="lower-condition-priority" data-condition-id="${escapeHtml(condition.id)}" aria-label="Move ${escapeHtml(subjectSummary(condition))} to a lower priority" ${sourceIndex > 0 ? "" : "disabled"}>Lower</button>
+          <button type="button" data-action="duplicate-condition" data-condition-id="${escapeHtml(condition.id)}">Duplicate</button>
+          <button class="is-danger" type="button" data-action="remove-condition" data-condition-id="${escapeHtml(condition.id)}" ${conditions.length > 1 ? "" : "disabled"}>Remove</button>
+        </span>
+        <section class="pv2-condition-group"><header><span><strong>Who can trigger this</strong><small>This rule owns its Pokémon pool.</small></span></header><div class="pv2-condition-grid">
+          ${renderPoolControl(subjects, "subjects", condition.id)}
+          ${subjectMode === "pool" ? "" : `<label><span>One-off selection</span><select class="field-control" data-condition-field="subjects.kind" data-condition-id="${escapeHtml(condition.id)}">
+            <option value="members" ${subjectMode === "members" ? "selected" : ""}>Listed Pokémon</option>
+            <option value="all" ${subjectMode === "all" ? "selected" : ""}>All matching Pokémon</option>
+          </select></label>`}
+          ${subjectMode === "application" ? `<p class="pv2-condition-wide">This imported rule still refers to another profile. Select a named or one-off pool to replace it.</p>` : `
+            ${subjectMode === "members" ? pokemonPicker(condition, "subjects", subjects.members) : ""}
+            ${subjectMode === "pool" ? "" : `<details class="pv2-condition-subdetails pv2-condition-wide" data-section-id="${escapeHtml(filterSectionId)}" ${ui.openSections.has(filterSectionId) ? "open" : ""}><summary>Optional Pokémon filters</summary>${matchInputs(condition, subjects.match)}</details>`}`}
+        </div></section>
+        <section class="pv2-condition-group"><header><span><strong>Trigger</strong><small>What must happen before this profile becomes active.</small></span></header><div class="pv2-condition-grid">
+          <label><span>Starts when</span><select class="field-control" data-condition-field="when.kind" data-condition-id="${escapeHtml(condition.id)}"><option value="notice-target" ${when.kind === "notice-target" ? "selected" : ""}>This Pokémon sees a target</option><option value="target-cannot-see-subject" ${when.kind === "target-cannot-see-subject" ? "selected" : ""}>The target cannot see this Pokémon</option><option value="terrain-motion" ${terrain ? "selected" : ""}>Terrain or movement matches</option></select></label>
+          ${terrain ? `
+            <label class="pv2-condition-toggle pv2-condition-wide"><input type="checkbox" data-condition-toggle="terrain" data-condition-id="${escapeHtml(condition.id)}" ${terrainEnabled ? "checked" : ""}><span><strong>Limit by terrain</strong><small>Choose which terrain types pass or fail this rule.</small></span></label>
+            ${terrainEnabled ? `<div class="pv2-condition-wide"><span class="pv2-terrain-policy" role="group" aria-label="Rule terrain checks">${allowedTerrainCatalog().map((terrainItem) => {
+              const bit = Number(terrainItem.bit);
+              const terrainState = terrainPolicyState(terrainValueMask, terrainExplicitMask, bit);
+              const nextState = nextTerrainPolicyState(terrainState);
+              const stateLabel = terrainState === "inherit" ? "not checked" : (terrainState === "on" ? "passes" : "blocked");
+              const nextLabel = nextState === "inherit" ? "not checked" : (nextState === "on" ? "passes" : "blocked");
+              return `<button type="button" class="pv2-terrain-toggle is-${terrainState}" data-action="set-condition-terrain" data-condition-id="${escapeHtml(condition.id)}" data-terrain-label="${escapeHtml(terrainItem.label)}" data-terrain-bit="${bit}" data-next-terrain-state="${nextState}" aria-label="${escapeHtml(`${terrainItem.label}: ${stateLabel}. Click for ${nextLabel}.`)}" title="${escapeHtml(`${terrainItem.label} · ${stateLabel}`)}">${allowedTerrainIcon(terrainItem.key)}<span>${escapeHtml(terrainItem.label)}</span><small class="sr-only">${escapeHtml(stateLabel)}</small></button>`;
+            }).join("")}</span><p class="pv2-condition-key"><span><i class="is-on"></i>Passes</span><span><i class="is-off"></i>Blocked</span><span><i class="is-inherit"></i>Not checked</span></p></div>` : ""}
+            ${terrainEnabled && speedEnabled ? `<p class="pv2-condition-and pv2-condition-wide">AND</p>` : ""}
+            <label class="pv2-condition-toggle pv2-condition-wide"><input type="checkbox" data-condition-toggle="speed" data-condition-id="${escapeHtml(condition.id)}" ${speedEnabled ? "checked" : ""}><span><strong>Limit by movement speed</strong><small>Use Walk time: fewer frames means faster movement.</small></span></label>
+            ${speedEnabled ? `<label><span>Fastest allowed Walk time</span><input class="field-control" type="number" min="0" max="32" data-condition-field="when.minMovementSpeed" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(when.minMovementSpeed ?? 0))}"></label><label><span>Slowest allowed Walk time</span><input class="field-control" type="number" min="0" max="32" data-condition-field="when.maxMovementSpeed" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(when.maxMovementSpeed ?? 0))}"></label>` : ""}` : `<label><span>Trigger chance</span><input class="field-control" type="number" min="0" max="100" data-condition-field="when.chancePercent" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(when.chancePercent ?? 100))}"><small>percent</small></label>`}
+        </div></section>
+        ${usesVision ? `<section class="pv2-condition-group pv2-condition-vision"><header><span><strong>Vision</strong><small>Use this Pokémon's current Vision or a custom value for this rule.</small></span></header><div class="pv2-condition-grid">
+          <label><span>Vision source</span><select class="field-control" data-condition-field="when.visionMode" data-condition-id="${escapeHtml(condition.id)}"><option value="current" ${visionMode === "current" ? "selected" : ""}>Use current Vision</option><option value="custom" ${visionMode === "custom" ? "selected" : ""}>Use custom Vision</option></select></label>
+          ${visionMode === "custom" ? `<label><span>Range</span><input class="field-control" type="number" min="1" max="32" data-condition-field="${catalog?.catalogVersion === 5 ? "when.vision.range" : "when.rangeLength"}" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(conditionVisionRange(condition, catalog?.catalogVersion) ?? 3))}"><small>tiles</small></label><label><span>Cone</span><input class="field-control" value="90° forward cone" disabled></label><label class="pv2-condition-toggle"><input type="checkbox" data-condition-vision-adjacent data-condition-id="${escapeHtml(condition.id)}" ${conditionVisionHasAdjacentAwareness(condition, catalog?.catalogVersion) ? "checked" : ""}><span><strong>Adjacent awareness</strong><small>Always notice a target on a neighboring tile.</small></span></label>` : `<p class="pv2-condition-wide pv2-condition-timing-note">The rule reads the Vision resolved by the Pokémon's normal profiles.</p>`}
+        </div></section>` : ""}
+        <section class="pv2-condition-group"><header><span><strong>Activation</strong><small>What happens after the trigger starts this rule.</small></span></header><div class="pv2-condition-grid">
+          <label><span>Stay active</span><select class="field-control" data-condition-field="activation.mode" data-condition-id="${escapeHtml(condition.id)}"><option value="while-true" ${activation.mode === "while-true" ? "selected" : ""}>Only while the trigger is true</option><option value="timed" ${activation.mode === "timed" ? "selected" : ""}>For a set time</option></select></label>
+          ${activation.mode === "timed" ? `<label><span>Active for</span><input class="field-control" type="number" min="1" max="65535" data-condition-field="activation.durationFrames" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(activation.durationFrames ?? 60))}"><small>${escapeHtml(frameHelp(activation.durationFrames ?? 60))}</small></label><label><span>Can trigger again after</span><input class="field-control" type="number" min="0" max="65535" data-condition-field="activation.cooldownFrames" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(activation.cooldownFrames ?? 0))}"><small>${escapeHtml(frameHelp(activation.cooldownFrames ?? 0))}</small></label>` : ""}
+          <p class="pv2-condition-timing-note pv2-condition-wide">${escapeHtml(timingNote(activation))}</p>
+        </div></section>
+        <section class="pv2-condition-group"><header><span><strong>Target</strong><small>The one actor captured when this rule triggers.</small></span></header><div class="pv2-condition-grid">
+          ${terrain ? `<p class="pv2-condition-wide">This trigger does not capture a target.</p>` : `<label><span>Capture</span><select class="field-control" data-condition-field="target.kind" data-condition-id="${escapeHtml(condition.id)}"><option value="player" ${target.kind === "player" ? "selected" : ""}>The player</option><option value="actor" ${target.kind === "actor" ? "selected" : ""}>One compatible Pokémon</option></select></label>${actorTarget ? `<fieldset class="pv2-condition-wide"><legend>Compatible actor</legend><label><input type="checkbox" data-condition-role="wild" data-condition-id="${escapeHtml(condition.id)}" ${(target.roles || []).includes("wild") ? "checked" : ""}> Wild Pokémon</label><label><input type="checkbox" data-condition-role="follower" data-condition-id="${escapeHtml(condition.id)}" ${(target.roles || []).includes("follower") ? "checked" : ""}> Follower</label>${renderPoolControl(target.pool ? { pool: target.pool } : null, "target", condition.id)}${target.pool ? "" : `<label><span>Group filter</span><input class="field-control" data-condition-field="target.groupMask" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(target.groupMask ?? "OW_WILD_BEHAVIOR_GROUP_NONE"))}"></label>${pokemonPicker(condition, "target", target.members)}`}</fieldset>` : ""}`}
+        </div></section>
+        <details class="pv2-condition-technical" data-section-id="${escapeHtml(technicalSectionId)}" ${ui.openSections.has(technicalSectionId) ? "open" : ""}><summary>Technical values</summary><label><span>Rule ID</span><input class="field-control" data-condition-field="id" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(condition.id)}" pattern="[a-z][a-z0-9]*(?:-[a-z0-9]+)*"><small>Used by generated data. Lowercase words joined with hyphens.</small></label></details>
+        <p class="pv2-condition-result-note"><strong>Result:</strong> When this rule is active, <strong>${escapeHtml(nameFor(profile))}</strong> applies to ${escapeHtml(subjectSummary(condition).toLowerCase())}${terrain ? "." : ` and uses ${target.kind === "actor" ? "the noticed Pokémon" : "the player"} as its target.`}</p>
+        </div></details></li>`;
     }).join("");
     return `<div class="pv2-state-profile-link pv2-condition-profile-link" data-profile-key="${escapeHtml(profileKey(profile))}">
-      <div class="pv2-state-owned-value">
-        <p><strong>Conditional states</strong><small>Add a state here. Its tab will then let you select an override profile.</small></p>
-        ${configuredStates ? `<ul class="member-list pv2-member-list">${configuredStates}</ul>` : `<p class="pv2-linked-state-empty">No conditional states have been added.</p>`}
-      </div>
-      <div class="pv2-state-profile-picker" data-condition-add-row>
-        <span><strong>Add conditional state</strong><small>Starts with Rooftop and Signpost accepted; adjust any tile or Walk time after adding.</small></span>
-        <button type="button" data-action="add-conditional-state">Add state</button>
-      </div>
-    </div>`;
-  }
-
-  function renderConditionalLinkedProfile(parentProfile, section) {
-    const child = section.linkedConditionalProfile;
-    const references = conditionalProfileCandidates(parentProfile, child);
-    const selectOptions = references.map((candidate) => {
-      const key = profileKey(candidate);
-      const order = ordersFor(candidate)[0];
-      const suffix = Number.isFinite(order) ? ` · #${order}` : " · unsaved";
-      const current = child && key === profileKey(child);
-      return `<option value="${escapeHtml(key)}" ${current ? "selected" : ""}>${escapeHtml(nameFor(candidate))}${escapeHtml(suffix)}</option>`;
-    }).join("");
-    return `<div class="pv2-state-profile-link" data-profile-key="${escapeHtml(profileKey(parentProfile))}">
-      <label class="pv2-state-profile-picker">
-        <span><strong>Override profile</strong><small>Applied whenever ${escapeHtml(nameFor(parentProfile))} matches ${escapeHtml(section.conditionSummary)}.</small></span>
-        <select class="field-control" data-condition-profile-reference data-current-child-key="${escapeHtml(child ? profileKey(child) : "")}" data-condition-state-key="${escapeHtml(section.conditionStateKey)}" data-condition-section-id="${escapeHtml(section.id)}" aria-label="${escapeHtml(`${section.title} override profile`)}">
-          <option value="">Inherit</option>
-          ${selectOptions}
-        </select>
-      </label>
-      ${child ? `<div class="pv2-linked-chill-editor" data-linked-profile-key="${escapeHtml(profileKey(child))}">
-        <header><span><strong>${escapeHtml(nameFor(child))} · Chill state</strong><small>These are the selected override profile's Chill values. Editing them updates that override everywhere it is referenced.</small></span><em>Linked globally</em></header>
-        ${section.fields.length ? renderSectionContent(child, section) : `<p class="pv2-linked-state-empty">This override profile has no editable Chill fields.</p>`}
-      </div>` : `<p class="pv2-linked-state-empty">Choose an override profile to author this conditional Chill state.</p>`}
+      ${activationChoice}
+      <section class="pv2-condition-rules"><header><span><strong>Activation rules</strong><small>Rules are independent. They do not stack. If more than one rule is active, the highest rule wins.</small></span><button type="button" data-action="add-condition">Add rule</button></header>
+        <p class="pv2-condition-priority-note"><strong>Higher rules win.</strong> Use Higher and Lower inside a rule to change its priority.</p>
+        <ol class="pv2-condition-list">${cards}</ol>
+      </section>
     </div>`;
   }
 
   function lifecycleTabSummaryParts(profile, section) {
     if (section.conditionPanel) {
-      const count = conditionalStatesFor(profile).length;
-      return [{ field: "conditionMask", tabId: "", label: count ? `${count} state${count === 1 ? "" : "s"}` : "None", available: false }];
-    }
-    if (section.conditionalStatePanel) {
-      return [{ field: "conditionalState", tabId: "", label: section.linkedConditionalProfile ? nameFor(section.linkedConditionalProfile) : "Inherit", available: false }];
+      const count = profile.catalogKind === "conditional" ? (profile.catalogConditions || []).length : 0;
+      return [{ field: "conditions", tabId: "", label: count ? `${count} rule${count === 1 ? "" : "s"}` : "Always applies", available: false }];
     }
     const descriptors = LIFECYCLE_TAB_SUMMARY_FIELDS[section.id];
     if (!descriptors) return [];
@@ -4156,17 +4816,18 @@ export function createProfilesController({
 
   function renderLifecycleTabs(profile, sections, override) {
     if (!sections.length) return "";
-    const storedSection = state.profileLifecycleSection;
+    const storedSection = lifecycleTabSelections.get(profileKey(profile))
+      || (isOverrideProfile(profile) ? "" : state.profileLifecycleSection);
     const preferred = sections.find((section) => section.id === storedSection)
+      || sections.find((section) => section.id === CONDITIONS_LIFECYCLE_SECTION_ID)
       || sections.find((section) => section.id === "spawn")
       || sections[0];
     const tabs = sections.map((section) => {
       const selected = section.id === preferred.id;
       const count = sectionCountInfo(section, override);
       const label = section.title.replace(/ state$/i, "");
-      const sectionProfile = section.linkedConditionalProfile || profile;
-      const summarySection = section.conditionalStatePanel ? { ...section, id: "chill" } : section;
-      const summaryParts = lifecycleTabSummaryParts(sectionProfile, summarySection);
+      const sectionProfile = profile;
+      const summaryParts = lifecycleTabSummaryParts(sectionProfile, section);
       const summary = summaryParts.map((part) => part.label).join(" / ");
       const summaryNav = summaryParts.length ? `<span class="pv2-lifecycle-summary-nav" role="group" aria-label="${escapeHtml(`${section.title} shortcuts`)}">${summaryParts.map((part, index) => `${index ? `<i aria-hidden="true">/</i>` : ""}${part.available
         ? `<button type="button" tabindex="${selected ? "0" : "-1"}" data-action="select-lifecycle-mode" data-lifecycle-section="${escapeHtml(section.id)}" data-mode-target="${escapeHtml(part.tabId)}" aria-label="${escapeHtml(`Open ${section.title} ${part.tabId === "behavior" ? "Behavior" : "Movement style"} options (${part.label})`)}">${escapeHtml(part.label)}</button>`
@@ -4175,14 +4836,12 @@ export function createProfilesController({
     }).join("");
     const panels = sections.map((section) => {
       const selected = section.id === preferred.id;
-      const sectionProfile = section.linkedConditionalProfile || profile;
+      const sectionProfile = profile;
       const body = section.conditionPanel
         ? renderConditionsPanel(profile)
-        : (section.conditionalStatePanel
-          ? renderConditionalLinkedProfile(profile, section)
-          : (section.stateProfileField ? renderStateProfileReference(profile, section) : renderSectionContent(profile, section)));
+        : (section.stateProfileField ? renderStateProfileReference(profile, section) : renderSectionContent(profile, section));
       return `<section class="pv2-lifecycle-tabpanel" role="tabpanel" id="pv2-lifecycle-panel-${escapeHtml(section.id)}" aria-labelledby="pv2-lifecycle-tab-${escapeHtml(section.id)}" data-section-id="${escapeHtml(section.id)}" ${selected ? "" : "hidden"}>
-        ${selected ? `<p class="pv2-lifecycle-hint">${escapeHtml(section.hint)}</p>${override && !section.conditionPanel && section.linkedConditionalProfile ? renderSectionToolbar(section, sectionProfile) : (!section.conditionalStatePanel && override && !section.conditionPanel ? renderSectionToolbar(section, sectionProfile) : "")}<div class="profile-fields pv2-field-hierarchy">${body}</div>` : ""}
+        ${selected ? `<p class="pv2-lifecycle-hint">${escapeHtml(section.hint)}</p>${override && !section.conditionPanel && !(section.id === "vision" && profile.catalogKind === "conditional") ? renderSectionToolbar(section, sectionProfile) : ""}<div class="profile-fields pv2-field-hierarchy">${body}</div>` : ""}
       </section>`;
     }).join("");
     return `<div class="pv2-lifecycle-workspace"><div class="pv2-lifecycle-tabs" role="tablist" aria-label="Profile lifecycle" style="--lifecycle-tab-count:${sections.length}">${tabs}</div>${panels}</div>`;
@@ -4206,40 +4865,17 @@ export function createProfilesController({
     const lifecycleSections = LIFECYCLE_SECTION_IDS
       .map((id) => visibleSections.find((section) => section.id === id))
       .filter(Boolean);
-    if (normalConditionalProfile(profile)) {
-      const conditionCount = conditionalStatesFor(profile).length;
-      lifecycleSections.unshift({
+    if (override) {
+      const conditionCount = profile.catalogKind === "conditional" ? (profile.catalogConditions || []).length : 0;
+      const conditionSection = {
         id: CONDITIONS_LIFECYCLE_SECTION_ID,
         title: "Conditions",
-        hint: "Add and remove conditional states for this profile.",
+        hint: "Conditions decide when this profile applies. The other tabs decide what it does.",
         fields: [],
         overrideCount: conditionCount,
         conditionPanel: true,
-      });
-    }
-    const chillSection = FIELD_SECTIONS.find((section) => section.id === "chill");
-    if (chillSection) {
-      conditionalStatesFor(profile).forEach((conditionalState) => {
-        const child = conditionalState.linkedConditionalProfile;
-        const fields = child ? sectionFields(chillSection, child) : [];
-        const conditionTitle = conditionalStateSummary(conditionalState);
-        const baseId = conditionalLifecycleBaseId(conditionalState);
-        lifecycleSections.push({
-          ...chillSection,
-          id: baseId,
-          title: conditionTitle,
-          hint: child
-            ? `Conditional Chill state using the separate ${nameFor(child)} override profile.`
-            : "Choose the override profile used by this conditional state.",
-          fields,
-          overrideCount: child ? fields.filter((field) => sectionFieldRaw(chillSection, child, field)).length : 0,
-          sourceSectionId: "chill",
-          linkedConditionalProfile: child,
-          conditionalStatePanel: true,
-          conditionStateKey: conditionalStateKey(conditionalState),
-          conditionSummary: conditionTitle,
-        });
-      });
+      };
+      lifecycleSections.unshift(conditionSection);
     }
     const secondarySections = visibleSections.filter((section) => !LIFECYCLE_SECTION_ID_SET.has(section.id));
     const rendered = [
@@ -4252,8 +4888,7 @@ export function createProfilesController({
   function sectionNavigationTarget(sectionId) {
     if (!sectionId) return null;
     if (LIFECYCLE_SECTION_ID_SET.has(sectionId)
-        || sectionId === CONDITIONS_LIFECYCLE_SECTION_ID
-        || sectionId.startsWith(CONDITIONAL_LIFECYCLE_SECTION_PREFIX)) {
+        || sectionId === CONDITIONS_LIFECYCLE_SECTION_ID) {
       return editorElement.querySelector(`[data-lifecycle-tab="${CSS.escape(sectionId)}"]`);
     }
     return editorElement.querySelector(`details[data-section-id="${CSS.escape(sectionId)}"] > summary`);
@@ -4267,21 +4902,17 @@ export function createProfilesController({
 
   function selectLifecycleTab(sectionId, focus = true) {
     if (!LIFECYCLE_SECTION_ID_SET.has(sectionId)
-        && sectionId !== CONDITIONS_LIFECYCLE_SECTION_ID
-        && !sectionId.startsWith(CONDITIONAL_LIFECYCLE_SECTION_PREFIX)) return;
+        && sectionId !== CONDITIONS_LIFECYCLE_SECTION_ID) return;
     if (!findProfile()) return;
     state.profileLifecycleSection = sectionId;
+    lifecycleTabSelections.set(profileKey(findProfile()), sectionId);
     renderEditor();
     if (focus) focusSectionNavigation(sectionId);
   }
 
   function selectModeTab(sectionId, tabId, focus = true) {
     const profile = findProfile();
-    const section = FIELD_SECTIONS.find((candidate) => candidate.id === sectionId)
-      || (sectionId.endsWith("-linked-chill")
-        || sectionId.startsWith(CONDITIONAL_LIFECYCLE_SECTION_PREFIX)
-        ? FIELD_SECTIONS.find((candidate) => candidate.id === "chill")
-        : null);
+    const section = FIELD_SECTIONS.find((candidate) => candidate.id === sectionId);
     if (!profile || !section?.subtabs?.some((tab) => tab.id === tabId)) return;
     branchTabSelections.set(sectionId, tabId);
     renderEditor();
@@ -4291,15 +4922,12 @@ export function createProfilesController({
   }
 
   function selectLifecycleMode(sectionId, tabId, focus = true) {
-    if (!LIFECYCLE_SECTION_ID_SET.has(sectionId)
-        && !sectionId.startsWith(CONDITIONAL_LIFECYCLE_SECTION_PREFIX)) return;
+    if (!LIFECYCLE_SECTION_ID_SET.has(sectionId)) return;
     const profile = findProfile();
-    const section = FIELD_SECTIONS.find((candidate) => candidate.id === sectionId)
-      || (sectionId.startsWith(CONDITIONAL_LIFECYCLE_SECTION_PREFIX)
-        ? FIELD_SECTIONS.find((candidate) => candidate.id === "chill")
-        : null);
+    const section = FIELD_SECTIONS.find((candidate) => candidate.id === sectionId);
     if (!profile || !section?.subtabs?.some((tab) => tab.id === tabId)) return;
     state.profileLifecycleSection = sectionId;
+    lifecycleTabSelections.set(profileKey(profile), sectionId);
     branchTabSelections.set(sectionId, tabId);
     renderEditor();
     if (focus) {
@@ -4379,16 +5007,13 @@ export function createProfilesController({
     }
     allProfiles().forEach((profile) => {
       if (drafts.removedOverrides.has(profileKey(profile))) return;
-      ["activeProfile", "tiredProfile"].forEach((fieldKey) => {
-        if (!profileCanEditField(profile, fieldKey)) return;
-        const raw = fieldRaw(profile, fieldKey);
-        if (raw && !laneReferenceProfile(raw)) {
-          const reference = raw.startsWith(APPLICATION_DRAFT_PREFIX)
-            ? raw.slice(APPLICATION_DRAFT_PREFIX.length)
-            : `#${Number(raw) + 1}`;
-          errors.push(`${nameFor(profile)} — ${fieldKey === "activeProfile" ? "Active" : "Tired"} override profile ${reference} is unavailable`);
-        }
-      });
+      const raw = fieldRaw(profile, "tiredProfile");
+      if (profileCanEditField(profile, "tiredProfile") && raw && !laneReferenceProfile(raw)) {
+        const reference = raw.startsWith(APPLICATION_DRAFT_PREFIX)
+          ? raw.slice(APPLICATION_DRAFT_PREFIX.length)
+          : `#${Number(raw) + 1}`;
+        errors.push(`${nameFor(profile)} — Tired override profile ${reference} is unavailable`);
+      }
     });
     allProfiles().forEach((profile) => {
       if (!profile.draftId && !fieldDraftMap(profile)?.size) return;
@@ -4432,27 +5057,6 @@ export function createProfilesController({
       const knownSpecies = new Set(speciesEntries().map((species) => species.symbol));
       if (target.members.some((symbol) => !knownSpecies.has(symbol))) errors.push(`${nameFor(profile)} contains an unknown Pokémon member`);
       errors.push(...matchErrors(target.match, target.targetMode !== "all"));
-    });
-    const seenConditionalStates = new Set();
-    currentConditionalStates().forEach((conditionalState) => {
-      const parent = findProfile(conditionalState.parentKey);
-      const linked = conditionalState.overrideKey ? findProfile(conditionalState.overrideKey) : null;
-      const allTerrainBits = terrainPolicyAllMask();
-      const explicit = Number(valueRaw(conditionalState.terrainOverrideMask));
-      const accepted = Number(valueRaw(conditionalState.terrainMask));
-      const minSpeed = conditionalMovementSpeed(conditionalState.minMovementSpeed);
-      const maxSpeed = conditionalMovementSpeed(conditionalState.maxMovementSpeed);
-      const signature = `${conditionalState.parentKey}:${conditionalStateKey(conditionalState)}`;
-      if (!parent || !normalConditionalProfile(parent)) errors.push("A conditional state has an unavailable parent override profile");
-      if (conditionalState.overrideKey && (!linked || !normalConditionalProfile(linked))) errors.push(`${nameFor(parent) || "A conditional state"} has an unavailable override profile`);
-      if (!Number.isInteger(explicit) || explicit < 0 || explicit & ~allTerrainBits
-          || !Number.isInteger(accepted) || accepted < 0 || accepted & ~allTerrainBits || accepted & ~explicit) {
-        errors.push(`${nameFor(parent) || "A conditional state"} has an invalid tile condition`);
-      }
-      if ((!minSpeed && maxSpeed) || (minSpeed && !maxSpeed) || minSpeed > maxSpeed) errors.push(`${nameFor(parent) || "A conditional state"} has an invalid Walk-time range`);
-      if (!explicit && !minSpeed && !maxSpeed) errors.push(`${nameFor(parent) || "A conditional state"} needs at least one tile or Walk-time condition`);
-      if (seenConditionalStates.has(signature)) errors.push(`${nameFor(parent) || "A profile"} has the same conditional state more than once`);
-      seenConditionalStates.add(signature);
     });
     errors.push(...canonicalCatalogStructuralErrors(canonicalDraftFromLegacy(), rawDeckData));
     validationCache = unique(errors);
@@ -4693,6 +5297,12 @@ export function createProfilesController({
     return `<div class="pv2-context-indicator"><span><strong>Resolved context active</strong><small>${escapeHtml(label)}</small></span><button type="button" data-action="open-context-resolver">Review</button></div>`;
   }
 
+  function renderProfileClassificationControl(profile) {
+    if (!isOverrideProfile(profile)) return "";
+    const value = classificationFor(profile);
+    return `<label class="pv2-profile-classification-control"><span>Classification</span><select class="field-control" data-profile-classification aria-label="Profile classification">${PROFILE_CLASSIFICATIONS.map((item) => `<option value="${escapeHtml(item.value)}" ${item.value === value ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}</select><small>Sets its order group</small></label>`;
+  }
+
   function renderEditor() {
     // Any editor rerender discards transient, invalid number text. Valid values
     // have already been copied into the draft by the input handler.
@@ -4723,11 +5333,10 @@ export function createProfilesController({
           <div class="pv2-editor-title-copy"><p class="eyebrow">${override ? "Ordered override" : "Base profile"}</p><h2>${escapeHtml(nameFor(profile))}</h2><p>${escapeHtml(profile.symbol || "New unsaved override")}</p></div>
           ${headerIcons}
         </div>
-        <div class="inspector-actions pv2-editor-actions">${actions}</div>
+        <div class="inspector-actions pv2-editor-actions">${renderProfileClassificationControl(profile)}${override ? `<span class="pv2-profile-activation-summary">${profile.catalogKind === "conditional" ? `${(profile.catalogConditions || []).length} activation rule${(profile.catalogConditions || []).length === 1 ? "" : "s"}` : "Always applies"}</span>` : ""}${actions}</div>
       </header>
       ${renderResolvedContextIndicator()}
       ${removed ? `<div class="removal-note pv2-removal-note"><strong>Marked for removal.</strong><span>This profile remains visible until the transaction commits.</span></div>` : ""}
-      ${override ? `${renderOverrideTarget(profile)}${renderAffected(profile)}` : ""}
       <section class="profile-field-editor pv2-fields" aria-labelledby="pv2-fields-title">
         <header><div><p class="eyebrow pv2-eyebrow">Focused field editor</p><h3 id="pv2-fields-title">${override ? "Overridden values" : "Profile values"}</h3></div><span>${data.fields.length} available fields</span></header>
         ${renderFieldSections(profile)}
@@ -4754,37 +5363,42 @@ export function createProfilesController({
     if (!result) return `<div class="empty-state empty-state--small"><span class="scan-grid" aria-hidden="true"></span><h2>Choose a subject</h2><p>Resolve a Pokémon and terrain to preview exact saved order and field provenance.</p></div>`;
     const layers = result.resolverLayers || [];
     const matchedOverrideIndexes = layers
-      .map((layer, index) => (layer.kind === "override" && layer.matched ? index : -1))
+      .map((layer, index) => (layer.kind === "application" && layer.applied ? index : -1))
       .filter((index) => index >= 0);
     const finalMatchedOverrideIndex = matchedOverrideIndexes.at(-1);
     const indexedLayers = layers.map((layer, index) => ({ layer, index }));
-    const appliedLayers = indexedLayers.filter(({ layer }) => layer.kind === "base" || layer.matched);
-    const skippedLayers = indexedLayers.filter(({ layer }) => layer.kind === "override" && !layer.matched);
-    const renderLayer = ({ layer, index }) => `<li class="resolution-layer ${layer.matched ? "is-matched" : "is-skipped"}${index === finalMatchedOverrideIndex ? " is-applied-last" : ""}"><span>${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(layer.name)}</strong><small>${escapeHtml(layer.summary || layer.kind)}</small></div><em>${index === finalMatchedOverrideIndex ? "applied last" : (layer.matched ? "applied" : "skipped")}</em></li>`;
-    const allFields = unique([...Object.keys(result.baseProfile || {}), ...Object.keys(result.resolvedProfile || {})]);
-    const changed = allFields.filter((field) => valueRaw(result.baseProfile?.[field]) !== valueRaw(result.resolvedProfile?.[field]));
-    const classHits = result.classRuleHits || [];
+    const appliedLayers = indexedLayers.filter(({ layer }) => layer.kind === "selection" || layer.applied);
+    const skippedLayers = indexedLayers.filter(({ layer }) => layer.kind === "application" && !layer.applied);
+    const renderLayer = ({ layer, index }) => `<li class="resolution-layer ${layer.applied ? "is-matched" : "is-skipped"}${index === finalMatchedOverrideIndex ? " is-applied-last" : ""}"><span>${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(layer.name)}</strong><small>${escapeHtml(layer.summary || layer.kind)}</small></div><em>${index === finalMatchedOverrideIndex ? "applied last" : (layer.applied ? "applied" : "skipped")}</em></li>`;
+    const allFields = unique([...Object.keys(result.selectedProfileValues || {}), ...Object.keys(result.resolvedProfile || {})]);
+    const changed = allFields.filter((field) => valueRaw(result.selectedProfileValues?.[field]) !== valueRaw(result.resolvedProfile?.[field]));
+    const classHits = result.selectorHits || [];
     const runtimeLayers = result.runtimeLayers || [];
     const normalizations = result.normalizations || [];
     const primitives = Object.entries(result.resolvedPrimitives || {});
     const runtimeChangeCount = runtimeLayers.reduce((total, layer) => total + (layer.changes || []).length, 0);
+    const evaluation = result.conditionEvaluation;
+    const activeEntries = evaluation?.entries?.filter((entry) => entry.active) || [];
+    const winner = evaluation?.winningCondition;
+    const targetSource = evaluation?.targetSource;
     return `
       <div class="resolution-result">
         <header class="resolution-summary"><div><small>Resolved subject</small><strong>${escapeHtml(result.context?.species?.name || ui.context.species)} · Lv ${escapeHtml(result.context?.level || ui.context.level)}</strong></div><span class="result-chip">${matchedOverrideIndexes.length} matched</span></header>
+        ${evaluation ? `<section><h3>Condition evaluation</h3><div class="pv2-condition-result"><p><strong>${activeEntries.length} active</strong><small>Entries are independent. The last active entry inside one profile wins.</small></p><dl><div><dt>Final winning condition</dt><dd>${escapeHtml(winner ? `${winner.profileId} / ${winner.applicationId} / ${winner.conditionId}` : "None")}</dd></div><div><dt>Target source</dt><dd>${escapeHtml(targetSource ? `${targetSource.profileId} / ${targetSource.applicationId} / ${targetSource.conditionId} · ${targetSource.target?.kind || "none"}${targetSource.target?.candidateId ? `:${targetSource.target.candidateId}` : ""}` : "None")}</dd></div></dl><ol>${(evaluation.entries || []).map((entry) => `<li class="${entry.active ? "is-active" : ""}"><span>${escapeHtml(`${entry.applicationId} · ${entry.conditionId}`)}</span><small>${entry.subjectMatched ? (entry.conditionTrue ? "true" : "false") : "subject skipped"}</small><em>${entry.winsProfile ? "profile winner" : (entry.active ? "active" : "inactive")}</em></li>`).join("") || `<li>No conditional entries.</li>`}</ol></div></section>` : ""}
         <section><h3>Applied layer order</h3><ol class="resolution-layers">${appliedLayers.map(renderLayer).join("")}</ol>
           ${skippedLayers.length ? `<details class="pv2-skipped-layers"><summary>Skipped layers <small>${skippedLayers.length}</small></summary><ol class="resolution-layers">${skippedLayers.map(renderLayer).join("")}</ol></details>` : ""}
         </section>
         <section><h3>Base → effective by field</h3><ul class="resolution-fields">
-          ${changed.map((field) => `<li><strong>${escapeHtml(fieldLabel(field))}</strong><span class="base-value">(${escapeHtml(valueLabel(result.baseProfile?.[field]))})</span><i aria-hidden="true">→</i><b>${escapeHtml(valueLabel(result.resolvedProfile?.[field]))}</b></li>`).join("") || `<li class="pv2-empty">No field changes in this context.</li>`}
+          ${changed.map((field) => `<li><strong>${escapeHtml(fieldLabel(field))}</strong><span class="base-value">(${escapeHtml(valueLabel(result.selectedProfileValues?.[field]))})</span><i aria-hidden="true">→</i><b>${escapeHtml(valueLabel(result.resolvedProfile?.[field]))}</b></li>`).join("") || `<li class="pv2-empty">No field changes in this context.</li>`}
         </ul></section>
         <details class="pv2-diagnostics">
           <summary><span>Runtime diagnostics</span><small>${runtimeChangeCount} field writes · ${classHits.length} class match${classHits.length === 1 ? "" : "es"}</small></summary>
           <div class="pv2-diagnostic-stack">
             <section><h4>Class selection</h4><ul class="pv2-diagnostic-list">
-              ${classHits.map((hit) => `<li><span>#${escapeHtml(hit.order)}</span><strong>${escapeHtml(hit.summary)}</strong><small>${escapeHtml(hit.className)}</small></li>`).join("") || `<li class="pv2-empty">No class rules matched.</li>`}
+              ${classHits.map((hit) => `<li><span>#${escapeHtml(hit.order)}</span><strong>${escapeHtml(hit.id || hit.summary)}</strong><small>${escapeHtml(hit.profileName || hit.className)}</small></li>`).join("") || `<li class="pv2-empty">No class rules matched.</li>`}
             </ul></section>
             <section><h4>Runtime layer writes</h4><ol class="pv2-runtime-layers">
-              ${runtimeLayers.map((layer, index) => `<li><header><span>${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(layer.label)}</strong><small>${(layer.changes || []).length} fields</small></header>${(layer.changes || []).length ? `<ul>${layer.changes.map((change) => `<li><strong>${escapeHtml(change.label || fieldLabel(change.field))}</strong><span class="base-value">(${escapeHtml(valueLabel(change.before))})</span><i aria-hidden="true">→</i><b>${escapeHtml(valueLabel(change.after))}</b></li>`).join("")}</ul>` : `<p>No runtime writes.</p>`}</li>`).join("") || `<li class="pv2-empty">No runtime layers returned.</li>`}
+              ${runtimeLayers.map((layer, index) => `<li><header><span>${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(layer.label || layer.kind)}</strong><small>${(layer.changes || []).length} fields</small></header>${(layer.changes || []).length ? `<ul>${layer.changes.map((change) => `<li><strong>${escapeHtml(change.label || fieldLabel(change.field))}</strong><span class="base-value">(${escapeHtml(valueLabel(change.before))})</span><i aria-hidden="true">→</i><b>${escapeHtml(valueLabel(change.after))}</b></li>`).join("")}</ul>` : `<p>No runtime writes.</p>`}</li>`).join("") || `<li class="pv2-empty">No runtime layers returned.</li>`}
             </ol></section>
             ${normalizations.length ? `<section><h4>Normalizations</h4><ul class="pv2-diagnostic-list">${normalizations.map((item) => `<li><strong>${escapeHtml(item.label || fieldLabel(item.field))}</strong><small>${escapeHtml(item.reason || item.summary || `${valueLabel(item.before)} → ${valueLabel(item.after)}`)}</small></li>`).join("")}</ul></section>` : ""}
             ${primitives.length ? `<section><h4>Resolved engine primitives</h4><dl class="pv2-primitives">${primitives.map(([key, value]) => `<div><dt>${escapeHtml(humanizeRaw(String(key).replace(/([a-z])([A-Z])/g, "$1_$2")))}</dt><dd>${escapeHtml(valueLabel(value))}</dd></div>`).join("")}</dl></section>` : ""}
@@ -4792,7 +5406,7 @@ export function createProfilesController({
         </details>
         <details class="pv2-full-profile">
           <summary><span>Full effective profile</span><small>${allFields.length} fields</small></summary>
-          <dl>${allFields.map((field) => `<div><dt>${escapeHtml(fieldLabel(field))}</dt><dd>${escapeHtml(valueLabel(result.resolvedProfile?.[field]))}<small>(${escapeHtml(valueLabel(result.baseProfile?.[field]))})</small></dd></div>`).join("")}</dl>
+          <dl>${allFields.map((field) => `<div><dt>${escapeHtml(fieldLabel(field))}</dt><dd>${escapeHtml(valueLabel(result.resolvedProfile?.[field]))}<small>(${escapeHtml(valueLabel(result.selectedProfileValues?.[field]))})</small></dd></div>`).join("")}</dl>
         </details>
       </div>`;
   }
@@ -4806,13 +5420,26 @@ export function createProfilesController({
     elements.profileContextTerrain.innerHTML = terrains.map((terrain) => `<option value="${escapeHtml(terrain.symbol)}" ${terrain.symbol === ui.context.terrain ? "selected" : ""}>${escapeHtml(terrain.name)}</option>`).join("");
     elements.profileContextLevel.value = ui.context.level;
     elements.profileContextShiny.checked = ui.context.shiny;
+    const preview = ui.conditionPreview;
+    elements.profileContextFrame.value = preview.frame;
+    elements.profileContextSubjectX.value = preview.subjectX;
+    elements.profileContextSubjectY.value = preview.subjectY;
+    elements.profileContextFacing.value = preview.facing;
+    elements.profileContextTerrainMask.value = preview.terrainMask;
+    elements.profileContextMovementSpeed.value = preview.movementSpeed;
+    elements.profileContextPlayerX.value = preview.playerX;
+    elements.profileContextPlayerY.value = preview.playerY;
+    elements.profileContextPlayerValid.checked = preview.playerValid;
+    elements.profileContextActiveUntil.value = preview.activeUntil;
+    elements.profileContextCooldownUntil.value = preview.cooldownUntil;
+    elements.profileContextCandidates.value = preview.candidates;
     elements.resolveContext.disabled = ui.contextBusy || !ui.context.species || !ui.context.terrain;
   }
 
   function renderContext() {
     renderContextControls();
     contextElement.innerHTML = `
-      <header class="panel-heading"><span><small>Context scan</small><strong>Resolution</strong></span><span class="result-chip">${ui.contextResult ? "Saved source" : "Not run"}</span></header>
+      <header class="panel-heading"><span><small>Context scan</small><strong>Resolution</strong></span><span class="result-chip">${ui.contextResult ? "Shared engine" : "Not run"}</span></header>
       ${renderContextResult()}`;
   }
 
@@ -4876,10 +5503,14 @@ export function createProfilesController({
       status("Clear search and kind filters before reordering overrides.", "warning");
       return;
     }
-    const ordered = orderedSavedOverrides();
+    const ordered = sortOverrideViewsByClassification(orderedSavedOverrides());
     const index = ordered.findIndex((profile) => profileKey(profile) === key);
     const target = index + delta;
     if (index < 0 || target < 0 || target >= ordered.length) return;
+    if (classificationFor(ordered[index]) !== classificationFor(ordered[target])) {
+      announce(`${nameFor(ordered[index])} stays inside its ${profileClassificationLabel(classificationFor(ordered[index])) || "unclassified"} group.`);
+      return;
+    }
     const [moved] = ordered.splice(index, 1);
     ordered.splice(target, 0, moved);
     drafts.overrideOrder = ordered.map(profileKey);
@@ -4890,10 +5521,14 @@ export function createProfilesController({
 
   function moveOverrideTo(sourceKey, targetKey, after) {
     if (filtered() || sourceKey === targetKey) return;
-    const ordered = orderedSavedOverrides();
+    const ordered = sortOverrideViewsByClassification(orderedSavedOverrides());
     const sourceIndex = ordered.findIndex((profile) => profileKey(profile) === sourceKey);
     const targetIndex = ordered.findIndex((profile) => profileKey(profile) === targetKey);
     if (sourceIndex < 0 || targetIndex < 0) return;
+    if (classificationFor(ordered[sourceIndex]) !== classificationFor(ordered[targetIndex])) {
+      announce(`${nameFor(ordered[sourceIndex])} can only move inside its classification group.`);
+      return;
+    }
     const [moved] = ordered.splice(sourceIndex, 1);
     let insertion = ordered.findIndex((profile) => profileKey(profile) === targetKey);
     if (after) insertion += 1;
@@ -4966,7 +5601,7 @@ export function createProfilesController({
     if (ui.busy) return;
     const next = canonicalDraftFromLegacy();
     if (!next) {
-      status("Profile changes need a V2 profile catalog.", "error");
+      status("Profile changes need a V4 profile catalog.", "error");
       return;
     }
     const profilesById = new Map(next.profiles.map((profile) => [profile.id, profile]));
@@ -4991,6 +5626,7 @@ export function createProfilesController({
         id,
         name: String(payload.name || "New profile").trim(),
         parent: source?.parent || next.rootProfile,
+        kind: "normal",
         fields: cloneDraftJson(source?.fields || {}),
       });
       next.runtimeBindings.classOrder.push({ profile: id, symbol: uniqueClassSymbol(payload.name) });
@@ -5002,7 +5638,7 @@ export function createProfilesController({
       selectedProfileId = id;
     } else if (payload.action === "rename" && current) {
       current.name = String(payload.name || current.name).trim();
-    } else if (payload.action === "delete" && current && current.id !== next.rootProfile && current.id !== next.runtimeBindings.pickedUpProfile) {
+    } else if (payload.action === "delete" && current && current.id !== next.rootProfile) {
       const fallbackProfileId = current.parent || next.rootProfile;
       const fallbackSymbol = next.runtimeBindings.classOrder.find((binding) => binding.profile === fallbackProfileId)?.symbol
         || next.runtimeBindings.classOrder.find((binding) => binding.profile === next.rootProfile)?.symbol
@@ -5075,19 +5711,31 @@ export function createProfilesController({
 
   function createOverrideDialog(source = null) {
     const suggestedName = uniqueOverrideName(source ? `${nameFor(source)} copy` : "New override profile");
+    const sourceClassification = source?.catalogClassification || "";
     openDialog({
       title: source ? `Duplicate ${nameFor(source)}` : "Create override profile",
       submitLabel: source ? "Duplicate override" : "Create draft",
-      fields: `<label><span>Name</span><input name="name" required maxlength="80" value="${escapeHtml(suggestedName)}" autocomplete="off"></label>`,
+      fields: `
+        <label><span>Name</span><input name="name" required maxlength="80" value="${escapeHtml(suggestedName)}" autocomplete="off"></label>
+        <label><span>Classification tag</span><select name="classification">${PROFILE_CLASSIFICATIONS.map((item) => `<option value="${escapeHtml(item.value)}" ${item.value === sourceClassification ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}</select><small>Sets the order group. Conditional rules are separate.</small></label>`,
       onSubmit: (form) => {
-        const name = String(new FormData(form).get("name") || "").trim();
+        const formData = new FormData(form);
+        const name = String(formData.get("name") || "").trim();
+        const classification = String(formData.get("classification") || "");
         if (!overrideNameAvailable(name)) {
           status(`An override named ${name} already exists. Names identify layers and must be unique.`, "error");
+          return;
+        }
+        if (classification && !PROFILE_CLASSIFICATION_VALUES.has(classification)) {
+          status("That classification tag is not supported.", "error");
           return;
         }
         const draft = {
           draftId: createDraftId(),
           name,
+          catalogKind: source?.catalogKind === "conditional" ? "conditional" : "normal",
+          catalogClassification: classification,
+          conditions: cloneDraftJson(source?.catalogConditions || []),
           fields: source ? Object.fromEntries(data.fields.map((field) => [
             field.key,
             storedFieldDraftRaw(fieldRaw(source, field.key), field.key),
@@ -5117,10 +5765,13 @@ export function createProfilesController({
       const raw = fieldRaw(profile, field.key);
       if (allowed.has(field.key) && raw) fields[field.key] = storedFieldDraftRaw(raw, field.key);
     });
-    const draft = {
-      draftId: createDraftId(),
-      name,
-      fields,
+        const draft = {
+          draftId: createDraftId(),
+          name,
+          catalogKind: "normal",
+          catalogClassification: "",
+          conditions: [],
+          fields,
       target: {
         members: members.map((assignment) => assignment.species.symbol),
         match: { ...DEFAULT_MATCH },
@@ -5214,27 +5865,71 @@ export function createProfilesController({
   }
 
   async function resolveContext() {
-    if (!ui.context.species || !ui.context.terrain || ui.contextBusy) return;
+    if (!ui.context.species || !ui.context.terrain) return;
     contextAbortController?.abort();
-    contextAbortController = new AbortController();
+    const requestController = new AbortController();
+    contextAbortController = requestController;
     ui.contextBusy = true;
     ui.contextError = "";
     renderContext();
     try {
-      const query = new URLSearchParams({
-        species: ui.context.species,
-        terrain: ui.context.terrain,
-        level: ui.context.level,
-        shiny: ui.context.shiny ? "1" : "0",
-      });
-      ui.contextResult = typeof api.resolve === "function"
-        ? await api.resolve(Object.fromEntries(query), { signal: contextAbortController.signal })
-        : await apiGet(`/api/v2/resolve?${query}`, { cache: "no-store", signal: contextAbortController.signal });
+      const catalog = canonicalDraftFromLegacy();
+      if (!catalog) throw new TypeError("Condition preview needs a V4 profile catalog.");
+      const preview = ui.conditionPreview;
+      const candidates = String(preview.candidates || "").split("\n").map((line, index) => {
+        const parts = line.split(",").map((part) => part.trim());
+        if (parts.length === 1 && !parts[0]) return null;
+        if (parts.length < 5 || !["wild", "follower"].includes(parts[2])) {
+          throw new TypeError(`Candidate line ${index + 1} must be: ID, species, wild or follower, X, Y.`);
+        }
+        return { id: parts[0], species: parts[1], role: parts[2], x: Number(parts[3]), y: Number(parts[4]), valid: true };
+      }).filter(Boolean);
+      const frame = Number(preview.frame);
+      const activeUntil = Number(preview.activeUntil);
+      const cooldownUntil = Number(preview.cooldownUntil);
+      const seedState = catalog.profiles.flatMap((owner) => (owner.conditions || []).map((condition) => ({
+        profileId: owner.id,
+        conditionId: condition.id,
+        active: activeUntil > frame,
+        hasTriggered: activeUntil > 0 || cooldownUntil > 0,
+        activeUntil,
+        cooldownUntil,
+        target: { kind: "none" },
+      })));
+      const payload = {
+        profileCatalog: { catalog },
+        subject: {
+          species: ui.context.species,
+          terrain: ui.context.terrain,
+          level: Number(ui.context.level),
+          shiny: ui.context.shiny,
+          behaviorClass: "auto",
+        },
+        observation: {
+          frame,
+          x: Number(preview.subjectX),
+          y: Number(preview.subjectY),
+          facing: Number(preview.facing),
+          terrainMask: Number(preview.terrainMask),
+          movementSpeed: Number(preview.movementSpeed),
+          player: { valid: preview.playerValid, x: Number(preview.playerX), y: Number(preview.playerY) },
+        },
+        candidates,
+        conditionState: preview.nextState.length ? preview.nextState : seedState,
+        chanceSeed: frame,
+      };
+      ui.contextResult = typeof api.resolveConditions === "function"
+        ? await api.resolveConditions(payload, { signal: requestController.signal })
+        : await apiPost("/api/v2/resolve", payload, { cache: "no-store", signal: requestController.signal });
+      if (contextAbortController !== requestController) return;
+      ui.conditionPreview.nextState = cloneDraftJson(ui.contextResult.conditionEvaluation?.nextState || []);
+      state.profileConditionPreview = cloneDraftJson(ui.conditionPreview);
       ui.contextError = "";
       renderEditor();
     } catch (error) {
-      if (error.name !== "AbortError") ui.contextError = `Could not resolve this context: ${error.message}`;
+      if (contextAbortController === requestController && error.name !== "AbortError") ui.contextError = `Could not resolve this context: ${error.message}`;
     } finally {
+      if (contextAbortController !== requestController) return;
       ui.contextBusy = false;
       contextAbortController = null;
       renderContext();
@@ -5268,70 +5963,83 @@ export function createProfilesController({
     else if (action === "select-lifecycle-tab") selectLifecycleTab(target.dataset.lifecycleTab);
     else if (action === "select-lifecycle-mode") selectLifecycleMode(target.dataset.lifecycleSection, target.dataset.modeTarget);
     else if (action === "select-mode-tab") selectModeTab(target.dataset.modeTabSection, target.dataset.modeTab);
-    else if (action === "add-conditional-state" && profile) {
-      const conditionalState = cloneConditionalState({
-        parentKey: profileKey(profile),
-        overrideKey: null,
-        terrainMask: CONDITIONAL_DEFAULT_TERRAIN_BITS,
-        terrainOverrideMask: CONDITIONAL_DEFAULT_TERRAIN_BITS,
-        minMovementSpeed: 0,
-        maxMovementSpeed: 0,
-      });
-      const duplicate = conditionalStatesFor(profile).some((candidate) => (
-        conditionalStateKey(candidate) === conditionalStateKey(conditionalState)
-      ));
-      if (duplicate) {
-        status("The default Rooftop / Signpost condition already exists. Adjust it before adding another.", "warning");
-        return;
+    else if (action === "create-named-pool" && profile) {
+      try {
+        const owner = target.dataset.poolOwner;
+        const conditionId = target.dataset.conditionId || "";
+        const nameInput = target.closest(".pv2-pool-control")?.querySelector("[data-new-pool-name]");
+        const name = String(nameInput?.value || "").trim();
+        if (!name) throw new TypeError("Enter a name for the new pool.");
+        mutatePoolOwner(profile, owner, conditionId, (next, selection) => {
+          const source = resolveProfilePoolSelection(selection, next) || inlinePool(selection);
+          const created = createProfileNamedPool(next, name, source);
+          next.pools = created.catalog.pools;
+          return { pool: created.poolId };
+        });
+        renderAll(); signalDirty();
+        announce(`${name} was created and selected.`);
+      } catch (error) {
+        status(error.message, "warning");
+        renderEditor();
       }
-      setConditionalStates([
-        ...currentConditionalStates(),
-        conditionalState,
-      ]);
-      state.profileLifecycleSection = conditionalLifecycleBaseId(conditionalState);
-      renderEditor(); renderList(); signalDirty();
-      focusSectionNavigation(state.profileLifecycleSection);
-      announce("Rooftop or Signpost state added. Adjust its tile or Walk-time conditions, then choose its override profile.");
     }
-    else if (action === "remove-conditional-state" && profile) {
-      const stateKey = target.dataset.conditionStateKey || "";
-      setConditionalStates(currentConditionalStates().filter((entry) => !(
-        entry.parentKey === profileKey(profile)
-        && conditionalStateKey(entry) === stateKey
-      )));
-      state.profileLifecycleSection = CONDITIONS_LIFECYCLE_SECTION_ID;
-      renderEditor(); renderList(); signalDirty();
-      focusSectionNavigation(CONDITIONS_LIFECYCLE_SECTION_ID);
-      announce("Conditional state removed.");
+    else if (["add-condition-member", "remove-condition-member"].includes(action) && profile) {
+      try {
+        const conditionId = target.dataset.conditionId;
+        const pool = target.dataset.conditionPool;
+        const choice = target.closest("[data-condition-card]")?.querySelector(`[data-condition-member-choice][data-condition-pool="${CSS.escape(pool)}"]`);
+        const species = action === "add-condition-member" ? choice?.value : target.dataset.species;
+        if (!species || !["subjects", "target"].includes(pool)) return;
+        mutateCanonicalCondition(profile, conditionId, (condition) => {
+          const owner = pool === "subjects" ? condition.subjects : condition.target;
+          const members = new Set(owner.members || []);
+          if (action === "add-condition-member") members.add(species);
+          else members.delete(species);
+          if (pool === "subjects" && !members.size) throw new TypeError("A rule needs at least one affected Pokémon.");
+          owner.members = [...members];
+        });
+        renderAll(); signalDirty();
+        editorElement.querySelector(`[data-condition-member-choice][data-condition-id="${CSS.escape(conditionId)}"][data-condition-pool="${CSS.escape(pool)}"]`)?.focus({ preventScroll: true });
+        announce(action === "add-condition-member" ? "Pokémon added to the rule." : "Pokémon removed from the rule.");
+      } catch (error) {
+        status(error.message, "warning");
+        renderEditor();
+      }
     }
-    else if (action === "set-conditional-terrain" && profile) {
-      const stateKey = target.dataset.conditionStateKey || "";
-      const bit = Number(target.dataset.terrainBit);
-      const terrainState = target.dataset.nextTerrainState;
-      if (!Number.isInteger(bit) || bit <= 0 || !["inherit", "off", "on"].includes(terrainState)) return;
-      const updated = updateConditionalState(profileKey(profile), stateKey, (entry) => {
-        let valueMask = terrainPolicyMaskNumber(entry.terrainMask);
-        let explicitMask = terrainPolicyMaskNumber(entry.terrainOverrideMask);
-        if (terrainState === "inherit") {
-          explicitMask &= ~bit;
-          valueMask &= ~bit;
-        } else {
-          explicitMask |= bit;
-          if (terrainState === "on") valueMask |= bit;
-          else valueMask &= ~bit;
+    else if (["add-condition", "duplicate-condition", "remove-condition", "raise-condition-priority", "lower-condition-priority"].includes(action) && profile) {
+      try {
+        const current = canonicalDraftFromLegacy();
+        const application = canonicalApplicationForView(current, profile);
+        if (!application) throw new TypeError("The selected override profile is unavailable.");
+        const ownerBefore = current.profiles.find((item) => item.id === application.profile);
+        const idsBefore = new Set((ownerBefore?.conditions || []).map((condition) => condition.id));
+        let next = current;
+        if (action === "add-condition") next = addConditionalProfileCondition(current, application.id);
+        if (action === "duplicate-condition") next = addConditionalProfileCondition(current, application.id, target.dataset.conditionId);
+        if (action === "remove-condition") next = removeConditionalProfileCondition(current, application.id, target.dataset.conditionId);
+        if (action === "raise-condition-priority") next = moveConditionalProfileCondition(current, application.id, target.dataset.conditionId, 1);
+        if (action === "lower-condition-priority") next = moveConditionalProfileCondition(current, application.id, target.dataset.conditionId, -1);
+        const ownerAfter = next.profiles.find((item) => item.id === application.profile);
+        const added = (ownerAfter?.conditions || []).find((condition) => !idsBefore.has(condition.id));
+        if (added) ui.openSections.add(`condition-rule:${profileKey(profile)}:${added.id}`);
+        if (action === "remove-condition") {
+          for (const sectionId of [...ui.openSections]) {
+            if (sectionId.includes(`:${profileKey(profile)}:${target.dataset.conditionId}`)) ui.openSections.delete(sectionId);
+          }
+          const draftPrefix = `${profileKey(profile)}:${target.dataset.conditionId}:`;
+          for (const key of [...conditionBranchDrafts.keys()]) {
+            if (key.startsWith(draftPrefix)) conditionBranchDrafts.delete(key);
+          }
         }
-        return { ...entry, terrainMask: String(valueMask), terrainOverrideMask: String(explicitMask) };
-      });
-      if (updated === false) {
-        status("That change would duplicate another conditional state.", "warning");
-        return;
+        adoptStructuralCatalog(next);
+        ui.selectedKey = `application:${application.id}`;
+        state.profileLifecycleSection = CONDITIONS_LIFECYCLE_SECTION_ID;
+        lifecycleTabSelections.set(ui.selectedKey, CONDITIONS_LIFECYCLE_SECTION_ID);
+        renderAll(); signalDirty();
+        announce(action === "remove-condition" ? "Rule removed." : (added ? "Rule added." : "Rule priority updated."));
+      } catch (error) {
+        status(error.message, "warning");
       }
-      if (!updated) return;
-      state.profileLifecycleSection = CONDITIONS_LIFECYCLE_SECTION_ID;
-      renderEditor(); renderList(); signalDirty();
-      const selector = `[data-action="set-conditional-terrain"][data-condition-state-key="${CSS.escape(conditionalStateKey(updated))}"][data-terrain-bit="${bit}"]`;
-      editorElement.querySelector(selector)?.focus({ preventScroll: true });
-      announce(`${target.dataset.terrainLabel || "Terrain"} will be ${terrainState} for this condition after saving.`);
     }
     else if (action === "inherit-player-adjacent-directions" && profile) {
       setField(profile, "playerAdjacentDirectionMasks", "");
@@ -5343,6 +6051,11 @@ export function createProfilesController({
       setField(profile, fieldKey, "");
       renderEditor(); renderList(); signalDirty();
       announce("Allowed movement directions will inherit after saving.");
+    }
+    else if (action === "inherit-chain-pause-actions" && profile) {
+      setField(profile, "chainPauseAction", "");
+      renderEditor(); renderList(); signalDirty();
+      announce("Movement Chain pause actions will inherit after saving.");
     }
     else if (action === "inherit-walk-options" && profile) {
       setField(profile, "walkOptions", "");
@@ -5362,6 +6075,17 @@ export function createProfilesController({
       const selector = `[data-action="set-terrain-policy"][data-profile-key="${CSS.escape(profileKey(profile))}"][data-terrain-policy="${CSS.escape(policyId)}"][data-terrain-bit="${bit}"]`;
       editorElement.querySelector(selector)?.focus({ preventScroll: true });
       announce(`${target.dataset.terrainLabel || "Terrain"} in ${TERRAIN_POLICY_CONFIGS[policyId].label.toLowerCase()} will be ${terrainState} after saving.`);
+    }
+    else if (action === "set-condition-terrain" && profile) {
+      const bit = Number(target.dataset.terrainBit);
+      const terrainState = target.dataset.nextTerrainState;
+      const conditionId = target.dataset.conditionId;
+      if (!Number.isInteger(bit) || bit <= 0 || !["inherit", "off", "on"].includes(terrainState)) return;
+      setConditionTerrainPolicyState(profile, conditionId, bit, terrainState);
+      renderAll(); signalDirty();
+      const selector = `[data-action="set-condition-terrain"][data-condition-id="${CSS.escape(conditionId)}"][data-terrain-bit="${bit}"]`;
+      editorElement.querySelector(selector)?.focus({ preventScroll: true });
+      announce(`${target.dataset.terrainLabel || "Terrain"} is now ${terrainState === "inherit" ? "not checked" : (terrainState === "on" ? "allowed" : "blocked")} for this rule.`);
     }
     else if (action === "move-up") moveOverride(key, -1);
     else if (action === "move-down") moveOverride(key, 1);
@@ -5510,6 +6234,31 @@ export function createProfilesController({
     return true;
   }
 
+  function updateConditionPreviewControl(target) {
+    let resetConditionState = false;
+    if (target === elements.profileContextSpecies) { ui.context.species = target.value; resetConditionState = true; }
+    else if (target === elements.profileContextTerrain) { ui.context.terrain = target.value; resetConditionState = true; }
+    else if (target === elements.profileContextLevel) { ui.context.level = target.value; resetConditionState = true; }
+    else if (target === elements.profileContextShiny) { ui.context.shiny = target.checked; resetConditionState = true; }
+    else if (target === elements.profileContextFrame) ui.conditionPreview.frame = target.value;
+    else if (target === elements.profileContextSubjectX) ui.conditionPreview.subjectX = target.value;
+    else if (target === elements.profileContextSubjectY) ui.conditionPreview.subjectY = target.value;
+    else if (target === elements.profileContextFacing) ui.conditionPreview.facing = target.value;
+    else if (target === elements.profileContextTerrainMask) ui.conditionPreview.terrainMask = target.value;
+    else if (target === elements.profileContextMovementSpeed) ui.conditionPreview.movementSpeed = target.value;
+    else if (target === elements.profileContextPlayerX) ui.conditionPreview.playerX = target.value;
+    else if (target === elements.profileContextPlayerY) ui.conditionPreview.playerY = target.value;
+    else if (target === elements.profileContextPlayerValid) ui.conditionPreview.playerValid = target.checked;
+    else if (target === elements.profileContextActiveUntil) { ui.conditionPreview.activeUntil = target.value; resetConditionState = true; }
+    else if (target === elements.profileContextCooldownUntil) { ui.conditionPreview.cooldownUntil = target.value; resetConditionState = true; }
+    else if (target === elements.profileContextCandidates) ui.conditionPreview.candidates = target.value;
+    else return false;
+    contextAbortController?.abort();
+    if (resetConditionState) ui.conditionPreview.nextState = [];
+    state.profileConditionPreview = cloneDraftJson(ui.conditionPreview);
+    return true;
+  }
+
   function onInput(event) {
     if (updateNumericOverrideInput(event.target, findProfile(), { render: false })) {
       if (formulaRefreshTimer !== null) window.clearTimeout(formulaRefreshTimer);
@@ -5531,6 +6280,8 @@ export function createProfilesController({
         input?.focus();
         input?.setSelectionRange(ui.memberQuery.length, ui.memberQuery.length);
       }
+    } else {
+      updateConditionPreviewControl(event.target);
     }
   }
 
@@ -5563,6 +6314,177 @@ export function createProfilesController({
       renderList();
       return;
     }
+    if (event.target.matches("[data-profile-classification]") && profile) {
+      try {
+        const classification = event.target.value;
+        const current = canonicalDraftFromLegacy();
+        const application = canonicalApplicationForView(current, profile);
+        if (!application) throw new TypeError("The selected override profile is unavailable.");
+        const next = setProfileClassification(current, application.id, classification);
+        adoptStructuralCatalog(next);
+        ui.selectedKey = `application:${application.id}`;
+        renderAll(); signalDirty();
+        const label = profileClassificationLabel(classification);
+        const position = next.applications.findIndex((candidate) => candidate.id === application.id) + 1;
+        announce(label ? `${label} tag applied. Profile moved to position ${position}.` : `Classification removed. Profile moved to position ${position}.`);
+      } catch (error) {
+        status(error.message, "warning");
+        renderEditor();
+      }
+      return;
+    }
+    if (event.target.matches("[data-profile-kind]") && profile) {
+      try {
+        const current = canonicalDraftFromLegacy();
+        const application = canonicalApplicationForView(current, profile);
+        if (!application) throw new TypeError("The selected override profile is unavailable.");
+        const next = setConditionalProfileKind(current, application.id, event.target.value);
+        adoptStructuralCatalog(next);
+        ui.selectedKey = `application:${application.id}`;
+        state.profileLifecycleSection = CONDITIONS_LIFECYCLE_SECTION_ID;
+        lifecycleTabSelections.set(ui.selectedKey, CONDITIONS_LIFECYCLE_SECTION_ID);
+        renderAll(); signalDirty();
+        announce(event.target.value === "conditional" ? "This profile now applies only when a rule is active." : "This profile now always applies to its selected Pokémon.");
+      } catch (error) {
+        status(error.message, "warning");
+        renderEditor();
+      }
+      return;
+    }
+    if (event.target.matches("[data-pool-selection]") && profile) {
+      try {
+        const owner = event.target.dataset.poolOwner;
+        const conditionId = event.target.dataset.conditionId || "";
+        const poolId = event.target.value;
+        mutatePoolOwner(profile, owner, conditionId, (next, selection) => {
+          if (poolId) {
+            if (!namedPoolById(next, poolId)) throw new TypeError("The selected named pool is unavailable.");
+            return { pool: poolId };
+          }
+          return resolveProfilePoolSelection(selection, next) || inlinePool(selection);
+        });
+        renderAll(); signalDirty();
+        announce(poolId ? "Named pool selected." : "One-off pool selected.");
+      } catch (error) {
+        status(error.message, "warning");
+        renderEditor();
+      }
+      return;
+    }
+    if (event.target.matches("[data-named-pool-field]") && profile) {
+      try {
+        const current = canonicalDraftFromLegacy();
+        const poolId = event.target.dataset.namedPoolId;
+        const field = event.target.dataset.namedPoolField;
+        const pool = namedPoolById(current, poolId);
+        if (!pool) throw new TypeError("The selected named pool is unavailable.");
+        let changes;
+        if (field === "members") changes = { members: conditionMemberList(event.target.value) };
+        else if (field.startsWith("match.")) changes = { match: { ...pool.match, [field.slice(6)]: event.target.value } };
+        else changes = { [field]: event.target.value };
+        adoptStructuralCatalog(updateProfileNamedPool(current, poolId, changes));
+        renderAll(); signalDirty();
+        announce("Named pool updated everywhere it is used.");
+      } catch (error) {
+        status(error.message, "warning");
+        renderEditor();
+      }
+      return;
+    }
+    if (event.target.matches("[data-condition-vision-adjacent]") && profile) {
+      try {
+        const conditionId = event.target.dataset.conditionId;
+        mutateCanonicalCondition(profile, conditionId, (condition, owner, catalog) => {
+          if (catalog.catalogVersion === 5) {
+            if (condition.when?.vision?.mode !== "custom") throw new TypeError("Custom Vision is not active.");
+            condition.when.vision.adjacentAwareness = event.target.checked;
+          } else {
+            let options = Number(condition.when.visionOptions) || 1;
+            options = event.target.checked ? (options | VISION_ADJACENT_BIT) : (options & ~VISION_ADJACENT_BIT);
+            condition.when.visionOptions = options;
+          }
+        });
+        renderAll(); signalDirty();
+      } catch (error) {
+        status(error.message, "warning");
+        renderEditor();
+      }
+      return;
+    }
+    if (event.target.matches("[data-condition-toggle]") && profile) {
+      try {
+        const conditionId = event.target.dataset.conditionId;
+        const toggle = event.target.dataset.conditionToggle;
+        const optionKey = `${profileKey(profile)}:${conditionId}:option:${toggle}`;
+        mutateCanonicalCondition(profile, conditionId, (condition) => {
+          if (condition.when?.kind !== "terrain-motion") return;
+          if (toggle === "terrain") {
+            if (event.target.checked) {
+              const saved = conditionBranchDrafts.get(optionKey);
+              condition.when.terrainMask = saved?.terrainMask ?? 1;
+              condition.when.terrainOverrideMask = saved?.terrainOverrideMask ?? 1;
+            } else {
+              conditionBranchDrafts.set(optionKey, {
+                terrainMask: condition.when.terrainMask,
+                terrainOverrideMask: condition.when.terrainOverrideMask,
+              });
+              condition.when.terrainMask = 0;
+              condition.when.terrainOverrideMask = 0;
+            }
+          } else if (toggle === "speed") {
+            if (event.target.checked) {
+              const saved = conditionBranchDrafts.get(optionKey);
+              condition.when.minMovementSpeed = saved?.minMovementSpeed ?? 1;
+              condition.when.maxMovementSpeed = saved?.maxMovementSpeed ?? 32;
+            } else {
+              conditionBranchDrafts.set(optionKey, {
+                minMovementSpeed: condition.when.minMovementSpeed,
+                maxMovementSpeed: condition.when.maxMovementSpeed,
+              });
+              condition.when.minMovementSpeed = 0;
+              condition.when.maxMovementSpeed = 0;
+            }
+          }
+        });
+        renderAll(); signalDirty();
+        editorElement.querySelector(`[data-condition-toggle="${CSS.escape(toggle)}"][data-condition-id="${CSS.escape(conditionId)}"]`)?.focus({ preventScroll: true });
+      } catch (error) {
+        status(error.message, "warning");
+        renderEditor();
+      }
+      return;
+    }
+    if (event.target.matches("[data-condition-field]") && profile) {
+      try {
+        const oldId = event.target.dataset.conditionId;
+        const field = event.target.dataset.conditionField;
+        setCanonicalConditionField(profile, oldId, field, event.target.value);
+        renderAll(); signalDirty();
+        const nextId = field === "id" ? event.target.value.trim() : oldId;
+        editorElement.querySelector(`[data-condition-field="${CSS.escape(field)}"][data-condition-id="${CSS.escape(nextId)}"]`)?.focus({ preventScroll: true });
+      } catch (error) {
+        status(error.message, "warning");
+        renderEditor();
+      }
+      return;
+    }
+    if (event.target.matches("[data-condition-role]") && profile) {
+      try {
+        const role = event.target.dataset.conditionRole;
+        mutateCanonicalCondition(profile, event.target.dataset.conditionId, (condition) => {
+          const roles = new Set(condition.target.roles || []);
+          if (event.target.checked) roles.add(role);
+          else roles.delete(role);
+          if (!roles.size) throw new TypeError("An actor target needs at least one role.");
+          condition.target.roles = [...roles];
+        });
+        renderAll(); signalDirty();
+      } catch (error) {
+        status(error.message, "warning");
+        renderEditor();
+      }
+      return;
+    }
     if (event.target.matches("[data-target-kind]")) {
       ui.targetKind = event.target.value;
       ui.targetValue = "";
@@ -5583,58 +6505,19 @@ export function createProfilesController({
       editorElement.querySelector(`[data-state-profile-reference][data-field-key="${CSS.escape(fieldKey)}"]`)?.focus({ preventScroll: true });
       return;
     }
-    if (event.target.matches("[data-condition-profile-reference]") && profile) {
-      const replacement = findProfile(event.target.value);
-      if (replacement && !conditionalProfileCandidates(profile)
-        .some((candidate) => profileKey(candidate) === profileKey(replacement))) {
-        status("That override profile cannot be used for this conditional state.", "warning");
-        renderEditor();
-        return;
-      }
-      const stateKey = event.target.dataset.conditionStateKey || "";
-      setConditionalStates(currentConditionalStates().map((entry) => (
-        entry.parentKey === profileKey(profile)
-          && conditionalStateKey(entry) === stateKey
-          ? { ...entry, overrideKey: replacement ? profileKey(replacement) : null }
-          : entry
-      )));
-      state.profileLifecycleSection = event.target.dataset.conditionSectionId
-        || `${CONDITIONAL_LIFECYCLE_SECTION_PREFIX}${stateKey.replaceAll(":", "-")}`;
-
+    if (event.target.matches("[data-chain-pause-action]")) {
+      const owner = controlProfile(event.target, profile);
+      if (!owner) return;
+      const actionRaw = event.target.dataset.actionRaw;
+      const selected = chainPauseActionSelection(
+        owner,
+        fieldRaw(owner, "chainPauseAction"),
+      );
+      if (event.target.checked) selected.add(actionRaw);
+      else selected.delete(actionRaw);
+      setField(owner, "chainPauseAction", chainPauseActionRaw(selected));
       renderEditor(); renderList(); signalDirty();
-      const childKey = replacement ? profileKey(replacement) : "";
-      editorElement.querySelector(`[data-condition-profile-reference][data-current-child-key="${CSS.escape(childKey)}"]`)?.focus({ preventScroll: true });
-      return;
-    }
-    if (event.target.matches("[data-condition-speed-mode], [data-condition-speed-min], [data-condition-speed-max]") && profile) {
-      const stateKey = event.target.dataset.conditionStateKey || "";
-      const updated = updateConditionalState(profileKey(profile), stateKey, (entry) => {
-        if (event.target.matches("[data-condition-speed-mode]")) {
-          if (event.target.value === "any") return { ...entry, minMovementSpeed: "0", maxMovementSpeed: "0" };
-          if (event.target.value === "range") return { ...entry, minMovementSpeed: "1", maxMovementSpeed: String(CONDITIONAL_MOVEMENT_SPEED_MAX) };
-          return { ...entry, minMovementSpeed: "1", maxMovementSpeed: "1" };
-        }
-        const speed = conditionalMovementSpeed(event.target.value);
-        if (event.target.matches("[data-condition-speed-min]")) {
-          if (conditionalSpeedMode(entry) === "exact") return { ...entry, minMovementSpeed: String(speed), maxMovementSpeed: String(speed) };
-          const maximum = Math.max(speed, conditionalMovementSpeed(entry.maxMovementSpeed));
-          return { ...entry, minMovementSpeed: String(speed), maxMovementSpeed: String(maximum) };
-        }
-        const minimum = Math.min(speed, conditionalMovementSpeed(entry.minMovementSpeed));
-        return { ...entry, minMovementSpeed: String(minimum), maxMovementSpeed: String(speed) };
-      });
-      if (updated === false) {
-        status("That change would duplicate another conditional state.", "warning");
-        renderEditor();
-        return;
-      }
-      if (!updated) return;
-      state.profileLifecycleSection = CONDITIONS_LIFECYCLE_SECTION_ID;
-      renderEditor(); renderList(); signalDirty();
-      const attribute = event.target.matches("[data-condition-speed-mode]")
-        ? "data-condition-speed-mode"
-        : (event.target.matches("[data-condition-speed-min]") ? "data-condition-speed-min" : "data-condition-speed-max");
-      editorElement.querySelector(`[${attribute}][data-condition-state-key="${CSS.escape(conditionalStateKey(updated))}"]`)?.focus({ preventScroll: true });
+      editorElement.querySelector(`[data-chain-pause-action][data-profile-key="${CSS.escape(profileKey(owner))}"][data-action-raw="${CSS.escape(actionRaw)}"]`)?.focus({ preventScroll: true });
       return;
     }
     if (event.target.matches("[data-movement-direction]")) {
@@ -5735,27 +6618,13 @@ export function createProfilesController({
       const fieldKey = event.target.dataset.fieldKey;
       const fieldInstance = event.target.dataset.fieldInstance;
       invalidNumericOperatorInputs.delete(`${profileKey(owner)}|${fieldKey}|${fieldInstance}`);
-      const compound = event.target.dataset.profileCompound;
-      const scope = event.target.dataset.compoundScope;
       const parentGroup = event.target.closest("[data-option-parent]");
       const parentField = parentGroup?.dataset.optionParent;
       const sectionId = event.target.closest("[data-section-id]")?.dataset.sectionId;
       const modeTabSelect = event.target.closest("[data-mode-tab-select]");
       const wasParentControl = Boolean(event.target.closest(".pv2-option-parent"));
       const beforeChildren = parentGroup?.querySelectorAll(":scope > .pv2-suboptions [data-profile-value]").length || 0;
-      const currentRaw = fieldRaw(owner, fieldKey);
       let nextRaw = event.target.value;
-      if (compound === "alert-range-type" && nextRaw) {
-        nextRaw = alertRangeRawWithClose(nextRaw, alertRangeSupportsClose(nextRaw) && alertRangeIsClose(currentRaw));
-      } else if (compound === "alert-range-close") {
-        nextRaw = alertRangeRawWithClose(currentRaw, nextRaw === "1");
-      } else if (compound === "scoped-action") {
-        if (!nextRaw && isOverrideProfile(owner)) {
-          nextRaw = scopedActionClearRaw(scope, currentRaw, originalFieldRaw(owner, fieldKey));
-        } else if (nextRaw === ALERT_SPECIAL.none && scopedActionRaw(scope, currentRaw) === ALERT_SPECIAL.none) {
-          nextRaw = currentRaw;
-        }
-      }
       if (modeTabSelect) {
         branchTabSelections.set(modeTabSelect.dataset.modeTabSection, modeTabSelect.dataset.modeTabSelect);
       }
@@ -5793,10 +6662,7 @@ export function createProfilesController({
       editorElement.querySelector(`[data-target-condition="${CSS.escape(field)}"]`)?.focus({ preventScroll: true });
       return;
     }
-    if (event.target === elements.profileContextSpecies) ui.context.species = event.target.value;
-    else if (event.target === elements.profileContextTerrain) ui.context.terrain = event.target.value;
-    else if (event.target === elements.profileContextLevel) ui.context.level = event.target.value;
-    else if (event.target === elements.profileContextShiny) ui.context.shiny = event.target.checked;
+    updateConditionPreviewControl(event.target);
   }
 
   function onFocusOut(event) {
@@ -5907,6 +6773,9 @@ export function createProfilesController({
   function onDragOver(event) {
     const row = event.target.closest("[data-profile-row]");
     if (!row?.classList.contains("override-profile") || !ui.draggedKey || row.dataset.profileKey === ui.draggedKey) return;
+    const draggedProfile = findProfile(ui.draggedKey);
+    const targetProfile = findProfile(row.dataset.profileKey);
+    if (!draggedProfile || !targetProfile || classificationFor(draggedProfile) !== classificationFor(targetProfile)) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     listElement.querySelectorAll(".is-drop-before, .is-drop-after").forEach((item) => item.classList.remove("is-drop-before", "is-drop-after"));
@@ -5965,12 +6834,12 @@ export function createProfilesController({
   function reset() {
     ui.selectionHint = nameFor(findProfile());
     ui.pendingLifecycleProfiles = [];
-    structuralCatalogDraft = null;
-    state.profileCatalogDraft = null;
+    structuralCatalogDraft = classificationOrderDraft(sourceCatalog);
+    state.profileCatalogDraft = structuralCatalogDraft;
     clearLegacyDrafts();
-    data = projectCanonicalProfileDeck(rawDeckData, sourceCatalog);
+    data = projectCanonicalProfileDeck(rawDeckData, structuralCatalogDraft || sourceCatalog);
     invalidateDerivedIndexes();
-    status("Profile drafts reset.", "info");
+    status(structuralCatalogDraft ? "Profile drafts reset. Automatic tag ordering is still pending." : "Profile drafts reset.", "info");
     renderAll();
   }
 
@@ -5997,9 +6866,6 @@ export function createProfilesController({
       const profile = profilesByKey.get(key);
       if (profile && JSON.stringify(cloneTarget(target)) === JSON.stringify(sourceTarget(profile))) drafts.overrideTargets.delete(key);
     }
-    if (drafts.conditionalStates !== null && conditionalStatesEqual(drafts.conditionalStates, sourceConditionalStates())) {
-      drafts.conditionalStates = null;
-    }
   }
 
   function refresh(nextData) {
@@ -6009,10 +6875,13 @@ export function createProfilesController({
     const refreshedCatalog = canonicalCatalogFromDeck(nextData);
     if (refreshedCatalog) {
       if (structuralCatalogDraft && sourceCatalog) {
-        structuralCatalogDraft = rebaseProfileCatalogDraft(sourceCatalog, structuralCatalogDraft, refreshedCatalog);
-        state.profileCatalogDraft = structuralCatalogDraft;
+        structuralCatalogDraft = sortProfileApplicationsByClassification(
+          rebaseProfileCatalogDraft(sourceCatalog, structuralCatalogDraft, refreshedCatalog),
+        );
       }
       sourceCatalog = cloneDraftJson(refreshedCatalog);
+      if (!structuralCatalogDraft) structuralCatalogDraft = classificationOrderDraft(sourceCatalog);
+      state.profileCatalogDraft = structuralCatalogDraft;
     }
     data = projectCanonicalProfileDeck(rawDeckData, structuralCatalogDraft || sourceCatalog);
     state.profileData = nextData;
@@ -6058,130 +6927,7 @@ export function createProfilesController({
       if (errors.length) throw new TypeError(errors[0]);
       return { version: 3, canonicalCatalog: cloneDraftJson(rebasedCatalog) };
     }
-    if (!snapshot || typeof snapshot !== "object" || ![1, 2].includes(snapshot.version)) {
-      throw new TypeError("Profile draft backup version is not supported.");
-    }
-    const mapOfMaps = (value, label) => new Map(draftEntryList(value, label).map(([key, entries]) => [
-      key,
-      new Map(draftEntryList(entries, `${label}.${key}`).map(([field, raw]) => {
-        if (typeof raw !== "string") throw new TypeError(`${label}.${key}.${field} must be text.`);
-        return [field, raw];
-      })),
-    ]));
-    const stringMap = (value, label) => new Map(draftEntryList(value, label).map(([key, raw]) => {
-      if (typeof raw !== "string") throw new TypeError(`${label}.${key} must be text.`);
-      return [key, raw];
-    }));
-    const importedTarget = (target, label) => {
-      if (!target || typeof target !== "object" || Array.isArray(target)
-          || !Array.isArray(target.members) || !target.match || typeof target.match !== "object"
-          || !["disabled", "members", "all"].includes(target.targetMode)) {
-        throw new TypeError(`${label} is malformed.`);
-      }
-      const species = new Set(speciesEntries().map((entry) => entry.symbol));
-      if (!target.members.every((member) => typeof member === "string" && species.has(member))) {
-        throw new TypeError(`${label} contains an unknown Pokémon.`);
-      }
-      for (const [field] of MATCH_FIELDS) {
-        if (typeof target.match[field] !== "string") throw new TypeError(`${label}.${field} must be text.`);
-      }
-      return cloneTarget(target);
-    };
-    const importedConditionalStates = snapshot.conditionalStates === undefined || snapshot.conditionalStates === null
-      ? null
-      : (() => {
-        if (!Array.isArray(snapshot.conditionalStates)) throw new TypeError("Profile conditionalStates must be an array.");
-        return snapshot.conditionalStates.map((entry, index) => {
-          if (!entry || typeof entry !== "object" || Array.isArray(entry)
-              || typeof entry.parentKey !== "string"
-              || (entry.overrideKey !== null && typeof entry.overrideKey !== "string")) {
-            throw new TypeError(`Profile conditionalStates.${index} is malformed.`);
-          }
-          if (snapshot.version >= 2) {
-            const numericFields = ["terrainMask", "terrainOverrideMask", "minMovementSpeed", "maxMovementSpeed"];
-            if (numericFields.some((field) => !Number.isInteger(Number(entry[field])))) {
-              throw new TypeError(`Profile conditionalStates.${index} has invalid condition values.`);
-            }
-            const explicit = Number(entry.terrainOverrideMask);
-            const accepted = Number(entry.terrainMask);
-            const minSpeed = Number(entry.minMovementSpeed);
-            const maxSpeed = Number(entry.maxMovementSpeed);
-            if (explicit < 0 || accepted < 0 || (accepted & ~explicit)
-                || minSpeed < 0 || maxSpeed > CONDITIONAL_MOVEMENT_SPEED_MAX
-                || ((!minSpeed && maxSpeed) || (minSpeed && !maxSpeed) || minSpeed > maxSpeed)) {
-              throw new TypeError(`Profile conditionalStates.${index} has an invalid tile or Walk-time condition.`);
-            }
-          }
-          return cloneConditionalState(entry);
-        });
-      })();
-    if (!Array.isArray(snapshot.removedOverrides) || !snapshot.removedOverrides.every((key) => typeof key === "string")) {
-      throw new TypeError("Profile removedOverrides must contain profile keys.");
-    }
-    if (!Array.isArray(snapshot.overrideOrder) || !snapshot.overrideOrder.every((key) => typeof key === "string")) {
-      throw new TypeError("Profile overrideOrder must contain profile keys.");
-    }
-    if (!Array.isArray(snapshot.newOverrides)) throw new TypeError("Profile newOverrides must be an array.");
-    const overrideTargets = new Map(draftEntryList(snapshot.overrideTargets, "Profile overrideTargets").map(([key, target]) => [key, importedTarget(target, `Profile overrideTargets.${key}`)]));
-    const newOverrides = snapshot.newOverrides.map((draft) => {
-      if (!draft || typeof draft !== "object" || Array.isArray(draft)
-          || typeof draft.draftId !== "string" || typeof draft.name !== "string"
-          || !draft.fields || typeof draft.fields !== "object" || Array.isArray(draft.fields)) {
-        throw new TypeError("Profile newOverrides contains an invalid draft.");
-      }
-      for (const [field, raw] of Object.entries(draft.fields)) {
-        if (typeof raw !== "string") throw new TypeError(`Profile new override ${draft.draftId}.${field} must be text.`);
-      }
-      return { ...cloneDraftJson(draft), target: importedTarget(draft.target, `Profile new override ${draft.draftId}.target`) };
-    });
-    if (new Set(snapshot.removedOverrides).size !== snapshot.removedOverrides.length
-        || new Set(snapshot.overrideOrder).size !== snapshot.overrideOrder.length
-        || new Set(newOverrides.map((draft) => draft.draftId)).size !== newOverrides.length) {
-      throw new TypeError("Profile draft backup contains duplicate identities.");
-    }
-    const baseFields = mapOfMaps(snapshot.baseFields, "Profile baseFields");
-    const overrideFields = mapOfMaps(snapshot.overrideFields, "Profile overrideFields");
-    const memberships = stringMap(snapshot.memberships, "Profile memberships");
-    const overrideNames = stringMap(snapshot.overrideNames, "Profile overrideNames");
-    const knownFields = new Set(data.fields.map((field) => field.key));
-    const knownBaseKeys = new Set(baseProfiles().map(profileKey));
-    const knownOverrideKeys = new Set(savedOverrideProfiles().map(profileKey));
-    if (importedConditionalStates?.some((entry) => (
-      !knownOverrideKeys.has(entry.parentKey)
-      || (entry.overrideKey && !knownOverrideKeys.has(entry.overrideKey))
-    ))) {
-      throw new TypeError("Profile conditionalStates refers to an unknown override profile.");
-    }
-    for (const [key, fields] of [...baseFields, ...overrideFields]) {
-      const knownKeys = baseFields.has(key) ? knownBaseKeys : knownOverrideKeys;
-      if (!knownKeys.has(key) || [...fields.keys()].some((field) => !knownFields.has(field))) {
-        throw new TypeError("Profile draft backup refers to an unknown profile or field.");
-      }
-    }
-    for (const [species, targetKey] of memberships) {
-      if (!speciesEntries().some((entry) => entry.symbol === species) || !knownBaseKeys.has(targetKey)) {
-        throw new TypeError("Profile membership backup refers to an unknown Pokémon or base profile.");
-      }
-    }
-    if ([...overrideNames.keys(), ...overrideTargets.keys(), ...snapshot.removedOverrides, ...snapshot.overrideOrder]
-      .some((key) => !knownOverrideKeys.has(key))) {
-      throw new TypeError("Profile draft backup refers to an unknown override profile.");
-    }
-    if (newOverrides.some((draft) => Object.keys(draft.fields).some((field) => !knownFields.has(field)))) {
-      throw new TypeError("Profile new override refers to an unknown field.");
-    }
-    return {
-      version: 2,
-      baseFields,
-      overrideFields,
-      memberships,
-      overrideNames,
-      overrideTargets,
-      conditionalStates: importedConditionalStates,
-      removedOverrides: new Set(snapshot.removedOverrides),
-      newOverrides,
-      overrideOrder: [...snapshot.overrideOrder],
-    };
+    throw new TypeError("Profile draft backup version is not supported.");
   }
 
   function applyDraftImport(prepared) {
@@ -6193,11 +6939,7 @@ export function createProfilesController({
       renderAll();
       return;
     }
-    Object.assign(drafts, prepared);
-    invalidNumericOperatorInputs.clear();
-    ui.selectionHint = nameFor(findProfile());
-    pruneDrafts();
-    renderAll();
+    throw new TypeError("Profile draft backup version is not supported.");
   }
 
   function destroy() {

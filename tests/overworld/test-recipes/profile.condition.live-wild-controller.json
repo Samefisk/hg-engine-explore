@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.condition.live-wild-controller",
+  "title": "Live Wild condition uses a Follower target at intent boundaries",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "tests/overworld/scenarios/profile.condition.live-wild-controller.json",
+  "requirements": ["current.live-condition-controller"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 240, "noProgressFrames": 120, "minObservedFrames": 8},
+  "subjects": [
+    {"id": "weepinbell", "species": 70, "role": "WILD", "acquire": "spawn"}
+  ],
+  "measurements": [
+    {"kind": "live-condition-controller-v1", "subject": "weepinbell"}
+  ],
+  "setup": [
+    {"id": "place-controlled-actors", "op": "teleport", "args": {"map": 33, "x": 585, "z": 408, "facing": 0},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "prepare-follower-target", "op": "spawn", "args": {"species": 174, "role": "follower", "slot": 3},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "spawn-wild-subject", "op": "spawn", "args": {"species": 70, "role": "wild", "level": 5, "x": 583, "z": 406},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "bind-wild-subject", "op": "bind", "args": {"subject": "weepinbell"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "install-controlled-target-predicate", "op": "condition-controller.fixture", "args": {},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "arm-live-condition-caller", "op": "condition-controller.arm", "args": {"subject": "weepinbell"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "observe-boundary-and-stale-target", "op": "wait", "args": {"predicate": {"kind": "measurement-stage", "measurement": "live-condition-controller-v1", "stage": "stale-target-observed"}},
+      "budget": {"maxSeconds": 90, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "close-and-restore-condition-reader", "op": "condition-controller.close", "args": {},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "assertions": [
+    {"kind": "measurement-complete", "measurement": "live-condition-controller-v1", "when": "final"}
+  ]
+}

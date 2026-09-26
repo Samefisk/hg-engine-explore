@@ -10,9 +10,9 @@ from tools.overworld.devtools_wild_walk_measurement import IDENTITY, LIFECYCLE
 KIND = 'turn-skid-v1'
 REQUIREMENT = 'current.turn-deceleration'
 ACCELERATION_MOTION_COUNT = 13
-MOTION_COUNT = 15
-DURATIONS = [8, 8, 8, 7, 7, 7, 6, 6, 6, 5, 5, 5, 4, 8, 5]
-KINDS = [1] * ACCELERATION_MOTION_COUNT + [4, 1]
+MOTION_COUNT = 16
+DURATIONS = [8, 8, 8, 7, 7, 7, 6, 6, 6, 5, 5, 5, 4, 8, 8, 5]
+KINDS = [1] * ACCELERATION_MOTION_COUNT + [4, 4, 1]
 
 
 def require(ok, reason):
@@ -26,6 +26,8 @@ def validate_motion(motion, index):
     plan = ticks[0]['before']['plan']
     require(plan['kind'] == KINDS[index] and plan['duration'] == DURATIONS[index], 'motion kind/time differs')
     require(plan['direction'] == (3 if index < MOTION_COUNT - 1 else 2), 'travel direction differs')
+    facing = 3 if index < ACCELERATION_MOTION_COUNT else 2
+    require(plan['facing'] == facing, 'turn-skid facing differs from requested turn')
     delta = 1 if index < MOTION_COUNT - 1 else -1
     require(plan['target'] == [plan['origin'][0] + delta, plan['origin'][1]], 'motion target differs')
     require(plan['reservationId'] > 0, 'missing reservation')
@@ -38,6 +40,7 @@ def validate_motion(motion, index):
                 and before['elapsed'] == elapsed and after['elapsed'] == elapsed + 1
                 and tick['sample']['elapsed'] == elapsed + 1
                 and tick['sample']['duration'] == plan['duration'], 'native elapsed sequence differs')
+        require(tick['sample']['facing'] == facing, 'turn-skid sample facing differs')
     require([e['event'] for e in events] == list(LIFECYCLE), 'exact lifecycle missing')
     require(all(e['reason'] == 'OK' for e in events), 'non-OK lifecycle')
     start, commit, finish, control = events
@@ -47,6 +50,15 @@ def validate_motion(motion, index):
             and (control['valueA'], control['valueB']) == (1, commit['valueA']), 'lifecycle values differ')
     require([e['sequence'] for e in events] == sorted(set(e['sequence'] for e in events)), 'lifecycle order differs')
     return plan
+
+
+def validate_skid_presentation(snapshot, actor):
+    if actor['motionKind'] != 'SKID':
+        return False
+    require(actor['motionPhase'] in ('MOVING', 'COMMIT_PENDING')
+            and snapshot['player']['facing'] == actor['engineObject']['facing'] == 2,
+            'mounted skid keeps old facing until recovery')
+    return True
 
 
 def validate_dust(call, subject, actor, context):
@@ -97,6 +109,7 @@ class TurnSkidMeasurement:
         self.reader_layout = self.tick_owner = self.last_tick = None
         self.ticks = self.moving = self.frames = self.sequence = 0
         self.streams = {}; self.motions = []; self.commands = []; self.dust = []
+        self.skid_facing_frames = []
         self.tick_groups = {}; self.pending_events = []
         self.failures = []; self.closed = False; self.command_end = None
 
@@ -171,6 +184,8 @@ class TurnSkidMeasurement:
             require(mask == command[0]['mask'] or snapshot['frame'] == command[0]['start'] + 1
                     and previous is not None and mask == previous['mask'], 'input differs from command')
             check_snapshot_pair(snapshot, actor)
+            if validate_skid_presentation(snapshot, actor):
+                self.skid_facing_frames.append(snapshot['frame'])
             for event in events:
                 d = event['data']; require(event['frame'] == snapshot['frame'], 'event frame differs')
                 if event['kind'] == 'native-observation':
@@ -179,8 +194,8 @@ class TurnSkidMeasurement:
                     if d.get('observation') == 'walk-matrix-tick': self._tick(d)
                     elif d.get('observation') == 'stomp-policy' and d.get('effect') == 2:
                         validate_dust(d, self.subject, self.actor, self.initial['context'])
-                        require(len(self.motions) in (ACCELERATION_MOTION_COUNT,
-                                ACCELERATION_MOTION_COUNT + 1), 'dust outside final skid')
+                        require(len(self.motions) in (ACCELERATION_MOTION_COUNT + 1,
+                                ACCELERATION_MOTION_COUNT + 2), 'dust outside final skid')
                         self.dust.append(deepcopy(d)); require(len(self.dust) == 1, 'duplicate skid dust')
                 elif event['kind'] == 'native':
                     stream = d['traceStream']; require(d['sequence'] == self.streams.get(stream, 0)+1, 'trace sequence gap')
@@ -223,6 +238,7 @@ class TurnSkidMeasurement:
     @property
     def ready(self):
         return not self.failures and len(self.motions) == MOTION_COUNT and not self.tick_groups and not self.pending_events and len(self.dust) == 1 \
+            and len(self.skid_facing_frames) == sum(DURATIONS[ACCELERATION_MOTION_COUNT:-1]) \
             and WalkMatrixMeasurement._idle(self.actor) and self.actor['movementPolicy']['pending'] == 0 \
             and self.actor['movementPolicy']['skid'] == 0 and self.actor['engineObject']['facing'] == 2 \
             and self.actor['logical'] == dict(zip(('x','y'), self.motions[-1]['plan']['target'])) \
@@ -255,5 +271,6 @@ class TurnSkidMeasurement:
     def result(self):
         return deepcopy(dict(kind=KIND, requirements=[REQUIREMENT], ready=self.ready, closed=self.closed,
             passed=self.ready and self.closed, acceptedProof=False, failures=self.failures,
-            frames=self.frames, motions=self.motions, dust=self.dust, initial=self.initial, terminal=self.last,
+            frames=self.frames, motions=self.motions, dust=self.dust,
+            skidFacingFrames=self.skid_facing_frames, initial=self.initial, terminal=self.last,
             subject=self.subject))

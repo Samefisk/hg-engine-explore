@@ -1,13 +1,17 @@
 """S0 checker controls, not gameplay proof or a replacement for facing S1."""
 
 from pathlib import Path
+import sys
 import unittest
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from scripts import verify_overworld_wild_walk_pause as pause
 from scripts import verify_overworld_wild_flying_insect_walk as insect
 
 
-ROOT = Path(__file__).resolve().parents[2]
 SPAWNS = ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
 RUNTIME = ROOT / "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c"
 COMPLETION = "OverworldWildSpawns_HandleFinishedMovementCommand"
@@ -19,8 +23,12 @@ REQUEST = "OverworldWildRuntime_RequestMotion"
 def verify_ledge_pause_source(spawns, runtime):
     ledge = "".join(pause.function_body(spawns, LEDGE).split())
     request = "".join(pause.function_body(runtime, REQUEST).split())
-    marker = "state->movementStagedHopPending[slot]=OW_WILD_SPAWNER_STAGED_HOP_LEDGE_PENDING;"
+    marker = ("state->movementStagedHopPending[slot]="
+              "OW_WILD_SPAWNER_STAGED_HOP_LEDGE_PENDING+(obstacleHop<<2);")
     start = "OverworldWildSpawns_StartPreparedCustomJumpCommand("
+    if ("#define OW_WILD_SPAWNER_STAGED_HOP_LEDGE_PENDING 2" not in spawns
+            or "#define OW_WILD_SPAWNER_STAGED_OBSTACLE_HOP_PENDING 6" not in spawns):
+        raise AssertionError("ledge and obstacle marker values changed")
     if ledge.count(marker) != 1 or ledge.index(marker) >= ledge.index(start):
         raise AssertionError("ledge kind is not staged before shared motion")
     if "state->movementStagedHopPending[slot]=FALSE;" not in ledge:
@@ -29,6 +37,17 @@ def verify_ledge_pause_source(spawns, runtime):
         raise AssertionError("ledge shared motion still owns hopPause")
     if "lane->hopPause" not in request:
         raise AssertionError("ordinary Hop lost its authored pause")
+
+
+def verify_obstacle_hop_turn_source(spawns):
+    ledge = "".join(pause.function_body(spawns, LEDGE).split())
+    chooser = "".join(pause.function_body(
+        spawns, "OverworldWildSpawns_TryStartSpawnerMovementCommand").split())
+    if "||!obstacleHopAllowed||!IsMetatileBlockedAt(" not in ledge:
+        raise AssertionError("blocked obstacle Hop bypasses Walk turn control")
+    if ("policy.walkMomentum.speed==0"
+            "||policy.walkMomentum.direction==direction" not in chooser):
+        raise AssertionError("obstacle Hop ignores the current Walk heading")
 
 
 def verify_chain_forward_hop_pause_source(spawns, runtime):
@@ -63,6 +82,7 @@ def verify_chain_forward_hop_pause_source(spawns, runtime):
         raise AssertionError("forward Hop is not staged before shared motion")
     expected_pause = (
         "intent.pauseFrames=kind==OVERWORLD_MOTION_KIND_REPOSITION"
+        "||kind==OVERWORLD_MOTION_KIND_FLY_IN"
         "||(kind==OVERWORLD_MOTION_KIND_HOP"
         "&&(state->movementStagedHopPending[slot]"
         "==OW_WILD_RUNTIME_STAGED_HOP_LEDGE_PENDING"
@@ -80,11 +100,13 @@ def verify_walk_sway_source(spawns):
     ]
     normalized = "".join(insect.strip_c_noncode(start).split())
     expected = "".join("""
-        swayWidth = chainReposition
+        swayWidth = chainReposition || flyIn
             ? 0
             : flatWalk
-                ? OW_WILD_BEHAVIOR_WALK_SWAY_WIDTH(lane->walkOptions)
-                : lane->hopSwayWidth;
+                ? lane->walkSwayWidth
+                : sOverworldWildSpawnHopPreparing
+                    ? lane->spawnHopSwayWidth
+                    : lane->hopSwayWidth;
     """.split())
     if expected not in normalized:
         raise AssertionError("flat Walk does not use its authored sway width")
@@ -98,6 +120,12 @@ class WildWalkSourceChecksTests(unittest.TestCase):
 
     def test_ledge_hop_uses_only_the_walk_completion_pause(self):
         verify_ledge_pause_source(self.spawns, self.runtime)
+
+    def test_obstacle_hop_waits_for_walk_turn(self):
+        verify_obstacle_hop_turn_source(self.spawns)
+        with self.assertRaisesRegex(AssertionError, "bypasses Walk turn"):
+            verify_obstacle_hop_turn_source(self.spawns.replace(
+                "            || !obstacleHopAllowed\n", "", 1))
 
     def test_chain_forward_hop_has_no_shared_motion_settle_pause(self):
         verify_chain_forward_hop_pause_source(self.spawns, self.runtime)
@@ -162,12 +190,13 @@ class WildWalkSourceChecksTests(unittest.TestCase):
 
     def test_ledge_pause_source_controls_reject_old_double_pause(self):
         marker = """    state->movementStagedHopPending[slot] =
-        OW_WILD_SPAWNER_STAGED_HOP_LEDGE_PENDING;
+        OW_WILD_SPAWNER_STAGED_HOP_LEDGE_PENDING + (obstacleHop << 2);
 """
         self.assertEqual(self.spawns.count(marker), 1)
         with self.assertRaisesRegex(AssertionError, "not staged"):
             verify_ledge_pause_source(self.spawns.replace(marker, "", 1), self.runtime)
         guard = """kind == OVERWORLD_MOTION_KIND_REPOSITION
+        || kind == OVERWORLD_MOTION_KIND_FLY_IN
         || (kind == OVERWORLD_MOTION_KIND_HOP
             && (state->movementStagedHopPending[slot]
                     == OW_WILD_RUNTIME_STAGED_HOP_LEDGE_PENDING
@@ -180,6 +209,7 @@ class WildWalkSourceChecksTests(unittest.TestCase):
                 self.runtime.replace(
                     guard,
                     """kind == OVERWORLD_MOTION_KIND_REPOSITION
+        || kind == OVERWORLD_MOTION_KIND_FLY_IN
         || (kind == OVERWORLD_MOTION_KIND_HOP
             && state->movementStagedHopPending[slot]
                 == OW_WILD_RUNTIME_STAGED_CHAIN_HOP_FORWARD_PENDING)""",
@@ -203,15 +233,15 @@ static void finish(int slot) {
         with self.assertRaises(SystemExit):
             pause.function_body("static void finish(int slot);\nvoid other(void) {}", "finish")
 
-    def test_current_three_lane_routing(self):
+    def test_current_two_lane_routing(self):
         pause.verify_walk_pause_routing(self.spawns)
-        self.assertEqual(pause.function_body(self.spawns, COMPLETION).count("lane->walkPause"), 3)
+        self.assertEqual(pause.function_body(self.spawns, COMPLETION).count("lane->walkPause"), 2)
 
     def test_each_missing_lane_and_follower_special_case_fail(self):
         body = pause.function_body(self.spawns, COMPLETION)
         pieces = body.split("lane->walkPause")
-        self.assertEqual(len(pieces), 4)
-        for lane in range(3):
+        self.assertEqual(len(pieces), 3)
+        for lane in range(2):
             changed = pieces[0]
             for index, piece in enumerate(pieces[1:]):
                 changed += ("0" if index == lane else "lane->walkPause") + piece
@@ -225,19 +255,20 @@ static void finish(int slot) {
         insect.verify_face_player_call_gating(self.spawns)
         body = insect.function_bodies(self.spawns)[TICK]
         changed = body.replace(
-            "&& (!actorPolicyKnown",
-            "&& /* active chain owner */\n (!actorPolicyKnown",
+            "&& policy.motionPhase > OVERWORLD_MOTION_PHASE_IDLE",
+            "&& /* shared motion owner */\n policy.motionPhase > OVERWORLD_MOTION_PHASE_IDLE",
             1,
         )
         self.assertNotEqual(body, changed)
         insect.verify_face_player_call_gating(self.spawns.replace(body, changed, 1))
 
-    def test_weakened_option_grid_guard_or_ungated_call_fail(self):
+    def test_wrong_face_option_or_ungated_call_fails(self):
         body = insect.function_bodies(self.spawns)[TICK]
         for before, after in (
-            ("if (OW_WILD_BEHAVIOR_WALK_FACES_PLAYER(profile.owner.walkOptions)", "if (1"),
-            ("&& (!actorPolicyKnown", "|| (!actorPolicyKnown"),
-            ("!= OW_WILD_SPAWNER_CHAIN_REPOSITION_GRID_MARKER)", "== OW_WILD_SPAWNER_CHAIN_REPOSITION_GRID_MARKER)"),
+            (
+                "OW_WILD_BEHAVIOR_WALK_FACES_PLAYER(profile.owner.walkOptions)",
+                "OW_WILD_BEHAVIOR_WALK_FACES_PLAYER(profile.tired.walkOptions)",
+            ),
         ):
             self.assertIn(before, body)
             changed = body.replace(before, after, 1)
@@ -312,7 +343,7 @@ static void finish(int slot) {
     def test_flat_walk_uses_its_own_sway_width(self):
         verify_walk_sway_source(self.spawns)
         changed = self.spawns.replace(
-            "OW_WILD_BEHAVIOR_WALK_SWAY_WIDTH(lane->walkOptions)",
+            "lane->walkSwayWidth",
             "lane->hopSwayWidth",
             1,
         )

@@ -1,5 +1,6 @@
 #include "../../include/overworld_mount.h"
 #include "../../include/overworld_mount_internal.h"
+#include "../../include/overworld_mount_action_adapter.h"
 #include "../../include/overworld_actor_system_internal.h"
 #include "../../include/overworld_wild_spawns_internal.h"
 
@@ -22,12 +23,30 @@ __asm__(
     ".thumb\n"
     ".thumb_func\n.thumb_set OverworldWalk_DeltaX, 0x023BF59C\n"
     ".thumb_func\n.thumb_set OverworldWalk_DeltaY, 0x023BF5BE\n"
+    ".thumb_func\n.thumb_set OverworldWalk_DirectionFromDelta, 0x023BF68C\n"
     ".thumb_func\n.thumb_set OverworldWalk_StrictDiagonalAllowed, 0x023BF6CE\n"
     ".thumb_func\n.thumb_set OverworldWalk_DiagonalFacing, 0x023BF74E\n"
     ".thumb_func\n.thumb_set OverworldWalk_ResolveMountedDiagonal, 0x023BF780\n"
     ".thumb_func\n.thumb_set OverworldWalk_StartMountedFlat, 0x023BF840\n"
     ".thumb_func\n.thumb_set OverworldWalk_FilterMountedInput, 0x023BF9A0\n"
+    ".thumb_func\n.thumb_set OverworldWildSpawns_ResolveWalkPause, 0x023DFFCC\n"
+    ".thumb_func\n.thumb_set OverworldMount_GetSurfaceId, 0x01FF9A70\n"
+    ".thumb_func\n.thumb_set OverworldMount_UpdatePlayerBaseHeight, 0x01FF97E0\n"
+    ".thumb_func\n.thumb_set OverworldMount_ClearFollowerDecisionCooldown, 0x01FF97D0\n"
+    ".thumb_func\n.thumb_set OverworldMount_GetOrdinaryDirection, 0x01FF9780\n"
+    ".thumb_func\n.thumb_set OverworldMount_FinalizeIsPending, 0x01FF97C0\n"
+    ".thumb_func\n.thumb_set OverworldMount_IsLandingTileAllowed, 0x01FF9620\n"
+    ".thumb_func\n.thumb_set OverworldMount_ClassifyTeleportCandidate, 0x01FF9661\n"
+    ".thumb_func\n.thumb_set OverworldMount_ApplyWalkPolicyOutput, 0x01FF96C0\n"
+    ".global OverworldMount_ClearObjectCommand\n"
+    ".thumb_func\n.thumb_set OverworldMount_ClearObjectCommand, 0x020621F0\n"
+    ".thumb_func\n.thumb_set OverworldActorPolicy_MountCommand, 0x023BA0E0\n"
+    ".thumb_func\n.thumb_set OverworldMount_ChainControl, 0x01FF9800\n"
+    ".thumb_func\n.thumb_set OverworldMount_ResetMomentum, 0x01FF9AB0\n"
+    ".thumb_func\n.thumb_set OverworldMount_BufferedDirection, 0x01FF9AD4\n"
+    ".thumb_func\n.thumb_set OverworldMount_FinishOneFrameWalk, 0x023BA0BC\n"
     ".thumb_func\n.thumb_set OverworldWalkMount_RebaseMotionTarget, 0x023BFFEA\n"
+    ".thumb_func\n.thumb_set OverworldWalk_RefreshMountedGraphics, 0x01FF8700\n"
     ".thumb_func\n.thumb_set memcpy, 0x023DEEBE\n"
     ".thumb_func\n.thumb_set memset, 0x023DEEA2\n");
 
@@ -46,29 +65,55 @@ __asm__(
 #define OVERWORLD_MOUNT_DIRECTION_SOUTH_WEST 6
 #define OVERWORLD_MOUNT_DIRECTION_SOUTH_EAST 7
 #define OVERWORLD_MOUNT_PLAYER_MOVE_STATE_NONE 0
-#define OVERWORLD_MOUNT_PLAYER_MOVE_STATE_END 3
 #define OVERWORLD_MOUNT_AVATAR_FLAG_FORCED_MOVEMENT (1u << 0)
 #define OVERWORLD_MOUNT_HOP_MAX_DISTANCE 16
 #define OVERWORLD_MOUNT_CRASH_SHAKE_FRAMES 32
 #define OVERWORLD_MOUNT_CRASH_SHAKE_FX32 0x2000
-#define OVERWORLD_MOUNT_WALK_COMMAND 0x0C
-#define OVERWORLD_MOUNT_RUN_COMMAND 0x58
 #define OVERWORLD_MOUNT_WALK_FREEZE_COMMAND 0x3C
 #define OVERWORLD_MOUNT_CUSTOM_MOTION_FREEZE_COMMAND 0x3E
 /* These object-event sprite IDs resolve to overworld models 0073
  * (swimhero.pal) and 0074 (swimheroine.pal), respectively. */
 #define OVERWORLD_MOUNT_RIDER_SPRITE_MALE 178
 #define OVERWORLD_MOUNT_RIDER_SPRITE_FEMALE 179
+extern void OverworldMount_ChainControl(
+    FIELD_PLAYER_AVATAR *avatar, u32 param1, s32 direction,
+    u32 newKeys, u32 heldKeys, u32 param5);
+extern u8 OverworldMount_BufferedDirection(u32 keys);
+extern void OverworldMount_ResetMomentum(void);
+extern u16 OverworldMount_GetSurfaceId(int targetX, int targetY);
+extern void OverworldMount_UpdatePlayerBaseHeight(LocalMapObject *player);
+extern void OverworldMount_ClearFollowerDecisionCooldown(void);
+extern void OverworldMount_FinishOneFrameWalk(FIELD_PLAYER_AVATAR *avatar);
+extern BOOL OverworldMount_GetOrdinaryDirection(
+    u32 movementCommand, u8 *directionOut);
+extern BOOL OverworldMount_FinalizeIsPending(void);
+extern BOOL OverworldMount_IsLandingTileAllowed(int targetX, int targetY);
+extern void OverworldMount_ClassifyTeleportCandidate(
+    void *rawContext, OverworldActorTeleportCandidate *candidate);
+extern void OverworldMount_ApplyWalkPolicyOutput(
+    FIELD_PLAYER_AVATAR *avatar, LocalMapObject *follower,
+    const OverworldActorWalkPolicyCall *call);
+#define OverworldMount_ApplyPolicyCommand \
+    OverworldActorPolicy_MountCommand
+#define OverworldMount_ApplyPolicyValue(operation, value) \
+    ((void)OverworldActorPolicy_MountCommand( \
+        (operation), (void *)(u32)(value)))
 
 typedef struct OverworldMountTeleportWorldContext {
     LocalMapObject *player;
 } OverworldMountTeleportWorldContext;
 
+extern void OverworldMount_ClearObjectCommand(LocalMapObject *player);
+
 static OverworldMountRuntimeState sOverworldMountState
     __attribute__((section(".overworld_mount_state")));
-static u32 sOverworldMountNextSessionGeneration
-    __attribute__((section(".overworld_mount_generation")));
-
+typedef char OverworldMountReleaseHandoffFramesMustRemain1[
+    OVERWORLD_MOUNT_RELEASE_HANDOFF_FRAMES == 1 ? 1 : -1];
+typedef char OverworldMountFollowerCooldownOffsetMustRemainF4[
+    offsetof(OverworldWildSpawnState, movementCooldowns)
+            + OW_WILD_FOLLOWER_SLOT == 0xF4
+        ? 1
+        : -1];
 #define OVERWORLD_MOUNT_BOUNDARY_FLAGS \
     (sOverworldMountState.reservedPolicyState[ \
         OVERWORLD_MOUNT_BOUNDARY_FLAGS_INDEX])
@@ -104,7 +149,6 @@ static void OverworldMount_ResumeCustomMotionAfterMapTransition(void);
 static BOOL __attribute__((noinline, noclone))
 OverworldMount_CompletePendingStep(FIELD_PLAYER_AVATAR *avatar);
 static BOOL OverworldMount_CommitWalkBoundary(FIELD_PLAYER_AVATAR *avatar);
-static void OverworldMount_ResetMomentum(void);
 static void OverworldMount_SetMountedFacing(u8 direction);
 void OverworldMount_IssueHeldMovement(
     FIELD_PLAYER_AVATAR *avatar,
@@ -113,8 +157,6 @@ void OverworldMount_IssueHeldMovement(
 static int OverworldMount_DirectionDeltaX(u8 direction);
 static int OverworldMount_DirectionDeltaY(u8 direction);
 static BOOL OverworldMount_PlanHopTrajectory(
-    const OverworldWildBehaviorProfileData *lane,
-    LocalMapObject *player,
     u8 distance,
     u32 *trajectory);
 void OverworldMount_PlayCrashSound(u32 sequence);
@@ -190,21 +232,6 @@ OverworldMount_ReleaseTerrainStream(void)
     return TRUE;
 }
 
-static void __attribute__((noinline))
-OverworldMount_ApplyPolicyValue(u8 operation, u8 value)
-{
-    OverworldActorWalkPolicyCall call;
-
-    call.version = OVERWORLD_ACTOR_WALK_POLICY_VERSION;
-    call.size = sizeof(call);
-    call.actorSlot = OW_WILD_FOLLOWER_SLOT;
-    call.operation = operation;
-    call.direction = value;
-    call.effect = value;
-    (void)OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY->policy
-        ->reduceWalk(&call);
-}
-
 static u8 __attribute__((noinline,
     optimize("Os", "no-tree-forwprop")))
 OverworldMount_ReduceRole(u32 request, u32 details)
@@ -228,6 +255,14 @@ OverworldMount_ReduceRole(u32 request, u32 details)
     return ((const u8 *)(const void *)&output)[outputOffset];
 }
 
+static void __attribute__((noinline, section(".overworld_mount_precode")))
+OverworldMount_InspectPolicy(OverworldActorPolicyView *policy)
+{
+    (void)OverworldMount_ApplyPolicyCommand(
+        OVERWORLD_ACTOR_WALK_POLICY_INSPECT,
+        policy);
+}
+
 static void __attribute__((noinline))
 OverworldMount_StartWalkCrash(void)
 {
@@ -243,7 +278,7 @@ OverworldMount_StartWalkCrash(void)
         != OVERWORLD_ROLE_CONTROLLER_TERMINAL_CRASH) {
         return;
     }
-    (void)OverworldActorPolicy_Inspect(OW_WILD_FOLLOWER_SLOT, &policy);
+    OverworldMount_InspectPolicy(&policy);
     if (sOverworldMountState.snapshot.motionMode
             == OVERWORLD_MOUNT_MOTION_NONE
         && !OW_WILD_BEHAVIOR_WALK_ALLOWS_TURNING(
@@ -264,7 +299,7 @@ OverworldMount_StartWalkCrash(void)
     OverworldMount_ResetMomentum();
 }
 
-static void __attribute__((noinline, section(".overworld_mount_control_tail")))
+static void __attribute__((noinline, section(".overworld_mount_control_tail_crash")))
 OverworldMount_ApplyCrashPresentation(
     LocalMapObject *player,
     LocalMapObject *follower)
@@ -275,13 +310,13 @@ OverworldMount_ApplyCrashPresentation(
         != OVERWORLD_MOUNT_MOTION_CRASH) {
         return;
     }
-    offset = (sOverworldMountState.motionElapsed & 2)
-        ? OVERWORLD_MOUNT_CRASH_SHAKE_FX32
-        : -OVERWORLD_MOUNT_CRASH_SHAKE_FX32;
+    offset = ((s32)(sOverworldMountState.motionElapsed & 2) - 1)
+        * OVERWORLD_MOUNT_CRASH_SHAKE_FX32;
     player->faceVec[0] = (u32)((s32)player->faceVec[0] + offset);
     player->faceVec[2] = (u32)((s32)player->faceVec[2] - offset);
     follower->faceVec[0] = (u32)offset;
     follower->faceVec[2] = (u32)-offset;
+    OverworldWalk_RefreshMountedGraphics(player, follower);
 }
 
 static void __attribute__((noinline, section(".overworld_mount_precode")))
@@ -327,19 +362,23 @@ OverworldMount_SetAppliedThrough(u16 appliedThrough)
         "1: .word sOverworldMountState + 0x84\n");
 }
 
-static BOOL __attribute__((noinline, section(".overworld_mount_precode")))
-OverworldMount_FinalizeIsPending(void)
+static void __attribute__((naked, noinline,
+    section(".overworld_mount_field_input_extra")))
+OverworldMount_EndSession(u8 reason)
 {
-    return (OVERWORLD_MOUNT_BOUNDARY_FLAGS
-        & OVERWORLD_MOUNT_BOUNDARY_FINALIZE_PENDING) != 0;
-}
-
-static void __attribute__((noinline, section(".overworld_mount_motion")))
-OverworldMount_ResetMomentum(void)
-{
-    OverworldMount_ApplyPolicyValue(
-        OVERWORLD_ACTOR_WALK_POLICY_RESET,
-        OVERWORLD_ACTOR_WORLD_EFFECT_NONE);
+    __asm__(
+        "ldr r3, 1f\n"
+        "mov r2, #0\n"
+        "str r2, [r3, #0]\n"
+        "mov r1, #1\n"
+        "lsl r1, r1, #8\n"
+        "add r3, #100\n"
+        "strh r1, [r3, #0]\n"
+        "strb r0, [r3, #2]\n"
+        "strh r2, [r3, #26]\n"
+        "bx lr\n"
+        ".align 2\n"
+        "1: .word sOverworldMountState\n");
 }
 
 static BOOL __attribute__((noinline, section(".overworld_mount_precode")))
@@ -403,28 +442,6 @@ OverworldMount_HasCurrentPlayer(void)
         && fieldSystem == gFieldSysPtr
         && fieldSystem->playerAvatar != NULL
         && fieldSystem->playerAvatar->mapObject != NULL;
-}
-
-static void __attribute__((noinline, section(".overworld_mount_motion")))
-OverworldMount_UpdatePlayerBaseHeight(LocalMapObject *player)
-{
-    if (player->faceVec[1] != sOverworldMountState.lastAppliedPlayerFaceY) {
-        sOverworldMountState.playerBaseFaceY = player->faceVec[1];
-    }
-    if (player->unk88[1] != sOverworldMountState.lastAppliedPlayerUnk88Y) {
-        sOverworldMountState.playerBaseUnk88Y = player->unk88[1];
-    }
-}
-
-static void __attribute__((naked, noinline,
-    section(".overworld_mount_precode")))
-OverworldMount_ClearObjectCommand(LocalMapObject *player)
-{
-    __asm__(
-        "ldr r3, 1f\n"
-        "bx r3\n"
-        ".align 2\n"
-        "1: .word MapObject_ClearHeldMovement\n");
 }
 
 static void __attribute__((naked, noinline,
@@ -560,6 +577,7 @@ static void OverworldMount_DetachPresentation(void)
     }
     if (follower != NULL) {
         OverworldMount_ClearObjectCommand(follower);
+        OverworldMount_ClearFollowerDecisionCooldown();
         follower->flags &= ~MAPOBJECTFLAG_UNK31;
         follower->xPrev = follower->xCurr;
         follower->hPrev = follower->hCurr;
@@ -582,12 +600,26 @@ static void OverworldMount_DetachPresentation(void)
 
 static void OverworldMount_Cancel(u8 reason)
 {
+    BOOL restorePriorPolicy;
+    OverworldMountActionCall actionCall = { 0 };
+
     if (sOverworldMountState.snapshot.phase == OVERWORLD_MOUNT_PHASE_NONE) {
         return;
     }
     if (reason == OVERWORLD_MOUNT_CANCEL_CONTEXT_LOST
         && sOverworldMountState.preserveTransitionPrepared) {
         return;
+    }
+
+    restorePriorPolicy = OverworldMount_BindingMatchesFollower(
+        sOverworldMountState.fieldSystem,
+        &sOverworldWildSpawnState);
+    if (restorePriorPolicy) {
+        actionCall.version = OVERWORLD_MOUNT_ACTION_ADAPTER_VERSION;
+        actionCall.size = sizeof(actionCall);
+        actionCall.operation = OVERWORLD_MOUNT_ACTION_CANCEL_CHAIN;
+        actionCall.state = &sOverworldMountState;
+        (void)OVERWORLD_MOUNT_ACTION_ADAPTER_DISPATCH(&actionCall);
     }
 
     if (sOverworldMountState.snapshot.motionMode
@@ -603,19 +635,22 @@ static void OverworldMount_Cancel(u8 reason)
         (void)OverworldMount_ReleaseTerrainStream();
     }
     OverworldMount_DetachPresentation();
-    OverworldMount_ResetMomentum();
-    sOverworldMountState.snapshot.phase = OVERWORLD_MOUNT_PHASE_NONE;
-    sOverworldMountState.motionIdentity = 0;
-    sOverworldMountState.snapshot.lastCancelReason = reason;
-    sOverworldMountState.fieldSystem = NULL;
+    if (restorePriorPolicy) {
+        OverworldMount_ResetMomentum();
+        (void)OverworldMount_ApplyPolicyCommand(
+            OVERWORLD_ACTOR_WALK_POLICY_BIND_PROFILE,
+            &sOverworldMountState.priorFollowerBehaviorFingerprint);
+    }
+    OverworldMount_EndSession(reason);
 }
 
-static BOOL OverworldMount_Begin(
+static BOOL __attribute__((optimize("Os", "no-tree-dominator-opts")))
+OverworldMount_Begin(
     FieldSystem *fieldSystem,
     const OverworldMountBinding *binding,
     const OverworldWildBehaviorProfile *profile,
-    const OverworldWildBehaviorPrimitives *primitives,
-    const OverworldWildSurfaceCatalog *surfaceCatalog)
+    const OverworldWildSurfaceCatalog *surfaceCatalog,
+    OverworldActorPolicyProfileTransaction *policyTransaction)
 {
     u32 generation;
     u8 bufferedToggleDown = sOverworldMountState.bufferedToggleDown;
@@ -623,15 +658,21 @@ static BOOL OverworldMount_Begin(
     if (fieldSystem == NULL
         || binding == NULL
         || profile == NULL
-        || primitives == NULL
         || surfaceCatalog == NULL
-        || binding->species == SPECIES_NONE) {
+        || binding->species == SPECIES_NONE
+        || sOverworldMountState.snapshot.phase != OVERWORLD_MOUNT_PHASE_NONE) {
         return FALSE;
     }
 
-    generation = ++sOverworldMountNextSessionGeneration;
+    if (!OverworldMount_ApplyPolicyCommand(
+            OVERWORLD_ACTOR_WALK_POLICY_SWAP_PROFILE,
+            policyTransaction)) {
+        return FALSE;
+    }
+
+    generation = sOverworldMountState.snapshot.sessionGeneration + 1;
     if (generation == 0) {
-        generation = ++sOverworldMountNextSessionGeneration;
+        generation = 1;
     }
     memset(&sOverworldMountState, 0, sizeof(sOverworldMountState));
     /* The Select press that starts this session can still be physically held.
@@ -644,6 +685,10 @@ static BOOL OverworldMount_Begin(
     sOverworldMountState.snapshot.binding = *binding;
     sOverworldMountState.snapshot.sessionGeneration = generation;
     sOverworldMountState.snapshot.phase = OVERWORLD_MOUNT_PHASE_BOUND;
+    sOverworldMountState.priorFollowerBehaviorFingerprint =
+        policyTransaction->prior.behaviorFingerprint;
+    sOverworldMountState.priorFollowerMatchedLayerMask =
+        policyTransaction->prior.matchedLayerMask;
 
     OverworldMount_ResetMomentum();
     return TRUE;
@@ -699,7 +744,7 @@ static BOOL OverworldMount_Transition(
     if (call->work != OVERWORLD_ACTOR_TRANSITION_WORK_CANONICALIZE) {
         return FALSE;
     }
-    (void)OverworldActorPolicy_Inspect(OW_WILD_FOLLOWER_SLOT, &policy);
+    OverworldMount_InspectPolicy(&policy);
     if (sOverworldMountState.snapshot.motionMode
             == OVERWORLD_MOUNT_MOTION_NONE
         && !policy.pendingStep) {
@@ -753,7 +798,10 @@ OverworldMount_ResumeCustomMotionAfterMapTransition(void)
 static BOOL __attribute__((noinline, section(".overworld_mount_control_tail")))
 OverworldMount_IsActive(void)
 {
-    return sOverworldMountState.snapshot.phase != OVERWORLD_MOUNT_PHASE_NONE;
+    typedef u16 OverworldMountOwnershipWord __attribute__((may_alias));
+
+    return *(const OverworldMountOwnershipWord *)(const void *)
+        &sOverworldMountState.snapshot.phase;
 }
 
 static u8 __attribute__((naked, noinline,
@@ -826,45 +874,6 @@ OverworldMount_FieldInputProcess(
             && OverworldMount_HasCurrentPlayer());
 }
 
-static void OverworldMount_ApplyWalkPolicyOutput(
-    FIELD_PLAYER_AVATAR *avatar,
-    LocalMapObject *follower,
-    const OverworldActorWalkPolicyCall *call)
-{
-    if (call->decision == OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP) {
-        sOverworldMountState.reservedPolicyProfile[
-            OVERWORLD_MOUNT_WALK_NOMINAL_TIME_INDEX] = call->reserved[0];
-        sOverworldMountState.reservedPolicyState[
-            OVERWORLD_MOUNT_WALK_STEP_FLAGS_INDEX] = call->stepFlags;
-        sOverworldMountState.reservedPolicyState[
-            OVERWORLD_MOUNT_WALK_STEP_DIRECTION_INDEX] = call->stepDirection;
-        sOverworldMountState.reservedPolicyState[
-            OVERWORLD_MOUNT_WALK_FACING_DIRECTION_INDEX] =
-                call->facingDirection;
-        sOverworldMountState.reservedPolicyState[
-            OVERWORLD_MOUNT_WALK_TRAVEL_TIME_INDEX] = call->travelTime;
-    }
-    if ((call->stepFlags
-            & OVERWORLD_ACTOR_WALK_STEP_CLEAR_PRESENTATION) != 0) {
-        avatar->mapObject->flags &= ~MAPOBJECTFLAG_UNK7;
-    }
-    if (call->effect == OVERWORLD_ACTOR_WORLD_EFFECT_NONE) {
-        return;
-    }
-    if (call->effect == OVERWORLD_ACTOR_WORLD_EFFECT_CRASH) {
-        OverworldMount_PlayCrashSound(SEQ_SE_DP_WALL_HIT);
-        return;
-    }
-    /* The typed reducer emits only STOMP or SKID_DUST after the two terminal
-     * cases above. */
-    if (follower != NULL) {
-        OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY->playLandingHopParticle(follower);
-        if (call->effect == OVERWORLD_ACTOR_WORLD_EFFECT_STOMP) {
-            PlaySE(SEQ_SE_GS_IWAOTOSHI02);
-        }
-    }
-}
-
 static BOOL __attribute__((noinline)) OverworldMount_ApplyWalkPolicy(
     FIELD_PLAYER_AVATAR *avatar,
     BOOL started,
@@ -894,7 +903,7 @@ OverworldMount_CommitWalkBoundary(FIELD_PLAYER_AVATAR *avatar)
     OverworldActorPolicyView policy;
     OverworldActorWalkPolicyCall output;
 
-    (void)OverworldActorPolicy_Inspect(OW_WILD_FOLLOWER_SLOT, &policy);
+    OverworldMount_InspectPolicy(&policy);
     memset(&output, 0, sizeof(output));
     output.version = OVERWORLD_ACTOR_WALK_POLICY_VERSION;
     output.size = sizeof(output);
@@ -904,7 +913,8 @@ OverworldMount_CommitWalkBoundary(FIELD_PLAYER_AVATAR *avatar)
     output.operation = OVERWORLD_ACTOR_WALK_POLICY_COMMIT;
     output.direction = policy.walkMomentum.direction;
     output.distance = 1;
-    output.flags = OVERWORLD_ACTOR_WALK_POLICY_FLAG_WALK_ACTIVE;
+    output.flags = OVERWORLD_ACTOR_WALK_POLICY_FLAG_WALK_ACCEPTED
+        | OVERWORLD_ACTOR_WALK_POLICY_FLAG_CHAIN_ENABLED;
     if (!OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY->policy
             ->terminalWalk(
                 &output,
@@ -959,9 +969,9 @@ OverworldMount_CompletePendingStep(FIELD_PLAYER_AVATAR *avatar)
     u8 endState = sOverworldMountState.walkEndState;
     OverworldActorPolicyView policy;
 
-    (void)OverworldActorPolicy_Inspect(OW_WILD_FOLLOWER_SLOT, &policy);
+    OverworldMount_InspectPolicy(&policy);
     if (policy.pendingStep
-            != OVERWORLD_ACTOR_WALK_PENDING_ACTIVE
+            != OVERWORLD_ACTOR_WALK_PENDING_ACCEPTED
         || avatar == NULL
         || (endState & OVERWORLD_MOUNT_WALK_END_PENDING) == 0) {
         return FALSE;
@@ -1009,70 +1019,6 @@ static int OverworldMount_DirectionDeltaY(u8 direction)
     return OverworldWalk_DeltaY(direction);
 }
 
-static BOOL OverworldMount_IsLandingTileAllowed(
-    int targetX,
-    int targetY)
-{
-    FieldSystem *fieldSystem = sOverworldMountState.fieldSystem;
-
-    return targetX >= 0
-        && targetY >= 0
-        && OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->validateHopLanding(
-            OVERWORLD_WILD_LANDING_VALUE_SERVICE_VERSION,
-            OW_WILD_FOLLOWER_SLOT,
-            fieldSystem,
-            sOverworldMountState.snapshot.profile
-                .chillAllowedTerrainMask,
-            targetX,
-            targetY,
-            targetX,
-            targetY);
-}
-
-static u16 __attribute__((noinline, optimize("Os"),
-    section(".overworld_mount_motion")))
-OverworldMount_GetSurfaceId(int targetX, int targetY)
-{
-    OverworldWildSurfaceHit surface;
-
-    if (OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY->querySurface(
-            sOverworldMountState.fieldSystem,
-            sOverworldMountState.surfaceCatalog,
-            targetX,
-            targetY,
-            &surface)) {
-        return surface.surfaceId;
-    }
-    return OW_WILD_SURFACE_ID_NATIVE_GROUND;
-}
-
-static void __attribute__((optimize("Os")))
-OverworldMount_ClassifyTeleportCandidate(
-    void *rawContext,
-    OverworldActorTeleportCandidate *candidate)
-{
-    OverworldMountTeleportWorldContext *context = rawContext;
-
-    /* The Actor Motion planner invokes this only with its stack candidate;
-     * RequestTeleportPlan supplies the mounted player's live world context. */
-    if (!OverworldMount_IsLandingTileAllowed(
-            candidate->targetX,
-            candidate->targetY)) {
-        candidate->rejectionFlags |= OVERWORLD_MOTION_CANDIDATE_BAD_TERRAIN;
-        return;
-    }
-    candidate->targetSurfaceId = OverworldMount_GetSurfaceId(
-        candidate->targetX,
-        candidate->targetY);
-    candidate->targetBaseY =
-        OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY->getGroundBaseY(
-            sOverworldMountState.fieldSystem,
-            sOverworldMountState.surfaceCatalog,
-            context->player,
-            candidate->targetX,
-            candidate->targetY);
-}
-
 static BOOL __attribute__((optimize("Os")))
 OverworldMount_RequestTeleportPlan(
     const OverworldWildBehaviorProfileData *lane,
@@ -1115,39 +1061,22 @@ OverworldMount_RequestTeleportPlan(
     return TRUE;
 }
 
-static BOOL __attribute__((optimize("Os")))
+static BOOL __attribute__((noinline, optimize("Os"),
+    section(".overworld_mount_motion")))
 OverworldMount_PlanHopTrajectory(
-    const OverworldWildBehaviorProfileData *lane,
-    LocalMapObject *player,
     u8 distance,
     u32 *trajectory)
 {
-    OverworldActorMotionRequestCall request = { 0 };
-    OverworldActorHopPlanCall hopPlan = { 0 };
+    OverworldMountActionCall call = { 0 };
 
-    hopPlan.operation = OVERWORLD_ACTOR_HOP_PLAN_TRAJECTORY;
-    hopPlan.lane = lane;
-    hopPlan.fieldSystem = sOverworldMountState.fieldSystem;
-    hopPlan.surfaceCatalog = sOverworldMountState.surfaceCatalog;
-    hopPlan.object = player;
-    hopPlan.startBaseY = sOverworldMountState.motionStartBaseY;
-    hopPlan.targetBaseY = sOverworldMountState.motionTargetBaseY;
-    hopPlan.startX = sOverworldMountState.motionStartX;
-    hopPlan.startY = sOverworldMountState.motionStartY;
-    hopPlan.targetX = sOverworldMountState.motionTargetX;
-    hopPlan.targetY = sOverworldMountState.motionTargetY;
-    hopPlan.distance = distance;
-    request.version = OVERWORLD_ACTOR_MOTION_CALL_VERSION;
-    request.size = sizeof(request);
-    request.operation = OVERWORLD_ACTOR_MOTION_SERVICE_PLAN_HOP;
-    request.hopPlan = &hopPlan;
-    if (OVERWORLD_ACTOR_SYSTEM_MOTION_ENTRY->request(&request)
-            != OVERWORLD_ACTOR_RESULT_OK
-        || request.decision != OVERWORLD_MOTION_DECISION_ACCEPTED) {
-        return FALSE;
-    }
-    *trajectory = hopPlan.trajectory;
-    return TRUE;
+    call.version = OVERWORLD_MOUNT_ACTION_ADAPTER_VERSION;
+    call.size = sizeof(call);
+    call.operation = OVERWORLD_MOUNT_ACTION_PLAN_HOP_TRAJECTORY;
+    call.action = distance;
+    call.state = &sOverworldMountState;
+    call.avatar = sOverworldMountState.fieldSystem->playerAvatar;
+    call.trajectory = trajectory;
+    return OVERWORLD_MOUNT_ACTION_ADAPTER_DISPATCH(&call);
 }
 
 static void __attribute__((section(".overworld_mount_motion")))
@@ -1262,6 +1191,12 @@ OverworldMount_BeginSharedMotion(BOOL advanceFirstFrame)
         - sOverworldMountState.motionStartX;
     distanceY = sOverworldMountState.motionTargetY
         - sOverworldMountState.motionStartY;
+    /* Keep the signed tile delta until travel has been selected. Facing can
+     * differ on a skid, and a stock held Walk need not have a saved proposal. */
+    candidate.direction = sOverworldMountState.snapshot.motionMode
+            == OVERWORLD_MOUNT_MOTION_WALK
+        ? OverworldWalk_DirectionFromDelta(distanceX, distanceY)
+        : sOverworldMountState.motionDirection;
     if (distanceX < 0) {
         distanceX = -distanceX;
     }
@@ -1270,9 +1205,14 @@ OverworldMount_BeginSharedMotion(BOOL advanceFirstFrame)
     }
     intent.arcHeightQ4 = sOverworldMountState.motionArcHeightQ4;
     intent.spinSpeed = 0;
-    intent.swayWidth = 0;
+    intent.swayWidth = sOverworldMountState.snapshot.motionMode
+            == OVERWORLD_MOUNT_MOTION_WALK
+        ? sOverworldMountState.snapshot.profile.walkSwayWidth : 0;
     intent.visibilityPolicy = OVERWORLD_MOTION_VISIBILITY_VISIBLE;
-    intent.pauseFrames = 0;
+    intent.pauseFrames = sOverworldMountState.snapshot.motionMode
+            == OVERWORLD_MOUNT_MOTION_WALK
+        ? OverworldWildSpawns_ResolveWalkPause(
+            &sOverworldMountState.snapshot.profile) : 0;
     if (intent.kind == OVERWORLD_MOTION_KIND_HOP) {
         intent.spinSpeed = sOverworldMountState.motionFlicker & 0x0F;
         intent.swayWidth = sOverworldMountState.motionFlicker >> 4;
@@ -1286,7 +1226,6 @@ OverworldMount_BeginSharedMotion(BOOL advanceFirstFrame)
     candidate.targetY = sOverworldMountState.motionTargetY;
     candidate.targetBaseY = sOverworldMountState.motionTargetBaseY;
     candidate.rejectionFlags = 0;
-    candidate.direction = sOverworldMountState.motionDirection;
     candidate.distance = (u8)(distanceX > distanceY ? distanceX : distanceY);
 
     call.version = OVERWORLD_ACTOR_MOTION_CALL_VERSION;
@@ -1308,13 +1247,19 @@ OverworldMount_BeginSharedMotion(BOOL advanceFirstFrame)
             == OVERWORLD_ACTOR_RESULT_OK
         && call.decision == OVERWORLD_MOTION_DECISION_ACCEPTED) {
         sOverworldMountState.motionIdentity = call.motionIdentity;
+        if (intent.kind == OVERWORLD_MOTION_KIND_WALK) {
+            sOverworldMountState.reservedPolicyProfile[
+                OVERWORLD_MOUNT_WALK_PAUSE_INDEX] =
+                intent.pauseFrames;
+        }
         OverworldMount_ClearBoundaryState();
         return TRUE;
     }
     return FALSE;
 }
 
-static void OverworldMount_CancelSharedMotion(u8 reason)
+static void __attribute__((noinline, section(".overworld_mount_motion")))
+OverworldMount_CancelSharedMotion(u8 reason)
 {
     OverworldActorMotionBoundaryCall call;
 
@@ -1362,9 +1307,13 @@ static void OverworldMount_FinishCustomMotion(void)
     finishedMotion = sOverworldMountState.snapshot.motionMode;
     walkMotion = finishedMotion == OVERWORLD_MOUNT_MOTION_WALK;
     pause = walkMotion
-        ? 0
+        ? sOverworldMountState.reservedPolicyProfile[
+            OVERWORLD_MOUNT_WALK_PAUSE_INDEX]
         : finishedMotion == OVERWORLD_MOUNT_MOTION_TELEPORT
             ? sOverworldMountState.motionArcHeightQ4
+            : sOverworldMountState.walkEndState
+                    == OVERWORLD_MOUNT_WALK_END_CHAIN_HOP
+                ? 0
             : sOverworldMountState.snapshot.profile.hopPause;
     if (!sOverworldMountState.motionLandingPauseStarted) {
         sOverworldMountState.motionCooldown = pause;
@@ -1401,17 +1350,16 @@ static void OverworldMount_FinishCustomMotion(void)
         OVERWORLD_MOUNT_BOUNDARY_FINAL_WRITES_DONE
         | OVERWORLD_MOUNT_BOUNDARY_FINALIZE_PENDING;
     OVERWORLD_MOUNT_BOUNDARY_MOTION = finishedMotion;
-    if (!walkMotion) {
+    if (walkMotion) {
+        OverworldMount_FinishOneFrameWalk(avatar);
+    } else {
         OverworldMount_ClearObjectCommand(player);
     }
     if (follower != NULL) {
         OverworldMount_ClearObjectCommand(follower);
     }
     OverworldMount_ApplyTeleportVisibility(TRUE);
-    if (walkMotion) {
-        avatar->unk10 = 1; /* AVATAR_MOVE_STATE_MOVING */
-        avatar->unk14 = 2; /* PLAYER_MOVE_STATE_MOVING */
-    } else {
+    if (!walkMotion) {
         if (OverworldMount_AcknowledgeSharedMotion(
                 OVERWORLD_ACTOR_BOUNDARY_ENGINE_END,
                 OverworldMount_GetAppliedThrough(),
@@ -1488,6 +1436,7 @@ static BOOL OverworldMount_TryFinalizeSharedMotion(void)
         OverworldMount_ResetAvatarAfterCancel(avatar);
     }
     OverworldMount_ResetMomentum();
+    sOverworldMountState.walkEndState = OVERWORLD_MOUNT_WALK_END_NONE;
     return FALSE;
 }
 
@@ -1522,6 +1471,9 @@ OverworldMount_UpdateCustomMotion(void)
             sOverworldMountState.snapshot.motionMode
                     == OVERWORLD_MOUNT_MOTION_TELEPORT
                 ? sOverworldMountState.motionArcHeightQ4
+                : sOverworldMountState.walkEndState
+                        == OVERWORLD_MOUNT_WALK_END_CHAIN_HOP
+                    ? 0
                 : sOverworldMountState.snapshot.profile.hopPause;
         sOverworldMountState.motionLandingPauseStarted = TRUE;
     }
@@ -1558,12 +1510,20 @@ OverworldMount_UpdateCustomMotion(void)
     player->posVec[1] = (u32)baseY;
     player->posVec[2] = (u32)baseZ;
     if (sOverworldMountState.snapshot.motionMode
-            != OVERWORLD_MOUNT_MOTION_WALK
-        && (player->xCurr != baseX >> 16 || player->yCurr != baseZ >> 16)) {
-        player->xPrev = player->xCurr;
-        player->yPrev = player->yCurr;
-        player->xCurr = baseX >> 16;
-        player->yCurr = baseZ >> 16;
+            != OVERWORLD_MOUNT_MOTION_WALK) {
+        if (sOverworldMountState.motionStartY
+                == sOverworldMountState.motionTargetY) {
+            baseZ -= sample.swayOffset;
+        } else {
+            baseX -= sample.swayOffset;
+        }
+        if (player->xCurr != baseX >> 16
+            || player->yCurr != baseZ >> 16) {
+            player->xPrev = player->xCurr;
+            player->yPrev = player->yCurr;
+            player->xCurr = baseX >> 16;
+            player->yCurr = baseZ >> 16;
+        }
     }
     player->hCurr = baseY >> 15;
     if (sOverworldMountState.snapshot.motionMode
@@ -1719,9 +1679,12 @@ OverworldMount_TryStartCustomMotion(
 
     /* The caller establishes player ownership and validates Walk collision. */
     if (sOverworldMountState.motionCooldown != 0
-        || sOverworldMountState.motionStreamPreparing
-        || (rawLocomotion != OW_WILD_BEHAVIOR_LOCOMOTION_HOP
-            && !OW_WILD_BEHAVIOR_LOCOMOTION_IS_TELEPORT(rawLocomotion))) {
+        || sOverworldMountState.motionStreamPreparing) {
+        return sOverworldMountState.walkEndState
+            == OVERWORLD_MOUNT_WALK_END_CHAIN_HOP ? 2 : FALSE;
+    }
+    if (rawLocomotion != OW_WILD_BEHAVIOR_LOCOMOTION_HOP
+        && !OW_WILD_BEHAVIOR_LOCOMOTION_IS_TELEPORT(rawLocomotion)) {
         return FALSE;
     }
     player = avatar->mapObject;
@@ -1732,7 +1695,8 @@ OverworldMount_TryStartCustomMotion(
      * at its landing frame. The input hook still consumes the held direction,
      * so simply defer the Hop/Teleport until the stock loader is idle. */
     if (follower == NULL || !OverworldMount_TerrainStreamIsIdle()) {
-        return FALSE;
+        return sOverworldMountState.walkEndState
+            == OVERWORLD_MOUNT_WALK_END_CHAIN_HOP ? 2 : FALSE;
     }
     roleIntent = rawLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP
         ? OVERWORLD_ROLE_CONTROLLER_INTENT_HOP
@@ -1751,6 +1715,35 @@ OverworldMount_TryStartCustomMotion(
     sOverworldMountState.motionStartX = (s16)startX;
     sOverworldMountState.motionStartY = (s16)startY;
     if (rawLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP) {
+        if (sOverworldMountState.walkEndState
+                == OVERWORLD_MOUNT_WALK_END_CHAIN_HOP) {
+            OverworldMountActionCall actionCall = { 0 };
+
+            actionCall.version = OVERWORLD_MOUNT_ACTION_ADAPTER_VERSION;
+            actionCall.size = sizeof(actionCall);
+            actionCall.operation = OVERWORLD_MOUNT_ACTION_CHAIN_FORWARD_TARGET;
+            actionCall.direction = direction;
+            actionCall.state = &sOverworldMountState;
+            actionCall.avatar = avatar;
+            if (!OVERWORLD_MOUNT_ACTION_ADAPTER_DISPATCH(&actionCall)) {
+                return FALSE;
+            }
+            distance = 2;
+            targetX = sOverworldMountState.motionTargetX;
+            targetY = sOverworldMountState.motionTargetY;
+            sOverworldMountState.motionTargetBaseY =
+                OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY->getGroundBaseY(
+                    sOverworldMountState.fieldSystem,
+                    sOverworldMountState.surfaceCatalog,
+                    player,
+                    targetX,
+                    targetY);
+            if (!OverworldMount_PlanHopTrajectory(
+                    (u8)distance, &trajectory)) {
+                return FALSE;
+            }
+            goto hop_target_found;
+        }
         minDistance = lane->hopMinDistance != 0 ? lane->hopMinDistance : 1;
         maxDistance = lane->hopMaxDistance >= minDistance
             ? lane->hopMaxDistance
@@ -1781,8 +1774,6 @@ OverworldMount_TryStartCustomMotion(
                 targetX,
                 targetY);
             if (OverworldMount_PlanHopTrajectory(
-                    lane,
-                    player,
                     (u8)distance,
                     &trajectory)) {
                 sOverworldMountState.motionTargetX = (s16)targetX;
@@ -1807,7 +1798,10 @@ hop_target_found:
         sOverworldMountState.motionTargetY = teleportPlan.targetY;
     }
     if (rawLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP) {
-        frames = trajectory & 0xFFFF;
+        /* Chain HOP_FORWARD is always two tiles at current Walk time. */
+        frames = sOverworldMountState.walkEndState
+                == OVERWORLD_MOUNT_WALK_END_CHAIN_HOP
+            ? (u32)lane->hopTime << 1 : trajectory & 0xFFFF;
         if (frames == 0) {
             frames = 1;
         }
@@ -1968,7 +1962,7 @@ OverworldMount_TryHandleDiagonalWalk(
     u8 requestedDirection;
     u8 facingDirection;
 
-    (void)OverworldActorPolicy_Inspect(OW_WILD_FOLLOWER_SLOT, &policy);
+    OverworldMount_InspectPolicy(&policy);
     if (!OverworldMount_CanControl(avatar)
         || sOverworldMountState.snapshot.profile.chillAction
             != OW_WILD_BEHAVIOR_LOCOMOTION_WALK
@@ -1976,7 +1970,7 @@ OverworldMount_TryHandleDiagonalWalk(
         return FALSE;
     }
     if (policy.pendingStep
-        == OVERWORLD_ACTOR_WALK_PENDING_ACTIVE) {
+        == OVERWORLD_ACTOR_WALK_PENDING_ACCEPTED) {
         /* A flat diagonal tile still owns the stock movement-end boundary.
          * Do not start its successor before that boundary updates skid and
          * acceleration state. */
@@ -1995,6 +1989,21 @@ OverworldMount_TryHandleDiagonalWalk(
         || requestedDirection == OVERWORLD_MOUNT_DIRECTION_NONE) {
         return FALSE;
     }
+    {
+        OverworldMountActionCall actionCall = { 0 };
+
+        actionCall.version = OVERWORLD_MOUNT_ACTION_ADAPTER_VERSION;
+        actionCall.size = sizeof(actionCall);
+        actionCall.operation = OVERWORLD_MOUNT_ACTION_WALK_CORRIDOR;
+        actionCall.direction = requestedDirection;
+        actionCall.state = &sOverworldMountState;
+        actionCall.avatar = avatar;
+        if (!OVERWORLD_MOUNT_ACTION_ADAPTER_DISPATCH(&actionCall)) {
+            (void)OverworldMount_ApplyWalkPolicy(
+                avatar, FALSE, FALSE);
+            return TRUE;
+        }
+    }
     if (requestedDirection >= OVERWORLD_MOUNT_DIRECTION_NORTH_WEST
         && !OverworldWalk_StrictDiagonalAllowed(
             &sOverworldMountState,
@@ -2010,12 +2019,18 @@ OverworldMount_TryHandleDiagonalWalk(
         && !OverworldMount_TerrainStreamIsIdle()) {
         return TRUE;
     }
-    facingDirection = requestedDirection;
+    facingDirection = sOverworldMountState.reservedPolicyState[
+        OVERWORLD_MOUNT_WALK_FACING_DIRECTION_INDEX];
     if (facingDirection >= OVERWORLD_MOUNT_DIRECTION_NORTH_WEST) {
+        /* FilterMountedInput rewrites keys to the old travel heading during a
+         * skid. Use the requested diagonal's own keys for facing instead. */
         facingDirection = OverworldWalk_DiagonalFacing(
             avatar->mapObject,
             facingDirection,
-            newKeys);
+            (sOverworldMountState.reservedPolicyState[
+                    OVERWORLD_MOUNT_WALK_STEP_FLAGS_INDEX]
+                    & OVERWORLD_ACTOR_WALK_STEP_SKID) != 0
+                ? PAD_PLUS_KEY_MASK : newKeys);
     }
     (void)OverworldMount_ApplyWalkPolicy(
         avatar,
@@ -2057,7 +2072,7 @@ static BOOL OverworldMount_TryStartWalkFromInput(
         advanceFirstFrame);
 }
 
-static void __attribute__((noinline, optimize("Os")))
+static void __attribute__((noinline, used, optimize("Os")))
 OverworldMount_ProcessPlayerControl(
     FIELD_PLAYER_AVATAR *avatar,
     u32 param1,
@@ -2066,14 +2081,22 @@ OverworldMount_ProcessPlayerControl(
     u32 heldKeys,
     u32 param5)
 {
-    if (sOverworldMountState.pendingFieldStep) {
-        return;
+    /* Finish the current stock tile, but do not admit another held step
+     * while Select is waiting for the mount handoff. */
+    if (sOverworldMountState.bufferedTogglePending) {
+        newKeys &= ~PAD_PLUS_KEY_MASK;
+        heldKeys &= ~PAD_PLUS_KEY_MASK;
     }
     if (sOverworldMountState.walkEndState
         == OVERWORLD_MOUNT_WALK_END_CONTINUATION_READY) {
         sOverworldMountState.walkEndState = OVERWORLD_MOUNT_WALK_END_NONE;
-        if (!sOverworldMountState.directionInputHeld) {
-            OverworldMount_ResetMomentum();
+        /* Control runs before the actor tick updates directionInputHeld.
+         * Decide this boundary from the keys supplied for this frame. */
+        if (((newKeys | heldKeys) & PAD_PLUS_KEY_MASK) == 0) {
+            /* NONE is a Walk-policy request. It can start the authored stop
+             * skid; a direct reset would discard that motion and its pause. */
+            (void)OverworldMount_TryStartWalkFromInput(
+                avatar, &newKeys, &heldKeys, FALSE);
             return;
         }
         if (OverworldMount_TryStartWalkFromInput(
@@ -2117,13 +2140,8 @@ OverworldMount_PlayerMoveControl(
     u32 heldKeys,
     u32 param5)
 {
-    OverworldMount_ProcessPlayerControl(
-        avatar,
-        param1,
-        direction,
-        newKeys,
-        heldKeys,
-        param5);
+    OverworldMount_ChainControl(
+        avatar, param1, direction, newKeys, heldKeys, param5);
 }
 
 void __attribute__((section(".overworld_mount_crash"), noinline, used))
@@ -2138,29 +2156,6 @@ OverworldMount_PlayCrashSound(u32 sequence)
         }
     }
     PlaySE(sequence);
-}
-
-static BOOL __attribute__((section(".overworld_mount_motion"), noinline))
-OverworldMount_GetOrdinaryDirection(
-    u32 movementCommand,
-    u8 *directionOut)
-{
-    u8 direction;
-
-    for (direction = OVERWORLD_MOUNT_DIRECTION_NORTH;
-         direction <= OVERWORLD_MOUNT_DIRECTION_EAST;
-         direction++) {
-        if (movementCommand == MapObject_MovementCommandFromDirection(
-                direction,
-                OVERWORLD_MOUNT_WALK_COMMAND)
-            || movementCommand == MapObject_MovementCommandFromDirection(
-                direction,
-                OVERWORLD_MOUNT_RUN_COMMAND)) {
-            *directionOut = direction;
-            return TRUE;
-        }
-    }
-    return FALSE;
 }
 
 void OverworldMount_IssueHeldMovement(
@@ -2191,6 +2186,7 @@ void OverworldMount_IssueHeldMovement(
     }
     if (trackedStep) {
         u8 facingDirection = direction;
+        OverworldActorPolicyView policy;
 
         if (sOverworldMountState.snapshot.motionMode
                 != OVERWORLD_MOUNT_MOTION_NONE) {
@@ -2199,8 +2195,13 @@ void OverworldMount_IssueHeldMovement(
              * replacing it here drops its last frame and logical boundary. */
             return;
         }
-        /* A turn skid keeps both travel and facing on the committed heading.
-         * Apply the requested facing only after the last skid tile lands. */
+        OverworldMount_InspectPolicy(&policy);
+        if (policy.pendingStep == OVERWORLD_ACTOR_WALK_PENDING_PROPOSAL) {
+            /* The held-step hook receives the forced travel command. Keep the
+             * reducer's separate facing when a turn skid owns that command. */
+            facingDirection = sOverworldMountState.reservedPolicyState[
+                OVERWORLD_MOUNT_WALK_FACING_DIRECTION_INDEX];
+        }
         (void)OverworldMount_ApplyWalkPolicy(
             avatar,
             OverworldMount_TryStartCustomMotion(
@@ -2230,8 +2231,7 @@ static BOOL OverworldMount_CanToggle(FieldSystem *fieldSystem)
         && !sOverworldMountState.motionStreamPreparing
         && avatar->state == PLAYER_STATE_WALKING
         && (avatar->unk0 & OVERWORLD_MOUNT_AVATAR_FLAG_FORCED_MOVEMENT) == 0
-        && (avatar->unk14 == OVERWORLD_MOUNT_PLAYER_MOVE_STATE_NONE
-            || avatar->unk14 == OVERWORLD_MOUNT_PLAYER_MOVE_STATE_END);
+        && avatar->unk14 == OVERWORLD_MOUNT_PLAYER_MOVE_STATE_NONE;
 }
 
 static void OverworldMount_HandleFollowerSelectionRequest(
@@ -2245,8 +2245,7 @@ static void OverworldMount_HandleFollowerSelectionRequest(
     u8 partySlot = request
         & OVERWORLD_FOLLOWER_SELECTION_REQUEST_SLOT_MASK;
     u8 selectedSlot = CUSTOM_FOLLOWER_PARTY_SLOT_NONE;
-    BOOL mount = (request
-        & OVERWORLD_FOLLOWER_SELECTION_REQUEST_MOUNT) != 0;
+    u8 mount = request & OVERWORLD_FOLLOWER_SELECTION_REQUEST_MOUNT;
 
     if ((request & OVERWORLD_FOLLOWER_SELECTION_REQUEST_PENDING) != 0) {
         (void)OVERWORLD_FOLLOWER_SELECTOR_OVERLAY_ENTRY->getSelectedPokemon(
@@ -2261,7 +2260,7 @@ static void OverworldMount_HandleFollowerSelectionRequest(
         if (follower->active
             && state->activeFollowerPartySlot == partySlot) {
             if (!mount
-                || OverworldMount_IsActive()
+                || (OverworldMount_IsActive() & OVERWORLD_MOUNT_ACTIVE_FLAG)
                 || OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY
                     ->beginMountSelectedFollower(fieldSystem, state)) {
                 queue->reserved = 0;
@@ -2286,7 +2285,7 @@ static void OverworldMount_HandleFollowerSelectionRequest(
     if (!follower->active
         || state->activeFollowerPartySlot != partySlot) {
         queue->reserved = 0;
-    } else if (OverworldMount_IsActive()
+    } else if ((OverworldMount_IsActive() & OVERWORLD_MOUNT_ACTIVE_FLAG)
         || OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY
             ->beginMountSelectedFollower(fieldSystem, state)) {
         queue->reserved = 0;
@@ -2298,11 +2297,17 @@ static BOOL __attribute__((used)) OverworldMount_Tick(
     OverworldWildSpawnState *state,
     u16 physicalKeys)
 {
-    BOOL togglePressed = sOverworldMountState.bufferedTogglePending != 0;
+    u8 togglePressed = sOverworldMountState.bufferedTogglePending;
     OverworldActorPolicyView policy;
+    OverworldMountActionCall actionCall = { 0 };
 
     sOverworldMountState.directionInputHeld =
-        (physicalKeys & PAD_PLUS_KEY_MASK) != 0;
+        (u8)(physicalKeys & PAD_PLUS_KEY_MASK);
+
+    if (!(OverworldMount_IsActive() & OVERWORLD_MOUNT_ACTIVE_FLAG)
+        && sOverworldMountState.snapshot.reserved != 0) {
+        sOverworldMountState.snapshot.reserved--;
+    }
 
     OverworldMount_HandleFollowerSelectionRequest(fieldSystem, state);
     if (togglePressed
@@ -2313,14 +2318,14 @@ static BOOL __attribute__((used)) OverworldMount_Tick(
          * accepted. Do not discard it merely because a Hop or a field update
          * made this particular frame unable to toggle. */
         sOverworldMountState.bufferedTogglePending = FALSE;
-        if (OverworldMount_IsActive()) {
+        if (OverworldMount_IsActive() & OVERWORLD_MOUNT_ACTIVE_FLAG) {
             OverworldMount_Cancel(OVERWORLD_MOUNT_CANCEL_EXPLICIT);
         } else {
             (void)OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY
                 ->beginMountSelectedFollower(fieldSystem, state);
         }
     }
-    if (!OverworldMount_IsActive()) {
+    if (!(OverworldMount_IsActive() & OVERWORLD_MOUNT_ACTIVE_FLAG)) {
         return FALSE;
     }
     if (fieldSystem != sOverworldMountState.fieldSystem
@@ -2329,26 +2334,22 @@ static BOOL __attribute__((used)) OverworldMount_Tick(
         return FALSE;
     }
     OverworldMount_ResumeCustomMotionAfterMapTransition();
-    (void)OverworldActorPolicy_Inspect(OW_WILD_FOLLOWER_SLOT, &policy);
+    OverworldMount_InspectPolicy(&policy);
     if (policy.pendingStep
-            == OVERWORLD_ACTOR_WALK_PENDING_ACTIVE
+            == OVERWORLD_ACTOR_WALK_PENDING_ACCEPTED
         && policy.walkMomentum.skidRemaining == 0) {
-        u8 requestedDirection = OverworldMount_GetInputDirection(physicalKeys);
+        u8 requestedDirection = OverworldMount_BufferedDirection(physicalKeys);
+        /* NONE clears an older turn when the player returns to the committed
+         * heading or gives input that cannot select a direction. */
+        u8 bufferedDirection = OVERWORLD_MOUNT_DIRECTION_NONE;
 
-        if (requestedDirection != OVERWORLD_MOUNT_DIRECTION_NONE
-            && requestedDirection != policy.walkMomentum.direction) {
+        if (requestedDirection != policy.walkMomentum.direction) {
             /* Buffer turns while the current tile owns PlayerMoveControl. */
-            OverworldMount_ApplyPolicyValue(
-                OVERWORLD_ACTOR_WALK_POLICY_BUFFER_DIRECTION,
-                requestedDirection);
-        } else if (requestedDirection
-            == policy.walkMomentum.direction) {
-            /* The player deliberately returned to the committed heading
-             * before the boundary, so discard an older buffered turn. */
-            OverworldMount_ApplyPolicyValue(
-                OVERWORLD_ACTOR_WALK_POLICY_BUFFER_DIRECTION,
-                OVERWORLD_MOUNT_DIRECTION_NONE);
+            bufferedDirection = requestedDirection;
         }
+        OverworldMount_ApplyPolicyValue(
+            OVERWORLD_ACTOR_WALK_POLICY_BUFFER_DIRECTION,
+            bufferedDirection);
     }
     if (sOverworldMountState.motionCooldown != 0) {
         sOverworldMountState.motionCooldown--;
@@ -2359,6 +2360,12 @@ static BOOL __attribute__((used)) OverworldMount_Tick(
         OverworldMount_Cancel(OVERWORLD_MOUNT_CANCEL_IDENTITY_CHANGED);
         return FALSE;
     }
+    actionCall.version = OVERWORLD_MOUNT_ACTION_ADAPTER_VERSION;
+    actionCall.size = sizeof(actionCall);
+    actionCall.operation = OVERWORLD_MOUNT_ACTION_TICK_CHAIN;
+    actionCall.state = &sOverworldMountState;
+    actionCall.avatar = fieldSystem->playerAvatar;
+    (void)OVERWORLD_MOUNT_ACTION_ADAPTER_DISPATCH(&actionCall);
     (void)OverworldMount_TryFinalizeSharedMotion();
     OverworldMount_SyncPresentation();
     return TRUE;

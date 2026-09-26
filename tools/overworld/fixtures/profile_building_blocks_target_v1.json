@@ -1,0 +1,374 @@
+{
+  "manifestVersion": 1,
+  "source": {
+    "catalogVersion": 4,
+    "profileCount": 32,
+    "applicationCount": 27,
+    "classBindingCount": 5,
+    "profiles": [
+      { "id": "default", "name": "Default", "classification": null },
+      { "id": "aggressive-chase", "name": "Agressive Chase", "classification": null },
+      { "id": "aggressive-ram", "name": "Aggressive Ram", "classification": null },
+      { "id": "picked-up", "name": "Picked Up", "classification": null },
+      { "id": "teleport-stalker-override", "name": "Teleport Stalker", "classification": "archetype" },
+      { "id": "canopy-hopper", "name": "Canopy Hopper", "classification": "capability" },
+      { "id": "canopy-hop-surface", "name": "Canopy Hopper · On Canopy", "classification": "capability" },
+      { "id": "throwing", "name": "Throwing!", "classification": "capability" },
+      { "id": "playful", "name": "Playful!", "classification": "attitude" },
+      { "id": "floaty-bounce", "name": "Floaty Bounce", "classification": "archetype" },
+      { "id": "bird", "name": "Bird", "classification": "archetype" },
+      { "id": "flying-insect", "name": "Flying insect", "classification": "archetype" },
+      { "id": "gentle-grazer", "name": "Gentle grazer", "classification": "archetype" },
+      { "id": "runner", "name": "Runner", "classification": "archetype" },
+      { "id": "skittish", "name": "Skittish", "classification": "attitude" },
+      { "id": "test", "name": "Test", "classification": null },
+      { "id": "forced-asleep", "name": "Forced asleep", "classification": "modifier" },
+      { "id": "flower", "name": "Flower", "classification": "capability" },
+      { "id": "bird-rooftop", "name": "Bird Rooftop", "classification": "capability" },
+      { "id": "nervous-scavenger", "name": "Scavenger", "classification": "archetype" },
+      { "id": "hopping-scavenger", "name": "Hopping Scavenger", "classification": "archetype" },
+      { "id": "follower-pokemon", "name": "Follower Pokemon", "classification": "follower-mount" },
+      { "id": "aggressive-ram-override", "name": "Aggressive Ram Boost", "classification": "capability" },
+      { "id": "default-active", "name": "Default Active", "classification": "archetype" },
+      { "id": "default-tired", "name": "Default Tired", "classification": "archetype" },
+      { "id": "baby-pokemon", "name": "Baby Pokemon", "classification": "attitude" },
+      { "id": "swaying-plant", "name": "Swaying Plant", "classification": "archetype" },
+      { "id": "swaying-plant-active", "name": "Swaying Plant Active", "classification": "archetype" },
+      { "id": "swaying-plant-tired", "name": "Swaying Plant Tired", "classification": "archetype" },
+      { "id": "ambush-plant", "name": "Ambush Plant", "classification": "archetype" },
+      { "id": "ambush-plant-active", "name": "Ambush Plant Active", "classification": "archetype" },
+      { "id": "ambush-plant-tired", "name": "Ambush Plant Tired", "classification": "archetype" }
+    ],
+    "applications": [
+      { "id": "apply-teleport-stalker-override", "profile": "teleport-stalker-override" },
+      { "id": "apply-nervous-scavenger", "profile": "nervous-scavenger" },
+      { "id": "apply-hopping-scavenger", "profile": "hopping-scavenger" },
+      { "id": "apply-runner", "profile": "runner" },
+      { "id": "apply-floaty-bounce", "profile": "floaty-bounce" },
+      { "id": "apply-bird", "profile": "bird" },
+      { "id": "apply-flying-insect", "profile": "flying-insect" },
+      { "id": "apply-gentle-grazer", "profile": "gentle-grazer" },
+      { "id": "apply-default-active", "profile": "default-active" },
+      { "id": "apply-swaying-plant", "profile": "swaying-plant" },
+      { "id": "apply-swaying-plant-active", "profile": "swaying-plant-active" },
+      { "id": "apply-swaying-plant-tired", "profile": "swaying-plant-tired" },
+      { "id": "apply-ambush-plant", "profile": "ambush-plant" },
+      { "id": "apply-ambush-plant-active", "profile": "ambush-plant-active" },
+      { "id": "apply-ambush-plant-tired", "profile": "ambush-plant-tired" },
+      { "id": "apply-default-tired", "profile": "default-tired" },
+      { "id": "apply-canopy-hopper", "profile": "canopy-hopper" },
+      { "id": "apply-canopy-hop-surface", "profile": "canopy-hop-surface" },
+      { "id": "apply-throwing", "profile": "throwing" },
+      { "id": "apply-flower", "profile": "flower" },
+      { "id": "apply-bird-rooftop", "profile": "bird-rooftop" },
+      { "id": "apply-aggressive-ram-override", "profile": "aggressive-ram-override" },
+      { "id": "apply-playful", "profile": "playful" },
+      { "id": "apply-skittish", "profile": "skittish" },
+      { "id": "apply-baby-pokemon", "profile": "baby-pokemon" },
+      { "id": "apply-follower-pokemon", "profile": "follower-pokemon" },
+      { "id": "apply-forced-asleep", "profile": "forced-asleep" }
+    ],
+    "classBindings": [
+      { "profile": "default", "symbol": "OW_WILD_BEHAVIOR_CLASS_DEFAULT" },
+      { "profile": "aggressive-chase", "symbol": "OW_WILD_BEHAVIOR_CLASS_AGRESSIVE_CHASE" },
+      { "profile": "aggressive-ram", "symbol": "OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM" },
+      { "profile": "picked-up", "symbol": "OW_WILD_BEHAVIOR_CLASS_PICKED_UP" },
+      { "profile": "test", "symbol": "OW_WILD_BEHAVIOR_CLASS_TEST" }
+    ]
+  },
+  "target": {
+    "maximumApplicationCount": 32,
+    "applicationCount": 30,
+    "rootProfile": { "id": "default", "name": "Default" },
+    "classificationOrder": [
+      "routine",
+      "placement",
+      "capability",
+      "attitude",
+      "style",
+      "follower-mount",
+      "modifier"
+    ],
+    "applications": [
+      { "order": 1, "id": "apply-scavenger", "profile": "scavenger", "name": "Scavenger", "classification": "routine", "badges": [] },
+      { "order": 2, "id": "apply-sprint", "profile": "sprint", "name": "Sprint", "classification": "routine", "badges": [] },
+      { "order": 3, "id": "apply-floaty-bounce", "profile": "floaty-bounce", "name": "Floaty Bounce", "classification": "routine", "badges": [] },
+      { "order": 4, "id": "apply-small-bird-hop", "profile": "small-bird-hop", "name": "Small Bird Hop", "classification": "routine", "badges": [] },
+      { "order": 5, "id": "apply-erratic-flutter", "profile": "erratic-flutter", "name": "Erratic Flutter", "classification": "routine", "badges": [] },
+      { "order": 6, "id": "apply-meander", "profile": "meander", "name": "Meander", "classification": "routine", "badges": [] },
+      { "order": 7, "id": "apply-hop-around", "profile": "hop-around", "name": "Hop Around", "classification": "routine", "badges": [] },
+      { "order": 8, "id": "apply-idle", "profile": "idle", "name": "Idle", "classification": "routine", "badges": [] },
+      { "order": 9, "id": "apply-drowsy-wander", "profile": "drowsy-wander", "name": "Drowsy Wander", "classification": "routine", "badges": [] },
+      { "order": 10, "id": "apply-perch", "profile": "perch", "name": "Perch", "classification": "routine", "badges": ["conditional"] },
+      { "order": 11, "id": "apply-rest", "profile": "rest", "name": "Rest", "classification": "routine", "badges": [], "links": ["tired"] },
+      { "order": 12, "id": "apply-fly-in", "profile": "fly-in", "name": "Fly In", "classification": "placement", "badges": [] },
+      { "order": 13, "id": "apply-canopy-access", "profile": "canopy-access", "name": "Canopy Access", "classification": "placement", "badges": [] },
+      { "order": 14, "id": "apply-flower-bed", "profile": "flower-bed", "name": "Flower Bed", "classification": "placement", "badges": [] },
+      { "order": 15, "id": "apply-notice-player", "profile": "notice-player", "name": "Notice Player", "classification": "capability", "badges": ["conditional"] },
+      { "order": 16, "id": "apply-teleport", "profile": "teleport", "name": "Teleport", "classification": "capability", "badges": [] },
+      { "order": 17, "id": "apply-stalker", "profile": "stalker", "name": "Stalker", "classification": "capability", "badges": ["conditional"] },
+      { "order": 18, "id": "apply-long-hop", "profile": "long-hop", "name": "Long Hop", "classification": "capability", "badges": [] },
+      { "order": 19, "id": "apply-canopy-hop", "profile": "canopy-hop", "name": "Canopy Hop", "classification": "capability", "badges": ["conditional"] },
+      { "order": 20, "id": "apply-throw", "profile": "throw", "name": "Throw", "classification": "capability", "badges": ["conditional"] },
+      { "order": 21, "id": "apply-ram", "profile": "ram", "name": "Ram", "classification": "capability", "badges": ["conditional"] },
+      { "order": 22, "id": "apply-heavy-stomp", "profile": "heavy-stomp", "name": "Heavy Stomp", "classification": "capability", "badges": [] },
+      { "order": 23, "id": "apply-startled", "profile": "startled", "name": "Startled", "classification": "attitude", "badges": ["conditional"] },
+      { "order": 24, "id": "apply-ambush", "profile": "ambush", "name": "Ambush", "classification": "attitude", "badges": ["conditional"] },
+      { "order": 25, "id": "apply-playful", "profile": "playful", "name": "Playful", "classification": "attitude", "badges": ["conditional"] },
+      { "order": 26, "id": "apply-skittish", "profile": "skittish", "name": "Skittish", "classification": "attitude", "badges": ["conditional"] },
+      { "order": 27, "id": "apply-waddle", "profile": "waddle", "name": "Waddle", "classification": "style", "badges": [] },
+      { "order": 28, "id": "apply-follower", "profile": "follower", "name": "Follower", "classification": "follower-mount", "badges": ["system"] },
+      { "order": 29, "id": "apply-mounted", "profile": "mounted", "name": "Mounted", "classification": "follower-mount", "badges": ["system"] },
+      { "order": 30, "id": "apply-asleep", "profile": "asleep", "name": "Asleep", "classification": "modifier", "badges": ["system"] }
+    ],
+    "classBindings": [
+      { "profile": "default", "symbol": "OW_WILD_BEHAVIOR_CLASS_DEFAULT" }
+    ],
+    "internalStates": ["held-actor-control"],
+    "conditionOrder": {
+      "playful": [
+        "condition-playful-notices-compatible-actor",
+        "condition-playful-notices-player"
+      ]
+    },
+    "exactProfileContracts": {
+      "drowsy-wander": {
+        "kind": "normal",
+        "classification": "routine",
+        "fields": {
+          "chillSpeed": { "operator": "replace", "value": 20 },
+          "ramAccelerationSteps": { "operator": "replace", "value": 2 },
+          "chainMovementVariance": { "operator": "replace", "value": 4 },
+          "ramMaxSpeed": { "operator": "replace", "value": 72 },
+          "chainPauseVariance": { "operator": "replace", "value": 96 },
+          "chainPauseAction": { "operator": "replace", "value": "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND" },
+          "chainPauseActionChance": { "operator": "replace", "value": 70 },
+          "avoidPreviousTile": { "operator": "replace", "value": "OW_WILD_BEHAVIOR_BOOL_YES" },
+          "walkOptions": { "operator": "replace", "value": 32 },
+          "wanderStraightChance": { "operator": "replace", "value": 55 },
+          "walkPause": { "operator": "replace", "value": 0 },
+          "walkPauseVariance": { "operator": "replace", "value": 0 },
+          "walkTimeVariance": { "operator": "replace", "value": 6 }
+        },
+        "condition": null,
+        "retiredProfileIds": []
+      },
+      "ram": {
+        "kind": "conditional",
+        "classification": "capability",
+        "fields": {
+          "alertEmote": { "operator": "replace", "value": "OW_WILD_SPAWNER_BUBBLE_ID_ANGRY" },
+          "alertTime": { "operator": "replace", "value": 10 },
+          "battleTrigger": { "operator": "replace", "value": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_MOVEMENT_CRASH" },
+          "chainMovementVariance": { "operator": "replace", "value": 0 },
+          "chainPauseVariance": { "operator": "replace", "value": 0 },
+          "walkOptions": { "operator": "replace", "value": 17 },
+          "walkStompTime": { "operator": "replace", "value": 8 },
+          "chillTarget": { "operator": "replace", "value": "OW_WILD_BEHAVIOR_TARGET_PLAYER_CARDINAL_LINE" },
+          "ramAccelerationSteps": { "operator": "replace", "value": 3 },
+          "ramMaxSpeed": { "operator": "replace", "value": 4 }
+        },
+        "condition": {
+          "id": "condition-ram-notices-player",
+          "when": {
+            "kind": "notice-target",
+            "vision": { "mode": "current" },
+            "chancePercent": 100
+          },
+          "activation": {
+            "mode": "timed",
+            "durationFrames": 96,
+            "cooldownFrames": 100
+          },
+          "target": { "kind": "player" }
+        },
+        "retiredProfileIds": ["aggressive-ram", "aggressive-ram-override"]
+      },
+      "heavy-stomp": {
+        "kind": "normal",
+        "classification": "capability",
+        "fields": {
+          "walkStompTime": { "operator": "replace", "value": 32 },
+          "overworldLimit": { "operator": "replace", "value": 1 }
+        },
+        "condition": null,
+        "retiredProfileIds": []
+      }
+    },
+    "namedPools": [
+      {
+        "id": "baby-pokemon",
+        "name": "Baby Pokémon",
+        "members": [
+          "SPECIES_CLEFFA", "SPECIES_IGGLYBUFF", "SPECIES_TOGEPI", "SPECIES_TYROGUE",
+          "SPECIES_SMOOCHUM", "SPECIES_ELEKID", "SPECIES_MAGBY", "SPECIES_AZURILL",
+          "SPECIES_WYNAUT", "SPECIES_BUDEW", "SPECIES_CHINGLING", "SPECIES_BONSLY",
+          "SPECIES_MIME_JR", "SPECIES_HAPPINY", "SPECIES_MUNCHLAX", "SPECIES_RIOLU",
+          "SPECIES_MANTYKE"
+        ]
+      },
+      {
+        "id": "playful-pokemon",
+        "name": "Playful Pokémon",
+        "members": [
+          "SPECIES_CLEFAIRY", "SPECIES_CLEFABLE", "SPECIES_SENTRET",
+          "SPECIES_FURRET", "SPECIES_AIPOM", "SPECIES_AMBIPOM"
+        ]
+      }
+    ],
+    "membershipSets": {
+      "teleport-stalker": [
+        "SPECIES_GASTLY", "SPECIES_HAUNTER", "SPECIES_GENGAR", "SPECIES_MISDREAVUS",
+        "SPECIES_SHEDINJA", "SPECIES_SABLEYE", "SPECIES_SHUPPET", "SPECIES_BANETTE",
+        "SPECIES_DUSKULL", "SPECIES_DUSCLOPS", "SPECIES_DRIFLOON", "SPECIES_DRIFBLIM",
+        "SPECIES_MISMAGIUS", "SPECIES_SPIRITOMB", "SPECIES_DUSKNOIR", "SPECIES_FROSLASS",
+        "SPECIES_ROTOM", "SPECIES_GIRATINA", "SPECIES_GIRATINA_ORIGIN", "SPECIES_YAMASK",
+        "SPECIES_COFAGRIGUS", "SPECIES_FRILLISH", "SPECIES_JELLICENT", "SPECIES_LITWICK",
+        "SPECIES_LAMPENT", "SPECIES_CHANDELURE", "SPECIES_GOLETT", "SPECIES_GOLURK",
+        "SPECIES_HONEDGE", "SPECIES_DOUBLADE", "SPECIES_AEGISLASH", "SPECIES_PHANTUMP",
+        "SPECIES_TREVENANT", "SPECIES_PUMPKABOO", "SPECIES_GOURGEIST", "SPECIES_HOOPA",
+        "SPECIES_DECIDUEYE", "SPECIES_SANDYGAST", "SPECIES_PALOSSAND", "SPECIES_MIMIKYU",
+        "SPECIES_DHELMISE", "SPECIES_LUNALA", "SPECIES_MARSHADOW", "SPECIES_BLACEPHALON",
+        "SPECIES_SINISTEA", "SPECIES_POLTEAGEIST", "SPECIES_CURSOLA", "SPECIES_RUNERIGUS",
+        "SPECIES_DREEPY", "SPECIES_DRAKLOAK", "SPECIES_DRAGAPULT", "SPECIES_SPECTRIER",
+        "SPECIES_BASCULEGION", "SPECIES_SKELEDIRGE", "SPECIES_CERULEDGE", "SPECIES_BRAMBLIN",
+        "SPECIES_BRAMBLEGHAST", "SPECIES_GREAVARD", "SPECIES_HOUNDSTONE", "SPECIES_FLUTTER_MANE",
+        "SPECIES_GIMMIGHOUL", "SPECIES_GHOLDENGO", "SPECIES_POLTCHAGEIST", "SPECIES_SINISTCHA",
+        "SPECIES_PECHARUNT", "SPECIES_MEGA_GENGAR", "SPECIES_MEGA_SABLEYE", "SPECIES_MEGA_BANETTE",
+        "SPECIES_MAROWAK_ALOLAN", "SPECIES_MAROWAK_ALOLAN_LARGE", "SPECIES_MIMIKYU_LARGE",
+        "SPECIES_MIMIKYU_BUSTED_LARGE", "SPECIES_CORSOLA_GALARIAN", "SPECIES_YAMASK_GALARIAN",
+        "SPECIES_AEGISLASH_BLADE", "SPECIES_PUMPKABOO_SMALL", "SPECIES_PUMPKABOO_LARGE",
+        "SPECIES_PUMPKABOO_SUPER", "SPECIES_GOURGEIST_SMALL", "SPECIES_GOURGEIST_LARGE",
+        "SPECIES_GOURGEIST_SUPER", "SPECIES_ORICORIO_SENSU", "SPECIES_MIMIKYU_BUSTED",
+        "SPECIES_NECROZMA_DAWN_WINGS", "SPECIES_SINISTEA_ANTIQUE", "SPECIES_POLTEAGEIST_ANTIQUE",
+        "SPECIES_CALYREX_SHADOW_RIDER", "SPECIES_TYPHLOSION_HISUIAN", "SPECIES_ZORUA_HISUIAN",
+        "SPECIES_ZOROARK_HISUIAN", "SPECIES_FRILLISH_FEMALE", "SPECIES_JELLICENT_FEMALE",
+        "SPECIES_BASCULEGION_FEMALE", "SPECIES_GIMMIGHOUL_ROAMING", "SPECIES_POLTCHAGEIST_MASTERPIECE",
+        "SPECIES_SINISTCHA_MASTERPIECE"
+      ],
+      "birds": [
+        "SPECIES_PIDGEY", "SPECIES_PIDGEOTTO", "SPECIES_PIDGEOT", "SPECIES_SPEAROW",
+        "SPECIES_FEAROW", "SPECIES_HOOTHOOT", "SPECIES_NOCTOWL", "SPECIES_DELIBIRD",
+        "SPECIES_TAILLOW", "SPECIES_SWELLOW"
+      ],
+      "flying-insects": [
+        "SPECIES_BEEDRILL", "SPECIES_BUTTERFREE", "SPECIES_SCYTHER", "SPECIES_LEDYBA",
+        "SPECIES_LEDIAN", "SPECIES_YANMA", "SPECIES_BEAUTIFLY", "SPECIES_MASQUERAIN",
+        "SPECIES_NINJASK", "SPECIES_MOTHIM", "SPECIES_COMBEE", "SPECIES_VESPIQUEN",
+        "SPECIES_YANMEGA", "SPECIES_VIVILLON", "SPECIES_MEGA_PINSIR", "SPECIES_VIVILLON_POLAR",
+        "SPECIES_VIVILLON_TUNDRA", "SPECIES_VIVILLON_CONTINENTAL", "SPECIES_VIVILLON_GARDEN",
+        "SPECIES_VIVILLON_ELEGANT", "SPECIES_VIVILLON_MEADOW", "SPECIES_VIVILLON_MODERN",
+        "SPECIES_VIVILLON_MARINE", "SPECIES_VIVILLON_ARCHIPELAGO", "SPECIES_VIVILLON_HIGH_PLAINS",
+        "SPECIES_VIVILLON_SANDSTORM", "SPECIES_VIVILLON_RIVER", "SPECIES_VIVILLON_MONSOON",
+        "SPECIES_VIVILLON_SAVANNA", "SPECIES_VIVILLON_SUN", "SPECIES_VIVILLON_OCEAN",
+        "SPECIES_VIVILLON_JUNGLE", "SPECIES_VIVILLON_FANCY", "SPECIES_VIVILLON_POKE_BALL"
+      ],
+      "plant-meander-waddle-startled": [
+        "SPECIES_BELLSPROUT", "SPECIES_ODDISH", "SPECIES_GLOOM", "SPECIES_VILEPLUME",
+        "SPECIES_BELLOSSOM", "SPECIES_SUNFLORA"
+      ],
+      "plant-hop-around-startled": [
+        "SPECIES_SUNKERN", "SPECIES_CHERUBI", "SPECIES_CHERRIM", "SPECIES_CHERRIM_SUNSHINE"
+      ],
+      "plant-idle-ambush-rest": [
+        "SPECIES_WEEPINBELL", "SPECIES_VICTREEBEL", "SPECIES_CARNIVINE"
+      ],
+      "drowsy-wander": [
+        "SPECIES_SNORLAX"
+      ],
+      "heavy-stomp": [
+        "SPECIES_GOLEM", "SPECIES_RHYDON", "SPECIES_SNORLAX", "SPECIES_TYRANITAR",
+        "SPECIES_AGGRON", "SPECIES_GROUDON", "SPECIES_TORTERRA", "SPECIES_HIPPOWDON",
+        "SPECIES_RHYPERIOR", "SPECIES_MAMOSWINE", "SPECIES_REGIGIGAS"
+      ]
+    },
+    "compositions": [
+      { "id": "teleport-stalker-direct", "membership": { "set": "teleport-stalker" }, "profiles": ["teleport", "stalker"], "assignment": "direct" },
+      { "id": "birds", "membership": { "set": "birds" }, "profiles": ["small-bird-hop", "fly-in"], "assignment": "direct" },
+      { "id": "flying-insects", "membership": { "set": "flying-insects" }, "profiles": ["erratic-flutter", "fly-in", "notice-player"], "assignment": "direct-and-condition" },
+      { "id": "plant-meander-waddle-startled", "membership": { "set": "plant-meander-waddle-startled" }, "profiles": ["meander", "waddle", "startled"], "assignment": "direct-and-condition" },
+      { "id": "plant-hop-around-startled", "membership": { "set": "plant-hop-around-startled" }, "profiles": ["hop-around", "startled"], "assignment": "direct-and-condition" },
+      { "id": "plant-idle-ambush-rest", "membership": { "set": "plant-idle-ambush-rest" }, "profiles": ["idle", "ambush", "rest"], "assignment": "direct-condition-and-tired" },
+      { "id": "snorlax-drowsy-wander", "membership": { "set": "drowsy-wander" }, "profiles": ["drowsy-wander"], "assignment": "direct" },
+      { "id": "heavy-stomp", "membership": { "set": "heavy-stomp" }, "profiles": ["heavy-stomp"], "assignment": "direct" },
+      { "id": "playful", "membership": { "pool": "playful-pokemon" }, "profiles": ["playful"], "assignment": "condition-subject-and-actor-target" },
+      { "id": "baby", "membership": { "pool": "baby-pokemon" }, "profiles": ["skittish"], "assignment": "condition-subject" }
+    ]
+  },
+  "migration": {
+    "profiles": [
+      { "source": "default", "destinations": [{ "type": "root", "id": "default" }] },
+      { "source": "aggressive-chase", "destinations": [{ "type": "root", "id": "default" }] },
+      { "source": "aggressive-ram", "destinations": [{ "type": "root", "id": "default" }, { "type": "profile", "id": "ram" }] },
+      { "source": "picked-up", "destinations": [{ "type": "internal-state", "id": "held-actor-control" }] },
+      { "source": "teleport-stalker-override", "destinations": [{ "type": "profile", "id": "teleport" }, { "type": "profile", "id": "stalker" }] },
+      { "source": "canopy-hopper", "destinations": [{ "type": "profile", "id": "canopy-access" }] },
+      { "source": "canopy-hop-surface", "destinations": [{ "type": "profile", "id": "canopy-hop" }] },
+      { "source": "throwing", "destinations": [{ "type": "profile", "id": "throw" }] },
+      { "source": "playful", "destinations": [{ "type": "profile", "id": "playful" }, { "type": "named-pool", "id": "playful-pokemon" }] },
+      { "source": "floaty-bounce", "destinations": [{ "type": "profile", "id": "floaty-bounce" }] },
+      { "source": "bird", "destinations": [{ "type": "profile", "id": "small-bird-hop" }, { "type": "profile", "id": "fly-in" }] },
+      { "source": "flying-insect", "destinations": [{ "type": "profile", "id": "erratic-flutter" }, { "type": "profile", "id": "fly-in" }, { "type": "profile", "id": "notice-player" }] },
+      { "source": "gentle-grazer", "destinations": [{ "type": "profile", "id": "meander" }, { "type": "profile", "id": "notice-player" }] },
+      { "source": "runner", "destinations": [{ "type": "profile", "id": "sprint" }] },
+      { "source": "skittish", "destinations": [{ "type": "profile", "id": "skittish" }] },
+      { "source": "test", "destinations": [{ "type": "root", "id": "default" }] },
+      { "source": "forced-asleep", "destinations": [{ "type": "profile", "id": "asleep" }] },
+      { "source": "flower", "destinations": [{ "type": "profile", "id": "flower-bed" }] },
+      { "source": "bird-rooftop", "destinations": [{ "type": "profile", "id": "perch" }] },
+      { "source": "nervous-scavenger", "destinations": [{ "type": "profile", "id": "scavenger" }] },
+      { "source": "hopping-scavenger", "destinations": [{ "type": "profile", "id": "scavenger" }, { "type": "profile", "id": "long-hop" }] },
+      { "source": "follower-pokemon", "destinations": [{ "type": "profile", "id": "follower" }] },
+      { "source": "aggressive-ram-override", "destinations": [{ "type": "profile", "id": "ram" }] },
+      { "source": "default-active", "destinations": [{ "type": "profile", "id": "notice-player" }] },
+      { "source": "default-tired", "destinations": [{ "type": "profile", "id": "rest" }] },
+      { "source": "baby-pokemon", "destinations": [{ "type": "named-pool", "id": "baby-pokemon" }] },
+      { "source": "swaying-plant", "destinations": [{ "type": "profile", "id": "meander" }, { "type": "profile", "id": "hop-around" }, { "type": "profile", "id": "waddle" }] },
+      { "source": "swaying-plant-active", "destinations": [{ "type": "profile", "id": "startled" }] },
+      { "source": "swaying-plant-tired", "destinations": [{ "type": "profile", "id": "rest" }] },
+      { "source": "ambush-plant", "destinations": [{ "type": "profile", "id": "idle" }] },
+      { "source": "ambush-plant-active", "destinations": [{ "type": "profile", "id": "ambush" }] },
+      { "source": "ambush-plant-tired", "destinations": [{ "type": "profile", "id": "rest" }] }
+    ],
+    "retiredSourceProfileIds": [
+      "aggressive-chase", "aggressive-ram", "picked-up", "teleport-stalker-override",
+      "canopy-hopper", "canopy-hop-surface", "throwing", "bird", "flying-insect",
+      "gentle-grazer", "runner", "test", "forced-asleep", "flower", "bird-rooftop",
+      "nervous-scavenger", "hopping-scavenger", "follower-pokemon",
+      "aggressive-ram-override", "default-active", "default-tired", "baby-pokemon",
+      "swaying-plant", "swaying-plant-active", "swaying-plant-tired",
+      "ambush-plant", "ambush-plant-active", "ambush-plant-tired"
+    ],
+    "deletedWithoutProfileReplacement": [
+      "aggressive-chase", "picked-up", "test", "baby-pokemon",
+      "swaying-plant-tired", "ambush-plant-tired"
+    ],
+    "deletedClassBindings": [
+      "OW_WILD_BEHAVIOR_CLASS_AGRESSIVE_CHASE",
+      "OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM",
+      "OW_WILD_BEHAVIOR_CLASS_PICKED_UP",
+      "OW_WILD_BEHAVIOR_CLASS_TEST"
+    ]
+  },
+  "precedenceConstraints": [
+    {
+      "kind": "application-after-all",
+      "application": "apply-perch",
+      "others": [
+        "apply-scavenger", "apply-sprint", "apply-floaty-bounce", "apply-small-bird-hop",
+        "apply-erratic-flutter", "apply-meander", "apply-hop-around", "apply-idle",
+        "apply-drowsy-wander"
+      ]
+    },
+    {
+      "kind": "application-before-all",
+      "application": "apply-notice-player",
+      "others": [
+        "apply-teleport", "apply-stalker", "apply-long-hop", "apply-canopy-hop",
+        "apply-throw", "apply-ram", "apply-heavy-stomp"
+      ]
+    },
+    { "kind": "application-before", "before": "apply-startled", "after": "apply-skittish" },
+    { "kind": "condition-last", "profile": "playful", "condition": "condition-playful-notices-player" }
+  ]
+}

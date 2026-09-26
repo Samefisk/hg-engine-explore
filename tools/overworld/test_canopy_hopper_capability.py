@@ -80,6 +80,7 @@ class CanopyHopperCapabilityTests(unittest.TestCase):
     def test_canopy_child_owns_the_conditional_hop(self) -> None:
         profile = self.profiles["canopy-hop-surface"]
         self.assertEqual(profile["parent"], "canopy-hopper")
+        self.assertEqual(profile["kind"], "conditional")
         self.assertEqual(
             set(profile["fields"]),
             {
@@ -87,7 +88,6 @@ class CanopyHopperCapabilityTests(unittest.TestCase):
                 "hopAllowNonCardinal",
                 "hopMinDistance",
                 "hopMaxDistance",
-                "hopPause",
                 "hopTime",
                 "hopElevationTimeScale",
                 "hopElevationArcScale",
@@ -108,17 +108,19 @@ class CanopyHopperCapabilityTests(unittest.TestCase):
         )
         condition = next(
             condition
-            for condition in self.catalog["conditionalStates"]
+            for condition in profile["conditions"]
             if condition["id"] == "condition-canopy-hopper-on-canopy"
         )
-        self.assertEqual(condition["parentApplication"], "apply-canopy-hopper")
-        self.assertEqual(condition["application"], "apply-canopy-hop-surface")
         self.assertEqual(
-            condition["terrainMask"],
+            condition["subjects"],
+            {"application": "apply-canopy-hopper"},
+        )
+        self.assertEqual(
+            condition["when"]["terrainMask"],
             "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY",
         )
         self.assertEqual(
-            condition["terrainOverrideMask"],
+            condition["when"]["terrainOverrideMask"],
             "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY",
         )
 
@@ -126,11 +128,8 @@ class CanopyHopperCapabilityTests(unittest.TestCase):
         body = self.bodies["OverworldWildSpawns_TryStartCanopyEntryHop"]
         self.assertIn("OverworldWildSpawns_GetElevatedTerrainBit", body)
         self.assertIn("lane->chillAllowedTerrainMask", body)
-        self.assertIn(
-            "context.conditionTerrainMask = OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY",
-            body,
-        )
-        self.assertIn("OverworldWildSpawns_ResolveBehaviorProfileForContext", body)
+        self.assertNotIn("conditionTerrain" + "Mask", body)
+        self.assertNotIn("OverworldWildSpawns_ResolveBehaviorProfileForContext", body)
         self.assertIn("lane->chillAction != OW_WILD_BEHAVIOR_LOCOMOTION_HOP", body)
         self.assertIn("OverworldWildSpawns_TryStartBehaviorHopToPlannedTileCommand", body)
         self.assertLess(

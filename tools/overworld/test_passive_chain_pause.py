@@ -1,8 +1,9 @@
-"""S1 regression for chain pause actions and look-around frame timing.
+"""S1 regression for chain pause choices and look-around frame timing.
 
 Bird profiles use a passive Pause: the chain has a move count and pause time,
 but no visual action. This harness extracts the production reducer and Wild
-adapter so None cannot silently become Pause again, or vice versa.
+adapter so None cannot silently become Pause again, or vice versa. It also
+proves that an authored action set is chance-gated once and sampled uniformly.
 """
 
 from pathlib import Path
@@ -30,6 +31,11 @@ def harness_source() -> str:
         "passive_chain_extract",
         ROOT / "scripts/verify_overworld_spawn_profile_lifecycle.py",
     )
+    choice_body = extract.production_function(
+        RUNTIME.read_text(),
+        "OverworldActorWalkPolicy_SelectChainPauseAction",
+        "u8",
+    )
     runtime_body = extract.production_function(
         RUNTIME.read_text(), "OverworldActorWalkPolicy_ReduceChain", "void"
     )
@@ -39,7 +45,10 @@ def harness_source() -> str:
     look_body = extract.production_function(
         WILD.read_text(), "OverworldWildSpawns_GetLookAroundFrames", "u8"
     )
-    return SUPPORT + runtime_body + "\n" + wild_body + "\n" + look_body + DRIVER
+    return (
+        SUPPORT + choice_body + "\n" + runtime_body + "\n"
+        + wild_body + "\n" + look_body + DRIVER
+    )
 
 
 SUPPORT = r"""
@@ -69,12 +78,18 @@ typedef int BOOL;
 #define OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_SKIDS 5
 #define OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE 6
 #define OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_FORWARD 7
+#define OW_WILD_BEHAVIOR_CHAIN_PAUSE_RANDOM_CHOICE 0x80
+#define OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE(action) (1u << ((action) - 1u))
+#define OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_LOOK_AROUND \
+    OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE(OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND)
+#define OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_PAUSE \
+    OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE(OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE)
+#define OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_MASK 0x7F
 #define OW_WILD_BEHAVIOR_LOCOMOTION_WANDER 1
 #define OW_WILD_BEHAVIOR_LOCOMOTION_WALK 1
 #define OW_WILD_BEHAVIOR_LOCOMOTION_HOP 2
 #define OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT 6
 #define OW_WILD_SPAWNER_SPOT_STATE_CHILL 0
-#define OW_WILD_SPAWNER_SPOT_STATE_ACTIVE 2
 #define OW_WILD_SPAWNER_SPOT_STATE_TIRED 3
 #define OW_WILD_BEHAVIOR_WALK_ALLOWS_TURNING(options) (((options) & 1) != 0)
 
@@ -92,14 +107,15 @@ typedef struct OverworldWildBehaviorProfileData {
 } OverworldWildBehaviorProfileData;
 
 typedef struct OverworldWildBehaviorProfile {
-    OverworldWildBehaviorProfileData lane;
-    OverworldWildBehaviorProfileData active;
+    union {
+        OverworldWildBehaviorProfileData lane;
+        OverworldWildBehaviorProfileData owner;
+    };
     OverworldWildBehaviorProfileData tired;
 } OverworldWildBehaviorProfile;
 
 typedef struct OverworldWildBehaviorPrimitives {
     u8 chillLocomotion;
-    u8 attentiveLocomotion;
     u8 tiredLocomotion;
 } OverworldWildBehaviorPrimitives;
 
@@ -134,7 +150,9 @@ static OverworldActorStateSnapshot actor;
 static OverworldActorWalkPolicyCall lastCall;
 static unsigned deferredCalls;
 static unsigned publishCalls;
-static u32 gf_rand(void) { return 0; }
+static u32 randomValues[4];
+static unsigned randomIndex;
+static u32 gf_rand(void) { return randomValues[randomIndex++]; }
 static BOOL OverworldActorWalkPolicy_PublishEffect(
     OverworldActorStateSnapshot *unusedActor, u32 unusedEffect, u32 unusedSequence)
 { (void)unusedActor; (void)unusedEffect; (void)unusedSequence; publishCalls++; return TRUE; }
@@ -158,19 +176,16 @@ static BOOL ReduceWalk(OverworldActorWalkPolicyCall *call)
 }
 static BOOL OverworldWildSpawns_ReduceWalk(OverworldActorWalkPolicyCall *call)
 { return ReduceWalk(call); }
-static const OverworldWildBehaviorProfileData *OverworldWildSpawns_GetBehaviorStateLane(
+static const OverworldWildBehaviorProfileData *OverworldWildSpawns_GetControllerLane(
     const OverworldWildBehaviorProfile *profile, u8 spotState)
 {
-    return spotState == OW_WILD_SPAWNER_SPOT_STATE_ACTIVE ? &profile->active
-        : spotState == OW_WILD_SPAWNER_SPOT_STATE_TIRED ? &profile->tired
+    return spotState == OW_WILD_SPAWNER_SPOT_STATE_TIRED ? &profile->tired
         : &profile->lane;
 }
 static u8 OverworldWildSpawns_GetCurrentMovementLocomotion(
     const OverworldWildBehaviorPrimitives *primitives, u8 spotState)
 {
-    return spotState == OW_WILD_SPAWNER_SPOT_STATE_ACTIVE
-        ? primitives->attentiveLocomotion
-        : spotState == OW_WILD_SPAWNER_SPOT_STATE_TIRED
+    return spotState == OW_WILD_SPAWNER_SPOT_STATE_TIRED
         ? primitives->tiredLocomotion : primitives->chillLocomotion;
 }
 static void OverworldWildSpawns_InitPolicyCall(
@@ -196,6 +211,8 @@ static void Reset(void)
     memset(&lastCall, 0, sizeof(lastCall));
     deferredCalls = 0;
     publishCalls = 0;
+    memset(randomValues, 0, sizeof(randomValues));
+    randomIndex = 0;
     policy.pendingStep = OVERWORLD_ACTOR_WALK_PENDING_CHAIN;
 }
 
@@ -248,13 +265,39 @@ int main(void)
         || policy.chainStepsRemaining != 0
         || policy.deferredChainPauseAction != 0
         || deferredCalls != 0
-        || publishCalls != 1) {
+        || publishCalls != 1
+        || randomIndex != 1) {
         fprintf(stderr,
-            "passive Pause was lost: decision=%u action=%u ticks=%u cooldown=%u remaining=%u deferred=%u calls=%u\n",
+            "passive Pause was lost: decision=%u action=%u ticks=%u cooldown=%u remaining=%u deferred=%u calls=%u rolls=%u\n",
             lastCall.decision, lastCall.chainAction, lastCall.chainTicks,
             state.movementCooldowns[0], policy.chainStepsRemaining,
-            policy.deferredChainPauseAction, deferredCalls);
+            policy.deferredChainPauseAction, deferredCalls, randomIndex);
         return 2;
+    }
+
+    Reset();
+    memset(&state, 0, sizeof(state));
+    memset(&profile, 0, sizeof(profile));
+    profile.lane.chainPauseAction = OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE;
+    profile.lane.ramAccelerationSteps = 1;
+    profile.lane.ramMaxSpeed = 30;
+    profile.lane.chainPauseActionChance = 1;
+    randomValues[0] = 99;
+    OverworldWildSpawns_ApplyUniversalChainMovementPause(
+        &state, 0, &profile, &primitives);
+    if (lastCall.decision != OVERWORLD_ACTOR_WALK_POLICY_IGNORED
+        || lastCall.chainAction != 0
+        || state.movementCooldowns[0] != 0
+        || policy.chainStepsRemaining != 0
+        || policy.deferredChainPauseAction != 0
+        || publishCalls != 0
+        || randomIndex != 1) {
+        fprintf(stderr,
+            "passive Pause ignored its chance: decision=%u action=%u cooldown=%u remaining=%u deferred=%u calls=%u rolls=%u\n",
+            lastCall.decision, lastCall.chainAction,
+            state.movementCooldowns[0], policy.chainStepsRemaining,
+            policy.deferredChainPauseAction, publishCalls, randomIndex);
+        return 10;
     }
 
     Reset();
@@ -340,7 +383,100 @@ int main(void)
             policy.deferredChainPauseTicks, deferredCalls);
         return 6;
     }
-    puts("None, passive Pause, look-around, and forward-Hop boundary cases passed");
+
+    Reset();
+    memset(&state, 0, sizeof(state));
+    memset(&profile, 0, sizeof(profile));
+    primitives.chillLocomotion = OW_WILD_BEHAVIOR_LOCOMOTION_HOP;
+    profile.lane.chainPauseAction = OW_WILD_BEHAVIOR_CHAIN_PAUSE_RANDOM_CHOICE
+        | OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_LOOK_AROUND
+        | OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_PAUSE;
+    profile.lane.ramAccelerationSteps = 1;
+    profile.lane.ramMaxSpeed = 30;
+    profile.lane.chainPauseActionChance = 50;
+    randomValues[0] = 0;
+    randomValues[1] = 1;
+    OverworldWildSpawns_ApplyUniversalChainMovementPause(
+        &state, 0, &profile, &primitives);
+    if (lastCall.chainAction != OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND
+        || policy.deferredChainPauseAction != 0x82
+        || deferredCalls != 1
+        || randomIndex != 2) {
+        fprintf(stderr, "random action set did not select Look around\n");
+        return 7;
+    }
+
+    Reset();
+    memset(&state, 0, sizeof(state));
+    memset(&profile, 0, sizeof(profile));
+    profile.lane.chainPauseAction = OW_WILD_BEHAVIOR_CHAIN_PAUSE_RANDOM_CHOICE
+        | OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_LOOK_AROUND
+        | OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_PAUSE;
+    profile.lane.ramAccelerationSteps = 1;
+    profile.lane.ramMaxSpeed = 30;
+    profile.lane.chainPauseActionChance = 50;
+    randomValues[0] = 0;
+    randomValues[1] = 5;
+    OverworldWildSpawns_ApplyUniversalChainMovementPause(
+        &state, 0, &profile, &primitives);
+    if (lastCall.chainAction != OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE
+        || state.movementCooldowns[0] != 15
+        || deferredCalls != 0
+        || randomIndex != 2) {
+        fprintf(stderr, "random action set did not select passive Pause\n");
+        return 8;
+    }
+
+    Reset();
+    memset(&state, 0, sizeof(state));
+    memset(&profile, 0, sizeof(profile));
+    profile.lane.chainPauseAction = OW_WILD_BEHAVIOR_CHAIN_PAUSE_RANDOM_CHOICE
+        | OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_LOOK_AROUND
+        | OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_PAUSE;
+    profile.lane.ramAccelerationSteps = 1;
+    profile.lane.ramMaxSpeed = 30;
+    profile.lane.chainPauseActionChance = 50;
+    randomValues[0] = 0;
+    randomValues[1] = 0;
+    randomValues[2] = 5;
+    OverworldWildSpawns_ApplyUniversalChainMovementPause(
+        &state, 0, &profile, &primitives);
+    if (lastCall.chainAction != OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE
+        || randomIndex != 3) {
+        fprintf(stderr, "random action set did not reject an unselected bit\n");
+        return 9;
+    }
+
+    Reset();
+    randomValues[0] = 5;
+    if (OverworldActorWalkPolicy_SelectChainPauseAction(
+            OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_PAUSE)
+            != OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE
+        || randomIndex != 1) {
+        fprintf(stderr, "single-action random set changed\n");
+        return 10;
+    }
+
+    Reset();
+    memset(&state, 0, sizeof(state));
+    memset(&profile, 0, sizeof(profile));
+    profile.lane.chainPauseAction = OW_WILD_BEHAVIOR_CHAIN_PAUSE_RANDOM_CHOICE
+        | OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_LOOK_AROUND
+        | OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_PAUSE;
+    profile.lane.ramAccelerationSteps = 1;
+    profile.lane.ramMaxSpeed = 30;
+    profile.lane.chainPauseActionChance = 50;
+    randomValues[0] = 99;
+    OverworldWildSpawns_ApplyUniversalChainMovementPause(
+        &state, 0, &profile, &primitives);
+    if (lastCall.decision != OVERWORLD_ACTOR_WALK_POLICY_IGNORED
+        || publishCalls != 0
+        || deferredCalls != 0
+        || randomIndex != 1) {
+        fprintf(stderr, "random action set bypassed its overall chance\n");
+        return 11;
+    }
+    puts("None, passive Pause, look-around, forward-Hop, and random action-set cases passed");
     return 0;
 }
 """
@@ -372,27 +508,30 @@ class PassiveChainPauseTests(unittest.TestCase):
             binding["symbol"]: profiles[binding["profile"]]
             for binding in catalog["runtimeBindings"]["classOrder"]
         }
-        overrides = {
-            profile["name"]: profile["fields"]
-            for profile in catalog["profiles"]
-        }
         self.assertEqual(
             classes["OW_WILD_BEHAVIOR_CLASS_DEFAULT"]["chainPauseAction"]["value"],
             "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE",
         )
-        for symbol in (
-            "OW_WILD_BEHAVIOR_CLASS_AGRESSIVE_CHASE",
-            "OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM",
-        ):
-            self.assertEqual(
-                classes[symbol]["chainPauseAction"]["value"],
-                "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE",
-            )
-        for name in ("Bird",):
-            self.assertEqual(
-                overrides[name]["chainPauseAction"]["value"],
-                "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE",
-            )
+        self.assertEqual(
+            profiles["small-bird-hop"]["chainPauseAction"]["value"],
+            "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE",
+        )
+        self.assertEqual(
+            profiles["playful"]["chainPauseAction"]["value"],
+            "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE",
+        )
+        self.assertEqual(
+            profiles["meander"]["chainPauseAction"]["value"],
+            "OW_WILD_BEHAVIOR_CHAIN_PAUSE_RANDOM_CHOICE | "
+            "OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_LOOK_AROUND | "
+            "OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_PAUSE",
+        )
+        self.assertEqual(
+            profiles["meander"]["chainPauseActionChance"]["value"],
+            50,
+        )
+        self.assertEqual(profiles["meander"]["walkPause"]["value"], 0)
+        self.assertEqual(profiles["meander"]["walkPauseVariance"]["value"], 0)
 
     def test_none_and_pause_have_distinct_semantics(self):
         with tempfile.TemporaryDirectory(prefix="ow-passive-chain-") as directory:

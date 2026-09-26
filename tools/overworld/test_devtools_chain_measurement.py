@@ -32,13 +32,13 @@ class Stream:
         fields = {item["key"]: item for item in SCHEMA["fields"]}
         for key, value in values.items():
             self.lane[fields[key]["offset"]] = value
-        active_lane = bytearray(self.lane); active_lane[0] = 19
-        self.lanes = [bytes(self.lane).hex(), bytes(active_lane).hex(), bytes(active_lane).hex()]
-        resolved = bytearray(256)
+        tired_lane = bytearray(self.lane); tired_lane[0] = 19
+        self.lanes = [bytes(self.lane).hex(), bytes(tired_lane).hex()]
+        resolved = bytearray(200)
         for index, lane in enumerate(self.lanes): resolved[index * 72:(index + 1) * 72] = bytes.fromhex(lane)
-        resolved[248:252] = (3).to_bytes(4, "little")
-        resolved[252:256] = (12345).to_bytes(4, "little")
-        request = bytearray(20); request[:2] = (165).to_bytes(2, "little"); request[8] = 5
+        resolved[172:176] = (3).to_bytes(4, "little")
+        resolved[176:180] = (12345).to_bytes(4, "little")
+        request = bytearray(44); request[:2] = (165).to_bytes(2, "little"); request[8] = 5; request[38] = 2
         self.profile = {"resolved": True, "requestHex": request.hex(), "resultHex": resolved.hex(),
                         "fingerprint": 12345, "sourceSha256": SOURCE, "lanes": self.lanes, "appliedOverrides": 3}
         self.actor = {"active": True, "species": 165, "form": 0, "level": 5, "role": "WILD",
@@ -120,7 +120,7 @@ class Stream:
             events = [self.trace("MOTION_STARTED", ids[kind], 8)] if elapsed == 0 else []
             if spawn and elapsed == 0:
                 startup = {"origin": origin, "target": target, "locomotion": 4,
-                           "hopDirection": 3}
+                           "hopDirection": 3, "targetBaseY": 0}
                 encounter = {"personality": self.actor["subjectIdentity"], "species": 165,
                              "form": 0, "level": 5}
                 prefix = struct.pack("<iiB3xIHBB4hBB", *target, 0,
@@ -381,7 +381,7 @@ class ChainMeasurementTests(unittest.TestCase):
         for group in ("identity", "chain", "render", "observation"):
             self.assertEqual(result[group + "Errors"], [])
         self.assertEqual(result["errorCoverage"]["completeRenderedMotions"], 45)
-        self.assertEqual(result["intervals"][0]["matchingLaneIndexes"], [1, 2])
+        self.assertEqual(result["intervals"][0]["matchingLaneIndexes"], [1])
         self.assertEqual(self.good, original)
         with self.assertRaises(ValueError): meter.observe(*self.good[-1])
 
@@ -490,13 +490,15 @@ class ChainMeasurementTests(unittest.TestCase):
 
     def test_same_profile_accepts_exact_live_rattata_requests_at_two_levels(self):
         items = deepcopy(self.good)
-        for request in ("1300000000000000030000000000000000000000",
-                        "1300000000000000020000000000000000000000"):
+        for level in (3, 2):
+            request = bytearray(44)
+            request[:2] = (19).to_bytes(2, "little")
+            request[8] = level
             profile = deepcopy(items[0][0]["nativeObservation"]["resolvedProfiles"][0])
-            profile["requestHex"] = request
+            profile["requestHex"] = request.hex()
             profile["fingerprint"] = 3990395777
             result = bytearray.fromhex(profile["resultHex"])
-            result[252:256] = (3990395777).to_bytes(4, "little")
+            result[176:180] = (3990395777).to_bytes(4, "little")
             profile["resultHex"] = result.hex()
             items[0][0]["nativeObservation"]["resolvedProfiles"].append(profile)
         meter, result = replay(items)
@@ -532,7 +534,7 @@ class ChainMeasurementTests(unittest.TestCase):
                     elif fault == "source": profile["sourceSha256"] = "b" * 64
                     elif fault == "result":
                         other = deepcopy(profile)
-                        result = bytearray.fromhex(other["resultHex"]); result[216] ^= 1
+                        result = bytearray.fromhex(other["resultHex"]); result[144] ^= 1
                         other["resultHex"] = result.hex()
                         profiles.append(other)
                     for event in events:

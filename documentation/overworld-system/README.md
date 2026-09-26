@@ -16,16 +16,17 @@ guides when a section answers the question; reuse material already loaded.
 | --- | --- |
 | Understand shared terms or find a code owner | [CONTEXT.md](../../CONTEXT.md), [system contracts](#system-contracts), and [source map](#current-source-map) |
 | Change runtime ownership, profiles, motion, mounts, terrain or transitions | Matching contract in [architecture.md](architecture.md) |
+| Design a Pokémon behavior composition | [design-overworld-behavior](../../.agents/skills/design-overworld-behavior/SKILL.md) |
 | Create or edit a profile or its use | [author-overworld-profile](../../.agents/skills/author-overworld-profile/SKILL.md) |
 | Understand profile sources or diagnose resolution | [authoring-debugging.md](authoring-debugging.md) |
-| Implement the conditional-profile ownership shift | [conditional-profiles implementation plan](conditional-profiles-implementation-plan.md) |
+| Implement the reusable profile-building-block cleanup | [profile building blocks implementation plan](profile-building-blocks-implementation-plan.md) |
 | Diagnose live behavior or prepare a reproduction | [overworld-devtools](../../.agents/skills/overworld-devtools/SKILL.md) |
 | Run an existing test or accept a runtime fix | [verify-overworld](../../.agents/skills/verify-overworld/SKILL.md) |
 | Create or repair a permanent test | [author-overworld-scenario](../../.agents/skills/author-overworld-scenario/SKILL.md) |
 | Refactor or add a system seam | [roadmap.md](roadmap.md#finite-delivery-slices) |
 | Resume roadmap work | [current work table](roadmap-progress.md#current-work-table) and [handoff rules](verification.md#progress-and-handoffs) |
 
-The four skills are task routes, not a required sequence. Existing tests do
+The skills are task routes, not a required sequence. Existing tests do
 not require test-authoring instructions. [verification.md](verification.md)
 owns proof policy; [devtools.md](devtools.md) owns live control;
 [devtools-tests.md](devtools-tests.md) owns checked-job operation and recipes.
@@ -38,7 +39,7 @@ The documents named `*_attempts.md`, the old movement index, and the old movemen
 ## System in one view
 
 ```text
-Named profile source
+Named V5 profiles + pools
         |
         v
 Behavior schema -> Resolver -> Resolved behavior + provenance
@@ -62,31 +63,58 @@ Wild AI / Follower AI / Rider input / Script
 
 ## Current invariants to preserve
 
-- Current mount begin resolves the current follower through the normal profile
-  resolver with the forced `Follower Pokemon` override layer, then snapshots
-  the resolved Owner lane. There is no separate mount-profile system.
+- `Default` is the one complete root. Override applications compose in the
+  order Routine, Placement, Capability, Attitude, Modifier, System, then
+  Utility. Conditional is independent of classification.
+- A conditional profile has no normal Pokémon assignment. Its independent
+  conditions own their subject pools, activation, Vision choice, and target.
+  Named pools are reusable authoring sets and are expanded before packaging.
+- Profiles own stable Current Vision. It is resolved from Default, normal
+  applications, and the forced-role profile. Conditional applications cannot
+  alter their own trigger Vision. A condition chooses Current Vision or owns
+  one Custom Vision.
+- Pickup and carry use internal held actor control. They are not a profile or
+  behavior class.
+- Chill, Active, and Attentive are not profile or Workshop concepts. Behavior
+  and Movement Style are separate main tabs.
+- Current mount begin resolves the same Pokémon through the normal profile
+  resolver with the forced `Mounted` System layer, then snapshots the resolved
+  Owner lane. Mounted has no field overrides. It inherits every field from the
+  Pokémon's selected profiles, including Sprint movement and capabilities.
 - Current mounted movement uses the player `MapObject` as engine anchor and
   synchronizes the Pokémon presentation to it. The rider graphics are on the
   player anchor; they are not a second actor.
 - One typed Walk reducer owns input transitions, acceleration, turn and stop
   skids, stomp and crash intent, and chain eligibility for wild and mounted
   actors. Adapters only validate or start engine steps and publish effects.
+- Mounted resolves the current Pokémon's normal selected Owner behavior plus
+  the empty Mounted System override. It does not apply Follower's chase, speed
+  cap, land-only, or zero-pause fields. Dismount restores the prior Follower
+  policy binding for that same actor.
 - The reducer transaction is `INPUT -> START_RESULT -> COMMIT`. A rejected
   start does not change committed direction. `COMMIT` runs once at the actor
-  terminal boundary. Mounted calls never enable chain handling.
-- Walk time variance adds 0 through the configured frame limit once per
-  accepted normal tile. It does not change nominal momentum, feedback checks,
-  chain state, or other movement types. Mounted rider and Pokemon share the
-  same selected duration.
+  terminal boundary. Mounted Walk enables the same chain counter. Its action
+  adapter handles Pause, forward and in-place Hop, look, and the three
+  reposition modes. A temporary start failure keeps the selected action
+  pending. Moving actions use the one player engine anchor.
+- Walk time variance adds 0 through the configured frame limit to each normal
+  tile, including a braking turn. The value is independent on each accepted
+  tile and is not clipped by the preceding displayed time. The first tile at
+  maximum nominal speed keeps full variance; each subsequent committed Walk
+  shrinks the range by the acceleration amount until zero. `/2` halves the
+  range, rounding down. Stops and accepted turns restore it. Variance does not
+  change nominal momentum, feedback checks, chain state, or other movement
+  types. Mounted rider and Pokemon share the selected duration and one eased
+  render path when a same-heading Walk changes speed.
 - A direction forbidden by the resolved lane is a rejected candidate, not a
   stop command. It must leave momentum and chain progress unchanged. A genuine
   `NONE` input retains its separate stop/skid rules.
-- Turn-skid path planning is an independent movement option. When enabled, an
-  ordinary Walk, including the first recovery step after a turn skid, first
-  keeps enough straight runway for the fastest possible skid. A normal turn is
-  then accepted only when every skid tile and the first tile after the turn are
-  open. A rejected planned step is another direction candidate; it does not
-  crash, stop, or change momentum. Chain movement options are unchanged.
+- Turn-skid path planning is an independent movement option. An ordinary Walk
+  needs only a clear next tile; a wall beyond it cannot keep the actor one tile
+  away. An actual turn skid is accepted only when every skid tile and the first
+  tile after the turn are open. If that path is blocked, the actor brakes
+  without a crash, then the next held direction can turn from rest. Chain
+  movement options are unchanged.
 - Unlocked mounted diagonal side and destination failures submit a rejected
   candidate through Actor Motion before Walk policy input. Locked Ram input
   first retains the role-selected direction and its normal crash policy.
@@ -103,16 +131,18 @@ Wild AI / Follower AI / Rider input / Script
   not skid tiles, reposition moves, or interpolation frames.
 - The default acceleration step removes one travel frame per acceleration
   event. The legacy `/2` rule remains an explicit profile option.
-- A nonzero Movement Chain move count enables the chain. `NONE` ends the chain
-  with no pause or presentation action. `PAUSE` waits for the configured
-  passive pause without an action. Stop skid is a separate Walk-momentum option.
-  A Runner uses it when the normal Wild planner cannot accept another movement
-  direction, or when its normal TIRED lifecycle stops the current run. It is
-  not caused by any Movement Chain movement, pause, or action. `HOP_FORWARD` jumps two tiles
-  in the committed direction,
-  uses the current Walk travel time per tile, preserves momentum, and starts
-  the next chain without an idle pause. Pause-action chance applies only to visual
-  actions.
+- A nonzero Movement Chain move count enables the chain. A profile can select
+  one pause action or a set. The action chance admits the set once, then one
+  set action is picked at random. `NONE` ends the chain with no pause or
+  presentation action. `PAUSE` waits for the configured passive pause without
+  an action. Stop skid is a separate Walk-momentum option. Sprint keeps fast
+  Walk, acceleration, and skids, but has no Movement Chain action. When a
+  cardinal Walk faces blocked terrain or a non-player actor, Sprint can Hop
+  two tiles forward if the shared planner accepts the landing and arc. Clear
+  tiles still use Walk. The generic `HOP_FORWARD` chain action
+  remains available to other profiles. A legacy single `PAUSE` remains an
+  unconditional passive pause. `PAUSE` inside a random set uses the set's
+  overall action chance.
 - Multi-tile mounted motion must update logical location and terrain streaming
   across the traversed path. Warps cannot fire mid-motion.
 - Hop landing validation must first prove that the target belongs to a real
@@ -194,7 +224,7 @@ This map describes `feature/overworld-actor-system-roadmap`.
 | Public actor lifecycle, handles, commands, snapshots, and trace | `include/overworld_actor_system.h`, `src/overworld_actor_system_overlay/` | Actor facade and Observation |
 | Profile field schema and generated profile metadata | `tools/overworld/behavior_schema.json`, `include/generated/`, `tools/overworld/generated/` | Behavior Schema |
 | Generated spawn identity, type, render, catch, and behavior-group metadata | `scripts/build_overworld_wild_spawn_metadata.py`, `include/overworld_wild_behavior_data.h`, `src/overworld_wild_behavior_data_overlay/` | Wild role adapter |
-| Named authored profile values and rules | `data/overworld_behavior_profiles.json` | Behavior Schema |
+| Named authored profiles, pools, applications, and rules | `data/overworld_behavior_profiles.json` | Behavior Schema |
 | Generated compact profile blob and surfaces | `data/OverworldWildBehaviorData.c` | Behavior Schema compatibility data |
 | Profile composition | `lib/overworld/overworld_behavior_resolver.c` | Behavior Resolver |
 | Shared motion state and sampling | `lib/overworld/overworld_motion_model.c` | Motion Module |
@@ -206,6 +236,7 @@ This map describes `feature/overworld-actor-system-roadmap`.
 | Hop vector, range, duration, arc, and clearance planning | Actor Motion `PLAN_HOP` request; private code host in `src/pokemon_move_history_task6_overlay/overworld_actor_hop_planner.c` | Motion Module |
 | Hop landing, helper configuration, and chain-reposition execution | `src/overworld_wild_spawns_overlay/` | Wild world and engine adapters |
 | Rider input, streaming, and dependent presentation | `src/overworld_mount_overlay/` | Mounted role and presentation adapters |
+| Mounted chain handoff and action execution | `src/overworld_mount_chain_overlay/`, `src/overworld_mount_action_overlay/` | Mounted action adapter |
 | Player path, commit, field-event, timer, and bounded population scheduling | `lib/overworld/overworld_population_model.c`, actor population entry, public `Inspect(POPULATION)` | Population module |
 | Population despawn, spawn, and reveal work | wild spawn and helper overlays | Wild engine adapter |
 | Warp and battle readiness | public `Inspect(WORLD_GATE)` with Warp and Battle query kinds | Actor facade |

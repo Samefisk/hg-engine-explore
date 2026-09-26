@@ -14,7 +14,7 @@
     "expectationSource": "documentation/overworld_walk_frame_timing_spec.md",
     "actor": "MOUNTED species 155 (cyndaquil), acquired through mount; live handle and attached presentation required",
     "trigger": "Mount the current Cyndaquil follower; Complete one Walk at the configured stomp threshold; Complete one control Walk below the stomp threshold",
-    "observable": "Two ordinary mounted Walks each commit once and return control with paired native poses. At threshold 2, the 2-frame Walk emits one stomp event, creates skid dust and starts sound 2183. The 3-frame Walk emits none of these. Missing native reader coverage is a failure, not zero feedback.",
+    "observable": "Two ordinary mounted Walks each commit once and return control with paired native poses. At threshold 2, the 2-frame Walk emits one stomp event, creates skid dust and starts the stock ledge-hop landing sound 1606. The 3-frame Walk emits none of these. Missing native reader coverage is a failure, not zero feedback.",
     "setupAudit": "complete",
     "setupMutations": [
       {

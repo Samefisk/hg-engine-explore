@@ -31,10 +31,10 @@ def verify_walk_pause_routing(spawns: str) -> None:
     )
     if "lane->walkPause" not in completion:
         raise SystemExit("Walk completion does not read the lane Walk pause")
-    if completion.count("== OW_WILD_BEHAVIOR_LOCOMOTION_WANDER") < 3:
-        raise SystemExit("Walk pause is not routed through all three lifecycle lanes")
-    if completion.count("lane->walkPause") != 3:
-        raise SystemExit("Each Walk lifecycle lane must use its resolved tile wait")
+    if completion.count("== OW_WILD_BEHAVIOR_LOCOMOTION_WANDER") < 2:
+        raise SystemExit("Walk pause is not routed through both controller lanes")
+    if completion.count("lane->walkPause") != 2:
+        raise SystemExit("Each controller lane must use its resolved tile wait")
     if "slot == OW_WILD_FOLLOWER_SLOT" in completion:
         raise SystemExit("Follower Walk timing is still hard-coded in the engine")
 
@@ -75,7 +75,7 @@ def main() -> int:
     )
 
     for required in (
-        "#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 77",
+        "#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 81",
         "u8 walkPause;",
         "#define OW_WILD_BEHAVIOR_OVERRIDE3_WALK_PAUSE (1u << 22)",
         "#define OW_WILD_BEHAVIOR_OVERRIDE3_WALK_PAUSE_VARIANCE (1u << 27)",
@@ -121,11 +121,8 @@ def main() -> int:
         for profile in catalog["profiles"]
         if profile["id"] == "nervous-scavenger"
     )
-    if any(
-        scavenger_fields[field]["value"] != "apply-nervous-scavenger"
-        for field in ("activeProfile", "tiredProfile")
-    ):
-        raise SystemExit("Scavenger does not retain its Active and Tired lanes")
+    if scavenger_fields["tiredProfile"]["value"] != "apply-nervous-scavenger":
+        raise SystemExit("Scavenger does not retain its Tired lane")
     if "OW_WILD_BEHAVIOR_TURN_SKID_OPTIONS(3, 0, 0)" not in nervous \
             or not re.search(r"OW_WILD_BEHAVIOR_TURN_SKID_OPTIONS\(3, 0, 0\),\s*0,\s*1,", nervous):
         raise SystemExit(

@@ -11,6 +11,17 @@ from tools.overworld.test_devtools_spawn_measurement import SCHEMA, SOURCE, AUTH
 
 def control_stream():
     stream = surface_stream()
+    def mareep(value):
+        if isinstance(value, dict):
+            return {key: (179 if key == "species" and item == 165 else mareep(item))
+                    for key, item in value.items()}
+        if isinstance(value, list):
+            return [mareep(item) for item in value]
+        if isinstance(value, tuple):
+            return tuple(mareep(item) for item in value)
+        return value
+    stream.items = mareep(stream.items)
+    stream.actor = mareep(stream.actor)
     for snapshot, events in stream.items:
         if snapshot["frame"] < 2:
             continue
@@ -23,11 +34,45 @@ def control_stream():
                     data["jumpReceipts"][0]["landingHeight"]["sequence"] += 1
     height = next(e["data"] for e in stream.items[1][1]
                   if e["data"].get("observation") == "spawn-landing-height")
+    height["initialPlacement"] = True
     guest_timing = {"scope": "test-envelope", "arm9Ticks": 123}
     height["guestTiming"] = deepcopy(guest_timing)
     spawn = next(e["data"] for _, events in stream.items for e in events
                  if e["data"].get("observation") == "spawn-prepared")
-    spawn["jumpReceipts"][0]["landingHeight"]["guestTiming"] = deepcopy(guest_timing)
+    nested_height = spawn["jumpReceipts"][0]["landingHeight"]
+    nested_height["initialPlacement"] = True
+    nested_height["guestTiming"] = deepcopy(guest_timing)
+    spawn["initialLandingHeight"] = nested_height
+    spawn["jumpReceipts"] = []
+    target = deepcopy(spawn["startup"]["target"])
+    spawn["position"] = target
+    spawn["startup"].update(locomotion=7, origin=deepcopy(target),
+                            target=deepcopy(target))
+    for snapshot, _ in stream.items[1:]:
+        actor = snapshot["actors"][0]
+        actor.update(motionKind="NONE", motionPhase="IDLE", motionElapsed=0,
+                     motionDuration=0, controllerState=1, inputOwnership=0,
+                     reservationId=0)
+        actor["logical"].update(x=target[0], y=target[1])
+        actor["origin"].update(x=target[0], y=target[1])
+        actor["target"].update(x=target[0], y=target[1])
+        engine = actor["engineObject"]
+        engine.update(x=target[0], y=target[1], pos_x=(target[0] << 16) + 0x8000,
+                      pos_z=(target[1] << 16) + 0x8000, unk88_y=0)
+        frame = snapshot["frame"]
+        if frame <= 7:
+            engine.update(movement_cmd=48, face_y=4096)
+            if frame == 2:
+                actor["controllerState"] = 0
+        elif frame <= 9:
+            engine.update(movement_cmd=62, face_y=2048)
+        elif frame == 10:
+            engine.update(movement_cmd=74, face_y=0)
+        elif frame == 11:
+            engine.update(movement_cmd=255, face_y=0)
+        else:
+            engine.update(movement_cmd=62, face_y=0)
+            actor["controllerState"] = 0
     clean = {key: deepcopy(value) for key, value in height.items() if key not in HEIGHT_ENVELOPE}
     bad = deepcopy(clean)
     bad["positionAfter"]["pos_y"] += 4096
@@ -41,6 +86,44 @@ def control_stream():
 
 
 class SpawnHeightControlMeasurementTests(unittest.TestCase):
+    def test_boot_trace_replays_the_natural_appear_hop(self):
+        stream, _ = control_stream()
+        spawn = next(event["data"] for event in stream.items[1][1]
+                     if event["data"].get("observation") == "spawn-prepared")
+        events = []
+        for snapshot, frame_events in stream.items[1:]:
+            events.extend(deepcopy(frame_events))
+            events.append({"kind": "native-observation", "frame": snapshot["frame"],
+                "data": {"observation": "spawn-appear-hop-frame",
+                    "sequence": 1000 + snapshot["frame"], "setupMode": "normal",
+                    "entryActorFrame": snapshot["actorFrame"],
+                    "returnActorFrame": snapshot["actorFrame"],
+                    "entryNativeCycle": snapshot["nativeCycle"],
+                    "returnNativeCycle": snapshot["nativeCycle"], "returnValue": 0,
+                    "subject": deepcopy(spawn["publicSubject"]),
+                    "worldContext": deepcopy(spawn["worldContext"]),
+                    "actor": deepcopy(snapshot["actors"][0]),
+                    "actorFrame": snapshot["actorFrame"],
+                    "nativeCycle": snapshot["nativeCycle"],
+                    "observationBoundary": "main-task-queue-completion",
+                    "prepared": False}})
+        meter = LiveSpawnHeightControlMeasurement(
+            SCHEMA, SOURCE, max_frames=100, authored_profiles=AUTHORED)
+        self.assertTrue(meter.observe_initial(stream.items[-1][0], events)["ready"])
+        self.assertTrue(meter.finish()["passed"])
+
+        hidden = deepcopy(events)
+        next(event["data"] for event in hidden
+             if event.get("data", {}).get("observation") == "spawn-height-read-control")[
+                 "observation"] = "height-control-meaning-removed"
+        missing = LiveSpawnHeightControlMeasurement(
+            SCHEMA, SOURCE, max_frames=100, authored_profiles=AUTHORED)
+        with self.assertRaisesRegex(ValueError, "boot trace did not complete"):
+            missing.observe_initial(stream.items[-1][0], hidden)
+        self.assertTrue(any(error.get("code") == "invalid-spawn-height-control"
+                            and "control is missing" in error.get("message", "")
+                            for error in missing.result()["failures"]))
+
     def run_stream(self, stream):
         meter = LiveSpawnHeightControlMeasurement(SCHEMA, SOURCE, max_frames=100, authored_profiles=AUTHORED)
         for snapshot, events in stream.items:
@@ -59,7 +142,6 @@ class SpawnHeightControlMeasurementTests(unittest.TestCase):
         result = meter.finish()
         self.assertTrue(result["passed"], result)
         self.assertTrue(result["baseline"]["passed"])
-        self.assertTrue(result["baseline"]["placement"]["passed"])
         self.assertTrue(result["baseline"]["surface"]["passed"])
         self.assertEqual(result["detections"]["spawn-height-read"]["reason"], EXPECTED_REASON)
         self.assertEqual(result["cleanup"]["receipt"], receipt)
@@ -67,7 +149,12 @@ class SpawnHeightControlMeasurementTests(unittest.TestCase):
         self.assertEqual(stream.items, before)
 
     def test_missing_control_fails_at_first_complete_surface(self):
-        _, result = self.run_stream(surface_stream())
+        stream, _ = control_stream()
+        stream.items[1] = (stream.items[1][0], [
+            event for event in stream.items[1][1]
+            if event.get("data", {}).get("observation") != "spawn-height-read-control"
+        ])
+        _, result = self.run_stream(stream)
         self.assertFalse(result["passed"])
         self.assertTrue(result["baseline"]["passed"])
         self.assertIn("control is missing", str(result["failures"]))

@@ -55,13 +55,17 @@ typedef int BOOL;
 #define OVERWORLD_MOTION_DECISION_ACCEPTED 0
 #define OVERWORLD_MOTION_DECISION_CONTEXT_LOST 1
 typedef struct { int unused; } OverworldMotionSample;
+typedef struct { int unused; } OverworldActorWalkPolicyCall;
 typedef struct { u16 movementMotionIdentities[OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS]; } OverworldWildRuntimeMotionPrefix;
 typedef struct { u16 motionIdentity; } OverworldMountRuntimeState;
 typedef struct { void *movementRuntimeState; } SpawnState;
 typedef struct {
-    int version, size, actorSlot, operation, acknowledgements, fieldEpoch;
-    u16 acknowledgedPathAdvance; u8 cancelReason; u16 motionIdentity;
-    OverworldMotionSample *sample; int phase, decision;
+    u16 version, size;
+    u8 operation, acknowledgements, cancelReason, phase, actorSlot, reserved;
+    u16 fieldEpoch, acknowledgedPathAdvance, motionIdentity;
+    u16 pendingLastPathAdvance, decision, tickFlags;
+    OverworldMotionSample *sample;
+    OverworldActorWalkPolicyCall *walkPolicy;
 } OverworldActorMotionBoundaryCall;
 static OverworldWildRuntimeMotionPrefix wild;
 static OverworldMountRuntimeState mountState;

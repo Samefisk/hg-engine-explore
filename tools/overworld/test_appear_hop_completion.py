@@ -35,6 +35,7 @@ def harness_source():
 
 typedef uint8_t u8;
 typedef uint16_t u16;
+typedef uint32_t u32;
 typedef int BOOL;
 #define TRUE 1
 #define FALSE 0
@@ -42,7 +43,6 @@ typedef int BOOL;
 #define OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_UPDATE_COMMAND 1
 #define OW_WILD_SPAWNER_SPOT_STATE_CHILL 0
 #define OW_WILD_SPAWNER_SPOT_STATE_EMOTING 1
-#define OW_WILD_SPAWNER_SPOT_STATE_ACTIVE 2
 #define OW_WILD_SPAWNER_SPOT_EMOTE_STEP_PARTNER_PREP 0
 #define OW_WILD_SPAWNER_SPOT_EMOTE_STEP_FREEZE 2
 #define OW_WILD_SPAWNER_SPOT_EMOTE_STEP_DONE 4
@@ -72,7 +72,8 @@ typedef struct OverworldWildSpawnState {
 static BOOL commandFinishes;
 static BOOL nextStepStarts;
 static unsigned cancelCalls;
-static unsigned activeCalls;
+static unsigned activeConditionApplications;
+static unsigned resumeCalls;
 
 static BOOL MapObject_IsSingleMovementActive(LocalMapObject *object)
 { return object->movementActive; }
@@ -99,9 +100,12 @@ static BOOL OverworldWildSpawns_StartNextSpotEmoteStep(
 static void OverworldWildSpawns_CancelSpotEmotePresentation(
     OverworldWildSpawnState *state, int slot, LocalMapObject *object)
 { (void)state; (void)slot; (void)object; cancelCalls++; }
-static void OverworldWildSpawns_EnterActiveStateFromGenericAlert(
+static u32 OverworldWildSpawns_GetActiveConditionApplications(
+    OverworldWildSpawnState *state, int slot)
+{ (void)state; (void)slot; return activeConditionApplications; }
+static void OverworldWildSpawns_ResumeOwnerAfterAlert(
     OverworldWildSpawnState *state, int slot, LocalMapObject *object)
-{ (void)state; (void)slot; (void)object; activeCalls++; }
+{ (void)state; (void)slot; (void)object; resumeCalls++; }
 
 /* @TICK@ */
 
@@ -124,7 +128,7 @@ static void Reset(OverworldWildSpawnState *state, Runtime *runtime, LocalMapObje
     object->movementActive = TRUE;
     commandFinishes = TRUE;
     nextStepStarts = TRUE;
-    cancelCalls = activeCalls = 0;
+    cancelCalls = activeConditionApplications = resumeCalls = 0;
 }
 
 int main(void)
@@ -161,10 +165,10 @@ int main(void)
 
     Reset(&state, &runtime, &object);
     state.movementEmoteJumpsRemaining[0] = 1;
-    state.movementEmoteEndStates[0] = OW_WILD_SPAWNER_SPOT_STATE_ACTIVE;
+    activeConditionApplications = 1;
     CHECK(OverworldWildSpawns_TickSpotEmote(&state, 0, &object));
-    CHECK(state.movementSpotStates[0] == OW_WILD_SPAWNER_SPOT_STATE_ACTIVE);
-    CHECK(activeCalls == 1);
+    CHECK(state.movementSpotStates[0] == OW_WILD_SPAWNER_SPOT_STATE_CHILL);
+    CHECK(resumeCalls == 1);
 
     puts("appear-hop completion regression: passed");
     return 0;

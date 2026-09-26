@@ -32,6 +32,7 @@ class AppearHopMeasurement:
         self.frames = 0
         self.stage = 0
         self.restore_frame = None
+        self.idle_frame = None
         self.failures = []
         self.samples = []
 
@@ -88,10 +89,12 @@ class AppearHopMeasurement:
             require(all(type(selector.get(key)) is int and selector[key] == 0
                         for key in ("heldKeys", "newKeys", "physicalPressed", "simulatedKeys")),
                     "Appear Hop timing requires neutral input")
-            require(actor.get("presentationAttached") is True
-                    and actor.get("motionKind") == "NONE"
-                    and actor.get("motionPhase") == "IDLE",
-                    "Appear Hop actor presentation or shared motion changed")
+            require(actor.get("presentationAttached") is True,
+                    "Appear Hop actor presentation changed")
+            if self.stage < 3:
+                require(actor.get("motionKind") == "NONE"
+                        and actor.get("motionPhase") == "IDLE",
+                        "Appear Hop shared motion changed before its control handoff")
             self.frames += 1
             require(self.frames <= self.max_frames,
                     "Appear Hop did not return control within 30 frames")
@@ -119,13 +122,20 @@ class AppearHopMeasurement:
                             and self.last["actors"]
                             and self.samples[-1]["command"] == RESTORE_COMMAND,
                             "Appear Hop restore did not finish on the next completed frame")
-                    require(state == 0,
-                            "Appear Hop stayed locked after its final restore")
+                    require(state == 1,
+                            "Appear Hop released before its idle publication")
                     self.stage = 3
-                    self.terminal = deepcopy(snapshot)
+                    self.idle_frame = snapshot["frame"]
                 else:
                     require(command == RESTORE_COMMAND,
                             "Appear Hop restore command order differs")
+            elif self.stage == 3:
+                require(snapshot["frame"] == self.idle_frame + 1,
+                        "Appear Hop control handoff did not use the next completed frame")
+                require(state == 0,
+                        "Appear Hop stayed locked after its idle publication")
+                self.stage = 4
+                self.terminal = deepcopy(snapshot)
             if self.stage < 3:
                 require(state == 1,
                         "Appear Hop released control before its final restore")
@@ -145,7 +155,7 @@ class AppearHopMeasurement:
 
     @property
     def ready(self):
-        return self.stage == 3 and not self.failures
+        return self.stage == 4 and not self.failures
 
     @property
     def closed(self):
@@ -172,5 +182,6 @@ class AppearHopMeasurement:
             "initial": deepcopy(self.initial),
             "terminal": deepcopy(self.terminal),
             "restoreFrame": self.restore_frame,
+            "idleFrame": self.idle_frame,
             "samples": deepcopy(self.samples),
         }

@@ -9,11 +9,12 @@ from scripts import verify_overworld_behavior_resolver as verifier
 class RuleRemovalControlTests(unittest.TestCase):
     def inputs(self):
         root = Path(__file__).resolve().parents[1]
-        catalog = verifier._load_json(root / "data/overworld_behavior_profiles.json")
-        application_id = catalog["runtimeBindings"]["defaultActiveApplication"]
-        rule_index = verifier._application_indexes(root)[application_id]
+        rule_index = verifier._select_rule_removal_index(
+            root,
+            [dict(expected=dict(requiredAppliedOverrideMask=(1 << 1)))],
+        )
         vectors = [dict(name="covered", request={}, expected=dict(requiredAppliedOverrideMask=1 << rule_index))]
-        result = dict(status=0, profileHex="00" * 216)
+        result = dict(status=0, profileHex="00" * 144)
         adapter = SimpleNamespace(resolve_many=Mock(side_effect=[[result], [result]]), build=Mock(return_value=root / "unused"))
         return root, vectors, adapter
 

@@ -59,8 +59,8 @@ def fixture():
                 contextHex=context.hex(),positionHex='00'*12)]
             feedback['init']=[dict(deepcopy(common),kind='init',args=[0x02240000,0,0,0],returnValue=1,
                 effectDataHex=data.hex(),renderPointer=0x02250000)]
-            feedback['sound']=[dict(deepcopy(common),kind='sound',args=[2183,0,0,0])]
-            feedback['soundStart']=[dict(deepcopy(common),kind='soundStart',soundId=2183,returnValue=1)]
+            feedback['sound']=[dict(deepcopy(common),kind='sound',args=[1606,0,0,0])]
+            feedback['soundStart']=[dict(deepcopy(common),kind='soundStart',soundId=1606,returnValue=1)]
         policy=dict(deepcopy(common),kind='policy',args=[0x02230000,0x02210000,0x02260000,0],
             policyHex=raw.hex(),profileHex=profile.hex(),stompTime=2,effect=raw[21],objectPointer=0x02210000,feedback=feedback)
         input_policy=deepcopy(policy);input_raw=bytearray(raw)
@@ -148,7 +148,7 @@ class StompContractTests(unittest.TestCase):
 
     def test_sound_id_is_anchored_in_actual_public_header(self):
         header=(Path(__file__).resolve().parents[2]/'include/constants/sndseq.h').read_text()
-        self.assertRegex(header,r'#define\s+SEQ_SE_GS_IWAOTOSHI02\s+2183\b')
+        self.assertRegex(header,r'#define\s+SEQ_SE_DP_SUTYA2\s+1606\b')
 
     def test_fixture_keeps_native_projection_separate_from_public_binding(self):
         cases,subject,terminal=fixture()
@@ -190,9 +190,10 @@ class StompContractTests(unittest.TestCase):
             case=dict(case=CASES[index],subject=subject,initial=start,terminal=end)
             counts=dict(policy=1,**{k:len(v) for k,v in call['feedback'].items()})
             window=dict(complete=True,startFrame=start['frame'],endFrame=end['frame'],counts=counts,calls=[call])
-            # These real unchanged COMMIT receipts have valid native sinks,
-            # but this partial pilot did not retain START_RESULT or INPUT.
-            with self.subTest(index=index),self.assertRaisesRegex(ValueError,'native START_RESULT count differs'):
+            # The older positive receipt used the retired loud sound. The
+            # negative receipt still lacks START_RESULT and INPUT.
+            expected = 'native stomp sound start failed' if index == 0 else 'native START_RESULT count differs'
+            with self.subTest(index=index),self.assertRaisesRegex(ValueError,expected):
                 validate_feedback(window,case,subject['engineIdentity'])
 
 

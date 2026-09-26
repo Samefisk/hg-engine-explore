@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.condition.packaged-rom-evaluator",
+  "title": "Packaged ROM condition service keeps conditional-profile rules",
+  "status": "active",
+  "capabilities": ["condition.evaluation"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/conditional-profiles-implementation-plan.md#runtime-contract",
+    "actor": "Subjectless service inputs use one complete copied actor handle. WILD and FOLLOWER are copied-input labels only and grant no live actor or role-caller credit.",
+    "trigger": "Authenticate the packaged condition service and live behavior blob, temporarily replace three declared catalog ranges with four fixed conditions, call PrepareActor and EvaluatePrepared through the native bridge, then restore the exact source ranges.",
+    "observable": "Seven bounded cases prove same-application last-wins, cross-application stacking, timed hold, cooldown and duration restart, player target capture, stale and fresh complete actor handles, and byte-identical copied WILD/FOLLOWER inputs.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Import a disposable copy of test.sav and use normal boot input. Capture the live behavior-blob address from one natural resolver call."
+      },
+      {
+        "phase": "during-observation",
+        "target": "observation",
+        "change": "Temporarily replace exactly 1,042 authenticated live catalog bytes: the condition count, profiles zero through three, and condition entries zero through three. Allocate one guarded 1,536-byte heap11 input/output block. Read back every input, state, scratch result and guard. Restore the exact source catalog ranges before freeing the block and verify the complete source blob. Actor state, registers, stack and the source save stay unchanged."
+      }
+    ],
+    "limits": [
+      "This proves the packaged PrepareActor and EvaluatePrepared service over controlled inputs and a temporary restored catalog fixture. It does not prove a Wild or Follower controller called the service during play.",
+      "The actor-target entries exist only during the disposable fixture because the current authored catalog has no Pokemon-target condition. Three declared catalog ranges must be restored exactly before cleanup.",
+      "Observed frames count native cycles containing condition-service work. They do not provide completed-game-frame, movement, intent-boundary, presentation or soak credit."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {"path": "test.sav", "kind": "sav"},
+    "seed": 0
+  },
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Authenticate the service and source blob, apply the bounded fixture, execute seven fixed condition cases, and restore the source blob"
+    }
+  ],
+  "stop": {
+    "frameBudget": 4000,
+    "condition": "All seven native cases, exact catalog and heap cleanup, and eleven recorded-data controls pass, or the first invalid receipt stops the run"
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "The temporary fixture changes only three declared catalog ranges and restores the complete live source blob before the probe returns",
+      "A later active condition wins inside one application while separate active applications stack",
+      "Cooldown blocks frame 104 and frame 105 retrigger restarts the timed duration",
+      "A changed actor generation returns STALE_TARGET before a later call captures the fresh complete handle",
+      "Copied WILD and FOLLOWER inputs produce byte-identical prepared state, scratch results and final result"
+    ]
+  },
+  "capture": "none",
+  "subjects": [],
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "profile.condition.packaged-rom-evaluator",
+    "claims": ["profile-resolution"],
+    "minimumFrames": 1
+  }
+}

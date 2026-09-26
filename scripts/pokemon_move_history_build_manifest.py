@@ -455,6 +455,10 @@ OUTPUTS = {
     "actor_binary": "build/output_overworld_actor_system_overlay.bin",
     "mount_linked": "build/overworld_mount_overlay_linked.o",
     "mount_binary": "build/output_overworld_mount_overlay.bin",
+    "mount_chain_linked": "build/overworld_mount_chain_overlay_linked.o",
+    "mount_chain_binary": "build/output_overworld_mount_chain_overlay.bin",
+    "mount_action_linked": "build/overworld_mount_action_overlay_linked.o",
+    "mount_action_binary": "build/output_overworld_mount_action_overlay.bin",
     "overworld_wild_spawns_linked":
         "build/overworld_wild_spawns_overlay_linked.o",
     "overworld_wild_spawns_binary":
@@ -485,6 +489,8 @@ OUTPUTS = {
     "patched_overlay154": "base/overlay/overlay_0154.bin",
     "patched_overlay155": "base/overlay/overlay_0155.bin",
     "patched_overlay156": "base/overlay/overlay_0156.bin",
+    "patched_overlay159": "base/overlay/overlay_0159.bin",
+    "patched_overlay160": "base/overlay/overlay_0160.bin",
 }
 
 

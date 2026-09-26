@@ -4,7 +4,17 @@ from types import SimpleNamespace
 import struct
 import unittest
 
-from tools.overworld.devtools_resolver_probe import ResolverProbe, ResolverProbeError, TRACE, STEPS, REQUEST
+from tools.overworld.devtools_resolver_parity import CASE_NAMES
+from tools.overworld.devtools_resolver_probe import (
+    BUFFER_BYTES,
+    CAPACITY,
+    REQUEST,
+    RESULT,
+    STEPS,
+    TRACE,
+    ResolverProbe,
+    ResolverProbeError,
+)
 
 
 class Session:
@@ -30,7 +40,8 @@ class ResolverProbeTests(unittest.TestCase):
     def run_recipe(self, session, probe, fault=None):
         call = lambda name, args: (name, args)
         generator = probe.recipe(None, call)
-        self.assertEqual(next(generator), ("allocate_work_memory", (11, 8000)))
+        self.assertEqual(next(generator),
+                         ("allocate_work_memory", (11, BUFFER_BYTES)))
         pointer = 0x02040000
         pending = generator.send(pointer); calls = []
         while True:
@@ -42,13 +53,17 @@ class ResolverProbeTests(unittest.TestCase):
                 try: generator.send(0)
                 except StopIteration as done: return calls, done.value
             self.assertEqual(name, "resolve_behavior")
-            self.assertEqual(args, (0x02020000, len(session.blob), pointer + REQUEST, pointer + 36, pointer + TRACE))
+            self.assertEqual(args, (0x02020000, len(session.blob),
+                                    pointer + REQUEST, pointer + RESULT, pointer + TRACE))
             session.put(pointer + TRACE + 6, struct.pack("<H", 1))
             session.put(pointer + STEPS, struct.pack("<HBBB3x", 1, 0, 2, 3) + bytes(72))
             if fault == "guard": session.put(pointer, b"!")
-            if fault == "end-guard": session.put(pointer + 7999, b"!")
+            if fault == "end-guard":
+                session.put(pointer + BUFFER_BYTES - 1, b"!")
             if fault == "request": session.put(pointer + REQUEST, b"!")
-            if fault == "count": session.put(pointer + TRACE + 6, struct.pack("<H", 97))
+            if fault == "count":
+                session.put(pointer + TRACE + 6,
+                            struct.pack("<H", CAPACITY + 1))
             if fault == "drop": session.put(pointer + TRACE + 8, struct.pack("<H", 1))
             if fault == "trace-pointer": session.put(pointer + TRACE, bytes(4))
             if fault == "reserved": session.put(pointer + STEPS + 5, b"!")
@@ -57,16 +72,17 @@ class ResolverProbeTests(unittest.TestCase):
             session.rt.EXECUTED_FRAME_COUNT += 1
             pending = generator.send(0)
 
-    def test_exact_seven_calls_owned_writes_and_free(self):
+    def test_exact_calls_owned_writes_and_free(self):
         session, probe = self.fixture()
         calls, result = self.run_recipe(session, probe)
-        self.assertEqual(calls, ["resolve_behavior"] * 7 + ["free"])
-        self.assertEqual(session.writes, [(0x02040000, 8000)] * 7)
+        self.assertEqual(calls, ["resolve_behavior"] * len(CASE_NAMES) + ["free"])
+        self.assertEqual(session.writes,
+                         [(0x02040000, BUFFER_BYTES)] * len(CASE_NAMES))
         self.assertTrue(result["completed"]); self.assertFalse(result["acceptedProof"])
-        self.assertEqual(len(result["receipts"]), 7)
+        self.assertEqual(len(result["receipts"]), len(CASE_NAMES))
         self.assertEqual(session.native_allocations, {})
         self.assertEqual(result["receipts"][0]["returnClock"]["nativeCycle"], 101)
-        result["receipts"].clear(); self.assertEqual(len(probe.receipts), 7)
+        result["receipts"].clear(); self.assertEqual(len(probe.receipts), len(CASE_NAMES))
         with self.assertRaises(ResolverProbeError): next(probe.recipe(None, lambda *a: a))
 
     def test_bad_data_frees_before_propagating(self):
@@ -105,3 +121,5 @@ class ResolverProbeTests(unittest.TestCase):
         step = header.split("typedef struct BehaviorResolutionStep {", 1)[1].split("} BehaviorResolutionStep;", 1)[0]
         fields = ("u16 sourceIndex;", "u8 lane;", "u8 kind;", "u8 flags;", "u8 reserved[3];", "OverworldWildBehaviorProfileData profile;")
         self.assertEqual([step.index(field) for field in fields], sorted(step.index(field) for field in fields))
+        self.assertLessEqual(STEPS + CAPACITY * 80,
+                             BUFFER_BYTES - len(b"ResolverGuard-v1"))

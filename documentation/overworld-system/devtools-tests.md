@@ -213,9 +213,12 @@ reader, checker, fixture or recorder-control dependency. Tool work serves the
 selected game outcome; a new tool is not the next outcome by default.
 
 `profile.owner-reader-control` is the separate native reader calibration for
-`profile.follower-mounted-owner-transfer`. Both use the healthy saved Mankey
-directly. The control changes/restores one Owner byte without guest execution;
-the transfer uses read-only observations. The transfer gate rechecks a separate
+`profile.follower-mounted-owner-transfer`. Both prepare the same Sprint Stantler
+in party slot 2, start it as Follower, and mount that exact actor. The control
+changes/restores one Owner byte without guest execution; the transfer uses
+read-only observations. The transfer requires Mounted field and primitive
+bytes equal to the normal selected Owner result, not the Follower result,
+plus a distinct Mounted policy fingerprint. The gate rechecks a separate
 accepted control manifest with matching source, ROM, save and reader inputs.
 A manual calibration receipt or copied-data rejection cannot replace that
 dependency. Neither test grants normal Select input, Hop or movement proof.
@@ -233,6 +236,21 @@ owned-buffer/session cleanup. Seven copied-data controls must fail for their
 own reason. Those are evaluator controls, not game observer faults. Its one-
 cycle floor counts native cycles containing resolver work and cannot provide
 completed-game-frame, actor identity, role-caller or movement-soak credit.
+
+`profile.condition.packaged-rom-evaluator` is a separate subjectless S3
+service test. One fixed `condition.probe` action authenticates the ROM
+condition-service table, all three linked callback entries, and the live
+behavior blob captured by natural resolver discovery. It allocates one guarded
+1,536-byte heap11 input/output block. It temporarily changes three declared
+catalog ranges, 1,042 bytes in total, for seven fixed cases. It then restores
+the complete source blob exactly before cleanup. The controller requires exact
+native arguments and returns, complete input/state/scratch/result readback,
+guard preservation, exact catalog restoration, free, private-session cleanup
+and eleven wrong-data controls. It proves overlap last-wins, application
+stacking, timed hold/cooldown/duration restart, player and actor targets,
+stale/fresh complete handles, and byte-identical copied-input Wild/Follower
+results. The role labels are not live actors or caller proof, and its native-
+cycle floor grants no intent, movement, presentation or soak credit.
 
 `actor.inspect-current-and-stale` is a separate S3 native facade lookup test.
 It binds the existing saved FOLLOWER Mankey, then resolves the bound handle for
@@ -776,7 +794,8 @@ The finalizer tap retains initialized input bytes before placement and the
 successful prepared output afterward. One same-frame, single-use receipt must
 match the spawn's exact buffer, slot, world context, encounter and final PID.
 The final PID may legitimately differ from the input PID. The winning Owner
-layer comes from matched/forced masks, not Active/Tired's combined applied mask.
+layer comes from matched/forced and active-conditional application masks, not
+from a controller-state lane.
 Only unconditional legacy POOL with no tree-top exception is in scope.
 The test compares the incoming site, finalized site and actual completed Hop;
 it cannot call a new site correct merely because startup copied that new site.
@@ -790,9 +809,10 @@ The registered `spawn.appear-hop-timing` test checks the separate `APPEAR_HOP`
 startup. It uses one prepared native Wild Clefairy spawn and retains the exact
 finalized identity, resolved startup mode, engine command order, rendered
 same-tile arc, and controller state. The jump, delay, restore, and idle commands
-must be contiguous. `CHILL` must start on the first completed idle frame after
-restore; the timeout is only a stuck-command fallback. Prepared setup does not
-prove natural population selection or other spawn locomotion modes.
+must be contiguous. The observer retains the completed idle publication after
+restore, then requires routine control on the next completed frame. The timeout
+is only a stuck-command fallback. Prepared setup does not prove natural
+population selection or other spawn locomotion modes.
 
 The shared spawn observer also records `spawn-landing-height` at the same
 encounter's final own target, nested under its spawn Hop. It retains the actual
@@ -815,15 +835,16 @@ two separate current calibrations: `observation.live-actor-and-motion-control`
 and `observation.spawn-height-control`. Both must pass before the normal
 `spawn.ledyba-pool-site` run; they do not supply normal-play credit themselves.
 
-The `live-spawn-height-control-v1` test uses the same normal route. It arms
-after boot, before route input. At one authenticated native height-reader
-return for the actual Wild Ledyba, it reads clean state, changes only four
+The `live-spawn-height-control-v1` test uses one natural Wild Mareep from the
+saved Route 29 start. It arms before boot and records the actor's initial
+Appear Hop landing height. At one authenticated native height-reader return
+for that actor, it reads clean state, changes only four
 native Y bytes by4096, uses the same complete reader, restores those bytes in
 `finally`, then reads again. No guest instruction executes between those
 reads. A restoration failure exits only the disposable worker even if error
 logging fails. Source, object, world, own target, all four tap clocks and the
 next completed-frame publication must match the clean height receipt.
-After the complete clean spawn, the unchanged surface checker must reject
+After the complete clean spawn, the initial-landing surface checker must reject
 the measured bad Y for the exact terminal-height reason. Controller replay
 also rejects absent/stale subjects, missing fault meaning and changed restored
 data. These copied-data checks do not replace the native wrong-Y read.
@@ -946,13 +967,17 @@ batching error:
 2. Run `python3 tools/overworld/test_spawn_destination_scan.py`.
 3. Stop if either extracted-C check finds more than one costly candidate query
    in one update. Fix the production scanner before starting melonDS.
-4. Run `population.spawn-work-budget` on the current ROM. Its fixed Route 30
-   path must keep the player moving during the scan. Require exactly one
-   profile resolution and one metadata/class preparation for the complete
-   automatic attempt. Later scan updates must reuse that prepared result. The
-   copied repeated-preparation controls and the slow-resumed-finalizer control
+4. Run `population.spawn-work-budget` on the current ROM. Its fixed route
+   crosses from Route 30 into Cherrygrove, then starts the strict window on the
+   first completed post-seam update. The player must keep moving during the
+   scan. Require exactly one profile resolution and one metadata/class
+   preparation for the complete automatic attempt. Later scan updates must
+   reuse that prepared result. The completed attempt must create Hoothoot with
+   its normal Fly In. The copied repeated-preparation controls
+   and the slow-resumed-finalizer control
    must fail for their matching reasons. The same short run must record every
-   stock main-loop wait through the first post-spawn loop. Require zero loops
+   stock main-loop wait in the strict window through the first post-spawn
+   loop. Require zero loops
    above two native cycles and reject ARM9 intervals above the sub-VBlank hook
    margin (`2800950` scheduler ticks), at least 120 in-transit
    player samples, and zero repeated exact player positions during those
@@ -1154,7 +1179,10 @@ missing callback still reaches the frame deadline. One arm per session,
 failed-arm cleanup and normal core disposal prevent leaked hooks. Receipts stay
 compact; events are retained once in the shared stream. Source tests are in the
 normal proof gate. The `mounted-frame-pacing-v1` pure evaluator retains all nine
-original rows and separates seven Right Walks from the recovery tile. Typed jobs
+checks and separates seven Right Walks from the recovery tile. Mounted
+Cyndaquil now uses its normal Default Owner time, not the Follower's old
+eight-frame cap. Its required seven travel times are `16, 16, 16, 15, 15,
+15, 14`; the separate recovery tile starts at 16 after a real stop. Typed jobs
 require one held-Right action until the seventh start, neutral completion, then
 one separately scoped Right recovery and close. At a key edge, only the first
 completed queue may retain the previous exact memory key mask: stock main polls

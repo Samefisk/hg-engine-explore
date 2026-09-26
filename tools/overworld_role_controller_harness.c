@@ -115,8 +115,8 @@ static void CheckRamLockAndCrash(void)
                 & OVERWORLD_ROLE_CONTROLLER_INTENT_LOCK_DIRECTION) != 0,
         "Mounted Ram uses the same actor-owned direction lock");
     CHECK((output.intentFlags
-            & OVERWORLD_ROLE_CONTROLLER_INTENT_ENABLE_CHAIN) == 0,
-        "Mounted Ram cannot inherit Wild AI chain actions");
+            & OVERWORLD_ROLE_CONTROLLER_INTENT_ENABLE_CHAIN) != 0,
+        "Mounted Ram keeps the composed Movement Chain");
 }
 
 static void CheckChainTerminalOwnership(void)
@@ -134,19 +134,13 @@ static void CheckChainTerminalOwnership(void)
         input.chainAction = 2;
         input.chainTicks = 9;
         OverworldRoleController_Reduce(&input, &output);
-        if (role == OVERWORLD_ROLE_CONTROLLER_ROLE_WILD
-            || role == OVERWORLD_ROLE_CONTROLLER_ROLE_FOLLOWER) {
-            CHECK(output.decision
-                    == OVERWORLD_ROLE_CONTROLLER_DECISION_TERMINAL
-                    && output.terminalKind
-                        == OVERWORLD_ROLE_CONTROLLER_TERMINAL_CHAIN
-                    && output.terminalAction == 2
-                    && output.terminalTicks == 9,
-                "Wild and Follower consume shared chain terminal output");
-        } else {
-            CHECK(output.decision == OVERWORLD_ROLE_CONTROLLER_DECISION_NONE,
-                "Mounted role does not inherit AI chains");
-        }
+        CHECK(output.decision
+                == OVERWORLD_ROLE_CONTROLLER_DECISION_TERMINAL
+                && output.terminalKind
+                    == OVERWORLD_ROLE_CONTROLLER_TERMINAL_CHAIN
+                && output.terminalAction == 2
+                && output.terminalTicks == 9,
+            "All actor roles consume shared chain terminal output");
     }
 
     {
@@ -434,8 +428,8 @@ static void CheckMountedMotionOutcomes(void)
                 && output.direction == input.requestedDirection,
             "Mounted Hop and Teleport keep current rider direction");
         CHECK((output.intentFlags
-                & OVERWORLD_ROLE_CONTROLLER_INTENT_ENABLE_CHAIN) == 0,
-            "Mounted Hop and Teleport cannot inherit AI chains");
+                & OVERWORLD_ROLE_CONTROLLER_INTENT_ENABLE_CHAIN) != 0,
+            "Mounted Hop and Teleport keep composed chain eligibility");
     }
 
     {

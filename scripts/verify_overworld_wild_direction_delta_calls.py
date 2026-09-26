@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OBJECT = ROOT / "build/overworld_wild_spawns_overlay_linked.o"
 SOURCE_OBJECT = ROOT / "build/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.o"
 FIXED_TARGETS = {
+    "OverworldActor_PlayStompSound": 0x023BA119,
     "OverworldWildSpawns_MovementDirectionDeltaX": 0x023BF59D,
     "OverworldWildSpawns_MovementDirectionDeltaY": 0x023BF5BF,
     "OverworldWildSpawns_SelectMovementLocomotion": 0x023B6BB9,
@@ -141,7 +142,7 @@ def main() -> None:
         counts[target] += 1
     if not all(counts.values()):
         fail(f"a fixed target has no verified compiled callers: {counts}")
-    print(f"Wild direct Thumb calls verified: {sum(counts.values())} calls, five fixed targets, no local bridges")
+    print(f"Wild direct Thumb calls verified: {sum(counts.values())} calls, {len(FIXED_TARGETS)} fixed targets, no local bridges")
 
 
 if __name__ == "__main__":

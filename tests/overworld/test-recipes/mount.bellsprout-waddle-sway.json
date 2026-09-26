@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.bellsprout-waddle-sway",
+  "title": "Mounted Bellsprout keeps Meander Walk time and Waddle lateral sway",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "data/overworld_behavior_profiles.json",
+  "requirements": ["current.mounted-bellsprout-waddle-sway"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 300, "noProgressFrames": 180, "minObservedFrames": 14},
+  "subjects": [{"id": "bellsprout", "species": 69, "role": "MOUNTED", "acquire": "existing"}],
+  "setup": [
+    {"id": "clear-waddle-lane", "op": "teleport", "args": {"map": 33, "x": 585, "z": 402, "facing": 3},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "own-bellsprout", "op": "party", "args": {"slot": 0, "species": 69, "level": 5, "hp": 1, "status": 0},
+      "budget": {"maxSeconds": 15, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "mount-own-bellsprout", "op": "spawn", "args": {"species": 69, "role": "mounted", "slot": 0},
+      "budget": {"maxSeconds": 30, "maxFrames": 180, "noProgressFrames": 120}},
+    {"id": "bind-bellsprout", "op": "bind", "args": {"subject": "bellsprout"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "start-one-right-walk", "op": "step", "args": {"frames": 30, "keys": ["RIGHT"],
+      "until": {"kind": "actor-field", "subject": "bellsprout", "path": "motionKind", "operator": "eq", "value": "WALK"}},
+      "budget": {"maxSeconds": 15, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "finish-one-right-walk", "op": "wait", "args": {"predicate": {"kind": "actor-field", "subject": "bellsprout", "path": "motionPhase", "operator": "eq", "value": "IDLE"}},
+      "budget": {"maxSeconds": 20, "maxFrames": 40, "noProgressFrames": 40}}
+  ],
+  "assertions": [
+    {"kind": "actor-field", "subject": "bellsprout", "path": "identityVerified", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "actor-field", "subject": "bellsprout", "path": "presentationAttached", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "frame-count", "operator": "gte", "value": 14}
+  ]
+}

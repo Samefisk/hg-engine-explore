@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.playful.target-and-collision",
+  "title": "Playful selects one actor or the player without collision",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/profile-building-blocks-implementation-plan.md#pb9--integrated-verification",
+  "requirements": ["current.playful-target-and-collision"],
+  "budgets": {"maxSeconds": 180, "maxFrames": 900, "noProgressFrames": 300, "minObservedFrames": 1},
+  "subjects": [
+    {"id": "clefairy", "species": 35, "role": "WILD", "acquire": "spawn"},
+    {"id": "clefable", "species": 36, "role": "WILD", "acquire": "spawn"}
+  ],
+  "measurements": [{"kind": "playful-runtime-v1", "subject": "clefairy"}],
+  "setup": [
+    {"id": "open-area", "op": "teleport", "args": {"map": 33, "x": 585, "z": 408, "facing": 0}, "budget": {"maxSeconds": 30, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "spawn-clefable", "op": "spawn", "args": {"species": 36, "role": "wild", "level": 5, "x": 585, "z": 405}, "budget": {"maxSeconds": 30, "maxFrames": 80, "noProgressFrames": 80}},
+    {"id": "spawn-clefairy", "op": "spawn", "args": {"species": 35, "role": "wild", "level": 5, "x": 585, "z": 404}, "budget": {"maxSeconds": 30, "maxFrames": 80, "noProgressFrames": 80}},
+    {"id": "bind-clefairy", "op": "bind", "args": {"subject": "clefairy"}, "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "bind-clefable", "op": "bind", "args": {"subject": "clefable"}, "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "observe-actor-play", "op": "wait", "args": {"predicate": {"kind": "measurement-stage", "measurement": "playful-runtime-v1", "stage": "actor-play-complete", "when": "final"}}, "budget": {"maxSeconds": 45, "maxFrames": 180, "noProgressFrames": 120}},
+    {"id": "enter-clefairy-vision", "op": "step", "args": {"frames": 32, "keys": ["UP"], "until": {"kind": "player-settled-at", "map": 33, "x": 585, "z": 407}}, "budget": {"maxSeconds": 30, "maxFrames": 32, "noProgressFrames": 32}},
+    {"id": "observe-player-play", "op": "wait", "args": {"predicate": {"kind": "measurement-complete", "measurement": "playful-runtime-v1", "when": "final"}}, "budget": {"maxSeconds": 120, "maxFrames": 700, "noProgressFrames": 300}}
+  ],
+  "assertions": [{"kind": "measurement-complete", "measurement": "playful-runtime-v1", "when": "final"}]
+}

@@ -7,20 +7,24 @@ from copy import deepcopy
 
 from tools.overworld.devtools_records import select_current_actor, engine_binding_identity
 from tools.overworld.devtools_mount_pacing_observer import IDENTITY, ENGINE
-from tools.overworld.normal_play_observer import MotionRecorder
 
-# Retained mounted-smoothness Cyndaquil fixture contract, independently
-# specified before the shared executor migration. Do not infer this vector
-# from observed durations: doing so would accept disabled acceleration.
-MAIN_DURATIONS = (8, 8, 8, 7, 7, 7, 6)
+# Mounted inherits Cyndaquil's normal Default Owner lane: 16-frame Walk,
+# one frame faster after each three committed tiles. Follower's 8-frame cap
+# is not part of a mounted request. Keep this authored vector independent of
+# observed durations so disabled acceleration still fails.
+MAIN_DURATIONS = (16, 16, 16, 15, 15, 15, 14)
 
 
 def check_pair_pose(data):
     """Raise on an invalid raw pair; return True for the unchanged valid pose."""
-    player, mount = data["player"], data["mount"]
-    # The rider sits half a tile behind its facing, not always north of the
-    # mount. Cardinal order is the public native facing contract N/S/W/E.
-    offsets = {0: (0, 32768), 1: (0, -32768), 2: (32768, 0), 3: (-32768, 0)}
+    from tools.overworld.devtools_mount_gait import normalized_pair
+    normalized = normalized_pair(data)
+    player, mount = normalized["player"], normalized["mount"]
+    # South gives the mount extra depth in front of the rider. Other
+    # directions and the rider height stay unchanged.
+    offsets = {0: (0, 32768), 1: (0, -40960), 2: (32768, 0), 3: (-32768, 0),
+               4: (32768, 32768), 5: (-32768, 32768),
+               6: (32768, -32768), 7: (-32768, -32768)}
     facing = player.get("facing")
     if type(facing) is not int or facing not in offsets:
         raise ValueError("mounted base, facing or rider offset differs")
@@ -95,8 +99,12 @@ class MountedPacingMeasurement:
         self._window(snapshot, 7)
 
     def _window(self, snapshot, count):
+        # The speed-slew meter derives from this one. Import its scoped
+        # recorder only when opening a window, after both modules have loaded.
+        from tools.overworld.devtools_mount_speed_slew_measurement import EasedMountedMotionRecorder
+
         self.windows.append(dict(expected=count, origin=deepcopy(self._actor(snapshot)["logical"]),
-            recorder=MotionRecorder(), traces=[], callbacks=[], steps=[], joined=0,
+            recorder=EasedMountedMotionRecorder(), traces=[], callbacks=[], steps=[], joined=0,
             callbackGap=0, boundaryGap=0, leadingZero=0, deltaMismatch=0,
             startFrame=snapshot["frame"], startCycle=snapshot["nativeCycle"]))
 
@@ -111,7 +119,9 @@ class MountedPacingMeasurement:
             and data.get("mountPointer") == self.actor["engineIdentity"]["pointer"], "callback subject differs")
         self.counts[kind] += 1
         self._require(sum(self.counts.values()) <= 4096, "callback bound exceeded")
-        player, mount = data["player"], data["mount"]
+        from tools.overworld.devtools_mount_gait import normalized_pair
+        normalized = normalized_pair(data)
+        player, mount = normalized["player"], normalized["mount"]
         self._pair(data)
         if kind == "playerStep":
             self._require(data.get("eventConsumed") == 0, "world step consumed an event")
@@ -203,7 +213,10 @@ class MountedPacingMeasurement:
                     raise ValueError("trace status interrupts pacing window")
             self._require(snapshot["nativeObservation"]["sequence"] == self.sequence, "missing native receipt")
             self._require(reader.get("counts") == self.counts, "reader callbacks were lost")
-            window["recorder"].observe(snapshot["frame"], actor, snapshot["player"])
+            from tools.overworld.devtools_mount_gait import check_gait
+            ground_player = deepcopy(snapshot["player"])
+            ground_player["unk88_y"] -= check_gait(pose)["riderY"]
+            window["recorder"].observe(snapshot["frame"], actor, ground_player)
             self._require(not window["recorder"].failures, "mounted motion: " + str(window["recorder"].failures))
             self._require(self._starts(window) <= window["expected"], "extra mounted motion")
             while window["joined"] < len(window["recorder"].completed):
@@ -215,16 +228,20 @@ class MountedPacingMeasurement:
         return self.result()
 
     def _join(self, window, motion):
+        from tools.overworld.devtools_mount_speed_slew_measurement import walk_step_fx32
+
         if window is self.windows[0]:
             self._require(window["joined"] < len(MAIN_DURATIONS)
                           and motion["duration"] == MAIN_DURATIONS[window["joined"]],
                           "mounted Cyndaquil acceleration duration differs")
         self._require(motion["kind"] == "WALK" and motion["target"] == [motion["origin"][0]+1, motion["origin"][1]],
                       "motion is not one Right Walk")
+        prior = window["recorder"].completed[window["joined"]-1]["duration"] if window["joined"] else 0
         for sample in motion["samples"]:
-            expected = (motion["origin"][0] << 16) + 32768 + 65536 * sample["elapsed"] // motion["duration"]
+            expected = (motion["origin"][0] << 16) + 32768 \
+                + walk_step_fx32(sample["elapsed"], motion["duration"], prior)
             self._require(sample["render"][0] == expected and sample["render"][2] == (motion["origin"][1] << 16)+32768
-                          and sample["jumpOffset"] == 0, "nonlinear mounted Walk")
+                          and sample["jumpOffset"] == 0, "mounted Walk pose differs from eased path")
         expected = (("MOTION_STARTED", motion["startFrame"], 1, motion["duration"]),
                     ("LOGICAL_COMMIT", motion["commitFrame"], motion["commitAfter"], 1),
                     ("MOTION_FINISHED", motion["finishFrame"], motion["commitAfter"], 1),

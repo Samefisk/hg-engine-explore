@@ -14,7 +14,7 @@ struct OverworldWildSpawnState;
 #define OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY_ADDR 0x023BC800
 #define OVERWORLD_WILD_RUNTIME_OVERLAY_END_ADDR 0x023BD400
 #define OVERWORLD_WILD_RUNTIME_MAGIC 0x3152574F /* "OWR1" */
-#define OVERWORLD_WILD_RUNTIME_VERSION 16
+#define OVERWORLD_WILD_RUNTIME_VERSION 17
 
 typedef BOOL (*OverworldWildRuntimeValidateFunc)(void);
 typedef BOOL (*OverworldWildRuntimeQuerySurfaceFunc)(

@@ -44,6 +44,21 @@ SECTIONS {
         ASSERT(SIZEOF(.overworld_grass_effect_guard) <= 32,
                 "grass-effect allocation guard exceeds its 32-byte budget")
 
+        .overworld_dust_effect_guard : {
+                KEEP(*(.overworld_dust_effect_guard))
+        } >rom = 0xff
+        ASSERT(SIZEOF(.overworld_dust_effect_guard) <= 32,
+                "dust-effect allocation guard exceeds its 32-byte budget")
+
+        .overworld_effect_pool_capacity : {
+                KEEP(*(.overworld_effect_pool_capacity))
+        } >rom = 0xff
+        ASSERT(SIZEOF(.overworld_effect_pool_capacity) <= 20,
+                "effect-pool capacity hook exceeds its 20-byte tail budget")
+        ASSERT(ADDR(.overworld_effect_pool_capacity)
+                    + SIZEOF(.overworld_effect_pool_capacity) <= 0x023DFFCC,
+                "effect guards overlap the Walk pause resolver")
+
         /* Keep the Walk pause resolver out of the fixed-address core ABI. */
         .overworld_walk_pause_variance 0x023DFFCC : {
                 KEEP(*(.overworld_walk_pause_variance))

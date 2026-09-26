@@ -10,10 +10,10 @@ remains unchanged.
 The canonical system model and vocabulary live in
 [`documentation/overworld-system/`](../../documentation/overworld-system/README.md)
 and [`CONTEXT.md`](../../CONTEXT.md). `/api/v2/resolve` calls the same portable C
-resolver source as the ROM. It supports forced layers, conditional physical
-surfaces, explicit or automatic behavior classes, and complete Owner, Active,
-and Tired lane resolution. Python prepares context and presents provenance; it
-does not compose profiles.
+condition evaluator and resolver sources as the ROM. A `GET` previews saved
+profile composition. A `POST` previews unsaved conditional-profile drafts with
+observation facts, timer state, and candidate targets. Python prepares context
+and presents provenance; it does not evaluate conditions or compose profiles.
 
 ## Run
 
@@ -78,15 +78,23 @@ sources themselves.
 - Keeps profile definitions separate from their uses. Selectors choose the
   initial profile. Each ordered application has one explicit member set and
   one shared target match.
+- Lets an override profile be normal or conditional. A conditional profile
+  owns an ordered list of independent conditions. The last active condition in
+  that profile wins, while active profiles still compose in application order.
+- Replaces the Alert editor with Conditions and removes the Active tab. Legacy
+  attentive and Active values remain visible only in the migration report
+  until catalog migration is complete.
 - Adds member-set shortcuts for individual Pokémon, evolution families, types,
   and live encounter pools. These shortcuts materialize members in the same
   profile; they never create per-Pokémon backend rules. New override drafts
   start disabled until members or an all-Pokémon shared condition is selected.
 - Documents the resolver contract in the UI: evaluation is top to bottom and
   the last matching application applies last.
-- Adds a source-context resolution preview for Pokémon, terrain, level, and shiny state.
-  It shows matched layers, skipped-layer count, effective values, and base
-  values in parentheses.
+- Adds a source-context resolution preview for Pokémon, terrain, level, and
+  shiny state. Conditional preview also accepts current time, terrain and
+  motion facts, player facts, timer state, and candidate actors. It shows
+  application order, applied profiles, changed fields, the winning condition,
+  and target source.
 - Protects every source mutation with a deterministic content revision.
   Stale editors receive a conflict instead of silently overwriting newer work.
 - Verifies the source revision before and after every full-data or resolver
@@ -134,8 +142,10 @@ control surface described in the system documents.
 - `static/profiles.js`, `static/routes.js`, and `static/routes-sounds.js`
   implement the focused profile, route, and sound workflows without copying
   the legacy DOM.
-- `lib/overworld/overworld_behavior_resolver.c` is the only composition policy.
-  The ROM actor service and Workshop native adapter compile that same file.
+- `lib/overworld/overworld_behavior_conditions.c` is the only condition policy,
+  and `lib/overworld/overworld_behavior_resolver.c` is the only composition
+  policy. The ROM actor service and Workshop native adapter compile those same
+  files.
 
 The V2-only API surface is:
 
@@ -144,6 +154,8 @@ The V2-only API surface is:
 - `GET /api/v2/decks/profiles`
 - `GET /api/v2/decks/routes`
 - `GET /api/v2/resolve?species=...&terrain=...&level=...&shiny=...&conditionTerrainMask=...&forcedOverrideMask=...&behaviorClass=auto|...`
+- `POST /api/v2/resolve` with a V3 draft catalog, subject, observation,
+  candidates, and optional condition timer state
 - `POST /api/v2/commit`
 
 The health response includes `serverInstanceId` and `restartRequired`. The

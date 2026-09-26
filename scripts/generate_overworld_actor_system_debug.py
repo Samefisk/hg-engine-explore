@@ -13,7 +13,7 @@ import tempfile
 
 
 OVERLAY_ID = 158
-OVERLAY_LOAD_ADDRESS = 0x023B6B00
+OVERLAY_LOAD_ADDRESS = 0x023B65A0
 OVERLAY_BASE = 0x023B6B00
 OVERLAY_END = 0x023BAB00
 STATE_ADDRESS = OVERLAY_BASE + 0x3670
@@ -40,6 +40,7 @@ POPULATION_CALLBACKS = (
 )
 MOVEMENT_POLICY_SYMBOLS = (
     "sActorMovementPolicy",
+    "gOverworldBehaviorConditionAdapterEntry",
 )
 
 MAIN_CALLBACKS = (
@@ -69,9 +70,9 @@ FIXED_SYMBOLS = {
     "gOverworldActorSystemMovementPolicyServiceEntry": (
         SERVICE_DIRECTORY_ADDRESS + SERVICE_ENTRY_SIZE * 3, SERVICE_ENTRY_SIZE),
     "OverworldActorSystem_SelectMovementLocomotion": (
-        OVERLAY_BASE + 0xB8, 0x14),
+        OVERLAY_BASE + 0xB8, 0x0C),
     "OverworldActorSystem_SelectMovementTarget": (
-        OVERLAY_BASE + 0xCC, 0x14),
+        OVERLAY_BASE + 0xCC, 0x0C),
 }
 STATE_SYMBOL = "gOverworldActorSystemState"
 PUBLIC_LAYOUT_MACROS = {
@@ -164,7 +165,7 @@ def verify_binary(binary, packaged, symbols):
 
     main = struct.unpack_from(
         "<IHH4I", image, ENTRY_ADDRESS - OVERLAY_LOAD_ADDRESS)
-    if main[:3] != (0x5341574F, 1, 24):
+    if main[:3] != (0x5341574F, 2, 24):
         raise RuntimeError("public actor facade header changed")
     for pointer, symbol in zip(main[3:], MAIN_CALLBACKS):
         verify_pointer(pointer, symbol, symbols)
@@ -200,7 +201,7 @@ def verify_binary(binary, packaged, symbols):
     services = []
     resolver = struct.unpack_from(
         "<IHHII", image, SERVICE_DIRECTORY_ADDRESS - OVERLAY_LOAD_ADDRESS)
-    if resolver[:3] != (SERVICE_MAGICS[0], 1, SERVICE_ENTRY_SIZE):
+    if resolver[:3] != (SERVICE_MAGICS[0], 2, SERVICE_ENTRY_SIZE):
         raise RuntimeError("resolver service entry header changed")
     for pointer, symbol in zip(resolver[3:], RESOLVER_CALLBACKS):
         verify_pointer(pointer, symbol, symbols)
@@ -208,7 +209,7 @@ def verify_binary(binary, packaged, symbols):
         "name": SERVICE_NAMES[0],
         "address": SERVICE_DIRECTORY_ADDRESS,
         "size": SERVICE_ENTRY_SIZE,
-        "version": 1,
+        "version": 2,
         "status": "available",
         "callbacks": {
             name: symbols[symbol]["address"] | 1
@@ -266,21 +267,22 @@ def verify_binary(binary, packaged, symbols):
         SERVICE_DIRECTORY_ADDRESS + SERVICE_ENTRY_SIZE * 3
             - OVERLAY_LOAD_ADDRESS,
     )
-    if movement[:3] != (SERVICE_MAGICS[3], 4, SERVICE_ENTRY_SIZE):
+    if movement[:3] != (SERVICE_MAGICS[3], 5, SERVICE_ENTRY_SIZE):
         raise RuntimeError("movement-policy service entry header changed")
     expected_policy = symbols[MOVEMENT_POLICY_SYMBOLS[0]]["address"]
+    expected_adapter = symbols[MOVEMENT_POLICY_SYMBOLS[1]]["address"]
     if movement[3] != expected_policy:
         raise RuntimeError("movement-policy data pointer changed")
-    if movement[4] != 0:
-        raise RuntimeError("movement-policy service exports private state")
+    if movement[4] != expected_adapter:
+        raise RuntimeError("condition-adapter data pointer changed")
     services.append({
         "name": SERVICE_NAMES[3],
         "address": OVERLAY_BASE + 0xA8,
         "size": SERVICE_ENTRY_SIZE,
-        "version": 4,
+        "version": 5,
         "status": "available",
         "policy": expected_policy,
-        "reserved": movement[4],
+        "conditionAdapter": expected_adapter,
     })
     return image, debug, services
 
@@ -398,7 +400,7 @@ def write_descriptor(
         },
         "facade": {
             "address": ENTRY_ADDRESS,
-            "version": 1,
+            "version": 2,
             "size": 24,
             "callbacks": {
                 name: symbols[symbol]["address"] | 1

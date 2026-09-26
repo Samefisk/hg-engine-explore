@@ -42,24 +42,29 @@ class RoleProfileTests(unittest.TestCase):
         def linked(label,path,symbols,name,before,after,**kwargs):
             observer.tokens.append(hooks.add(0x02300000+(0x40 if label.endswith("mount") else 0),before))
         reader=RoleProfileObserver(observer,linked);reader.mount_state=0x023BC744
-        put(regs.r2,bytes(range(216)));put(regs.r3,bytes(range(11)))
+        put(regs.r2,bytes(range(144)));put(regs.r3,bytes(range(8)))
         return reader,s,actor,source,engine,regs,put,regs_calls
 
-    def mount(self,f):
+    def mount(self,f,surface=0x02213000):
         reader,s,actor,source,engine,regs,put,_=f
-        regs.r0=s.field_pointer();regs.r1=0x02212000
+        regs.r0=s.field_pointer();regs.r1=0x02212000;regs.r3=surface
         binding=struct.pack("<IHHHHBBBB",123,155,33,3,4,0,6,1,0)
-        put(regs.r1,binding);put(regs.sp,struct.pack("<I",0x02213000))
+        # The real mount caller keeps this transaction on its public DTCM stack.
+        transaction=0x027E3100
+        put(regs.r1,binding);put(regs.sp,struct.pack("<I",transaction))
+        put(transaction,struct.pack("<IIII",3,4,0,0))
         before=reader.mount_before()
-        put(reader.mount_state,struct.pack("<II",s.field_pointer(),0x02213000)+bytes(range(72))+
+        put(transaction,struct.pack("<IIII",3,4,1,2))
+        put(reader.mount_state,struct.pack("<II",s.field_pointer(),surface)+bytes(range(72))+
             binding+struct.pack("<IBBBB",7,1,0,0,0))
+        actor.update(behaviorFingerprint=3,matchedLayerMask=4)
         return before
 
     def test_getter_returns_exact_output_and_bound_subject(self):
         f=self.fixture();reader=f[0]
         before=reader.getter_before();result=reader.getter_after(before,{})
-        self.assertEqual(result["profileHex"],bytes(range(216)).hex())
-        self.assertEqual(result["primitivesHex"],bytes(range(11)).hex())
+        self.assertEqual(result["profileHex"],bytes(range(144)).hex())
+        self.assertEqual(result["primitivesHex"],bytes(range(8)).hex())
         self.assertEqual(result["ownerAfter"]["publicSubject"]["subjectIdentity"],123)
         self.assertIsNone(result["returnValue"])
         # Getter observes changed bytes faithfully; host equality is the consumer's job.
@@ -78,16 +83,23 @@ class RoleProfileTests(unittest.TestCase):
             with self.subTest(fault=fault),self.assertRaises(NativeObservationError):
                 r.getter_after(before,{}) if fault=="return-owner" else r.getter_before()
 
-    def test_nullable_getter_outputs_have_no_transfer_credit(self):
-        for profile,primitives in ((0,0x02211000),(0x02210000,0),(0,0)):
+    def test_profile_only_getter_has_transfer_credit(self):
+        for profile,primitives,credited in (
+                (0,0x02211000,False),(0x02210000,0,True),(0,0,False)):
             r,s,a,source,e,regs,put,_=self.fixture()
             regs.r2,regs.r3=profile,primitives
             with self.subTest(profile=profile,primitives=primitives):
-                self.assertIsNone(r.getter_before())
-                self.assertEqual(r.count,0);self.assertEqual(r.owned_data,[])
+                before=r.getter_before()
+                self.assertEqual(before is not None,credited)
+                self.assertEqual(r.count,1 if credited else 0)
+                self.assertEqual(len(r.owned_data),1 if credited else 0)
+                if credited:
+                    result=r.getter_after(before,{})
+                    self.assertNotIn("primitivesHex",result)
+                    self.assertNotIn("primitivesPointer",result)
                 regs.r2,regs.r3=0x02210000,0x02211000
                 self.assertIsNotNone(r.getter_before())
-                self.assertEqual(r.count,1)
+                self.assertEqual(r.count,2 if credited else 1)
 
     def test_partial_getter_still_rejects_nonzero_invalid_output(self):
         for profile,primitives in ((1,0),(0,1),(0x02ffffff,0),(0,0x02ffffff)):
@@ -96,7 +108,7 @@ class RoleProfileTests(unittest.TestCase):
             with self.subTest(profile=profile,primitives=primitives),self.assertRaises(NativeObservationError):
                 r.getter_before()
 
-    def test_nullable_getter_source_contract_and_active_caller(self):
+    def test_nullable_getter_source_contract_and_profile_only_caller(self):
         source=(Path(__file__).resolve().parents[2]/
             "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c").read_text()
         body=source.split("\nOverworldWildSpawns_GetBehaviorProfileAndPrimitivesForSlot(",1)[1]
@@ -105,7 +117,7 @@ class RoleProfileTests(unittest.TestCase):
         self.assertIn("if (primitivesOut != NULL)",body)
         caller=source.split("static BOOL OverworldWildSpawns_IsCanopyHopperTreeTopSlot(",1)[1]
         caller=caller.split("\n}",1)[0]
-        self.assertIn("state, slot, NULL, &primitives);",caller)
+        self.assertRegex(caller, r"state,\s*slot,\s*&profile,\s*NULL\);")
 
     def test_mount_exact_owner_transfer_and_wrong_output_controls(self):
         for fault in (None,"owner","binding","phase","generation","return","subject"):
@@ -154,13 +166,9 @@ class RoleProfileTests(unittest.TestCase):
         self.assertEqual(failure.role_profile_cleanup_errors,["cleanup","cleanup"])
 
     def test_actual_halfword_surface_pointer_and_invalid_odd_pointer(self):
-        f=self.fixture();r=f[0];before=self.mount(f)
-        f[6](f[5].sp,struct.pack("<I",0x022B976A))
-        before=r.mount_before()
-        f[6](r.mount_state+4,struct.pack("<I",0x022B976A))
+        f=self.fixture();r=f[0];before=self.mount(f,0x022B976A)
         self.assertEqual(r.mount_after(before,{"returnValue":1})["surfacePointer"],0x022B976A)
-        f[6](f[5].sp,struct.pack("<I",0x022B976B))
-        with self.assertRaises(NativeObservationError):r.mount_before()
+        with self.assertRaises(NativeObservationError):self.mount(self.fixture(),0x022B976B)
 
     def test_pending_owned_return_rejects_success_and_keeps_shared_context(self):
         f=self.fixture();r=f[0];o=r.observer
@@ -293,7 +301,7 @@ _Alignof(OverworldWildSurfaceCatalog)); }
             exe=str(Path(d)/"layout")
             subprocess.run(["cc","-DOVERWORLD_BEHAVIOR_HOST","-I",str(root/"include"),"-x","c","-","-o",exe],
                 input=code,text=True,capture_output=True,check=True)
-            self.assertEqual(subprocess.check_output([exe]).decode(),"216 11 16 96 72 88 2")
+            self.assertEqual(subprocess.check_output([exe]).decode(),"144 8 16 96 72 88 2")
         internal=(root/"include/overworld_mount_internal.h").read_text()
         prefix=internal.split("typedef struct OverworldMountRuntimeState {",1)[1].split("OverworldMountSnapshot snapshot;",1)[0]
         self.assertEqual(prefix.split(),["FieldSystem","*fieldSystem;","const","OverworldWildSurfaceCatalog","*surfaceCatalog;"])

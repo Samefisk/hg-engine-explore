@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "id": "walk.turn-skid.control-release",
-  "title": "Mounted cardinal turn-skid keeps facing and returns control",
+  "title": "Mounted cardinal turn-skid faces the turn while sliding and returns control",
   "mode": "prepared",
   "fixture": {"rom": "test.nds", "save": "test.sav"},
   "expectationSource": "documentation/overworld_walk_frame_timing_spec.md and tools/overworld/runtime_proof_registry.json: legacy.turn-skid",
   "requirements": ["current.turn-deceleration"],
-  "budgets": {"maxSeconds": 180, "maxFrames": 221, "noProgressFrames": 64, "minObservedFrames": 94},
+  "budgets": {"maxSeconds": 180, "maxFrames": 221, "noProgressFrames": 64, "minObservedFrames": 102},
   "subjects": [{"id": "cyndaquil", "species": 155, "role": "MOUNTED", "acquire": "existing"}],
   "measurements": [{"kind": "turn-skid-v1", "subject": "cyndaquil"}],
   "setup": [

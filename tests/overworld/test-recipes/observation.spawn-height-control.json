@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
   "id": "observation.spawn-height-control",
-  "title": "Native own-target Ledyba height reader rejects a restored wrong-Y read",
+  "title": "Native own-target Mareep height reader rejects a restored wrong-Y read",
   "mode": "observer-control",
   "fixture": {
     "rom": "test.nds",
     "save": "test.sav"
   },
-  "expectationSource": "Requirements shared.ledyba-pool-site-v1 and shared.ledyba-pool-surface-v1: preserve this finalized Wild Ledyba's own legacy POOL site through its complete spawn Hop. At that exact target require coherent loaded metatile permission, exclusion of authored surfaces, actual successful native height refresh and matching terminal Y. Bind all native receipts and terrain/model provenance to this encounter, object and world. Missing data is unknown, not legal. This does not prove universal unmodeled geometry, later movement or chain actions.",
+  "expectationSource": "Requirement shared.spawn-height-recorder-control-v1: preserve one naturally spawned Wild Mareep's own initial landing target through its complete Appear Hop. At that exact target require coherent loaded metatile permission, exclusion of authored surfaces, actual successful native height refresh and matching terminal Y. Bind all native receipts and terrain/model provenance to this encounter, object and world. Missing data is unknown, not legal. This does not prove universal unmodeled geometry, later movement or chain actions.",
   "requirements": [
     "shared.spawn-height-recorder-control-v1"
   ],
@@ -19,8 +19,8 @@
   },
   "subjects": [
     {
-      "id": "ledyba",
-      "species": 165,
+      "id": "mareep",
+      "species": 179,
       "role": "WILD",
       "acquire": "spawn"
     }
@@ -28,7 +28,7 @@
   "measurements": [
     {
       "kind": "live-spawn-height-control-v1",
-      "subject": "ledyba"
+      "subject": "mareep"
     }
   ],
   "setup": [
@@ -86,7 +86,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -107,7 +107,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -131,7 +131,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -152,7 +152,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -176,7 +176,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -197,7 +197,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -221,7 +221,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -242,7 +242,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -266,7 +266,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -287,7 +287,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -311,7 +311,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -332,7 +332,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -356,7 +356,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -377,7 +377,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -401,7 +401,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -422,7 +422,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -446,7 +446,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -467,7 +467,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -491,7 +491,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -512,7 +512,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -536,7 +536,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -557,7 +557,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -581,7 +581,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -602,7 +602,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -626,7 +626,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -647,7 +647,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -671,7 +671,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -692,7 +692,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -716,7 +716,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -737,7 +737,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -761,7 +761,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -782,7 +782,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -806,7 +806,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -827,7 +827,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -851,7 +851,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -872,7 +872,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -896,7 +896,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -917,7 +917,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -941,7 +941,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -962,7 +962,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -986,7 +986,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1007,7 +1007,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1031,7 +1031,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1052,7 +1052,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1076,7 +1076,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1097,7 +1097,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1121,7 +1121,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1142,7 +1142,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1166,7 +1166,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1187,7 +1187,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1211,7 +1211,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1232,7 +1232,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1256,7 +1256,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1277,7 +1277,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1301,7 +1301,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1322,7 +1322,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1346,7 +1346,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1367,7 +1367,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1391,7 +1391,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1412,7 +1412,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1436,7 +1436,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1457,7 +1457,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1481,7 +1481,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1502,7 +1502,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1526,7 +1526,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1547,7 +1547,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1571,7 +1571,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1592,7 +1592,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1616,7 +1616,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1637,7 +1637,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1661,7 +1661,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1682,7 +1682,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1706,7 +1706,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1727,7 +1727,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1751,7 +1751,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1772,7 +1772,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1796,7 +1796,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1817,7 +1817,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1841,7 +1841,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1862,7 +1862,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1886,7 +1886,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1907,7 +1907,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1931,7 +1931,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1952,7 +1952,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1976,7 +1976,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -1997,7 +1997,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2021,7 +2021,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2042,7 +2042,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2066,7 +2066,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2087,7 +2087,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2111,7 +2111,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2132,7 +2132,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2156,7 +2156,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2177,7 +2177,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2201,7 +2201,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2222,7 +2222,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2246,7 +2246,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2267,7 +2267,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2291,7 +2291,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2312,7 +2312,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2336,7 +2336,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2357,7 +2357,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2381,7 +2381,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2402,7 +2402,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2426,7 +2426,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2447,7 +2447,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2471,7 +2471,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2492,7 +2492,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2516,7 +2516,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2537,7 +2537,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2561,7 +2561,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2582,7 +2582,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2606,7 +2606,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2627,7 +2627,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2651,7 +2651,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2672,7 +2672,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2696,7 +2696,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2717,7 +2717,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2741,7 +2741,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2762,7 +2762,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2786,7 +2786,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2807,7 +2807,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2831,7 +2831,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2852,7 +2852,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2876,7 +2876,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2897,7 +2897,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2921,7 +2921,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2942,7 +2942,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2966,7 +2966,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -2987,7 +2987,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -3011,7 +3011,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -3032,7 +3032,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -3056,7 +3056,7 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
     {
@@ -3077,35 +3077,49 @@
       },
       "skipIf": {
         "kind": "actor-present",
-        "subject": "ledyba"
+        "subject": "mareep"
       }
     },
-    {
-      "id": "wait-natural-ledyba",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "actor-present",
-          "subject": "ledyba"
-        }
-      },
-      "budget": {
-        "maxSeconds": 60,
-        "maxFrames": 600,
-        "noProgressFrames": 240
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    }
+    {"id":"search-68-admit","op":"step","args":{"frames":64,"keys":["LEFT"],"until":{"kind":"player-step-count","operator":"eq","value":68}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-68-settle","op":"wait","args":{"predicate":{"kind":"player-settled-at","map":34,"x":551,"z":376}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-69-admit","op":"step","args":{"frames":64,"keys":["RIGHT"],"until":{"kind":"player-step-count","operator":"eq","value":69}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-69-settle","op":"wait","args":{"predicate":{"kind":"player-settled-at","map":34,"x":552,"z":376}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-70-admit","op":"step","args":{"frames":64,"keys":["LEFT"],"until":{"kind":"player-step-count","operator":"eq","value":70}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-70-settle","op":"wait","args":{"predicate":{"kind":"player-settled-at","map":34,"x":551,"z":376}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-71-admit","op":"step","args":{"frames":64,"keys":["RIGHT"],"until":{"kind":"player-step-count","operator":"eq","value":71}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-71-settle","op":"wait","args":{"predicate":{"kind":"player-settled-at","map":34,"x":552,"z":376}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-72-admit","op":"step","args":{"frames":64,"keys":["LEFT"],"until":{"kind":"player-step-count","operator":"eq","value":72}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-72-settle","op":"wait","args":{"predicate":{"kind":"player-settled-at","map":34,"x":551,"z":376}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-73-admit","op":"step","args":{"frames":64,"keys":["RIGHT"],"until":{"kind":"player-step-count","operator":"eq","value":73}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-73-settle","op":"wait","args":{"predicate":{"kind":"player-settled-at","map":34,"x":552,"z":376}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-74-admit","op":"step","args":{"frames":64,"keys":["LEFT"],"until":{"kind":"player-step-count","operator":"eq","value":74}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-74-settle","op":"wait","args":{"predicate":{"kind":"player-settled-at","map":34,"x":551,"z":376}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-75-admit","op":"step","args":{"frames":64,"keys":["RIGHT"],"until":{"kind":"player-step-count","operator":"eq","value":75}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-75-settle","op":"wait","args":{"predicate":{"kind":"player-settled-at","map":34,"x":552,"z":376}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-76-admit","op":"step","args":{"frames":64,"keys":["LEFT"],"until":{"kind":"player-step-count","operator":"eq","value":76}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-76-settle","op":"wait","args":{"predicate":{"kind":"player-settled-at","map":34,"x":551,"z":376}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-77-admit","op":"step","args":{"frames":64,"keys":["RIGHT"],"until":{"kind":"player-step-count","operator":"eq","value":77}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-77-settle","op":"wait","args":{"predicate":{"kind":"player-settled-at","map":34,"x":552,"z":376}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-78-admit","op":"step","args":{"frames":64,"keys":["LEFT"],"until":{"kind":"player-step-count","operator":"eq","value":78}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-78-settle","op":"wait","args":{"predicate":{"kind":"player-settled-at","map":34,"x":551,"z":376}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-79-admit","op":"step","args":{"frames":64,"keys":["RIGHT"],"until":{"kind":"player-step-count","operator":"eq","value":79}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-79-settle","op":"wait","args":{"predicate":{"kind":"player-settled-at","map":34,"x":552,"z":376}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-80-admit","op":"step","args":{"frames":64,"keys":["LEFT"],"until":{"kind":"player-step-count","operator":"eq","value":80}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-80-settle","op":"wait","args":{"predicate":{"kind":"player-settled-at","map":34,"x":551,"z":376}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-81-admit","op":"step","args":{"frames":64,"keys":["RIGHT"],"until":{"kind":"player-step-count","operator":"eq","value":81}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-81-settle","op":"wait","args":{"predicate":{"kind":"player-settled-at","map":34,"x":552,"z":376}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-82-admit","op":"step","args":{"frames":64,"keys":["LEFT"],"until":{"kind":"player-step-count","operator":"eq","value":82}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-82-settle","op":"wait","args":{"predicate":{"kind":"player-settled-at","map":34,"x":551,"z":376}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-83-admit","op":"step","args":{"frames":64,"keys":["RIGHT"],"until":{"kind":"player-step-count","operator":"eq","value":83}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"search-83-settle","op":"wait","args":{"predicate":{"kind":"player-settled-at","map":34,"x":552,"z":376}},"budget":{"maxSeconds":20,"maxFrames":64,"noProgressFrames":32},"skipIf":{"kind":"actor-present","subject":"mareep"}},
+    {"id":"wait-natural-mareep","op":"wait","args":{"predicate":{"kind":"actor-present","subject":"mareep"}},"budget":{"maxSeconds":30,"maxFrames":240,"noProgressFrames":120},"skipIf":{"kind":"actor-present","subject":"mareep"}}
   ],
   "actions": [
     {
-      "id": "bind-natural-ledyba",
+      "id": "bind-natural-mareep",
       "op": "bind",
       "args": {
-        "subject": "ledyba"
+        "subject": "mareep"
       },
       "budget": {
         "maxSeconds": 5,
@@ -3132,7 +3146,7 @@
   "assertions": [
     {
       "kind": "actor-field",
-      "subject": "ledyba",
+      "subject": "mareep",
       "path": "identityVerified",
       "operator": "eq",
       "value": true,
@@ -3140,7 +3154,7 @@
     },
     {
       "kind": "actor-field",
-      "subject": "ledyba",
+      "subject": "mareep",
       "path": "presentationAttached",
       "operator": "eq",
       "value": true,
@@ -3148,7 +3162,7 @@
     },
     {
       "kind": "actor-field",
-      "subject": "ledyba",
+      "subject": "mareep",
       "path": "role",
       "operator": "eq",
       "value": "WILD",

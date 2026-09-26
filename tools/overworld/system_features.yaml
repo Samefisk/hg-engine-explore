@@ -26,6 +26,15 @@
   ],
   "checks": [
     {
+      "id": "host.mount-gait",
+      "title": "Compiled mounted gait invariants across all speed and control settings",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": ["{python}", "tools/overworld/test_mount_gait_model.py"],
+      "requires": [],
+      "sourcePatterns": ["include/overworld_mount_gait_model.h", "lib/overworld/overworld_mount_gait_model.c", "tools/overworld/test_mount_gait_model.py"]
+    },
+    {
       "id": "package.wild-occupancy",
       "title": "Verify resident occupancy reader and typed Wild callers in ROM",
       "proofLevel": "S2",
@@ -256,7 +265,52 @@
         "data/OverworldWildBehaviorData.c",
         "scripts/generate_overworld_behavior_catalog.py",
         "scripts/overworld_behavior_profile_viewer.py",
-        "tools/overworld/schemas/behavior-authoring-v2.schema.json"
+        "tools/overworld/schemas/behavior-authoring-v4.schema.json",
+        "tools/overworld/schemas/behavior-authoring-v5.schema.json",
+        "tools/overworld/test_behavior_catalog_v5.py",
+        "tools/overworld/test_profile_building_blocks_manifest.py",
+        "tools/overworld/fixtures/profile_building_blocks_target_v1.json"
+      ]
+    },
+    {
+      "id": "host.behavior-conditions",
+      "title": "Compile and verify the portable behavior condition evaluator",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_behavior_conditions.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_behavior_conditions.h",
+        "include/overworld_behavior_condition_runtime.h",
+        "include/overworld_behavior_condition_adapter.h",
+        "lib/overworld/overworld_behavior_conditions.c",
+        "lib/overworld/overworld_behavior_condition_runtime.c",
+        "lib/overworld/overworld_behavior_condition_adapter.c",
+        "tools/overworld/test_behavior_conditions.py"
+      ]
+    },
+    {
+      "id": "host.condition-live-controller-proof",
+      "title": "Check the bounded live Wild condition-controller proof contract",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_devtools_condition_controller.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/devtools_condition_controller*.py",
+        "tools/overworld/test_devtools_condition_controller.py",
+        "tests/overworld/test-recipes/profile.condition.live-wild-controller.json",
+        "tests/overworld/scenarios/profile.condition.live-wild-controller.json"
       ]
     },
     {
@@ -281,6 +335,155 @@
         "tools/overworld/test_workshop_authoring.py",
         "tools/overworld-viewer-v2/native_resolver.py",
         "tools/overworld-viewer-v2/reliability.py"
+      ]
+    },
+    {
+      "id": "host.profile-building-blocks",
+      "title": "Check the V5 profile schema and migration",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_behavior_catalog_v5.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/schemas/behavior-authoring-v4.schema.json",
+        "tools/overworld/schemas/behavior-authoring-v5.schema.json",
+        "tools/overworld/fixtures/profile_building_blocks_target_v1.json",
+        "tools/overworld/test_behavior_catalog_v5.py",
+        "tools/overworld/test_profile_building_blocks_manifest.py",
+        "tools/overworld/test_workshop_profile_building_blocks.py",
+        "scripts/generate_overworld_behavior_catalog.py",
+        "scripts/overworld_behavior_profile_viewer.py",
+        "tools/overworld-viewer-v2/static/profiles.js"
+      ]
+    },
+    {
+      "id": "host.profile-building-blocks-manifest",
+      "title": "Check exact profile-building-block memberships and order",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_profile_building_blocks_manifest.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/fixtures/profile_building_blocks_target_v1.json",
+        "tools/overworld/test_profile_building_blocks_manifest.py"
+      ]
+    },
+    {
+      "id": "host.workshop-profile-building-blocks",
+      "title": "Check profile-building blocks in the Workshop",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_workshop_profile_building_blocks.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "scripts/overworld_behavior_profile_viewer.py",
+        "tools/overworld-viewer-v2/**",
+        "tools/overworld/test_workshop_profile_building_blocks.py"
+      ]
+    },
+    {
+      "id": "host.overworld-vision",
+      "title": "Check shared Current and Custom Vision geometry",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_overworld_vision.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_vision.h",
+        "lib/overworld/overworld_vision.c",
+        "include/overworld_behavior_condition_adapter.h",
+        "lib/overworld/overworld_behavior_condition_adapter.c",
+        "src/overworld_wild_helper_overlay/overworld_condition_visibility.c",
+        "tools/overworld/test_overworld_vision.py"
+      ]
+    },
+    {
+      "id": "host.spawn-fly-in",
+      "title": "Check descending Fly In spawn entry",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_spawn_fly_in.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_motion_model.h",
+        "lib/overworld/overworld_motion_model.c",
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c",
+        "tools/overworld/test_spawn_fly_in.py"
+      ]
+    },
+    {
+      "id": "host.held-actor-control",
+      "title": "Check internal held actor control without a Picked Up profile",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_picked_up_actor_control.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_wild_spawns_internal.h",
+        "lib/overworld/overworld_behavior_resolver.c",
+        "src/overworld_wild_helper_overlay/overworld_wild_helper_overlay.c",
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "tools/overworld/test_picked_up_actor_control.py"
+      ]
+    },
+    {
+      "id": "host.pb9-profile-building-block-scenarios",
+      "title": "Check PB9 profile building-block runtime contracts",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_profile_building_block_runtime_contracts.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/runtime_proof_registry.json",
+        "tools/overworld/system_features.yaml",
+        "tools/overworld/test_profile_building_block_runtime_contracts.py",
+        "tests/overworld/scenarios/profile.notice-player.routine-return.json",
+        "tests/overworld/scenarios/profile.stalker.visibility-gate.json",
+        "tests/overworld/scenarios/profile.playful.target-and-collision.json",
+        "tests/overworld/scenarios/profile.startled.timed-retreat.json",
+        "tests/overworld/scenarios/spawn.fly-in.uneven-height.json",
+        "tests/overworld/scenarios/profile.waddle.walk-presentation-only.json",
+        "tests/overworld/scenarios/profile.floaty-bounce-hop-pause.json",
+        "tests/overworld/scenarios/actor.held-control-resume.json"
       ]
     },
     {
@@ -1475,6 +1678,8 @@
         "host.contracts",
         "host.feature-table",
         "host.motion-model",
+        "host.held-actor-control",
+        "host.pb9-profile-building-block-scenarios",
         "host.actor-view",
         "host.actor-lane-projection",
         "host.actor-command-sequence",
@@ -1495,6 +1700,7 @@
         "actor.binding.current-context",
         "actor.inspect-current-and-stale",
         "mount.begin-current-follower",
+        "mount.select-mid-run",
         "mount.detach-restores-control",
         "mount.transition-mid-motion",
         "world.unmounted.long-travel-cadence",
@@ -1510,7 +1716,8 @@
         "observation.corner-policy-control",
         "observation.walk-matrix-state-control",
         "observation.stomp-policy-control",
-        "observation.crash-reader-control"
+        "observation.crash-reader-control",
+        "actor.held-control-resume"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md",
@@ -1555,7 +1762,12 @@
         "tools/overworld/behavior_schema*",
         "tools/overworld/generated/**",
         "tools/overworld/native/behavior_resolver_golden.json",
-        "tools/overworld/schemas/behavior-authoring-v2.schema.json",
+        "tools/overworld/schemas/behavior-authoring-v4.schema.json",
+        "tools/overworld/schemas/behavior-authoring-v5.schema.json",
+        "tools/overworld/test_behavior_catalog_v5.py",
+        "tools/overworld/test_profile_building_blocks_manifest.py",
+        "tools/overworld/test_workshop_profile_building_blocks.py",
+        "tools/overworld/fixtures/profile_building_blocks_target_v1.json",
         "scripts/generate_overworld_behavior_catalog.py",
         "scripts/verify_overworld_behavior_resolver.py",
         "scripts/overworld_behavior_profile_viewer.py",
@@ -1565,6 +1777,9 @@
         "host.contracts",
         "host.behavior-schema",
         "host.behavior-catalog",
+        "host.profile-building-blocks",
+        "host.profile-building-blocks-manifest",
+        "host.workshop-profile-building-blocks",
         "host.behavior-resolver",
         "host.feature-table",
         "host.spawn-refill-budget",
@@ -1578,6 +1793,7 @@
         "profile.resolve.override-order",
         "profile.resolve.follower-mounted-parity",
         "profile.follower-mounted-owner-transfer",
+        "mount.bellsprout-waddle-sway",
         "profile.resolve.packaged-rom-parity",
         "population.spawn-work-budget",
         "world.unmounted.long-travel-cadence"
@@ -1630,7 +1846,8 @@
         "world.unmounted.long-travel-cadence",
         "world.unmounted.game-cadence",
         "world.unmounted.spawn-zero-stutter",
-        "world.unmounted.wild-soak"
+        "world.unmounted.wild-soak",
+        "walk.wild.blocked-facing"
       ],
       "docs": [
         "documentation/overworld_walk_frame_timing_spec.md"
@@ -1674,7 +1891,14 @@
       ],
       "scenarios": [
         "walk.wild.exact-frame",
-        "mount.movement.frame-pacing"
+        "mount.movement.frame-pacing",
+        "mount.stantler-speed-slew",
+        "mount.stantler-sprint-parity",
+        "mount.stantler-sprint-obstacle-hop",
+        "mount.stantler-sprint-npc-hop",
+        "mount.stantler-sprint-wall-approach",
+        "mount.stantler-key-edge",
+        "mount.bellsprout-waddle-sway"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -1711,7 +1935,8 @@
       "scenarios": [
         "walk.turn-skid.control-release",
         "walk.wild.runner-stop-skid",
-        "walk.wild.runner-turn-runway"
+        "walk.wild.runner-turn-runway",
+        "mount.stantler-turn-skid-facing"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -1822,6 +2047,7 @@
         "host.motion-start-transaction",
         "host.hop-elevation-arc",
         "host.appear-hop-completion",
+        "host.pb9-profile-building-block-scenarios",
         "package.actor",
         "hop.emote-directions",
         "runtime.mankey-hops",
@@ -1831,9 +2057,13 @@
         "hop.cardinal-and-diagonal",
         "hop.mankey-visual-arc",
         "hop.mounted-single-motion",
+        "profile.floaty-bounce-hop-pause",
         "spawn.appear-hop-timing",
         "mount.transition-mid-motion",
-        "chain.runner-stantler-route31"
+        "mount.stantler-sprint-obstacle-hop",
+        "mount.stantler-sprint-npc-hop",
+        "walk.wild.sprint-obstacle-approach",
+        "walk.wild.sprint-npc-hop"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -1941,12 +2171,14 @@
       "owner": "Role controllers",
       "roles": [
         "Wild",
-        "Follower"
+        "Follower",
+        "Mounted"
       ],
       "sourcePatterns": [
         "data/OverworldWildBehaviorData.c",
         "src/overworld_wild_spawns_overlay/**",
-        "src/pokemon_move_history_task6_overlay/**"
+        "src/pokemon_move_history_task6_overlay/**",
+        "src/overworld_mount_chain_overlay/**"
       ],
       "checks": [
         "host.role-controller",
@@ -1959,8 +2191,7 @@
       ],
       "scenarios": [
         "chain.pause.counts-semantic-moves",
-        "chain.pause.ledyba-normal-profile",
-        "chain.runner-stantler-route31"
+        "chain.pause.ledyba-normal-profile"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -1997,10 +2228,19 @@
       "scenarios": [
         "profile.resolve.follower-mounted-parity",
         "mount.begin-current-follower",
+        "mount.select-mid-run",
+        "mount.detach-follower-resumes-motion",
         "mount.detach-restores-control",
         "mount.transition-mid-motion",
         "mount.walk-transition-mid-motion",
-        "mount.movement.frame-pacing"
+        "mount.movement.frame-pacing",
+        "mount.stantler-speed-slew",
+        "mount.stantler-sprint-parity",
+        "mount.stantler-sprint-obstacle-hop",
+        "mount.stantler-sprint-npc-hop",
+        "mount.stantler-sprint-wall-approach",
+        "mount.stantler-key-edge",
+        "mount.bellsprout-waddle-sway"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -2025,6 +2265,7 @@
         {
           "proofLevel": "S4",
           "roles": [
+            "Follower",
             "Mounted"
           ]
         }
@@ -2039,9 +2280,15 @@
       ],
       "sourcePatterns": [
         "src/overworld_mount_overlay/**",
+        "src/overworld_mount_chain_overlay/**",
+        "src/overworld_mount_action_overlay/**",
+        "include/overworld_mount_gait_model.h",
+        "lib/overworld/overworld_mount_gait_model.c",
+        "tools/overworld/devtools_mount_gait.py",
         "src/field/**"
       ],
       "checks": [
+        "host.mount-gait",
         "package.mount",
         "runtime.mounted-smoothness",
         "runtime.mankey-control-stress"
@@ -2052,7 +2299,9 @@
         "walk.crash.feedback",
         "hop.mounted-single-motion",
         "mount.movement.frame-pacing",
-        "mount.walk-transition-mid-motion"
+        "mount.stantler-speed-slew",
+        "mount.walk-transition-mid-motion",
+        "mount.stantler-turn-skid-facing"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -2084,7 +2333,8 @@
       ],
       "scenarios": [
         "world.streaming.path-advance",
-        "world.streaming.cardinal-held-route"
+        "world.streaming.cardinal-held-route",
+        "world.streaming.stantler-mounted-route"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -2246,8 +2496,118 @@
       ]
     },
     {
+      "id": "condition.evaluation",
+      "title": "Conditional profile activation",
+      "owner": "Behavior Condition Evaluator",
+      "roles": [
+        "Wild",
+        "Follower"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "include/overworld_behavior_conditions.h",
+        "include/overworld_behavior_condition_runtime.h",
+        "include/overworld_behavior_condition_adapter.h",
+        "include/overworld_vision.h",
+        "lib/overworld/overworld_behavior_conditions.c",
+        "lib/overworld/overworld_behavior_condition_runtime.c",
+        "lib/overworld/overworld_behavior_condition_adapter.c",
+        "lib/overworld/overworld_vision.c",
+        "src/overworld_wild_helper_overlay/overworld_condition_visibility.c",
+        "tools/overworld/test_overworld_vision.py",
+        "tools/overworld/devtools_condition_*.py",
+        "tests/overworld/test-recipes/profile.condition.packaged-rom-evaluator.json",
+        "tests/overworld/scenarios/profile.condition.packaged-rom-evaluator.json",
+        "tests/overworld/test-recipes/profile.condition.live-wild-controller.json",
+        "tests/overworld/scenarios/profile.condition.live-wild-controller.json",
+        "src/overworld_wild_spawns_overlay/**"
+      ],
+      "checks": [
+        "host.behavior-catalog",
+        "host.behavior-conditions",
+        "host.overworld-vision",
+        "host.condition-live-controller-proof",
+        "host.pb9-profile-building-block-scenarios",
+        "host.behavior-resolver",
+        "host.actor-lane-projection",
+        "host.spawn-profile-lifecycle"
+      ],
+      "scenarios": [
+        "profile.condition.packaged-rom-evaluator",
+        "profile.condition.live-wild-controller",
+        "profile.notice-player.routine-return",
+        "profile.stalker.visibility-gate",
+        "profile.playful.target-and-collision",
+        "profile.startled.timed-retreat"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md",
+        "documentation/overworld-system/authoring-debugging.md",
+        "documentation/overworld-system/verification.md"
+      ],
+      "traceGroups": [
+        "profile",
+        "intent"
+      ],
+      "minimumProof": [
+        "S0",
+        "S1",
+        "S3"
+      ],
+      "roleProof": [
+        {
+          "proofLevel": "S3",
+          "roles": [
+            "Wild"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vision",
+      "title": "Shared Current and Custom Vision",
+      "owner": "Vision service",
+      "roles": [
+        "Wild",
+        "Follower"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/behavior_schema.json",
+        "data/overworld_behavior_profiles.json",
+        "include/overworld_vision.h",
+        "lib/overworld/overworld_vision.c",
+        "include/overworld_behavior_condition_adapter.h",
+        "lib/overworld/overworld_behavior_condition_adapter.c",
+        "src/overworld_wild_helper_overlay/overworld_condition_visibility.c",
+        "tools/overworld/test_overworld_vision.py"
+      ],
+      "checks": [
+        "host.behavior-schema",
+        "host.behavior-catalog",
+        "host.behavior-conditions",
+        "host.overworld-vision",
+        "host.pb9-profile-building-block-scenarios"
+      ],
+      "scenarios": [
+        "profile.stalker.visibility-gate"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md",
+        "documentation/overworld-system/authoring-debugging.md",
+        "documentation/overworld-system/verification.md"
+      ],
+      "traceGroups": [
+        "profile",
+        "intent"
+      ],
+      "minimumProof": [
+        "S0",
+        "S1"
+      ]
+    },
+    {
       "id": "profile.state",
-      "title": "Behavior state lanes",
+      "title": "Owner and Tired behavior lanes",
       "owner": "Behavior Resolver",
       "roles": [
         "Wild",
@@ -2270,7 +2630,9 @@
       ],
       "scenarios": [
         "walk.wild.runner-stop-skid",
-        "walk.wild.runner-turn-runway"
+        "walk.wild.runner-turn-runway",
+        "walk.wild.sprint-obstacle-approach",
+        "walk.wild.sprint-npc-hop"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -2285,8 +2647,8 @@
     },
     {
       "id": "alert",
-      "title": "Alert behavior",
-      "owner": "Role controllers",
+      "title": "Condition-triggered presentation",
+      "owner": "Role controllers (presentation)",
       "roles": [
         "Wild",
         "Follower"
@@ -2298,9 +2660,15 @@
       ],
       "checks": [
         "host.behavior-schema",
-        "host.behavior-resolver"
+        "host.behavior-conditions",
+        "host.behavior-resolver",
+        "host.pb9-profile-building-block-scenarios"
       ],
-      "scenarios": [],
+      "scenarios": [
+        "profile.notice-player.routine-return",
+        "profile.playful.target-and-collision",
+        "profile.startled.timed-retreat"
+      ],
       "docs": [
         "documentation/overworld-system/architecture.md"
       ],
@@ -2339,6 +2707,8 @@
         "host.spawn-refill-budget",
         "host.spawn-destination-budget",
         "host.appear-hop-completion",
+        "host.spawn-fly-in",
+        "host.pb9-profile-building-block-scenarios",
         "host.proof-gate",
         "runtime.land-surf"
       ],
@@ -2346,6 +2716,7 @@
         "population.land-surf-separation",
         "spawn.appear-hop-timing",
         "spawn.ledyba-pool-site",
+        "spawn.fly-in.uneven-height",
         "population.spawn-work-budget",
         "world.unmounted.spawn-zero-stutter"
       ],
@@ -2420,7 +2791,8 @@
         "runtime.land-surf"
       ],
       "scenarios": [
-        "population.land-surf-separation"
+        "population.land-surf-separation",
+        "walk.wild.blocked-facing"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -2453,9 +2825,13 @@
       "checks": [
         "host.behavior-schema",
         "host.motion-model",
+        "host.pb9-profile-building-block-scenarios",
         "walk.policy"
       ],
-      "scenarios": [],
+      "scenarios": [
+        "profile.waddle.walk-presentation-only",
+        "walk.wild.blocked-facing"
+      ],
       "docs": [
         "documentation/overworld_walk_frame_timing_spec.md"
       ],
@@ -2489,7 +2865,9 @@
         "walk.momentum"
       ],
       "scenarios": [
-        "walk.wild.runner-turn-runway"
+        "walk.wild.runner-turn-runway",
+        "walk.wild.sprint-obstacle-approach",
+        "walk.wild.sprint-npc-hop"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -2527,8 +2905,7 @@
       ],
       "scenarios": [
         "chain.pause.counts-semantic-moves",
-        "chain.pause.ledyba-normal-profile",
-        "chain.runner-stantler-route31"
+        "chain.pause.ledyba-normal-profile"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -2559,9 +2936,14 @@
       ],
       "checks": [
         "host.behavior-schema",
-        "host.behavior-resolver"
+        "host.behavior-resolver",
+        "host.pb9-profile-building-block-scenarios"
       ],
-      "scenarios": [],
+      "scenarios": [
+        "profile.stalker.visibility-gate",
+        "profile.playful.target-and-collision",
+        "profile.startled.timed-retreat"
+      ],
       "docs": [
         "documentation/overworld-system/architecture.md"
       ],

@@ -82,7 +82,7 @@ def verify_package(rom_path):
         start, end = struct.unpack_from("<II", rom, fat + file_id * 8)
         checked(start <= end <= len(rom) and end - start == size, "overlay file bounds differ")
         checked(base + size + bss <= {149: 0x023D8000, 151: 0x023C8000,
-                152: 0x023C22A0, 153: 0x023C0400}[number],
+                152: 0x023C3000, 153: 0x023C0400}[number],
                 "native reservation exceeded")
         return rom[start:end]
 

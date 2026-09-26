@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.waddle.walk-presentation-only",
+  "title": "Waddle changes only Walk presentation",
+  "status": "active",
+  "capabilities": ["walk"],
+  "proofLevel": "S4",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "data/overworld_behavior_profiles.json",
+    "actor": "One prepared WILD Bellsprout (species 69) with Meander plus Waddle, current identity, attached presentation, and one clear Walk lane.",
+    "trigger": "Observe one normal Walk and one Idle presentation from the same bound Bellsprout without changing its resolved profile or motion policy.",
+    "observable": "Requirement current.waddle-walk-presentation-only: Waddle resolves walkSwayWidth 4. During Walk it changes only the horizontal sway presentation sample. Walk timing, logical path, target, base height, vertical offset, facing, collision result, and terminal commit remain unchanged; Idle presentation stays centered with zero Waddle sway.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use a disposable test.sav, checked teleport to map 33, native Bellsprout spawn, exact bind, and a clear normal Walk lane. Do not alter profile values, Walk timing, target choice, motion kind, pose, collision, or presentation during observation."
+      }
+    ],
+    "limits": [
+      "The bound runtime observer records complete Walk motion and horizontal sway, verifies the unchanged logical terminal path, and rejects sway on Idle frames. Its copied-data controls reject missing subject and missing feature evidence.",
+      "The claim is only walkSwayWidth 4 on Walk. It grants no movement-feel judgment and no claim for Hop, Teleport, Fly In, emotes, or idle presentation.",
+      "Prepared spawning does not prove natural population selection or every Waddle species."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [
+    {"id": "bellsprout", "species": 69, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}
+  ],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Spawn and bind Bellsprout with resolved Waddle width 4 on one clear lane."},
+    {"at": 1, "kind": "lifecycle", "value": "Observe one complete normal Walk with every motion and presentation field."},
+    {"at": 2, "kind": "lifecycle", "value": "Observe one Idle presentation and require zero Waddle sway without changing the profile."}
+  ],
+  "stop": {"frameBudget": 900, "condition": "One complete Walk and one Idle control prove that only Walk horizontal sway changes."},
+  "expect": {
+    "requiredEvents": ["MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["MOTION_CANCELED", "ACTOR_REBOUND", "CONTEXT_CHANGED"],
+    "invariants": [
+      "The resolved Waddle field is walkSwayWidth 4",
+      "Only horizontal sway differs during Walk",
+      "Walk timing, logical path, target, height, facing, collision and commit are unchanged",
+      "Waddle contributes no sway to the Idle presentation"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "profile.waddle.walk-presentation-only",
+    "claims": ["live-actor-identity", "profile-resolution", "logical-commit", "rendered-motion", "frame-pacing", "control-release"],
+    "minimumFrames": 1
+  }
+}

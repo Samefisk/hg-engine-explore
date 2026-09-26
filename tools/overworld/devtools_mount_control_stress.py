@@ -41,7 +41,9 @@ full native pair reader can prove additional vectors; this witness cannot.
     for key in ("pos_x", "pos_y", "pos_z", "face_x", "face_y", "face_z", "unk88_x", "unk88_y", "unk94_x", "unk94_y", "facing"):
         require(type(player.get(key)) is int and type(mount.get(key)) is int, "missing native pair vector " + key)
     require(all(player["pos_" + axis] == mount["pos_" + axis] for axis in "xyz"), "player/presentation base positions differ")
-    offsets = {0: (0, 32768), 1: (0, -32768), 2: (32768, 0), 3: (-32768, 0)}
+    offsets = {0: (0, 32768), 1: (0, -40960), 2: (32768, 0), 3: (-32768, 0),
+               4: (32768, 32768), 5: (-32768, 32768),
+               6: (32768, -32768), 7: (-32768, -32768)}
     require(player["facing"] in offsets and player["facing"] == mount["facing"], "player/presentation facing differs")
     x, z = offsets[player["facing"]]
     require(sum(player[p + "x"] - mount[p + "x"] for p in ("face_", "unk88_", "unk94_")) == x

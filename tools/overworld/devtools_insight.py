@@ -14,7 +14,7 @@ def explain_actor(snapshot, handle, schema=None):
     resolved = deepcopy(profiles[0]) if len(profiles) == 1 else None
     if resolved and schema:
         lanes = {}
-        for name, encoded in zip(("owner", "active", "tired"), resolved.get("lanes", [])):
+        for name, encoded in zip(("owner", "tired"), resolved.get("lanes", [])):
             raw = bytes.fromhex(encoded)
             if len(raw) != schema["compactSize"]:
                 raise ValueError("observed lane size differs from the current schema")

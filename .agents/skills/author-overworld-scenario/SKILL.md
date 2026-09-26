@@ -22,6 +22,13 @@ native ABI anchors and invalid-result rules.
 Name the expected behavior, actor role and identity, starting profile, trigger,
 observable, forbidden result, limits and cleanup. For live discovery or setup,
 use [overworld-devtools](../overworld-devtools/SKILL.md).
+
+For a conditional-profile claim, also name the exact profile and condition
+entry, subject pool, activation mode, duration/cooldown if timed, target kind,
+expected winning entry, and the intent boundary where the result may first
+change. Never assert an Active or attentive controller state; those states do
+not exist. Use the condition, target, resolution, intent, and motion semantic
+events as the proof chain.
 For a runtime fix, follow [reproduction and acceptance](../../../documentation/overworld-system/verification.md#reproduction-before-editing-acceptance-before-closure):
 a measured reproduction can support the product edit before permanent test
 registration, but acceptance and durable coverage are required before closure.

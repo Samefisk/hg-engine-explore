@@ -5,7 +5,7 @@ from copy import deepcopy
 from tools.overworld.devtools_records import engine_binding_identity, select_current_actor
 from tools.overworld.devtools_runner_turn_runway_measurement import (
     IDENTITY, KIND, POST_SKID_FLAGS, REQUIREMENT, RUNNER_LANE_HEX,
-    STRAIGHT_FLAGS, TURN_FLAGS, decode_call, direction_delta,
+    STRAIGHT_FLAGS, TURN_FLAGS, decode_call, direction_delta, recovery_time,
 )
 from tools.overworld.normal_play_observer import complete_travel, live_identity
 
@@ -28,20 +28,20 @@ def contract():
         "integer" if type(expected) is int else "array"),
         "validator": "meaningful-observation", "expected": expected}]
     return {
-        "natural-input": simple("runner-turn-natural-motion-count", 2),
+        "natural-input": simple("runner-turn-natural-motion-count", 3),
         "live-actor-identity": simple("runner-turn-stantler-identity-flags",
                                       [1, "WILD", 234, 1, 1, 1, 1, 0]),
         "profile-resolution": simple("runner-turn-profile-lane",
                                       [2279901407, 98312, 8, 1, 4, 193, 1]),
         "collision-decision": simple("runner-turn-runway-decisions", [2, 0, 1, 1]),
         "engine-boundary": simple("runner-turn-policy-boundaries",
-                                   [129, 4, 1, 131, 5, 1, 161, 5, 1]),
+                                   [129, 4, 2, 131, 5, 2, 161, 5, 1]),
         "logical-commit": [{"name": "runner-turn-terminal-boundaries-and-target",
             "operator": "eq", "type": "object", "validator": "terminal-boundary-target-v1",
-            "requiredCount": 2, "requiredKeys": ["boundaryCount", "final", "target"]}],
-        "rendered-motion": simple("runner-turn-skid-recovery-and-corner", [8, 6, 1]),
-        "frame-pacing": simple("runner-turn-motion-schedules", [list(range(8)), list(range(6))]),
-        "control-release": simple("runner-turn-control-return-count", 2),
+            "requiredCount": 3, "requiredKeys": ["boundaryCount", "final", "target"]}],
+        "rendered-motion": simple("runner-turn-skid-recovery-and-corner", [8, 8, 5, 1]),
+        "frame-pacing": simple("runner-turn-exact-keyed-motion-schedules", 1),
+        "control-release": simple("runner-turn-control-return-count", 3),
     }
 
 
@@ -83,39 +83,74 @@ def measurements(replay, record):
     turn = decode_call(meter["turnInput"]["responseHex"])
     accepted = decode_call(meter["turnResult"]["responseHex"])
     recovery = decode_call(meter["postSkidResult"]["responseHex"])
-    require(straight[20] == STRAIGHT_FLAGS and straight[24:26] == bytes((4, 1))
+    require(straight[20] == STRAIGHT_FLAGS and straight[24:26] == bytes((4, 2))
             and blocked[15] == 2 and blocked[16] == 0
-            and turn[20] == TURN_FLAGS and turn[24:26] == bytes((5, 1))
+            and turn[11] == 2 and turn[20] == TURN_FLAGS and turn[24:26] == bytes((5, 2))
             and accepted[15:17] == bytes((1, 1))
             and recovery[20] == POST_SKID_FLAGS and recovery[15:17] == bytes((1, 1))
             and recovery[24:26] == bytes((5, 1)),
             "Runner turn-runway policy transaction differs")
     motions = meter["motions"]
-    require(len(motions) == 2 and [motion["duration"] for motion in motions] == [8, 6]
-            and all(complete_travel(motion) for motion in motions)
-            and motions[0]["target"] == motions[1]["origin"]
+    require(len(motions) == meter.get("completeMotions") == 3,
+            "Runner turn-runway lacks its three complete motions")
+    expected_recovery = recovery_time(actor, motions[-1]["commitBefore"])
+    require([motion["duration"] for motion in motions] == [8, 8, expected_recovery]
+            and motions[0]["startFrame"] == meter["policyFrame"]
+            and motions[1]["startFrame"] == meter["continuationFrame"]
+            and recovery[19] == expected_recovery
+            and all(motion["kind"] == "WALK" and motion["handle"] == actor["handle"]
+                    and motion["fingerprint"] == actor["behaviorFingerprint"]
+                    and complete_travel(motion) for motion in motions)
+            and all(before["target"] == after["origin"] and before["commitAfter"] == after["commitBefore"]
+                    and before["finishFrame"] <= after["startFrame"]
+                    for before, after in zip(motions, motions[1:]))
             and all(motion["commitAfter"] == ((motion["commitBefore"] + 1) & 0xFFFFFFFF)
                     for motion in motions),
-            "Runner turn-runway lacks its two complete motions")
+            "Runner turn-runway lacks its three complete motions")
+    continuation_request = decode_call(meter["continuation"]["requestHex"])
+    continuation = decode_call(meter["continuation"]["responseHex"])
     old_direction, turn_direction = meter["oldDirection"], meter["turnDirection"]
     old_delta, turn_delta = direction_delta(old_direction), direction_delta(turn_direction)
     require(sum(a * b for a, b in zip(old_delta, turn_delta)) == 0
             and [target - origin for origin, target in zip(motions[0]["origin"], motions[0]["target"])] == old_delta
-            and [target - origin for origin, target in zip(motions[1]["origin"], motions[1]["target"])] == turn_delta,
+            and [target - origin for origin, target in zip(motions[1]["origin"], motions[1]["target"])] == old_delta
+            and [target - origin for origin, target in zip(motions[2]["origin"], motions[2]["target"])] == turn_delta,
             "Runner turn-runway did not turn through a clear perpendicular corridor")
+    require(continuation_request[11] == continuation[11] == 1
+            and continuation_request[15] == continuation[15] == 1
+            and continuation_request[16] == 2 and continuation[16] == 1
+            and continuation_request[17:21] == continuation[17:21]
+            and continuation[17:21] == bytes((old_direction, turn_direction, 8, 0x13))
+            and all(raw[22] == raw[23] == 0 for raw in (continuation_request, continuation)),
+            "Runner turn-runway continuation differs")
+    require(all([sample["elapsed"] for sample in motion["samples"]] == list(range(motion["duration"]))
+                for motion in motions), "Runner turn-runway exact keyed schedules differ")
     lifecycle = meter["lifecycle"]
     names = [event["data"]["event"] for event in lifecycle]
-    require(len(lifecycle) == 8 and names.count("MOTION_STARTED") == 2
-            and names.count("LOGICAL_COMMIT") == 2 and names.count("MOTION_FINISHED") == 2
-            and names.count("CONTROL_RETURNED") == 2,
+    require(len(lifecycle) == 12 and names.count("MOTION_STARTED") == 3
+            and names.count("LOGICAL_COMMIT") == 3 and names.count("MOTION_FINISHED") == 3
+            and names.count("CONTROL_RETURNED") == 3,
             "Runner turn-runway native lifecycle differs")
+    for motion in motions:
+        for name, frame, a, b in (
+            ("MOTION_STARTED", motion["startFrame"], 1, motion["duration"]),
+            ("LOGICAL_COMMIT", motion["commitFrame"], motion["commitAfter"], 1),
+            ("MOTION_FINISHED", motion["finishFrame"], motion["commitAfter"], 1),
+            ("CONTROL_RETURNED", motion["finishFrame"], 0, motion["commitAfter"]),
+        ):
+            matches = [event for event in lifecycle if event["frame"] == frame and event["data"]["event"] == name]
+            require(len(matches) == 1 and matches[0]["data"].get("reason") == "OK"
+                    and (matches[0]["data"].get("valueA"), matches[0]["data"].get("valueB")) == (a, b),
+                    "Runner turn-runway native lifecycle differs")
+    sequences = [event["data"]["sequence"] for event in lifecycle]
+    require(sequences == sorted(set(sequences)), "Runner turn-runway native lifecycle order differs")
     identity = [1, actor["role"], actor["species"], int(actor.get("identityVerified") is True),
                 int(actor.get("presentationAttached") is True), int(bool(source.get("active"))),
                 int(engine.get("active") is True and engine.get("in_manager") is True),
                 actor["inputOwnership"]]
-    final = motions[1]["terminalLogical"]
+    final = motions[-1]["terminalLogical"]
     values = (
-        ("natural-input", "runner-turn-natural-motion-count", 2),
+        ("natural-input", "runner-turn-natural-motion-count", 3),
         ("live-actor-identity", "runner-turn-stantler-identity-flags", identity),
         ("profile-resolution", "runner-turn-profile-lane",
          [actor["behaviorFingerprint"], actor["matchedLayerMask"], 8, 1, 4, 193, 1]),
@@ -125,11 +160,10 @@ def measurements(replay, record):
          [straight[20], straight[24], straight[25], turn[20], turn[24], turn[25],
           recovery[20], recovery[24], recovery[25]]),
         ("logical-commit", "runner-turn-terminal-boundaries-and-target",
-         {"boundaryCount": 2, "final": final, "target": motions[1]["target"]}),
-        ("rendered-motion", "runner-turn-skid-recovery-and-corner", [8, 6, 1]),
-        ("frame-pacing", "runner-turn-motion-schedules",
-         [[sample["elapsed"] for sample in motion["samples"]] for motion in motions]),
-        ("control-release", "runner-turn-control-return-count", 2),
+         {"boundaryCount": 3, "final": final, "target": motions[-1]["target"]}),
+        ("rendered-motion", "runner-turn-skid-recovery-and-corner", [8, 8, 5, 1]),
+        ("frame-pacing", "runner-turn-exact-keyed-motion-schedules", 1),
+        ("control-release", "runner-turn-control-return-count", 3),
     )
     return [{"claim": claim, "name": name, "value": deepcopy(value), "operator": "eq",
              "expected": deepcopy(value), "passed": True} for claim, name, value in values]

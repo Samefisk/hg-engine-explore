@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import unittest
 
-from tools.overworld.devtools_test_contract import TestEvaluator, validate_test
+from tools.overworld.devtools_test_contract import HEIGHT_CONTROL, TestEvaluator, validate_test
 
 
 def recipe():
@@ -41,6 +41,38 @@ def event(frame=1, name="MOTION_FINISHED", sequence=1):
 
 
 class ContractTests(unittest.TestCase):
+    def test_spawn_binding_excludes_rebound_initial_actor_and_uses_height_receipt(self):
+        value = recipe()
+        value["subjects"] = [{"id": "subject", "species": 165,
+                              "role": "WILD", "acquire": "spawn"}]
+        evaluator = TestEvaluator(value)
+        initial = snapshot()
+        evaluator.observe(initial, count_frame=False)
+
+        rebound = deepcopy(initial["actors"][0])
+        rebound["handle"] = {**rebound["handle"], "value": 65536,
+                             "fieldEpoch": 2, "mapGeneration": 2}
+        fresh = deepcopy(rebound)
+        fresh["handle"] = {**fresh["handle"], "value": 65537, "slot": 1}
+        fresh["subjectIdentity"] = 456
+        other = deepcopy(fresh)
+        other["handle"] = {**other["handle"], "value": 65538, "slot": 2}
+        other["subjectIdentity"] = 789
+        current = {**snapshot(2), "actors": [rebound, fresh, other],
+                   "context": {"fieldEpoch": 2, "mapGeneration": 2}}
+        evaluator.first_handles = set()
+        evaluator.measurements[HEIGHT_CONTROL] = SimpleNamespace(
+            result=lambda: {"subject": fresh})
+
+        self.assertEqual(evaluator._candidates("subject", current), [fresh, other])
+        self.assertTrue(evaluator.check(
+            {"kind": "actor-present", "subject": "subject"}, current))
+        evaluator.events[(tuple(fresh["handle"][key] for key in
+                          ("value", "slot", "generation", "fieldEpoch",
+                           "mapGeneration", "encounterGeneration")),
+                          "ACTOR_ATTACHED")] = 1
+        self.assertEqual(evaluator.bind("subject", current)["handle"], fresh["handle"])
+
     def test_host_hitch_continuation_is_diagnostic_only(self):
         path = Path(__file__).resolve().parents[2] / "tests/overworld/test-recipes/world.unmounted.long-travel-cadence.json"
         value = json.loads(path.read_text())

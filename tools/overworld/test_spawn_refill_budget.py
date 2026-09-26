@@ -158,6 +158,13 @@ static int scheduleControl(int operation, int argument)
     return OVERWORLD_ACTOR_POPULATION_WORK_NONE;
 }
 
+static u8 OverworldWildSpawns_PopulationControl(
+    u8 operation,
+    u16 refillDelay)
+{
+    return (u8)populationEntry.control(operation, refillDelay);
+}
+
 static u32 randomValues[32];
 static int randomCount;
 static int randomIndex;

@@ -5,9 +5,9 @@ description: Create, edit, reorder, or remove hg-engine overworld profiles, sele
 
 # Author an overworld profile
 
-Use the named behavior catalog as the only authoring source. Every profile has
-the same shape: a stable ID, display name, parent, and local field operators.
-The one root profile is complete.
+Use the named behavior catalog as the only authoring source. Every non-root
+profile has a stable ID, display name, parent, classification, and local field
+operators. The one root profile is complete and has no classification.
 
 ## Model the result
 
@@ -31,7 +31,22 @@ Identify:
 Selectors choose the initial materialized profile. Applications contribute
 only their profile's local operators. Later matching applications consume the
 earlier result. A parent supplies inherited authoring values; it does not turn
-one profile into a second profile type.
+one profile into a second profile type. Classifications set composition order:
+Routine, Placement, Capability, Attitude, Modifier, System, then Utility.
+
+A profile can be normal or conditional. Conditional is independent of its
+classification. A conditional profile owns one or more independent condition
+entries. Each entry owns its subject pool and can use Current Vision or its own
+Custom Vision. If several entries in one profile are admitted, the last listed
+entry wins. Different conditional applications still compose in application
+order, field by field. Conditions choose when a profile applies; they do not
+create another behavior lane.
+
+A normal application owns its Pokémon target. A conditional application omits
+that target: all conditional membership lives in each condition's subject
+pool. A profile can set stable Current Vision; conditional applications are
+excluded when that value is resolved, so they cannot change the Vision that
+admits them.
 
 ## Make the edit
 
@@ -61,14 +76,45 @@ Preserve these rules:
 - Keep only local field operators in a non-root profile.
 - Use `replace` for exact values. Use relative or bounded operators only when
   composition is intended.
-- Put matches and members in selectors or applications, not profile records.
-- Keep applications in layer order: archetype, capabilities, attitude, style
-  traits, Follower/Mount, then modifiers. Archetypes are first and modifiers
-  are last. The resolver uses application order, not profile definition order.
-  Keep a conditional or lane-only helper beside the layer that owns it. At
-  most 32 applications can reach the current runtime mask.
-- Keep runtime-owned Picked Up, Follower, Default Active, and Default Tired
-  bindings valid.
+- Put normal matches and members in selectors or normal applications. Put
+  conditional membership only in each condition's subject pool.
+- Keep applications in classification order: Routine, Placement, Capability,
+  Attitude, Modifier, System, then Utility. Preserve manual order inside each
+  classification. The resolver uses application order, not profile definition
+  order. At most 32 applications can reach the current runtime mask.
+- Keep runtime-owned Follower, Mounted, Asleep, and Default Tired bindings
+  valid. Mounted is an empty override and inherits all fields from the selected
+  Pokémon profiles. Pickup, carry, throw, drop, cancel, and release use internal
+  held actor control; do not create or restore a Picked Up profile.
+- Give each conditional profile at least one valid condition. Keep its target,
+  activation mode, duration, cooldown, and subject pool explicit. Timed
+  conditions restart duration only when they retrigger after cooldown.
+- For a vision condition, choose Current Vision or define Custom Vision on the
+  condition. Keep stable Current Vision fields on the profile.
+- Use the Conditions, Spawn, Behavior, Movement Style, Vision, and Tired main
+  tabs. Behavior and Movement Style are separate main tabs. Do not model
+  controller states as authoring tabs or profile concepts. Do not create Chill,
+  Active, or Attentive profile concepts.
+- Use Fly In for descending spawn entry. It descends from offscreen flying
+  height to the prevalidated destination surface, then returns control to the
+  normal Routine.
+- For Walk, keep `walkPause` and `walkPauseVariance` at zero. Do not use a
+  one-move Movement Chain: use zero to disable the chain, or at least two
+  moves. A deliberate slow-pause exception must belong to a clearly named
+  Routine, use a visibly intentional pause, and receive a playtest.
+- Treat Movement Chain pause actions as a set. In the Workshop, use the action
+  checkboxes. No checked action continues into the next chain. One checked
+  action keeps the existing single-action behavior. With several checked
+  actions, `chainPauseActionChance` is one admission roll for the whole set;
+  after a pass, the runtime picks one checked action with equal probability.
+  Do not give every checked action the full overall chance.
+- A lone `Pause` uses `chainPauseActionChance` like every other action, including
+  while Mounted. In a multi-action set, `Pause` shares the set's chance. A zero
+  chance retains the legacy always-admit meaning. For example,
+  Meander checks `Look Around` and `Pause` at 50% overall: each runs about 25%
+  of chain endings and the other 50% starts the next chain. Keep `walkPause`
+  and `walkPauseVariance` at zero; do not restore a per-step Walk pause to
+  create this rhythm.
 
 The generator lowers this one authoring model into the existing ROM tables.
 Those tables are compatibility data, not authoring profile types.
@@ -84,8 +130,16 @@ python3 scripts/verify_overworld_workshop_authoring.py
 python3 scripts/verify_overworld_behavior_resolver.py --rule-removal-control
 ```
 
+When the pause-action set or its overall chance changes, also run:
+
+```bash
+python3 tools/overworld/test_passive_chain_pause.py
+python3 tools/overworld/test_workshop_profile_building_blocks.py
+```
+
 Resolve each affected subject again. Confirm selection, application order,
-changed fields, Active/Tired links, normalization, primitives, and fingerprint.
+condition winners and target source, changed fields, Tired links,
+normalization, primitives, and fingerprint.
 Confirm the chosen non-target subject is unchanged.
 
 Behavior-profile changes stale spawn-work pacing proof. Run the extracted-C

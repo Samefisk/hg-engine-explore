@@ -1,7 +1,44 @@
 # Conditional Profiles Implementation Plan
 
-Status: Proposed implementation plan. No product code has changed. The current
-architecture and runtime stay authoritative until the CP7 cutover gate passes.
+Status: Implemented. This file retains the delivery order and its exit gates;
+the completion record below describes the authoritative result.
+
+## Implementation status
+
+| Slice | State | Evidence and next action |
+| --- | --- | --- |
+| CP0 | Complete | Baseline schema, catalog, catalog tests, resolver goldens, actor view, and spawn lifecycle pass. The migration inventory reports 1,746 classified findings, zero unclassified findings, seven activeProfile references, and two legacy conditional states. |
+| CP1 | Complete | Catalog V3 owns profile kinds and condition entries. The final V79 generated storage emits fixed profile-owned condition records. V1/V2 remain read-only import inputs. |
+| CP2 | Complete | The portable evaluator covers while-true, timed duration, cooldown, refresh, player and actor targets, overlap order, stale targets, terrain/speed, and frame wrap. Its fixed result includes per-application winners and one final target. |
+| CP3 | Complete | The V2/44-byte request and 200-byte result support explicit conditions. Ordered resolver tests, 15 goldens, and host/package fixtures prove the one-pass path. |
+| CP4 | Complete | The role adapter prepares bounded condition entries at bind, clears them with actor identity, evaluates at intent boundaries, and emits armed-only trace facts. CP7 made this path authoritative and removed the shadow bridge. |
+| CP5 | Complete | The Workshop authors ordered, profile-owned conditions and previews draft data through the shared portable evaluator and resolver. The Active tab is gone; Conditions replaces Alert authoring. |
+| CP6 | Complete | All seven old Active-profile sources and both terrain conditions have profile-owned condition homes. Migration fixtures cover chase, flee, presentation-only alert, and terrain response. The inventory reports 1,784 classified findings, zero unclassified findings, seven mapped legacy sources, and zero unmapped sources. |
+| CP7 | Complete | Wild and Follower intent boundaries use the condition adapter. Active and attentive runtime state, lane data, counters, transitions, shadow bridge, and public projection are removed. Alert remains presentation only. |
+| CP8 | Complete | Host checks, packaged resolver/evaluator proof, live Wild condition proof, current-ROM build, spawn-work pacing, and zero-stutter acceptance pass. The separate user playtest gate remains a roadmap concern, not a conditional-profile implementation gap. |
+
+## Completion record
+
+- Catalog storage is V79, semantic behavior is V78, the resolver request is
+  V2/44 bytes, and its result is 200 bytes. The condition service is V8 and
+  the role adapter is V10.
+- Wild allocates one 2,044-byte condition workspace from `HEAPID_WORLD` only
+  when needed. Each of its ten 52-byte prepared actor records owns an exact
+  per-entry state allocation. Wild frees those child blocks itself, including
+  when the adapter overlay is unavailable.
+- Conditions run at every new intent boundary. The resolver runs again only
+  when the active conditional-application mask changes. Accepted motion is
+  never interrupted.
+- A timed refresh restarts duration. It requests Alert presentation only when
+  that trigger also changes resolved behavior. Tired can start only after the
+  last timed conditional application ends.
+- The adapter-private `PROFILE_CHANGED` flag never crosses the Wild public
+  outcome boundary, where the same bit means `FAIL_CLOSED`.
+- The current ROM passed `profile.resolve.packaged-rom-parity`,
+  `profile.condition.packaged-rom-evaluator`,
+  `profile.condition.live-wild-controller`,
+  `population.spawn-work-budget`, and
+  `world.unmounted.spawn-zero-stutter`.
 
 This plan changes who owns alert and active behavior. It does not design a
 general condition language.
@@ -38,8 +75,9 @@ The completed system has these properties:
 - When cooldown ends and the condition is still true, it triggers again,
   selects a fresh target, and restarts duration and cooldown.
 - A while-true condition has no held duration. It applies only while true.
-- Existing profile migration is a later delivery slice. The migration mapping
-  is not decided by this plan.
+- No broad behavior redesign or reusable migration framework is part of this
+  change. Existing catalog entries moved only as required for the ownership
+  cutover.
 
 ## Non-goals
 
@@ -62,8 +100,8 @@ The completed system has these properties:
 | --- | --- | --- |
 | Named behavior catalog | Profile kind, ordered applications, condition-entry definitions, pools, duration, cooldown, and target query definition | Live timers, actor handles, world pointers |
 | Catalog generator | Validation, fixed-size generated tables, stable IDs, bounds, and host metadata | Runtime condition truth |
-| Behavior Condition Evaluator | Subject-pool match, condition truth, timer state, cooldown state, target choice, and one captured target per active entry | Profile field composition, world pointers, or motion execution |
-| Behavior Resolver | Ordered field composition, normalization, target-binding precedence, fingerprint, and provenance | World search, timer updates, or actor lifecycle |
+| Behavior Condition Evaluator | Subject-pool match, condition truth, timer state, cooldown state, target choice, one captured target per active entry, and reduction to the final target in shared application order | Profile field composition, world pointers, or motion execution |
+| Behavior Resolver | Ordered field composition, normalization, target-source validation, fingerprint, and provenance | World search, timer updates, target search, or actor lifecycle |
 | Wild or Follower controller adapter | The idle intent boundary, bounded world observation, evaluator call, resolved behavior use, and conversion to one intent | Mid-motion cancellation or direct profile mutation |
 | Actor Motion | Validation, reservation, execution, and terminal completion of an accepted intent | Conditions, profile ordering, or target search |
 | Workshop | Authoring and preview of the same catalog contract | A separate save format or private resolution rules |
@@ -115,14 +153,14 @@ Condition evaluator
   - captures zero or one target for that selected entry
               |
               v
-Active conditional application mask plus target bindings
+Active conditional application mask plus one resolved target and its source
               |
               v
 Behavior Resolver iterates the shared application list once
   - normal application: apply when its selector matches
   - conditional application: apply when its selector matches and it is active
   - later values override earlier values
-  - later target bindings override earlier target bindings
+  - validates the winning condition and target-source provenance
               |
               v
 Resolved Owner and Tired behavior, target, fingerprint, and provenance
@@ -135,32 +173,27 @@ The micro-level check is the controller's existing request for a new intent.
 An actor with an accepted motion does not run another decision. Chained
 movement runs the check before it asks for the next chain intent.
 
-## Required decisions before runtime cutover
+## Frozen decisions before runtime cutover
 
-The implementation agent must record these decisions in the architecture
-contract before Slice CP4. They are small gates, not a request to broaden the
-condition language.
+These decisions are now part of the architecture contract for Slice CP4.
 
 1. Invalid captured target during held duration.
-   Decide whether the activation ends, or whether targetless profile fields
-   remain active while target-dependent behavior falls back. Do not retain a
-   stale actor reference.
+   A stale required target ends that complete condition activation. No
+   target-dependent or targetless field from that entry remains active.
 2. First supported condition kinds.
-   Start only with kinds needed to represent current alert, current
-   terrain/speed conditional states, and the first other-Pokémon case. Each
-   kind gets a fixed value schema and a bounded evaluator.
+   The fixed first set is player noticed, Pokémon noticed, and terrain/speed.
 3. Timer clock.
-   Select one monotonic actor-system frame counter, document its unit and
-   wrap-safe comparison, and use expiry values rather than per-frame decrement
-   loops.
+   Timers use the public actor-system frame. Expiries use unsigned half-range
+   comparison and do not decrement once per frame.
 4. Target binding precedence.
-   Treat a captured target as an override value. The last active application
-   with a target binding supplies the resolved target. A later targetless
-   profile does not erase an earlier target.
+   The evaluator treats a captured target as an override value. The last
+   active application with a target supplies the final target. A later
+   targetless profile does not erase it. The resolver receives and validates
+   that one target, its condition, and its source application.
 5. Binary compatibility.
-   List every package, service, trace, and Workshop adapter that consumes the
-   changed records. Bump its version or preserve an explicit retired numeric
-   hole. Do not silently reinterpret an old Active-lane value.
+   The completed cutover uses catalog storage V79 and semantic behavior V78.
+   The resolver request is V2/44 bytes and the result is 200 bytes. Host,
+   package-parity, and observation adapters use those exact extents.
 
 ## Delivery rules
 
@@ -358,8 +391,8 @@ Dependencies: CP1; CP2 result shape is frozen.
 
 Steps:
 
-1. Add the active conditional application bitset and target bindings to the
-   private resolver request.
+1. Add the active conditional application bitset, overall winning condition,
+   and final target provenance to the private resolver request.
 2. Stop deriving active conditions from terrain and speed inside the resolver.
    Keep the old derivation only in the temporary compatibility adapter.
 3. Replace the current normal-pass-then-conditional-pass behavior with one
@@ -367,8 +400,9 @@ Steps:
    - apply a matching normal application;
    - apply a matching conditional application only when its active bit is set;
    - preserve existing field operators and later-wins behavior.
-4. Resolve target binding in the same order. The last applied application with
-   a target binding wins. A targetless application changes only its fields.
+4. Validate the evaluator's final target against its active source application
+   and condition. The evaluator has already preserved an earlier target across
+   a later targetless application.
 5. Add the winning condition-entry ID and target-source application ID to
    provenance and the fingerprint input.
 6. During migration, keep the old Active-lane output adapter. Do not let new
@@ -496,6 +530,8 @@ Steps:
    - expected target rule;
    - expected duration and cooldown mode;
    - parity proof.
+   The reviewed mapping is in
+   [conditional-profiles-migration.md](conditional-profiles-migration.md).
 3. Ask for a product decision only when old data does not define one of these
    values or when two mappings would create different visible behavior.
 4. Convert current terrain/speed conditionalStates entries to condition entries

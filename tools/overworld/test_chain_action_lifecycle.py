@@ -39,18 +39,22 @@ def harness_source():
     source = start.harness_source().split("static void RunCase(", 1)[0]
     source = replace_once(source, '#include "overworld_motion_model.h"',
                           '#include "overworld_motion_model.h"\n#include "overworld_role_controller.h"')
-    source = replace_once(source, "u8 walkOptions, hopSwayWidth;",
-                          "u8 walkOptions, hopSwayWidth, hopTime, hopPause, chainRepositionJumpCount, chainRepositionDistance, "
+    source = replace_once(source, "u8 walkOptions, walkSwayWidth, hopSwayWidth, spawnHopSwayWidth, spawnHopTime;",
+                          "u8 walkOptions, walkSwayWidth, hopSwayWidth, spawnHopSwayWidth, spawnHopTime, hopTime, hopPause, chainRepositionJumpCount, chainRepositionDistance, "
                           "chainRepositionAllowCardinal, chainRepositionAllowDiagonal, chainRepositionDust; u16 chillAllowedTerrainMask;")
     source = replace_once(
         source,
         "typedef struct OverworldWildBehaviorProfile { OverworldWildBehaviorProfileData lane; } OverworldWildBehaviorProfile;",
         "typedef struct OverworldWildBehaviorProfile { union { OverworldWildBehaviorProfileData lane; OverworldWildBehaviorProfileData owner; }; "
-        "OverworldWildBehaviorProfileData active, tired; u8 jumpLevel, stamina, tiredState; } OverworldWildBehaviorProfile;",
+        "OverworldWildBehaviorProfileData tired; u8 jumpLevel, stamina, tiredState; } OverworldWildBehaviorProfile;",
     )
-    source = replace_once(source, "u8 chainStepsRemaining, chainPauseTicks, chainPauseAction, motionPhase, actorActive;",
-                          "u8 chainStepsRemaining, chainPauseTicks, chainPauseAction, motionPhase, actorActive; "
-                          "struct { u8 direction, tileCounter, speed, baseSpeed, spotState, skidRemaining, turnDirection, resumeSpeed; } walkMomentum;")
+    source = replace_once(
+        source,
+        "typedef struct OverworldWildWalkMomentumState { u8 speed; } OverworldWildWalkMomentumState;",
+        "typedef struct OverworldWildWalkMomentumState { "
+        "u8 direction, tileCounter, speed, baseSpeed, spotState, skidRemaining, turnDirection, resumeSpeed; "
+        "} OverworldWildWalkMomentumState;",
+    )
     source = replace_once(source, "u8 movementCustomJumpPrepActive[10], movementCustomJumpActive[10];",
                           "u8 movementCustomJumpPrepActive[10], movementCustomJumpActive[10], movementEmotePlayHopSound[10], "
                           "movementMankeyTreeTopLandingExpected[10], movementMankeyTreeTopSettled[10]; "
@@ -65,7 +69,7 @@ def harness_source():
     source = replace_once(source, "u16 movementInProgressMask;", """
     u16 movementInProgressMask;
     struct { LocalMapObject *object; u8 active; } spawns[10];
-    u8 movementStagedHopPending[10], movementCooldowns[10];
+    u8 movementCooldowns[10];
     u8 movementEmoteJumpsRemaining[10], movementEmoteTimers[10], movementEmoteSteps[10];
     u8 movementEmoteDirections[10], movementEmoteEndStates[10], movementEmoteBubbleIds[10];
     u8 movementEmoteShowBubbleEachJump[10], movementEmotePlayCryOnHop[10];
@@ -74,7 +78,6 @@ def harness_source():
     s16 movementStagedHopAvoidX[10], movementStagedHopAvoidY[10];
     s16 movementPreviousTileX[10], movementPreviousTileY[10];
     u8 movementStagedHopFinishWithTired[10], movementStagedHopAvoidValid[10];
-    u8 movementActiveSteps[10];
     """)
     # Keep the real portable admission model; the engine bridge supplies its
     # kind/arc/pause contract, with distinct ordinary-Hop timing as a control.
@@ -108,6 +111,7 @@ def harness_source():
         ("OverworldWildSpawns_ApplyChainRepositionResult", "BOOL"),
         ("OverworldWildSpawns_RunChainReposition", "BOOL"),
         ("OverworldWildSpawns_GetLookAroundFrames", "u8"),
+        ("OverworldWildSpawns_ResetEmotePresentationStyle", "void"),
         ("OverworldWildSpawns_TryStartChainForwardHop", "u8"),
         ("OverworldWildSpawns_TryStartChainPauseAction", "u8"),
         ("OverworldWildSpawns_CommitDeferredChainMovementPause", "void"),
@@ -301,6 +305,9 @@ static BOOL OverworldWildSpawns_TryStartManualHopEmote(OverworldWildSpawnState *
   (void)count; (void)frames; (void)bubble; (void)each; (void)sound; return FALSE; }
 static void OverworldWildSpawns_StartNextSpotEmoteStep(OverworldWildSpawnState *state, int slot, LocalMapObject *object)
 { (void)state; (void)slot; (void)object; }
+static BOOL OverworldWildSpawns_ResolveChainConditionsAtIntentBoundary(
+    OverworldWildSpawnState *state, int slot, OverworldWildBehaviorProfile *profile)
+{ (void)state; (void)slot; (void)profile; return TRUE; }
 static void OverworldWildSpawns_HandleFinishedMovementCommand(OverworldWildSpawnState *, int);
 """
 
@@ -410,7 +417,7 @@ int main(int argc, char **argv)
             && selectedPolicy.walkMomentum.speed == 4);
         FinishLeg(&state, &object);
         OverworldWildSpawns_FinishPendingStagedHop(
-            &state, 0, &object, &testProfile);
+            &state, 0, &object);
         CHECK(state.movementStagedHopPending[0] == 0
             && state.movementCooldowns[0] == 0
             && completionCalls == 0);

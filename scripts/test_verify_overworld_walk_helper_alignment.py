@@ -43,7 +43,7 @@ class WalkHelperAlignmentTests(unittest.TestCase):
             self.inspect_fixture([], [], [])
 
     def test_each_required_section_must_be_present_nonempty_and_executable(self):
-        self.assertEqual(len(checker.REQUIRED_SECTIONS), 21)
+        self.assertEqual(len(checker.REQUIRED_SECTIONS), 25)
         for index in range(len(checker.REQUIRED_SECTIONS)):
             for fault in ("delete", "empty", "nonexecutable"):
                 with self.subTest(index=index, fault=fault):

@@ -119,6 +119,7 @@ class WildWalkObserverTests(unittest.TestCase):
         definition=re.search(r"typedef struct OverworldWildOverlayRuntimeState \{.*?\} OverworldWildOverlayRuntimeState;",native,re.S)[0]
         source='#include "include/overworld_wild_spawns_internal.h"\n#include "include/map_events_internal.h"\n'
         source+='#include "include/overworld_wild_helper.h"\n#include "include/overworld_spawn_guard.h"\n'
+        source+='#include "include/overworld_behavior_condition_adapter.h"\n'
         source+='typedef struct OverworldWildBehaviorSlotCache OverworldWildBehaviorSlotCache;\n'+destination_scan+'\n'+definition
         source+='\n_Static_assert((BIT_JUMP_START | BIT_MOVE_START | MAPOBJECTFLAG_UNK13)==0x12004,"owned flags");'
         for owner,member,offset in (("OverworldWildSpawnState","movementRuntimeState",0xE4),

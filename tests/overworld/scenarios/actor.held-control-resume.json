@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "id": "actor.held-control-resume",
+  "title": "Held actor control resumes the same autonomous behavior",
+  "status": "active",
+  "capabilities": ["actor.system"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "tools/overworld/test_picked_up_actor_control.py",
+    "actor": "One prepared WILD Mankey (species 56) as the Throw carrier and one prepared WILD Rattata (species 19) as the held target, both bound to current handles and attached presentations.",
+    "trigger": "Let Mankey's authored Throw action reserve and pick up Rattata, observe the carried interval, then let the normal throw or cleanup path release Rattata and observe its first autonomous intent.",
+    "observable": "Requirement current.held-actor-control-resume: Rattata changes from internal AUTONOMOUS to HELD control without changing its behavior class or resolving a Picked Up profile. While HELD it submits no autonomous intent and stays synchronized to Mankey. Release normalizes presentation, clears stale Walk state, restores AUTONOMOUS, preserves the same behavior class, and permits the first ordinary Routine intent.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use a disposable test.sav, checked teleport to map 33, native Mankey and Rattata spawns, exact binds, and a valid Throw arrangement. Do not write control mode, behavior class, throw masks, profile data, motion state, target, or presentation during observation."
+      }
+    ],
+    "limits": [
+      "The bound runtime observer retains HELD entry and release, carried synchronization, unchanged behavior identity, presentation cleanup, and the first resumed intent. Its copied-data controls reject missing subject and missing feature evidence.",
+      "The Picked Up profile and behavior class do not exist. Any proof that resolves such a profile or changes Rattata's behavior class fails this requirement.",
+      "Prepared actors prove the internal hold/release lifecycle, not natural population selection or every Throw target."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [
+    {"id": "mankey", "species": 56, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true},
+    {"id": "rattata", "species": 19, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}
+  ],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Spawn and bind Mankey and Rattata in a valid authored Throw arrangement."},
+    {"at": 1, "kind": "lifecycle", "value": "Observe Rattata enter HELD with unchanged behavior class and synchronized presentation, with no autonomous intent."},
+    {"at": 2, "kind": "lifecycle", "value": "Observe normal throw or cleanup release, presentation normalization, stale Walk clear, AUTONOMOUS restoration, and Rattata's first ordinary Routine intent."}
+  ],
+  "stop": {"frameBudget": 900, "condition": "Rattata completes one HELD interval, restores AUTONOMOUS with the same behavior class, and starts its first normal Routine intent."},
+  "expect": {
+    "requiredEvents": ["INTENT_CREATED", "MOTION_STARTED", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["ACTOR_REBOUND", "CONTEXT_CHANGED"],
+    "invariants": [
+      "Held ownership is internal control state and never a profile or behavior class",
+      "The held actor starts no autonomous intent while carried",
+      "Carrier and target presentations stay synchronized during the held interval",
+      "Release clears stale Walk state, restores AUTONOMOUS, preserves behavior class, and resumes the normal Routine"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "actor.held-control-resume",
+    "claims": ["live-actor-identity", "profile-resolution", "controlled-action", "engine-boundary", "rendered-motion", "control-release"],
+    "minimumFrames": 1
+  }
+}

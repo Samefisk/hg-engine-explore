@@ -40,12 +40,12 @@ def contract():
         "frame-pacing": [{
             "name": "appear-hop-command-order-and-tail", "operator": "eq",
             "type": "array", "validator": "meaningful-observation",
-            "expected": [49, 62, 74, 255, 0],
+            "expected": [49, 62, 74, 255, 1],
         }],
         "control-release": [{
             "name": "appear-hop-terminal-control", "operator": "eq",
             "type": "array", "validator": "meaningful-observation",
-            "expected": [0, 255],
+            "expected": [0, 1],
         }],
     }
 
@@ -87,17 +87,20 @@ def measurements(replay, record):
     require(samples and any(sample["faceY"] > 0 for sample in samples)
             and samples[-1]["faceY"] == 0,
             "Appear Hop rendered arc is incomplete")
+    idle_index = next((index for index, sample in enumerate(samples)
+                       if sample["frame"] == meter["idleFrame"]), None)
+    require(type(idle_index) is int, "Appear Hop idle publication is missing")
     commands = []
-    for sample in samples:
+    for sample in samples[:idle_index + 1]:
         if not commands or commands[-1] != sample["command"]:
             commands.append(sample["command"])
     require(len(commands) == 4 and commands[0] in JUMP_COMMANDS
             and commands[1:] == [62, RESTORE_COMMAND, IDLE_COMMAND],
             "Appear Hop command sequence differs")
-    tail = samples[-1]["frame"] - meter["restoreFrame"] - 1
-    require(tail == 0 and samples[-1]["controllerState"] == 0
-            and samples[-1]["command"] == IDLE_COMMAND,
-            "Appear Hop retained a post-restore control tail")
+    tail = samples[-1]["frame"] - meter["idleFrame"]
+    require(tail == 1 and samples[idle_index]["controllerState"] == 1
+            and samples[-1]["controllerState"] == 0,
+            "Appear Hop retained control after its idle publication")
     values = {
         "appear-hop-clefairy-identity": [
             1, last["role"], last["species"], int(last["identityVerified"]),
@@ -108,8 +111,7 @@ def measurements(replay, record):
         "appear-hop-rendered-arc": [int(any(sample["faceY"] > 0 for sample in samples)),
                                     samples[-1]["faceY"]],
         "appear-hop-command-order-and-tail": [*commands, tail],
-        "appear-hop-terminal-control": [samples[-1]["controllerState"],
-                                         samples[-1]["command"]],
+        "appear-hop-terminal-control": [samples[-1]["controllerState"], tail],
     }
     rows = []
     for claim, specs in contract().items():
@@ -128,6 +130,7 @@ class AppearHopNegative:
         require(fault in FAULTS, "unknown Appear Hop copied-data fault")
         self.fault = fault
         self.mutated = False
+        self.handle = None
 
     @property
     def applied(self):
@@ -138,7 +141,24 @@ class AppearHopNegative:
             return row
         changed = deepcopy(row)
         handles = {subject["handle"]["value"] for subject in subjects.values()}
-        for snapshot in changed.get("samples", []):
+        if self.handle is not None:
+            handles.add(self.handle)
+        snapshots = list(changed.get("samples", []))
+        if self.fault == "appear-hop-flat-arc" \
+                and isinstance(changed.get("boundarySnapshot"), dict):
+            snapshots.insert(0, changed["boundarySnapshot"])
+        for snapshot in snapshots:
+            if self.handle is None:
+                candidates = [item for item in snapshot.get("actors", [])
+                              if item.get("active") is True
+                              and item.get("species") == 35
+                              and item.get("role") == "WILD"
+                              and item.get("controllerState") == 1
+                              and item.get("engineObject", {}).get("movement_cmd")
+                                  in JUMP_COMMANDS]
+                if len(candidates) == 1:
+                    self.handle = candidates[0]["handle"]["value"]
+                    handles.add(self.handle)
             actor = next((item for item in snapshot.get("actors", [])
                           if item.get("handle", {}).get("value") in handles), None)
             if actor is None:
@@ -153,7 +173,6 @@ class AppearHopNegative:
                     and actor["engineObject"]["movement_cmd"] == 62:
                 actor["engineObject"]["movement_cmd"] = IDLE_COMMAND
             elif self.fault == "appear-hop-late-control" \
-                    and actor["engineObject"]["movement_cmd"] == IDLE_COMMAND \
                     and actor.get("controllerState") == 0:
                 actor["controllerState"] = 1
             else:
@@ -172,8 +191,30 @@ class AppearHopNegative:
         }
 
 
-def validate_negative_result(value, fault=None):
-    return isinstance(value, dict) and value.get("fault") in FAULTS \
-        and (fault is None or value.get("fault") == fault) \
-        and value.get("mutated") is True and value.get("rejected") is True \
-        and value.get("acceptedProof") is False
+def validate_negative_result(result, fault):
+    if fault not in FAULTS or result.get("passed") is not False:
+        return False
+    values = result.get("failures", []) + result.get("measurements", {}).get(
+        KIND, {}).get("failures", [])
+    reasons = []
+    def collect(value):
+        if isinstance(value, str):
+            reasons.append(value)
+        elif isinstance(value, dict):
+            for item in value.values():
+                collect(item)
+        elif isinstance(value, list):
+            for item in value:
+                collect(item)
+    collect(values)
+    expected = {
+        "appear-hop-absent-subject":
+            "selected handle must name exactly one current active actor",
+        "appear-hop-stale-subject":
+            "selected actor has a stale authorityGeneration",
+        "appear-hop-flat-arc": "Appear Hop has no rendered vertical arc",
+        "appear-hop-command-order": "Appear Hop jump command order differs",
+        "appear-hop-late-control":
+            "Appear Hop stayed locked after its idle publication",
+    }[fault]
+    return any(expected in reason for reason in reasons)

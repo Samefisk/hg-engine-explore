@@ -3,6 +3,8 @@
 
 #overlay 1 is loaded in at 021E5900
 0001 OverworldGrassEffect_InitAllocationGuard 021FF1F0 1
+0001 OverworldDustEffect_InitAllocationGuard 021FF7EC 1
+0001 OverworldEffectPool_ExpandModelSlots 021E64D0 1
 #overlay 2 is loaded in at 02245B80
 #overlay 12 is loaded in at 022378C0
 #mega

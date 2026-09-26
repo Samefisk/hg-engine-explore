@@ -108,6 +108,9 @@ def complete_travel(motion):
 class MotionRecorder:
     """One actor's live samples; exact duplicate hooks alone are deduplicated."""
 
+    MOVING_KINDS = ("WALK", "HOP", "TELEPORT", "REPOSITION", "FLY_IN")
+    CONTINUOUS_GROUND_KINDS = ("WALK",)
+
     current: dict | None = None
     completed: list[dict] = field(default_factory=list)
     failures: list[dict] = field(default_factory=list)
@@ -117,14 +120,25 @@ class MotionRecorder:
     def _fail(self, reason, **details):
         self.failures.append({"reason": reason, **details})
 
+    def _successor_pose(self, actor, current):
+        """Default linear first pose; a scoped movement meter can override it."""
+        pose = []
+        for axis in ("x", "y"):
+            delta = (actor["target"][axis] - actor["origin"][axis]) << 16
+            step = abs(delta) // actor["motionDuration"]
+            pose.append((actor["origin"][axis] << 16) + 0x8000
+                        + (step if delta >= 0 else -step))
+        return pose
+
     def observe(self, frame, actor, engine):
-        moving = actor["motionKind"] in ("WALK", "HOP", "TELEPORT", "REPOSITION") \
+        moving = actor["motionKind"] in self.MOVING_KINDS \
             and actor["motionPhase"] in ("PLANNED", "MOVING", "COMMIT_PENDING", "SETTLING")
         # Motion records cross JSON storage before independent acceptance.
         # Keep their key in that native wire type, not a tuple that reloads
         # as a list and makes an otherwise identical replay differ.
         key = list(motion_key(actor)) if moving else None
         current = self.current
+        one_frame_successor = False
         if current is not None:
             target_render = [(coordinate << 16) + 0x8000 for coordinate in current["target"]]
             if current.get("travelEnd") is None and actor["motionElapsed"] == current["duration"] \
@@ -155,41 +169,72 @@ class MotionRecorder:
                 current["travelEnd"] = {"frame": frame, "elapsed": current["duration"],
                                         "render": [engine["pos_x"], engine["pos_z"]],
                                         "observedBy": "successor-origin", "successorElapsed": 0}
+            end = current.get("travelEnd")
+            if end is not None and key == current["key"] and moving \
+                    and actor["motionPhase"] == "COMMIT_PENDING" \
+                    and actor["motionElapsed"] == current["duration"] \
+                    and actor["motionDuration"] == current["duration"] \
+                    and actor["handle"] == current["handle"] \
+                    and actor["behaviorFingerprint"] == current["fingerprint"] \
+                    and actor["commitSequence"] == current["commitBefore"] \
+                    and [actor["logical"]["x"], actor["logical"]["y"]] == current["target"] \
+                    and [engine["pos_x"], engine["pos_z"]] == target_render \
+                    and engine.get("unk88_y", 0) == 0 \
+                    and frame == current.get("lastEndpointFrame", end["frame"]) + 1:
+                # A completed one-frame tile can wait one or more exact
+                # endpoint frames for its commit. These are observed holds,
+                # not missing travel samples. A skipped frame or changed pose
+                # cannot bridge the next motion boundary.
+                current["lastEndpointFrame"] = frame
             if current.get("commitFrame") is None \
                     and actor["commitSequence"] == ((current["commitBefore"] + 1) & 0xFFFFFFFF):
                 current["commitFrame"] = frame
-        if current is not None and (key != current["key"] or not moving):
+        defer_fly_in_terminal = (
+            current is not None
+            and current["kind"] == "FLY_IN"
+            and (key != current["key"] or not moving)
+            and actor["commitSequence"]
+                == ((current["commitBefore"] + 1) & 0xFFFFFFFF)
+            and [actor["logical"]["x"], actor["logical"]["y"]]
+                != current["target"]
+            and [engine["pos_x"], engine["pos_z"]]
+                == [(coordinate << 16) + 0x8000
+                    for coordinate in current["target"]]
+        )
+        if current is not None and (key != current["key"] or not moving) \
+                and not defer_fly_in_terminal:
             # The old endpoint can be observed before a zero-pause successor
             # advances. Use that real pose, never the successor's moving pose.
             end = current.get("travelEnd")
             successor_pose = []
             if type(actor["motionDuration"]) is int and actor["motionDuration"] > 0:
-                for axis in ("x", "y"):
-                    delta = (actor["target"][axis] - actor["origin"][axis]) << 16
-                    step = abs(delta) // actor["motionDuration"]
-                    successor_pose.append((actor["origin"][axis] << 16) + 0x8000
-                                          + (step if delta >= 0 else -step))
-            # At elapsed1 of a two-frame tile, the new motion has already
-            # crossed its tile boundary. Its logical target is not the old
-            # motion's endpoint. Keep the endpoint actually read last frame.
-            fast_tile = (actor["motionDuration"] == 2 and max(
+                successor_pose = self._successor_pose(actor, current)
+            # At elapsed1 of a one- or two-frame tile, the new motion has
+            # already crossed its logical boundary. A one-frame Walk can even
+            # be COMMIT_PENDING in this same completed queue. Keep the old
+            # endpoint read on the preceding frame, not the new target pose.
+            fast_tile = (actor["motionDuration"] in (1, 2) and max(
                 abs(actor["target"][axis] - actor["origin"][axis]) for axis in ("x", "y")) == 1)
             successor_logical = [actor["target" if fast_tile else "origin"][axis] for axis in ("x", "y")]
             observed_successor = (
-                current["kind"] == "WALK" and moving and actor["motionKind"] == "WALK"
-                and actor["motionPhase"] == "MOVING"
+                current["kind"] in self.CONTINUOUS_GROUND_KINDS and moving
+                and actor["motionKind"] in self.CONTINUOUS_GROUND_KINDS
+                and (actor["motionPhase"] == "MOVING" or
+                     (actor["motionPhase"] == "COMMIT_PENDING" and actor["motionDuration"] == 1))
                 and type(actor["motionElapsed"]) is int and actor["motionElapsed"] == 1
                 and actor["handle"] == current["handle"]
                 and actor["behaviorFingerprint"] == current["fingerprint"]
                 and [actor["origin"]["x"], actor["origin"]["y"]] == current["target"]
                 and [actor["logical"]["x"], actor["logical"]["y"]] == successor_logical
                 and (not fast_tile or current.get("travelEndLogical") == current["target"])
-                and end is not None and end["frame"] == frame - 1
+                and end is not None and current.get("lastEndpointFrame", end["frame"]) == frame - 1
                 and current.get("travelEndRender") is not None
                 and complete_travel(current)
                 and [engine["pos_x"], engine["pos_z"]] == successor_pose
                 and engine.get("unk88_y", 0) == 0
             )
+            one_frame_successor = observed_successor and actor["motionDuration"] == 1 \
+                and actor["motionPhase"] == "COMMIT_PENDING"
             commit = actor["commitSequence"]
             if commit != (current["commitBefore"] + 1) & 0xFFFFFFFF:
                 self._fail("missing-terminal-commit", expected=current["commitBefore"] + 1,
@@ -230,7 +275,7 @@ class MotionRecorder:
                 "travelEnd": None, "commitFrame": None,
             }
         current = self.current
-        if current is None or actor["motionPhase"] != "MOVING":
+        if current is None or (actor["motionPhase"] != "MOVING" and not one_frame_successor):
             return
         elapsed = actor["motionElapsed"]
         sample_key = (frame, key, elapsed)
@@ -259,6 +304,16 @@ class MotionRecorder:
         elif elapsed not in (0, 1):
             self._fail("missed-motion-start", elapsed=elapsed)
         current["samples"].append(sample)
+        if one_frame_successor:
+            # The only completed-queue sample for this tile is its exact
+            # endpoint. Native mounted proof separately requires both the
+            # origin and endpoint callbacks in this frame; do not invent an
+            # elapsed-zero completed frame or interpolate a missing pose.
+            current["travelEnd"] = {"frame": frame, "elapsed": 1,
+                                    "render": [engine["pos_x"], engine["pos_z"]],
+                                    "observedBy": "one-frame-successor"}
+            current["travelEndRender"] = [engine["pos_x"], engine["pos_y"], engine["pos_z"]]
+            current["travelEndLogical"] = [actor["logical"]["x"], actor["logical"]["y"]]
 
 
 def observed_chain_reset(request: bytes, response: bytes, returned: bool):

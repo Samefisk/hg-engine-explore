@@ -89,7 +89,11 @@ const elements = {};
   "pokemonLibrary", "pokemonLibraryCount", "pokemonInspector",
   "profilesView", "profileSearch", "profileKindFilter", "profileLibrary",
   "profileContextSpecies", "profileContextTerrain", "profileContextLevel",
-  "profileContextShiny", "resolveContext", "profileResolution", "profileInspector",
+  "profileContextShiny", "profileContextFrame", "profileContextSubjectX", "profileContextSubjectY",
+  "profileContextFacing", "profileContextTerrainMask", "profileContextMovementSpeed",
+  "profileContextPlayerX", "profileContextPlayerY", "profileContextPlayerValid",
+  "profileContextActiveUntil", "profileContextCooldownUntil", "profileContextCandidates",
+  "resolveContext", "profileResolution", "profileInspector",
   "profileWorkbench", "profileResolverDrawer", "openProfileResolver", "closeProfileResolver",
   "routesView", "routeSearch", "routeFilters", "routeLibrary", "routeInspector",
   "soundsView", "soundSearch", "soundFilters", "soundLibrary", "soundInspector",
@@ -205,13 +209,23 @@ const API_TIMEOUT_MS = 60000;
 
 async function timedJsonRequest(path, options = {}, timeoutMs = API_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  const externalSignal = options.signal;
+  const requestOptions = { ...options };
+  delete requestOptions.signal;
+  let timedOut = false;
+  const abortFromCaller = () => controller.abort();
+  if (externalSignal?.aborted) controller.abort();
+  else externalSignal?.addEventListener("abort", abortFromCaller, { once: true });
+  const timer = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
   try {
-    const response = await fetch(path, { ...options, signal: controller.signal });
+    const response = await fetch(path, { ...requestOptions, signal: controller.signal });
     const result = await response.json();
     return { response, result };
   } catch (error) {
-    if (error?.name === "AbortError") {
+    if (error?.name === "AbortError" && timedOut) {
       const wrapped = new Error(`The server did not respond within ${Math.round(timeoutMs / 1000)} seconds.`, { cause: error });
       wrapped.isTimeout = true;
       throw wrapped;
@@ -219,6 +233,7 @@ async function timedJsonRequest(path, options = {}, timeoutMs = API_TIMEOUT_MS) 
     throw error;
   } finally {
     window.clearTimeout(timer);
+    externalSignal?.removeEventListener("abort", abortFromCaller);
   }
 }
 
@@ -234,6 +249,7 @@ const api = {
         timeoutMs
       ));
     } catch (error) {
+      if (error?.name === "AbortError") throw error;
       if (error?.isTimeout) throw error;
       if (error instanceof SyntaxError) throw new Error("The V2 server returned an unreadable response.", { cause: error });
       throw offlineRequestError(error);
@@ -243,7 +259,8 @@ const api = {
   },
 
   async post(path, payload = {}, options = {}) {
-    const headers = new Headers({ "Content-Type": "application/json", ...(options.headers || {}) });
+    const { timeoutMs = API_TIMEOUT_MS, headers: optionHeaders, ...requestOptions } = options;
+    const headers = new Headers({ "Content-Type": "application/json", ...(optionHeaders || {}) });
     if (MUTATION_PATHS.has(path)) {
       if (state.conflict) throw new Error("Sources changed. Your draft is preserved and must be applied to the latest revision.");
       if (!state.revision) throw new Error("The workspace revision is not loaded yet.");
@@ -253,11 +270,13 @@ const api = {
     let result;
     try {
       ({ response, result } = await timedJsonRequest(path, {
+        ...requestOptions,
         method: "POST",
         headers,
         body: JSON.stringify(payload),
-      }));
+      }, timeoutMs));
     } catch (error) {
+      if (error?.name === "AbortError") throw error;
       const wrapped = error?.isTimeout
         ? error
         : error instanceof SyntaxError

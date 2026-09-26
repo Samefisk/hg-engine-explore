@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.stantler-sprint-wall-approach",
+  "title": "Mounted Sprint reaches the last open tile before a wall and turns away",
+  "status": "active",
+  "capabilities": ["mount.lifecycle", "walk.acceleration"],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md#5-motion-module-policy",
+    "actor": "One prepared current Mounted Stantler (species 234, party slot 0) at the copied save's Route 29 map 33 tile (585,406)",
+    "trigger": "Hold Right for 120 completed game frames along the clear lane toward the solid wall at (590,406), then press Up to leave from the last open tile (589,406) and release it through the terminal commit",
+    "observable": "The same mounted Stantler completes the cardinal Walk from (588,406) to the last open tile (589,406), never enters or targets the blocked wall, remains under rider control, and completes a normal Up Walk to (589,405).",
+    "setupAudit": "complete",
+    "setupMutations": [{
+      "phase": "before-observation",
+      "target": "fixture",
+      "change": "Use the disposable copy of test.sav at (585,406); assert the saved start, prepare party slot 0 Stantler, spawn native Mounted role, and bind its exact actor. Do not teleport or edit movement state, profile, speed, Hop target, timers or input during observation."
+    }],
+    "limits": [
+      "The copied save and prepared party do not prove natural capture, selection or spawning; they preserve the normal mounted movement trigger.",
+      "Pre-edit live terrain readback found (589,406) and (589,405) loaded and clear, while (590,406) and (591,406) are blocked. The actor reader checks the exact route but does not re-read collision during this run.",
+      "This proves one eastward wall approach and one safe Up turn, not every wall, moving actor, long-term sprint or presentation feel.",
+      "Copied-data controls reject a premature stop, wall penetration, wrong Walk target, missing native commit, missing turn, and changed mounted actor. The owner-reader control remains a separate requirement."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "stantler", "species": 234, "role": "MOUNTED", "acquisition": "mount",
+    "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Assert the copied save's Route 29 start, prepare and mount own Stantler, then bind the live actor"},
+    {"at": 1, "kind": "input", "value": "Hold Right for 120 completed frames toward the wall without letting the planner stop one tile early"},
+    {"at": 2, "kind": "input", "value": "Press Up until the player reaches (589,405)"},
+    {"at": 3, "kind": "input", "value": "Release Up and observe the actor's terminal commit and idle control return"}
+  ],
+  "stop": {"frameBudget": 220, "condition": "The last open east tile and one safe Up tile have each been committed by the same mounted actor"},
+  "expect": {
+    "requiredEvents": ["MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["MOTION_CANCELED", "CONTEXT_CHANGED", "ACTOR_REBOUND", "CONTROL_REBOUND"],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "mount.stantler-sprint-wall-approach",
+    "claims": ["natural-input", "live-actor-identity", "collision-decision", "logical-commit", "control-release"],
+    "minimumFrames": 120}
+}

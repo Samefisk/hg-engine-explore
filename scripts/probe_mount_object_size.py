@@ -49,7 +49,7 @@ def worker(baseline=False):
                 precode = sum(sizes[k] for k in (".overworld_mount_precode",
                     ".overworld_mount_hop_search", ".overworld_mount_streaming",
                     ".overworld_mount_boundary_thunk"))
-                if precode > 0x328 or sizes[".overworld_mount_motion"] > 0x7B8:
+                if precode > 0x314 or sizes[".overworld_mount_motion"] > 0x7EC:
                     raise RuntimeError(f"mount reserve overflow: precode={precode}, motion={sizes['.overworld_mount_motion']}")
             results.append(dict(flags=extra, sections=sizes,
                 code=sum(v for k, v in sizes.items() if k == ".text" or

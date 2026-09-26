@@ -56,6 +56,7 @@ from tools.overworld.control import (
     _registry_validator_passes,
     _runtime_runner_key,
     _run_command,
+    _scenario_inputs,
     _scenario_run,
     _verify_roadmap,
     build_parser,
@@ -94,6 +95,7 @@ class RuntimeActorStateHelperTests(unittest.TestCase):
         actor_format = "<HH6H8I8h4H16B"
         actor_size = struct.calcsize(actor_format)
         descriptor = {
+            "facade": {"version": 2},
             "state": {
                 "address": 16,
                 "offsets": {"actors": 8},
@@ -118,7 +120,7 @@ class RuntimeActorStateHelperTests(unittest.TestCase):
         slot = 1
         address = 16 + 8 + slot * 96
         values = (
-            1, actor_size,
+            2, actor_size,
             slot, 9, 4, 5, 6, 0,
             155, 0x1234, 0x56, 7, 8, 9, 10, 11,
             12, 13, 14, 15, 16, 17, 18, 19,
@@ -801,6 +803,18 @@ def skid_motion_events(
 
 
 class ScenarioContractTests(unittest.TestCase):
+    def test_source_only_scenario_inputs_do_not_require_a_rom(self):
+        with mock.patch(
+                "tools.overworld.control.source_record",
+                return_value={"sha256": "source"}), mock.patch(
+                "tools.overworld.control.file_record",
+                side_effect=lambda path, _repo: str(path)):
+            source_only = _scenario_inputs(
+                {"fixture": {"rom": None, "save": None}})
+            default_rom = _scenario_inputs({"fixture": {}})
+        self.assertNotIn("test.nds", source_only["files"])
+        self.assertIn("test.nds", default_rom["files"])
+
     def validate(self, document: dict) -> dict:
         return validate_scenario(document, Path(f"{document['id']}.json"))
 
@@ -2137,14 +2151,14 @@ class ScenarioContractTests(unittest.TestCase):
 
 
 class MovementPolicyDescriptorTests(unittest.TestCase):
-    def test_private_policy_state_is_not_resolved_from_version_4_descriptor(self) -> None:
+    def test_private_policy_state_is_not_resolved_from_version_5_descriptor(self) -> None:
         descriptor = {
             "privateServices": [
                 {
                     "name": "movementPolicy",
-                    "reserved": 0,
+                    "conditionAdapter": 0x023B9000,
                     "status": "available",
-                    "version": 4,
+                    "version": 5,
                 }
             ]
         }
@@ -2154,7 +2168,7 @@ class MovementPolicyDescriptorTests(unittest.TestCase):
         ):
             resolve_movement_policy_state(descriptor, 7)
 
-    def test_version_3_policy_descriptor_is_stale(self) -> None:
+    def test_version_4_policy_descriptor_is_stale(self) -> None:
         descriptor = {
             "privateServices": [
                 {
@@ -2163,12 +2177,12 @@ class MovementPolicyDescriptorTests(unittest.TestCase):
                     "stateSize": 32,
                     "stateCapacity": 7,
                     "status": "available",
-                    "version": 3,
+                    "version": 4,
                 }
             ]
         }
 
-        with self.assertRaisesRegex(ValidationFailure, "not available at version 4"):
+        with self.assertRaisesRegex(ValidationFailure, "not available at version 5"):
             resolve_movement_policy_state(descriptor, 7)
 
 

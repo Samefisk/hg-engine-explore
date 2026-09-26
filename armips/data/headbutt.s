@@ -737,18 +737,18 @@ headbuttheader  32,  15,   0   // Route 28
 
 headbuttheader  33,  35,   0   // Route 29
     // normal slots
-    headbuttencounter SPECIES_MAREEP, 2, 3
-    headbuttencounter SPECIES_MAREEP, 2, 3
-    headbuttencounter SPECIES_MAREEP, 2, 3
-    headbuttencounter SPECIES_MAREEP, 2, 3
-    headbuttencounter SPECIES_MAREEP, 2, 3
-    headbuttencounter SPECIES_MAREEP, 2, 3
-    headbuttencounter SPECIES_MAREEP, 4, 5
-    headbuttencounter SPECIES_MAREEP, 4, 5
-    headbuttencounter SPECIES_MAREEP, 4, 5
-    headbuttencounter SPECIES_MAREEP, 4, 5
-    headbuttencounter SPECIES_MAREEP, 4, 5
-    headbuttencounter SPECIES_MAREEP, 4, 5
+    headbuttencounter SPECIES_SNORLAX, 2, 3
+    headbuttencounter SPECIES_SNORLAX, 2, 3
+    headbuttencounter SPECIES_SNORLAX, 2, 3
+    headbuttencounter SPECIES_SNORLAX, 2, 3
+    headbuttencounter SPECIES_SNORLAX, 2, 3
+    headbuttencounter SPECIES_SNORLAX, 2, 3
+    headbuttencounter SPECIES_SNORLAX, 4, 5
+    headbuttencounter SPECIES_SNORLAX, 4, 5
+    headbuttencounter SPECIES_SNORLAX, 4, 5
+    headbuttencounter SPECIES_SNORLAX, 4, 5
+    headbuttencounter SPECIES_SNORLAX, 4, 5
+    headbuttencounter SPECIES_SNORLAX, 4, 5
     // special slots
     headbuttencounter SPECIES_NONE, 0, 0
     headbuttencounter SPECIES_NONE, 0, 0

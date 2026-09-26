@@ -37,7 +37,7 @@ class Fixture:
         self.pose = dict(flags=0x201,x=550,y=380,pos_x=36077568,pos_y=0,pos_z=24936448)
         self.lifecycle = dict(authenticated=True,fieldReady=1,controlPointer=0x02220000,
             managerPointer=0x02221000,managerExecState=2,managerProcState=0,reason=None)
-        descriptor = dict(compatibility=dict(address=self.table,version=3,size=32,
+        descriptor = dict(facade=dict(version=1), compatibility=dict(address=self.table,version=3,size=32,
             callbacks=dict(getContext=self.address|1)),state=dict(address=self.state,size=2448,
             offsets=dict(fieldEpoch=12,mapGeneration=46)),capacities=dict(actors=10))
         symbols = {FUNCTION:self.address|1,"gOverworldActorSystemState":self.state}

@@ -15,10 +15,6 @@ __asm__(
 #define FIELD_STREAM_CODE \
     __attribute__((section(".overworld_field_terrain_stream_code")))
 
-extern void LONG_CALL ov01_021F62E8(
-    VecFx32 *position,
-    void *landDataManager);
-
 static FIELD_STREAM_CODE BOOL OverworldFieldTerrainStream_ValidateCall(
     const OverworldFieldTerrainStreamCall *call)
 {
@@ -84,9 +80,10 @@ static FIELD_STREAM_CODE BOOL OverworldFieldTerrainStream_RestoreWatcher(
     if (manager == NULL) {
         return FALSE;
     }
-    ov01_021F62E8(
-        (VecFx32 *)fieldSystem->playerAvatar->mapObject->posVec,
-        manager);
+    /* The stock helper also overwrites the last sampled position. A watcher
+     * change is not a completed land load, so keep that sample untouched. */
+    *(VecFx32 **)((u8 *)manager + 0xDC) =
+        (VecFx32 *)fieldSystem->playerAvatar->mapObject->posVec;
     return TRUE;
 }
 
@@ -156,9 +153,9 @@ OverworldFieldTerrainStream_Apply(
         runtime->fieldSystem = fieldSystem;
         runtime->fieldContext = call->fieldContext;
         runtime->motionIdentity = call->motionIdentity;
-        ov01_021F62E8(
-            &runtime->watchedAnchor,
-            manager);
+        /* Let the stock loader sample the new watcher on its own update. */
+        *(VecFx32 **)((u8 *)manager + 0xDC) =
+            &runtime->watchedAnchor;
         runtime->active = TRUE;
         return OVERWORLD_FIELD_TERRAIN_STREAM_WAITING;
     }

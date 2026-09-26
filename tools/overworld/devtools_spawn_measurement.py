@@ -98,19 +98,19 @@ def check_pool_spawn_receipt(spawn, *, source_sha256, authored_profiles):
     resolved = profiles[-1]
     if resolved.get("resolved") is not True or resolved.get("sourceSha256") != source_sha256:
         raise ValueError("finalizer profile has missing or stale source identity")
-    request = _bytes(resolved.get("requestHex"), 20, "resolver request")
-    result = _bytes(resolved.get("resultHex"), 256, "resolver result")
-    applied = int.from_bytes(result[248:252], "little")
-    matched, forced, conditional = struct.unpack_from("<III", result, 236)
+    request = _bytes(resolved.get("requestHex"), 44, "resolver request")
+    result = _bytes(resolved.get("resultHex"), 200, "resolver result")
+    applied = int.from_bytes(result[172:176], "little")
+    matched, forced, conditional = struct.unpack_from("<III", result, 160)
     owner = matched | forced
-    # Active/Tired references also enter appliedOverrideMask. They are not
-    # Owner layers. Conditional layering and canopy-hopper exceptions require
-    # separate witnesses; this narrow legacy POOL check must not infer them.
-    if forced or conditional or owner & ~applied or result[218] == 4 or result[222] == 4:
+    # Tired references also enter appliedOverrideMask. They are not Owner
+    # layers. Conditional layering and canopy-hopper exceptions require a
+    # separate witness; this narrow legacy POOL check must not infer them.
+    if forced or conditional or owner & ~applied or result[146] == 4 or result[150] == 4:
         raise ValueError("conditional, forced or tree-top placement is outside this POOL witness")
     if resolved.get("appliedOverrides") != applied \
-            or resolved.get("fingerprint") != int.from_bytes(result[252:256], "little") \
-            or resolved.get("lanes") != [result[n:n + 72].hex() for n in (0, 72, 144)]:
+            or resolved.get("fingerprint") != int.from_bytes(result[176:180], "little") \
+            or resolved.get("lanes") != [result[n:n + 72].hex() for n in (0, 72)]:
         raise ValueError("native finalizer profile bytes differ")
     if int.from_bytes(request[:2], "little") != incoming["species"] \
             or request[8] != incoming["level"] or request[9] != receipt["terrain"] \

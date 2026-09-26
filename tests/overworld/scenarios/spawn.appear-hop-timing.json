@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "spawn.appear-hop-timing",
-  "title": "Appear Hop returns control when its final restore completes",
+  "title": "Appear Hop returns control after its idle handoff",
   "status": "active",
   "capabilities": [
     "spawn",
@@ -14,7 +14,7 @@
     "expectationSource": "TICKETS.md#TKT-0003",
     "actor": "One prepared WILD Clefairy (35), created by the native finalizer and bound by its full current handle with attached presentation.",
     "trigger": "Spawn Clefairy at Route 29 (587,406) with its resolved APPEAR_HOP startup and keep input neutral.",
-    "observable": "The same actor runs jump, delay and final restore in order, draws one same-tile vertical arc, and changes from EMOTING to CHILL on the first completed frame after restore. No fixed timer tail remains.",
+    "observable": "The same actor runs jump, delay and final restore in order, draws one same-tile vertical arc, publishes one idle handoff frame, and returns control on the next completed frame. No fixed timer tail remains.",
     "setupAudit": "complete",
     "setupMutations": [
       {
@@ -25,7 +25,7 @@
     ],
     "limits": [
       "This proves the shared APPEAR_HOP startup for one prepared Wild Clefairy. It does not prove natural population selection or other spawn locomotion modes.",
-      "The observation is limited to 30 completed game frames. Missing identity, presentation, command order, vertical arc, contiguous frames, or first-frame control return fails."
+      "The observation is limited to 30 completed game frames. Missing identity, presentation, command order, vertical arc, contiguous frames, idle publication, or next-frame control return fails."
     ]
   },
   "fixture": {
@@ -57,12 +57,12 @@
     {
       "at": 1,
       "kind": "lifecycle",
-      "value": "Retain each completed frame through jump, delay, restore, and immediate CHILL control return."
+      "value": "Retain each completed frame through jump, delay, restore, idle publication, and control return."
     }
   ],
   "stop": {
     "frameBudget": 30,
-    "condition": "The same Clefairy returns control on the first completed frame after restore, or an exact failure ends the job."
+    "condition": "The same Clefairy returns control on the first completed frame after its idle publication, or an exact failure ends the job."
   },
   "expect": {
     "requiredEvents": [],
@@ -71,7 +71,7 @@
       "The finalized startup resolves APPEAR_HOP locomotion for the bound Clefairy.",
       "The visible actor completes one same-tile vertical Hop.",
       "Jump, delay, restore, and idle commands occur in order on contiguous completed frames.",
-      "Controller state returns to CHILL on the first completed idle frame after restore."
+      "Controller state returns to routine control on the first completed frame after the idle publication."
     ]
   },
   "capture": "none",

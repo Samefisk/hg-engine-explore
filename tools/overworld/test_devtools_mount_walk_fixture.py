@@ -35,7 +35,7 @@ def session():
     raw[8:80] = bytes(range(72))
     raw[20] = 1
     struct.pack_into("<IHHHHBBBB", raw, 80, 77, 165, 33, 3, 4, 0, 5, 0, 1)
-    struct.pack_into("<IBBBB", raw, 96, 1, 2, 0, 0, 0)
+    struct.pack_into("<IBBBB", raw, 96, 1, 3, 0, 0, 0)
     raw[122] = 1
     s.put(STATE_ADDRESS, raw)
     s.aborted = []
@@ -223,7 +223,7 @@ class IndependentAnchors(unittest.TestCase):
         s = session()
         address = 0x023BB700
         code = bytes(36) + struct.pack("<I", STATE_ADDRESS)
-        entry = struct.pack("<IHHI", 0x544E554D, 9, 32, address | 1) + bytes(20)
+        entry = struct.pack("<IHHI", 0x544E554D, 11, 32, address | 1) + bytes(20)
         s.rt.linked_symbol = lambda _, name: STATE_ADDRESS if name == "sOverworldMountState" else address | 1
         s.packaged_code = lambda a, n: entry if a == 0x023BB600 else code
         with patch("tools.overworld.devtools_runtime._elf_function_extent", return_value=(address, 40)), \

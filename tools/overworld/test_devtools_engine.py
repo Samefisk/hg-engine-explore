@@ -43,8 +43,8 @@ class WildStagedMotionTests(unittest.TestCase):
         for slot in (0, 7, 9):
             engine, emu, memory = self.fixture()
             for pending, distance in ((0, 0), (1, 0), (0, 2), (2, 3)):
-                memory[engine.WILD_STATE + 704 + slot] = pending
-                memory[engine.WILD_STATE + 684 + slot] = distance
+                memory[engine.WILD_STATE + 684 + slot] = pending
+                memory[engine.WILD_STATE + 664 + slot] = distance
                 memory[engine.WILD_STATE + slot * 20] = 4
                 value = engine.wild_staged_motion(emu, slot)
                 self.assertTrue(value["known"])
@@ -75,18 +75,18 @@ class WildStagedMotionTests(unittest.TestCase):
         self.assertEqual(len(code), 116)
         compiler = shutil.which("arm-none-eabi-gcc") or "/opt/homebrew/bin/arm-none-eabi-gcc"
         source = '#include "overworld_wild_spawns_internal.h"\n#include <stddef.h>\n'
-        source += '_Static_assert(sizeof(OverworldWildSpawnState)==964,"size");\n'
+        source += '_Static_assert(sizeof(OverworldWildSpawnState)==952,"size");\n'
         source += '_Static_assert(OW_WILD_MAX_SPAWNS==10,"slots");\n'
-        for name, offset in (("movementStagedHopPending", 704), ("movementStagedHopDistances", 684),
-                             ("movementPendingDirections", 434), ("movementPendingDistances", 444),
+        for name, offset in (("movementStagedHopPending", 684), ("movementStagedHopDistances", 664),
+                             ("movementPendingDirections", 414), ("movementPendingDistances", 424),
                              ("pendingPersonality", 252), ("pendingSpecies", 256),
-                             ("pendingSlot", 262), ("pendingMapGeneration", 948),
-                             ("pendingEncounterGeneration", 950)):
+                             ("pendingSlot", 262), ("pendingMapGeneration", 928),
+                             ("pendingEncounterGeneration", 930)):
             source += f'_Static_assert(offsetof(OverworldWildSpawnState,{name})=={offset},"{name}");\n'
         command = [compiler, "-x", "c", "-std=c11", "-mthumb", "-mcpu=arm946e-s", "-I" + str(ROOT / "include"), "-fsyntax-only", "-"]
         result = subprocess.run(command, input=source, text=True, capture_output=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stderr[-2000:])
-        wrong = subprocess.run(command, input=source.replace("==704", "==703"), text=True, capture_output=True, timeout=20)
+        wrong = subprocess.run(command, input=source.replace("==684", "==683", 1), text=True, capture_output=True, timeout=20)
         self.assertNotEqual(wrong.returncode, 0)
 
     def test_unknown_linked_code_is_not_a_known_layout(self):
@@ -94,7 +94,7 @@ class WildStagedMotionTests(unittest.TestCase):
         real = fresh_engine()
         real.WILD_STATE = engine.WILD_STATE
         with patch("tools.overworld.devtools_field_cleanup.symbol", side_effect=[
-                (engine.WILD_STATE, 964, None), (0x02310000, 116, bytes(116))]), \
+                (engine.WILD_STATE, 944, None), (0x02310000, 108, bytes(108))]), \
                 patch.object(Path, "read_bytes", return_value=b"unused fixture"):
             value = real.wild_staged_motion(emu, 0)
         self.assertFalse(value["known"])
@@ -125,7 +125,7 @@ class WildStagedMotionTests(unittest.TestCase):
                 elif fault == "opcode": code[17] ^= 0x08
                 elif fault == "other-byte": code[40] ^= 1
                 table = {
-                    "sOverworldWildSpawnState": (0x02300000, 964, None),
+                    "sOverworldWildSpawnState": (0x02300000, 952, None),
                     "OverworldWildSpawns_ClearStagedHopTargetLocal": (entry, 116, bytes(code)),
                     names[0]: (targets[0], 2, b"\x70\x47"),
                     names[1]: (targets[1], 2, b"\x70\x47"),

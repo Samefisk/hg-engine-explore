@@ -69,15 +69,17 @@ class Overlay153OccupancyTailTests(unittest.TestCase):
 class Overlay153CopyClearOwnerTests(unittest.TestCase):
     def setUp(self):
         self.owner = "Walk_RejectDiagonalCandidate"
+        self.input_owner = "OverworldWalk_FilterMountedInput"
         self.copy, self.clear = "PokemonMoveHistory_OverlayMemcpy", "PokemonMoveHistory_OverlayMemset"
-        self.symbols = {self.owner: 0x023BFE50, self.copy: 0x023BF354, self.clear: 0x023BF35C}
-        self.sizes = {self.owner: 194}
+        self.symbols = {self.owner: 0x023BFE50, self.input_owner: 0x023BF9A0,
+                        self.copy: 0x023BF354, self.clear: 0x023BF35C}
+        self.sizes = {self.owner: 194, self.input_owner: 0x1BE}
         self.calls = sorted(
             [(address, "bl", self.symbols[self.copy]) for address in (0x023BE694, 0x023BEBF6, 0x023BEE0E)]
             + [(address, "bl", self.symbols[self.clear]) for address in
-               (0x023BE52C, 0x023BFA4E, 0x023BFAB6, 0x023BFE66, 0x023BFE70, 0x023BFE7A)])
+               (0x023BE52C, 0x023BFA40, 0x023BFAAA, 0x023BFE66, 0x023BFE70, 0x023BFE7A)])
 
-    def test_old_owners_and_three_typed_request_clears_pass(self):
+    def test_stock_and_two_bounded_mounted_owners_pass(self):
         result = gate.overlay153_copy_clear_owner_contracts(self.calls, self.symbols, self.sizes)
         self.assertEqual(len(result[self.clear]), 6)
         self.assertEqual(len(result[self.copy]), 3)
@@ -100,9 +102,15 @@ class Overlay153CopyClearOwnerTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             gate.overlay153_copy_clear_owner_contracts(
                 self.calls, self.symbols, {self.owner: 0x200})
+        with self.assertRaises(SystemExit):
+            gate.overlay153_copy_clear_owner_contracts(
+                self.calls, {**self.symbols, self.input_owner: 0x023BF9A2}, self.sizes)
+        with self.assertRaises(SystemExit):
+            gate.overlay153_copy_clear_owner_contracts(
+                self.calls, self.symbols, {**self.sizes, self.input_owner: 0x1C2})
 
-    def test_three_compiler_local_offsets_can_move_within_same_owner(self):
-        calls = [(address + 2 if address >= 0x023BFE50 else address, mode, target)
+    def test_compiler_local_offsets_can_move_within_each_owner(self):
+        calls = [(address + 2 if address >= 0x023BF9A0 else address, mode, target)
                  for address, mode, target in self.calls]
         gate.overlay153_copy_clear_owner_contracts(calls, self.symbols, self.sizes)
 

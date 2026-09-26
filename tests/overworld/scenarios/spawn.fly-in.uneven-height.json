@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "id": "spawn.fly-in.uneven-height",
+  "title": "Fly In lands at the exact uneven destination surface height",
+  "status": "active",
+  "capabilities": ["spawn"],
+  "proofLevel": "S4",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/profile-building-blocks-implementation-plan.md#pb4--add-fly-in-and-shorten-old-offscreen-hop",
+    "actor": "One prepared WILD Pidgey (species 16) finalized for the natural map 33 signpost destination (581,397), with Fly In as its resolved Placement and one current attached presentation.",
+    "trigger": "Put the player at (585,405), where Pidgey's authored destination scan naturally selects the signpost at (581,397), require a successful destination surface-height read that differs from the offscreen origin height, then keep input neutral through the complete Fly In descent.",
+    "observable": "Requirement current.fly-in-uneven-height: the natural prepared destination is validated and its exact native surface height is retained before offscreen-origin selection. Actor and sprite descend monotonically from flying height. The native shadow is hidden throughout the airborne flight, including over the signpost surface, so it cannot project onto building walls. The actor commits once at (581,397), finishes with both final Y values exactly equal to the retained destination surface height, zero terminal offset, and normal Routine control returned.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use a disposable test.sav, checked teleport to map 33 tile (585,405), and the normal prepared-spawn operation for Pidgey. Its authored destination scan must choose the signpost at (581,397). Do not patch the target, surface, height, origin, Fly In state, timing, pose, or terminal result."
+      }
+    ],
+    "limits": [
+      "The bound runtime observer retains Fly In preparation, target height, complete descent and shadow-policy samples, terminal actor pose, commit, and control return. Its copied-data controls reject missing subject and missing feature evidence.",
+      "Activation requires a native read confirming that natural target (581,397) is a loaded valid destination with an uneven height relative to the chosen origin. A different, flat, or unknown target is setup failure, not a pass.",
+      "Prepared spawning proves Fly In landing for Pidgey at this target. It does not prove natural population selection, every surface, or Hop From Off Screen."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [
+    {"id": "pidgey", "species": 16, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}
+  ],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Finalize and bind Pidgey for natural map 33 signpost target (581,397), retaining its validated destination height before origin selection."},
+    {"at": 1, "kind": "lifecycle", "value": "Observe Fly In creation at offscreen flying height and every rendered descent sample."},
+    {"at": 2, "kind": "lifecycle", "value": "Observe one terminal commit at the target, exact actor and sprite final Y, zero offset, and Routine control return."}
+  ],
+  "stop": {"frameBudget": 240, "condition": "Pidgey lands once at (581,397) with actor and sprite Y equal to the retained uneven destination height and returns control."},
+  "expect": {
+    "requiredEvents": ["MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["MOTION_CANCELED", "ACTOR_REBOUND", "CONTEXT_CHANGED"],
+    "invariants": [
+      "Destination height is retained before offscreen-origin selection",
+      "The destination height differs from the origin height",
+      "Fly In sprite height descends monotonically while its Jump-style lift stays above sampled ground",
+      "The native shadow stays visible on open ground, follows the moving ground height, and obeys the usual signpost suppression",
+      "Actor and sprite final Y equal the retained destination surface height",
+      "The terminal presentation offset is zero and control returns to the normal Routine"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "spawn.fly-in.uneven-height",
+    "claims": ["live-actor-identity", "profile-resolution", "terrain-selection", "logical-commit", "rendered-motion", "frame-pacing", "control-release"],
+    "minimumFrames": 1
+  }
+}

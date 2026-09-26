@@ -30,10 +30,12 @@ def authenticate(session):
     require(len(services) == 1, "missing public movement policy service")
     service = services[0]
     target = session.target("reduce_walk")
-    require(service.get("status") == "available" and service.get("version") == 4
-            and service.get("size") == 16 and service.get("reserved") == 0,
+    adapter = service.get("conditionAdapter")
+    require(service.get("status") == "available" and service.get("version") == 5
+            and service.get("size") == 16 and type(adapter) is int and adapter != 0,
             "public movement policy ABI differs")
-    expected = struct.pack("<IHHII", 0x504D574F, 4, 16, service["policy"], 0)
+    expected = struct.pack(
+        "<IHHII", 0x504D574F, 5, 16, service["policy"], adapter)
     require(session.packaged_code(service["address"], 16) == expected,
             "public movement policy entry differs")
     table = session.packaged_code(service["policy"], 24)
@@ -108,7 +110,9 @@ class WalkPolicyReset:
         require(slot < capacity, "RESET actor slot outside capacity")
         policy_offset = offset + stride * slot + policy_member
         raw = s.read(base, size)
-        require(len(raw) == size and raw[:8] == struct.pack("<IHH", 0x5353574F, 1, size),
+        require(len(raw) == size and raw[:8] == struct.pack(
+                    "<IHH", 0x5353574F,
+                    s.rt.ACTOR_DESCRIPTOR["facade"]["version"], size),
                 "RESET actor state is not initialized")
         policy = raw[policy_offset:policy_offset + 32]
         require(policy[5] == 0 and policy[22] == 0 and policy[23] == 0,

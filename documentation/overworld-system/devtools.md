@@ -470,7 +470,7 @@ Only its owned heap11 buffer is written. It retains the exact query, returned
 snapshot, current actor bytes and native call receipts, and checks cleanup.
 This is diagnostic lookup evidence, not accepted motion, role or roadmap proof.
 
-For the seven fixed resolver deployment cases, use
+For the nine fixed resolver deployment cases, use
 `scripts/owctl dev command resolver.probe --args '{}' --json --summary`.
 It requires a quiescent field and a successful natural resolver discovery in
 the current field/heap. It marks the session prepared, authenticates the live

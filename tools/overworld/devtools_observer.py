@@ -98,6 +98,7 @@ class NativeObservation:
         self.caller_bounds = {}
         self.latest_finalizations = {}
         self.spawn_height_contexts, self.spawn_height_call_sites = [], {}
+        self.spawn_height_trace = None
         self.tokens, self.return_tokens = [], []
         self.calls = {}
         self.installed = False
@@ -164,7 +165,12 @@ class NativeObservation:
             # At most one unconsumed value per wild slot can exist.
             self.finalizations[value["slot"]] = deepcopy(value)
         if kind == "spawn-landing-height":
-            self.spawn_contexts[-1]["_activeSpawnJump"]["landingHeight"] = deepcopy(value)
+            parent = self.spawn_contexts[-1]
+            jump = parent.get("_activeSpawnJump")
+            if jump is None:
+                parent["initialLandingHeight"] = deepcopy(value)
+            else:
+                jump["landingHeight"] = deepcopy(value)
 
     def _tap(self, label, address, expected, before, after, scope=None, *, resident=False):
         address &= ~1
@@ -289,7 +295,7 @@ class NativeObservation:
                "OverworldWildSpawns_StartPreparedCustomJumpCommand", self._jump_before, self._jump_after)
         linked("spawn-landing-height", wild_file, rt.WILD_SYMBOLS,
                "OverworldWildSpawns_ResolveObjectLandingHeight", self._spawn_height_before, self._spawn_height_after,
-               scope=lambda: bool(self.spawn_contexts and self.spawn_contexts[-1].get("_activeSpawnJump")))
+               scope=lambda: bool(self.spawn_contexts))
         linked("spawn-landing-surface", wild_file, rt.WILD_SYMBOLS,
                "OverworldWildSpawns_QuerySurface", self._spawn_surface_before, self._spawn_height_detail_after,
                scope=lambda: bool(self.spawn_height_contexts))
@@ -1056,11 +1062,15 @@ class NativeObservation:
                      "form": data[18], "level": data[19]}
         value = {"position": [int.from_bytes(data[n:n + 4], "little", signed=True) for n in (0, 4)],
                  "preparedEncounter": encounter}
-        if len(data) == 30:
+        if len(data) >= 30:
             value["startup"] = {
                 "target": [int.from_bytes(data[n:n + 2], "little", signed=True) for n in (20, 22)],
                 "origin": [int.from_bytes(data[n:n + 2], "little", signed=True) for n in (24, 26)],
                 "locomotion": data[28], "hopDirection": data[29]}
+        if len(data) >= 36:
+            value["startup"]["targetBaseY"] = int.from_bytes(
+                data[32:36], "little", signed=True)
+            value["startupHex"] = data[20:36].hex()
         return value
 
     def _prepared_call(self):
@@ -1255,8 +1265,8 @@ class NativeObservation:
         result = {key: deepcopy(data) for key, data in value.items() if key != "superseded"}
         result.update(returnWorldContext=current, returnValue=context["returnValue"], pairEligible=False)
         if context["returnValue"] == 1:
-            data = public_bytes(self.session, value["preparedPointer"], 30)
-            result.update(preparedPrefixHex=data.hex(), **self._prepared_fields(data))
+            data = public_bytes(self.session, value["preparedPointer"], 36)
+            result.update(preparedPrefixHex=data[:30].hex(), **self._prepared_fields(data))
             result["pairEligible"] = (
                 current == value["worldContext"]
                 and all(value[key] == current[key] for key in ("statePointer", "fieldPointer"))
@@ -1273,7 +1283,7 @@ class NativeObservation:
         value = self._prepared_call()
         if value is None:
             return None
-        data = public_bytes(self.session, value["preparedPointer"], 30)
+        data = public_bytes(self.session, value["preparedPointer"], 36)
         prior = self.finalizations.pop(value["slot"], None)
         # A mismatching consumer still uses up that receipt; pointer reuse in
         # another slot cannot leave an old value available for a later spawn.
@@ -1288,9 +1298,10 @@ class NativeObservation:
                     "statePointer", "fieldPointer", "slot", "terrain", "preparedPointer", "worldContext")) \
                     or prior["setupMode"] != ("prepared" if self.session.prepared else "normal"):
                 pair["status"] = "context-mismatch"
-            elif prior["preparedPrefixHex"] != data.hex():
+            elif prior["preparedPrefixHex"] != data[:30].hex():
                 pair["status"] = "prefix-mismatch"
-        value.update(preparedPrefixHex=data.hex(), **self._prepared_fields(data),
+        value.update(preparedPrefixHex=data[:30].hex(), **self._prepared_fields(data),
+                     initialLandingHeight={"status": "not-observed", "surfaceLegality": "unknown"},
                      jumpReceipts=[], resolverReceipts=[], finalization=pair)
         self.spawn_contexts.append(value)
         return value
@@ -1305,6 +1316,11 @@ class NativeObservation:
                 or any(subject.get("subjectIdentity" if key == "personality" else key) != expected
                        for key, expected in value["preparedEncounter"].items())):
             raise NativeObservationError("successful spawn does not match its prepared encounter and slot")
+        trace = self.spawn_height_trace
+        if (context["returnValue"] == 1 and trace is not None
+                and trace["subject"] is None and trace["slot"] == value["slot"]
+                and trace["worldContext"] == value["worldContext"]):
+            trace["subject"] = deepcopy(subject)
         return {**value, "publicSubject": subject}
 
     def _jump_before(self):
@@ -1359,24 +1375,32 @@ class NativeObservation:
 
     def _spawn_height_before(self):
         parent = self.spawn_contexts[-1]
-        jump = parent["_activeSpawnJump"]
-        if parent["startup"]["locomotion"] != 4:
+        jump = parent.get("_activeSpawnJump")
+        initial = jump is None
+        locomotion = parent["startup"]["locomotion"]
+        if initial and locomotion != 7:
             return None
-        self._chain_caller("OverworldWildSpawns_StartPreparedCustomJumpCommandTimed",
-                           cache=self.spawn_height_call_sites)
+        if not initial and locomotion != 4:
+            return None
+        self._chain_caller(
+            "OverworldWildSpawns_SpawnPreparedEncounter" if initial
+            else "OverworldWildSpawns_StartPreparedCustomJumpCommandTimed",
+            cache=self.spawn_height_call_sites)
         regs = self.session.emu.memory.register_arm9
         args = [getattr(regs, key) & 0xFFFFFFFF for key in ("r0", "r1", "r2", "r3")]
-        if args[:2] != [parent["fieldPointer"], jump["sourceIdentity"]["object"]]:
+        rt, emu = self.session.rt, self.session.emu
+        source = rt.wild_spawn(emu, parent["slot"]) if initial else jump["sourceIdentity"]
+        if args[:2] != [parent["fieldPointer"], source["object"]]:
             raise NativeObservationError("spawn landing height field/object differs")
         point = list(map(self._chain_signed, args[2:]))
-        if point != jump["target"]:
+        target = parent["position"] if initial else jump["target"]
+        if point != target:
             return None  # Intermediate height seeding is not the landing target.
         if point != parent["position"] or point != parent["startup"]["target"]:
             raise NativeObservationError("spawn landing borrows a different encounter target")
-        if self.spawn_height_contexts or jump["landingHeight"]["status"] != "not-observed":
+        owner = parent["initialLandingHeight"] if initial else jump["landingHeight"]
+        if self.spawn_height_contexts or owner["status"] != "not-observed":
             raise NativeObservationError("duplicate or reentered spawn landing height")
-        rt, emu = self.session.rt, self.session.emu
-        source = jump["sourceIdentity"]
         if (any(source.get(key) != value for key, value in parent["preparedEncounter"].items())
                 or source.get("map_id") != parent["worldContext"]["mapId"]
                 or not source.get("active") or not source.get("encounter_generation")):
@@ -1385,19 +1409,20 @@ class NativeObservation:
         if (engine.get("pointer") != args[1] or not engine.get("in_manager") or not engine.get("active")
                 or engine.get("object_manager") != engine.get("current_manager")
                 or engine.get("object_map_id") != parent["worldContext"]["mapId"]
-                or engine.get("object_id") != jump["sourceIdentity"].get("object_id")
+                or engine.get("object_id") != source.get("object_id")
                 or engine.get("script_id") != 2074
                 or engine.get("id_lookup", {}).get("status") != "complete"
                 or engine.get("id_lookup", {}).get("eligible_count") != 1
                 or engine.get("id_lookup", {}).get("pointer_matches") is not True):
             raise NativeObservationError("spawn landing native object binding differs")
         record = {"status": "observed", "observationVersion": 1, "slot": parent["slot"],
-                  "sourceIdentity": deepcopy(jump["sourceIdentity"]), "engineIdentity": engine,
+                  "sourceIdentity": deepcopy(source), "engineIdentity": engine,
                   "worldContext": deepcopy(parent["worldContext"]), "target": point,
                   "preparedPointer": parent["preparedPointer"],
                   "preparedEncounter": deepcopy(parent["preparedEncounter"]),
                   "positionBefore": rt.object_state(emu, args[1]),
                   "surfaceQuery": None, "heightRefresh": None, "_activeDetail": None, "_spawn": parent,
+                  "initialPlacement": initial,
                   "surfaceLegality": "unknown", "acceptedProof": False,
                   "scope": "native own-target height preparation; not settled pose or surface legality"}
         self._spawn_height_check(record)
@@ -1469,6 +1494,17 @@ class NativeObservation:
                 value = control.result()
                 self._queue("spawn-height-read-control", context,
                             {**{k: v for k, v in value.items() if k != "receipt"}, **value["receipt"]})
+                self.spawn_height_trace = {
+                    # The initial height read is nested inside spawn creation.
+                    # Bind the public actor at the successful outer return.
+                    "subject": None,
+                    "slot": record["slot"],
+                    "worldContext": deepcopy(record["worldContext"]),
+                    "started": False,
+                    "waiting": 0,
+                    "samples": 0,
+                    "complete": False,
+                }
         self.spawn_height_contexts.remove(record)
         return result
 
@@ -1515,7 +1551,7 @@ class NativeObservation:
 
     def _resolver_before(self):
         regs = self.session.emu.memory.register_arm9
-        request = public_bytes(self.session, regs.r2, 20)
+        request = public_bytes(self.session, regs.r2, 44)
         return {"requestHex": request.hex(), "resultAddress": regs.r3 & 0xFFFFFFFF,
                 "blobAddress": regs.r0 & 0xFFFFFFFF, "blobSize": regs.r1 & 0xFFFFFFFF,
                 "fieldPointer": self.session.rt.unsigned(self.session.emu, self.session.rt.G_FIELD_SYS_PTR),
@@ -1529,7 +1565,7 @@ class NativeObservation:
     def _resolver_after(self, value, context):
         if context["returnValue"] != 0:
             return {"requestHex": value["requestHex"], "resolved": False}
-        result = public_bytes(self.session, value["resultAddress"], 256)
+        result = public_bytes(self.session, value["resultAddress"], 200)
         if not value["controlledCall"]:
             # Discovery is one bounded private receipt. A later prepared probe
             # must authenticate current code/blob and recheck this field owner.
@@ -1539,11 +1575,11 @@ class NativeObservation:
             self.resolver_discovery.update(status=0,
                 entryNativeCycle=context["entry"]["nativeCycle"],
                 returnNativeCycle=context["returned"]["nativeCycle"])
-        fingerprint = int.from_bytes(result[252:256], "little")
+        fingerprint = int.from_bytes(result[176:180], "little")
         receipt = {"requestHex": value["requestHex"], "resultHex": result.hex(), "resolved": True,
                    "fingerprint": fingerprint, "sourceSha256": self.source_hash,
-                   "lanes": [result[n:n + 72].hex() for n in (0, 72, 144)],
-                   "appliedOverrides": int.from_bytes(result[248:252], "little")}
+                   "lanes": [result[n:n + 72].hex() for n in (0, 72)],
+                   "appliedOverrides": int.from_bytes(result[172:176], "little")}
         if fingerprint not in self.profiles and len(self.profiles) >= self.MAX_PROFILES:
             self.profiles.popitem(last=False)
             self.profiles_evicted += 1
@@ -1680,6 +1716,65 @@ class NativeObservation:
                 "scope": "late unmounted route wait window; raw native call arguments",
                 "timing": "guestTiming is the inclusive ARM9 scheduler interval"}
 
+    def _flush_pending(self, frame):
+        while self.pending:
+            if len(self.ready) >= self.MAX_EVENTS:
+                self.ready.popleft()
+                self.events_dropped += 1
+            self.ready.append({"frame": frame, "kind": "native-observation",
+                               "data": self.pending.popleft()})
+
+    def completed_snapshot(self, snapshot):
+        """Retain the one controlled natural Appear Hop across boot frames."""
+        trace = self.spawn_height_trace
+        if trace is None or trace["complete"]:
+            return
+        subject = trace["subject"]
+        if subject is None or subject.get("status") != "observed-public-subject":
+            raise NativeObservationError("spawn height trace has no successful public actor binding")
+        actors = [actor for actor in snapshot.get("actors", [])
+                  if actor.get("handle") == subject.get("handle")]
+        if len(actors) != 1:
+            raise NativeObservationError("spawn height trace subject is missing or duplicated")
+        actor = actors[0]
+        world = trace["worldContext"]
+        if (snapshot.get("observationBoundary") != "main-task-queue-completion"
+                or snapshot.get("prepared") is not False
+                or any(snapshot.get("context", {}).get(key) != world.get(key)
+                       for key in ("mapId", "fieldEpoch", "mapGeneration"))):
+            raise NativeObservationError("spawn height trace world changed")
+        engine = actor.get("engineObject", {})
+        command, state = engine.get("movement_cmd"), actor.get("controllerState")
+        if type(command) is not int or type(state) is not int \
+                or type(engine.get("face_y")) is not int:
+            raise NativeObservationError("spawn height trace pose is incomplete")
+        clock = {"actorFrame": snapshot.get("actorFrame"),
+                 "nativeCycle": snapshot.get("nativeCycle")}
+        if any(type(value) is not int or value < 0 for value in clock.values()):
+            raise NativeObservationError("spawn height trace clock is incomplete")
+        if not trace["started"]:
+            if command not in (48, 49, 50, 51):
+                trace["waiting"] += 1
+                if trace["waiting"] > 120:
+                    raise NativeObservationError("spawn height trace did not start within its frame bound")
+                return
+            trace["started"] = True
+        context = {"entry": clock, "returned": clock,
+                   "setupMode": "normal", "returnValue": 0}
+        self._queue("spawn-appear-hop-frame", context, {
+            "subject": deepcopy(subject), "worldContext": deepcopy(world),
+            "actor": deepcopy(actor), "actorFrame": clock["actorFrame"],
+            "nativeCycle": clock["nativeCycle"],
+            "observationBoundary": "main-task-queue-completion",
+            "prepared": False,
+        })
+        trace["samples"] += 1
+        if trace["samples"] > 60:
+            raise NativeObservationError("spawn height trace exceeded its frame bound")
+        if command == 255 and state == 0:
+            trace["complete"] = True
+        self._flush_pending(snapshot["frame"])
+
     def completed_frame(self, frame):
         if getattr(getattr(self.session, 'spawn_cost_probe', None), 'mode', None) == 'baseline':
             if self.wait_probe is None:
@@ -1715,11 +1810,7 @@ class NativeObservation:
         # Expose only the count from that complete boundary, never a later call.
         self.player_step_count = self.player_steps_admitted
         self.player_step_frame = frame
-        while self.pending:
-            if len(self.ready) >= self.MAX_EVENTS:
-                self.ready.popleft()
-                self.events_dropped += 1
-            self.ready.append({"frame": frame, "kind": "native-observation", "data": self.pending.popleft()})
+        self._flush_pending(frame)
 
     def drain(self):
         events = list(self.ready)
@@ -1766,3 +1857,4 @@ class NativeObservation:
         self.latest_finalizations.clear()
         self.reposition_contexts.clear()
         self.reposition_call_sites.clear()
+        self.spawn_height_trace = None

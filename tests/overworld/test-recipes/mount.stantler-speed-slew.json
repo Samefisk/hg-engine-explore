@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.stantler-speed-slew",
+  "title": "Mounted Stantler keeps full Walk variance without a speed-change snap",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld_walk_frame_timing_spec.md",
+  "requirements": ["current.mounted-speed-slew"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 240, "noProgressFrames": 90, "minObservedFrames": 13},
+  "subjects": [{"id": "stantler", "species": 234, "role": "MOUNTED", "acquire": "existing"}],
+  "measurements": [{"kind": "mounted-speed-slew-v1", "subject": "stantler"}],
+  "setup": [
+    {"id": "own-clear-sprint-lane", "op": "teleport", "args": {"map": 33, "x": 585, "z": 402, "facing": 3},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "own-stantler", "op": "party", "args": {"slot": 0, "species": 234, "level": 50, "hp": 1, "status": 0},
+      "budget": {"maxSeconds": 15, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "mount-own-stantler", "op": "spawn", "args": {"species": 234, "role": "mounted", "slot": 0},
+      "budget": {"maxSeconds": 30, "maxFrames": 180, "noProgressFrames": 120}},
+    {"id": "bind-stantler", "op": "bind", "args": {"subject": "stantler"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "arm-reader", "op": "mount-pacing.arm", "args": {"subject": "stantler"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "held-right-thirteen", "op": "step", "args": {"frames": 160, "keys": ["RIGHT"],
+      "until": {"kind": "measurement-stage", "measurement": "mounted-speed-slew-v1", "stage": "main-started"}},
+      "budget": {"maxSeconds": 30, "maxFrames": 160, "noProgressFrames": 30}},
+    {"id": "thirteen-terminal", "op": "wait", "args": {"predicate": {"kind": "measurement-stage", "measurement": "mounted-speed-slew-v1", "stage": "main-complete"}},
+      "budget": {"maxSeconds": 10, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "gait-settles-with-released-input", "op": "wait", "args": {"predicate": {"kind": "measurement-stage", "measurement": "mounted-speed-slew-v1", "stage": "gait-settled"}},
+      "budget": {"maxSeconds": 20, "maxFrames": 64, "noProgressFrames": 64}},
+    {"id": "close-reader", "op": "mount-pacing.close", "args": {},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "assertions": [{"kind": "measurement-complete", "measurement": "mounted-speed-slew-v1"}]
+}

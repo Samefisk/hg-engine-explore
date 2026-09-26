@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "id": "world.streaming.stantler-mounted-route",
+  "title": "Mounted Stantler keeps nearby terrain loaded after the long route",
+  "status": "active",
+  "capabilities": ["world.streaming"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/README.md#system-contracts and the measured mounted Stantler 840-frame terrain-loss reproduction",
+    "actor": "One prepared current Mounted Stantler (species 234, party slot 0, level 10) with an attached presentation on map 33",
+    "trigger": "Hold RIGHT, RIGHT, UP, LEFT, LEFT, UP and DOWN for exactly 120 completed frames each; read nearby loaded terrain; hold RIGHT for 120 more frames and read terrain again",
+    "observable": "The 840-frame endpoint stays near (576,397..398) with all nine radius-one terrain cells loaded. RIGHT recovery moves at least eight tiles east and all 25 radius-two terrain cells are loaded.",
+    "setupAudit": "complete",
+    "setupMutations": [{
+      "phase": "before-observation",
+      "target": "fixture",
+      "change": "Teleport to map 33 (585,402), prepare party slot 0 as level-10 Stantler, mount it and bind its current actor. Do not edit movement, terrain, profile, chain state or input during observation."
+    }],
+    "limits": [
+      "This tests the exact seven-leg 840-frame reproduction and one 120-frame RIGHT recovery, not every map or mounted Pokemon.",
+      "Paused endpoint terrain probes do not prove that all nearby tiles stayed loaded on every intermediate frame.",
+      "Prepared party and location do not prove natural selection, capture or spawning."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "stantler", "species": 234, "role": "MOUNTED", "acquisition": "mount",
+    "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Prepare and bind the current mounted Stantler at map 33 (585,402)"},
+    {"at": 1, "kind": "input", "value": "Run the exact seven 120-frame cardinal holds: RIGHT RIGHT UP LEFT LEFT UP DOWN"},
+    {"at": 2, "kind": "input", "value": "Read the radius-one terrain grid, then hold RIGHT 120 frames and read radius two"}
+  ],
+  "stop": {"frameBudget": 1300, "condition": "All 960 route and recovery frames complete, both native loaded-terrain neighborhoods are present, and RIGHT recovery advances"},
+  "expect": {
+    "requiredEvents": ["MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["CONTEXT_CHANGED", "ACTOR_REBOUND", "CONTROL_REBOUND"],
+    "invariants": [
+      "The same current Mounted Stantler remains attached throughout the route",
+      "The route endpoint has nine loaded native terrain cells and the recovery endpoint has 25",
+      "RIGHT recovery moves at least eight tiles east from the route endpoint",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch"
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "world.streaming.stantler-mounted-route",
+    "claims": ["natural-input", "live-actor-identity", "streaming-path"], "minimumFrames": 960}
+}

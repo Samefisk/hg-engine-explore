@@ -13,7 +13,8 @@ static u8 OverworldRoleController_IsRoleValid(u8 role)
 static u8 OverworldRoleController_RoleUsesChain(u8 role)
 {
     return role == OVERWORLD_ROLE_CONTROLLER_ROLE_WILD
-        || role == OVERWORLD_ROLE_CONTROLLER_ROLE_FOLLOWER;
+        || role == OVERWORLD_ROLE_CONTROLLER_ROLE_FOLLOWER
+        || role == OVERWORLD_ROLE_CONTROLLER_ROLE_MOUNTED;
 }
 
 void OverworldRoleController_Reduce(

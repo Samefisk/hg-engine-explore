@@ -65,7 +65,10 @@ class ActorInspectProbe:
         require(s.emu is not None and self.field and s.field_pointer() == self.field
                 and s.native_heap_generation == self.generation, "actor field/heap owner changed", fatal=True)
         require(s._actor_inspect_probe_service() == self.service, "authenticated Inspect service changed", fatal=True)
-        require(s.read(self.state["address"], 8) == struct.pack("<IHH", 0x5353574F, 1, self.state["size"]),
+        require(s.read(self.state["address"], 8) == struct.pack(
+                    "<IHH", 0x5353574F,
+                    s.rt.ACTOR_DESCRIPTOR["facade"]["version"],
+                    self.state["size"]),
                 "actor state is not initialized", fatal=True)
 
     def _select(self):
@@ -88,7 +91,8 @@ class ActorInspectProbe:
                 and 0 <= handle["slot"] < self.capacity and handle["generation"] > 0, "invalid actor handle")
         raw = self.session.read(self.state["address"] + self.state["offsets"]["actors"]
                                 + handle["slot"] * self.state["actorStride"], 88)
-        require(len(raw) == 88 and raw[:4] == struct.pack("<HH", 1, 88)
+        require(len(raw) == 88 and raw[:4] == struct.pack(
+                    "<HH", self.session.rt.ACTOR_DESCRIPTOR["facade"]["version"], 88)
                 and raw[4:14] == struct.pack("<5H", *(handle[k] for k in HANDLE_KEYS))
                 and raw[84] == 1 and struct.unpack_from("<I", raw, 16)[0] == actor["subjectIdentity"],
                 "raw actor identity differs")

@@ -178,7 +178,7 @@ static void CheckContinuousMotions(void)
                 Commit(&slot);
                 CHECK(slot.snapshot.commitSequence == seeds[seed] + index + 1u);
                 CHECK(slot.policy.pendingStep
-                    == (role != OVERWORLD_ACTOR_ROLE_MOUNTED && index != 3
+                    == (index != 3
                         ? OVERWORLD_ACTOR_WALK_PENDING_CHAIN : OVERWORLD_ACTOR_WALK_PENDING_NONE));
                 for (unsigned pause = 0; pause < plan.pauseFrames; pause++) {
                     OverworldMotionState before = slot.motion;

@@ -123,54 +123,54 @@ superrodrate 0
 walklevels 2, 3, 2, 3, 3, 3, 2, 2, 4, 4, 4, 4
 
 // morning encounter slots
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
 
 // day encounter slots
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
 
 // night encounter slots
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
 
 // hoenn encounter slots
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
 
 // sinnoh encounter slots
-pokemon SPECIES_MAREEP
-pokemon SPECIES_MAREEP
+pokemon SPECIES_SNORLAX
+pokemon SPECIES_SNORLAX
 
 // surf encounters
 encounter SPECIES_NONE, 0, 0
@@ -205,7 +205,7 @@ encounter SPECIES_NONE, 0, 0
 encounter SPECIES_NONE, 0, 0
 
 // swarm grass
-pokemon SPECIES_MAREEP
+pokemon SPECIES_SNORLAX
 // swarm surf
 pokemon SPECIES_NONE
 // swarm good rod

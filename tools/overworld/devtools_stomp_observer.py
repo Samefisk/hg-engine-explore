@@ -13,7 +13,7 @@ STOCK = {'dust':(0x021FF74C,0x64,True), 'allocate':(0x021F1620,0x20,True),
          'init':(0x021FF7B0,0x44,True), 'sound':(0x0200604C,0x20,False),
          'soundStart':(0x020060BC,0x5C,False), 'descriptor':(0x022091EC,20,True)}
 KINDS=('policy','dust','allocate','init','sound','soundStart')
-SOUND_ID=2183
+SOUND_ID=1606
 
 
 class NativeStompObserver(NativeMountedPacingObserver):

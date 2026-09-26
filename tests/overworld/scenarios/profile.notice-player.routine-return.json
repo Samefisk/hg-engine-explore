@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.notice-player.routine-return",
+  "title": "Notice Player presents once, pauses, then resumes Routine",
+  "status": "active",
+  "capabilities": ["condition.evaluation", "alert"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "data/overworld_behavior_profiles.json",
+    "actor": "One prepared WILD Mareep (species 179) with its current handle, attached presentation, Default Routine, and Notice Player conditional Capability.",
+    "trigger": "Place the player inside Mareep's current Vision at an idle intent boundary and keep both actors still through the complete notice presentation and the first later Routine intent.",
+    "observable": "Requirement current.notice-player-routine-return: condition-notice-player captures the player, emits exactly one exclamation, faces that captured target, pauses for exactly the authored 10-frame presentation, and then submits one ordinary Routine intent without a second notice presentation.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use a disposable test.sav, checked teleport to map 33, native Mareep spawn, exact-subject bind, and checked player placement outside Vision. Do not change the profile, condition state, timers, target, movement choice, or presentation during observation."
+      }
+    ],
+    "limits": [
+      "The bound runtime observer retains condition identity, target, presentation timing, control return, and the first later Routine intent. Its copied-data controls reject missing subject and missing feature evidence.",
+      "Prepared placement proves the response at one real intent boundary. It does not prove natural population spawning or all Vision geometries.",
+      "Activation is the authored timed condition: profile notice-player, condition condition-notice-player, all matching subjects, duration 960, cooldown 970, target PLAYER, and current Vision."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [
+    {"id": "mareep", "species": 179, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}
+  ],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Spawn and bind one current Mareep with its authored Default Routine and Notice Player application."},
+    {"at": 1, "kind": "lifecycle", "value": "Move the player into current Vision and observe one condition trigger at Mareep's next idle intent boundary."},
+    {"at": 2, "kind": "lifecycle", "value": "Observe one exclamation, target-facing 10-frame pause, control return, and the first ordinary Routine intent."}
+  ],
+  "stop": {"frameBudget": 600, "condition": "The first post-notice Routine intent completes, or any duplicate presentation, wrong target, timeout, or identity failure stops the case."},
+  "expect": {
+    "requiredEvents": ["INTENT_CREATED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["MOTION_CANCELED", "ACTOR_REBOUND", "CONTEXT_CHANGED"],
+    "invariants": [
+      "The Notice Player condition captures the current player at an idle intent boundary",
+      "Exactly one exclamation and one 10-frame pause occur for this trigger",
+      "The first later intent uses Mareep's ordinary Routine rather than chase or flee"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "profile.notice-player.routine-return",
+    "claims": ["live-actor-identity", "profile-resolution", "feedback-effect", "rendered-motion", "frame-pacing", "control-release"],
+    "minimumFrames": 1
+  }
+}

@@ -1,11 +1,43 @@
 #include "../../include/overworld_actor_system_internal.h"
+#include "../../include/overworld_behavior_condition_adapter.h"
 #include "../../include/overworld_wild_runtime.h"
 #include "../../include/overworld_mount_internal.h"
 #include "../../include/overworld_walk_module.h"
+#include "../../include/overworld_wild_behavior_data.h"
+#include "../../include/constants/sndseq.h"
 #include "../../include/map_events_internal.h"
+#include "../../include/sound.h"
 
 #define OW_ACTOR_STEP_PARTICLE_SET_BITS 0x00010004
 #define OW_ACTOR_STEP_PARTICLE_CLEAR_BITS 0x00100000
+
+void __attribute__((noinline, used, optimize("Os"),
+        section(".overworld_mount_one_frame_walk")))
+OverworldMount_FinishOneFrameWalk(FIELD_PLAYER_AVATAR *avatar)
+{
+    LocalMapObject *player = avatar->mapObject;
+
+    avatar->unk10 = 1; /* AVATAR_MOVE_STATE_MOVING */
+    avatar->unk14 = 2; /* PLAYER_MOVE_STATE_MOVING */
+    /* The actor has reached its target. Stock command 0x3C can lag behind
+     * a one-frame Walk, so complete that shell now. Longer Walks already have
+     * this bit set. Vanilla emits the real END on the next field frame. */
+    if (player->movementCmd == 0x3C) {
+        player->flags |= MAPOBJECTFLAG_UNK5;
+    }
+}
+
+void __attribute__((noinline, used,
+        section(".overworld_actor_stomp_sound")))
+OverworldActor_PlayStompSound(u8 walkOptions)
+{
+    /* Ram locks its direction. Ordinary Heavy Stomp uses the hop landing sound. */
+    if ((walkOptions & OW_WILD_BEHAVIOR_WALK_OPTION_LOCK_DIRECTION) != 0) {
+        PlaySE(SEQ_SE_GS_IWAOTOSHI02);
+    } else {
+        PlaySE(SEQ_SE_DP_SUTYA2);
+    }
+}
 
 void __attribute__((noinline, optimize("Os"), used,
         section(".overworld_actor_step_particle")))
@@ -38,11 +70,18 @@ __asm__(
     ".global __aeabi_idiv\n.thumb_func\n.thumb_set __aeabi_idiv, 0x023DEE44\n"
     ".global __aeabi_uidiv\n.thumb_func\n.thumb_set __aeabi_uidiv, 0x023DEE4C\n"
     ".global __gnu_thumb1_case_uqi\n.thumb_func\n.thumb_set __gnu_thumb1_case_uqi, 0x023DEE54\n"
+    ".global __gnu_thumb1_case_sqi\n.thumb_func\n.thumb_set __gnu_thumb1_case_sqi, 0x023DED9A\n"
     ".global __aeabi_idivmod\n.thumb_func\n.thumb_set __aeabi_idivmod, 0x023DEE44\n");
 
-#pragma GCC optimize("Os,no-tree-sra,no-defer-pop,no-tree-forwprop")
+#pragma GCC optimize("Os,no-tree-sra,no-defer-pop,no-tree-forwprop,no-tree-dominator-opts,rename-registers")
 
 u8 ActorSystem_ClampWalkTimeWide(u32 time);
+typedef void (*OverworldWalkSelectDisplayedTimeFunc)(
+    OverworldActorWalkPolicyCall *call,
+    const OverworldActorStateSnapshot *snapshot,
+    const OverworldActorPolicyState *policy);
+#define OVERWORLD_WALK_SELECT_DISPLAYED_TIME \
+    ((OverworldWalkSelectDisplayedTimeFunc)0x01FF9C8D)
 
 #define ARRAY_COUNT(array) (sizeof(array) / sizeof((array)[0]))
 #define TRACE_INDEX_MASK (OVERWORLD_ACTOR_SYSTEM_TRACE_CAPACITY - 1)
@@ -58,7 +97,8 @@ static u8 OverworldActorSystem_PopulationControlImpl(
     u8 operation,
     u16 refillDelay);
 
-static void ActorSystem_Zero(void *destination, u32 size)
+static void __attribute__((section(".overworld_condition_adapter_zero")))
+ActorSystem_Zero(void *destination, u32 size)
 {
     u8 *bytes = destination;
 
@@ -69,33 +109,25 @@ static void ActorSystem_Zero(void *destination, u32 size)
 }
 
 u8 __attribute__((noinline, optimize("Os"),
-    section(".overworld_actor_lane_policy")))
+    section(".overworld_actor_locomotion_policy")))
 OverworldActorSystem_SelectMovementLocomotion(
     const OverworldWildBehaviorPrimitives *primitives,
     u8 laneState)
 {
-    if (laneState == OW_WILD_SPAWNER_SPOT_STATE_CHILL) {
-        return primitives->chillLocomotion;
-    }
-    if (laneState == OW_WILD_SPAWNER_SPOT_STATE_ACTIVE) {
-        return primitives->attentiveLocomotion;
-    }
-    return primitives->tiredLocomotion;
+    return laneState == OW_WILD_SPAWNER_SPOT_STATE_TIRED
+        ? primitives->tiredLocomotion
+        : primitives->chillLocomotion;
 }
 
 u8 __attribute__((noinline, optimize("Os"),
-    section(".overworld_actor_lane_policy")))
+    section(".overworld_actor_target_policy")))
 OverworldActorSystem_SelectMovementTarget(
     const OverworldWildBehaviorPrimitives *primitives,
     u8 laneState)
 {
-    if (laneState == OW_WILD_SPAWNER_SPOT_STATE_CHILL) {
-        return primitives->chillTarget;
-    }
-    if (laneState == OW_WILD_SPAWNER_SPOT_STATE_ACTIVE) {
-        return primitives->attentiveTarget;
-    }
-    return primitives->tiredTarget;
+    return laneState == OW_WILD_SPAWNER_SPOT_STATE_TIRED
+        ? primitives->tiredTarget
+        : primitives->chillTarget;
 }
 
 static void __attribute__((noinline, section(".overworld_actor_population_adapter")))
@@ -239,7 +271,7 @@ static void ActorSystem_EnsureInitialized(void)
     state->mapGeneration = 1;
     state->lastReason = OVERWORLD_ACTOR_REASON_OK;
     state->trace.magic = OVERWORLD_ACTOR_TRACE_MAGIC;
-    state->trace.version = OVERWORLD_ACTOR_SYSTEM_ABI_VERSION;
+    state->trace.version = OVERWORLD_ACTOR_TRACE_VERSION;
     state->trace.size = sizeof(state->trace);
     state->trace.fieldEpoch = state->fieldEpoch;
     state->trace.filterActorSlot = OVERWORLD_ACTOR_TRACE_ALL_SLOTS;
@@ -776,7 +808,7 @@ OverworldActorResult OverworldActorSystem_CompatibilityRecordTraceImpl(
 {
     ActorSystem_EnsureInitialized();
     if (event == OVERWORLD_ACTOR_EVENT_NONE
-        || event > OVERWORLD_ACTOR_EVENT_MOUNT_PRESENTATION_STATE) {
+        || event > OVERWORLD_ACTOR_EVENT_CONDITIONAL_RESOLVED) {
         return OVERWORLD_ACTOR_RESULT_REJECTED;
     }
     if (handle != NULL && ActorSystem_FindActor(handle) == NULL) {
@@ -1091,7 +1123,6 @@ ActorSystem_TryAcknowledgeMotionCommit(
      * Publish the new phase before policy readers decide whether to wait. */
     actor->motionPhase = motion->phase;
     if (motion->plan.commitPolicy == OVERWORLD_MOTION_COMMIT_NORMAL
-        && actor->role != OVERWORLD_ACTOR_ROLE_MOUNTED
         && policy->pendingStep == OVERWORLD_ACTOR_WALK_PENDING_NONE
         && (walkPolicy == NULL
             || (walkPolicy->stepFlags & OVERWORLD_ACTOR_WALK_STEP_SKID) == 0)) {
@@ -1485,31 +1516,47 @@ static int ActorSystem_ChooseWanderDirection(
 
 static BOOL ActorSystem_ReduceWalk(OverworldActorWalkPolicyCall *call)
 {
-    OverworldActorStateSnapshot *snapshot;
-    OverworldActorPolicyState *policy;
+    OverworldActorRuntimeSlot *slot;
 
     if (call == NULL
         || call->actorSlot >= OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS) {
         return FALSE;
     }
-    snapshot = &gOverworldActorSystemState.slots[call->actorSlot].snapshot;
-    policy = &((OverworldActorRuntimeSlot *)snapshot)->policy;
+    slot = &gOverworldActorSystemState.slots[call->actorSlot];
     if (!OVERWORLD_ACTOR_WALK_POLICY_OWNER_ENTRY->reduceWalk(
-            policy,
-            snapshot,
+            &slot->policy,
+            &slot->snapshot,
             call)) {
         return FALSE;
     }
-    if (call->decision != OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP
-        || (call->stepFlags & OVERWORLD_ACTOR_WALK_STEP_SKID) != 0) {
-        return TRUE;
+    if (call->operation == OVERWORLD_ACTOR_WALK_POLICY_INPUT) {
+        OVERWORLD_WALK_SELECT_DISPLAYED_TIME(
+            call, &slot->snapshot, &slot->policy);
     }
-    call->travelTime = ActorSystem_ClampWalkTimeWide(
-        call->travelTime
-            + (u8)((snapshot->commitSequence * 73u)
-                % (OW_WILD_BEHAVIOR_WALK_TIME_VARIANCE(
-                    call->lane->chainRepositionAllowDiagonal) + 1u)));
     return TRUE;
+}
+
+BOOL __attribute__((noinline, used,
+    section(".overworld_actor_mount_profile_command")))
+OverworldActorPolicy_MountCommand(u8 operation, void *payload)
+{
+    OverworldActorWalkPolicyCall call;
+
+    if (operation == OVERWORLD_ACTOR_WALK_POLICY_SWAP_PROFILE
+        && (payload == NULL
+            || ((OverworldActorPolicyProfileTransaction *)payload)
+                    ->next.behaviorFingerprint == 0)) {
+        return FALSE;
+    }
+
+    call.version = OVERWORLD_ACTOR_WALK_POLICY_VERSION;
+    call.size = sizeof(call);
+    call.policyView = payload;
+    call.actorSlot = OVERWORLD_ACTOR_SYSTEM_FOLLOWER_SLOT;
+    call.operation = operation;
+    call.direction = (u8)(u32)payload;
+    call.effect = (u8)(u32)payload;
+    return ActorSystem_ReduceWalk(&call);
 }
 
 static BOOL __attribute__((noinline, optimize("Os"),
@@ -1542,9 +1589,11 @@ ActorSystem_FinishMountedWalk(
         OVERWORLD_MOUNT_WALK_FACING_DIRECTION_INDEX];
     output->travelTime = state->reservedPolicyState[
         OVERWORLD_MOUNT_WALK_TRAVEL_TIME_INDEX];
+    /* A new skid follows a displayed Walk tile. Continuation distance is
+     * ignored by START_RESULT, so its cleared lastWalkTime is harmless. */
     output->distance = (output->stepFlags
             & OVERWORLD_ACTOR_WALK_STEP_SKID) != 0
-        ? OverworldWalk_SkidTiles(policy->walkMomentum.speed)
+        ? OverworldWalk_SkidTiles(policy->lastWalkTime)
         : 0;
     output->reserved[0] = state->reservedPolicyProfile[
         OVERWORLD_MOUNT_WALK_NOMINAL_TIME_INDEX];
@@ -1621,6 +1670,27 @@ OverworldActorSystem_ValidateImpl(void)
             || service[index].inspect == 0) {
             return OVERWORLD_ACTOR_RESULT_ERROR;
         }
+    }
+    if (gOverworldBehaviorConditionAdapterEntry.magic
+            != OVERWORLD_BEHAVIOR_CONDITION_ADAPTER_MAGIC
+        || gOverworldBehaviorConditionAdapterEntry.version
+            != OVERWORLD_BEHAVIOR_CONDITION_ADAPTER_VERSION
+        || gOverworldBehaviorConditionAdapterEntry.size
+            != sizeof(gOverworldBehaviorConditionAdapterEntry)
+        || gOverworldBehaviorConditionAdapterEntry.prepareActor == NULL
+        || gOverworldBehaviorConditionAdapterEntry.clearActor == NULL
+        || gOverworldBehaviorConditionAdapterEntry.clearAll == NULL
+        || gOverworldBehaviorConditionAdapterEntry.clearResolution == NULL
+        || gOverworldBehaviorConditionAdapterEntry.evaluateActor == NULL
+        || gOverworldActorSystemMovementPolicyServiceEntry.magic
+            != OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_MAGIC
+        || gOverworldActorSystemMovementPolicyServiceEntry.version
+            != OVERWORLD_ACTOR_MOVEMENT_POLICY_SERVICE_VERSION
+        || gOverworldActorSystemMovementPolicyServiceEntry.size
+            != sizeof(gOverworldActorSystemMovementPolicyServiceEntry)
+        || gOverworldActorSystemMovementPolicyServiceEntry.conditionAdapter
+            != &gOverworldBehaviorConditionAdapterEntry) {
+        return OVERWORLD_ACTOR_RESULT_ERROR;
     }
     return OVERWORLD_ACTOR_RESULT_OK;
 }
@@ -2103,5 +2173,5 @@ const OverworldActorMovementPolicyServiceEntry
         OVERWORLD_ACTOR_MOVEMENT_POLICY_SERVICE_VERSION,
         sizeof(OverworldActorMovementPolicyServiceEntry),
         &sActorMovementPolicy,
-        0,
+        &gOverworldBehaviorConditionAdapterEntry,
     };

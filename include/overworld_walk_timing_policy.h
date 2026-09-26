@@ -80,14 +80,16 @@ OverworldWalkTimingPolicy_Decelerate(
 OVERWORLD_WALK_TIMING_INLINE u8
 OverworldWalkTimingPolicy_SkidTiles(u8 travelTime)
 {
-    travelTime = OverworldWalkTimingPolicy_Clamp(travelTime);
-    if (travelTime >= 7) {
-        return 0;
+    if (travelTime <= 1) {
+        return 4;
     }
-    if (travelTime >= 3) {
+    if (travelTime <= 4) {
+        return 2;
+    }
+    if (travelTime <= 6) {
         return 1;
     }
-    return travelTime == 2 ? 2 : 4;
+    return 0;
 }
 
 OVERWORLD_WALK_TIMING_INLINE u8

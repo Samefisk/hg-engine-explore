@@ -220,11 +220,11 @@ class AccelerationMeasurement:
         if before[8:16] != binding or after[8:16] != binding:
             raise ValueError("raw policy profile binding differs")
         lane = _bytes(data.get("laneHex"), 72, "COMMIT lane")
-        # GetBehaviorStateLane maps ACTIVE2/TIRED3, not raw enum indexes;
-        # CHILL0 and EMOTING1 use Owner. Mount CommitWalkBoundary always Owner.
+        # GetBehaviorStateLane maps TIRED3 to lane index 1. CHILL0, EMOTING1,
+        # and the reserved value 2 use Owner. Mount CommitWalkBoundary always Owner.
         if request[13] not in (0, 1, 2, 3) or (self.active == "MOUNTED" and request[13] != 0):
             raise ValueError("COMMIT role lane state differs")
-        lane_index = {2: 1, 3: 2}.get(request[13], 0)
+        lane_index = 1 if request[13] == 3 else 0
         if lane.hex() != self.profile_reader.profiles[state["fingerprint"]]["lanes"][lane_index]:
             raise ValueError("COMMIT does not use the role's resolved lane")
         field = lambda name: lane[self.fields[name]]

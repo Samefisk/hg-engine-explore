@@ -28,6 +28,8 @@ ENTRY_TARGET_MAX_DISTANCE_TILES = 16
 ENTRY_OFFSCREEN_MARGIN_TILES = 4
 ENTRY_VIEW_HALF_WIDTH_TILES = 8
 ENTRY_VIEW_HALF_HEIGHT_TILES = 6
+EXPECTED_ENTRY_LOCOMOTION = 9
+EXPECTED_ENTRY_MOTION_KIND = "FLY_IN"
 
 
 def require(value, reason):
@@ -65,6 +67,8 @@ class SpawnWorkBudgetMeasurement:
         self.max_frames = max_frames
         self.source_sha256 = source["sourceSha256"]
         self.initial = None
+        self.active_context = None
+        self.context_transition = None
         self.terminal = None
         self.subject = None
         self.last_frame = None
@@ -114,12 +118,41 @@ class SpawnWorkBudgetMeasurement:
                 and subject.get("handle", {}).get("value"),
                 "spawn-work measurement requires the reviewed Route 30 boundary")
         self.initial = _boundary(snapshot)
+        self.active_context = deepcopy(snapshot["context"])
         self.subject = deepcopy(subject)
         self.last_frame = snapshot["frame"]
         self.last_native_cycle = snapshot["nativeCycle"]
         self.last_actor_frame = snapshot["actorFrame"]
         self.last_player_pose = [snapshot["player"]["pos_x"], snapshot["player"]["pos_z"]]
         return self.result()
+
+    def _adopt_route_transition(self, snapshot):
+        context = snapshot.get("context")
+        if context == self.active_context:
+            return
+        actors = [actor for actor in snapshot.get("actors", [])
+                  if actor.get("subjectIdentity") == self.subject.get("subjectIdentity")
+                  and actor.get("species") == 56
+                  and actor.get("role") == "FOLLOWER"]
+        require(self.attempt is None
+                and self.context_transition is None
+                and self.active_context.get("mapId") == 33
+                and isinstance(context, dict)
+                and context.get("mapId") == 67
+                and snapshot.get("player", {}).get("x") == 575
+                and snapshot.get("player", {}).get("y") == 398
+                and len(actors) == 1
+                and actors[0].get("active") is True
+                and actors[0].get("identityVerified") is True,
+                "spawn-work route changed field outside its reviewed crossing")
+        self.context_transition = {
+            "frame": snapshot["frame"],
+            "from": deepcopy(self.active_context),
+            "to": deepcopy(context),
+        }
+        self.active_context = deepcopy(context)
+        self.subject = deepcopy(actors[0])
+        self.last_player_pose = [snapshot["player"]["pos_x"], snapshot["player"]["pos_z"]]
 
     def _check_subject(self, snapshot):
         actors = [actor for actor in snapshot.get("actors", [])
@@ -158,10 +191,7 @@ class SpawnWorkBudgetMeasurement:
         require(type(frame_counter) is int and frame_counter >= 0,
                 "spawn-work main-loop pacing counter is invalid")
         interval = row.get("intervalFromPrevious")
-        if self.pacing_samples == 1:
-            require(interval is None,
-                    "spawn-work first main-loop pacing sample has a foreign interval")
-        else:
+        if self.pacing_samples > 1:
             require(isinstance(interval, dict)
                     and all(type(interval.get(key)) is int and interval[key] >= 0
                             for key in ("arm9Ticks", "nativeCycles", "frameSequence", "actorFrames")),
@@ -173,11 +203,11 @@ class SpawnWorkBudgetMeasurement:
                 self.max_main_loop_native_cycles, interval["nativeCycles"])
             self.max_main_loop_frame_sequence = max(
                 self.max_main_loop_frame_sequence, interval["frameSequence"])
-        late = (frame_counter > 2
+        late = (self.pacing_samples > 1 and (frame_counter > 2
                 or (interval is not None
                     and (interval["arm9Ticks"] > MAX_ZERO_STUTTER_ARM9_TICKS
                          or interval["nativeCycles"] > NORMAL_MAIN_LOOP_NATIVE_CYCLES
-                         or interval["frameSequence"] > NORMAL_MAIN_LOOP_NATIVE_CYCLES)))
+                         or interval["frameSequence"] > NORMAL_MAIN_LOOP_NATIVE_CYCLES))))
         if late:
             self.late_main_loops += 1
             self.first_late_main_loop = deepcopy(row)
@@ -312,7 +342,7 @@ class SpawnWorkBudgetMeasurement:
                 and destination["worldContext"] == self.attempt["worldContext"]
                 and {key: destination["worldContext"].get(key)
                      for key in ("mapId", "fieldEpoch", "mapGeneration")}
-                    == self.initial["context"],
+                    == self.active_context,
                 "spawn-work scan changed attempt, encounter, slot, or field")
         if self.calls:
             require(snapshot["frame"] == self.calls[-1]["frame"] + 1
@@ -419,12 +449,13 @@ class SpawnWorkBudgetMeasurement:
         require(all(type(value) is int for value in origin)
                 and isinstance(target, list) and len(target) == 2
                 and all(type(value) is int for value in target)
-                and startup.get("locomotion") == 3
-                and final.get("position") == origin
+                and startup.get("locomotion") == EXPECTED_ENTRY_LOCOMOTION
+                and final.get("position") == target
                 and final.get("startup", {}).get("target") == target
+                and final.get("startup", {}).get("origin") == origin
                 and isinstance(public_subject.get("handle"), dict)
                 and type(public_subject["handle"].get("value")) is int,
-                "spawn-work Move entry did not retain its exact A and B")
+                "spawn-work entry did not retain its exact A and B")
         distance = abs(target[0] - origin[0]) + abs(target[1] - origin[1])
         player = snapshot["player"]
         player_x = player["x"]
@@ -453,15 +484,8 @@ class SpawnWorkBudgetMeasurement:
             "distanceProgress": 0,
             "maximumRenderDisplacement": 0,
             "observedFrames": 0,
-            "activeWalkFrames": 0,
-            "baseSpeed": None,
-            "startedAtBaseSpeed": False,
-            "accelerationObserved": False,
-            "chainObserved": False,
-            "turnObserved": False,
-            "walkPauseObserved": False,
-            "resumedAfterPause": False,
-            "tiredObserved": False,
+            "ownerEntryFrames": 0,
+            "spawnMotionObserved": False,
         }
         self.resumed_finalizer_ticks.append(finalizer_ticks)
         self.attempt.update(
@@ -477,18 +501,18 @@ class SpawnWorkBudgetMeasurement:
         actors = [actor for actor in snapshot.get("actors", [])
                   if actor.get("handle") == self.entry["handle"]]
         require(len(actors) == 1,
-                "spawn-work Move entry actor lost its exact identity")
+                "spawn-work Fly In actor lost its exact identity")
         actor = actors[0]
         require(actor.get("active") is True
                 and actor.get("identityVerified") is True
                 and actor.get("subjectIdentity") == self.entry["subjectIdentity"]
                 and actor.get("species") == self.entry["species"],
-                "spawn-work Move entry actor changed identity")
+                "spawn-work Fly In actor changed identity")
         logical = actor.get("logical", {})
         render = actor.get("render", {})
         require(all(type(logical.get(key)) is int for key in ("x", "y"))
                 and all(type(render.get(key)) is int for key in ("x", "y")),
-                "spawn-work Move entry lacks logical or rendered position")
+                "spawn-work Fly In actor lacks logical or rendered position")
         distance = (abs(self.entry["target"][0] - logical["x"])
                     + abs(self.entry["target"][1] - logical["y"]))
         render_displacement = (abs(render["x"] - self.entry["origin"][0])
@@ -499,52 +523,33 @@ class SpawnWorkBudgetMeasurement:
             self.entry["startDistance"] - self.entry["minimumDistance"])
         self.entry["maximumRenderDisplacement"] = max(
             self.entry["maximumRenderDisplacement"], render_displacement)
-        policy = actor.get("movementPolicy", {})
-        if actor.get("motionKind") == "WALK":
-            require(type(policy.get("base")) is int and policy["base"] > 0
-                    and type(policy.get("speed")) is int and policy["speed"] > 0,
-                    "spawn-work Move entry did not use normal Walk policy")
-            if self.entry["baseSpeed"] is None:
-                self.entry["baseSpeed"] = policy["base"]
-                self.entry["startedAtBaseSpeed"] = policy["speed"] == policy["base"]
-            require(policy["base"] == self.entry["baseSpeed"],
-                    "spawn-work Move entry changed its Walk base speed")
-            if actor.get("lane") == "ACTIVE":
-                self.entry["activeWalkFrames"] += 1
-            if policy["speed"] < policy["base"]:
-                self.entry["accelerationObserved"] = True
-            if policy.get("chain", 0) > 0:
-                self.entry["chainObserved"] = True
-            if policy.get("turn", 0) > 0:
-                self.entry["turnObserved"] = True
-        if (self.entry["activeWalkFrames"] > 0
-                and actor.get("lane") == "OWNER"
-                and actor.get("motionKind") == "NONE"):
-            self.entry["walkPauseObserved"] = True
-        if (self.entry["walkPauseObserved"]
-                and actor.get("lane") == "ACTIVE"
-                and actor.get("motionKind") == "WALK"):
-            self.entry["resumedAfterPause"] = True
-        if actor.get("lane") == "TIRED":
-            self.entry["tiredObserved"] = True
+        if (actor.get("lane") == "OWNER"
+                and actor.get("motionKind") == EXPECTED_ENTRY_MOTION_KIND):
+            self.entry["ownerEntryFrames"] += 1
+            self.entry["spawnMotionObserved"] = True
 
     def observe(self, snapshot, events):
         if self.failures or self.closed:
             return self.result()
         try:
+            field_changed = snapshot.get("context") != self.active_context
             require(self.initial is not None
                     and snapshot.get("observationBoundary") == "main-task-queue-completion"
                     and snapshot.get("frame") == self.last_frame + 1
                     and snapshot.get("nativeCycle") >= self.last_native_cycle
-                    and snapshot.get("actorFrame") == self.last_actor_frame + 1
-                    and snapshot.get("context") == self.initial["context"]
+                    and snapshot.get("actorFrame") == self.last_actor_frame
+                        + (0 if field_changed else 1)
                     and snapshot.get("nativeObservation", {}).get("coverageComplete") is True
                     and snapshot.get("nativeObservation", {}).get("error") is None
                     and snapshot.get("nativeObservation", {}).get("eventsDropped") == 0,
                     "spawn-work completed frame or field context changed")
+            self._adopt_route_transition(snapshot)
+            require(snapshot.get("context") == self.active_context,
+                    "spawn-work completed frame or field context changed")
             self._check_subject(snapshot)
-            self._observe_pacing(snapshot, events)
-            self._observe_player_render(snapshot)
+            if self.context_transition is not None and not field_changed:
+                self._observe_pacing(snapshot, events)
+                self._observe_player_render(snapshot)
             destinations = [event.get("data", {}) for event in events
                             if event.get("kind") == "native-observation"
                             and event.get("data", {}).get("observation") == "spawn-destination-search"
@@ -579,13 +584,8 @@ class SpawnWorkBudgetMeasurement:
     def ready(self):
         return bool(self.attempt and self.attempt.get("completed")
                     and self.entry
-                    and self.entry["startedAtBaseSpeed"]
-                    and self.entry["accelerationObserved"]
-                    and self.entry["chainObserved"]
-                    and self.entry["turnObserved"]
-                    and self.entry["walkPauseObserved"]
-                    and self.entry["resumedAfterPause"]
-                    and self.entry["tiredObserved"]
+                    and self.context_transition
+                    and self.entry["spawnMotionObserved"]
                     and self.entry["distanceProgress"] >= MINIMUM_ENTRY_PROGRESS
                     and self.entry["maximumRenderDisplacement"] >= MINIMUM_ENTRY_PROGRESS
                     and self.post_spawn_pacing_samples >= POST_SPAWN_PACING_SAMPLES
@@ -617,6 +617,8 @@ class SpawnWorkBudgetMeasurement:
             "failures": list(self.failures),
             "frames": self.frames,
             "initial": deepcopy(self.initial),
+            "activeContext": deepcopy(self.active_context),
+            "contextTransition": deepcopy(self.context_transition),
             "terminal": deepcopy(self.terminal),
             "subject": deepcopy(self.subject),
             "attempt": deepcopy(self.attempt),

@@ -8,6 +8,9 @@
 #include "overworld_population_model.h"
 #include "overworld_wild_movement.h"
 
+void OverworldActor_PlayStompSound(u8 walkOptions);
+BOOL OverworldActorPolicy_MountCommand(u8 operation, void *payload);
+
 #define OVERWORLD_ACTOR_SYSTEM_RESOLVER_ENTRY_ADDR \
     (OVERWORLD_ACTOR_SYSTEM_OVERLAY_BASE + 0x78)
 #define OVERWORLD_ACTOR_SYSTEM_MOTION_ENTRY_ADDR \
@@ -27,11 +30,11 @@
 #define OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_MAGIC 0x504D574F /* OWMP */
 #define OVERWORLD_ACTOR_WALK_POLICY_OWNER_MAGIC 0x5057574F /* OWWP */
 #define OVERWORLD_ACTOR_SYSTEM_SERVICE_COUNT 4
-#define OVERWORLD_ACTOR_RESOLVER_SERVICE_VERSION 1
+#define OVERWORLD_ACTOR_RESOLVER_SERVICE_VERSION 2
 #define OVERWORLD_ACTOR_MOTION_SERVICE_VERSION 6
 #define OVERWORLD_ACTOR_POPULATION_SERVICE_VERSION 3
 #define OVERWORLD_ACTOR_POPULATION_FRAME_CALL_VERSION 1
-#define OVERWORLD_ACTOR_MOVEMENT_POLICY_SERVICE_VERSION 4
+#define OVERWORLD_ACTOR_MOVEMENT_POLICY_SERVICE_VERSION 5
 #define OVERWORLD_ACTOR_WALK_POLICY_OWNER_VERSION 1
 #define OVERWORLD_ACTOR_MOTION_CALL_VERSION 5
 
@@ -141,6 +144,8 @@ typedef enum OverworldActorHopPlanOperation {
     OVERWORLD_ACTOR_HOP_PLAN_FLAT_TRAJECTORY = 2,
 } OverworldActorHopPlanOperation;
 
+#define OVERWORLD_ACTOR_HOP_PLAN_FLAG_SPAWN_ENTRY (1u << 0)
+
 /*
  * One caller-owned planning value crosses the Actor Motion request seam.
  * Engine adapters provide the resolved profile and read-only world-query
@@ -167,6 +172,9 @@ typedef struct OverworldActorHopPlanCall {
      * it never adds an arc or lifts over an intervening raised surface. */
     u32 trajectory;
     u8 operation;
+    /* VECTOR stores the spot state here. Trajectory planning stores the
+     * OVERWORLD_ACTOR_HOP_PLAN_FLAG_* bits instead. The name remains stable
+     * for the fixed 48-byte service ABI. */
     u8 spotState;
     u8 direction;
     u8 distance;
@@ -427,6 +435,7 @@ struct OverworldActorPolicyState {
     u8 pendingStep;
     u8 pendingSkid;
     u8 streamState;
+    u8 lastWalkTime;
     u16 pendingFirstPathAdvance;
     u16 pendingLastPathAdvance;
     u16 targetSurfaceId;
@@ -456,6 +465,8 @@ typedef char OverworldActorPolicyPendingSkidOffsetMustRemain23[
     offsetof(OverworldActorPolicyState, pendingSkid) == 23 ? 1 : -1];
 typedef char OverworldActorPolicyStreamOffsetMustRemain24[
     offsetof(OverworldActorPolicyState, streamState) == 24 ? 1 : -1];
+typedef char OverworldActorPolicyLastWalkTimeOffsetMustRemain25[
+    offsetof(OverworldActorPolicyState, lastWalkTime) == 25 ? 1 : -1];
 typedef char OverworldActorPolicyPendingFirstPathOffsetMustRemain26[
     offsetof(OverworldActorPolicyState, pendingFirstPathAdvance) == 26 ? 1 : -1];
 typedef char OverworldActorPolicyPendingLastPathOffsetMustRemain28[
@@ -466,7 +477,7 @@ typedef struct OverworldActorMovementPolicyServiceEntry {
     u16 version;
     u16 size;
     const OverworldActorMovementPolicyEntry *policy;
-    u32 reserved;
+    const struct OverworldBehaviorConditionAdapterEntry *conditionAdapter;
 } OverworldActorMovementPolicyServiceEntry;
 
 #define OVERWORLD_ACTOR_SYSTEM_RESOLVER_ENTRY \

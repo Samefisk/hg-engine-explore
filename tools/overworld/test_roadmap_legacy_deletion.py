@@ -12,6 +12,7 @@ REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "scripts"))
 
 from verify_overworld_roadmap_legacy_deletion import (  # noqa: E402
+    ACTOR_LOAD_BASE,
     ACTOR_BASE,
     ACTOR_COMPAT_ENTRY,
     ACTOR_DEBUG_ENTRY,
@@ -61,7 +62,7 @@ def entry(magic: int, version: int, size: int, pointers: list[int]) -> bytes:
 
 def complete_fixture() -> tuple[list[Symbol], dict[str, bytes]]:
     lengths = {
-        "actor_system": 0x3670,
+        "actor_system": 0x3BD0,
         "mount": 0x1C40,
         "wild_spawns": 0xB000,
         "wild_runtime": 0xC00,
@@ -69,7 +70,7 @@ def complete_fixture() -> tuple[list[Symbol], dict[str, bytes]]:
         "role_controller": 0x1000,
         "wild_helper": 0x4000,
         "wild_behavior_data": 0x1000,
-        "follower_selector": 0x1EA0,
+        "follower_selector": 0x2C00,
         "field": 0x5000,
         "follower_selector_icons": 0x8CC,
         "follower_release": 0x38C,
@@ -97,6 +98,12 @@ def complete_fixture() -> tuple[list[Symbol], dict[str, bytes]]:
         "ActorSystem_ReduceWalk",
         "ActorSystem_TerminalWalkBoundary",
         "ActorSystem_FinishMountedWalk",
+        "OverworldBehaviorConditionAdapter_PrepareActor",
+        "OverworldBehaviorConditionAdapter_ClearActor",
+        "OverworldBehaviorConditionAdapter_ClearAll",
+        "OverworldBehaviorConditionAdapter_ClearResolution",
+        "OverworldBehaviorConditionAdapter_EvaluateActor",
+        "OverworldBehaviorConditionAdapter_RecordTrace",
     )
     addresses: dict[str, int] = {}
     for index, name in enumerate(actor_names):
@@ -104,9 +111,11 @@ def complete_fixture() -> tuple[list[Symbol], dict[str, bytes]]:
         addresses[name] = address
         symbols.append(definition("actor_system", name, address))
     policy_address = ACTOR_BASE + 0x1000
+    adapter_address = ACTOR_BASE + 0x1100
     symbols.append(Symbol("actor_system", policy_address, 24, "r", "sActorMovementPolicy"))
-    write(images["actor_system"], ACTOR_BASE, ACTOR_FACADE_ENTRY, entry(0x5341574F, 1, 24, [addresses[name] | 1 for name in actor_names[:4]]))
-    write(images["actor_system"], ACTOR_BASE, ACTOR_COMPAT_ENTRY, entry(0x4341574F, 3, 32, [
+    symbols.append(Symbol("actor_system", adapter_address, 28, "r", "gOverworldBehaviorConditionAdapterEntry"))
+    write(images["actor_system"], ACTOR_LOAD_BASE, ACTOR_FACADE_ENTRY, entry(0x5341574F, 2, 24, [addresses[name] | 1 for name in actor_names[:4]]))
+    write(images["actor_system"], ACTOR_LOAD_BASE, ACTOR_COMPAT_ENTRY, entry(0x4341574F, 3, 32, [
         addresses["OverworldActorSystem_CompatibilityBindImpl"] | 1,
         0,
         addresses["OverworldActorSystem_CompatibilityUnbindImpl"] | 1,
@@ -117,11 +126,12 @@ def complete_fixture() -> tuple[list[Symbol], dict[str, bytes]]:
     debug = bytearray(64)
     struct.pack_into("<IHHIII", debug, 0, 0x4C44574F, 1, 64, ACTOR_BASE, ACTOR_BASE + 0x4000, ACTOR_BASE + 0x3670)
     struct.pack_into("<H", debug, 42, 0x990)
-    write(images["actor_system"], ACTOR_BASE, ACTOR_DEBUG_ENTRY, debug)
-    write(images["actor_system"], ACTOR_BASE, ACTOR_MOTION_ENTRY, entry(0x534D574F, 6, 16, [addresses["ActorSystem_RequestMotion"] | 1, addresses["ActorSystem_EngineBoundary"] | 1]))
-    write(images["actor_system"], ACTOR_BASE, ACTOR_POPULATION_ENTRY, entry(0x5450574F, 3, 16, [addresses["OverworldActorSystem_PopulationFrameImpl"] | 1, addresses["OverworldActorSystem_PopulationControlImpl"] | 1]))
-    write(images["actor_system"], ACTOR_BASE, ACTOR_MOVEMENT_POLICY_ENTRY, entry(0x504D574F, 4, 16, [policy_address, 0]))
-    write(images["actor_system"], ACTOR_BASE, policy_address, struct.pack("<6I", *[addresses[name] | 1 for name in actor_names[13:19]]))
+    write(images["actor_system"], ACTOR_LOAD_BASE, ACTOR_DEBUG_ENTRY, debug)
+    write(images["actor_system"], ACTOR_LOAD_BASE, ACTOR_MOTION_ENTRY, entry(0x534D574F, 6, 16, [addresses["ActorSystem_RequestMotion"] | 1, addresses["ActorSystem_EngineBoundary"] | 1]))
+    write(images["actor_system"], ACTOR_LOAD_BASE, ACTOR_POPULATION_ENTRY, entry(0x5450574F, 3, 16, [addresses["OverworldActorSystem_PopulationFrameImpl"] | 1, addresses["OverworldActorSystem_PopulationControlImpl"] | 1]))
+    write(images["actor_system"], ACTOR_LOAD_BASE, ACTOR_MOVEMENT_POLICY_ENTRY, entry(0x504D574F, 5, 16, [policy_address, adapter_address]))
+    write(images["actor_system"], ACTOR_LOAD_BASE, policy_address, struct.pack("<6I", *[addresses[name] | 1 for name in actor_names[13:19]]))
+    write(images["actor_system"], ACTOR_LOAD_BASE, adapter_address, entry(0x4143574F, 6, 28, [addresses[name] | 1 for name in actor_names[19:24]]))
     runtime_base = specs["wild_runtime"].base
     walk_body = runtime_base + 0x200
     symbols.append(definition("wild_runtime", "RenamedWalkOwner", walk_body))
@@ -134,7 +144,7 @@ def complete_fixture() -> tuple[list[Symbol], dict[str, bytes]]:
     pointers = [runtime_base + 0x300 | 1] * 11
     pointers[4] = 0
     pointers[7] = 0
-    write(images["wild_runtime"], runtime_base, WILD_RUNTIME_ENTRY, entry(0x3152574F, 16, 52, pointers))
+    write(images["wild_runtime"], runtime_base, WILD_RUNTIME_ENTRY, entry(0x3152574F, 17, 52, pointers))
     write(images["wild_runtime"], runtime_base, WALK_OWNER_ENTRY, entry(0x5057574F, 1, 12, [walk_body | 1]))
     struct.pack_into("<I", images["mount"], 0x500, MOTION_BOUNDARY_BRIDGE | 1)
     symbols.append(definition("wild_runtime", "OverworldWildSpawns_AcknowledgeSharedMotion",
@@ -365,14 +375,14 @@ static void OverworldActorSystem_PopulationFrameImpl(void) {}
         symbols, images = complete_fixture()
         images, actor = mutate(images, "actor_system")
         wrong = next(item.address for item in symbols if item.name == "OverworldActorSystem_ApplyImpl")
-        struct.pack_into("<I", actor, ACTOR_MOTION_ENTRY - ACTOR_BASE + 8, wrong | 1)
+        struct.pack_into("<I", actor, ACTOR_MOTION_ENTRY - ACTOR_LOAD_BASE + 8, wrong | 1)
         self.assertIn("wrong-entry-pointer", kinds(audit_structure(symbols, images)))
 
-    def test_nonzero_exported_policy_state_fails(self) -> None:
+    def test_wrong_condition_adapter_pointer_fails(self) -> None:
         symbols, images = complete_fixture()
         images, actor = mutate(images, "actor_system")
-        struct.pack_into("<I", actor, ACTOR_MOVEMENT_POLICY_ENTRY - ACTOR_BASE + 12, ACTOR_BASE + 0x3670)
-        self.assertIn("exported-private-state", kinds(audit_structure(symbols, images)))
+        struct.pack_into("<I", actor, ACTOR_MOVEMENT_POLICY_ENTRY - ACTOR_LOAD_BASE + 12, ACTOR_BASE + 0x3670)
+        self.assertIn("wrong-entry-pointer", kinds(audit_structure(symbols, images)))
 
     def test_retired_compatibility_update_pointer_fails(self) -> None:
         symbols, images = complete_fixture()
@@ -380,7 +390,7 @@ static void OverworldActorSystem_PopulationFrameImpl(void) {}
         struct.pack_into(
             "<I",
             actor,
-            ACTOR_COMPAT_ENTRY - ACTOR_BASE + 12,
+            ACTOR_COMPAT_ENTRY - ACTOR_LOAD_BASE + 12,
             ACTOR_BASE + 0x300 | 1,
         )
         self.assertIn(
@@ -394,7 +404,7 @@ static void OverworldActorSystem_PopulationFrameImpl(void) {}
         struct.pack_into(
             "<H",
             actor,
-            ACTOR_COMPAT_ENTRY - ACTOR_BASE + 4,
+            ACTOR_COMPAT_ENTRY - ACTOR_LOAD_BASE + 4,
             2,
         )
         self.assertIn(
@@ -412,7 +422,7 @@ static void OverworldActorSystem_PopulationFrameImpl(void) {}
         struct.pack_into(
             "<I",
             actor,
-            ACTOR_COMPAT_ENTRY - ACTOR_BASE + 28,
+            ACTOR_COMPAT_ENTRY - ACTOR_LOAD_BASE + 28,
             wrong | 1,
         )
         self.assertIn(
@@ -769,12 +779,17 @@ static void OverworldActorSystem_PopulationFrameImpl(void) {}
 
     def test_renamed_function_in_retired_slot_fails(self) -> None:
         symbols, images = complete_fixture()
-        retired = next(item for item in RETIRED_ENTRIES if item.module == "walk_module")
+        retired = next(
+            item for item in RETIRED_ENTRIES
+            if item.module == "role_controller"
+        )
         spec = next(item for item in MODULES if item.key == retired.module)
-        helper = definition("walk_module", "UnrelatedRenamedFunction", spec.base + 0x800)
+        helper = definition(
+            "role_controller", "UnrelatedRenamedFunction", spec.base + 0x800
+        )
         symbols.append(helper)
-        images, walk = mutate(images, "walk_module")
-        struct.pack_into("<I", walk, retired.address - spec.base, helper.address | 1)
+        images, role = mutate(images, "role_controller")
+        struct.pack_into("<I", role, retired.address - spec.base, helper.address | 1)
         self.assertIn("retired-entry-shape", kinds(audit_structure(symbols, images)))
 
     def test_retired_slot_literal_fails_without_old_names(self) -> None:
@@ -805,7 +820,7 @@ static void OverworldActorSystem_PopulationFrameImpl(void) {}
         )
         images, role = mutate(images, "role_controller")
         role[retired.address - 0x023BD400] = 0x7F
-        self.assertIn("retired-entry-not-zero", kinds(audit_structure(symbols, images)))
+        self.assertIn("retired-entry-not-empty", kinds(audit_structure(symbols, images)))
 
     def test_staged_hop_task_pointer_table_is_retired(self) -> None:
         symbols, images = complete_fixture()
@@ -818,7 +833,7 @@ static void OverworldActorSystem_PopulationFrameImpl(void) {}
         behavior[retired.address - 0x023C3000] = 1
 
         self.assertIn(
-            "retired-entry-not-zero",
+            "retired-entry-not-empty",
             kinds(audit_structure(symbols, images)),
         )
 
@@ -913,7 +928,7 @@ static void OverworldActorSystem_PopulationFrameImpl(void) {}
             WILD_HELPER_FLEE_FALLBACK_ENTRY - spec.base,
             spec.base + 0x500 | 1,
         )
-        self.assertIn("retired-entry-not-zero", kinds(audit_structure(symbols, images)))
+        self.assertIn("retired-entry-not-empty", kinds(audit_structure(symbols, images)))
 
     def test_legitimate_adapter_names_are_allowed(self) -> None:
         symbols, images = complete_fixture()

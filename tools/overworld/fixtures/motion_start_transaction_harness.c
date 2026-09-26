@@ -19,22 +19,29 @@ typedef struct LocalMapObject {
     u8 curFacing;
     BOOL partnerPrepared;
 } LocalMapObject;
-typedef struct FieldSystem { int unused; } FieldSystem;
-typedef struct OverworldWildBehaviorProfileData { u8 walkOptions, hopSwayWidth; } OverworldWildBehaviorProfileData;
+typedef struct PlayerAvatar { LocalMapObject *mapObject; } PlayerAvatar;
+typedef struct FieldSystem { PlayerAvatar *playerAvatar; } FieldSystem;
+typedef struct OverworldWildBehaviorProfileData { u8 walkOptions, walkSwayWidth, hopSwayWidth, spawnHopSwayWidth, spawnHopTime; } OverworldWildBehaviorProfileData;
 typedef struct OverworldWildBehaviorProfile { OverworldWildBehaviorProfileData lane; } OverworldWildBehaviorProfile;
 typedef struct OverworldWildBehaviorDataBlob { void *surfaceModels; } OverworldWildBehaviorDataBlob;
 typedef struct OverworldWildSurfaceCatalog { int unused; } OverworldWildSurfaceCatalog;
-typedef struct OverworldActorPolicyView { u8 chainStepsRemaining, chainPauseTicks, chainPauseAction, motionPhase, actorActive; } OverworldActorPolicyView;
+typedef struct OverworldWildWalkMomentumState { u8 speed; } OverworldWildWalkMomentumState;
+typedef struct OverworldActorPolicyView {
+    OverworldWildWalkMomentumState walkMomentum;
+    u8 chainStepsRemaining, chainPauseTicks, chainPauseAction, motionPhase, actorActive;
+} OverworldActorPolicyView;
 typedef struct OverworldWildOverlayRuntimeState {
     u8 movementCustomMotionModes[10], movementCustomJumpArcHeightsQ4[10];
     u8 movementCustomJumpPrepActive[10], movementCustomJumpActive[10];
     s16 movementCustomJumpStartX[10], movementCustomJumpStartY[10];
     s16 movementCustomJumpTargetX[10], movementCustomJumpTargetY[10];
+    s32 movementCustomJumpTargetBaseY[10], movementCustomJumpShadowBaseY[10];
 } OverworldWildOverlayRuntimeState;
 typedef struct OverworldWildSpawnState {
     FieldSystem *movementFieldSystem;
     u8 movementSpotStates[10], movementPendingDirections[10], movementPendingDistances[10];
-    u8 movementStagedHopDistances[10], movementBattleSettleFrames;
+    u8 movementSpawnRunActive[10];
+    u8 movementStagedHopDistances[10], movementStagedHopPending[10], movementBattleSettleFrames;
     u16 movementInProgressMask;
     OverworldWildOverlayRuntimeState runtime;
 } OverworldWildSpawnState;
@@ -82,7 +89,7 @@ static BOOL MapObject_UpdateMovementCommand(LocalMapObject *object)
     return TRUE;
 }
 /* @IMMEDIATE@ */
-static const OverworldWildBehaviorProfileData *OverworldWildSpawns_GetBehaviorStateLane(const OverworldWildBehaviorProfile *profile, u8 state)
+static const OverworldWildBehaviorProfileData *OverworldWildSpawns_GetControllerLane(const OverworldWildBehaviorProfile *profile, u8 state)
 { (void)state; return &profile->lane; }
 static u8 OverworldWalk_DirectionKey(u8 direction) { return direction; }
 static u8 OverworldWalk_DiagonalFacing(LocalMapObject *object, u8 direction, u8 key)
@@ -102,9 +109,9 @@ static const OverworldWildBehaviorDataBlob *OverworldWildSpawns_GetBehaviorDataB
 { static const OverworldWildBehaviorDataBlob blob = {0}; return &blob; }
 static OverworldMotionDecision OverworldWildSpawns_ResolveHopTrajectory(FieldSystem *field, const OverworldWildSurfaceCatalog *catalog,
     const OverworldWildBehaviorProfileData *lane, LocalMapObject *object, s32 base, s32 target,
-    int x, int y, int tx, int ty, u8 distance, BOOL usesArc, u32 *trajectory)
+    int x, int y, int tx, int ty, u8 distance, BOOL usesArc, BOOL spawnEntry, u32 *trajectory)
 { (void)field; (void)catalog; (void)lane; (void)object; (void)base; (void)target; (void)x; (void)y;
-  (void)tx; (void)ty; (void)distance; (void)usesArc; *trajectory = 8 | (24u << 16);
+  (void)tx; (void)ty; (void)distance; (void)usesArc; (void)spawnEntry; *trajectory = 8 | (24u << 16);
   return trajectoryOkay ? OVERWORLD_MOTION_DECISION_ACCEPTED : OVERWORLD_MOTION_DECISION_BLOCKED; }
 static u8 OverworldWildSpawns_GetBehaviorHopSpinSpeed(const OverworldWildBehaviorProfile *profile, u8 state)
 { (void)profile; (void)state; return 0; }
@@ -151,8 +158,10 @@ static void RunCase(unsigned mode, unsigned failure)
 {
     static const char *names[] = {"success", "existing settlement", "profile failure", "trajectory failure", "prep failure", "admission failure"};
     caseName = names[failure];
-    OverworldWildSpawnState state = {0}; FieldSystem field = {0};
+    OverworldWildSpawnState state = {0};
     LocalMapObject object = {.xCurr = 551, .yCurr = 389, .posVec = {36143104, 65536, 25526272}, .flags = 1, .movementCommand = 255};
+    PlayerAvatar playerAvatar = {.mapObject = &object};
+    FieldSystem field = {.playerAvatar = &playerAvatar};
     OverworldWildBehaviorProfile profile = {0};
     inspectOkay = failure != 2; trajectoryOkay = failure != 3;
     prepOkay = failure != 4; requestOkay = failure != 5;
@@ -199,7 +208,7 @@ static void RunCase(unsigned mode, unsigned failure)
         CHECK(state.movementPendingDirections[0] == 7);
         CHECK(state.movementPendingDistances[0] == 3);
         CHECK(state.movementStagedHopDistances[0] == 6);
-        if (mode == 2) CHECK(object.curFacing == 0);
+        CHECK(object.curFacing == precedingObject.curFacing);
         CHECK(!result);
         CHECK(!MapObject_IsSingleMovementActive(&object));
         CHECK(shellStarts == 0); /* Native shell exists only for admitted work. */

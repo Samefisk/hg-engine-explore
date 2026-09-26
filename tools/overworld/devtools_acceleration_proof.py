@@ -46,11 +46,12 @@ def _checked(row, subject, oracle):
             and re.fullmatch(r"[0-9a-f]{64}", service["entrySha256"]) is not None,
             "oracle target differs")
     header, table = bytes.fromhex(service["entryHex"]), bytes.fromhex(service["tableHex"])
-    require(len(header) == 16 and header[:8] == struct.pack("<IHH", 0x504D574F, 4, 16)
-            and header[12:16] == bytes(4) and len(table) == 24
+    require(len(header) == 16 and header[:8] == struct.pack("<IHH", 0x504D574F, 5, 16)
+            and struct.unpack_from("<I", header, 12)[0] != 0 and len(table) == 24
             and struct.unpack_from("<I", table, 12)[0] == target | 1, "oracle public ABI differs")
     pointer(service["address"], 16)
     pointer(struct.unpack_from("<I", header, 8)[0], 24)
+    pointer(struct.unpack_from("<I", header, 12)[0], 16)
     trampoline, stack = receipt["trampoline"], receipt["stackOwnership"]
     address = pointer(trampoline["address"], 1536)
     field, heap = pointer(value["fieldPointer"]), integer(value["heapGeneration"])

@@ -15,12 +15,12 @@
         "frame-pacing",
         "control-release"
       ],
-      "measurementContractSha256": "217d82bdb607b36aa500756a95795c4f9dd3166f884587cac7f3a2e85f6c4c1d",
+      "measurementContractSha256": "5937bd5cedceb89991e780d389ef2ad684a9cd25570b6dc309f4cefaad24393c",
       "scenarios": [],
       "tests": [
         "walk.wild.runner-stop-skid"
       ],
-      "reason": "The current Runner stop-skid contract has one bounded registered shared-devtools test. It spawns and binds a current Stantler near the player, leaves input neutral through its normal alert run, and requires one Tired NONE stop request, an accepted one-tile eight-frame skid, zero Movement Chain action and pause fields, one target commit, and idle control return.",
+      "reason": "The current Runner stop-skid contract has one bounded registered shared-devtools test. It spawns and binds a current Stantler near the player, leaves input neutral through its normal alert run, and requires one Tired NONE stop request, two accepted eight-frame skid tiles, zero Movement Chain action and pause fields, two target commits, and idle control return.",
       "originRunner": "scripts/verify_overworld_walk_runtime.py::runner_stop_skid"
     },
     "legacy.acceleration-parity": {

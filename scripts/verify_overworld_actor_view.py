@@ -48,7 +48,7 @@ def engine_constants() -> str:
             "OW_WILD_FISH_SLOT_START", "OW_WILD_FOLLOWER_SLOT", "OW_WILD_MAX_SPAWNS",
         ),
         "include/overworld_wild_movement.h": ("OW_WILD_SPAWNER_SPOT_STATE_CHILL",
-            "OW_WILD_SPAWNER_SPOT_STATE_EMOTING", "OW_WILD_SPAWNER_SPOT_STATE_ACTIVE",
+            "OW_WILD_SPAWNER_SPOT_STATE_EMOTING", "OW_WILD_SPAWNER_SPOT_STATE_RESERVED",
             "OW_WILD_SPAWNER_SPOT_STATE_TIRED"),
         "include/map_events_internal.h": ("BIT_VANISH",),
     }

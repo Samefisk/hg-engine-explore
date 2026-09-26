@@ -6,6 +6,7 @@
 #include "../../include/map_events_internal.h"
 #include "../../include/overlay.h"
 #include "../../include/overworld_actor_system_internal.h"
+#include "../../include/overworld_behavior_condition_adapter.h"
 #include "../../include/overworld_mount_internal.h"
 #include "../../include/overworld_wild_spawns_internal.h"
 #include "../../include/overworld_wild_runtime.h"
@@ -52,6 +53,16 @@ OverworldWalk_DecelerateTimeBody(
         time, baseTime, accelerationStep);
 }
 
+extern const u16 sOverworldWalkDirectionKeys[];
+__asm__(".section .overworld_walk_decelerate_time_body,\"ax\",%progbits\n"
+        ".balign 2\n"
+        ".type sOverworldWalkDirectionKeys,%object\n"
+        "sOverworldWalkDirectionKeys:\n"
+        ".hword 0x40, 0x80, 0x20, 0x10\n"
+        ".hword 0x60, 0x50, 0xA0, 0x90\n"
+        ".size sOverworldWalkDirectionKeys,.-sOverworldWalkDirectionKeys\n"
+        ".previous\n");
+
 u8 __attribute__((naked)) WALK_PUBLIC_CODE(".overworld_walk_decelerate_time")
 OverworldWalk_DecelerateTime(
     u8 time,
@@ -63,6 +74,26 @@ OverworldWalk_DecelerateTime(
         "bx r3\n"
         ".align 2\n"
         "1: .word OverworldWalk_DecelerateTimeBody + 1\n");
+}
+
+void WALK_PUBLIC_CODE(".overworld_condition_trace")
+OverworldBehaviorConditionTrace_Record(
+    const OverworldActorHandle *subject,
+    const OverworldBehaviorConditionResult *result,
+    const OverworldBehaviorConditionEntryState *entryState,
+    u16 entryStateBits)
+{
+    OVERWORLD_ACTOR_SYSTEM_COMPAT_ENTRY->recordTrace(
+        subject,
+        OVERWORLD_ACTOR_EVENT_CONDITIONAL_RESOLVED,
+        result->winningConditionSourceApplication
+            | ((u16)result->resolvedTargetSourceApplication << 5)
+            | ((u16)result->resolvedTarget.kind << 10)
+            | entryStateBits,
+        result->winningConditionId
+            | ((u32)result->resolvedTarget.actor.slot << 16),
+        (u16)entryState->activeUntil
+            | ((u32)(u16)entryState->cooldownUntil << 16));
 }
 
 void __attribute__((naked)) WALK_PUBLIC_CODE(".overworld_walk_propose_step")
@@ -220,7 +251,6 @@ OverworldWalk_MarkPlannedStopSkid(
     OverworldActorWalkPolicyCall *call)
 {
     u8 turnSkidOptions = call->lane->tilesBeforeTurnSkid;
-    u8 skidTiles;
 
     (void)policy;
 
@@ -233,26 +263,6 @@ OverworldWalk_MarkPlannedStopSkid(
         call->stepFlags |= OVERWORLD_ACTOR_WALK_STEP_PLANNED_SKID_PATH;
         call->reserved[OVERWORLD_ACTOR_WALK_POLICY_SKID_PATH_TILES_INDEX] =
             call->distance;
-        return;
-    }
-    if ((call->stepFlags & OVERWORLD_ACTOR_WALK_STEP_SKID) != 0) {
-        return;
-    }
-    if ((call->flags & OVERWORLD_ACTOR_WALK_POLICY_FLAG_CHAIN_ENABLED) == 0) {
-        return;
-    }
-    if ((call->stepFlags & OVERWORLD_ACTOR_WALK_STEP_CONTINUATION) != 0
-        || OW_WILD_BEHAVIOR_TILES_BEFORE_TURN_SKID(turnSkidOptions) == 0
-        || !OW_WILD_BEHAVIOR_PLANS_TURN_SKID_PATH(turnSkidOptions)) {
-        return;
-    }
-    /* Reserve enough straight runway for the fastest later turn, including
-     * the first recovery step after a turn skid. */
-    skidTiles = OverworldWalk_SkidTiles(call->lane->maxWalkSpeed);
-    if (skidTiles != 0) {
-        call->stepFlags |= OVERWORLD_ACTOR_WALK_STEP_PLANNED_SKID_PATH;
-        call->reserved[OVERWORLD_ACTOR_WALK_POLICY_SKID_PATH_TILES_INDEX] =
-            skidTiles;
     }
 }
 
@@ -285,7 +295,7 @@ u32 OverworldWalk_DirectionKey(u8 direction) __asm__("OverworldWalk_DirectionKey
 u32 WALK_PUBLIC_CODE(".overworld_walk_direction_key_body")
 OverworldWalk_DirectionKey(u8 direction)
 {
-    return OverworldWalkDirectionPolicy_Key(direction);
+    return direction < 8 ? sOverworldWalkDirectionKeys[direction] : 0;
 }
 
 int WALK_PUBLIC_CODE(".overworld_walk_delta_x")
@@ -517,7 +527,8 @@ static BOOL WALK_PRIVATE_CODE Walk_MountCanControl(
         && (avatar->unk0 & WALK_MOUNT_AVATAR_FORCED_MOVEMENT) == 0;
 }
 
-static void WALK_PRIVATE_CODE Walk_MountForceDirection(
+static void __attribute__((noinline)) WALK_PRIVATE_CODE
+Walk_MountForceDirection(
     u32 *newKeys,
     u32 *heldKeys,
     u8 direction)
@@ -528,7 +539,7 @@ static void WALK_PRIVATE_CODE Walk_MountForceDirection(
     *heldKeys = (*heldKeys & ~PAD_PLUS_KEY_MASK) | key;
 }
 
-static void WALK_PRIVATE_CODE Walk_MountSaveProposal(
+static void Walk_MountSaveProposal(
     OverworldMountRuntimeState *state,
     const OverworldActorWalkPolicyCall *policyCall);
 
@@ -549,7 +560,7 @@ OverworldWalk_FilterMountedInput(
         || !Walk_MountCanControl(state, avatar)
         || (avatar->unk14 != WALK_PLAYER_MOVE_STATE_NONE
             && avatar->unk14 != WALK_PLAYER_MOVE_STATE_END)
-        || policy.pendingStep == OVERWORLD_ACTOR_WALK_PENDING_ACTIVE) {
+        || policy.pendingStep == OVERWORLD_ACTOR_WALK_PENDING_ACCEPTED) {
         return;
     }
     if (policy.pendingStep == OVERWORLD_ACTOR_WALK_PENDING_PROPOSAL) {
@@ -570,6 +581,7 @@ OverworldWalk_FilterMountedInput(
         roleInput.intentKind = OVERWORLD_ROLE_CONTROLLER_INTENT_WALK;
         roleInput.requestedDirection = requestedDirection;
         roleInput.committedDirection = policy.walkMomentum.direction;
+        roleInput.flags = OVERWORLD_ROLE_CONTROLLER_INPUT_CHAIN_ENABLED;
         if ((state->snapshot.profile.walkOptions
                 & OW_WILD_BEHAVIOR_WALK_OPTION_LOCK_DIRECTION) != 0) {
             roleInput.flags |= OVERWORLD_ROLE_CONTROLLER_INPUT_RAM;
@@ -597,6 +609,13 @@ OverworldWalk_FilterMountedInput(
     call.facingDirection = WALK_DIRECTION_NONE;
     call.laneState = OW_WILD_SPAWNER_SPOT_STATE_CHILL;
     call.flags = OVERWORLD_ACTOR_WALK_POLICY_FLAG_DEFER_STOP;
+    call.stepFlags = OVERWORLD_ACTOR_WALK_STEP_VALIDATE;
+    call.reserved[OVERWORLD_ACTOR_WALK_POLICY_SKID_PATH_TILES_INDEX] = 0;
+    if (requestedDirection != WALK_DIRECTION_NONE
+        && (roleOutput.intentFlags
+            & OVERWORLD_ROLE_CONTROLLER_INTENT_ENABLE_CHAIN) != 0) {
+        call.flags |= OVERWORLD_ACTOR_WALK_POLICY_FLAG_CHAIN_ENABLED;
+    }
     if (requestedDirection != WALK_DIRECTION_NONE
         && (roleOutput.intentFlags
             & OVERWORLD_ROLE_CONTROLLER_INTENT_CRASH_ON_BLOCKED) != 0) {
@@ -605,6 +624,12 @@ OverworldWalk_FilterMountedInput(
     if (!OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY->policy
             ->reduceWalk(&call)) {
         return;
+    }
+    if (call.decision == OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP
+        && (call.stepFlags & OVERWORLD_ACTOR_WALK_STEP_STOP_SKID) != 0) {
+        call.stepFlags |= OVERWORLD_ACTOR_WALK_STEP_PLANNED_STOP_SKID;
+        call.reserved[OVERWORLD_ACTOR_WALK_POLICY_STOP_SKID_TILES_INDEX] =
+            call.distance;
     }
     if ((call.stepFlags
             & OVERWORLD_ACTOR_WALK_STEP_CLEAR_PRESENTATION) != 0) {
@@ -674,7 +699,6 @@ OverworldWalk_StartMountedFlat(
     state->snapshot.motionMode = OVERWORLD_MOUNT_MOTION_WALK;
     state->motionDirection = facingDirection;
     state->motionArcHeightQ4 = 0;
-    state->motionFlicker = 0;
     state->savedFollowerShadowSuppressed =
         (follower->flags & MAPOBJECTFLAG_UNK20) != 0;
     state->motionCooldown = 0;
@@ -705,7 +729,8 @@ OverworldWalk_StartMountedFlat(
     return TRUE;
 }
 
-static void __attribute__((noinline)) WALK_PRIVATE_CODE Walk_MountSaveProposal(
+static void WALK_PUBLIC_CODE(".overworld_walk_start_mounted_flat")
+Walk_MountSaveProposal(
     OverworldMountRuntimeState *state,
     const OverworldActorWalkPolicyCall *policyCall)
 {
@@ -714,6 +739,11 @@ static void __attribute__((noinline)) WALK_PRIVATE_CODE Walk_MountSaveProposal(
     }
     state->reservedPolicyState[OVERWORLD_MOUNT_WALK_STEP_FLAGS_INDEX] =
         policyCall->stepFlags;
+    state->motionFlicker = policyCall->reserved[3];
+    state->reservedPolicyProfile[
+        OVERWORLD_MOUNT_WALK_SKID_PATH_TILES_INDEX] =
+            policyCall->reserved[
+                OVERWORLD_ACTOR_WALK_POLICY_SKID_PATH_TILES_INDEX];
     state->reservedPolicyState[OVERWORLD_MOUNT_WALK_STEP_DIRECTION_INDEX] =
         policyCall->stepDirection;
     state->reservedPolicyState[

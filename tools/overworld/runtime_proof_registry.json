@@ -3,6 +3,781 @@
   "executionMethod": "shared-devtools",
   "migration": "tools/overworld/runtime_proof_migration.json",
   "sharedTests": {
+
+  "profile.notice-player.routine-return": {
+    "evaluator": "notice-player-runtime-v1",
+    "proofLevel": "S3",
+    "mode": "prepared",
+    "recipeSha256": "0e565a738dbb0c65f583e499632b2fe31887ca0f9777883ceaf0fda2950642e4",
+    "requirements": [
+      "current.notice-player-routine-return"
+    ],
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "feedback-effect",
+      "rendered-motion",
+      "frame-pacing",
+      "control-release"
+    ],
+    "minimumObservedFrames": 1,
+    "recorderControlRequirement": null,
+    "measurementContract": {
+      "live-actor-identity": [
+        {
+          "name": "notice-player-mareep-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "WILD",
+            179,
+            1,
+            1
+          ]
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "notice-player-condition-contract",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            "notice-player",
+            "condition-notice-player",
+            "timed",
+            960,
+            970,
+            "PLAYER",
+            "current-vision"
+          ]
+        }
+      ],
+      "feedback-effect": [
+        {
+          "name": "notice-player-exclamation-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "notice-player-faced-captured-target-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "notice-player-presentation-pause-frames",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 10
+        }
+      ],
+      "control-release": [
+        {
+          "name": "notice-player-post-pause-routine-and-repeat-counts",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            0
+          ]
+        }
+      ]
+    },
+    "scope": "One prepared Wild Mareep proves the authored Notice Player condition, target, one presentation pause, control return, and no retrigger in the observed window."
+  },
+
+  "profile.stalker.visibility-gate": {
+    "evaluator": "stalker-runtime-v1",
+    "proofLevel": "S3",
+    "mode": "prepared",
+    "recipeSha256": "ac79567dea6ca4f6cee7036b3ddbbcaf65c904fcc545b404b994e8137794e409",
+    "requirements": [
+      "current.stalker-visibility-gate"
+    ],
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "engine-boundary",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumObservedFrames": 1,
+    "recorderControlRequirement": null,
+    "measurementContract": {
+      "live-actor-identity": [
+        {
+          "name": "stalker-gastly-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "WILD",
+            92,
+            1,
+            1
+          ]
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "stalker-condition-contract",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            "stalker",
+            "condition-stalker-unseen-by-player",
+            "while-true",
+            "PLAYER",
+            "current-vision",
+            "BEHIND"
+          ]
+        }
+      ],
+      "engine-boundary": [
+        {
+          "name": "stalker-visibility-rechecks-at-intent-boundaries",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1
+          ]
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "stalker-unseen-seen-and-routine-motion-counts",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            0,
+            1
+          ]
+        }
+      ],
+      "control-release": [
+        {
+          "name": "stalker-seen-routine-resume-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ]
+    },
+    "scope": "One prepared Wild Gastly proves Stalker motion while unseen, suppression at seen intent boundaries, and return to its ordinary Routine."
+  },
+
+  "profile.playful.target-and-collision": {
+    "evaluator": "playful-runtime-v1",
+    "proofLevel": "S3",
+    "mode": "prepared",
+      "recipeSha256": "05bf008fa46e173899ee9c28e9aeeb4fbc8532b139ed2ca9dd37328408a178f2",
+    "requirements": [
+      "current.playful-target-and-collision"
+    ],
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "collision-decision",
+      "logical-commit",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumObservedFrames": 1,
+    "recorderControlRequirement": null,
+    "measurementContract": {
+      "live-actor-identity": [
+        {
+          "name": "playful-clefairy-clefable-identities",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "WILD",
+            35,
+            1,
+            1,
+            "WILD",
+            36,
+            1
+          ]
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "playful-captured-target-cases",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            "condition-playful-notices-compatible-actor",
+            "WILD:36",
+            "condition-playful-notices-player",
+            "PLAYER"
+          ]
+        }
+      ],
+      "collision-decision": [
+        {
+          "name": "playful-target-tile-rejection-counts",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1
+          ]
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "playful-noncolliding-terminal-commit-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 2
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "playful-target-relative-motion-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 2
+        }
+      ],
+      "control-release": [
+        {
+          "name": "playful-case-control-return-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 2
+        }
+      ]
+    },
+    "scope": "Prepared Wild Clefairy and Clefable prove compatible-actor and player target capture, non-colliding commits, and control return."
+  },
+
+  "profile.startled.timed-retreat": {
+    "evaluator": "startled-runtime-v1",
+    "proofLevel": "S3",
+    "mode": "prepared",
+    "recipeSha256": "aa09700015e557da3e18c479f08d895e21e1fb2f0bfbf329cebfae7040853b9e",
+    "requirements": [
+      "current.startled-timed-retreat"
+    ],
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "engine-boundary",
+      "rendered-motion",
+      "frame-pacing",
+      "control-release"
+    ],
+    "minimumObservedFrames": 1,
+    "recorderControlRequirement": null,
+    "measurementContract": {
+      "live-actor-identity": [
+        {
+          "name": "startled-bellsprout-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "WILD",
+            69,
+            1,
+            1
+          ]
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "startled-condition-contract",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            "startled",
+            "condition-startled-notices-player",
+            "timed",
+            44,
+            164,
+            "PLAYER"
+          ]
+        }
+      ],
+      "engine-boundary": [
+        {
+          "name": "startled-intents-inside-active-window",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 2
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "startled-away-displacement-and-locomotion",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1
+          ]
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "startled-active-frame-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 44
+        }
+      ],
+      "control-release": [
+        {
+          "name": "startled-post-expiry-routine-resume-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ]
+    },
+    "scope": "One prepared Wild Bellsprout proves the 44-frame Startled window, repeated retreat intent, preserved locomotion, and Routine return."
+  },
+
+  "spawn.fly-in.uneven-height": {
+    "evaluator": "fly-in-runtime-v1",
+    "proofLevel": "S4",
+    "mode": "prepared",
+    "recipeSha256": "3d2ac9cf53cd55beb5f83b653e3845aa8ec965fdbdba7b45793a1da061f8693b",
+    "requirements": [
+      "current.fly-in-uneven-height"
+    ],
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "terrain-selection",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "control-release"
+    ],
+    "minimumObservedFrames": 1,
+    "recorderControlRequirement": null,
+    "measurementContract": {
+      "live-actor-identity": [
+        {
+          "name": "fly-in-pidgey-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "WILD",
+            16,
+            1,
+            1
+          ]
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "fly-in-placement-and-target",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            "fly-in",
+            "OW_WILD_BEHAVIOR_SPAWN_STATE_FLY_IN",
+            33,
+            581,
+            397
+          ]
+        }
+      ],
+      "terrain-selection": [
+        {
+          "name": "fly-in-loaded-validated-uneven-target",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "name": "fly-in-origin-target-height-delta",
+          "operator": "ne",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "fly-in-terminal-commit-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "fly-in-monotonic-and-terminal-height-errors",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "fly-in-suppressed-surface-shadow-observations",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        },
+        {
+          "name": "fly-in-open-ground-shadow-observations",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        },
+        {
+          "name": "fly-in-suppressed-surface-shadow-errors",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "fly-in-ground-height-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 2
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "fly-in-duration-frames",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 144
+        },
+        {
+          "name": "fly-in-contiguous-descent-sample-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 2
+        }
+      ],
+      "control-release": [
+        {
+          "name": "fly-in-routine-control-return-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ]
+    },
+    "scope": "One prepared Wild Pidgey proves Fly In preparation, uneven target height retention, monotonic descent, exact landing, commit, and control return."
+  },
+
+  "walk.wild.blocked-facing": {
+    "evaluator": "blocked-wild-facing-v1",
+    "proofLevel": "S3",
+    "mode": "prepared",
+    "recipeSha256": "fe2ba1a9f12cb6f76db40d07b091dbba45773737665a92d350f7572045e1c0af",
+    "requirements": ["current.blocked-wild-facing"],
+    "claims": ["live-actor-identity", "terrain-selection", "rendered-motion", "frame-pacing"],
+    "minimumObservedFrames": 128,
+    "recorderControlRequirement": null,
+    "measurementContract": {
+      "live-actor-identity": [
+        {"name": "blocked-exeggcute-identity", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [1, "WILD", 102, 1, 1]}
+      ],
+      "terrain-selection": [
+        {"name": "blocked-exeggcute-canopy-fixture", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [33, 580, 409, "canopy", 1]}
+      ],
+      "rendered-motion": [
+        {"name": "blocked-exeggcute-facing-and-position-changes", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [0, 0, 0]}
+      ],
+      "frame-pacing": [
+        {"name": "blocked-exeggcute-contiguous-frames", "operator": "gte", "type": "integer", "validator": "meaningful-observation", "minimum": 128}
+      ]
+    },
+    "scope": "One native-spawned Wild Exeggcute on the authored colliding canopy at map33 (580,409). With neutral input and its normal resolved profile, the same actor must remain idle on that tile for 128 continuous completed frames with one unchanged facing and no logical commit. Prepared spawning does not prove natural Headbutt encounter selection."
+  },
+
+  "profile.waddle.walk-presentation-only": {
+    "evaluator": "waddle-runtime-v1",
+    "proofLevel": "S4",
+    "mode": "prepared",
+    "recipeSha256": "47ae7e9d8f36c2ee3fb2be570d8b88b4dfb674b88c208274752bd524f349c27d",
+    "requirements": [
+      "current.waddle-walk-presentation-only"
+    ],
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "control-release"
+    ],
+    "minimumObservedFrames": 1,
+    "recorderControlRequirement": null,
+    "measurementContract": {
+      "live-actor-identity": [
+        {
+          "name": "waddle-bellsprout-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "WILD",
+            69,
+            1,
+            1
+          ]
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "waddle-resolved-width",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            "waddle",
+            4
+          ]
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "waddle-walk-terminal-commit-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "waddle-changed-walk-sample-fields",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            "swayOffset"
+          ]
+        },
+        {
+          "name": "waddle-non-walk-sway-sample-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "waddle-walk-timing-and-path-unchanged",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1
+          ]
+        }
+      ],
+      "control-release": [
+        {
+          "name": "waddle-control-return-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ]
+    },
+    "scope": "One prepared Wild Bellsprout proves Waddle changes Walk horizontal presentation while logical path, timing, commit, and non-Walk presentation stay unchanged."
+  },
+
+  "profile.floaty-bounce-hop-pause": {
+    "evaluator": "floaty-bounce-hop-pause-v1",
+    "proofLevel": "S4",
+    "mode": "prepared",
+    "recipeSha256": "79ba2d9350495f5aa04ab76ecae054217dae9acf8b32eb1db1e0881570b709cd",
+    "requirements": ["current.floaty-bounce-hop-pause"],
+    "claims": ["live-actor-identity", "profile-resolution", "logical-commit", "rendered-motion", "frame-pacing", "control-release"],
+    "minimumObservedFrames": 2,
+    "recorderControlRequirement": null,
+    "measurementContract": {
+      "live-actor-identity": [
+        {"name": "floaty-jigglypuff-identity", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [1, "WILD", 39, 1, 1]}
+      ],
+      "profile-resolution": [
+        {"name": "floaty-resolved-hop-contract", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [2, 12, 10]}
+      ],
+      "logical-commit": [
+        {"name": "floaty-complete-hop-commits", "operator": "gte", "type": "integer", "validator": "meaningful-observation", "minimum": 2}
+      ],
+      "rendered-motion": [
+        {"name": "floaty-complete-rendered-hops", "operator": "gte", "type": "integer", "validator": "meaningful-observation", "minimum": 2}
+      ],
+      "frame-pacing": [
+        {"name": "floaty-hop-duration-errors", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 0},
+        {"name": "floaty-two-hop-pause-frames", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [10, 10]}
+      ],
+      "control-release": [
+        {"name": "floaty-control-return-count", "operator": "gte", "type": "integer", "validator": "meaningful-observation", "minimum": 2}
+      ]
+    },
+    "scope": "One prepared Wild Jigglypuff at the measured flat Route 29 fixture retains two complete normal Floaty Bounce Hops, each with authored 12-frame base travel and 10 settle frames. Igglybuff shares the authored application but has no live cadence credit from this test."
+  },
+
+  "actor.held-control-resume": {
+    "evaluator": "held-control-runtime-v1",
+    "proofLevel": "S3",
+    "mode": "prepared",
+    "recipeSha256": "310a4cfdd7115e0282120cfa4a65801e53c32183a526742cbda293438b0f66e4",
+    "requirements": [
+      "current.held-actor-control-resume"
+    ],
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "controlled-action",
+      "engine-boundary",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumObservedFrames": 1,
+    "recorderControlRequirement": null,
+    "measurementContract": {
+      "live-actor-identity": [
+        {
+          "name": "held-mankey-rattata-identities",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            "WILD",
+            56,
+            1,
+            1,
+            "WILD",
+            19,
+            1
+          ]
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "held-no-picked-up-profile-and-class-equality",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            0,
+            1
+          ]
+        }
+      ],
+      "controlled-action": [
+        {
+          "name": "held-control-mode-sequence",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            "AUTONOMOUS",
+            "HELD",
+            "AUTONOMOUS"
+          ]
+        }
+      ],
+      "engine-boundary": [
+        {
+          "name": "held-during-and-after-autonomous-intent-counts",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            0,
+            1
+          ]
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "held-sync-errors-and-release-normalizations",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            0,
+            1,
+            1
+          ]
+        }
+      ],
+      "control-release": [
+        {
+          "name": "held-routine-resume-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ]
+    },
+    "scope": "Prepared Wild Mankey and Rattata prove internal HELD ownership, carried synchronization, no held autonomy, release normalization, and Routine resume."
+  },
     "world.unmounted.spawn-zero-stutter": {
       "evaluator": "unmounted-zero-stutter-v1",
       "recipeSha256": "1e8619634ef8392b7ceffb834798cd3b50fba7d861645b10f244ed2bcc40eabb",
@@ -121,9 +896,9 @@
     },
     "walk.turn-skid.control-release": {
       "evaluator": "turn-skid-v1",
-      "recipeSha256": "4e0be5eebf51019f63ab6ee42772e98ba18d5ce197daeabb24ccb521616560e7",
-      "minimumObservedFrames": 94,
-      "proofLevel": "S3",
+      "recipeSha256": "6536bebba6cdd3c40ff8328b9b8139c71ebd2e732d1f73ffe157acce50e8592d",
+      "minimumObservedFrames": 102,
+      "proofLevel": "S4",
       "mode": "prepared",
       "claims": ["natural-input", "live-actor-identity", "logical-commit", "rendered-motion", "frame-pacing", "feedback-effect", "control-release"],
       "requirements": ["current.turn-deceleration"],
@@ -131,35 +906,57 @@
       "measurementContract": {
         "natural-input": [{"name": "turn-skid-acceleration-durations", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [8, 8, 8, 7, 7, 7, 6, 6, 6, 5, 5, 5, 4]}],
         "live-actor-identity": [{"name": "mounted-cyndaquil-identity-flags", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [1, "MOUNTED", 155, 1, 1, 1]}],
-        "logical-commit": [{"name": "turn-skid-terminal-boundaries-and-target", "operator": "eq", "type": "object", "validator": "terminal-boundary-target-v1", "requiredCount": 2, "requiredKeys": ["boundaryCount", "final", "target"]}],
-        "rendered-motion": [{"name": "turn-skid-pair-and-facing", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [0, 2, 2]}],
-        "frame-pacing": [{"name": "turn-skid-motion-schedules", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [[0, 1, 2, 3, 4, 5, 6, 7], [0, 1, 2, 3, 4]]}],
+        "logical-commit": [{"name": "turn-skid-terminal-boundaries-and-target", "operator": "eq", "type": "object", "validator": "terminal-boundary-target-v1", "requiredCount": 3, "requiredKeys": ["boundaryCount", "final", "target"]}],
+        "rendered-motion": [{"name": "turn-skid-pair-and-facing", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [0, 2, 2]}, {"name": "turn-skid-facing-through-drift", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [3, 2, 16]}],
+        "frame-pacing": [{"name": "turn-skid-motion-schedules", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [[0, 1, 2, 3, 4, 5, 6, 7], [0, 1, 2, 3, 4, 5, 6, 7], [0, 1, 2, 3, 4]]}],
         "feedback-effect": [{"name": "turn-skid-dust-effect-count", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
         "control-release": [{"name": "turn-skid-recovery-state", "operator": "eq", "type": "array", "validator": "turn-skid-recovery-v1"}]
       },
-      "scope": "Prepared mounted Cyndaquil on one clear Cherrygrove lane. Normal Right input proves the authored thirteen-step acceleration times; normal Left reversal proves one 8-frame skid motion, one dust effect, its exact native Tick schedule, and a 5-frame recovery Walk one acceleration level slower than the pre-turn 4-frame speed. Prepared teleport, mount and direction-mode setup give no motion or timing credit."
+      "scope": "Prepared mounted Cyndaquil on one clear Cherrygrove lane. Normal Right input proves the authored thirteen-step acceleration times; normal Left reversal proves two 8-frame skid tiles that face Left while traveling Right on every completed frame, one dust effect, their exact native Tick schedules, and a 5-frame Left recovery Walk one acceleration level slower than the pre-turn 4-frame speed. Prepared teleport, mount and direction-mode setup give no motion or timing credit."
     },
     "walk.wild.runner-stop-skid": {
       "evaluator": "runner-stop-skid-v1",
-      "recipeSha256": "7f0c1e7d8eb9c746ce59355a2535bc91ccb8fb46611aa0da0901867bb977acce",
-      "minimumObservedFrames": 12,
+      "recipeSha256": "21658627cc7de6748f9467e1bcd25241c1c7be592ea39bd8c722fb4301c04a11",
+      "minimumObservedFrames": 20,
       "proofLevel": "S3",
       "mode": "prepared",
       "claims": ["natural-input", "live-actor-identity", "engine-boundary", "logical-commit", "rendered-motion", "frame-pacing", "control-release"],
       "requirements": ["legacy.runner-stop-skid"],
       "recorderControlRequirement": null,
-      "scope": "One current Wild Stantler spawned through native finalization at map33 (584,406), then left next to the player on neutral input through its normal alert run until the Tired lifecycle submits a separate NONE stop request at speed four. The proof retains exact identity, the 0x07 INPUT and accepted one-tile 0x87 start, zero Movement Chain action and pause fields, every elapsed frame, one logical commit, terminal lifecycle, reservation release and private-session cleanup. Prepared spawning does not prove natural population spawning."
+      "scope": "In a disposable session, the player teleports to map33 (585,406), then one current Wild Stantler spawns through native finalization at (584,406). Neutral input leaves it next to the player through its normal alert run until the Tired lifecycle submits a separate NONE stop request at speed four. The proof retains exact identity, the 0x07 INPUT and accepted two-tile 0x87 start, zero Movement Chain action and pause fields, every elapsed frame of two eight-frame skid tiles, both logical commits, terminal lifecycle, reservation release and private-session cleanup. Prepared setup does not prove natural population spawning or travel to the test site."
     },
     "walk.wild.runner-turn-runway": {
       "evaluator": "runner-turn-runway-v1",
-      "recipeSha256": "6832de0b7135b5be6e5e2fe6cb08fa8247a80805d0bfcd27ce616b45baa4202d",
-      "minimumObservedFrames": 14,
+      "recipeSha256": "95e53a108e39d896b20c800478903dfe2aa7ded543d062e5268f6b5826f42048",
+      "minimumObservedFrames": 22,
       "proofLevel": "S3",
       "mode": "prepared",
       "claims": ["natural-input", "live-actor-identity", "profile-resolution", "collision-decision", "engine-boundary", "logical-commit", "rendered-motion", "frame-pacing", "control-release"],
       "requirements": ["current.runner-turn-runway"],
       "recorderControlRequirement": null,
-      "scope": "One current Wild Stantler spawned through native finalization at map33 (586,404), then left on neutral input until its planned straight runway blocks. The same-frame perpendicular proposal must start one eight-frame skid and one six-frame recovery Walk in the new direction. The proof retains exact identity and profile lane, blocked-to-ignored and accepted policy receipts, zero Movement Chain action or pause fields, both complete motion lifecycles, two logical commits, reservation release and private-session cleanup. Prepared spawning does not prove natural population spawning."
+      "scope": "In a disposable session, the player teleports to map33 (585,406), then one current Wild Stantler spawns through native finalization at (586,404). Neutral input continues until its planned straight runway blocks. The same-frame perpendicular proposal must start two eight-frame skid tiles and one exact keyed recovery Walk in the new direction. The proof retains exact identity and profile lane, blocked-to-ignored and accepted policy receipts, zero Movement Chain action or pause fields, all three complete motion lifecycles and logical commits, reservation release and private-session cleanup. Prepared setup does not prove natural population spawning or travel to the test site."
+    },
+    "walk.wild.sprint-obstacle-approach": {
+      "evaluator": "wild-sprint-obstacle-approach-v1",
+      "recipeSha256": "30cd3ee51c33c3a453c995af94c51b91d23a1763673a0e6365731fbfb1a612e6",
+      "minimumObservedFrames": 16,
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "claims": ["controlled-action", "live-actor-identity", "profile-resolution", "collision-decision", "logical-commit", "rendered-motion", "control-release"],
+      "requirements": ["current.wild-sprint-obstacle-approach"],
+      "recorderControlRequirement": null,
+      "scope": "One current Wild Sprint Stantler starts idle at map33 (580,397), next to a static blocked signpost (581,397). A bounded native control sets only the direction candidate register to East. Stock collision and motion decide whether a two-tile Hop starts, commits at the open landing (582,397), renders completely and returns control. This does not prove a Walk-to-Hop route or natural Wander, Chase or Flee direction selection."
+    },
+    "walk.wild.sprint-npc-hop": {
+      "evaluator": "wild-sprint-npc-hop-v1",
+      "recipeSha256": "524325ec08b99dfd5555c07b33273b7ae506134908a77b52bdcaad00ce282cce",
+      "minimumObservedFrames": 16,
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "claims": ["controlled-action", "live-actor-identity", "profile-resolution", "collision-decision", "logical-commit", "rendered-motion", "control-release"],
+      "requirements": ["current.wild-sprint-npc-hop"],
+      "recorderControlRequirement": null,
+      "scope": "One current Wild Sprint Stantler starts idle at map33 (599,395), next to the stock Route 29 NPC at (600,395). A bounded native control changes only the East direction register. Open terrain plus a real two-tile Hop to (601,395) proves actor-obstacle admission and a safe landing. The NPC identity is inferred from fixed stock event data; it is not read directly. This does not prove a natural Wander, Chase or Flee direction choice."
     },
     "battle.capture.wild-handoff": {
       "evaluator": "wild-battle-handoff-v1",
@@ -414,6 +1211,63 @@
       "recorderControlRequirement": "shared.mounted-pose-recorder-control-v1",
       "scope": "Seven ordinary held-Right Cyndaquil Walks with durations8,8,8,7,7,7,6 and all nine original pacing measurements, then one separately scoped recovery tile. Prepared own-party mount on a checked clear lane; no wild-object relocation or timing mutation. Actual pair poses, native callbacks, final queue poses and input readback. Not natural selection/spawn or intermittent soak proof."
     },
+    "mount.stantler-speed-slew": {
+      "evaluator": "mounted-speed-slew-v1",
+      "recipeSha256": "57bf9d47b1b5dc7950474962621da1a0203c4abcef78b7ba3080ee6dcfea3929",
+      "minimumObservedFrames": 13,
+      "proofLevel": "S4",
+      "mode": "prepared",
+      "claims": ["natural-input", "live-actor-identity", "rendered-motion", "frame-pacing", "engine-boundary", "control-release"],
+      "requirements": ["current.mounted-speed-slew"],
+      "recorderControlRequirement": "shared.mounted-pose-recorder-control-v1",
+      "measurementContract": {
+        "natural-input": [{"name": "held-right-walk-count", "expected": 13, "operator": "eq", "type": "integer", "validator": "meaningful-observation"}],
+        "live-actor-identity": [{"name": "mounted-stantler-identity", "expected": [1, "MOUNTED", 234, 1], "operator": "eq", "type": "array", "validator": "meaningful-observation"}],
+        "rendered-motion": [
+          {"name": "continuous-walk-count", "expected": 13, "operator": "eq", "type": "integer", "validator": "meaningful-observation"},
+          {"name": "paired-position-mismatch-count", "expected": 0, "operator": "eq", "type": "integer", "validator": "meaningful-observation"},
+          {"name": "camera-locked-draw-frame-count", "expected": 47, "operator": "gte", "type": "integer", "validator": "meaningful-observation"},
+          {"name": "mounted-shadow-aligned-frame-count", "expected": 62, "operator": "gte", "type": "integer", "validator": "meaningful-observation"},
+          {"name": "distance-gait-and-seat-frame-count", "expected": 62, "operator": "gte", "type": "integer", "validator": "meaningful-observation"},
+          {"name": "gait-acceleration-braking-observed", "expected": [1, 1], "operator": "eq", "type": "array", "validator": "meaningful-observation"},
+          {"name": "gait-settled-after-release", "expected": 1, "operator": "eq", "type": "integer", "validator": "meaningful-observation"},
+          {"name": "authored-stop-skid-tail", "expected": 1, "operator": "eq", "type": "integer", "validator": "meaningful-observation"},
+          {"name": "eased-speed-transition-count", "expected": 1, "operator": "gte", "type": "integer", "validator": "meaningful-observation"}
+        ],
+        "frame-pacing": [
+          {"name": "authored-variance-tile-count", "expected": 13, "operator": "eq", "type": "integer", "validator": "meaningful-observation"},
+          {"name": "maximum-callback-gap", "expected": 2, "operator": "lte", "type": "integer", "validator": "meaningful-observation"},
+          {"name": "maximum-boundary-gap", "expected": 2, "operator": "lte", "type": "integer", "validator": "meaningful-observation"}
+        ],
+        "engine-boundary": [{"name": "player-step-callback-count", "expected": 13, "operator": "eq", "type": "integer", "validator": "meaningful-observation"}],
+        "control-release": [{"name": "released-player-control", "expected": [1, 0, 1], "operator": "eq", "type": "array", "validator": "meaningful-observation"}]
+      },
+      "scope": "Thirteen continuous held-Right mounted Stantler Walks on a checked clear lane, starting at authored speed6 with variance2, acceleration1 and Mounted top speed2. Retain full keyed variance through the first nominal max-speed tile; each later committed normal Walk reduces its width by1 until zero. Reject copied persistent variance. Check the shared eased ground path, exact native distance gait with bounce2/stride2/settle1/lean1, attached seat, stable ground camera and shadow, and actual graphics XYZ. Released input must produce exactly two four-frame stop skids, braking lean and zero final presentation offsets. Prepared setup does not prove natural mounting or other directions."
+    },
+    "mount.detach-follower-resumes-motion": {
+      "evaluator": "mount-detach-follower-resume-v1",
+      "recipeSha256": "bd9037b1df9d611f071772165a1f77ad0be1be2c11e1f3e2882d1d1b5fee4a19",
+      "minimumObservedFrames": 1,
+      "proofLevel": "S4",
+      "mode": "prepared",
+      "claims": ["natural-input", "live-actor-identity", "profile-resolution", "engine-boundary", "logical-commit", "rendered-motion", "frame-pacing", "control-release"],
+      "requirements": ["current.mount-detach-follower-resume"],
+      "recorderControlRequirement": null,
+      "measurementContract": {
+        "natural-input": [{"name": "mount-detach-select-and-player-clearance", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [1, 1]}],
+        "live-actor-identity": [
+          {"name": "mount-detach-follower-role", "operator": "eq", "type": "string", "validator": "meaningful-observation", "expected": "FOLLOWER"},
+          {"name": "mount-detach-same-cyndaquil-identity", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [1, 155, 7, 1, 1]}
+        ],
+        "profile-resolution": [{"name": "mount-detach-policy-transition", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [1, 1, 1]}],
+        "engine-boundary": [{"name": "mount-detach-rebound-and-generation-counts", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [1, 1, 1, 1]}],
+        "logical-commit": [{"name": "mount-detach-first-follower-commit-count", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+        "rendered-motion": [{"name": "mount-detach-first-follower-walk", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [1, 1, 1]}],
+        "frame-pacing": [{"name": "mount-detach-follower-clearance-resume-frame-count", "operator": "lte", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+        "control-release": [{"name": "mount-detach-follower-terminal-control", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [0, 1, 1]}]
+      },
+      "scope": "Normal SELECT detaches one prepared mounted Cyndaquil. Its policy identity changes from Mounted back to Follower, and the first normal Follower Walk uses that restored fingerprint. Normal RIGHT input clears the follower's next tile. The same slot-7 actor becomes autonomous and completes its first rendered Walk no later than one completed frame after that clearance. No timer, cooldown, target, profile or motion mutation during observation."
+    },
     "mount.detach-restores-control": {
       "evaluator": "mounted-control-stress-v1",
       "recipeSha256": "5154dc1f0cbc172882d93d30505dd81fd64549ae1c5fa0e600dccfb38609abfb",
@@ -489,7 +1343,7 @@
     },
     "observation.mount-pose-control": {
       "evaluator": "live-mount-pose-control-v1",
-      "recipeSha256": "2bb9ffd913a7d77dbae56f38d947c49f0ddff49b343cdc5ad54e696eae8ef1fc",
+      "recipeSha256": "1e98329b145eaea024f4f648a4d51512fb5e3ee8205732ad0a5d0f85358097a4",
       "minimumObservedFrames": 1,
       "proofLevel": "S3",
       "mode": "observer-control",
@@ -662,7 +1516,7 @@
       "evaluator": "mount-begin-current-follower-v1",
       "proofLevel": "S3",
       "mode": "prepared",
-      "recipeSha256": "ba6033ba3c85cf07c417fcef8ad5a6383c4e4866fd7e9bf8df155007767e22fa",
+      "recipeSha256": "ebf21e65a3faac795f2f8066073b0ae3c468aace354dda88d0250213189a286e",
       "requirements": [
         "legacy.mount-begin-current-follower"
       ],
@@ -674,7 +1528,95 @@
       ],
       "minimumObservedFrames": 1,
       "recorderControlRequirement": "shared.owner-reader-control-v1",
-      "scope": "Prepared different previous follower, then native Y/Y/Select selects and mounts current Mankey. Same actor and presentation object retain its resolved Owner and complete one Hop. No natural spawning, rendered trajectory, broad movement or soak claim."
+      "scope": "Prepared different previous follower, then normal Y/Y selects current Mankey. Select during a normal player run waits for the stock tile step to end before mounting; the same Mankey completes a later Hop and the player advances beyond the run tile. No natural spawning, general movement timing or soak claim."
+    },
+    "mount.select-mid-run": {
+      "evaluator": "mount-select-mid-run-v1",
+      "proofLevel": "S3",
+      "mode": "normal",
+      "recipeSha256": "441a16a11b6359bc4c541ba49fd55a1a595b66bbc557a55eece60a691a9b005e",
+      "requirements": ["current.mount-select-mid-run"],
+      "claims": ["natural-input", "live-actor-identity", "frame-pacing", "control-release"],
+      "minimumObservedFrames": 1,
+      "recorderControlRequirement": "shared.owner-reader-control-v1",
+      "scope": "Unchanged test.sav current Mankey Follower. Normal Right4 then one Right+Select completed frame while the player step and follower Hop are moving, with Right held through role handoff. The same actor must mount within eight completed game frames and complete one mounted Hop with control restored. No prepared mutation, natural acquisition, broad timing matrix or soak claim."
+    },
+    "mount.stantler-sprint-parity": {
+      "evaluator": "mounted-stantler-sprint-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "fcf03b11b519504605f489401d278797560833d850dca2d34e3574ff4c69c3cd",
+      "requirements": ["current.mounted-stantler-sprint-parity"],
+      "claims": ["natural-input", "live-actor-identity", "logical-commit", "frame-pacing", "control-release"],
+      "minimumObservedFrames": 160,
+      "recorderControlRequirement": "shared.owner-reader-control-v1",
+      "scope": "Prepared map33 (585,402) and party slot 0 Stantler; normal mounted Right input for 160 completed frames, then 40 frames with Up+Right held. On clear ground, at least eight cardinal one-tile Walks accelerate from nominal speed eight to four and stay there without Hop. No forced action, edited policy, or natural spawn claim."
+    },
+    "mount.stantler-sprint-obstacle-hop": {
+      "evaluator": "mounted-stantler-obstacle-hop-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "2b6df2e48c79059d0039638447eceaa1ff45fe8558a36e0c6c57cf34c84d9a40",
+      "requirements": ["current.mounted-stantler-obstacle-hop"],
+      "claims": ["natural-input", "live-actor-identity", "collision-decision", "logical-commit", "frame-pacing", "control-release"],
+      "minimumObservedFrames": 16,
+      "recorderControlRequirement": "shared.owner-reader-control-v1",
+      "scope": "Prepared map33 (580,397) and party slot 0 Stantler. Normal held Right starts one two-tile Hop across static blocked (581,397) and lands at (582,397); after release, the same mounted actor resumes cardinal Walk and accelerates to speed four. No edited movement state, natural capture, other obstacle shapes or Wild AI claim."
+    },
+    "mount.stantler-sprint-npc-hop": {
+      "evaluator": "mounted-stantler-npc-hop-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "a03696b3198aeaa4a3079892fc7f933690bdf17f394bfb8b3901ac6d455e6595",
+      "requirements": ["current.mounted-stantler-npc-hop"],
+      "claims": ["natural-input", "live-actor-identity", "collision-decision", "logical-commit", "frame-pacing", "control-release"],
+      "minimumObservedFrames": 16,
+      "recorderControlRequirement": "shared.owner-reader-control-v1",
+      "scope": "Prepared map33 (599,395) and party slot 0 Stantler. Normal Right starts one two-tile Hop over the stock Route 29 NPC at (600,395) and lands at (601,395). The stock NPC and open terrain are reviewed fixture facts, not direct live-object reads. No edited movement state, natural capture, Wild AI choice or broad actor-collision claim."
+    },
+    "mount.stantler-sprint-wall-approach": {
+      "evaluator": "mounted-stantler-wall-approach-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "73263317146d3e3dd3527653f5713bd3c07d0fecb2b5e37dc2be61021812c6c0",
+      "requirements": ["current.mounted-stantler-wall-approach"],
+      "claims": ["natural-input", "live-actor-identity", "collision-decision", "logical-commit", "control-release"],
+      "minimumObservedFrames": 120,
+      "recorderControlRequirement": "shared.owner-reader-control-v1",
+      "scope": "Copied save starts map33 (585,406). Prepared party slot 0 Stantler holds normal Right120 toward blocked wall (590,406), reaches the last clear tile (589,406) through four Walk commits, then turns Up to (589,405). No teleport, edited movement state, natural capture, broad wall coverage or presentation-feel claim."
+    },
+    "mount.stantler-key-edge": {
+      "evaluator": "mounted-stantler-key-edge-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "307eb37be876eeb72409023a04a54ab49bb7712b4db121de76db494df006c1be",
+      "requirements": ["current.mounted-stantler-key-edge"],
+      "claims": ["natural-input", "live-actor-identity", "logical-commit", "frame-pacing"],
+      "minimumObservedFrames": 12,
+      "recorderControlRequirement": "shared.owner-reader-control-v1",
+      "scope": "Prepared map33 (585,402) and party slot 0 Stantler. Natural Right reaches the second Sprint Walk at speed 7; neutral input continues through its COMMIT_PENDING boundary; a fresh Right edge on the next completed game frame must start the next Walk at speed 6 without an input-bearing idle frame. This does not replace the clear-lane run, obstacle Hop or transition proof."
+    },
+    "mount.stantler-turn-skid-facing": {
+      "evaluator": "mounted-stantler-turn-skid-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "28fcc2d22ee2ca1fe896f31d7291052e4da757e4bd8bbb9af7984f48463c2206",
+      "requirements": ["current.mounted-stantler-turn-skid-facing"],
+      "claims": ["natural-input", "live-actor-identity", "logical-commit", "rendered-motion", "frame-pacing", "control-release"],
+      "minimumObservedFrames": 67,
+      "recorderControlRequirement": "shared.owner-reader-control-v1",
+      "scope": "Prepared map33 (586,402), party slot 0 level-10 Stantler, and normal Right49, direct Down18 input. The run-up must end with a displayed four-frame Walk. The same live mounted pair faces Down on every frame of two eight-frame east-travel skid tiles, each with one commit, then returns control and starts a Down recovery Walk. This does not replace Sprint clear-lane or obstacle-Hop proof."
+    },
+    "mount.bellsprout-waddle-sway": {
+      "evaluator": "mounted-bellsprout-waddle-sway-v1",
+      "proofLevel": "S4",
+      "mode": "prepared",
+      "recipeSha256": "ea3bae4e38f1bac0528a1c11c57d82a2cd466f94d648ee400623e0fc08bc560d",
+      "requirements": ["current.mounted-bellsprout-waddle-sway"],
+      "claims": ["natural-input", "live-actor-identity", "profile-resolution", "logical-commit", "rendered-motion", "frame-pacing", "control-release"],
+      "minimumObservedFrames": 14,
+      "recorderControlRequirement": "shared.mounted-pose-recorder-control-v1",
+      "scope": "Prepared map33 (585,402), party slot 0 Bellsprout, and normal mounted Right input for one Walk. The Meander first-Walk time is nominal 14 plus at most two authored variance frames; the Waddle style contributes bounded signed lateral sway on the shared player and dependent Pokemon pose, with one Right-tile commit and idle control return. No natural spawning, exact sway amplitude, nonzero pause, chain, or soak claim."
     },
     "actor.binding-current-context": {
       "evaluator": "actor-binding-context-v1",
@@ -798,6 +1740,17 @@
       "recorderControlRequirement": null,
       "scope": "Prepared mounted Cyndaquil at Route29 (584,403), then one held RIGHT input reaches at least (604,403) across a full 16-tile field-stream boundary. The route permits the one already queued east step allowed by the original terminal-x contract. Every Walk keeps ordered public path states and one current identity; the route drain and one LEFT recovery return idle. Prepared setup gives no path or movement credit."
     },
+    "world.streaming.stantler-mounted-route": {
+      "evaluator": "mounted-stantler-terrain-route-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "b641d52213c079c23301416ccb45be435ebeab96ecf114a3c9aec7d09416a0bf",
+      "requirements": ["current.mounted-stantler-terrain-route"],
+      "claims": ["natural-input", "live-actor-identity", "streaming-path"],
+      "minimumObservedFrames": 960,
+      "recorderControlRequirement": "shared.owner-reader-control-v1",
+      "scope": "Prepared mounted level-10 Stantler at map33 (585,402). Seven exact 120-frame cardinal holds reproduce the old unloaded-terrain freeze. At the 840-frame endpoint, native radius-one terrain is 9/9 loaded; after RIGHT120 recovery, radius-two terrain is 25/25 loaded and the player advanced at least eight tiles east. These paused endpoints do not prove all intermediate terrain cells."
+    },
     "population.land-surf-separation": {
       "evaluator": "land-surf-separation-v1",
       "proofLevel": "S3",
@@ -817,7 +1770,7 @@
       "evaluator": "spawn-work-budget-v1",
       "proofLevel": "S3",
       "mode": "normal",
-      "recipeSha256": "c12394512225217cfb28c8bc677944a3d2e68fe2e5ab9f0c01c0f701948d6d4d",
+      "recipeSha256": "1d917c10384fe6b38948e9ad47809af6c6a5580247597df0ffaf1c36b26ad408",
       "requirements": [
         "shared.spawn-work-budget-v1"
       ],
@@ -844,7 +1797,7 @@
             "operator": "eq",
             "type": "array",
             "validator": "meaningful-observation",
-            "expected": [1, "WILD", 19, 1]
+            "expected": [1, "WILD", 1, 1]
           }
         ],
         "profile-resolution": [
@@ -932,11 +1885,11 @@
             "minimum": 4
           },
           {
-            "name": "spawn-work-entry-normal-walk-evidence",
+            "name": "spawn-work-entry-normal-fly-in-evidence",
             "operator": "eq",
             "type": "array",
             "validator": "meaningful-observation",
-            "expected": [3, 1, 1, 1, 1, 1, 1, 1]
+            "expected": [9, 1]
           },
           {
             "name": "spawn-work-entry-distance-progress",
@@ -1009,13 +1962,13 @@
       },
       "minimumObservedFrames": 120,
       "recorderControlRequirement": null,
-      "scope": "Unchanged direct save load at Route 30 (585,406), read-only binding of the saved Mankey follower, then travel north and east to the clear lane and keep moving north-south through the first automatic population scan. One natural helper-owned queue attempt must resolve and prepare its profile once, begin an explicit destination scan with zero terrain-matcher queries, then resume the same prepared attempt with no repeated profile work across 20 batches of at most 12 observed terrain-matcher queries per completed game update. The next update must create one prepared Rattata at A between 1 and 16 cardinal tiles from B, with A at least four tiles beyond the player-relative camera extent. The exact actor must use normal Walk base speed, acceleration, Movement Chain, turn, pause, resume, and tired behavior while logical and rendered positions progress at least four tiles toward B. At least 120 measured player samples must be in transit. Every measured main loop must stay at or below two native cycles; one late loop fails. The extracted-C checks own the exact 240-candidate mask coverage. Setup gives no population, scan, movement, or pacing credit."
+      "scope": "Unchanged direct save load at Route 30 (585,406), read-only binding of the saved Mankey follower, then the reviewed natural crossing into Cherrygrove and continued held movement through the first automatic explicit destination scan. One natural helper-owned queue attempt must resolve and prepare its profile once, begin with zero terrain-matcher queries, then resume the same prepared attempt with no repeated profile work across 20 batches of at most 12 observed terrain-matcher queries per completed game update. The next update must create the prepared encounter actor at A between 1 and 16 cardinal tiles from B, with A at least four tiles beyond the player-relative camera extent. Its normal Fly In must move logical and rendered positions at least four tiles toward B. At least 120 measured player samples must be in transit. Every measured main loop must stay at or below two native cycles; one late loop fails. The extracted-C checks own the exact 240-candidate mask coverage. Setup gives no population, scan, movement, or pacing credit."
     },
     "profile.owner-reader-control": {
       "evaluator": "owner-reader-control-v1",
       "proofLevel": "S3",
       "mode": "observer-control",
-      "recipeSha256": "690ef18f5ef67eb1378b0921688e66b12f5f7a90745575ac618980c9f01da72b",
+      "recipeSha256": "541ce3fce1da617bdad131db848aa8e15bbcd7ca8eea6e4d79b747417055b950",
       "requirements": [
         "shared.owner-reader-control-v1"
       ],
@@ -1024,13 +1977,13 @@
         "controlled-action"
       ],
       "minimumObservedFrames": 1,
-      "scope": "Native Owner byte reader calibration with exact restoration and no guest advancement; not normal gameplay."
+      "scope": "Prepared Sprint Stantler follower and mount. Native Owner byte reader calibration with exact restoration and no guest advancement; not normal gameplay."
     },
     "profile.follower-mounted-owner-transfer": {
       "evaluator": "follower-mounted-owner-transfer-v1",
       "proofLevel": "S3",
       "mode": "prepared",
-      "recipeSha256": "4e5a20951959ad5c8c2b0074674cd25033880f6d059c9c9f1aba6f88843cc4aa",
+      "recipeSha256": "b09699641631eaa5512f781c45abdd400bac4fcd40a629d0e032e1bcd04c6280",
       "requirements": [
         "shared.follower-mounted-owner-transfer-v1"
       ],
@@ -1040,13 +1993,13 @@
       ],
       "minimumObservedFrames": 1,
       "recorderControlRequirement": "shared.owner-reader-control-v1",
-      "scope": "Saved current FOLLOWER Mankey getter bytes transfer to Begin and mounted Owner, with the same final actor and input owner. Prepared transfer only; no normal Select, Hop completion, provenance, movement or soak proof."
+      "scope": "Prepared Sprint Stantler keeps one actor across Follower-to-Mounted transfer. The Mounted Begin input differs from Follower-only profile bytes, its Owner snapshot matches its Begin input, and its policy fingerprint is distinct. Normal Owner field inheritance is a separate resolver claim. Prepared transfer only; no normal Select, Hop completion, movement or soak proof."
     },
     "profile.resolve.packaged-rom-parity": {
       "evaluator": "packaged-resolver-parity-v1",
       "proofLevel": "S3",
       "mode": "prepared",
-      "recipeSha256": "c7fe5b6e027fd526c27738cecea6da8624e0392c3e0ae78663ed0090b27a2dff",
+      "recipeSha256": "b0d0c9ff3632bb375daaacc24541adeb02a981cc21f1cc5f1c8e086a711758c1",
       "requirements": [
         "legacy.packaged-resolver-parity"
       ],
@@ -1054,7 +2007,56 @@
         "profile-resolution"
       ],
       "minimumObservedFrames": 1,
-      "scope": "Seven authenticated native resolver calls compared byte-for-byte and by ordered provenance with Workshop on the same blob. Observed frame unit is native cycles containing resolver work, not completed queues, boot padding, actor identity, or movement soak."
+      "scope": "Nine authenticated native resolver calls, including forced Mounted over Sprint, compared byte-for-byte and by ordered provenance with Workshop on the same blob. Observed frame unit is native cycles containing resolver work, not completed queues, boot padding, actor identity, or movement soak."
+    },
+    "profile.condition.packaged-rom-evaluator": {
+      "evaluator": "packaged-condition-service-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "3d725e3f5fed8c6a0db2e8d50187d30afb8965684d6f7a109540ab49b171f267",
+      "requirements": [
+        "shared.packaged-condition-service-v1"
+      ],
+      "claims": [
+        "profile-resolution"
+      ],
+      "minimumObservedFrames": 1,
+      "recorderControlRequirement": null,
+      "measurementContract": {
+        "profile-resolution": [
+          {"name": "packaged-condition-service-entry", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+          {"name": "authenticated-condition-source-blob", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+          {"name": "condition-overlap-last-wins", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+          {"name": "conditional-application-stacking", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+          {"name": "timed-hold-cooldown-retrigger", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+          {"name": "condition-player-target", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+          {"name": "condition-actor-target-lifecycle", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+          {"name": "copied-subject-role-parity", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+          {"name": "owned-condition-buffer-cleanup", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+          {"name": "condition-native-call-boundaries", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}
+        ]
+      },
+      "scope": "Seven authenticated native condition-service cases use one guarded 1,536-byte input/output buffer and a temporary three-range catalog fixture that must restore the complete source blob before cleanup. This proves overlap order, application stacking, timed hold/cooldown/retrigger, player and actor target handling, stale/fresh handles and copied-input Wild/Follower parity. It grants no live role-caller, intent, movement or soak credit."
+    },
+    "profile.condition.live-wild-controller": {
+      "evaluator": "live-condition-controller-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "79c9ac1bc3ab8d28fdad19152e48cfd3edf96d92a0a225df1eaba69a000df50a",
+      "requirements": [
+        "current.live-condition-controller"
+      ],
+      "claims": [
+        "live-actor-identity",
+        "profile-resolution",
+        "engine-boundary",
+        "controlled-action",
+        "logical-commit",
+        "control-release"
+      ],
+      "minimumObservedFrames": 8,
+      "recorderControlRequirement": null,
+      "scope": "One controlled live Wild Weepinbell caller resolves the unchanged Ambush conditional profile against one live Follower target at idle intent boundaries, completes one 11-frame two-tile Hop from the authored hopTime 6 toward it, then rejects one condition-owned stale target after control returns. The disposable fixture changes three target-predicate bytes, clears only that condition's retained state before its first observed call, and restores the catalog bytes before cleanup. This grants no Follower-caller or mounted-target-exclusion credit."
     },
     "world.unmounted.long-travel-cadence": {
       "evaluator": "unmounted-cadence-v1",
@@ -1200,11 +2202,11 @@
       "minimumObservedFrames": 4,
       "scope": "Saved FOLLOWER Cyndaquil: four normal player moves with an early held segment and complete follower trace, then real CPU-work and player-render start-stall faults through unchanged route classifiers. Exact private-session cleanup required. Calibration only; no normal-route or S5 credit."
     },
-    "observation.spawn-height-control": {
+  "observation.spawn-height-control": {
       "evaluator": "live-spawn-height-control-v1",
       "proofLevel": "S3",
       "mode": "observer-control",
-      "recipeSha256": "8df8d859e0a246f1f565f484967f5fc4ae7a5c55b74d62d4f467df865384fd6a",
+      "recipeSha256": "940041e97418d3321101dbb77e40306ed8f08dd07d4a6e1dc80d83d619bbe7c6",
       "requirements": [
         "shared.spawn-height-recorder-control-v1"
       ],
@@ -1213,7 +2215,7 @@
         "controlled-action"
       ],
       "minimumObservedFrames": 16,
-      "scope": "One naturally spawned Wild Ledyba's own-target native height reader sees clean, wrong-Y and restored state inside one callback. The unchanged surface checker rejects the measured fault after a valid spawn baseline. Recorder calibration only, not normal gameplay credit."
+      "scope": "One naturally spawned Wild Mareep's own-target native height reader sees clean, wrong-Y and restored state inside one callback. The initial-landing surface checker rejects the measured fault after a valid Appear Hop baseline. Recorder calibration only, not normal gameplay credit."
     },
     "spawn.ledyba-pool-site": {
       "evaluator": "pool-spawn-surface-v1",
@@ -1240,7 +2242,7 @@
       "evaluator": "appear-hop-timing-v1",
       "proofLevel": "S4",
       "mode": "prepared",
-      "recipeSha256": "1fc31e9db4f489d176c9ab515bcefef308b7519eae909862c0b6cbbb7dfb6915",
+      "recipeSha256": "1d1a9e9ea90df5eb42170f092f3bee3bd52dde95f763170d0fdf231fff393e7b",
       "requirements": [
         "shared.appear-hop-timing-v1"
       ],
@@ -1287,7 +2289,7 @@
             "operator": "eq",
             "type": "array",
             "validator": "meaningful-observation",
-            "expected": [49, 62, 74, 255, 0]
+            "expected": [49, 62, 74, 255, 1]
           }
         ],
         "control-release": [
@@ -1296,11 +2298,11 @@
             "operator": "eq",
             "type": "array",
             "validator": "meaningful-observation",
-            "expected": [0, 255]
+            "expected": [0, 1]
           }
         ]
       },
-      "scope": "One prepared native Wild Clefairy spawn resolves APPEAR_HOP, keeps one current attached identity, draws one same-tile vertical arc, runs jump/delay/restore in order on contiguous completed frames, and returns CHILL control on the first idle frame after restore. Prepared setup does not prove natural population selection or other spawn locomotion modes."
+      "scope": "One prepared native Wild Clefairy spawn resolves APPEAR_HOP, keeps one current attached identity, draws one same-tile vertical arc, runs jump/delay/restore in order on contiguous completed frames, publishes one idle handoff frame, and returns routine control on the next completed frame. Prepared setup does not prove natural population selection or other spawn locomotion modes."
     },
     "chain.ledyba-witness": {
       "evaluator": "ledyba-chain-v1",
@@ -1428,7 +2430,19 @@
     }
   },
   "runnerKinds": {
+    "current.mount-select-mid-run": "normal-play",
+    "current.mounted-speed-slew": "controlled-case",
+    "current.mounted-bellsprout-waddle-sway": "controlled-case",
+    "current.mounted-stantler-key-edge": "controlled-case",
+    "current.mounted-stantler-turn-skid-facing": "controlled-case",
+    "current.mounted-stantler-sprint-parity": "controlled-case",
+    "current.mounted-stantler-obstacle-hop": "controlled-case",
+    "current.mounted-stantler-npc-hop": "controlled-case",
+    "current.mounted-stantler-wall-approach": "controlled-case",
+    "current.mounted-stantler-terrain-route": "controlled-case",
     "current.runner-turn-runway": "controlled-case",
+    "current.wild-sprint-obstacle-approach": "controlled-case",
+    "current.wild-sprint-npc-hop": "controlled-case",
     "legacy.runner-stop-skid": "controlled-case",
     "legacy.actor-binding-current-context": "normal-play",
     "legacy.ledyba-normal-profile": "normal-play",
@@ -1456,6 +2470,18 @@
     "legacy.mounted-transition": "controlled-case",
     "legacy.mounted-walk-transition": "controlled-case",
     "legacy.packaged-resolver-parity": "controlled-case",
+    "shared.packaged-condition-service-v1": "controlled-case",
+    "current.live-condition-controller": "controlled-case",
+    "current.notice-player-routine-return": "controlled-case",
+    "current.stalker-visibility-gate": "controlled-case",
+    "current.playful-target-and-collision": "controlled-case",
+    "current.startled-timed-retreat": "controlled-case",
+    "current.fly-in-uneven-height": "controlled-case",
+    "current.waddle-walk-presentation-only": "controlled-case",
+    "current.floaty-bounce-hop-pause": "controlled-case",
+    "current.blocked-wild-facing": "controlled-case",
+    "current.mount-detach-follower-resume": "controlled-case",
+    "current.held-actor-control-resume": "controlled-case",
     "legacy.population-after-fast-travel": "controlled-case",
     "legacy.stomp": "controlled-case",
     "legacy.teleport-timing": "controlled-case",
@@ -1472,6 +2498,73 @@
     "legacy.wild-walk": "controlled-case"
   },
   "runners": {
+    "current.mount-select-mid-run": [
+      "natural-input",
+      "live-actor-identity",
+      "frame-pacing",
+      "control-release"
+    ],
+    "current.mounted-speed-slew": [
+      "natural-input", "live-actor-identity", "rendered-motion", "frame-pacing", "engine-boundary", "control-release"
+    ],
+    "current.mounted-bellsprout-waddle-sway": [
+      "natural-input",
+      "live-actor-identity",
+      "profile-resolution",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "control-release"
+    ],
+    "current.mounted-stantler-key-edge": [
+      "natural-input",
+      "live-actor-identity",
+      "logical-commit",
+      "frame-pacing"
+    ],
+    "current.mounted-stantler-turn-skid-facing": [
+      "natural-input",
+      "live-actor-identity",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "control-release"
+    ],
+    "current.mounted-stantler-sprint-parity": [
+      "natural-input",
+      "live-actor-identity",
+      "logical-commit",
+      "frame-pacing",
+      "control-release"
+    ],
+    "current.mounted-stantler-obstacle-hop": [
+      "natural-input",
+      "live-actor-identity",
+      "collision-decision",
+      "logical-commit",
+      "frame-pacing",
+      "control-release"
+    ],
+    "current.mounted-stantler-npc-hop": [
+      "natural-input",
+      "live-actor-identity",
+      "collision-decision",
+      "logical-commit",
+      "frame-pacing",
+      "control-release"
+    ],
+    "current.mounted-stantler-wall-approach": [
+      "natural-input",
+      "live-actor-identity",
+      "collision-decision",
+      "logical-commit",
+      "control-release"
+    ],
+    "current.mounted-stantler-terrain-route": [
+      "natural-input",
+      "live-actor-identity",
+      "streaming-path"
+    ],
     "current.runner-turn-runway": [
       "natural-input",
       "live-actor-identity",
@@ -1483,10 +2576,28 @@
       "frame-pacing",
       "control-release"
     ],
-    "legacy.runner-stop-skid": [
-      "natural-input",
+    "current.wild-sprint-obstacle-approach": [
+      "controlled-action",
       "live-actor-identity",
-      "engine-boundary",
+      "profile-resolution",
+      "collision-decision",
+      "logical-commit",
+      "rendered-motion",
+      "control-release"
+    ],
+    "current.wild-sprint-npc-hop": [
+      "controlled-action",
+      "live-actor-identity",
+      "profile-resolution",
+      "collision-decision",
+      "logical-commit",
+      "rendered-motion",
+      "control-release"
+    ],
+    "legacy.runner-stop-skid": [
+        "natural-input",
+        "live-actor-identity",
+        "engine-boundary",
       "logical-commit",
       "rendered-motion",
       "frame-pacing",
@@ -1655,6 +2766,97 @@
     "legacy.packaged-resolver-parity": [
       "profile-resolution"
     ],
+    "shared.packaged-condition-service-v1": [
+      "profile-resolution"
+    ],
+    "current.live-condition-controller": [
+      "live-actor-identity",
+      "profile-resolution",
+      "engine-boundary",
+      "controlled-action",
+      "logical-commit",
+      "control-release"
+    ],
+    "current.notice-player-routine-return": [
+      "live-actor-identity",
+      "profile-resolution",
+      "feedback-effect",
+      "rendered-motion",
+      "frame-pacing",
+      "control-release"
+    ],
+    "current.stalker-visibility-gate": [
+      "live-actor-identity",
+      "profile-resolution",
+      "engine-boundary",
+      "rendered-motion",
+      "control-release"
+    ],
+    "current.playful-target-and-collision": [
+      "live-actor-identity",
+      "profile-resolution",
+      "collision-decision",
+      "logical-commit",
+      "rendered-motion",
+      "control-release"
+    ],
+    "current.startled-timed-retreat": [
+      "live-actor-identity",
+      "profile-resolution",
+      "engine-boundary",
+      "rendered-motion",
+      "frame-pacing",
+      "control-release"
+    ],
+    "current.fly-in-uneven-height": [
+      "live-actor-identity",
+      "profile-resolution",
+      "terrain-selection",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "control-release"
+    ],
+    "current.blocked-wild-facing": [
+      "live-actor-identity",
+      "terrain-selection",
+      "rendered-motion",
+      "frame-pacing"
+    ],
+    "current.floaty-bounce-hop-pause": [
+      "live-actor-identity",
+      "profile-resolution",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "control-release"
+    ],
+    "current.waddle-walk-presentation-only": [
+      "live-actor-identity",
+      "profile-resolution",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "control-release"
+    ],
+    "current.mount-detach-follower-resume": [
+      "natural-input",
+      "live-actor-identity",
+      "profile-resolution",
+      "engine-boundary",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "control-release"
+    ],
+    "current.held-actor-control-resume": [
+      "live-actor-identity",
+      "profile-resolution",
+      "controlled-action",
+      "engine-boundary",
+      "rendered-motion",
+      "control-release"
+    ],
     "legacy.population-after-fast-travel": [
       "natural-input",
       "live-actor-identity",
@@ -1756,13 +2958,145 @@
     ]
   },
   "measurementContracts": {
+    "current.mounted-speed-slew": {
+      "natural-input": [{"name": "held-right-walk-count", "expected": 13, "operator": "eq", "type": "integer", "validator": "meaningful-observation"}],
+      "live-actor-identity": [{"name": "mounted-stantler-identity", "expected": [1, "MOUNTED", 234, 1], "operator": "eq", "type": "array", "validator": "meaningful-observation"}],
+      "rendered-motion": [
+        {"name": "continuous-walk-count", "expected": 13, "operator": "eq", "type": "integer", "validator": "meaningful-observation"},
+        {"name": "paired-position-mismatch-count", "expected": 0, "operator": "eq", "type": "integer", "validator": "meaningful-observation"},
+        {"name": "camera-locked-draw-frame-count", "expected": 47, "operator": "gte", "type": "integer", "validator": "meaningful-observation"},
+        {"name": "mounted-shadow-aligned-frame-count", "expected": 62, "operator": "gte", "type": "integer", "validator": "meaningful-observation"},
+        {"name": "distance-gait-and-seat-frame-count", "expected": 62, "operator": "gte", "type": "integer", "validator": "meaningful-observation"},
+        {"name": "gait-acceleration-braking-observed", "expected": [1, 1], "operator": "eq", "type": "array", "validator": "meaningful-observation"},
+        {"name": "gait-settled-after-release", "expected": 1, "operator": "eq", "type": "integer", "validator": "meaningful-observation"},
+        {"name": "authored-stop-skid-tail", "expected": 1, "operator": "eq", "type": "integer", "validator": "meaningful-observation"},
+        {"name": "eased-speed-transition-count", "expected": 1, "operator": "gte", "type": "integer", "validator": "meaningful-observation"}
+      ],
+      "frame-pacing": [
+        {"name": "authored-variance-tile-count", "expected": 13, "operator": "eq", "type": "integer", "validator": "meaningful-observation"},
+        {"name": "maximum-callback-gap", "expected": 2, "operator": "lte", "type": "integer", "validator": "meaningful-observation"},
+        {"name": "maximum-boundary-gap", "expected": 2, "operator": "lte", "type": "integer", "validator": "meaningful-observation"}
+      ],
+      "engine-boundary": [{"name": "player-step-callback-count", "expected": 13, "operator": "eq", "type": "integer", "validator": "meaningful-observation"}],
+      "control-release": [{"name": "released-player-control", "expected": [1, 0, 1], "operator": "eq", "type": "array", "validator": "meaningful-observation"}]
+    },
+    "current.mounted-bellsprout-waddle-sway": {
+      "natural-input": [{"name": "one-right-press-then-release", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "live-actor-identity": [{"name": "same-current-mounted-bellsprout", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "profile-resolution": [{"name": "normal-meander-and-waddle-effects", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "logical-commit": [{"name": "one-right-tile-one-commit", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "rendered-motion": [
+        {"name": "both-sides-waddle-sway", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "player-pokemon-pose-pair", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}
+      ],
+      "frame-pacing": [{"name": "full-meander-walk-frame-sequence", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "control-release": [{"name": "walk-terminal-control-return", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}]
+    },
+    "current.mounted-stantler-key-edge": {
+      "natural-input": [{"name": "fresh-right-after-neutral-tile", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "live-actor-identity": [{"name": "same-current-mounted-stantler", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "logical-commit": [{"name": "one-terminal-before-next-start", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "frame-pacing": [
+        {"name": "fresh-edge-starts-without-idle", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "fresh-edge-keeps-sprint-speed", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}
+      ]
+    },
+    "current.mounted-stantler-turn-skid-facing": {
+      "natural-input": [{"name": "right-down-normal-input", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "live-actor-identity": [{"name": "same-mounted-stantler", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "logical-commit": [{"name": "two-east-skid-commits", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "rendered-motion": [{"name": "down-facing-east-skid-pair", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "frame-pacing": [{"name": "sixteen-skid-frames", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "control-release": [{"name": "skid-return-then-down-walk", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}]
+    },
+    "current.mount-select-mid-run": {
+      "natural-input": [
+        {"name": "select-native-held-right-edge", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "right-held-through-handoff", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}
+      ],
+      "live-actor-identity": [
+        {"name": "select-started-as-follower", "operator": "eq", "type": "string", "validator": "meaningful-observation", "expected": "FOLLOWER"},
+        {"name": "select-mid-run-same-actor", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}
+      ],
+      "frame-pacing": [
+        {"name": "select-to-mount-completed-frames", "operator": "lte", "type": "integer", "validator": "meaningful-observation", "expected": 8}
+      ],
+      "control-release": [
+        {"name": "mounted-hop-terminal-control", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}
+      ]
+    },
+    "current.mounted-stantler-sprint-parity": {
+      "natural-input": [{"name": "held-right-and-two-direction-input", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "live-actor-identity": [{"name": "same-current-mounted-stantler", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "logical-commit": [{"name": "complete-clear-lane-walks", "operator": "gte", "type": "integer", "validator": "meaningful-observation", "expected": 8}],
+      "frame-pacing": [
+        {"name": "accelerates-to-four-speed", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "clear-lane-no-hops", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "four-speed-walks-continue", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "cardinal-only-two-key-window", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}
+      ],
+      "control-release": [{"name": "walks-return-control", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}]
+    },
+    "current.mounted-stantler-obstacle-hop": {
+      "natural-input": [{"name": "held-right-across-obstacle", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "live-actor-identity": [{"name": "same-current-mounted-stantler", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "collision-decision": [{"name": "static-front-two-tile-hop", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "logical-commit": [{"name": "one-hop-landing-commit", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "frame-pacing": [
+        {"name": "hop-uses-sprint-speed", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "post-hop-accelerates-to-four", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}
+      ],
+      "control-release": [{"name": "hop-returns-to-walk", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}]
+    },
+    "current.mounted-stantler-npc-hop": {
+      "natural-input": [{"name": "held-right-into-npc", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "live-actor-identity": [{"name": "same-current-mounted-stantler", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "collision-decision": [{"name": "npc-front-two-tile-hop", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "logical-commit": [{"name": "one-npc-hop-landing-commit", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "frame-pacing": [{"name": "npc-hop-uses-sprint-speed", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "control-release": [{"name": "npc-hop-returns-control", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}]
+    },
+    "current.mounted-stantler-wall-approach": {
+      "natural-input": [{"name": "held-right-through-wall-approach", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "live-actor-identity": [{"name": "same-current-mounted-stantler", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "collision-decision": [{"name": "last-open-tile-not-wall", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "logical-commit": [{"name": "four-cardinal-approach-walks", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "control-release": [{"name": "up-turn-leaves-wall", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}]
+    },
+    "current.wild-sprint-obstacle-approach": {
+      "controlled-action": [{"name": "east-only-register-control", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "live-actor-identity": [{"name": "same-current-wild-stantler", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "profile-resolution": [{"name": "native-sprint-lane", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "collision-decision": [{"name": "open-takeoff-static-front-safe-landing", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "logical-commit": [{"name": "one-two-tile-hop", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "rendered-motion": [{"name": "hop-rendered", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "control-release": [{"name": "hop-finished", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}]
+    },
+    "current.wild-sprint-npc-hop": {
+      "controlled-action": [{"name": "east-only-register-control", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "live-actor-identity": [{"name": "same-current-wild-stantler", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "profile-resolution": [{"name": "native-sprint-lane", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "collision-decision": [{"name": "open-takeoff-open-midpoint-safe-landing", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "logical-commit": [{"name": "one-two-tile-hop", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "rendered-motion": [{"name": "hop-rendered", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "control-release": [{"name": "hop-finished", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}]
+    },
+    "current.mounted-stantler-terrain-route": {
+      "natural-input": [{"name": "exact-mounted-route-frames", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 840}],
+      "live-actor-identity": [{"name": "current-mounted-stantler", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "streaming-path": [
+        {"name": "route-nearby-loaded-cells", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 9},
+        {"name": "recovery-nearby-loaded-cells", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 25},
+        {"name": "right-recovery-distance", "operator": "gte", "type": "integer", "validator": "meaningful-observation", "expected": 8}
+      ]
+    },
     "current.runner-turn-runway": {
       "natural-input": [{
         "name": "runner-turn-natural-motion-count",
         "operator": "eq",
         "type": "integer",
         "validator": "meaningful-observation",
-        "expected": 2
+        "expected": 3
       }],
       "live-actor-identity": [{
         "name": "runner-turn-stantler-identity-flags",
@@ -1790,14 +3124,14 @@
         "operator": "eq",
         "type": "array",
         "validator": "meaningful-observation",
-        "expected": [129, 4, 1, 131, 5, 1, 161, 5, 1]
+        "expected": [129, 4, 2, 131, 5, 2, 161, 5, 1]
       }],
       "logical-commit": [{
         "name": "runner-turn-terminal-boundaries-and-target",
         "operator": "eq",
         "type": "object",
         "validator": "terminal-boundary-target-v1",
-        "requiredCount": 2,
+        "requiredCount": 3,
         "requiredKeys": ["boundaryCount", "final", "target"]
       }],
       "rendered-motion": [{
@@ -1805,21 +3139,21 @@
         "operator": "eq",
         "type": "array",
         "validator": "meaningful-observation",
-        "expected": [8, 6, 1]
+        "expected": [8, 8, 5, 1]
       }],
       "frame-pacing": [{
-        "name": "runner-turn-motion-schedules",
+        "name": "runner-turn-exact-keyed-motion-schedules",
         "operator": "eq",
-        "type": "array",
+        "type": "integer",
         "validator": "meaningful-observation",
-        "expected": [[0, 1, 2, 3, 4, 5, 6, 7], [0, 1, 2, 3, 4, 5]]
+        "expected": 1
       }],
       "control-release": [{
         "name": "runner-turn-control-return-count",
         "operator": "eq",
         "type": "integer",
         "validator": "meaningful-observation",
-        "expected": 2
+        "expected": 3
       }]
     },
     "legacy.runner-stop-skid": {
@@ -1842,28 +3176,29 @@
         "operator": "eq",
         "type": "array",
         "validator": "meaningful-observation",
-        "expected": [255, 3, 1, 8, 7, 135, 0, 0]
+        "expected": [255, 3, 2, 8, 7, 135, 0, 0]
       }],
       "logical-commit": [{
         "name": "runner-stop-commit-and-target",
         "operator": "eq",
         "type": "object",
-        "validator": "wild-teleport-terminal-v1",
-        "requiredKeys": ["origin", "target", "preCommit", "terminalCommit", "terminalLogical"]
+        "validator": "terminal-boundary-target-v1",
+        "requiredCount": 2,
+        "requiredKeys": ["boundaryCount", "final", "target"]
       }],
       "rendered-motion": [{
-        "name": "runner-stop-one-tile-eight-frame-walk",
+        "name": "runner-stop-two-eight-frame-tiles",
         "operator": "eq",
         "type": "array",
         "validator": "meaningful-observation",
-        "expected": [1, 8]
+        "expected": [2, 8, 8]
       }],
       "frame-pacing": [{
         "name": "runner-stop-elapsed-schedule",
         "operator": "eq",
         "type": "array",
         "validator": "meaningful-observation",
-        "expected": [0, 1, 2, 3, 4, 5, 6, 7, 8]
+        "expected": [[0, 1, 2, 3, 4, 5, 6, 7, 8], [0, 1, 2, 3, 4, 5, 6, 7, 8]]
       }],
       "control-release": [{
         "name": "runner-stop-terminal-control",
@@ -4096,6 +5431,565 @@
           "type": "array",
           "validator": "packaged-resolver-parity-v1",
           "aspect": "provenance"
+        }
+      ]
+    },
+    "shared.packaged-condition-service-v1": {
+      "profile-resolution": [
+        {"name": "packaged-condition-service-entry", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "authenticated-condition-source-blob", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "condition-overlap-last-wins", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "conditional-application-stacking", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "timed-hold-cooldown-retrigger", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "condition-player-target", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "condition-actor-target-lifecycle", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "copied-subject-role-parity", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "owned-condition-buffer-cleanup", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1},
+        {"name": "condition-native-call-boundaries", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}
+      ]
+    },
+    "current.live-condition-controller": {
+      "live-actor-identity": [
+        {
+          "name": "live-wild-condition-subject",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "conditional-profile-and-target-used",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "engine-boundary": [
+        {
+          "name": "conditions-only-at-intent-boundaries",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "controlled-action": [
+        {
+          "name": "stale-condition-target-fails-closed",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "conditional-hop-commit",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "control-release": [
+        {
+          "name": "control-return-before-stale-recheck",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ]
+    },
+    "current.notice-player-routine-return": {
+      "live-actor-identity": [
+        {
+          "name": "notice-player-mareep-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [1, "WILD", 179, 1, 1]
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "notice-player-condition-contract",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": ["notice-player", "condition-notice-player", "timed", 960, 970, "PLAYER", "current-vision"]
+        }
+      ],
+      "feedback-effect": [
+        {
+          "name": "notice-player-exclamation-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "notice-player-faced-captured-target-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "notice-player-presentation-pause-frames",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 10
+        }
+      ],
+      "control-release": [
+        {
+          "name": "notice-player-post-pause-routine-and-repeat-counts",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [1, 0]
+        }
+      ]
+    },
+    "current.stalker-visibility-gate": {
+      "live-actor-identity": [
+        {
+          "name": "stalker-gastly-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [1, "WILD", 92, 1, 1]
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "stalker-condition-contract",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": ["stalker", "condition-stalker-unseen-by-player", "while-true", "PLAYER", "current-vision", "BEHIND"]
+        }
+      ],
+      "engine-boundary": [
+        {
+          "name": "stalker-visibility-rechecks-at-intent-boundaries",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [1, 1]
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "stalker-unseen-seen-and-routine-motion-counts",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [1, 0, 1]
+        }
+      ],
+      "control-release": [
+        {
+          "name": "stalker-seen-routine-resume-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ]
+    },
+    "current.playful-target-and-collision": {
+      "live-actor-identity": [
+        {
+          "name": "playful-clefairy-clefable-identities",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [1, "WILD", 35, 1, 1, "WILD", 36, 1]
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "playful-captured-target-cases",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": ["condition-playful-notices-compatible-actor", "WILD:36", "condition-playful-notices-player", "PLAYER"]
+        }
+      ],
+      "collision-decision": [
+        {
+          "name": "playful-target-tile-rejection-counts",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [1, 1]
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "playful-noncolliding-terminal-commit-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 2
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "playful-target-relative-motion-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 2
+        }
+      ],
+      "control-release": [
+        {
+          "name": "playful-case-control-return-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 2
+        }
+      ]
+    },
+    "current.startled-timed-retreat": {
+      "live-actor-identity": [
+        {
+          "name": "startled-bellsprout-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [1, "WILD", 69, 1, 1]
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "startled-condition-contract",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": ["startled", "condition-startled-notices-player", "timed", 44, 164, "PLAYER"]
+        }
+      ],
+      "engine-boundary": [
+        {
+          "name": "startled-intents-inside-active-window",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 2
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "startled-away-displacement-and-locomotion",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [1, 1]
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "startled-active-frame-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 44
+        }
+      ],
+      "control-release": [
+        {
+          "name": "startled-post-expiry-routine-resume-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ]
+    },
+    "current.fly-in-uneven-height": {
+      "live-actor-identity": [
+        {
+          "name": "fly-in-pidgey-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [1, "WILD", 16, 1, 1]
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "fly-in-placement-and-target",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": ["fly-in", "OW_WILD_BEHAVIOR_SPAWN_STATE_FLY_IN", 33, 581, 397]
+        }
+      ],
+      "terrain-selection": [
+        {
+          "name": "fly-in-loaded-validated-uneven-target",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [1, 1, 1]
+        },
+        {
+          "name": "fly-in-origin-target-height-delta",
+          "operator": "ne",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "fly-in-terminal-commit-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "fly-in-monotonic-and-terminal-height-errors",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [0, 0, 0, 0]
+        },
+        {
+          "name": "fly-in-suppressed-surface-shadow-observations",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        },
+        {
+          "name": "fly-in-open-ground-shadow-observations",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        },
+        {
+          "name": "fly-in-suppressed-surface-shadow-errors",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        },
+        {
+          "name": "fly-in-ground-height-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 2
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "fly-in-duration-frames",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 144
+        },
+        {
+          "name": "fly-in-contiguous-descent-sample-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 2
+        }
+      ],
+      "control-release": [
+        {
+          "name": "fly-in-routine-control-return-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ]
+    },
+    "current.mount-detach-follower-resume": {
+      "natural-input": [{"name": "mount-detach-select-and-player-clearance", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [1, 1]}],
+      "live-actor-identity": [
+        {"name": "mount-detach-follower-role", "operator": "eq", "type": "string", "validator": "meaningful-observation", "expected": "FOLLOWER"},
+        {"name": "mount-detach-same-cyndaquil-identity", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [1, 155, 7, 1, 1]}
+      ],
+      "profile-resolution": [{"name": "mount-detach-policy-transition", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [1, 1, 1]}],
+      "engine-boundary": [{"name": "mount-detach-rebound-and-generation-counts", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [1, 1, 1, 1]}],
+      "logical-commit": [{"name": "mount-detach-first-follower-commit-count", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "rendered-motion": [{"name": "mount-detach-first-follower-walk", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [1, 1, 1]}],
+      "frame-pacing": [{"name": "mount-detach-follower-clearance-resume-frame-count", "operator": "lte", "type": "integer", "validator": "meaningful-observation", "expected": 1}],
+      "control-release": [{"name": "mount-detach-follower-terminal-control", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [0, 1, 1]}]
+    },
+    "current.blocked-wild-facing": {
+      "live-actor-identity": [
+        {"name": "blocked-exeggcute-identity", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [1, "WILD", 102, 1, 1]}
+      ],
+      "terrain-selection": [
+        {"name": "blocked-exeggcute-canopy-fixture", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [33, 580, 409, "canopy", 1]}
+      ],
+      "rendered-motion": [
+        {"name": "blocked-exeggcute-facing-and-position-changes", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [0, 0, 0]}
+      ],
+      "frame-pacing": [
+        {"name": "blocked-exeggcute-contiguous-frames", "operator": "gte", "type": "integer", "validator": "meaningful-observation", "minimum": 128}
+      ]
+    },
+    "current.floaty-bounce-hop-pause": {
+      "live-actor-identity": [
+        {"name": "floaty-jigglypuff-identity", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [1, "WILD", 39, 1, 1]}
+      ],
+      "profile-resolution": [
+        {"name": "floaty-resolved-hop-contract", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [2, 12, 10]}
+      ],
+      "logical-commit": [
+        {"name": "floaty-complete-hop-commits", "operator": "gte", "type": "integer", "validator": "meaningful-observation", "minimum": 2}
+      ],
+      "rendered-motion": [
+        {"name": "floaty-complete-rendered-hops", "operator": "gte", "type": "integer", "validator": "meaningful-observation", "minimum": 2}
+      ],
+      "frame-pacing": [
+        {"name": "floaty-hop-duration-errors", "operator": "eq", "type": "integer", "validator": "meaningful-observation", "expected": 0},
+        {"name": "floaty-two-hop-pause-frames", "operator": "eq", "type": "array", "validator": "meaningful-observation", "expected": [10, 10]}
+      ],
+      "control-release": [
+        {"name": "floaty-control-return-count", "operator": "gte", "type": "integer", "validator": "meaningful-observation", "minimum": 2}
+      ]
+    },
+    "current.waddle-walk-presentation-only": {
+      "live-actor-identity": [
+        {
+          "name": "waddle-bellsprout-identity",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [1, "WILD", 69, 1, 1]
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "waddle-resolved-width",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": ["waddle", 4]
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "waddle-walk-terminal-commit-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "waddle-changed-walk-sample-fields",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": ["swayOffset"]
+        },
+        {
+          "name": "waddle-non-walk-sway-sample-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 0
+        }
+      ],
+      "frame-pacing": [
+        {
+          "name": "waddle-walk-timing-and-path-unchanged",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [1, 1]
+        }
+      ],
+      "control-release": [
+        {
+          "name": "waddle-control-return-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ]
+    },
+    "current.held-actor-control-resume": {
+      "live-actor-identity": [
+        {
+          "name": "held-mankey-rattata-identities",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [1, "WILD", 56, 1, 1, "WILD", 19, 1]
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "held-no-picked-up-profile-and-class-equality",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [0, 1]
+        }
+      ],
+      "controlled-action": [
+        {
+          "name": "held-control-mode-sequence",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": ["AUTONOMOUS", "HELD", "AUTONOMOUS"]
+        }
+      ],
+      "engine-boundary": [
+        {
+          "name": "held-during-and-after-autonomous-intent-counts",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [0, 1]
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "held-sync-errors-and-release-normalizations",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [0, 1, 1]
+        }
+      ],
+      "control-release": [
+        {
+          "name": "held-routine-resume-count",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
         }
       ]
     },

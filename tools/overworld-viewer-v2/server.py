@@ -77,6 +77,7 @@ def server_code_revision() -> str:
     for source in (
         Path(__file__).resolve(),
         Path(reliability.__file__).resolve(),
+        Path(reliability.native_resolver.__file__).resolve(),
         LEGACY_VIEWER_SOURCE,
         *(ROOT / path for path in devtools_source_paths(ROOT)),
     ):
@@ -584,7 +585,6 @@ class V2ViewerHandler(legacy.ViewerHandler):
                             (query.get("level") or [None])[0],
                             (query.get("terrain") or [None])[0],
                             (query.get("shiny") or [None])[0],
-                            (query.get("conditionTerrainMask") or [None])[0],
                             (query.get("forcedOverrideMask") or [None])[0],
                             (query.get("behaviorClass") or [None])[0],
                         ),
@@ -617,6 +617,35 @@ class V2ViewerHandler(legacy.ViewerHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
+        if path == "/api/v2/resolve":
+            try:
+                if server_restart_required():
+                    self.send_json({"error": "V2 server code changed on disk. Restart the server before resolving another context.", "code": "server_restart_required"}, status=409)
+                    return
+                length = int(self.headers.get("Content-Length", "0"))
+                if length <= 0 or length > 4 * 1024 * 1024:
+                    raise ValueError("condition preview must contain at most 4 MiB of JSON")
+                if self.headers.get("Content-Type", "").split(";", 1)[0].strip() != "application/json":
+                    raise ValueError("condition preview requires application/json")
+                payload = json.loads(self.rfile.read(length))
+                reliability.require_capability(legacy, "profiles")
+                with reliability.workspace_guard(ROOT):
+                    result, source_revision = reliability.stable_source_read(
+                        legacy,
+                        ROOT,
+                        lambda: reliability.resolve_conditional_preview(legacy, payload),
+                    )
+                    result["sourceRevision"] = source_revision
+                self.send_json(result)
+            except reliability.CapabilityUnavailable as exc:
+                self.send_json({"error": str(exc), "code": "capability_unavailable", "capability": exc.capability, "missingSources": exc.missing_sources}, status=409)
+            except reliability.SourceReadConflict as exc:
+                self.send_json({"error": str(exc), "code": "source_read_conflict"}, status=409)
+            except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                self.send_json({"error": str(exc)}, status=400)
+            except Exception as exc:
+                self.send_json({"error": str(exc)}, status=500)
+            return
         if path == "/api/v2/devtools":
             if not self.devtools_request_allowed():
                 return

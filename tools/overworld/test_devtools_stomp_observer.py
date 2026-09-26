@@ -72,13 +72,13 @@ class StompObserverTests(unittest.TestCase):
         regs.r0=1;self.invoke(r,0x02010300)
         regs.sp+=16;regs.r0=0x02260000;self.invoke(r,0x02010200)
         regs.sp+=16;self.invoke(r,0x02010100)
-        regs.sp+=16;regs.sp-=16;regs.r0=2183;regs.lr=0x02010401;self.invoke(r,'sound')
-        regs.sp-=16;put(regs.sp,struct.pack('<I',2183));regs.lr=0x02010501;self.invoke(r,'soundStart')
+        regs.sp+=16;regs.sp-=16;regs.r0=1606;regs.lr=0x02010401;self.invoke(r,'sound')
+        regs.sp-=16;put(regs.sp,struct.pack('<I',1606));regs.lr=0x02010501;self.invoke(r,'soundStart')
         regs.r0=1;self.invoke(r,0x02010500)
         regs.sp+=16;self.invoke(r,0x02010400)
         regs.sp+=16;self.invoke(r,0x02010000)
         self.assertEqual(r.counts,dict.fromkeys(('policy','dust','allocate','init','sound','soundStart'),1))
-        self.assertEqual(r.latest['feedback']['soundStart'][0]['soundId'],2183)
+        self.assertEqual(r.latest['feedback']['soundStart'][0]['soundId'],1606)
         self.assertEqual(r.latest['feedback']['allocate'][0]['returnValue'],0x02260000)
         r.close();self.assertIsNone(r.failure);self.assertEqual(r.observer.hooks.callbacks,{})
 
@@ -110,7 +110,7 @@ class StompObserverTests(unittest.TestCase):
         sound=(reference/'unk_02005D10.s').read_text()
         self.assertIn('PlaySE: ; 0x0200604C',sound)
         self.assertIn('sub_020060BC: ; 0x020060BC',sound)
-        self.assertRegex((root/'include/constants/sndseq.h').read_text(),r'SEQ_SE_GS_IWAOTOSHI02\s+2183\b')
+        self.assertRegex((root/'include/constants/sndseq.h').read_text(),r'SEQ_SE_DP_SUTYA2\s+1606\b')
 
 
 if __name__=='__main__':unittest.main()

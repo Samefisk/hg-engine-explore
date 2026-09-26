@@ -17,6 +17,7 @@ from scripts import build_overworld_wild_spawn_metadata as generator
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.c"
+SPAWNS_SOURCE = ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
 BLOB = ROOT / "build/OverworldWildSpawnMetadata.bin"
 
 
@@ -72,7 +73,10 @@ typedef uint32_t u32;
 typedef int BOOL;
 #define TRUE 1
 #define FALSE 0
+#define HEAPID_DEFAULT 0
+#define HEAPID_MAIN_HEAP 3
 #define HEAPID_WORLD 4
+#define OVERWORLD_WILD_SPAWN_METADATA_HEAP_ID HEAPID_DEFAULT
 #define ARC_CODE_ADDONS 1
 #define CODE_ADDON_OVERWORLD_WILD_SPAWN_METADATA 3
 #define CHECK(x) do { if (!(x)) { fprintf(stderr,"line %d: %s\n",__LINE__,#x); return 1; } } while (0)
@@ -99,7 +103,7 @@ static u32 NARC_GetMemberSize(void *narc,int member) {
     if(narc!=&opens||member!=CODE_ADDON_OVERWORLD_WILD_SPAWN_METADATA)abort();return input_size;
 }
 static void *sys_AllocMemory(int heap,u32 size) {
-    if(heap!=HEAPID_WORLD||size!=input_size||owned)abort();allocs++;
+    if(heap!=OVERWORLD_WILD_SPAWN_METADATA_HEAP_ID||size!=input_size||owned)abort();allocs++;
     return owned=fail_alloc?NULL:malloc(size);
 }
 static void sys_FreeMemoryEz(void *value) {
@@ -196,6 +200,24 @@ int main(int argc,char **argv) {
 
 
 class SpawnMetadataCapacityTests(unittest.TestCase):
+    def test_persistent_catalogs_split_across_supported_heaps(self):
+        from scripts.verify_overworld_spawn_profile_lifecycle import production_function
+        header = (ROOT / "include/overworld_wild_behavior_data.h").read_text()
+        self.assertRegex(header,
+            r"#define\s+OVERWORLD_WILD_BEHAVIOR_DATA_HEAP_ID\s+HEAPID_WORLD")
+        self.assertRegex(header,
+            r"#define\s+OVERWORLD_WILD_SPAWN_METADATA_HEAP_ID\s+HEAPID_DEFAULT")
+        metadata_loader = production_function(SOURCE.read_text(),
+            "OverworldWildBehavior_LoadSpawnMetadata", "BOOL")
+        behavior_loader = production_function(SPAWNS_SOURCE.read_text(),
+            "OverworldWildSpawns_LoadCodeAddonBlob", "BOOL")
+        self.assertEqual(metadata_loader.count("HEAPID_WORLD"), 1)
+        self.assertEqual(
+            metadata_loader.count("OVERWORLD_WILD_SPAWN_METADATA_HEAP_ID"), 1)
+        self.assertEqual(behavior_loader.count("HEAPID_WORLD"), 1)
+        self.assertEqual(
+            behavior_loader.count("OVERWORLD_WILD_BEHAVIOR_DATA_HEAP_ID"), 1)
+
     def test_checksum_matches_byte_reference_for_all_lengths_and_alignments(self):
         from scripts.verify_overworld_spawn_profile_lifecycle import production_function
         body = production_function(SOURCE.read_text(),

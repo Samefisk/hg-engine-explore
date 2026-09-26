@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.condition.live-wild-controller",
+  "title": "Live Wild controller resolves one conditional profile at intent boundaries",
+  "status": "active",
+  "capabilities": ["condition.evaluation"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "tests/overworld/scenarios/profile.condition.live-wild-controller.json",
+    "actor": "WILD species 70 (Weepinbell), acquired through spawn with a current handle and attached presentation. A live FOLLOWER Igglybuff is the controlled target, not the caller.",
+    "trigger": "Prepare and bind the live actors before changing the disposable catalog. Change only the existing Ambush condition's kind, target and range predicate so it notices the nearest Follower in a four-tile radius. At the first observed idle intent boundary, clear the 16-byte retained state for only this condition so the old Player target cannot cross into the changed target type. Observe the real Wild wrapper call the condition adapter. Let the trigger presentation finish, then observe the next idle evaluation start the unchanged Ambush Hop. During that accepted Hop, change only the generation in the condition-owned retained target reference.",
+    "observable": "The first two real Wild calls resolve condition 49529, application 21, profile ambush and the current Follower handle. One two-tile Hop uses the authored hopTime 6 and therefore takes 11 frames. It moves toward that Follower. No condition call occurs during accepted motion. After LOGICAL_COMMIT, MOTION_FINISHED and CONTROL_RETURNED, the next Wild call returns STALE_TARGET, clears active resolution and target validity, and creates no new intent or motion.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use a disposable test.sav, checked teleport, saved-party Follower spawn, and native Wild Weepinbell spawn. Patch exactly five bytes in the live behavior blob: player-noticed to Pokemon-noticed, player target to actor target, target-role zero to Follower, current Vision to radius, and range zero to four. At the first observed adapter entry, zero only this condition's 16-byte retained state so its old Player target cannot cross target types. Keep the authored condition timing, subject pool, application, conditional profile and all profile fields unchanged."
+      },
+      {
+        "phase": "during-observation",
+        "target": "observation",
+        "change": "While the accepted Hop is moving, change only the two-byte generation in the condition-owned retained target. Keep the actual Follower handle, actor and position unchanged. The evaluator clears that stale reference. Restore the exact five catalog bytes before the private session closes."
+      }
+    ],
+    "limits": [
+      "This is controlled live-caller proof for the Wild controller only. The Follower is a target, so this grants no Follower-caller role credit.",
+      "The current authored catalog has no Pokemon-target condition. The five-byte target-and-range predicate patch and one controlled retained-state reset prove the live evaluator and controller seam, not normal authored Ambush targeting.",
+      "This does not prove mounted-follower target exclusion. No mounted exclusion claim is made.",
+      "The separate profile.condition.packaged-rom-evaluator remains copied-service-input proof only and grants no live caller, intent-boundary or movement credit."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {"path": "test.sav", "kind": "sav"},
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "weepinbell",
+      "species": 70,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Prepare one live Follower target and one live Wild Weepinbell, then install the exact five-byte target-and-range fixture"},
+    {"at": 1, "kind": "lifecycle", "value": "Observe condition trigger and active hold only at idle Wild intent boundaries"},
+    {"at": 2, "kind": "lifecycle", "value": "Observe the unchanged two-tile conditional Hop use hopTime 6 and move for 11 frames toward the resolved Follower"},
+    {"at": 3, "kind": "lifecycle", "value": "Make the retained target generation stale during motion and observe fail-closed handling only after control returns"}
+  ],
+  "stop": {
+    "frameBudget": 240,
+    "condition": "The stale-target Wild call fails closed after one complete conditional Hop and the live catalog is restored"
+  },
+  "expect": {
+    "requiredEvents": [
+      "INTENT_CREATED",
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED",
+      "CONTEXT_CHANGED",
+      "ACTOR_REBOUND",
+      "CONTROL_REBOUND"
+    ],
+    "invariants": [
+      "Every condition call is owned by the real Wild intent-boundary wrapper and enters while the subject is idle",
+      "The successful condition result uses condition 49529, application 21, profile ambush and the current Follower handle",
+      "No condition evaluation interrupts the accepted 11-frame, two-tile Hop",
+      "The stale retained target is rejected after control returns and before another intent starts",
+      "The live behavior catalog is restored before cleanup"
+    ],
+    "orderedEvents": [
+      {"id": "intent", "event": "INTENT_CREATED", "reason": "OK"},
+      {"id": "start", "event": "MOTION_STARTED", "reason": "OK", "valueA": {"equals": 2}, "valueB": {"equals": 11}},
+      {"id": "commit", "event": "LOGICAL_COMMIT", "reason": "OK"},
+      {"id": "finish", "event": "MOTION_FINISHED", "reason": "OK"},
+      {"id": "control", "event": "CONTROL_RETURNED", "reason": "OK"}
+    ],
+    "eventCounts": [
+      {"event": "INTENT_CREATED", "reason": "OK", "minimum": 1, "maximum": 1},
+      {"event": "MOTION_STARTED", "reason": "OK", "valueA": {"equals": 2}, "valueB": {"equals": 11}, "minimum": 1, "maximum": 1},
+      {"event": "LOGICAL_COMMIT", "reason": "OK", "minimum": 1, "maximum": 1},
+      {"event": "MOTION_FINISHED", "reason": "OK", "minimum": 1, "maximum": 1},
+      {"event": "CONTROL_RETURNED", "reason": "OK", "minimum": 1, "maximum": 1}
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "profile.condition.live-wild-controller",
+    "claims": ["live-actor-identity", "profile-resolution", "engine-boundary", "controlled-action", "logical-commit", "control-release"],
+    "minimumFrames": 8
+  }
+}

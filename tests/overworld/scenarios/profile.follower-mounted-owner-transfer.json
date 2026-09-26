@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "profile.follower-mounted-owner-transfer",
-  "title": "Same follower profile reaches mounted Owner without a second profile",
+  "title": "Mounted binds the current Sprint follower as one actor",
   "status": "active",
   "capabilities": ["profile.composition"],
   "proofLevel": "S3",
@@ -9,13 +9,13 @@
   "verification": {
     "kind": "controlled-case",
     "expectationSource": "documentation/overworld-system/README.md#current-invariants-to-preserve",
-    "actor": "Saved FOLLOWER Mankey56, party slot2 PID2920357538, becomes the same current MOUNTED actor.",
-    "trigger": "Prepared native mount of that current follower, with bounded read-only getter and Begin observations.",
-    "observable": "The exact current follower getter profile and primitives reach Begin; stored Owner bytes match and the same final actor owns input in the Owner lane.",
+    "actor": "Prepared FOLLOWER Stantler234, party slot2 PID2920357538, becomes the same current MOUNTED actor.",
+    "trigger": "Prepare the Sprint Stantler, start it as the current follower, then mount it with bounded read-only getter and Begin observations.",
+    "observable": "Begin receives the Mounted profile, not the Follower-only profile. The resolver parity scenario separately proves normal Owner field and primitive inheritance. Mounted keeps a distinct policy fingerprint, stores its Begin Owner bytes, and the same final actor owns input.",
     "setupAudit": "complete",
     "setupMutations": [
-      {"phase": "before-observation", "target": "fixture", "change": "Copy test.nds and test.sav. Use the already healthy saved Mankey; no party edit, teleport, menu or healing route."},
-      {"phase": "before-observation", "target": "actors", "change": "Use fixed prepared spawn mounted command with slot2 and owner-transfer diagnostics. Read native getter and Begin values without changing profiles; retain all scoped receipts and cleanup."}
+      {"phase": "before-observation", "target": "fixture", "change": "Copy test.nds and test.sav. Replace party slot2 with level5 Stantler using the fixed native party operation."},
+      {"phase": "before-observation", "target": "actors", "change": "Start that exact Stantler as Follower, then mount it with owner-transfer diagnostics. Read the Follower getter and separate Mounted Begin values; retain all scoped receipts and cleanup."}
     ],
     "limits": [
       "Prepared byte-transfer proof only. No normal Y/Select input, Hop completion, movement timing, full resolver provenance or soak claim.",
@@ -23,13 +23,13 @@
     ]
   },
   "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
-  "subjects": [{"id": "mankey", "species": 56, "role": "MOUNTED", "acquisition": "mount", "minimum": 1, "maximum": 1, "motionActor": false, "requirePresentation": true}],
+  "subjects": [{"id": "stantler", "species": 234, "role": "MOUNTED", "acquisition": "mount", "minimum": 1, "maximum": 1, "motionActor": false, "requirePresentation": true}],
   "events": [
-    {"at": 0, "kind": "setup", "value": "Read the saved follower identity, then mount that same subject through the prepared lifecycle."},
-    {"at": 1, "kind": "lifecycle", "value": "Compare getter output, Begin input and stored Owner; inspect one completed final mounted frame."}
+    {"at": 0, "kind": "setup", "value": "Prepare and start the Sprint Stantler follower, then mount that same subject through the prepared lifecycle."},
+    {"at": 1, "kind": "lifecycle", "value": "Require separate Follower and Mounted profile inputs, distinct policy identity, matching stored Mounted Owner bytes, and one completed mounted frame."}
   ],
   "stop": {"frameBudget": 600, "condition": "One complete profile transfer and final bound frame, or first missing/invalid observation."},
-  "expect": {"requiredEvents": [], "forbiddenEvents": [], "invariants": ["The mounted Owner lane comes from the current follower profile", "Every active actor handle uses the current field epoch"]},
+  "expect": {"requiredEvents": [], "forbiddenEvents": [], "invariants": ["Mounted uses its own forced system profile identity", "Mounted does not reuse Follower-only profile bytes", "The stored Owner lane equals the Mounted Begin input", "Every active actor handle uses the current field epoch"]},
   "capture": "none",
   "adapter": {"kind": "devtools-test", "test": "profile.follower-mounted-owner-transfer", "claims": ["live-actor-identity", "profile-resolution"], "minimumFrames": 1}
 }

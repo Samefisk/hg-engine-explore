@@ -135,16 +135,136 @@ still armed is diagnostic data, not reusable scenario proof.
 The generated field schema lives in `tools/overworld/behavior_schema.json`.
 Its generator emits matching ROM and host metadata. Named values live in
 `data/overworld_behavior_profiles.json`. This named JSON catalog is the sole
-editable behavior-profile source. Catalog v2 has one `profiles` collection.
-The root profile is complete. Every other profile has a stable ID, one parent,
-and only its local field operators. A field operator is `replace`, `relative`,
-`atLeast`, `atMost`, or a supported combined relative bound.
+editable behavior-profile source. Catalog V5 has `profiles`, `pools`, and one
+ordered `applications` collection. The root profile is complete. Every other
+profile has a stable ID, one parent, one kind, one classification, and only its
+local field operators. A field operator is `replace`, `relative`, `atLeast`,
+`atMost`, or a supported combined relative bound.
 
-`selectors` choose the initial profile. Ordered `applications` hold targets,
-members, and shared matches. They use profile IDs and do not define another
-profile type. Conditional links and Active/Tired references use stable
-application IDs. Names are display text and can change without breaking these
-references.
+The PB0 manifest at
+[`profile_building_blocks_target_v1.json`](../../tools/overworld/fixtures/profile_building_blocks_target_v1.json)
+freezes both the exact V4 source inventory and complete target inventory. The
+checker accepts the untouched source or the complete target and rejects a
+partial mixed catalog.
+
+### Profile building-block model
+
+The saved classifications and composition order are:
+
+1. Routine
+2. Placement
+3. Capability
+4. Attitude
+5. Modifier
+6. System
+7. Utility
+
+Later matching applications override earlier fields. The Workshop groups by
+classification, auto-sorts the groups, and preserves manual order inside each
+group. Conditional is independent of classification. An archetype is only
+design shorthand for a complete composition; it is not authored data.
+
+The exact target catalog is owned by the
+[architecture catalog table](architecture.md#1-behavior-schema). In compact
+form it is:
+
+- Routine: Scavenger, Sprint, Floaty Bounce, Small Bird Hop, Erratic Flutter,
+  Meander, Hop Around, Idle, Drowsy Wander, Perch, Rest.
+- Placement: Fly In, Canopy Access, Flower Bed.
+- Capability: Notice Player, Teleport, Stalker, Long Hop, Canopy Hop, Throw,
+  Ram, Heavy Stomp.
+- Attitude: Startled, Ambush, Playful, Skittish.
+- Style: Waddle.
+- System: Follower, Mounted.
+- Utility: Asleep.
+
+`Default` is the one complete root and is not an application. Notice Player is
+the first Capability. Perch follows the ordinary Routines. Startled precedes
+Skittish. The player condition is last inside Playful. Follower, Mounted, and
+Asleep are runtime-linked and cannot be assigned normally.
+
+Selectors choose the root profile. In the target catalog they resolve to
+`Default`; species differences come from reusable applications. Authoring uses
+Behavior and Movement Style names. The generator can lower them to legacy
+binary field names while compatibility storage remains.
+
+The frozen composition changes are:
+
+- Teleport and Stalker use the same direct member list.
+- Current small birds use Small Bird Hop plus Fly In. A large-bird redesign is
+  outside this catalog change.
+- Flying insects use Erratic Flutter, Fly In, and Notice Player.
+- Bellsprout, the Oddish line, and Sunflora use Meander, Waddle, and Startled.
+- Sunkern, Cherubi, and both Cherrim forms use Hop Around and Startled.
+- Weepinbell, Victreebel, and Carnivine use Idle, Ambush, and Rest.
+- Playful uses the Playful Pokémon pool for condition subjects and compatible
+  actor targets. Its player condition is last.
+- Skittish uses one Baby Pokémon subject-pool condition.
+- Snorlax uses Drowsy Wander for uneven two-to-six-step Walk bursts, variable
+  step time, long look-around stops, and no immediate backtracking.
+- Golem, Rhydon, Snorlax, Tyranitar, Aggron, Groudon, Torterra, Hippowdon,
+  Rhyperior, Mamoswine, and Regigigas use Heavy Stomp. Each completed Walk tile
+  emits stomp dust and the stock ledge-hop landing sound without changing its Routine,
+  target, speed, or pause. The profile's shared population key limits these
+  Pokémon to one active Wild spawn across species.
+
+The Workshop main tabs are Conditions, Spawn, Behavior, Movement Style,
+Vision, and Tired. Native controller-state names do not appear as authoring
+tabs. Chill, Active, and Attentive are not authoring concepts.
+
+Ordinary Walk has no pause after each tile and no per-tile pause variance.
+Those pauses read as lag. A Walk Movement Chain is either disabled or contains
+at least two moves. A deliberately slow Routine can break the no-pause rule
+only with a visibly intentional pause and a playtest; a one-move Walk chain is
+never used. Hop chains are separate and can contain one move.
+
+A Movement Chain can own several pause actions. Its action chance is one gate
+for the whole set. When the gate passes, the runtime picks one set action at
+random. `PAUSE` is an idle chain action, not a per-step Walk pause. Meander uses
+Look around and Pause with a 50% action chance, so each action keeps an expected
+25% share while `walkPause` and `walkPauseVariance` stay zero.
+
+### Membership and conditions
+
+A normal application owns a named or inline Pokémon target. A conditional
+application has an ordered identity but no authored target. Its profile owns
+the ordered condition entries, and each entry owns its own named or inline
+subject pool. A System application is linked from its runtime owner rather than
+assigned to Pokémon. Entries are independent. The last admitted entry in one
+profile wins; different conditional profiles still compose in application
+order. Tired references use stable application IDs.
+
+One condition captures at most one target. It selects no target, the player, or
+one compatible actor. While-true activation follows predicate truth. Timed
+activation owns duration and cooldown; retrigger restarts duration and cannot
+occur during cooldown. A changed result applies at the next intent boundary and
+does not interrupt accepted motion.
+
+A named pool has a stable ID, display name, one match, and explicit members. It
+can be reused by a normal target, a condition subject, or an actor-target
+filter. It cannot reference another pool. `Baby Pokémon` supplies Skittish
+subjects. `Playful Pokémon` supplies both Playful subjects and compatible actor
+targets. Teleport and Stalker use direct memberships rather than a synthetic
+pool.
+
+### Vision and control ownership
+
+Vision-based conditions select Current Vision or own an inline Custom Vision.
+Profiles own stable Current Vision fields. Current Vision is cached from
+`Default`, normal applications, and a forced-role profile. Conditional
+applications are excluded, so a profile cannot alter the Vision used to admit
+itself. The default is a three-tile, 90-degree forward cone with awareness of
+all adjacent tiles and solid-terrain occlusion.
+
+Fly In is a Placement, not a Hop tuning bundle. It descends from offscreen
+flying height to the exact prevalidated destination surface and then returns
+control to the normal Routine. Hop From Off Screen remains a separate
+eight-tile effect.
+
+Pickup, carry, throw, drop, cancel, and release use internal held actor control.
+There is no Picked Up profile or behavior class in the target model. Raw native
+controller-state names remain diagnostic compatibility values only; they are
+not Workshop tabs, lanes, or classifications.
 
 `data/OverworldWildBehaviorData.c` and
 `include/overworld_wild_behavior_data.h` are generated ROM-compatibility
@@ -165,9 +285,10 @@ generator does not import positional C data into the catalog. Workshop saves
 update the named JSON catalog and regenerate the same compatibility files.
 
 The catalog shape is documented by
-`tools/overworld/schemas/behavior-authoring-v2.schema.json`. The generator
+`tools/overworld/schemas/behavior-authoring-v5.schema.json`. The generator
 also validates field names, stable IDs, parent cycles, references, matches,
-members, operators, and fixed-layout counts before it writes output.
+members, pools, classification order, operators, and fixed-layout counts before
+it writes output.
 
 The generated C still contains class snapshots and ordered override tables.
 Those are ROM compatibility layouts, not authoring profile types. Generation
@@ -184,9 +305,15 @@ do not create a second composition implementation.
 
 The resolve endpoint accepts the complete resolver context. In addition to
 species, level, terrain, and shiny state, agents can pass
-`conditionTerrainMask`, `forcedOverrideMask`, and `behaviorClass`. Values can
-be integers or known C symbols and flag expressions. Omit `behaviorClass`, or
-use `auto`, to run class rules.
+`forcedOverrideMask`, `activeConditionalApplicationMask`, condition winners,
+the resolved condition target, and `behaviorClass`. The Workshop condition
+preview prepares world facts and calls the same portable evaluator before it
+calls the resolver. Values can be integers or known C symbols and flag
+expressions. Omit `behaviorClass`, or use `auto`, to run class rules.
+
+`activeConditionalApplicationMask` is a compatibility API field name. It means
+the set of conditional applications admitted for this intent decision; it does
+not name an authored state or lane.
 
 `scripts/verify_overworld_behavior_resolver.py` runs the committed golden
 corpus through both single and batch Workshop adapters. It also checks that the
@@ -199,11 +326,12 @@ ROM run is still required before claiming live parity.
 A resolution explanation must show:
 
 - Subject and field context.
-- Selected profile and why it matched.
-- Every layer in source order.
-- Applied, skipped, and conditionally selected layers.
+- Default and every application in source order, with classification.
+- Applied, skipped, and conditionally admitted profiles.
+- Normal assignment, condition subject, named-pool, and System-link reasons.
 - Each changed field with old value, operator, and new value.
-- Active and Tired linked profile selection.
+- Winning condition entry, Current or Custom Vision source, captured target,
+  and Tired profile selection.
 - Normalization changes.
 - Mechanical primitives.
 - Final fingerprint.
@@ -211,24 +339,29 @@ A resolution explanation must show:
 Example:
 
 ```text
-SPECIES_CYNDAQUIL / forced Follower layer / Mounted projection / Land
+SPECIES_MAREEP / Wild / Land
 
-Base: Default
-Layer 05: Fire group                 APPLIED
-Layer: Follower Pokémon              APPLIED
+Root: Default
+Routine 06: Meander                  APPLIED by normal membership
+Capability 14: Notice Player         ADMITTED by condition
+  Subject: SPECIES_MAREEP
+  Vision: Current Vision from Default + normal applications
+  Target: Player
 
-Owner.walk.travelTime: 16 -> 8      no slower than 8
-Owner.chain.pause: Hop -> None       Follower Pokémon layer
-
-Mounted controller: Owner movement values consumed; AI chain policy ignored
+Owner.behavior: Meander -> Notice presentation
+Owner.target: None -> Player
 
 Fingerprint: 4d2a7e91
 ```
 
-Mounted is not a profile type or resolver role. Current mount begin resolves
-the current follower with the forced `Follower Pokemon` layer, snapshots the
-resolved Owner lane, then selects the rider-input controller. AI-only values
-stay resolved but that controller does not consume them.
+Mounted is a System profile, not a profile type or resolver role. Current mount
+begin resolves the same subject with the forced `Mounted` application,
+snapshots the resolved Owner lane, then selects the rider-input controller.
+Mounted has no field overrides. It is applied to the Pokémon's normal selected
+profile, not on top of Follower. Every movement field stays inherited from
+that selected profile. Follower's chase and land-only rules remain limited to
+the unmounted follower. The Mounted controller takes rider input in place of
+AI target choice; it keeps the selected movement timing and chain actions.
 
 ## Stable observation
 

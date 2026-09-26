@@ -68,9 +68,9 @@ class WalkIntentTests(unittest.TestCase):
         f.rt.movement_policy_state = lambda emu, slot: deepcopy(f.policy)
         f.observer._chain_current = lambda slot: (deepcopy(f.actor), {}, deepcopy(f.actor["engineIdentity"]), {})
         f.native_observation = f.observer
-        resolved = bytearray(256); resolved[19] = 1
+        resolved = bytearray(200); resolved[19] = 1
         f.observer.profiles[44] = dict(resolved=True, resultHex=resolved.hex())
-        f.put(0x02221000, resolved[:216])
+        f.put(0x02221000, resolved[:144])
         name = "OverworldWildSpawns_TryStartAcceleratedWalkStep"
         f.symbols[name] = 0x02301000
         f.put(0x02301000, b"W" * 32)
@@ -159,7 +159,7 @@ class WalkIntentTests(unittest.TestCase):
                 if fault == "missing-profile": f.observer.profiles.clear()
                 if fault == "direction":
                     f.put(0x02221013, b"\x00")
-                    f.observer.profiles[44]["resultHex"] = bytes(256).hex()
+                    f.observer.profiles[44]["resultHex"] = bytes(200).hex()
                 if fault == "context": f.put(0x02220008, struct.pack("<I", 0x02210004))
                 f.enter("walk-direction-intent", r0=0x02220000, r1=7)
                 self.assertIsNotNone(c.failure)
@@ -189,8 +189,8 @@ class WalkIntentTests(unittest.TestCase):
                 with self.subTest(mode=mode, direction=direction), tempfile.TemporaryDirectory() as directory:
                     f, c = self.fixture(directory)
                     c.direction = direction
-                    data = bytearray(256); data[19] = mode
-                    f.put(0x02221000, data[:216])
+                    data = bytearray(200); data[19] = mode
+                    f.put(0x02221000, data[:144])
                     f.observer.profiles[44]["resultHex"] = data.hex()
                     f.enter("walk-direction-intent", r0=0x02220000, r1=7)
                     allowed = mode == 1 or (direction < 4 and mode == 0) or (direction >= 4 and mode == 2)
@@ -208,13 +208,13 @@ class WalkIntentTests(unittest.TestCase):
                              ("primitives", 16), ("slot", 20), ("allowedTile", 22), ("jumpLevel", 24), ("avoidPreviousTile", 25)):
             program += f'\n_Static_assert(offsetof(OverworldWildDirectionStepContext,{name})=={offset},"{name}");'
         program += '\n_Static_assert(sizeof(OverworldWildDirectionStepContext)==28,"context size");'
-        program += '\n_Static_assert(sizeof(OverworldWildBehaviorProfile)==216,"profile size");'
-        program += '\n_Static_assert(sizeof(OverworldWildBehaviorPrimitives)==11,"primitives size");'
-        program += '\n_Static_assert(OVERWORLD_ACTOR_WALK_PENDING_ACTIVE==2,"pending active");'
-        program += '\n_Static_assert(offsetof(OverworldWildSpawnState,movementSpawnRunActive)==514,"spawn run");'
+        program += '\n_Static_assert(sizeof(OverworldWildBehaviorProfile)==144,"profile size");'
+        program += '\n_Static_assert(sizeof(OverworldWildBehaviorPrimitives)==8,"primitives size");'
+        program += '\n_Static_assert(OVERWORLD_ACTOR_WALK_PENDING_ACCEPTED==2,"pending active");'
+        program += '\n_Static_assert(offsetof(OverworldWildSpawnState,movementSpawnRunActive)==494,"spawn run");'
         program += '\n_Static_assert(offsetof(OverworldWildSpawnState,movementSpotStates)==264,"spot state");'
         program += '\n_Static_assert(offsetof(OverworldWildBehaviorProfileData,hopAllowNonCardinal)==19,"directions");'
-        program += '\n_Static_assert(OW_WILD_SPOT_STATE_ACTIVE==2 && OW_WILD_SPOT_STATE_TIRED==3,"lane selection");'
+        program += '\n_Static_assert(OW_WILD_SPOT_STATE_RESERVED==2 && OW_WILD_SPOT_STATE_TIRED==3,"lane selection");'
         program += '\n_Static_assert(OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY==0 && OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_AND_DIAGONAL==1 && OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_DIAGONAL_ONLY==2,"direction modes");'
         cc = shutil.which("arm-none-eabi-gcc") or "/opt/homebrew/bin/arm-none-eabi-gcc"
         result = subprocess.run([cc, "-x", "c", "-std=c11", "-I" + str(root / "include"), "-fsyntax-only", "-"],

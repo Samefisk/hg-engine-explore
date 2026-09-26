@@ -105,7 +105,11 @@ class BindingContextObserver:
             rt, emu = self.session.rt, self.session.emu
             state = self.descriptor["state"]
             prefix = self._read(state["address"], 8)
-            if struct.unpack("<IHH", prefix) != (0x5353574F, 1, state["size"]):
+            if struct.unpack("<IHH", prefix) != (
+                0x5353574F,
+                self.descriptor["facade"]["version"],
+                state["size"],
+            ):
                 raise NativeObservationError("binding context resident state header differs")
             current = {key: int.from_bytes(self._read(state["address"] + state["offsets"][key], 2), "little")
                        for key in ("fieldEpoch", "mapGeneration")}

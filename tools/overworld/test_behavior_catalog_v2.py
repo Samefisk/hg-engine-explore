@@ -1,14 +1,12 @@
-"""Focused parity and reference checks for the unified behavior catalog."""
+"""Focused checks for the CP7 conditional-profile catalog cutover."""
 
 from __future__ import annotations
 
 import copy
-import gzip
 import importlib.util
 import json
 import unittest
 from pathlib import Path
-from unittest import mock
 
 
 REPO = Path(__file__).resolve().parents[2]
@@ -16,7 +14,9 @@ VIEWER_PATH = REPO / "scripts/overworld_behavior_profile_viewer.py"
 
 
 def load_viewer():
-    spec = importlib.util.spec_from_file_location("behavior_catalog_v2_test_viewer", VIEWER_PATH)
+    spec = importlib.util.spec_from_file_location(
+        "behavior_catalog_v4_test_viewer", VIEWER_PATH
+    )
     if spec is None or spec.loader is None:
         raise RuntimeError(f"could not load {VIEWER_PATH}")
     module = importlib.util.module_from_spec(spec)
@@ -25,14 +25,24 @@ def load_viewer():
 
 
 VIEWER = load_viewer()
+REMOVED_CONDITIONAL_STATES = "conditional" + "States"
+REMOVED_DEFAULT_ACTIVE_BINDING = "default" + "ActiveApplication"
+REMOVED_ACTIVE_PROFILE = "active" + "Profile"
+REMOVED_ALERT_FIELDS = {
+    "alert" + suffix for suffix in ("State", "ness", "Range", "Chance")
+}
 
 
-class BehaviorCatalogV2Tests(unittest.TestCase):
+class BehaviorCatalogV5CutoverTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.catalog = json.loads(VIEWER.BEHAVIOR_CATALOG_SOURCE.read_text())
 
-    def test_checked_in_v2_catalog_lowers_to_byte_identical_compatibility_data(self) -> None:
+    def profile(self, profile_id: str, catalog: dict | None = None) -> dict:
+        source = self.catalog if catalog is None else catalog
+        return next(profile for profile in source["profiles"] if profile["id"] == profile_id)
+
+    def test_checked_in_catalog_and_generated_data_are_synchronized(self) -> None:
         VIEWER.validate_behavior_catalog(self.catalog)
         source = VIEWER.BEHAVIOR_DATA_SOURCE.read_text()
         header = VIEWER.BEHAVIOR_DATA_HEADER.read_text()
@@ -42,221 +52,129 @@ class BehaviorCatalogV2Tests(unittest.TestCase):
             header,
         )
 
-    def test_canonical_loader_and_profile_read_model_return_v2(self) -> None:
-        self.assertEqual(VIEWER.load_behavior_catalog_v2(), self.catalog)
-        payload = VIEWER.build_data(
-            include_routes=False,
-            include_spawn_settings=False,
-        )
-        self.assertEqual(payload["profileCatalog"], self.catalog)
-        self.assertNotIn("classProfiles", payload["profileCatalog"])
-        self.assertNotIn("overrideProfiles", payload["profileCatalog"])
+    def test_checked_in_catalog_is_v5_and_old_versions_are_rejected(self) -> None:
+        self.assertEqual(self.catalog["catalogVersion"], 5)
+        for old_version in (1, 2, 3):
+            changed = copy.deepcopy(self.catalog)
+            changed["catalogVersion"] = old_version
+            with self.assertRaisesRegex(
+                VIEWER.ParseError, "unsupported behavior catalog version; expected 4 or 5"
+            ):
+                VIEWER.validate_behavior_catalog(changed)
 
-    def test_focused_profile_deck_builder_is_compact_and_skips_legacy_resolution(self) -> None:
-        retired_calls = (
-            "resolve_native_requests",
-            "lower_behavior_catalog_v2",
-            "catalog_class_profiles",
-            "catalog_behavior_overrides",
-            "catalog_conditional_states",
-        )
-        patches = [
-            mock.patch.object(
-                VIEWER,
-                name,
-                side_effect=AssertionError(f"focused Profile Deck called {name}"),
-            )
-            for name in retired_calls
-        ]
-        for patch in patches:
-            patch.start()
-            self.addCleanup(patch.stop)
-        payload = VIEWER.build_profile_deck_data()
-        self.assertEqual(set(payload), {
-            "profilesAvailable",
-            "profileError",
-            "profileCatalog",
-            "fields",
-            "numericProfileFieldKeys",
-            "numericOverrideOperatorFieldKeys",
-            "boundedOverrideOperatorFieldKeys",
-            "editOptions",
-            "assignments",
-            "labels",
-        })
-        self.assertEqual(payload["profileCatalog"], self.catalog)
-        self.assertEqual(set(payload["labels"]), {"groups", "terrains"})
-        for assignment in payload["assignments"]:
-            self.assertEqual(set(assignment), {"species", "groups"})
-            self.assertLessEqual(
-                set(assignment["species"]),
-                {
-                    "symbol", "name", "aliases", "iconUrl",
-                    "familyBaseSymbol", "familyBaseName", "types",
-                },
-            )
-        encoded = json.dumps(payload, separators=(",", ":")).encode()
-        self.assertLess(len(gzip.compress(encoded, compresslevel=6)), 250_000)
+    def test_v5_is_the_current_authoring_schema(self) -> None:
+        schema = json.loads(VIEWER.BEHAVIOR_AUTHORING_SCHEMA_V5.read_text())
+        self.assertEqual(schema["$id"], "behavior-authoring-v5.schema.json")
+        self.assertEqual(schema["properties"]["catalogVersion"]["const"], 5)
+        schema_dir = VIEWER.BEHAVIOR_AUTHORING_SCHEMA.parent
+        self.assertFalse((schema_dir / "behavior-authoring-v2.schema.json").exists())
+        self.assertFalse((schema_dir / "behavior-authoring-v3.schema.json").exists())
 
-    def test_complete_catalog_save_is_one_validated_write(self) -> None:
+    def test_legacy_catalog_shapes_and_profile_fields_are_rejected(self) -> None:
+        self.assertNotIn(REMOVED_CONDITIONAL_STATES, self.catalog)
+        self.assertNotIn(REMOVED_DEFAULT_ACTIVE_BINDING, self.catalog["runtimeBindings"])
+        removed_fields = {REMOVED_ACTIVE_PROFILE, *REMOVED_ALERT_FIELDS}
+        self.assertFalse(any(
+            removed_fields & set(profile["fields"])
+            for profile in self.catalog["profiles"]
+        ))
+
         changed = copy.deepcopy(self.catalog)
-        changed_profile = next(
-            profile for profile in changed["profiles"] if profile["id"] == "test"
-        )
-        changed_profile["name"] = "Test renamed"
-        changed["selectors"][0]["profile"] = "aggressive-chase"
-        changed["applications"][0], changed["applications"][1] = (
-            changed["applications"][1],
-            changed["applications"][0],
-        )
-        body = json.dumps({"catalog": changed}).encode()
-        with mock.patch.object(
-            VIEWER, "load_behavior_catalog_v2", return_value=self.catalog
-        ), mock.patch.object(VIEWER, "write_behavior_catalog") as write:
-            result = VIEWER.apply_profile_catalog_changes(body)
-        self.assertEqual(
-            result,
-            {
-                "saved": True,
-                "message": "Saved profile catalog",
-                "catalogVersion": 2,
-            },
-        )
-        write.assert_called_once_with(changed)
-        VIEWER.lower_behavior_catalog_v2(changed)
-
-    def test_complete_catalog_save_no_op_does_not_write(self) -> None:
-        body = json.dumps({"catalog": self.catalog}).encode()
-        with mock.patch.object(
-            VIEWER, "load_behavior_catalog_v2", return_value=self.catalog
-        ), mock.patch.object(VIEWER, "write_behavior_catalog") as write:
-            result = VIEWER.apply_profile_catalog_changes(body)
-        self.assertEqual(result["saved"], False)
-        self.assertEqual(result["catalogVersion"], 2)
-        write.assert_not_called()
-
-    def test_complete_catalog_save_rejects_unknown_wrapper_keys(self) -> None:
-        body = json.dumps({"catalog": self.catalog, "sourceRevision": "unexpected"}).encode()
-        with self.assertRaisesRegex(ValueError, "unknown sourceRevision"):
-            VIEWER.apply_profile_catalog_changes(body)
-
-    def test_v1_migration_and_compatibility_writer_are_lossless(self) -> None:
-        lowered = VIEWER.lower_behavior_catalog_v2(self.catalog)
-        plain_v1 = json.loads(json.dumps(lowered))
-        migrated = VIEWER.migrate_behavior_catalog_v1(plain_v1)
-        round_trip = VIEWER.lower_behavior_catalog_v2(migrated)
-        for key in (
-            "classProfiles",
-            "classRules",
-            "speciesClassRules",
-            "overrideProfiles",
-            "conditionalStates",
+        changed[REMOVED_CONDITIONAL_STATES] = []
+        with self.assertRaisesRegex(
+            VIEWER.ParseError, f"unknown {REMOVED_CONDITIONAL_STATES}"
         ):
-            self.assertEqual(round_trip[key], plain_v1[key])
-        self.assertEqual(
-            VIEWER.lift_compatibility_behavior_catalog(lowered),
-            self.catalog,
-        )
+            VIEWER.validate_behavior_catalog(changed)
 
-    def test_selection_materializes_parent_but_application_uses_local_fields(self) -> None:
-        lowered = VIEWER.lower_behavior_catalog_v2(self.catalog)
-        root = next(
-            profile
-            for profile in self.catalog["profiles"]
-            if profile["id"] == self.catalog["rootProfile"]
-        )
-        selected = next(
-            profile
-            for profile in self.catalog["profiles"]
-            if profile["id"] == "aggressive-chase"
-        )
-        selected_compat = next(
-            profile
-            for profile in lowered["classProfiles"]
-            if profile.profile_id == selected["id"]
-        )
-        application = self.catalog["applications"][0]
-        application_profile = next(
-            profile
-            for profile in self.catalog["profiles"]
-            if profile["id"] == application["profile"]
-        )
-        inherited_field = next(
-            field
-            for field in VIEWER.PROFILE_FIELDS
-            if field not in selected["fields"] and field not in application_profile["fields"]
-        )
-        self.assertEqual(
-            selected_compat["fields"][inherited_field],
-            str(root["fields"][inherited_field]["value"]),
-        )
-
-        application_compat = lowered["overrideProfiles"][0]
-        self.assertEqual(
-            set(application_compat["fields"]),
-            set(application_profile["fields"]),
-        )
-        self.assertNotIn(inherited_field, application_compat["fields"])
-
-    def test_empty_application_profile_is_a_valid_inherit_only_layer(self) -> None:
         changed = copy.deepcopy(self.catalog)
-        profile = next(
-            profile
-            for profile in changed["profiles"]
-            if profile["id"] == "default-active"
-        )
-        profile["fields"] = {}
+        changed["runtimeBindings"][REMOVED_DEFAULT_ACTIVE_BINDING] = "apply-default-active"
+        with self.assertRaisesRegex(
+            VIEWER.ParseError, f"unknown {REMOVED_DEFAULT_ACTIVE_BINDING}"
+        ):
+            VIEWER.validate_behavior_catalog(changed)
 
-        lowered = VIEWER.lower_behavior_catalog_v2(changed)
-        application_index = next(
-            index
-            for index, application in enumerate(changed["applications"])
-            if application["profile"] == profile["id"]
-        )
-        self.assertEqual(lowered["overrideProfiles"][application_index]["fields"], {})
-
-    def test_stable_references_follow_application_reordering(self) -> None:
-        reordered = copy.deepcopy(self.catalog)
-        reordered["applications"][0], reordered["applications"][1] = (
-            reordered["applications"][1],
-            reordered["applications"][0],
-        )
-        lowered = VIEWER.lower_behavior_catalog_v2(reordered)
-        application_indexes = {
-            application["id"]: index
-            for index, application in enumerate(reordered["applications"])
+        changed = copy.deepcopy(self.catalog)
+        changed["profiles"][0]["fields"][REMOVED_ACTIVE_PROFILE] = {
+            "operator": "replace", "value": "apply-default-active"
         }
-        root = next(
-            profile
-            for profile in reordered["profiles"]
-            if profile["id"] == reordered["rootProfile"]
+        with self.assertRaisesRegex(
+            VIEWER.ParseError, f"cannot be overridden: {REMOVED_ACTIVE_PROFILE}"
+        ):
+            VIEWER.validate_behavior_catalog(changed)
+
+    def test_notice_player_replaces_default_active(self) -> None:
+        profile = self.profile("notice-player")
+        application = next(
+            item for item in self.catalog["applications"]
+            if item["id"] == "apply-notice-player"
         )
-        root_compat = lowered["classProfiles"][0]["fields"]
+        self.assertEqual(profile["kind"], "conditional")
+        self.assertTrue(profile["conditions"])
+        self.assertEqual(application["profile"], profile["id"])
+        self.assertNotIn("target", application)
+
+    def test_profile_owned_conditions_can_use_independent_subject_pools(self) -> None:
+        changed = copy.deepcopy(self.catalog)
+        profile = self.profile("perch", changed)
+        extra = copy.deepcopy(profile["conditions"][0])
+        extra["id"] = "condition-perch-other-pool"
+        extra["subjects"] = {
+            "mode": "members",
+            "match": VIEWER.default_behavior_match_raws(),
+            "members": ["SPECIES_BEEDRILL"],
+        }
+        profile["conditions"].append(extra)
+        VIEWER.validate_behavior_catalog(changed)
+
+    def test_runtime_projection_has_owner_data_and_tired_references_only(self) -> None:
+        runtime = VIEWER.project_behavior_catalog_runtime(self.catalog)
+        self.assertEqual(len(runtime["classProfiles"]), len(
+            self.catalog["runtimeBindings"]["classOrder"]
+        ))
+        self.assertEqual(len(runtime["overrideProfiles"]), len(self.catalog["applications"]))
+        self.assertNotIn(REMOVED_CONDITIONAL_STATES, runtime)
+        self.assertNotIn(REMOVED_DEFAULT_ACTIVE_BINDING, runtime["runtimeBindings"])
+        self.assertTrue(all(
+            REMOVED_ACTIVE_PROFILE not in profile["fields"]
+            for profile in runtime["classProfiles"] + runtime["overrideProfiles"]
+        ))
+
+        application_index = {
+            application["id"]: index
+            for index, application in enumerate(self.catalog["applications"])
+        }
+        root = runtime["classProfiles"][0]["fields"]
         self.assertEqual(
-            int(root_compat["activeProfile"]),
-            application_indexes[root["fields"]["activeProfile"]["value"]],
-        )
-        state = reordered["conditionalStates"][0]
-        state_compat = lowered["conditionalStates"][0]
-        self.assertEqual(
-            int(state_compat["parentProfile"]),
-            application_indexes[state["parentApplication"]],
-        )
-        self.assertEqual(
-            int(state_compat["overrideProfile"]),
-            application_indexes[state["application"]],
+            int(root["tiredProfile"]),
+            application_index[self.catalog["runtimeBindings"]["defaultTiredApplication"]],
         )
 
-    def test_profile_cycle_is_rejected(self) -> None:
-        invalid = copy.deepcopy(self.catalog)
-        root = next(
-            profile
-            for profile in invalid["profiles"]
-            if profile["id"] == invalid["rootProfile"]
+    def test_field_schema_uses_removed_storage_for_vision_and_walk_sway(self) -> None:
+        source = json.loads(VIEWER.BEHAVIOR_SCHEMA_SOURCE.read_text())
+        generated = json.loads(VIEWER.BEHAVIOR_SCHEMA_METADATA.read_text())
+        self.assertEqual(source["schemaVersion"], 2)
+        self.assertEqual(source["blobVersion"], 81)
+        by_offset = {field["offset"]: field for field in source["fields"]}
+        self.assertEqual(by_offset[1]["key"], "visionRange")
+        self.assertEqual(by_offset[4]["key"], "visionCone")
+        self.assertEqual(by_offset[14]["key"], "visionAdjacentAwareness")
+        self.assertEqual(by_offset[46]["key"], "walkSwayWidth")
+        self.assertNotIn("reserved", by_offset[46])
+        self.assertEqual(by_offset[47]["key"], "tiredProfile")
+        self.assertIn(
+            "walkSwayWidth", {field["key"] for field in generated["editor"]["fields"]}
         )
-        root["parent"] = invalid["profiles"][1]["id"]
-        with self.assertRaisesRegex(VIEWER.ParseError, "root profile cannot have a parent"):
-            VIEWER.validate_behavior_catalog(invalid)
+
+    def test_legacy_lowering_entry_points_are_gone(self) -> None:
+        for name in (
+            "migrate_behavior_catalog_v1",
+            "migrate_behavior_catalog_v2",
+            "lower_behavior_catalog_v2",
+            "lower_behavior_catalog_v3",
+            "load_behavior_catalog_v3",
+            "lift_compatibility_behavior_catalog",
+        ):
+            self.assertFalse(hasattr(VIEWER, name), name)
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ class SpawnProfileLifecycleTests(unittest.TestCase):
             [sys.executable, str(root / "scripts/verify_overworld_spawn_profile_lifecycle.py")],
             cwd=root, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("PASS 26 spawn-order cases", result.stdout)
+        self.assertIn("PASS 32 spawn-order cases", result.stdout)
         self.assertEqual(result.stdout.count("PASS known-bad spawn rejected:"), 6)
 
 

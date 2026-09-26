@@ -47,6 +47,29 @@ SECTIONS {
                 *(.data)
         } >rom = 0xff
 
+        ASSERT(ADDR(.data) + SIZEOF(.data) <= ORIGIN(rom) + 0x3DF8,
+            "wild helper core overlaps condition visibility population")
+
+        .overworld_condition_visibility_populate ORIGIN(rom) + 0x3DF8 : {
+                KEEP(*(.overworld_condition_visibility_populate))
+                ASSERT(OverworldConditionVisibility_PopulateWorld
+                        == ORIGIN(rom) + 0x3DF8,
+                    "condition visibility population moved");
+                ASSERT(. <= ORIGIN(rom) + 0x3EA8,
+                    "condition visibility population exceeds helper slot");
+                . = ORIGIN(rom) + 0x3EA8;
+        } >rom = 0xff
+
+        .overworld_condition_visibility_trace ORIGIN(rom) + 0x3EA8 : {
+                KEEP(*(.overworld_condition_visibility_trace))
+                ASSERT(OverworldConditionVisibility_TraceBlocked
+                        == ORIGIN(rom) + 0x3EA8,
+                    "condition visibility trace moved");
+                ASSERT(. <= ORIGIN(rom) + 0x3F60,
+                    "condition visibility trace exceeds helper tail");
+                . = ORIGIN(rom) + 0x3F60;
+        } >rom = 0xff
+
         .overworld_spawn_spatial ORIGIN(rom) + 0x3F60 : {
                 KEEP(*(.overworld_spawn_spatial_player_tile))
                 ASSERT(OverworldSpawnSpatial_IsPlayerTile

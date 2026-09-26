@@ -4028,7 +4028,8 @@ static BOOL OverworldWildHelper_IsValidPickupThrowTarget(
         || carrierSlot == targetSlot
         || !state->spawns[targetSlot].active
         || state->spawns[targetSlot].object == NULL
-        || state->movementBehaviorClasses[targetSlot] == OW_WILD_BEHAVIOR_CLASS_PICKED_UP
+        || state->movementActorControlModes[targetSlot]
+            == OW_WILD_ACTOR_CONTROL_HELD
         || state->movementQueuedBattleSlot == targetSlot
         || state->pendingSlot == targetSlot
         || throwState->targets[targetSlot] != OW_WILD_HELPER_THROW_TARGET_NONE) {
@@ -4085,7 +4086,8 @@ static BOOL OverworldWildHelper_IsReservedPickupTargetNearCarrier(
         || targetSlot < 0
         || targetSlot >= OW_WILD_MAX_SPAWNS
         || (throwState->targetMask & (1u << targetSlot)) == 0
-        || state->movementBehaviorClasses[targetSlot] == OW_WILD_BEHAVIOR_CLASS_PICKED_UP) {
+        || state->movementActorControlModes[targetSlot]
+            == OW_WILD_ACTOR_CONTROL_HELD) {
         return FALSE;
     }
 
@@ -4170,7 +4172,8 @@ static u16 OverworldWildHelper_ClearPickupThrowState(
     throwState->targetMask &= ~(1u << slot);
     throwState->carrierMask &= ~(1u << slot);
     presentation->farSamples[slot] = 0;
-    if (state->movementBehaviorClasses[slot] == OW_WILD_BEHAVIOR_CLASS_PICKED_UP) {
+    if (state->movementActorControlModes[slot]
+        == OW_WILD_ACTOR_CONTROL_HELD) {
         restoreMask |= 1u << slot;
     }
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
@@ -4191,8 +4194,8 @@ static u16 OverworldWildHelper_ClearPickupThrowState(
             throwState->targetMask &= ~(1u << target);
             presentation->farSamples[target] = 0;
             if ((relation & OW_WILD_HELPER_THROW_TARGET_CARRIED_FLAG) != 0
-                && state->movementBehaviorClasses[target]
-                    == OW_WILD_BEHAVIOR_CLASS_PICKED_UP) {
+                && state->movementActorControlModes[target]
+                    == OW_WILD_ACTOR_CONTROL_HELD) {
                 restoreMask |= 1u << target;
             }
             throwState->targets[i] = OW_WILD_HELPER_THROW_TARGET_NONE;
@@ -4272,10 +4275,10 @@ static BOOL OverworldWildHelper_StartCarriedThrowTarget(
     }
 
     targetObject = state->spawns[targetSlot].object;
+    state->movementActorControlModes[targetSlot] =
+        OW_WILD_ACTOR_CONTROL_HELD;
     state->movementSpotStates[targetSlot] = 0;
     state->movementEmoteTimers[targetSlot] = 0;
-    state->movementActiveSteps[targetSlot] = 0;
-    state->movementBehaviorClasses[targetSlot] = OW_WILD_BEHAVIOR_CLASS_PICKED_UP;
     MapObject_SetBits(targetObject, MAPOBJECTFLAG_UNK18);
     MapObject_ClearBits(targetObject, BIT_VANISH);
     throwState->targets[carrierSlot] =

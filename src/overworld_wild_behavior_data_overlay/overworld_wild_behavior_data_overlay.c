@@ -492,7 +492,9 @@ static BOOL OverworldWildBehavior_LoadSpawnMetadata(void)
         return sOverworldWildSpawnMetadataBlob != NULL;
     }
     sOverworldWildSpawnMetadataLoadAttempted = TRUE;
-    narc = NARC_ctor(ARC_CODE_ADDONS, HEAPID_WORLD);
+    narc = NARC_ctor(
+        ARC_CODE_ADDONS,
+        HEAPID_WORLD);
     if (narc == NULL) {
         return FALSE;
     }
@@ -503,7 +505,9 @@ static BOOL OverworldWildBehavior_LoadSpawnMetadata(void)
     size = NARC_GetMemberSize(narc, CODE_ADDON_OVERWORLD_WILD_SPAWN_METADATA);
     if (size >= sizeof(OverworldWildSpawnMetadataBlobHeader)
         && size <= OVERWORLD_WILD_SPAWN_METADATA_MAX_BLOB_SIZE) {
-        sOverworldWildSpawnMetadataBlob = sys_AllocMemory(HEAPID_WORLD, size);
+        sOverworldWildSpawnMetadataBlob = sys_AllocMemory(
+            OVERWORLD_WILD_SPAWN_METADATA_HEAP_ID,
+            size);
     }
     if (sOverworldWildSpawnMetadataBlob != NULL) {
         NARC_ReadWholeMember(

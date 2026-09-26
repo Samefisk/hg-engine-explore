@@ -114,9 +114,10 @@ OVERWORLD_CORE_THUMB_HELPERS = {
 }
 OVERWORLD_CORE_HELPER_CLIENTS = {
     158: ("overworld_actor_system_overlay", ("memcpy", "memset", "__aeabi_uidivmod", "__aeabi_lmul", "__aeabi_idiv", "__aeabi_uidiv", "__gnu_thumb1_case_uqi", "__aeabi_idivmod")),
-    152: ("overworld_follower_selector_overlay", ("__gnu_thumb1_case_uhi", "__aeabi_idivmod", "memcpy", "__aeabi_lmul", "__aeabi_idiv", "memset")),
-    149: ("overworld_wild_spawns_overlay", ("__aeabi_uidivmod", "memset", "__aeabi_idivmod", "__gnu_thumb1_case_uhi", "__aeabi_idiv", "OverworldWildSpawns_ApplyFacePlayerFacing", "__gnu_thumb1_case_uqi", "memcpy")),
+    152: ("overworld_follower_selector_overlay", ("__gnu_thumb1_case_uhi", "__aeabi_idivmod", "memcpy", "__aeabi_lmul", "__aeabi_idiv", "memset", "__aeabi_uidivmod", "__aeabi_uidiv", "__gnu_thumb1_case_uqi")),
+    149: ("overworld_wild_spawns_overlay", ("__aeabi_uidivmod", "memset", "__aeabi_idivmod", "__aeabi_idiv", "memcpy")),
     153: ("pokemon_move_history_overlay", ("memset",)),
+    159: ("overworld_mount_chain_overlay", ("memcpy", "memset", "__aeabi_uidiv", "__aeabi_uidivmod")),
 }
 OVERWORLD_CORE_PRESERVED_BODIES = {
     "__gnu_thumb1_case_uqi": bytes.fromhex("02 b4 71 46 49 08 49 00 09 5c 49 00 8e 44 02 bc 70 47"),
@@ -152,7 +153,7 @@ OVERLAY153_CORE_CALL_INVENTORY_SHA256 = (
 OVERLAY155_BASE = 0x023BD400
 OVERLAY155_LIMIT = 0x1000
 OVERLAY155_CALL_INVENTORY_SHA256 = (
-    "618008667911384b39e43dbb1936eb84aed2dd1f51c73b901933ed8a7c192df5"
+    "1b22d45571ac8543e894ca4f1382dde7d23831b0fc407c5e45d0f1f4e910d087"
 )
 # The planner reserve contains the current Hop and Teleport calls, including
 # Teleport's ARM9 BLX classifier callback.
@@ -162,7 +163,7 @@ OVERLAY155_CALL_INVENTORY_SHA256 = (
 OVERLAY155_PLANNER_CODE_START = OVERLAY155_BASE + 0x898
 OVERLAY155_PLANNER_CODE_END = OVERLAY155_BASE + 0xE40
 OVERLAY155_CORE_CALL_INVENTORY_SHA256 = (
-    "fe15bacfc9501148908226ff868ef93ca3c0abb0481feb0ee2624fd2831819af"
+    "aa0b06964767a905702781ec320d0b127c8c1a4c395daa645a2996fa6f9d159f"
 )
 OVERLAY155_ACTOR_PLANNERS = (
     (0xF0, "OverworldActorHopPlanner_Plan", "OverworldActorHopPlanner_PlanImpl"),
@@ -178,7 +179,7 @@ OVERLAY155_RETIRED_HOP_SYMBOLS = {
     "OverworldWild_IsChainActionReady",
 }
 EXPECTED_MAKEFILE_SHA256 = (
-    "82647a1254f31b572fde2f51c9ac38f31c155bbb6c44a70be68c65a7f409d5a5"
+    "a49fe849e6b87a7f4599372975b4cc977e00758798eb19a9c22bc0b5ee11b655"
 )
 EXPECTED_BUILD_WRAPPER_SHA256 = (
     "96a807bb9033336361b2da6c57eb0b55a3dcc18e19b900007bdf416c11833e1c"
@@ -195,7 +196,7 @@ EXPECTED_INCLUDED_MAKE_SOURCES = {
     "narcs.mk":
         "df964fe5b5822e230ab179e45eb53e23fbf9adab46afbe89167495b4f96e467a",
     "overlays.mk":
-        "f0a124ef0d19e26f09d7784e2976accce1ae6c8360010a74af5c55bf8050d0a1",
+        "0880c86b6bddb5e4914f0b1179ec68f6cc1452688f97af53b1177c6541b4bcf6",
 }
 MANAGED_BUILD_PATH = (
     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -5926,8 +5927,13 @@ def overworld_core_client_objects(client: str) -> list[Path]:
     objects = {REPO / "build" / client / (source.stem + ".o") for source in sources}
     if client == "overworld_actor_system_overlay":
         objects.update(REPO / "build" / client / (name + ".o") for name in (
-            "overworld_behavior_resolver", "overworld_motion_model",
+            "overworld_behavior_condition_adapter", "overworld_behavior_resolver",
+            "overworld_motion_model",
             "overworld_actor_transition_model", "overworld_population_model"))
+    if client == "overworld_follower_selector_overlay":
+        objects.add(
+            REPO / "build" / client / "overworld_behavior_condition_runtime.o"
+        )
     require(bool(sources) and all(path.is_file() for path in objects),
             f"overworld helper client {client} lacks current source/caller objects")
     return sorted(objects)
@@ -5957,6 +5963,14 @@ def verify_overworld_core_helper_packaging(rom: bytes, core: bytes, core_base: i
         if overlay_id == 153:
             require(base == OVERLAY_BASE, "overlay 153 helper client base moved")
             linked_image = verify_overlay153_spawn_tail_packaging(linked, image)
+        elif overlay_id == 159:
+            # Mounted presentation moved out of field's full code block.
+            # Its fixed code/state sections have deliberate zero-filled gaps.
+            with tempfile.TemporaryDirectory(prefix="mount-chain-package-") as directory:
+                binary = Path(directory) / "chain.bin"
+                subprocess.run(["arm-none-eabi-objcopy", "-O", "binary", str(linked), str(binary)],
+                               check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                linked_image = binary.read_bytes()
         else:
             linked_image = elf_bytes_at(linked, base, len(image))
         require(image == linked_image,
@@ -6132,7 +6146,10 @@ def verify_field_core_helper_packaging(field_linked: Path, core_linked: Path,
     actual = {address for address, kind, target in
               packaged_thumb_calls(field, FIELD_OVERLAY_BASE, FIELD_OVERLAY_BASE, len(field))
               if target in resident_targets and kind in ("bl", "blx")}
-    require(all(counts.values()) and verified == actual,
+    # The two presentation copies now live in overlay159. They are covered
+    # by the same typed import/relocation/package gate below, not retired.
+    require(all(count for name, count in counts.items() if name != "memcpy")
+            and verified == actual,
             "Field helper calls are missing, untyped, or not covered by object relocations")
 
 
@@ -6387,9 +6404,9 @@ def task6_call_inventory_contracts(overlay: bytes) -> None:
             and call_inventory_sha256(core) == OVERLAY155_CORE_CALL_INVENTORY_SHA256,
             "overlay-155 non-planner core call-site inventory differs")
     require(len(calls) == 103
-            and sum(kind == "bl" for _address, kind, _target in calls) == 90
+            and sum(kind == "bl" for _address, kind, _target in calls) == 86
             and sum(kind == "blx" for _address, kind, _target in calls) == 5
-            and sum(kind == "blx_reg" for _address, kind, _target in calls) == 8
+            and sum(kind == "blx_reg" for _address, kind, _target in calls) == 12
             and call_inventory_sha256(calls) == OVERLAY155_CALL_INVENTORY_SHA256,
             "complete overlay-155 call-site inventory differs")
 
@@ -6486,21 +6503,27 @@ def overlay153_call_inventory_mutation_fixtures(overlay: bytes, linked_overlay: 
 
 
 def overlay153_copy_clear_owner_contracts(linked_calls, symbols, sizes):
-    """Keep old owners exact; admit only three clears in the typed request owner.
+    """Keep stock owners exact and bound both mounted Walk clear owners.
 
-    The request's stack packet contains call, intent and candidate values.
-    Its compiler-local call offsets may move within its bounded function, but
-    an extra owner or a changed number/mode of clears must still fail closed.
+    The mounted input and rejected-candidate stack packets have compiler-local
+    call offsets. Their fixed function ranges and clear counts still reject
+    an extra owner, missing initialization, or a changed call mode.
     """
     historical = {
         "PokemonMoveHistory_OverlayMemcpy": (0x023BE694, 0x023BEBF6, 0x023BEE0E),
-        "PokemonMoveHistory_OverlayMemset": (0x023BE52C, 0x023BFA4E, 0x023BFAB6),
+        "PokemonMoveHistory_OverlayMemset": (0x023BE52C,),
     }
     owner = "Walk_RejectDiagonalCandidate"
     start, size = symbols.get(owner), sizes.get(owner)
     require(start == FIELD_TERRAIN_END and isinstance(size, int)
             and 0 < size <= OVERLAY_BASE + 0x1BEA - start,
             "Walk rejected-candidate clear owner has invalid binding/extent")
+    input_start = symbols.get("OverworldWalk_FilterMountedInput")
+    input_size = sizes.get("OverworldWalk_FilterMountedInput")
+    require(input_start == OVERLAY_BASE + 0x15A0
+            and isinstance(input_size, int)
+            and 0 < input_size <= 0x1C0,
+            "mounted Walk input clear owner has invalid binding/extent")
     verified = {}
     for helper, old_calls in historical.items():
         require(helper in symbols, f"local bridge symbol {helper} is absent")
@@ -6510,7 +6533,11 @@ def overlay153_copy_clear_owner_contracts(linked_calls, symbols, sizes):
                  if mode == "bl" and start <= address < start + size]
         require(len(owned) == (3 if helper.endswith("Memset") else 0),
                 f"{helper} rejected-candidate owner clear count/mode differs")
-        expected = sorted((*old_calls, *owned))
+        input_owned = [address for address, mode in calls
+                       if mode == "bl" and input_start <= address < input_start + input_size]
+        require(len(input_owned) == (2 if helper.endswith("Memset") else 0),
+                f"{helper} mounted Walk input clear count/mode differs")
+        expected = sorted((*old_calls, *input_owned, *owned))
         require(calls == [(address, "bl") for address in expected],
                 f"{helper} packaged callers differ from the exact owner call sites")
         verified[helper] = tuple(expected)
@@ -7019,7 +7046,7 @@ def packaged_components_from_bytes(
     selector = (REPO / "build/output_overworld_follower_selector_overlay.bin").read_bytes()
     require(selector == elf_bytes_at(REPO / "build/overworld_follower_selector_overlay_linked.o",
                                      0x023C0400, len(selector))
-            and 0 < len(selector) <= 0x1EA0,
+            and 0 < len(selector) <= 0x2C00,
             "Selector predecessor does not match its linked reservation")
     expected_metadata[152] = (0x023C0400, len(selector), 0, 0, 0, 152, 0,
                               0x41F600, 0x41F600 + len(selector))

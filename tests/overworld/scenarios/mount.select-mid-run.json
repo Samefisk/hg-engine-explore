@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.select-mid-run",
+  "title": "Select mounts the moving current follower without a long pause",
+  "status": "active",
+  "capabilities": ["actor.system", "mount.lifecycle"],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "normal-play",
+    "expectationSource": "documentation/overworld-system/README.md#system-contracts",
+    "actor": "Saved current Follower Mankey species 56, party slot 2, then the same live Mounted actor",
+    "trigger": "Hold Right for four completed game frames, press Select with Right still held while both the stock player step and follower Hop are moving, and continue to hold Right",
+    "observable": "A native Select edge reaches the same mounted actor within eight completed game frames; Right input remains held; a later mounted Hop commits and reaches IDLE with control returned",
+    "setupAudit": "complete",
+    "setupMutations": [],
+    "limits": [
+      "The unchanged test.sav supplies the current saved Mankey; no party, follower, profile, map or timer state is prepared.",
+      "This is one normal mid-run Select and one mounted Hop, not a broad timing matrix or long reliability soak.",
+      "The latency uses completed main-task-queue game frames, not video cycles or host time."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "mankey", "species": 56, "role": "MOUNTED", "acquisition": "mount", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "roleProof": [{"role": "Follower", "claim": "live-actor-identity", "measurement": "select-started-as-follower"}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Read the saved current Mankey follower and wait until it is settled"},
+    {"at": 1, "kind": "input", "value": "Hold Right for four completed game frames, then press Select for one frame while Right stays held"},
+    {"at": 2, "kind": "input", "value": "Keep Right held through mount, start one mounted Hop, then release input and wait for its terminal state"}
+  ],
+  "stop": {"frameBudget": 240, "condition": "The same actor mounts within eight completed frames of Select and one mounted Hop ends in IDLE, or the first invalid observation"},
+  "expect": {
+    "requiredEvents": ["ACTOR_REBOUND", "CONTROL_REBOUND", "MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "mount.select-mid-run", "claims": ["natural-input", "live-actor-identity", "frame-pacing", "control-release"], "minimumFrames": 1}
+}

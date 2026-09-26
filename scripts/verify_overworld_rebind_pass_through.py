@@ -68,20 +68,23 @@ typedef uint8_t u8;
 #define OW_WILD_HELPER_PRESENTATION_NORMALIZE_SLOT 4
 #define OVERWORLD_ACTOR_TRANSITION_WORK_REBIND 2
 #define OVERWORLD_ACTOR_TRANSITION_DISPOSITION_DISCARD 3
+#define OW_WILD_ACTOR_CONTROL_AUTONOMOUS 0
 #define OW_WILD_BEHAVIOR_CLASS_PICKED_UP 9
 #define OW_WILD_BEHAVIOR_CLASS_DEFAULT 0
+typedef struct { u32 value; } OverworldActorHandle;
 typedef struct { u32 flags; int xCurr,yCurr,xInit,yInit,xPrev,yPrev; u32 posVec[3];
     int faceVec[3],unk88[3],unk94[3],unkC; } LocalMapObject;
 typedef struct { LocalMapObject *objects; } MapObjectMan;
 typedef struct { int mapId; } Location;
 typedef struct { Location *location; MapObjectMan *mapObjectMan; } FieldSystem;
 typedef struct { int movementNativeShadowRestorePending; } OverworldWildOverlayRuntimeState;
+typedef struct { int unused; } OverworldWildBehaviorProfile;
 typedef struct { LocalMapObject *object; int active,mapId; } Spawn;
 typedef struct { Spawn spawns[10]; int mapGeneration,mapId,pendingSlot,movementQueuedBattleSlot;
     int pendingMapGeneration,pendingEncounterGeneration,battleGraceSteps,presentationRestorePending;
     MapObjectMan *mapObjectMan; LocalMapObject *mapObjects; FieldSystem *movementFieldSystem;
     OverworldWildOverlayRuntimeState *movementRuntimeState; int movementBehaviorClasses[10];
-    int movementTeleportFlickerTimers[10]; } OverworldWildSpawnState;
+    int movementTeleportFlickerTimers[10]; u8 movementActorControlModes[10]; } OverworldWildSpawnState;
 typedef struct { int work,disposition,retainedActorMask,currentMapId,nextMapGeneration; } OverworldActorTransitionCall;
 typedef struct { int operation; } PresentationCall;
 #define OW_WILD_RUNTIME(s) ((s)->movementRuntimeState)
@@ -103,7 +106,14 @@ static void OverworldWildSpawns_ClearObjectFlags(LocalMapObject *o,u32 bits) { o
 static void *OverworldWildSpawns_RetainedMaskNamesActiveSpawns(OverworldWildSpawnState *s,int mask)
 { (void)mask; return s; }
 static BOOL OverworldWildSpawns_RebindRetainedSpawnObject(FieldSystem *f,OverworldWildSpawnState *s,
- const OverworldActorTransitionCall *c,int slot) { (void)f;(void)s;(void)c;(void)slot; return identityOk; }
+ const OverworldActorTransitionCall *c,int slot,OverworldActorHandle *handle)
+{ (void)f;(void)s;(void)c;(void)slot;handle->value=1;return identityOk; }
+static BOOL OverworldWildSpawns_PrepareConditionsForSlot(OverworldWildSpawnState *s,int slot,
+ const OverworldActorHandle *handle,const OverworldWildBehaviorProfile *profile)
+{ (void)s;(void)slot;(void)handle;(void)profile;return TRUE; }
+static void OverworldWildSpawns_GetBehaviorProfileAndPrimitivesForSlot(
+ OverworldWildSpawnState *s,int slot,OverworldWildBehaviorProfile *profile,void *primitives)
+{ (void)s;(void)slot;(void)primitives;memset(profile,0,sizeof(*profile)); }
 static void OverworldWildSpawns_ReconcileNativeShadow(FieldSystem *f,LocalMapObject *o)
 { (void)f;(void)o;shadows++; }
 '''

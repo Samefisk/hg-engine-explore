@@ -2250,7 +2250,7 @@ button {
 
 .resolver-drawer {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -2315,6 +2315,91 @@ button {
 
 .resolver-drawer-controls #resolveContext {
   width: 100%;
+}
+
+.profile-condition-preview {
+  max-height: 290px;
+  overflow: auto;
+  border-bottom: 1px solid #aaa8a1;
+  background: #e5e1d8;
+}
+
+.profile-condition-preview > summary {
+  padding: 8px;
+  cursor: pointer;
+}
+
+.profile-condition-preview > summary > span {
+  display: grid;
+  gap: 2px;
+}
+
+.profile-condition-preview__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 0 8px 8px;
+}
+
+.profile-condition-preview__grid > label {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  color: #4f5652;
+  font: 750 9px/1.2 var(--mono);
+}
+
+.profile-condition-preview__grid input,
+.profile-condition-preview__grid select,
+.profile-condition-preview__grid textarea {
+  min-width: 0;
+  width: 100%;
+  border: 1px solid #aaa69c;
+  border-radius: 3px;
+  background: #f7f3e9;
+  color: var(--ink);
+}
+
+.profile-condition-preview__candidates {
+  grid-column: 1 / -1;
+}
+
+.pv2-condition-result,
+.pv2-condition-result > p,
+.pv2-condition-result dl,
+.pv2-condition-result ol {
+  display: grid;
+  gap: 6px;
+}
+
+.pv2-condition-result > p {
+  margin: 0;
+}
+
+.pv2-condition-result dl {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+}
+
+.pv2-condition-result dl > div,
+.pv2-condition-result ol > li {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid #c6c2b8;
+  background: #eeeae1;
+}
+
+.pv2-condition-result ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pv2-condition-result ol > li.is-active {
+  border-color: #4e947d;
+  background: #dfeee8;
 }
 
 .resolver-drawer .resolution-panel {
@@ -3245,6 +3330,89 @@ button {
   min-width: 0;
 }
 
+.pv2-profile-copy {
+  flex: 1 1 auto;
+}
+
+.pv2-profile-tags {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.pv2-profile-tag {
+  --profile-tag-color: #656d68;
+  --profile-tag-background: #eeece5;
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--profile-tag-color) 56%, #fff);
+  border-radius: 50%;
+  background: var(--profile-tag-background);
+  color: var(--profile-tag-color);
+}
+
+.pv2-profile-tag svg {
+  width: 13px;
+  height: 13px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.pv2-profile-tag[data-profile-tag="routine"] {
+  --profile-tag-color: #77519a;
+  --profile-tag-background: #eee7f5;
+}
+
+.pv2-profile-tag[data-profile-tag="placement"] {
+  --profile-tag-color: #3f6f92;
+  --profile-tag-background: #e3edf4;
+}
+
+.pv2-profile-tag[data-profile-tag="capability"] {
+  --profile-tag-color: #276c78;
+  --profile-tag-background: #e1eff0;
+}
+
+.pv2-profile-tag[data-profile-tag="attitude"] {
+  --profile-tag-color: #a24f63;
+  --profile-tag-background: #f5e5e9;
+}
+
+.pv2-profile-tag[data-profile-tag="style"] {
+  --profile-tag-color: #9a642e;
+  --profile-tag-background: #f4eadc;
+}
+
+.pv2-profile-tag[data-profile-tag="follower-mount"] {
+  --profile-tag-color: #347052;
+  --profile-tag-background: #e1eee6;
+}
+
+.pv2-profile-tag[data-profile-tag="modifier"] {
+  --profile-tag-color: #59616c;
+  --profile-tag-background: #e7e9ec;
+}
+
+.pv2-profile-tag.is-conditional {
+  --profile-tag-color: #9b691d;
+  --profile-tag-background: #f6ebcf;
+  border-style: dashed;
+}
+
+.pv2-profile-tag.is-system {
+  --profile-tag-color: #4f5853;
+  --profile-tag-background: #e1e5e2;
+  border-style: double;
+}
+
 .pv2-profile-icons {
   position: static;
   display: flex;
@@ -3280,6 +3448,10 @@ button {
   margin-left: 0;
 }
 
+.pv2-profile-icons button.is-conditional-member {
+  opacity: .55;
+}
+
 .pv2-profile-icons button:hover,
 .pv2-profile-icons button:focus-visible,
 .pv2-editor-icons > button:hover,
@@ -3287,6 +3459,11 @@ button {
   z-index: 2;
   background: #fffaf0;
   box-shadow: 0 0 0 2px var(--red-dark);
+}
+
+.pv2-profile-icons button.is-conditional-member:hover,
+.pv2-profile-icons button.is-conditional-member:focus-visible {
+  opacity: 1;
 }
 
 .pv2-profile-icons img {
@@ -3338,6 +3515,153 @@ button {
 
 .pv2-profile-row.override-profile > .pv2-profile-icons {
   grid-column: 2;
+}
+
+.profile-group--overrides .profile-list > .pv2-profile-row.override-profile[data-profile-classification="routine"] {
+  background: color-mix(in srgb, #77519a 6%, #efe5e0);
+}
+
+.profile-group--overrides .profile-list > .pv2-profile-row.override-profile[data-profile-classification="placement"] {
+  background: color-mix(in srgb, #3f6f92 6%, #efe5e0);
+}
+
+.profile-group--overrides .profile-list > .pv2-profile-row.override-profile[data-profile-classification="capability"] {
+  background: color-mix(in srgb, #276c78 6%, #efe5e0);
+}
+
+.profile-group--overrides .profile-list > .pv2-profile-row.override-profile[data-profile-classification="attitude"] {
+  background: color-mix(in srgb, #a24f63 6%, #efe5e0);
+}
+
+.profile-group--overrides .profile-list > .pv2-profile-row.override-profile[data-profile-classification="style"] {
+  background: color-mix(in srgb, #9a642e 6%, #efe5e0);
+}
+
+.profile-group--overrides .profile-list > .pv2-profile-row.override-profile[data-profile-classification="follower-mount"] {
+  background: color-mix(in srgb, #347052 6%, #efe5e0);
+}
+
+.profile-group--overrides .profile-list > .pv2-profile-row.override-profile[data-profile-classification="modifier"] {
+  background: color-mix(in srgb, #59616c 6%, #efe5e0);
+}
+
+.profile-group--overrides .profile-list > .pv2-profile-classification-divider {
+  --profile-section-accent: #747873;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 34px;
+  margin-top: 8px;
+  padding: 5px 8px 5px 7px;
+  border: 1px solid color-mix(in srgb, var(--profile-section-accent) 42%, #b2b0a8);
+  border-left: 4px solid var(--profile-section-accent);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--profile-section-accent) 13%, #ebe7de);
+  box-shadow: 0 2px 0 rgb(81 82 78 / 15%);
+}
+
+.profile-group--overrides .profile-list > .pv2-profile-classification-divider:first-child {
+  margin-top: 0;
+}
+
+.pv2-profile-classification-divider__identity {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.pv2-profile-classification-divider__identity > .pv2-profile-tag {
+  width: 24px;
+  height: 24px;
+  border-color: color-mix(in srgb, var(--profile-section-accent) 50%, #aaa8a1);
+  background: color-mix(in srgb, var(--profile-section-accent) 10%, #f7f3ea);
+  color: var(--profile-section-accent);
+}
+
+.pv2-profile-classification-divider__identity > strong {
+  overflow: hidden;
+  font: 850 11px/1.1 var(--mono);
+  letter-spacing: .035em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pv2-profile-classification-divider > small {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  margin: 0;
+  color: #606662;
+  font: 750 8px/1 var(--mono);
+  letter-spacing: .025em;
+  text-transform: uppercase;
+}
+
+.pv2-profile-classification-divider > small > span + span {
+  padding-left: 7px;
+  border-left: 1px solid color-mix(in srgb, var(--profile-section-accent) 30%, #b2b0a8);
+}
+
+.pv2-profile-classification-divider[data-profile-classification="routine"] { --profile-section-accent: #77519a; }
+.pv2-profile-classification-divider[data-profile-classification="placement"] { --profile-section-accent: #3f6f92; }
+.pv2-profile-classification-divider[data-profile-classification="capability"] { --profile-section-accent: #276c78; }
+.pv2-profile-classification-divider[data-profile-classification="attitude"] { --profile-section-accent: #a24f63; }
+.pv2-profile-classification-divider[data-profile-classification="style"] { --profile-section-accent: #9a642e; }
+.pv2-profile-classification-divider[data-profile-classification="follower-mount"] { --profile-section-accent: #347052; }
+.pv2-profile-classification-divider[data-profile-classification="modifier"] { --profile-section-accent: #59616c; }
+
+.pv2-profile-row.override-profile.is-conditional-profile::after {
+  position: absolute;
+  top: 4px;
+  right: 0;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 2px 0 0 2px;
+  background: #b47d27;
+  content: "";
+  pointer-events: none;
+}
+
+.profile-group--overrides .profile-list > .pv2-profile-row.override-profile.is-active[data-profile-classification] {
+  background: #fff8ef;
+}
+
+.pv2-profile-classification-control {
+  display: grid;
+  grid-template-columns: auto minmax(118px, 150px);
+  align-items: center;
+  gap: 2px 6px;
+  min-height: 32px;
+  padding: 4px 6px;
+  border: 1px solid #bbb5a8;
+  border-radius: 3px;
+  background: #eeebe2;
+}
+
+.pv2-profile-classification-control > span {
+  color: #5c625e;
+  font: 800 9px/1 var(--mono);
+  letter-spacing: .025em;
+  text-transform: uppercase;
+}
+
+.pv2-profile-classification-control > select {
+  min-height: 24px;
+  padding: 2px 24px 2px 6px;
+  font-size: 10px;
+}
+
+.pv2-profile-classification-control > small {
+  grid-column: 2;
+  color: #747873;
+  font: 650 8px/1 var(--mono);
 }
 
 .pv2-editor-identity {
@@ -4157,9 +4481,9 @@ button {
 }
 
 :where(
-  .pv2-lifecycle-tab-shell[data-lifecycle-theme="chill"],
-  .pv2-lifecycle-tab[data-lifecycle-tab="chill"],
-  .pv2-lifecycle-tabpanel[data-section-id="chill"]
+  .pv2-lifecycle-tab-shell[data-lifecycle-theme="behavior"],
+  .pv2-lifecycle-tab[data-lifecycle-tab="behavior"],
+  .pv2-lifecycle-tabpanel[data-section-id="behavior"]
 ) {
   --life-accent: #55789e;
   --life-accent-dark: #3f5e81;
@@ -4169,6 +4493,21 @@ button {
   --life-item: #f6f9fc;
   --life-suboption: #e8eef5;
   --life-control: #dde7f0;
+}
+
+:where(
+  .pv2-lifecycle-tab-shell[data-lifecycle-theme="movement"],
+  .pv2-lifecycle-tab[data-lifecycle-tab="movement"],
+  .pv2-lifecycle-tabpanel[data-section-id="movement"]
+) {
+  --life-accent: #4f7b78;
+  --life-accent-dark: #375c59;
+  --life-tab: #d9e7e5;
+  --life-panel: #edf5f4;
+  --life-canvas: #e3eeee;
+  --life-item: #f6faf9;
+  --life-suboption: #e7f1ef;
+  --life-control: #dce9e7;
 }
 
 :where(
@@ -4187,18 +4526,18 @@ button {
 }
 
 :where(
-  .pv2-lifecycle-tab-shell[data-lifecycle-theme="active"],
-  .pv2-lifecycle-tab[data-lifecycle-tab="active"],
-  .pv2-lifecycle-tabpanel[data-section-id="active"]
+  .pv2-lifecycle-tab-shell[data-lifecycle-theme="vision"],
+  .pv2-lifecycle-tab[data-lifecycle-tab="vision"],
+  .pv2-lifecycle-tabpanel[data-section-id="vision"]
 ) {
-  --life-accent: #a64e46;
-  --life-accent-dark: #803832;
-  --life-tab: #eadbd7;
-  --life-panel: #f6ece9;
-  --life-canvas: #eee2de;
-  --life-item: #fbf6f4;
-  --life-suboption: #f1e6e2;
-  --life-control: #eadbd6;
+  --life-accent: #59729c;
+  --life-accent-dark: #40567b;
+  --life-tab: #dde4ef;
+  --life-panel: #eef2f8;
+  --life-canvas: #e4e9f2;
+  --life-item: #f7f9fc;
+  --life-suboption: #e8edf5;
+  --life-control: #dce4f0;
 }
 
 :where(
@@ -4223,7 +4562,7 @@ button {
 
 .pv2-lifecycle-tabs {
   display: grid;
-  grid-template-columns: repeat(var(--lifecycle-tab-count, 5), minmax(0, 1fr));
+  grid-template-columns: repeat(var(--lifecycle-tab-count, 6), minmax(0, 1fr));
   gap: 4px;
   padding: 7px 7px 0;
   border-bottom: 1px solid #aaa8a1;
@@ -4475,7 +4814,7 @@ button {
   box-shadow: inset 3px 0 #b33b35;
 }
 
-.pv2-linked-chill-editor {
+.pv2-linked-profile-editor {
   min-width: 0;
   overflow: hidden;
   border: 1px solid #aaa8a1;
@@ -4483,7 +4822,7 @@ button {
   background: var(--life-panel, #f7f4ed);
 }
 
-.pv2-linked-chill-editor > header {
+.pv2-linked-profile-editor > header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -4494,27 +4833,27 @@ button {
   background: color-mix(in srgb, var(--life-accent, #777) 12%, #e9e6df);
 }
 
-.pv2-linked-chill-editor > header > span,
-.pv2-linked-chill-editor > header strong,
-.pv2-linked-chill-editor > header small {
+.pv2-linked-profile-editor > header > span,
+.pv2-linked-profile-editor > header strong,
+.pv2-linked-profile-editor > header small {
   display: block;
   min-width: 0;
 }
 
-.pv2-linked-chill-editor > header strong {
+.pv2-linked-profile-editor > header strong {
   color: #2f3532;
   font: 850 10px/1.2 var(--mono);
   letter-spacing: .025em;
 }
 
-.pv2-linked-chill-editor > header small {
+.pv2-linked-profile-editor > header small {
   max-width: 620px;
   margin-top: 3px;
   color: #626965;
   font: 650 9px/1.35 var(--mono);
 }
 
-.pv2-linked-chill-editor > header em {
+.pv2-linked-profile-editor > header em {
   flex: 0 0 auto;
   padding: 4px 6px;
   border: 1px solid color-mix(in srgb, var(--life-accent, #777) 40%, #aaa8a1);
@@ -4525,6 +4864,44 @@ button {
   letter-spacing: .035em;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.pv2-linked-profile-sections {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+}
+
+.pv2-linked-profile-section {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #c2bfb7;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--life-accent, #777) 4%, #fff);
+}
+
+.pv2-linked-profile-section > header {
+  padding: 7px 9px;
+  border-bottom: 1px solid #cfccc4;
+  background: color-mix(in srgb, var(--life-accent, #777) 8%, #eeebe4);
+}
+
+.pv2-linked-profile-section > header strong,
+.pv2-linked-profile-section > header small {
+  display: block;
+}
+
+.pv2-linked-profile-section > header strong {
+  color: #343a37;
+  font: 850 9px/1.2 var(--mono);
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+
+.pv2-linked-profile-section > header small {
+  margin-top: 2px;
+  color: #666d69;
+  font: 650 8px/1.3 var(--mono);
 }
 
 .pv2-state-owned-value {
@@ -5225,6 +5602,109 @@ button {
   color: var(--muted);
 }
 
+.pv2-condition-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.pv2-condition-grid,
+.pv2-condition-match-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.pv2-condition-grid > label,
+.pv2-condition-match-grid > label,
+.pv2-condition-grid fieldset {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pv2-condition-grid label > span,
+.pv2-condition-match-grid label > span,
+.pv2-condition-grid legend {
+  color: var(--muted);
+  font: 800 10px/1.2 var(--mono);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.pv2-condition-wide {
+  grid-column: 1 / -1;
+}
+
+.pv2-condition-grid fieldset {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 9px;
+  border: 1px solid #c8c4ba;
+}
+
+.pv2-condition-grid fieldset > legend {
+  padding: 0 4px;
+}
+
+.pv2-profile-kind {
+  display: grid;
+  gap: 3px;
+  min-width: 180px;
+  text-align: left;
+}
+
+.pv2-profile-kind > span,
+.pv2-profile-kind > small {
+  color: var(--muted);
+  font: 750 9px/1.25 var(--mono);
+}
+
+.pv2-migration-report {
+  margin: 10px 0;
+  border: 1px solid #c9c4b8;
+  background: #efebe1;
+}
+
+.pv2-migration-report > summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.pv2-migration-report > summary > span {
+  display: grid;
+  gap: 3px;
+}
+
+.pv2-migration-report dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 0 12px 12px;
+}
+
+.pv2-migration-report dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px;
+  border-bottom: 1px solid #d7d1c5;
+}
+
+.pv2-migration-report dt {
+  color: var(--muted);
+}
+
+.pv2-migration-report dd {
+  margin: 0;
+  font-family: var(--mono);
+  text-align: right;
+}
+
 .pv2-conditional-terrain .pv2-terrain-policy {
   grid-template-columns: repeat(5, minmax(46px, 58px));
 }
@@ -5252,12 +5732,550 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .pv2-condition-grid,
+  .pv2-condition-match-grid,
+  .pv2-pool-control,
+  .pv2-migration-report dl {
+    grid-template-columns: 1fr;
+  }
+
   .pv2-conditional-speed {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .pv2-conditional-speed > span:first-child {
     grid-column: 1 / -1;
+  }
+}
+
+.pv2-condition-profile-link {
+  container-type: inline-size;
+  gap: 14px;
+}
+
+.pv2-profile-activation-choice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 11px;
+  border: 1px solid #b5aa93;
+  border-radius: 5px;
+  background: #f8f4e9;
+}
+
+.pv2-profile-activation-choice > legend {
+  grid-column: 1 / -1;
+  padding: 0 5px;
+  color: #353a36;
+  font: 850 11px/1.2 var(--mono);
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+
+.pv2-profile-activation-choice > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #c9c3b6;
+  border-radius: 4px;
+  background: #fffefa;
+  cursor: pointer;
+}
+
+.pv2-profile-activation-choice > label.is-selected {
+  border-color: var(--life-accent, #a8782b);
+  background: color-mix(in srgb, var(--life-accent, #a8782b) 9%, #fff);
+  box-shadow: inset 3px 0 var(--life-accent, #a8782b);
+}
+
+.pv2-profile-activation-choice input {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.pv2-profile-activation-choice span,
+.pv2-profile-activation-choice strong,
+.pv2-profile-activation-choice small {
+  display: block;
+  min-width: 0;
+}
+
+.pv2-profile-activation-choice strong {
+  color: #303632;
+  font: 800 11px/1.25 var(--sans);
+}
+
+.pv2-profile-activation-choice small {
+  margin-top: 3px;
+  color: #68706b;
+  font: 650 9px/1.35 var(--mono);
+}
+
+.pv2-system-lock {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid #aeb5b0;
+  border-left: 4px solid #59635e;
+  border-radius: 4px;
+  background: #edf0ee;
+}
+
+.pv2-system-lock strong,
+.pv2-system-lock small {
+  display: block;
+}
+
+.pv2-system-lock strong {
+  color: #303733;
+  font: 850 11px/1.2 var(--mono);
+  text-transform: uppercase;
+}
+
+.pv2-system-lock small {
+  margin-top: 3px;
+  color: #626b66;
+  font: 650 9px/1.35 var(--mono);
+}
+
+.pv2-pool-control {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, 1fr);
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid #c9c4b8;
+  border-radius: 4px;
+  background: #f0eee7;
+}
+
+.pv2-pool-control > label,
+.pv2-new-pool {
+  display: grid;
+  gap: 4px;
+}
+
+.pv2-new-pool {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.pv2-named-pool-editor {
+  grid-column: 1 / -1;
+  padding-top: 6px;
+  border-top: 1px solid #cbc5b9;
+}
+
+.pv2-named-pool-editor > summary {
+  color: #4d5953;
+  font: 800 9px/1.2 var(--mono);
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.pv2-named-pool-editor > .pv2-condition-grid {
+  margin-top: 8px;
+}
+
+.pv2-named-pool-editor textarea {
+  resize: vertical;
+}
+
+.pv2-profile-activation-summary {
+  align-self: center;
+  padding: 5px 8px;
+  border: 1px solid #c7b995;
+  border-radius: 999px;
+  background: #f5efe0;
+  color: #66552f;
+  font: 800 9px/1 var(--mono);
+  white-space: nowrap;
+}
+
+.pv2-condition-normal-target,
+.pv2-condition-rules {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid #c3bba9;
+  border-radius: 5px;
+  background: #fbf9f3;
+}
+
+.pv2-condition-normal-target > header,
+.pv2-condition-rules > header,
+.pv2-condition-group > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pv2-condition-normal-target > header span,
+.pv2-condition-rules > header span,
+.pv2-condition-group > header span,
+.pv2-condition-normal-target > header strong,
+.pv2-condition-rules > header strong,
+.pv2-condition-group > header strong,
+.pv2-condition-normal-target > header small,
+.pv2-condition-rules > header small,
+.pv2-condition-group > header small {
+  display: block;
+}
+
+.pv2-condition-normal-target > header strong,
+.pv2-condition-rules > header strong,
+.pv2-condition-group > header strong {
+  color: #303632;
+  font: 850 11px/1.2 var(--mono);
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+
+.pv2-condition-normal-target > header small,
+.pv2-condition-rules > header small,
+.pv2-condition-group > header small {
+  margin-top: 3px;
+  color: #69706c;
+  font: 650 9px/1.35 var(--mono);
+}
+
+.pv2-condition-priority-note,
+.pv2-condition-timing-note,
+.pv2-condition-result-note {
+  margin: 0;
+  color: #5f6762;
+  font: 650 10px/1.45 var(--sans);
+}
+
+.pv2-condition-priority-note {
+  padding: 7px 9px;
+  border-left: 3px solid var(--life-accent, #a8782b);
+  background: #f2eee4;
+}
+
+.pv2-condition-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pv2-conditional-state-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #bdb7aa;
+  border-radius: 5px;
+  background: #fffefa;
+  box-shadow: 0 1px 2px rgb(57 51 39 / 8%);
+}
+
+.pv2-conditional-state-card > details > summary {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 8px 10px;
+  background: #f1ece0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.pv2-conditional-state-card > details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.pv2-conditional-state-card > details > summary > span:nth-child(2),
+.pv2-conditional-state-card > details > summary strong,
+.pv2-conditional-state-card > details > summary small {
+  display: block;
+  min-width: 0;
+}
+
+.pv2-conditional-state-card > details > summary strong {
+  color: #2f3532;
+  font: 800 11px/1.25 var(--sans);
+}
+
+.pv2-conditional-state-card > details > summary small {
+  margin-top: 3px;
+  color: #6a716c;
+  font: 700 9px/1.3 var(--mono);
+}
+
+.pv2-condition-priority {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--life-accent, #a8782b);
+  color: #fff;
+  font: 850 10px/1 var(--mono);
+}
+
+.pv2-condition-expand {
+  color: #686156;
+  font-size: 18px;
+  transition: transform 120ms ease;
+}
+
+.pv2-conditional-state-card > details[open] > summary .pv2-condition-expand {
+  transform: rotate(180deg);
+}
+
+.pv2-condition-card-body {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border-top: 1px solid #c8c1b3;
+}
+
+.pv2-condition-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.pv2-condition-group {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #d4cec1;
+  border-radius: 4px;
+  background: #f9f7f1;
+}
+
+.pv2-condition-grid,
+.pv2-condition-match-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.pv2-condition-grid > label,
+.pv2-condition-match-grid > label,
+.pv2-condition-grid fieldset,
+.pv2-condition-technical > label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.pv2-condition-grid label > span,
+.pv2-condition-match-grid label > span,
+.pv2-condition-grid legend,
+.pv2-condition-technical label > span {
+  color: #666d68;
+  font: 800 10px/1.2 var(--mono);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.pv2-condition-grid label > small,
+.pv2-condition-technical label > small {
+  color: #737973;
+  font: 650 9px/1.3 var(--mono);
+}
+
+.pv2-condition-wide {
+  grid-column: 1 / -1;
+}
+
+.pv2-condition-subdetails,
+.pv2-condition-technical {
+  border: 1px solid #d2ccc0;
+  border-radius: 4px;
+  background: #f3f0e8;
+}
+
+.pv2-condition-subdetails > summary,
+.pv2-condition-technical > summary {
+  padding: 8px 9px;
+  color: #59615c;
+  font: 800 9px/1.2 var(--mono);
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.pv2-condition-subdetails[open] > summary,
+.pv2-condition-technical[open] > summary {
+  border-bottom: 1px solid #d2ccc0;
+}
+
+.pv2-condition-subdetails .pv2-condition-match-grid,
+.pv2-condition-technical > label {
+  padding: 9px;
+}
+
+.pv2-condition-toggle {
+  display: flex !important;
+  align-items: flex-start;
+  gap: 8px !important;
+  padding: 8px;
+  border: 1px solid #d0cabd;
+  border-radius: 4px;
+  background: #fffefa;
+}
+
+.pv2-condition-toggle input {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.pv2-condition-toggle span,
+.pv2-condition-toggle strong,
+.pv2-condition-toggle small {
+  display: block;
+}
+
+.pv2-condition-toggle span > strong {
+  color: #333936;
+  font: 800 10px/1.25 var(--sans);
+}
+
+.pv2-condition-toggle span > small {
+  margin-top: 2px;
+  color: #707670;
+  font: 650 9px/1.3 var(--mono);
+}
+
+.pv2-condition-pokemon-picker,
+.pv2-condition-pokemon-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pv2-condition-pokemon-picker {
+  display: grid;
+  padding: 8px;
+  border: 1px solid #d0cabd;
+  border-radius: 4px;
+  background: #fffefa;
+}
+
+.pv2-condition-pokemon-chips > small {
+  align-self: center;
+  color: #737973;
+  font: 650 9px/1.3 var(--mono);
+}
+
+.pv2-condition-pokemon-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 2px 3px 2px 6px;
+  border: 1px solid #c7bfaf;
+  border-radius: 999px;
+  background: #f1ede4;
+  color: #3d443f;
+  font: 750 10px/1 var(--sans);
+}
+
+.pv2-condition-pokemon-chip img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
+#profileInspector .pv2-condition-pokemon-chip button {
+  width: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.pv2-condition-pokemon-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.pv2-condition-profile-link .pv2-terrain-policy {
+  grid-template-columns: repeat(5, minmax(46px, 1fr));
+}
+
+.pv2-condition-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 7px 0 0;
+  color: #69706b;
+  font: 700 9px/1 var(--mono);
+}
+
+.pv2-condition-key span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pv2-condition-key i {
+  width: 8px;
+  height: 8px;
+  border: 1px solid #aaa49a;
+  border-radius: 50%;
+  background: #dedad1;
+}
+
+.pv2-condition-key i.is-on {
+  border-color: #35735f;
+  background: #4e947d;
+}
+
+.pv2-condition-key i.is-off {
+  border-color: #a84b44;
+  background: #d96960;
+}
+
+.pv2-condition-and {
+  margin: 0;
+  color: #7b725f;
+  font: 850 9px/1 var(--mono);
+  text-align: center;
+}
+
+.pv2-condition-result-note {
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--life-accent, #a8782b) 25%, #d0cabd);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--life-accent, #a8782b) 7%, #fff);
+}
+
+@container (max-width: 680px) {
+  .pv2-profile-activation-choice,
+  .pv2-condition-grid,
+  .pv2-condition-match-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pv2-condition-wide {
+    grid-column: auto;
+  }
+
+  .pv2-condition-profile-link .pv2-terrain-policy {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .pv2-condition-normal-target > header,
+  .pv2-condition-rules > header,
+  .pv2-condition-group > header {
+    align-items: flex-start;
   }
 }
 
@@ -5451,6 +6469,259 @@ button {
   min-width: 0;
 }
 
+.pv2-movement-layout {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 16px;
+  min-width: 0;
+  padding: 8px;
+}
+
+.pv2-movement-section {
+  min-width: 0;
+  border: 1px solid var(--life-border, #c8c5bc);
+  border-radius: 4px;
+  background: var(--life-item, #f8f6f0);
+}
+
+.pv2-movement-section > header {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-bottom: 1px solid var(--life-border, #d8d5cc);
+  background: var(--life-suboption, #efede7);
+}
+
+.pv2-movement-section > header > strong {
+  color: var(--life-accent, #47715e);
+  font: 850 12px/1.3 var(--mono);
+}
+
+.pv2-movement-section > header > small,
+.pv2-movement-group-heading > small {
+  color: #616864;
+  font: 500 11px/1.5 var(--sans);
+}
+
+.pv2-movement-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding: 12px;
+}
+
+.pv2-movement-group {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pv2-movement-group-heading {
+  display: grid;
+  gap: 4px;
+}
+
+.pv2-movement-group-heading > strong,
+.pv2-walk-options-groups legend {
+  color: var(--life-accent, #47715e);
+  font: 800 10px/1.4 var(--mono);
+  text-transform: uppercase;
+}
+
+.pv2-movement-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.pv2-movement-fields .pv2-field {
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pv2-movement-fields .pv2-composite-controls {
+  grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
+  gap: 12px;
+}
+
+.pv2-movement-fields .pv2-composite-control {
+  align-content: start;
+  gap: 6px;
+}
+
+.pv2-movement-fields .pv2-composite-control > span:first-child {
+  line-height: 1.4;
+}
+
+.pv2-movement-fields .pv2-direction-options {
+  grid-template-columns: repeat(auto-fit, minmax(min(100px, 100%), 1fr));
+}
+
+.pv2-movement-fields .pv2-direction-option span {
+  line-height: 1.4;
+  text-align: center;
+}
+
+.pv2-movement-group.is-single-composite > .pv2-movement-fields > .pv2-composite-field:not(.is-inactive) > .pv2-field-copy {
+  display: none;
+}
+
+.pv2-movement-group:has(.pv2-walk-options-field),
+[data-movement-section="direction"] .pv2-movement-group,
+[data-movement-section="teleport"] .pv2-movement-group,
+[data-movement-section="chain"] .pv2-movement-group {
+  grid-column: 1 / -1;
+}
+
+.pv2-walk-options-groups {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+.pv2-walk-options-groups fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid #d8d5cc;
+  border-radius: 3px;
+}
+
+.pv2-walk-options-groups > button {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+@container (max-width: 900px) {
+  .pv2-movement-groups {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (max-width: 620px) {
+  .pv2-walk-options-groups {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (max-width: 390px) {
+  .pv2-movement-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.pv2-composite-field.pv2-chain-field {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.pv2-chain-layout.pv2-composite-controls {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 16px;
+}
+
+.pv2-chain-group {
+  min-width: 0;
+}
+
+.pv2-chain-group > header {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.pv2-chain-group > header > strong,
+.pv2-chain-subgroup > strong {
+  color: var(--life-accent, #47715e);
+  font: 850 10px/1.3 var(--mono);
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.pv2-chain-group > header > small {
+  color: #616864;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.pv2-chain-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 10px;
+  min-width: 0;
+}
+
+.pv2-chain-pause > .pv2-chain-fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.pv2-chain-fields [data-chain-control="chainPauseAction"] {
+  grid-column: 1 / -1;
+}
+
+.pv2-chain-field .pv2-direction-options {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(auto-fit, minmax(min(110px, 100%), 1fr));
+}
+
+.pv2-chain-field .pv2-direction-option span {
+  line-height: 1.3;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.pv2-chain-field .pv2-composite-control {
+  align-content: start;
+  gap: 6px;
+}
+
+.pv2-chain-field .pv2-composite-control > span:first-child {
+  line-height: 1.4;
+}
+
+.pv2-chain-reposition {
+  grid-column: 1 / -1;
+  border-top: 1px solid #d3d5cb;
+  padding-top: 14px;
+}
+
+.pv2-chain-reposition > .pv2-chain-fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.pv2-chain-subgroup {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+@container (max-width: 760px) {
+  .pv2-chain-layout.pv2-composite-controls,
+  .pv2-chain-reposition > .pv2-chain-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pv2-chain-pause {
+    border-top: 1px solid #d3d5cb;
+    padding-top: 14px;
+  }
+}
+
+@container (max-width: 390px) {
+  .pv2-chain-fields,
+  .pv2-chain-pause > .pv2-chain-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @container (max-width: 760px) {
   .pv2-field-grid,
   .pv2-root-field-grid,
@@ -5465,7 +6736,7 @@ button {
     gap: 7px;
   }
 
-  .pv2-linked-chill-editor > header {
+  .pv2-linked-profile-editor > header {
     align-items: flex-start;
     flex-direction: column;
   }

@@ -5,6 +5,27 @@
 
 #define BEHAVIOR_RESOLVER_CLASS_AUTO 0xFF
 #define BEHAVIOR_RESOLVER_NO_SOURCE 0xFFFF
+#define BEHAVIOR_RESOLVER_NO_APPLICATION 0xFF
+#define BEHAVIOR_RESOLVER_NO_CONDITION 0xFFFF
+#define BEHAVIOR_RESOLVE_REQUEST_VERSION 2
+
+typedef enum BehaviorResolveTargetKind {
+    BEHAVIOR_RESOLVE_TARGET_NONE = 0,
+    BEHAVIOR_RESOLVE_TARGET_PLAYER = 1,
+    BEHAVIOR_RESOLVE_TARGET_ACTOR = 2,
+} BehaviorResolveTargetKind;
+
+/* Stable value copy of an evaluator target. It contains no runtime pointer. */
+typedef struct BehaviorResolveTargetReference {
+    u16 actorSlot;
+    u16 actorGeneration;
+    u16 fieldEpoch;
+    u16 mapGeneration;
+    u16 encounterGeneration;
+    u16 actorReserved;
+    u8 kind;
+    u8 reserved;
+} BehaviorResolveTargetReference;
 
 typedef enum BehaviorResolveStatus {
     BEHAVIOR_RESOLVE_OK = 0,
@@ -12,11 +33,12 @@ typedef enum BehaviorResolveStatus {
     BEHAVIOR_RESOLVE_INVALID_BLOB = 2,
     BEHAVIOR_RESOLVE_INVALID_CONTEXT = 3,
     BEHAVIOR_RESOLVE_TRACE_TRUNCATED = 4,
+    BEHAVIOR_RESOLVE_UNSUPPORTED_REQUEST_VERSION = 5,
 } BehaviorResolveStatus;
 
 typedef enum BehaviorResolutionLane {
     BEHAVIOR_RESOLUTION_LANE_OWNER = 0,
-    BEHAVIOR_RESOLUTION_LANE_ACTIVE = 1,
+    BEHAVIOR_RESOLUTION_LANE_RESERVED = 1,
     BEHAVIOR_RESOLUTION_LANE_TIRED = 2,
     BEHAVIOR_RESOLUTION_LANE_NONE = 0xFF,
 } BehaviorResolutionLane;
@@ -39,10 +61,17 @@ typedef enum BehaviorResolutionStepKind {
 typedef struct BehaviorResolveRequest {
     OverworldWildBehaviorContext context;
     u32 forcedOverrideMask;
+    u32 activeConditionalMask;
+    BehaviorResolveTargetReference resolvedTarget;
+    u16 winningConditionId;
     /* AUTO selects from catalog rules. Other values preserve legacy match
      * tokens while out-of-range base classes normalize to Default. */
     u8 behaviorClass;
-    u8 reserved[3];
+    u8 targetSourceApplication;
+    u8 requestVersion;
+    u8 reserved;
+    u16 resolvedTargetConditionId;
+    u8 reserved2[2];
 } BehaviorResolveRequest;
 
 typedef struct BehaviorResolutionStep {
@@ -75,7 +104,19 @@ typedef struct BehaviorResolveResult {
     u32 conditionalOverrideMask;
     u32 appliedOverrideMask;
     u32 fingerprint;
+    BehaviorResolveTargetReference resolvedTarget;
+    u16 winningConditionId;
+    u8 targetSourceApplication;
+    u8 reserved;
+    u16 resolvedTargetConditionId;
 } BehaviorResolveResult;
+
+typedef char BehaviorResolveRequestSizeMustRemain44Bytes[
+    sizeof(BehaviorResolveRequest) == 44 ? 1 : -1];
+typedef char BehaviorResolveResultSizeMustRemain200Bytes[
+    sizeof(BehaviorResolveResult) == 200 ? 1 : -1];
+typedef char BehaviorResolveTargetReferenceSizeMustRemain14Bytes[
+    sizeof(BehaviorResolveTargetReference) == 14 ? 1 : -1];
 
 typedef struct BehaviorClassSelection {
     u32 matchedClassRuleMask;
@@ -85,7 +126,7 @@ typedef struct BehaviorClassSelection {
 } BehaviorClassSelection;
 
 /*
- * Resolve one immutable behavior value from the compact v76 blob.
+ * Resolve one immutable behavior value from the compact behavior blob.
  *
  * The function has no engine dependency, performs no allocation, and accepts
  * no Nintendo DS pointers. The blob bytes must stay alive only for this call.

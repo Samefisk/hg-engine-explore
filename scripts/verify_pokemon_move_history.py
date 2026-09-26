@@ -11,12 +11,12 @@ from pathlib import Path
 
 if __package__:
     from .verify_pokemon_move_history_capture import (
-        elf_bytes_at, layout_symbols, thumb_bl_target, verify_overlay153_spawn_tail_packaging,
+        elf_bytes_at, elf_section_layout, layout_symbols, thumb_bl_target, verify_overlay153_spawn_tail_packaging,
     )
     from .verify_overworld_walk_frame_timing import verify_compiled_thumb_acceleration
 else:
     from verify_pokemon_move_history_capture import (
-        elf_bytes_at, layout_symbols, thumb_bl_target, verify_overlay153_spawn_tail_packaging,
+        elf_bytes_at, elf_section_layout, layout_symbols, thumb_bl_target, verify_overlay153_spawn_tail_packaging,
     )
     from verify_overworld_walk_frame_timing import verify_compiled_thumb_acceleration
 
@@ -29,6 +29,7 @@ OVERLAY_RETIRED_WALK_TABLES_START = OVERLAY_BASE + 0x1000
 OVERLAY_RETIRED_WALK_TABLES_END = OVERLAY_BASE + 0x1088
 OVERLAY_WALK_HELPERS = {
     "OverworldWalk_DecelerateTime": OVERLAY_BASE + 0x1000,
+    "OverworldBehaviorConditionTrace_Record": OVERLAY_BASE + 0x1008,
     "OverworldWalk_ProposeStep": OVERLAY_BASE + 0x105C,
     "OverworldWalk_ClampTime": OVERLAY_BASE + 0x1088,
     "OverworldWalk_AccelerateTime": OVERLAY_BASE + 0x109E,
@@ -68,8 +69,19 @@ MOUNT_OVERLAY_ID = 157
 MOUNT_OVERLAY_BASE = 0x023BAB00
 MOUNT_OVERLAY_LIMIT = 0x023BC800
 ACTOR_OVERLAY_ID = 158
-ACTOR_OVERLAY_LOAD_BASE = 0x023B6B00
+ACTOR_OVERLAY_LOAD_BASE = 0x023B65A0
+ACTOR_OVERLAY_BASE = 0x023B6B00
 ACTOR_OVERLAY_LIMIT = 0x023BAB00
+MOUNT_CHAIN_OVERLAY_ID = 159
+MOUNT_CHAIN_OVERLAY_BASE = 0x01FF9800
+MOUNT_CHAIN_OVERLAY_LIMIT = 0x01FFA580
+MOUNT_GAIT_ENTRY = 0x01FF9D00
+MOUNT_PRESENTATION_ENTRY = 0x01FFA100
+MOUNT_GAIT_STATE = 0x01FFA500
+MOUNT_ACTION_OVERLAY_ID = 160
+MOUNT_ACTION_OVERLAY_BASE = 0x01FF8620
+MOUNT_ACTION_OVERLAY_ENTRY = 0x01FF8800
+MOUNT_ACTION_OVERLAY_LIMIT = MOUNT_CHAIN_OVERLAY_BASE
 ACTOR_PLANNER_IMPORTS = {
     "OverworldActorHopPlanner_Plan": 0x023BD4F0,
     "OverworldActorTeleportPlanner_Plan": 0x023BD4F8,
@@ -77,6 +89,9 @@ ACTOR_PLANNER_IMPORTS = {
 MOUNT_ARCHIVE_GUARD = 0xC00
 MAIN_RAM_START = 0x02000000
 MAIN_ARENA_HIGH = 0x023E0000
+ITCM_STATIC_END = 0x01FF8620
+ITCM_ARENA_LOW = 0x01FFA580
+ITCM_END = 0x02000000
 DTCM_START = 0x027E0000
 DTCM_END = DTCM_START + 0x4000
 ROW_SIZE = 0x20
@@ -85,6 +100,45 @@ ROW_SIZE = 0x20
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise SystemExit(f"move-history verifier: {message}")
+
+
+def verify_mount_gait_layout(linked_object: Path, packaged: bytes) -> None:
+    """Check the appended ITCM code and loaded mutable capsule, not motion feel."""
+    symbols = layout_symbols(linked_object, "arm-none-eabi-objdump")
+    entry = symbols.get("OverworldMountGait_Apply")
+    state = symbols.get("sOverworldMountGaitState")
+    presentation = symbols.get("OverworldFieldService_SyncMountedPresentation")
+    require(entry is not None and entry[0] & ~1 == MOUNT_GAIT_ENTRY
+            and entry[1] > 0 and entry[2:] == (".overworld_mount_gait", "F"),
+            "mounted gait entry is not hosted at its fixed ITCM address")
+    require(state is not None and state[0] == MOUNT_GAIT_STATE
+            and 0 < state[1] <= MOUNT_CHAIN_OVERLAY_LIMIT - MOUNT_GAIT_STATE
+            and state[2:] == (".overworld_mount_gait_state", "O"),
+            "mounted gait capsule differs from its reserved loaded state")
+    require(presentation is not None and presentation[0] & ~1 == MOUNT_PRESENTATION_ENTRY
+            and presentation[1] > 0
+            and presentation[2:] == (".overworld_mount_presentation", "F"),
+            "mounted presentation is not hosted at its fixed ITCM address")
+    sections = elf_section_layout(linked_object)
+    code = [row for row in sections if row[2] == MOUNT_GAIT_ENTRY]
+    data = [row for row in sections if row[2] == MOUNT_GAIT_STATE]
+    adapter = [row for row in sections if row[2] == MOUNT_PRESENTATION_ENTRY]
+    require(len(code) == 1 and code[0][0] == 1 and code[0][1] & 4
+            and code[0][2] + code[0][3] <= MOUNT_PRESENTATION_ENTRY,
+            "mounted gait code is absent, non-executable, or overlaps state")
+    require(len(adapter) == 1 and adapter[0][0] == 1 and adapter[0][1] & 4
+            and adapter[0][2] + adapter[0][3] <= MOUNT_GAIT_STATE,
+            "mounted presentation is absent, non-executable, or overlaps state")
+    require(len(data) == 1 and data[0][0] == 1 and data[0][1] & 3 == 3
+            and not data[0][1] & 4
+            and data[0][2] + data[0][3] <= MOUNT_CHAIN_OVERLAY_LIMIT,
+            "mounted gait state is not writable loaded data inside its reserve")
+    for _kind, _flags, address, size in code + adapter + data:
+        offset = address - MOUNT_CHAIN_OVERLAY_BASE
+        require(packaged[offset:offset + size] == elf_bytes_at(linked_object, address, size),
+                "mounted gait packaged bytes differ from linked code or state")
+    require(elf_bytes_at(linked_object, state[0], state[1]) == bytes(state[1]),
+            "mounted gait capsule does not start cleared")
 
 
 def actor_planner_source_contract(source: str, linker: str) -> None:
@@ -1309,6 +1363,65 @@ def main() -> None:
         ACTOR_OVERLAY_ID < len(rows),
         "final y9 has no overlay 158 row",
     )
+    require(
+        MOUNT_CHAIN_OVERLAY_ID < len(rows),
+        "final y9 has no overlay 159 row",
+    )
+    require(
+        MOUNT_ACTION_OVERLAY_ID < len(rows),
+        "final y9 has no overlay 160 row",
+    )
+
+    action_row = rows[MOUNT_ACTION_OVERLAY_ID]
+    action_overlay = final_overlay(rom, fat, action_row)
+    action_built = (
+        REPO / "build/output_overworld_mount_action_overlay.bin"
+    ).read_bytes()
+    require(
+        action_overlay == action_built
+        and action_row == (
+            MOUNT_ACTION_OVERLAY_ID,
+            MOUNT_ACTION_OVERLAY_BASE,
+            len(action_overlay),
+            0, 0, 0, MOUNT_ACTION_OVERLAY_ID, 0,
+        )
+        and 0 < len(action_overlay) <= (
+            MOUNT_ACTION_OVERLAY_LIMIT - MOUNT_ACTION_OVERLAY_BASE
+        ),
+        "final mounted action overlay has wrong bytes, metadata, or size",
+    )
+    action_symbols = layout_symbols(
+        REPO / "build/overworld_mount_action_overlay_linked.o",
+        "arm-none-eabi-objdump",
+    )
+    action_entry = action_symbols.get("OverworldMountActionAdapter_Dispatch")
+    require(
+        action_entry is not None
+        and (action_entry[0] & ~1) == MOUNT_ACTION_OVERLAY_ENTRY
+        and action_entry[2] == ".text",
+        "mounted action dispatch is not at its resident entry",
+    )
+
+    chain_row = rows[MOUNT_CHAIN_OVERLAY_ID]
+    chain_overlay = final_overlay(rom, fat, chain_row)
+    chain_built = (
+        REPO / "build/output_overworld_mount_chain_overlay.bin"
+    ).read_bytes()
+    require(
+        chain_overlay == chain_built
+        and chain_row == (
+            MOUNT_CHAIN_OVERLAY_ID,
+            MOUNT_CHAIN_OVERLAY_BASE,
+            len(chain_overlay),
+            0, 0, 0, MOUNT_CHAIN_OVERLAY_ID, 0,
+        )
+        and 0 < len(chain_overlay) <= (
+            MOUNT_CHAIN_OVERLAY_LIMIT - MOUNT_CHAIN_OVERLAY_BASE
+        ),
+        "final mounted chain overlay has wrong bytes, metadata, or size",
+    )
+    verify_mount_gait_layout(
+        REPO / "build/overworld_mount_chain_overlay_linked.o", chain_overlay)
 
     actor_row = rows[ACTOR_OVERLAY_ID]
     actor_overlay = final_overlay(rom, fat, actor_row)
@@ -1541,6 +1654,8 @@ def main() -> None:
             RUNTIME_OVERLAY_ID,
             MOUNT_OVERLAY_ID,
             ACTOR_OVERLAY_ID,
+            MOUNT_CHAIN_OVERLAY_ID,
+            MOUNT_ACTION_OVERLAY_ID,
         ) or other_size == 0:
             continue
         other_start = other[1]
@@ -1563,9 +1678,8 @@ def main() -> None:
     full_save_size = parse_define(save_constants, "FULL_SAVE_SIZE")
     heap3_size = parse_define(save_constants, "NEW_HEAP3_SIZE")
     require(
-        heap3_size == 0x106B00
-        and 0x110000 - heap3_size == 0x9500,
-        "heap 3 does not explicitly reserve 0x9500 for overlays 158/157/156/155/153",
+        heap3_size == 0x106730,
+        "boot heap 3 lost its proven capacity",
     )
 
     def arm9_word(address: int, description: str) -> int:
@@ -1592,6 +1706,12 @@ def main() -> None:
     require(
         arm9_word(0x02000930, "DTCM stack base literal") == DTCM_START,
         "final ARM9 DTCM stack base changed",
+    )
+    require(
+        arm9_word(0x02111EE0, "ITCM autoload destination") == 0x01FF8000
+        and arm9_word(0x02111EE4, "ITCM autoload size") == 0x620
+        and arm9_word(0x020D2C68, "ITCM arena low literal") == ITCM_ARENA_LOW,
+        "mounted ITCM code is not clear of stock code and reserved from the arena",
     )
 
     stock_overlay_end = max(
@@ -1634,23 +1754,27 @@ def main() -> None:
 
     arm9_end = arm9_ram + arm9_size
     require(
+        ITCM_STATIC_END <= MOUNT_ACTION_OVERLAY_BASE
+        and MOUNT_ACTION_OVERLAY_LIMIT == MOUNT_CHAIN_OVERLAY_BASE
+        and MOUNT_CHAIN_OVERLAY_LIMIT == ITCM_ARENA_LOW
+        and ITCM_ARENA_LOW <= ITCM_END,
+        "mounted ITCM adapters overlap static code or unreserved ITCM arena",
+    )
+    require(
         not ranges_overlap(
             arm9_ram,
             arm9_end,
             ACTOR_OVERLAY_LOAD_BASE,
             OVERLAY_LIMIT,
-        ),
-        "final ARM9 load image overlaps resident overlays 158/157/156/155/153",
-    )
-    require(
-        OVERLAY_LIMIT <= MAIN_ARENA_HIGH
+        )
+        and OVERLAY_LIMIT <= MAIN_ARENA_HIGH
         and not ranges_overlap(
             DTCM_START,
             DTCM_END,
             ACTOR_OVERLAY_LOAD_BASE,
             OVERLAY_LIMIT,
         ),
-        "resident overlays 158/157/156/155/153 cross the main arena or DTCM stack boundary",
+        "resident main-RAM overlays 158/157/156/155/153 cross the main arena or DTCM stack boundary",
     )
 
     require(129 < len(rows), "final y9 has no overlay 129 row")
@@ -1690,18 +1814,20 @@ def main() -> None:
 
     startup = (REPO / "armips/asm/syntheticoverlay.s").read_text()
     require(
-        "mov r1, #157" in startup
-        and "mov r1, #155" in startup
-        and "mov r1, #153" in startup
-        and "mov r1, #156" in startup
-        and startup.index("mov r1, #157")
-        < startup.index("mov r1, #155")
-        < startup.index("mov r1, #153")
-        < startup.index("mov r1, #156"),
-        "startup does not load overlays 157, 155, 153, and 156 in order",
+        "ResidentOverlayIds:" in startup
+        and ".byte 158, 157, 159, 160, 155, 153, 156" in startup
+        and "mov r5, #7" in startup
+        and "bl LoadResidentOverlay" in startup,
+        "startup does not load resident overlays 158, 157, 159, 160, 155, 153, and 156 in order",
     )
     require("0x02007188|1" in startup,
             "startup does not use the untracked no-init loader")
+    require(
+        "cmp r1, #159" in startup
+        and "cmp r1, #160" in startup
+        and "0x02006FF8|1" in startup,
+        "mounted ITCM overlays are not loaded through the DMA-safe wrapper",
+    )
 
     rom_ld = (REPO / "rom.ld").read_text()
     for name, api_offset in (

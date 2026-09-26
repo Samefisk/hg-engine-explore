@@ -11,7 +11,6 @@ REQUIREMENT = "legacy.runner-stop-skid"
 IDENTITY = (
     "handle", "species", "form", "level", "role", "subjectIdentity",
     "authorityGeneration", "engineAnchorGeneration", "presentationGeneration",
-    "behaviorFingerprint", "matchedLayerMask",
 )
 LIFECYCLE = (
     "MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED",
@@ -61,10 +60,13 @@ class RunnerStopSkidMeasurement:
         self.failures = []
         self.traces = []
         self.policy_input = self.start_result = None
+        self.continuation = None
+        self.continuation_frame = None
         self.policy_frame = None
         self.stop_speed = None
         self.recorder = None
         self.motion = None
+        self.motions = None
 
     def arm(self, subject, snapshot, trace_sequences=None):
         require(self.initial is None, "Runner stop-skid measurement already armed")
@@ -102,7 +104,7 @@ class RunnerStopSkidMeasurement:
             and engine_binding_identity(actor.get("engineIdentity"))
                 == engine_binding_identity(self.actor.get("engineIdentity"))
             and snapshot["context"] == self.initial["context"],
-            "Runner stop-skid identity or profile changed",
+            "Runner stop-skid live identity changed",
         )
         return actor
 
@@ -132,6 +134,21 @@ class RunnerStopSkidMeasurement:
                 and request[9] == response[9] == data.get("operation"),
                 "Runner stop skid Walk-policy owner differs")
 
+        if data["operation"] == WALK_POLICY_START_RESULT and self.start_result is not None \
+                and request[20] == 0x13:
+            require(self.continuation is None
+                    and request[11] == response[11] == 1
+                    and request[15] == response[15] == START_ACCEPTED
+                    and request[16] == DECISION_TRY_STEP and response[16] == DECISION_CONSUMED
+                    and request[17] == request[18] == self._policy_response()[17]
+                    and request[17:21] == response[17:21]
+                    and request[19] == 8
+                    and request[22] == request[23] == response[22] == response[23] == 0,
+                    "Runner stop-skid continuation differs")
+            self.continuation = deepcopy(data)
+            self.continuation_frame = event["frame"]
+            return
+
         if data["operation"] == WALK_POLICY_INPUT \
                 and request[10] == WALK_DIRECTION_NONE \
                 and request[13] == SPOT_STATE_TIRED \
@@ -147,7 +164,7 @@ class RunnerStopSkidMeasurement:
                     and request[11] == 0 and request[12] == 0
                     and request[14] == 0 and request[15] == 0
                     and response[10] == WALK_DIRECTION_NONE
-                    and response[11] == 1 and response[12] == 0
+                    and response[11] == 2 and response[12] == 0
                     and response[13] == SPOT_STATE_TIRED
                     and response[14] == 0 and response[15] == 0
                     and response[17] < 4 and response[18] == response[17]
@@ -165,7 +182,7 @@ class RunnerStopSkidMeasurement:
                 and self.policy_input is not None and self.start_result is None \
                 and event["frame"] == self.policy_frame:
             require(request[10] == WALK_DIRECTION_NONE
-                    and request[11] == 1 and request[12] == 0
+                    and request[11] == 2 and request[12] == 0
                     and request[13] == SPOT_STATE_TIRED
                     and request[14] == 0
                     and request[15] == START_ACCEPTED
@@ -178,8 +195,8 @@ class RunnerStopSkidMeasurement:
                     and request[19] == 8
                     and request[20] == response[20]
                         == (STOP_STEP_FLAGS | STEP_PLANNED_SKID_PATH)
-                    and request[25] == response[25] == 1,
-                    "Runner stop skid start was not one accepted planned tile")
+                    and request[25] == response[25] == 2,
+                    "Runner stop skid start was not two accepted planned tiles")
             require(all(raw[22] == 0 and raw[23] == 0
                         for raw in (request, response)),
                     "Runner stop skid used a Movement Chain action or pause action")
@@ -271,7 +288,7 @@ class RunnerStopSkidMeasurement:
                         and actor.get("movementPolicy", {}).get("action") == 0
                         and actor.get("movementPolicy", {}).get("ticks") == 0
                         and actor.get("movementPolicy", {}).get("pendingSkid") == 1
-                        and actor.get("movementPolicy", {}).get("skid") == 1
+                        and actor.get("movementPolicy", {}).get("skid") == 2
                         and actor.get("movementPolicy", {}).get("turn") == WALK_DIRECTION_NONE
                         and actor.get("engineObject", {}).get("facing") == response[17],
                         "Runner stop skid did not start as normal Walk motion")
@@ -281,12 +298,13 @@ class RunnerStopSkidMeasurement:
                 self.recorder.observe(snapshot["frame"], actor, actor["engineObject"])
                 require(not self.recorder.failures,
                         "Runner stop-skid motion: " + str(self.recorder.failures))
-                require(len(self.recorder.completed) <= 1,
+                require(len(self.recorder.completed) <= 2,
                         "Runner stop skid produced extra measured motion")
-                if self.recorder.completed:
+                if len(self.recorder.completed) == 2:
                     require(self.recorder.current is None,
                             "Runner stop-skid terminal motion is still active")
-                    self.motion = self.recorder.completed[0]
+                    self.motions = deepcopy(self.recorder.completed)
+                    self.motion = self.motions[-1]
                     self._check_motion(actor)
             self.last = deepcopy(snapshot)
         except (ValueError, KeyError, TypeError, StopIteration) as error:
@@ -294,7 +312,25 @@ class RunnerStopSkidMeasurement:
         return self.result()
 
     def _check_motion(self, actor):
-        motion = self.motion
+        require(self.continuation is not None and len(self.motions) == 2
+                and self.motions[0]["startFrame"] == self.policy_frame
+                and self.motions[1]["startFrame"] == self.continuation_frame,
+                "Runner stop-skid continuation lacks accepted start")
+        for index, motion in enumerate(self.motions):
+            if index:
+                previous = self.motions[index - 1]
+                require(motion["origin"] == previous["target"]
+                        and motion["commitBefore"] == previous["commitAfter"]
+                        and previous["finishFrame"] <= motion["startFrame"],
+                        "Runner stop-skid continuation skipped a tile or commit")
+            self._check_tile(motion)
+        require(actor.get("logical") == dict(zip(("x", "y"), self.motion["target"]))
+                and actor.get("motionKind") == "NONE"
+                and actor.get("motionPhase") == "IDLE"
+                and actor.get("reservationId") == 0,
+                "Runner stop-skid terminal control differs")
+
+    def _check_tile(self, motion):
         require(motion["kind"] == "WALK" and motion["duration"] == 8
                 and complete_travel(motion),
                 "Runner stop skid lacks one complete eight-frame Walk")
@@ -310,15 +346,11 @@ class RunnerStopSkidMeasurement:
         require([sample["elapsed"] for sample in motion["samples"]] == list(range(8))
                 and motion.get("travelEnd", {}).get("elapsed") == 8,
                 "Runner stop-skid elapsed schedule differs")
-        require(motion["commitAfter"] == ((motion["commitBefore"] + 1) & 0xFFFFFFFF)
-                and actor.get("logical") == dict(zip(("x", "y"), motion["target"]))
-                and actor.get("motionKind") == "NONE"
-                and actor.get("motionPhase") == "IDLE"
-                and actor.get("reservationId") == 0,
-                "Runner stop-skid terminal control differs")
+        require(motion["commitAfter"] == ((motion["commitBefore"] + 1) & 0xFFFFFFFF),
+                "Runner stop-skid tile commit differs")
 
         start = [event for event in self.traces
-                 if event["frame"] == self.policy_frame
+                 if event["frame"] == motion["startFrame"]
                  and event["data"].get("event") == "MOTION_STARTED"
                  and (event["data"].get("valueA"), event["data"].get("valueB")) == (1, 8)]
         require(len(start) == 1, "Runner stop skid lacks its native motion start")
@@ -331,7 +363,8 @@ class RunnerStopSkidMeasurement:
         sequences = [start_sequence]
         for name, frame, value_a, value_b in wanted:
             rows = [event for event in self.traces
-                    if event["data"].get("sequence", 0) > start_sequence
+                    if event["frame"] == frame
+                    and event["data"].get("sequence", 0) > start_sequence
                     and event["data"].get("event") == name]
             require(len(rows) == 1 and rows[0]["frame"] == frame
                     and rows[0]["data"].get("reason") == "OK"
@@ -374,6 +407,9 @@ class RunnerStopSkidMeasurement:
             "stopSpeed": self.stop_speed,
             "policyInput": deepcopy(self.policy_input),
             "startResult": deepcopy(self.start_result),
+            "continuation": deepcopy(self.continuation),
+            "continuationFrame": self.continuation_frame,
             "motion": deepcopy(self.motion),
+            "motions": deepcopy(self.motions),
             "traces": deepcopy(self.traces),
         }

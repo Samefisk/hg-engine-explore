@@ -12,7 +12,7 @@ class SpawnHeightControlTests(unittest.TestCase):
         self.pointer = 0x02210000
         self.memory = bytearray(struct.pack("<i", 12345))
         self.writes = []
-        self.source = dict(object=self.pointer, species=165, form=0, level=5, personality=42,
+        self.source = dict(object=self.pointer, species=179, form=0, level=5, personality=42,
                            active=True, encounter_generation=4, object_id=224, map_id=33)
         self.world = dict(fieldPointer=0x02110000, statePointer=0x02310000, mapId=33,
                           fieldEpoch=2, mapGeneration=3)
@@ -28,8 +28,8 @@ class SpawnHeightControlTests(unittest.TestCase):
             surfaceQuery=dict(returnValue=0, hit=None),
             heightRefresh=dict(returnValue=1, objectPointer=self.pointer, positionBefore=dict(flags=1),
                                positionAfter=dict(pos_y=12345)), positionAfter=dict(x=4, y=5, pos_y=12345, flags=1))
-        self.record = dict(sourceIdentity=deepcopy(self.source), target=[4, 5], _spawn=dict(
-            startup=dict(locomotion=4, target=[4, 5]), position=[4, 5], slot=0,
+        self.record = dict(sourceIdentity=deepcopy(self.source), target=[4, 5], initialPlacement=True, _spawn=dict(
+            startup=dict(locomotion=7, target=[4, 5]), position=[4, 5], slot=0,
             worldContext=self.world, preparedPointer=0x02290000, preparedEncounter=prepared))
         rt = SimpleNamespace(ACTOR_DESCRIPTOR={"state": {"address": 0x02300000,
                                 "offsets": {"fieldEpoch": 12, "mapGeneration": 46}}},

@@ -16,22 +16,32 @@ class ProofAdapterTests(unittest.TestCase):
         self.assertEqual(ProofAdapter('a','b','c','reader','S4').proof_level,'S4')
 
     def test_exact_adapters_preserve_contracts_faults_and_constructors(self):
-        self.assertEqual(len(ADAPTERS),9)
+        self.assertEqual(len(ADAPTERS),20)
         for kind,adapter in ADAPTERS.items():
             with self.subTest(kind=kind):
                 module=import_module('tools.overworld.'+adapter.module_name)
                 self.assertIs(get_adapter(kind),adapter)
-                self.assertEqual(adapter.requirement,module.REQUIREMENT)
-                self.assertEqual(adapter.claims,tuple(module.CLAIMS))
-                self.assertEqual(adapter.contract(),module.contract())
-                self.assertEqual(adapter.faults,tuple(module.FAULTS))
-                self.assertEqual(adapter.proof_level,'S4' if kind=='mounted-crash-v1' else 'S3')
+                if adapter.feature is None:
+                    self.assertEqual(adapter.requirement,module.REQUIREMENT)
+                    self.assertEqual(adapter.claims,tuple(module.CLAIMS))
+                    self.assertEqual(adapter.contract(),module.contract())
+                    self.assertEqual(adapter.faults,tuple(module.FAULTS))
+                else:
+                    self.assertEqual(adapter.requirement,module.requirement(adapter.feature))
+                    self.assertEqual(adapter.claims,tuple(module.claims(adapter.feature)))
+                    self.assertEqual(adapter.contract(),module.contract(adapter.feature))
+                    self.assertEqual(adapter.faults,tuple(module.faults(adapter.feature)))
+                self.assertEqual(adapter.proof_level,'S4' if kind in
+                                 ('mounted-crash-v1','mount-detach-follower-resume-v1',
+                                  'mounted-speed-slew-v1','turn-skid-v1',
+                                  'fly-in-runtime-v1','waddle-runtime-v1',
+                                  'floaty-bounce-hop-pause-v1') else 'S3')
                 for fault in adapter.faults:
                     self.assertIsInstance(adapter.negative(fault),getattr(module,adapter.negative_name))
                 with self.assertRaises(ValueError):adapter.negative('unknown-copied-fault')
                 if adapter.is_control:
                     self.assertTrue(adapter.requirement.startswith('shared.'))
-                else:
+                elif adapter.recorder_control_requirement is not None:
                     controls=[a for a in ADAPTERS.values() if a.requirement==adapter.recorder_control_requirement]
                     self.assertEqual(len(controls),1);self.assertTrue(controls[0].is_control)
 
@@ -55,10 +65,12 @@ print(json.dumps(sorted(n for n in sys.modules if n.startswith('tools.overworld.
             module=adapter.module;replay=object();record=object();result=object()
             with patch.object(module,'measurements',return_value=result) as called:
                 self.assertIs(adapter.measurements(replay,record),result)
-                called.assert_called_once_with(replay,record)
+                called.assert_called_once_with(*((replay,record) if adapter.feature is None
+                                                else (adapter.feature,replay,record)))
             with patch.object(module,'validate_negative_result',return_value=result) as called:
                 self.assertIs(adapter.validate_negative_result(replay,adapter.faults[0]),result)
-                called.assert_called_once_with(replay,adapter.faults[0])
+                called.assert_called_once_with(*((replay,adapter.faults[0]) if adapter.feature is None
+                                                else (adapter.feature,replay,adapter.faults[0])))
 
     def test_existing_stream_replay_and_exact_named_failure_still_work(self):
         from tools.overworld.test_devtools_stomp_measurement import raw_records

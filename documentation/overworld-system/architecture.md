@@ -57,7 +57,14 @@ movement-policy state. Wild refreshes the snapshot through a bounded value
 view; it does not expose or retain Actor storage. An active motion keeps its
 Actor-owned logical tile while the engine object supplies render position.
 Wild retains only engine-adapter state such as prepared spawn work, refill work,
-and staged presentation handles.
+staged presentation handles, and prepared condition state.
+
+The resident condition adapter builds bounded value-only observations for the
+portable evaluator and records armed semantic trace events. It does not decide
+condition truth, compose profiles, or own intent and motion. The movement-policy
+service entry publishes this adapter because that fixed 16-byte entry had one
+available data pointer; this is deployment placement, not movement-policy
+ownership.
 
 A retryable `Apply` result means the command was not queued or acknowledged.
 A retryable motion decision leaves the intent pending and does not consume
@@ -83,29 +90,176 @@ The actor facade must not become a new monolith. Its implementation is a tower o
 Owns profile field names, units, bounds, lane use, override operators, enum values, feature IDs, and binary layout generation.
 
 The field schema is named data and generates C and host metadata. Named profile
-values, rules, targets, members, operators, and conditional states live in
+values, rules, pools, applications, operators, and conditions live in
 `data/overworld_behavior_profiles.json`. Positional C profile records are
 generated ROM compatibility output and are not an authoring source.
 
 ```text
-profile
-  spawn
-  alert
-  battle
-  lanes
-    owner
-    active
-    tired
-      controller
-      locomotion
-      traversal
-      momentum
-      chain
-      feedback
-      presentation
+catalog
+  root profile: Default
+  profiles
+    normal
+    conditional
+      condition entries
+  named pools
+  ordered applications
+    targeted normal application
+    linked conditional or System application
+  runtime bindings
 ```
 
-### 2. Behavior Resolver
+Every non-root profile has one classification. Applications are grouped in
+this precedence order: `routine`, `placement`, `capability`, `attitude`,
+`modifier`, `system`, then `utility`. Manual order is preserved inside a group.
+Later applications still win field by field, so group and manual order are
+functional. Conditional is independent of classification. An archetype is
+only design shorthand for a composition; it is never saved as a
+classification.
+
+A normal application owns a named or inline Pokémon target. A conditional
+application owns only ordered identity and its profile; each condition entry
+owns its own subject pool. A System application is linked from its runtime
+owner and has no normal assignment. The generator lowers linked applications
+to the existing compatibility representation.
+
+Named pools are authoring-only reusable sets. A pool has a stable ID, display
+name, one match record, and explicit members. Normal applications, condition
+subjects, and actor-target filters can reference one. Pools cannot contain
+other pools. The generator expands them before packaging, so they add no ROM
+lookup or recursive runtime storage.
+
+The target catalog has one complete `Default` root and this exact application
+order. The machine-readable contract is
+[`profile_building_blocks_target_v1.json`](../../tools/overworld/fixtures/profile_building_blocks_target_v1.json).
+
+| Order | Classification | Profile | Application ID |
+| ---: | --- | --- | --- |
+| 1 | Routine | Scavenger | `apply-scavenger` |
+| 2 | Routine | Sprint | `apply-sprint` |
+| 3 | Routine | Floaty Bounce | `apply-floaty-bounce` |
+| 4 | Routine | Small Bird Hop | `apply-small-bird-hop` |
+| 5 | Routine | Erratic Flutter | `apply-erratic-flutter` |
+| 6 | Routine | Meander | `apply-meander` |
+| 7 | Routine | Hop Around | `apply-hop-around` |
+| 8 | Routine | Idle | `apply-idle` |
+| 9 | Routine | Drowsy Wander | `apply-drowsy-wander` |
+| 10 | Routine | Perch | `apply-perch` |
+| 11 | Routine | Rest | `apply-rest` |
+| 12 | Placement | Fly In | `apply-fly-in` |
+| 13 | Placement | Canopy Access | `apply-canopy-access` |
+| 14 | Placement | Flower Bed | `apply-flower-bed` |
+| 15 | Capability | Notice Player | `apply-notice-player` |
+| 16 | Capability | Teleport | `apply-teleport` |
+| 17 | Capability | Stalker | `apply-stalker` |
+| 18 | Capability | Long Hop | `apply-long-hop` |
+| 19 | Capability | Canopy Hop | `apply-canopy-hop` |
+| 20 | Capability | Throw | `apply-throw` |
+| 21 | Capability | Ram | `apply-ram` |
+| 22 | Capability | Heavy Stomp | `apply-heavy-stomp` |
+| 23 | Attitude | Startled | `apply-startled` |
+| 24 | Attitude | Ambush | `apply-ambush` |
+| 25 | Attitude | Playful | `apply-playful` |
+| 26 | Attitude | Skittish | `apply-skittish` |
+| 27 | Style | Waddle | `apply-waddle` |
+| 28 | System | Follower | `apply-follower` |
+| 29 | System | Mounted | `apply-mounted` |
+| 30 | Utility | Asleep | `apply-asleep` |
+
+Perch follows the ordinary Routines. Notice Player is the first Capability.
+Startled precedes Skittish. Heavy Stomp follows Ram, adds ledge-hop landing
+footfall feedback, and limits its shared Pokémon group to one active Wild spawn
+for Golem, Rhydon, Snorlax, Tyranitar, Aggron, Groudon, Torterra, Hippowdon,
+Rhyperior, Mamoswine, and Regigigas. The player condition
+is last inside Playful. Follower, Mounted, and Asleep are runtime-linked and
+cannot be normally assigned.
+
+Snorlax also uses Drowsy Wander. It walks in uneven two-to-six-step bursts,
+varies each step's travel time, often stops to look around, and avoids immediate
+backtracking. Heavy Stomp remains independent of this Routine.
+
+Ram keeps the strong stomp sound while its Walk direction is locked. Heavy
+Stomp uses the stock ledge-hop landing sound when Walk direction is unlocked.
+
+### 2. Behavior Condition Evaluator
+
+Owns bounded condition truth, activation lifetime, cooldown, and target
+selection. It consumes value-only subject and world observations plus the
+current actor-system frame. It returns an active conditional-application mask,
+one winning condition-entry ID per active application, and zero or one captured
+target per active application. It also reduces those winners in shared
+application order to one overall winning condition and one final target with
+its source application and condition.
+
+Condition entries are independent. The last listed active entry for one
+conditional profile wins. Different conditional profiles can be active at the
+same time. The evaluator does not compose profile fields and does not start,
+cancel, or inspect motion.
+
+Each condition owns its subject pool. The conditional application has no
+normal Pokémon target. The first condition kinds include visible player,
+visible compatible actor, target cannot see subject, and physical
+terrain/speed. They use fixed records; there is no Boolean expression language.
+While-true entries capture one target when they become true and keep it until
+they become false. Timed entries capture one target when they trigger and keep
+it through duration. Cooldown starts at that trigger. When cooldown ends while
+the predicate remains true, the entry triggers again, selects a fresh target,
+and restarts duration and cooldown.
+
+Vision is one shared value-only service for Pokémon and the player. The initial
+Vision is a 90-degree forward cone with three tiles of range, awareness of all
+eight adjacent tiles, and solid-terrain occlusion. Actors do not block sight.
+Observer and target tiles are not blockers. Invalid or unloaded terrain fails
+closed.
+
+Profiles own stable Current Vision fields. At bind or rebind, the controller
+resolves and caches Current Vision from `Default`, matching normal
+applications, and the forced-role profile. Conditional applications are
+excluded, so a profile cannot change the Vision that activates itself. A
+vision-based condition either uses Current Vision or owns one inline Custom
+Vision. The player uses the same evaluator and initial defaults; player tuning
+is not profile authoring.
+
+Visibility is evaluated at intent boundaries. Geometry rejects candidates
+outside the cone before the adapter traces the short line to a candidate. The
+actor search remains bounded by the ten-actor world view. Conditions and
+behavior planning consume the same visibility result.
+
+Target-required activation fails when no valid target exists. If a captured
+actor handle becomes stale, the complete activation ends before resolution.
+The evaluator never keeps a slot number or engine pointer as target identity.
+
+All timer values use the public actor-system frame returned by Inspect. Expiry
+comparison is unsigned and wrap-safe. The role adapter prepares applicable
+entries at bind and supplies bounded observations only when it is ready to ask
+for a new intent.
+
+Wild lazily allocates one 2,044-byte condition workspace from `HEAPID_WORLD`.
+It contains ten fixed 52-byte prepared actor records. Bind prepares only the
+catalog indexes that can apply to that subject, then allocates exactly the
+required entry-state array from the same heap. Despawn, slot reuse, actor
+identity change, and field-context loss clear the owned state. Wild owns and
+frees each nested state allocation even when the adapter overlay is
+unavailable. One actor roster is cached for each public actor frame and is
+invalidated immediately by a bind or clear. Full actor handles validate
+captured targets before resolution.
+
+Authoritative evaluation runs whenever the controller can request a new
+intent: initial idle choice, completed motion, completed presentation, and the
+next step of a movement chain. The resulting application mask and captured
+target feed the resolver before the controller selects that intent. The
+adapter resolves again only when the active application mask changes; an
+unchanged mask reuses the cached resolution. A stale captured actor handle
+clears the conditional result and that intent decision fails closed.
+Trace-disabled calls do not walk condition trace records.
+
+A timed retrigger always restarts its duration. It requests trigger presentation
+only when the trigger also changes the resolved application mask. When one
+timed profile ends, Tired starts only if no other timed conditional application
+remains active. Adapter-private outcome bits are masked at the role boundary;
+in particular, private `PROFILE_CHANGED` never escapes as Wild's public
+`FAIL_CLOSED` bit.
+
+### 3. Behavior Resolver
 
 Owns deterministic composition:
 
@@ -116,9 +270,11 @@ BehaviorResult BehaviorCatalog_Resolve(
     BehaviorResolutionTrace *trace);
 ```
 
-This is a private implementation interface. The resolver input contains subject,
-encounter terrain, conditional physical-surface state, behavior class inputs,
-and an explicit forced layer set. It does not contain actor role.
+This is a private implementation interface. The resolver input contains
+subject, encounter terrain, behavior class inputs, an explicit forced layer
+set, active conditional applications, the overall winning condition, and one
+already-resolved target with source provenance. It does
+not contain actor role, world pointers, timers, or condition predicates.
 
 Required order:
 
@@ -126,13 +282,17 @@ Required order:
 2. Resolve the ordered profile selectors.
 3. Materialize the selected profile from the complete root and its parent chain.
 4. Resolve inherited policy.
-5. Match normal profile applications.
-6. Select conditional layers from the pre-condition Owner travel time and surface state.
-7. Apply normal layers, then conditional layers, in source order.
-8. Resolve Active and Tired lane references once.
-9. Normalize all lanes.
-10. Resolve mechanical primitives.
-11. Produce a fingerprint and ordered provenance.
+5. Iterate the shared application list once.
+6. Apply a matching normal application.
+7. Apply a matching conditional application only when its active input bit is
+   set.
+8. Validate the final target's source application and condition. Target
+   precedence was reduced by the evaluator using this same application order.
+9. Resolve the Tired lane reference once.
+10. Normalize both lanes.
+11. Resolve mechanical primitives.
+12. Produce a fingerprint and ordered provenance, including the winning
+    condition entry and target source.
 
 The resolver is one portable C source compiled for ARM and for the Workshop
 host adapter. Both read the same generated compact behavior layout. The
@@ -145,16 +305,32 @@ same result. Observers retain each bounded request separately and bind the
 selected request to the actual subject/context. Changed result bytes under one
 fingerprint remain an error; changed request bytes alone are not one.
 
-Current mount resolution first resolves the follower with the forced `Follower
-Pokemon` override layer. Mount begin then snapshots the resolved Owner lane.
-Mounted is not a resolver role. The mounted controller later chooses which
-resolved values it consumes and ignores AI-only chain decisions.
+Current mount resolution resolves the same subject with the forced `Mounted`
+System layer. Mount begin then snapshots the resolved Owner lane and binds its
+fingerprint to the actor for the session. Mounted is an application, not a
+resolver role. Follower is not forced in the mounted request. Mounted has no
+field overrides, so the normal selected Owner movement fields remain composed.
+Mounted Walk uses the shared chain counter. The mounted adapter
+executes `PAUSE`, `HOP_FORWARD`, `HOP_IN_PLACE`, `LOOK_AROUND`, and the three
+reposition modes. It consumes an action only after a successful start or a
+final rejection; a temporary busy result keeps the exact action pending.
+Mounted moving actions use the player engine anchor and dependent Pokémon
+presentation, not a second engine mover.
+At a preserved map transition, Wild may prepare the retained slot's Follower
+profile for the destination map, but Mount keeps ownership of that slot's actor
+policy until the mount session ends. Wild must not bind Follower policy over a
+still-Mounted actor. Wild does not cache the destination Follower profile
+while Mounted owns the slot. The old map-keyed cache then misses after
+dismount, so the first normal Follower lookup resolves and binds the
+destination profile.
 
-The public actor view keeps lane and controller state separate. Native Chill
-and Emoting project to Owner, Active to Active, and Tired to Tired. Mounted
-control projects to Owner. An unknown native state has no resolved lane
+The public actor view keeps lane and controller state separate. Native
+controller enum values are compatibility details, not profile tabs or
+classifications. Ordinary and emoting controller values project to Owner, and
+the tired controller value projects to Tired. Conditional admission does not
+change lane. Mounted control projects to Owner. An unknown native state has no resolved lane
 (`BEHAVIOR_RESOLUTION_LANE_NONE`); it must not be labeled as valid behavior.
-`controllerState` retains the raw native value (Chill while mounted).
+`controllerState` retains the raw native value for diagnosis.
 
 Prepared Wild and Follower spawns bind their fresh actor before setup helpers
 can resolve and cache its profile. A new bind must still clear the old subject's
@@ -162,16 +338,27 @@ policy. No cache hit may rely on a profile binding erased by a later bind.
 Rejected binds leave the previous actor untouched; a failed startup Hop unbinds
 only its newly accepted handle before the normal spawn rollback.
 
-### 3. Role Controllers
+### 4. Role Controllers
 
 Controllers decide what an actor wants. They never change coordinates or presentation.
 
-- Wild controller: alert, chase, flee, wander, chain, Ram, rest, and battle intent.
+- Wild controller: condition observation, chase, flee, wander, chain, Ram,
+  rest, and battle intent. Internal held actor control suspends this planning
+  during pickup, carry, throw, drop, cancel, and release; it is not a profile
+  or behavior class.
 - Follower controller: follow and release intent.
-- Mounted controller: player input to intent. It uses the same resolved behavior as the follower and the Owner lane.
+- Mounted controller: player input to intent. It uses the normal selected Owner
+  behavior plus Mounted, not Follower's chase and spawn rules.
 - Script controller: explicit scripted intent.
 
 Ram is controller policy that emits Walk intents with direction lock, acceleration, stomp, and crash reactions. It is not a locomotion engine.
+
+Wild and Follower adapters evaluate conditions only when the actor can request
+a new intent. A condition change cannot interrupt an accepted motion. A chained
+movement returns to the same boundary before requesting its next intent.
+Mounted follower control does not evaluate autonomous conditions. Alert is a
+presentation response to a qualifying trigger, not a controller state or a
+condition predicate.
 
 During migration, the fixed Wild runtime service entry exposes the value-only
 `reduceRole` callback. It points at the same portable
@@ -179,13 +366,26 @@ During migration, the fixed Wild runtime service entry exposes the value-only
 packaged in audited boot-resident compatibility space; the service entry keeps
 its 64-byte ABI. Wild and Mount call-site migration is a separate phase.
 
-### 4. Motion Module: Policy
+### 5. Motion Module: Policy
 
 The stateful policy reducer owns momentum, acceleration counters, the resolved
 per-event acceleration rule, skid selection, chain eligibility, and feedback
 intent. Acceleration value `0` keeps the current travel time, values `1` through
 `32` remove that many frames per event, and value `33` is the editor's `/2`
 legacy rule. The default is `1`, so each acceleration event removes one frame.
+Normal Walk variance keeps nominal momentum separate from the displayed tile
+time. With acceleration enabled, the first maximum-speed tile retains full
+variance. Each later eligible normal Walk commit reduces the range by the
+acceleration amount (or halves it, rounding down, for `/2`), until zero.
+This is per tile, independent of the below-cap acceleration cadence. The
+existing momentum tile counter records capped-speed commits, saturating at255;
+below the cap it retains its acceleration-cadence role. Stops and accepted
+turns reset it; rejected starts and skid tiles cannot advance it.
+The displayed-time entry remains fixed at `0x01FF9C8C`; its implementation
+uses existing overlay159 code space after the presentation adapter and before
+the gait-state reserve. No entry, state address, or memory reserve grows.
+A turn or stop starts its braking and skid decision from the last
+displayed Walk time, so the next motion does not jump to a faster hidden speed.
 It consumes resolved
 behavior plus prior terminal outcomes and produces an immutable policy snapshot
 for planning. It mutates policy state only from explicit path-advance, commit,
@@ -198,24 +398,31 @@ remains a stop request and follows the existing stop/skid rules. After the full
 normal Wild direction search cannot start a step, the adapter can submit one
 separate, profile-gated `NONE` directly to Walk policy. This does not reinterpret
 an individual rejected direction and does not use the role or chain controller.
+When a full random or untargeted Wild `WANDER`/`HOP` search is blocked, the
+adapter reports that no movement started, preserves the committed facing, and
+waits one normal movement pause before it searches again. An explicit
+`TURN_AROUND` action and a directed blocked fallback can still change facing
+without starting a step.
 
-`planTurnSkidPath` is an Owner-lane Walk momentum option. On an ordinary Walk,
-including the first recovery step after a turn skid, the policy reserves enough
-straight runway for the lane's fastest possible turn skid before it admits the
-next tile. On an initial normal turn skid, the Wild adapter also validates the
-full skid corridor and the first step in the requested turn direction before
-motion starts. A blocked projected path returns `IGNORED`, preserves momentum
-and chain state, and lets the direction loop try another candidate. It does not
-use or change the separate stop-skid option.
+`planTurnSkidPath` is an Owner-lane Walk momentum option. An ordinary Walk,
+including the first recovery step after a turn skid, validates its immediate
+destination without reserving a future skid runway. On an actual turn skid,
+Wild and Mounted validate the full skid corridor and the first step in the
+requested turn direction before motion starts. A blocked skid path brakes
+momentum without a crash; the next held direction can turn from rest. This
+does not change the separate stop-skid option. A Sprint actor may walk into
+the last clear tile before a wall or non-player actor even if a later obstacle
+Hop has no safe landing. The actual Hop still validates the world when it
+starts, and no skid may cross a blocked tile.
 
 `stopSkid` is also an Owner-lane Walk momentum option. When it is enabled, a
 normal Wild WANDER direction search that cannot start another step sends one
-genuine Walk `NONE` request. A normal Runner lifecycle transition out of TIRED
-can send the same request before entering Chill. The shared Walk policy then
-applies the current speed-based stop skid. Movement Chain movement, pause, and
-action selection do not start, plan, or gate this stop skid.
+genuine Walk `NONE` request. Sprint's normal Tired-to-Routine transition can
+send the same request before Owner planning resumes. The shared Walk policy
+then applies the current speed-based stop skid. Movement Chain movement, pause,
+and action selection do not start, plan, or gate this stop skid.
 
-### 5. Motion Module: Planner
+### 6. Motion Module: Planner
 
 The planner converts one intent and one world revision into an accepted plan or a typed rejection.
 
@@ -299,7 +506,7 @@ the public actor policy service, and the wild adapter uses public policy
 inspection before it attempts the next reposition motion. Neither Wild nor
 Mounted calls task-6 Hop code directly.
 
-### 6. Motion Module: Executor
+### 7. Motion Module: Executor
 
 Walk, Hop, and Teleport share one execution lifecycle. Specialized planners can choose different paths, but interpolation, streaming, presentation synchronization, cancellation, and commit are shared.
 
@@ -326,6 +533,9 @@ there would be no accepted controller to finish that command. Any synchronous
 Hop preparation belongs to this attempt and is restored on rejection; flat
 Walk must not run the Hop restore command. This also applies while an earlier
 spawn Hop is still in its authored landing pause.
+Walk presentation is transactional too. A proposed direction does not change
+facing before terrain and actor admission accept the step. If shared admission
+rejects after local preparation, the adapter restores the prior facing.
 Before any preparation, the adapter reads the current actor policy and admits
 only `IDLE` or `CANCELED`, matching Motion's admission rule. The local cooldown
 can expire one tick before the actor finishes settling. Such a retry returns
@@ -366,6 +576,11 @@ For mounted Walk, a paused stationary held command is not this boundary. The
 adapter must also observe `PLAYER_MOVE_STATE_END` from the player controller.
 It cannot infer END from `MapObject_IsMovementPaused`, because the temporary
 delay command can pause before the authored actor motion reaches its target.
+When a one-frame Walk reaches its terminal actor sample, the mounted adapter
+marks only its active stationary command `0x3C` complete. The stock player
+controller then emits END on the next field frame. This avoids an idle render
+frame between one-frame tiles without creating an early END or skipping the
+normal player-step handler.
 
 The field-input adapter latches the genuine terminal END before the world
 gate masks input. It retries the matching actor commit and retains one stock
@@ -386,7 +601,10 @@ reuse a stale direction proposal.
 Cardinal mounted Walk stays bound to the stock player terrain streamer. It
 does not wait for a second custom terrain receipt after the stock player step.
 Staged diagonal or long motion still owns and drains its explicit stream
-anchor before terminal completion.
+anchor before terminal completion. Binding or restoring that watcher changes
+only the land manager's watcher pointer. It must not overwrite the manager's
+last sampled position: the stock loader advances that position only after it
+has processed the ground, including when a natural chain Hop follows a Walk.
 
 The adapter must preserve the completed motion kind through presentation and
 staged-path cleanup. It clears that kind only after the actor receives the
@@ -394,7 +612,7 @@ matching terminal boundary. A flat Walk must therefore remain a Walk while it
 is `COMMIT_PENDING`; clearing it early would route completion through the
 legacy reducer and leave the actor without control return.
 
-### 7. Path Advance, Commit, and Reactions
+### 8. Path Advance, Commit, and Reactions
 
 The executor emits a path advance when authority crosses a tile boundary. A
 multi-tile Hop or Teleport can emit several advances but still has one terminal
@@ -428,14 +646,31 @@ documented order:
 
 Skid tiles, chain repositioning, render interpolation, and stream anchors state their commit policy explicitly. They cannot enter the normal chain count by accident.
 
-A nonzero chain move count enables Movement Chain. `NONE` ends that chain with
-no pause or presentation effect. `PAUSE` waits for the resolved passive pause
-time without starting an effect.
+A nonzero chain move count enables Movement Chain. A resolved lane can name one
+pause action or a tagged set of actions. The chain boundary applies the overall
+action chance once, then uniformly samples one action from an admitted set.
+`NONE` ends that chain with no pause or presentation effect. `PAUSE` waits for
+the resolved passive pause time without starting an effect. A single `PAUSE`
+uses the same overall action chance as any other single action or action set,
+including while Mounted. A zero chance retains the legacy always-admit
+meaning for existing profiles.
+For ordinary Walk authoring, Movement Chain is either disabled or contains at
+least two moves. A one-move Walk chain gives no readable grouping and is not
+used. This restriction does not apply to Hop chains.
 `HOP_FORWARD` is a two-tile Hop in the committed Walk direction. It uses the
 current Walk travel time per tile, so the full Hop takes twice that time. It
 has no settle pause, does not add a chain step, and preserves momentum for the
-next chain. Pause-action chance is evaluated only for a configured visual
-action.
+next chain.
+
+Sprint does not use that chain action. Its normal motion is Walk. A blocked
+cardinal terrain tile or a non-player actor on a cardinal midpoint can instead
+trigger a two-tile forward Hop. The takeoff and landing must remain clear;
+the shared Hop planner still accepts the landing and arc. A clear step stays Walk.
+The Sprint lane opts in with a two-tile Hop
+range and vertical-obstacle clearance; it has no chain move count or action.
+Wild Wander, Flee, and Chase can approach a safe blocked-tile or actor Hop along their
+chosen cardinal direction. Mounted Walk uses the same approach rule. Neither
+role weakens the clearance check for an actual turn skid.
 
 A chain action is a new motion. If the previous motion has reached its engine
 end but the shared actor has not returned to `IDLE` or `CANCELED`, the action
@@ -482,17 +717,42 @@ step proposal. The engine adapter validates and starts that proposal, then
 returns `START_RESULT`. Only an accepted result changes committed direction or
 skid state. The adapter sends `COMMIT` only after the shared actor boundary is
 terminal. This reducer owns acceleration, turn and stop skid reduction, stomp
-and crash intent, and chain eligibility. Wild enables chain handling; mounted
-movement does not. Adapters publish returned effects and never run a second
+and crash intent, and chain eligibility. Wild and mounted Walk enable chain
+handling. Adapters publish returned effects and never run a second
 Walk reducer.
 
+For a turn skid, the reducer's step direction remains the committed travel
+heading while its facing direction is the requested turn. Wild and mounted
+adapters must keep both values through the motion plan and presentation. The
+first recovery Walk moves in the new direction after the skid commits; a stop
+skid keeps its current facing.
+
 Walk time variance is an Owner-lane timing option from 0 through 32 frames.
-The actor selects one extra duration for each accepted normal Walk tile and
-caps the final travel time at 32 frames. A blocked proposal keeps the same
-value. The added time is presentation timing only: acceleration, momentum,
+The actor selects an extra duration for every normal Walk proposal, including
+a braking turn, and caps the final travel time at 32 frames. A blocked proposal
+keeps the same value. Each accepted tile gets its full independent variance;
+the previous displayed duration does not clip it. The added time is
+presentation timing only: acceleration, momentum,
 skids, stomp thresholds, chain counters, repositioning and other locomotion
 types continue to use their nominal values. Wild, follower and mounted roles
 use this same policy; the mounted rider and Pokemon share the one motion time.
+Walk variance uses a pseudorandom value keyed by actor identity and committed
+step number. The same actor and step reproduce the same value, so a blocked
+retry cannot reroll it. The keyed value is separate from the Movement Chain
+phase and the game's general random stream.
+For a continuing mounted Walk in the same heading, the Walk proposal carries
+the previous displayed time in its reserved render field. The mount saves it
+for presentation; the field service eases the player position before copying
+that position to the Pokemon. A monotone within-tile curve removes the abrupt
+linear-speed seam while preserving the new tile's selected frame count, exact
+endpoint, logical path and step event.
+The curve is slope-limited for extreme variance and cannot subdivide a
+one-frame tile.
+
+Ordinary Walk profiles resolve `walkPause` and `walkPauseVariance` to zero, so
+the next decision can start without a synthetic stop after every tile. A
+deliberately slow Routine may opt into a visibly long pause after playtesting;
+short per-tile pauses are not used because they read as lag.
 
 Walk horizontal sway is an Owner-lane presentation option from 0 through 7
 pixels. Wild flat Walk passes that width to the shared Motion curve, which
@@ -534,7 +794,7 @@ After internal commit, publication is role-specific:
 4. Suspend immediately if the callback changed context.
 5. Emit safe post-commit presentation and feedback reactions.
 
-### 8. Presentation Adapters
+### 9. Presentation Adapters
 
 Presentation mirrors motion. It does not own it.
 
@@ -544,21 +804,81 @@ Presentation mirrors motion. It does not own it.
 - Effect adapter: shadow, flicker, particle, sound, or future elevated-surface sprite.
 - Headless adapter: semantic poses and events with no renderer.
 
-Mounted input changes the role and presentation adapter. It does not create a second profile or a second motion.
+Mounted input changes the role and presentation adapter and forces the Mounted
+System profile. It does not create a second actor or a second motion.
+The Select request stops new held-direction player steps and stays buffered
+until the current stock player step has ended. At mount begin, a still-active
+Follower motion receives a terminal cancel and releases its reservation before
+its engine command is cleared. Mounted input then owns the next actor motion;
+it must not inherit an unfinished Follower motion.
 
 Initial mount attachment aligns both objects' current/next facing and backups
 to the player's current facing before the first synchronized pose. This is an
 attachment operation, not a per-frame override of motion-owned Hop spin.
+The mounted presentation keeps the rider and Pokémon on the same logical base
+position and puts the rider half a tile higher. Other headings keep the
+half-tile offset behind each facing axis. South places the rider five-eighths
+of a tile behind the Pokémon so the Pokémon is in front without a large gap.
+This south-only depth offset does not change either actor's logical movement.
+During mounted Walk, the field presentation adapter must publish the eased
+player position to both MapObjects and refresh both stock graphics positions
+in the same completed game update. The mount task republishes both positions
+after its later crash-shake offset. The stock object graphics tasks run before
+the mounted frame task, while the next draw moves the camera to the player's
+new position. A MapObject-only update leaves both visible sprites one update
+behind that camera target, so matching rider/Pokémon MapObject vectors alone
+does not prove a fixed screen position.
+The mount's native shadow is a separate field-effect slot. Its stock task also
+runs before mounted presentation, so the same late refresh copies the mount's
+current base position to the exact live shadow slot. The field-effect pool is
+reached through the mount's MapObject manager and its FieldSystem; MapObject
+offset `0x128` is not a FieldSystem pointer. The rider shadow stays
+hidden; stock shadow visibility and lifetime still own both effects.
 
-Stock grass effects use a bounded renderer pool. Failed creation must return
-FALSE from the grass initializer before storing or using a missing handle.
+Mounted Walk adds a bounded sprite gait after the shared ground pose and seat
+offsets are set, before both graphics positions are refreshed. The camera and
+native shadow remain attached to the unchanged ground pose, not the bounce.
+The rider follows the mount's vertical bounce with a small bounded lag, and
+leans backward on acceleration and forward on braking. This presentation does
+not change movement timing, speed variance, collision, Hop pauses or layering.
+
+The four inheritable profile controls are `mountBounce` (0..3 pixels),
+`mountStride` (16/32/48/64 pixels per cycle), `mountSettle` (0..3 strength), and
+`mountLean` (0..3 pixels). Defaults are 2/48/1/1. Zero bounce and lean disable
+those effects; zero settling makes the rider follow the bounce exactly.
+The compact profile packs these four values into its former reserved byte16;
+each field still resolves and overrides independently.
+
+The gait phase follows distance, without restarting at a tile or speed change.
+Its advance is capped at one eighth-cycle per game update at high speed to
+avoid flicker. Body height changes by at most one quarter-pixel per update.
+Settling limits rider/body separation to one eighth-pixel per strength level;
+lean changes by at most one eighth-pixel per update. When movement stops, these
+offsets settle to zero. Other motion modes reset gait so it cannot add a second
+bounce to Hop or Teleport. A new mount session or player identity resets it too.
+Repeated callbacks in one main update recompute from the same previous state;
+they cannot advance the phase or damping twice.
+
+The portable model is `lib/overworld/overworld_mount_gait_model.c`. Its adapter
+and mounted presentation callback live in resident overlay159. The field
+service table keeps its existing address and version. Gait code starts at
+`0x01FF9D00`, presentation at `0x01FFA100`, and a zero-loaded 72-byte state
+capsule at `0x01FFA500`. Boot reserves through `0x01FFA580` from the ITCM arena;
+no field heap or implicit overlay BSS is used. Link and package checks enforce
+these boundaries and preserve all older resident entry addresses.
+
+Stock grass and dry-ground dust effects use a bounded renderer pool. The
+model/field-effect slot count is 48 instead of the stock 32; the other stock
+resource and memory budgets stay unchanged. Failed
+creation must return FALSE from either initializer before storing or using a
+missing handle.
 The stock task creator then destroys the new task and resets its slot without
 calling a destructor for an effect it never acquired. This presentation
 failure cannot own or block player, Wild or Follower motion. The successful
 initialization path is unchanged; a larger pool is not a substitute for safe
 failure handling. Effect lifetime and recovery of pool capacity require their
 own runtime evidence.
-The guard has its own at-most32-byte section appended to resident overlay129,
+Each guard has its own at-most32-byte section appended to resident overlay129,
 after existing code/data. Existing export addresses must not move. The image
 must fit its actual `0x023D8000..0x023E0000` reservation; historical Summary
 feature headroom is not a separate reserved memory owner.
@@ -575,7 +895,7 @@ readers and writers use only the low half for the hidden flag. A missing,
 stale, malformed, or inactive response means no position override. No Wild
 private-state pointer crosses this service boundary.
 
-### 9. Population and Lifecycle
+### 10. Population and Lifecycle
 
 Population controls encounter preparation, spawn timing, despawn, identity,
 capture, and battle handoff. It consumes path advances for player-centered
@@ -628,33 +948,63 @@ The host spawn-search fixture checks selection parity and these work bounds.
 
 Move From Off Screen keeps the selected spawn tile as its immutable target.
 It starts with the same four cardinal origin rays as Hop and searches inward:
-origin A is between1 and16 tiles from selected spawn tile B. A must also be at
-least four tiles beyond the player-relative inclusive8-by6 camera extent. Land actors can enter from
+origin A is between1 and16 tiles from selected spawn tile B. A is prepared at
+least five tiles beyond the player-relative inclusive8-by6 camera extent, which
+reserves one update of player movement before its required four-tile creation
+margin. Land actors can enter from
 any walkable land tile; the spawn destination still keeps its authored terrain
 rule. If no eligible off-screen origin exists, the spawn is rejected. It never
 falls back to an on-screen appearance. Otherwise,
-it enters the normal active chase lane and replaces the player target with the
-immutable spawn tile. The shared chase controller selects and
-runs each Walk, Hop, or Teleport segment with the profile's active movement
+it starts an Owner-lane destination trip and replaces the player target with
+the immutable spawn tile. The shared chase controller selects and
+runs each Walk, Hop, or Teleport segment with the resolved Owner movement
 parameters. Each segment must complete its normal Motion transaction before
 the next segment starts. Move From Off Screen has no movement-policy
 exceptions: Walk pause, Movement Chain actions, stamina, tired effects, turn
 skid, battle rules, and the authored previous-tile rule work exactly as they
-do for any other active chase. A normal tired cycle can pause the trip and the
-same active chase resumes afterward. On arrival, and only after the normal
-movement completion pipeline is idle, the actor returns to Chill and never
-snaps to the target.
+do for any other destination trip. A normal tired cycle can pause the trip and
+the same Owner trip resumes afterward. On arrival, and only after the normal
+movement completion pipeline is idle, the actor returns control to its resolved
+Routine and never snaps to the target.
 
 A resumed destination scan stops after its final candidate batch. Spawn-start
 selection continues on the next update. This keeps both bounded operations out
 of the same frame while reusing the prepared profile and spawn metadata.
 
+Fly In is a distinct Placement spawn locomotion. It validates and stores the
+destination and its physical surface height before choosing an offscreen origin
+at flying height. Its motion uses independent start and target heights, no Hop
+arc, and a monotonic descent. Intermediate ground, water, walls, and lower
+surfaces do not become landing checks; only the destination must be a legal
+placement.
+
+The destination surface is the only landing-height source. The visual descent
+is relative to that height, its terminal offset is exactly zero, and the actor
+and sprite finish at that exact height. Fly In then hands control to the normal
+Routine. Its universal descent lasts 144 frames. It exposes no per-profile
+timing or arc controls.
+
+Fly In uses the same ground-plus-lift presentation as Jump: the sprite descends
+above the sampled ground, and its native shadow follows the rendered tile's
+ground height. The landing tile remains the logical owner, but it does not
+determine the shadow height for the whole path. On surfaces that normally
+suppress native shadows, Fly In uses that same surface rule. Landing restores
+the normal surface-based shadow state.
+
 Off-screen Hop startup keeps that destination and selects a loaded origin
-exactly16 cardinal tiles away. The origin must be strictly outside the current
-player-relative inclusive8-by6 half-extent tile rectangle; an edge tile is not
-off-screen. Rank visible travel only among eligible origins. Reject a spawn
-with no eligible origin without changing its target or falling back to an
-on-screen appearance. This origin contract does not establish landing height.
+exactly eight cardinal tiles away. An explicit spawn-entry intent grants its
+startup clearance; ordinary eight-tile Hops do not gain spawn-entry rules. The
+origin must be at least four tiles beyond
+the current player-relative inclusive8-by6 camera extent. Rank visible travel
+among eligible origins. If the destination has moved just outside one camera
+axis, an entirely out-of-view ray or a ray that reaches view only at its
+destination remains an eligible zero-travel fallback. Prepared origins reserve
+one extra tile beyond the required four-tile margin. A queued spawn commits on
+the next update, so one tile of player movement cannot make its origin unsafe.
+This does not repeat encounter, profile, metadata, or destination resolution.
+Reject a spawn with no eligible origin without changing its target or falling
+back to an on-screen appearance. This origin contract does not establish
+landing height.
 
 Stock saves restore dynamic native map objects without the live encounter
 ownership that created them. Before allocating a new reserved Wild slot ID,
@@ -747,9 +1097,9 @@ finalizer receipt across only one completed queue; stale receipts cannot pair.
 boolean form of private maintenance state; phase and dirty bits never leak
 through the public ABI.
 
-Overlay 158 is resident at `0x023B6B00-0x023BAB00`. The public actor facade
-remains at `0x023B6B00`, and the service directory keeps its fixed addresses.
-Actor and population code is bounded below `0x023BA170`. Actor state starts at
+Overlay 158 loads at `0x023B6B00-0x023BAB00`. The public actor facade and
+service directory keep their fixed addresses. Actor and population code is
+bounded below `0x023BA170`. Actor state starts at
 `0x023BA170`, uses no more than `0x0990` bytes, and must end at or before overlay 157
 at `0x023BAB00`. The fixed capacities are 10 actors, 2 queued commands, 2
 acknowledgements, and 16 trace events. This layout preserves the full field
@@ -824,7 +1174,7 @@ resident mount adapter before it invokes wild transition work. The throw helper
 receives a separate typed presentation command through its existing fixed
 callback slot. Negative slot numbers are not lifecycle commands.
 
-### 10. Observation
+### 11. Observation
 
 Observation is a first-class module, not temporary diagnostic code. `Inspect`,
 the generated debug descriptor, and a bounded trace ring expose semantic state
@@ -848,12 +1198,30 @@ Planner families are private strategies, not public plugin APIs. Fixed overlay e
 The conceptual module uses one small resident code home and several unloadable
 engine adapters.
 
-- Overlay 158 is resident at `0x023B6B00-0x023BAB00`. The fixed facade and
-  resident actor/population code occupy the range through `0x023BA170`.
-  Bounded state starts there and ends before `0x023BAB00`.
+- Mount action overlay 160 occupies ITCM `0x01FF8620..0x01FF9800`, including
+  the Walk easing and graphics entries before its action entry at `0x01FF8800`.
+  Mount chain overlay 159 occupies `0x01FF9800..0x01FFA580`, including the
+  mounted gait code and explicit state capsule. The stock ITCM autoload ends
+  at `0x01FF8620`. Boot reserves both adapters by setting the ITCM arena low
+  to `0x01FFA580`, then loads
+  them through `HandleLoadOverlay` so file reads do not use DMA into ITCM.
+  Heap 3 stays at `0x106730`; it must not be cut to make a code home.
+  The SDK FNT/FAT archive and its `0xC00` guard stay below actor overlay
+  158 at `0x023B65A0`. Package checks verify these ranges and the loader.
+- Overlay 158 loads at `0x023B65A0..0x023BAB00`; its core entry is at
+  `0x023B6B00`. The fixed facade and resident
+  actor/population code occupy the range through `0x023BA170`. Bounded state
+  starts there and ends before `0x023BAB00`.
+  The resolver's five-byte legacy spawn lookup uses target-selector slot
+  padding at `0x023B6BD8`; its entry and the following slot stay fixed.
 - The public facade, compatibility entry, debug layout, resolver, motion,
   population, and movement-policy entries have fixed addresses and
   magic/version/size checks.
+- The version-5 movement-policy entry publishes the private Walk policy table
+  and the version-1 condition adapter. Actor validation checks the adapter's
+  magic, version, and 16-byte size. The adapter builds condition frames and
+  records condition trace facts; the portable evaluator remains the only
+  condition-truth owner.
 - Walk client overlays link to individual fixed helper functions from
   `0x023BF400` through `0x023BF9A0`. The old Walk service-table range at
   `0x023BF400..0x023BF487` now hosts the direct `DecelerateTime` and
@@ -895,6 +1263,11 @@ engine adapters.
   Selector is linked to Wild; all calls into Helper follow helper preparation
   or a live actor/profile, and teardown stops those calls before unloading.
   Slot limits, typed Thumb imports, and exact packaged bodies are checked.
+- Selector owns `0x023C22A0–0x023C3000` for the condition evaluator service.
+  Its existing callbacks stay below
+  `0x023C22A0`. Field teardown unloads Selector before another cold overlay
+  can use this shared tail. The behavior-data overlay begins at
+  `0x023C3000`, so the two images do not overlap.
 - ARM/Thumb interworking and `LONG_CALL` requirements remain explicit adapter
   contracts.
 - Normal field walking friendship uses a 34-byte wrapper at `0x023CCF90`.
@@ -985,13 +1358,23 @@ Cancel is idempotent. It leaves authority on a complete tile, releases reservati
 
 - No per-frame heap allocation.
 - Fixed candidate arrays and bounded actor loops.
-- Profile resolution cached by source revision, subject, forced layers, and relevant resolver context such as conditional physical-surface state.
+- Vision runs only at intent boundaries. It rejects candidates by cone before
+  short-line occlusion work and examines at most the ten-actor world view.
+- Profile resolution is cached by source revision, subject, forced layers,
+  active conditional applications, and the captured target source.
 - Spawn metadata uses one validated, reusable blob. The build generator and
   runtime loader share `OVERWORLD_WILD_SPAWN_METADATA_MAX_BLOB_SIZE`; generated
   data above that bound must fail the build, not silently force file reads for
   every normal spawn. Allocation uses the actual blob size. Failed loading
   retains explicit fallback behavior and teardown frees only owned memory.
   Unmounted cadence tests reject an observed base-form metadata cache miss.
+- The persistent behavior catalog belongs to the field session and uses
+  `HEAPID_WORLD`. The smaller persistent spawn-metadata cache uses
+  `HEAPID_DEFAULT`. This leaves stock field scripts and message banks with
+  `17,988` more bytes than storing both catalogs on the field heap, while the
+  metadata cache remains below the default heap's capacity. Temporary archive
+  handles use `HEAPID_WORLD` and close immediately after loading. Teardown
+  frees each catalog through its recorded allocation.
 - Resolved behavior is copied or referenced as one coherent value, not rebuilt field by field during motion.
 - Trace writes occur only when a filter is armed.
 - The trace ring is fixed-size and overwrites old records.
@@ -1016,7 +1399,8 @@ A successful migration passes these tests:
 ## Anti-patterns
 
 - Do not add another movement owner or parallel runtime array.
-- Do not add a mount-only copy of a profile field or motion rule.
+- Keep mount tuning in the Mounted System profile. Do not copy profile fields
+  or motion rules into the mount controller.
 - Do not model flat Walk as a behavior-level zero-height Hop.
 - Do not infer semantic commits from coordinate changes. Emit explicit path
   advances and one explicit terminal commit.
@@ -1024,3 +1408,4 @@ A successful migration passes these tests:
 - Do not use private raw memory offsets as the long-term verification interface.
 - Do not layer a new path permanently over an old path. Compare, switch, then delete.
 - Do not treat a source-string verifier as proof of runtime behavior.
+- Do not represent pickup or carry ownership as a profile or behavior class.

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.stalker.visibility-gate",
+  "title": "Stalker advances only outside player Vision",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/profile-building-blocks-implementation-plan.md#pb9--integrated-verification",
+  "requirements": ["current.stalker-visibility-gate"],
+  "budgets": {"maxSeconds": 180, "maxFrames": 900, "noProgressFrames": 300, "minObservedFrames": 1},
+  "subjects": [{"id": "gastly", "species": 92, "role": "WILD", "acquire": "spawn"}],
+  "measurements": [{"kind": "stalker-runtime-v1", "subject": "gastly"}],
+  "setup": [
+    {"id": "clear-rear-tile", "op": "party", "args": {"slot": 2, "hp": 0, "status": 0}, "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "rear-tile-clear-readback", "op": "assert", "args": {"predicate": {"kind": "party-field", "slot": 2, "path": "hp", "operator": "eq", "value": 0}}, "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "open-area", "op": "teleport", "args": {"map": 33, "x": 585, "z": 406, "facing": 1}, "budget": {"maxSeconds": 30, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "spawn-gastly", "op": "spawn", "args": {"species": 92, "role": "wild", "level": 5, "x": 585, "z": 402}, "budget": {"maxSeconds": 30, "maxFrames": 80, "noProgressFrames": 80}},
+    {"id": "bind-gastly", "op": "bind", "args": {"subject": "gastly"}, "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "observe-unseen-stalker", "op": "wait", "args": {"predicate": {"kind": "measurement-stage", "measurement": "stalker-runtime-v1", "stage": "unseen-motion-complete", "when": "final"}}, "budget": {"maxSeconds": 90, "maxFrames": 400, "noProgressFrames": 300}},
+    {"id": "face-stalker", "op": "step", "args": {"frames": 16, "keys": ["UP"], "until": {"kind": "player-field", "path": "facing", "operator": "eq", "value": 0}}, "budget": {"maxSeconds": 10, "maxFrames": 16, "noProgressFrames": 16}},
+    {"id": "face-stalker-settled", "op": "wait", "args": {"predicate": {"kind": "player-settled-at", "map": 33, "x": 585, "z": 406}}, "budget": {"maxSeconds": 10, "maxFrames": 32, "noProgressFrames": 32}},
+    {"id": "observe-seen-routine", "op": "wait", "args": {"predicate": {"kind": "measurement-complete", "measurement": "stalker-runtime-v1", "when": "final"}}, "budget": {"maxSeconds": 90, "maxFrames": 400, "noProgressFrames": 300}}
+  ],
+  "assertions": [{"kind": "measurement-complete", "measurement": "stalker-runtime-v1", "when": "final"}]
+}

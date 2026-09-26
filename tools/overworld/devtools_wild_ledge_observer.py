@@ -89,14 +89,14 @@ class NativeWildLedgeObserver(NativeMountedPacingObserver):
                 and [actor.get("logical", {}).get(key) for key in ("x", "y")] == point)
 
     def _profile(self, current, pointer, allowed_tile, jump_level):
-        raw = public_bytes(self.session, pointer, 216)
+        raw = public_bytes(self.session, pointer, 144)
         resolved = self.observer.profiles.get(current["publicSubject"]["behaviorFingerprint"], {})
-        self._require(resolved.get("resolved") is True and resolved.get("resultHex", "")[:432] == raw.hex(),
+        self._require(resolved.get("resolved") is True and resolved.get("resultHex", "")[:288] == raw.hex(),
                       "profile lacks exact native resolver identity")
         rt, emu = self.session.rt, self.session.emu
-        spot = (2 if rt.unsigned(emu, rt.WILD_STATE + 514 + self.slot, 1)
+        spot = (2 if rt.unsigned(emu, rt.WILD_STATE + 494 + self.slot, 1)
                 else rt.unsigned(emu, rt.WILD_STATE + 264 + self.slot, 1))
-        lane_index = 1 if spot == 2 else 2 if spot == 3 else 0
+        lane_index = 1 if spot == 3 else 0
         lane = raw[lane_index * 72:(lane_index + 1) * 72]
         self._require(allowed_tile == struct.unpack_from("<H", lane, 32)[0]
             and jump_level == raw[9] == 2 and raw[17] == 0,

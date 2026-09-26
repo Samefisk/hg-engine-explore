@@ -332,12 +332,11 @@ class TestJobs:
             record_from_setup = normal_baseline or evaluator.uses_raw_records
             initial_events = []
             initial_event_start_frame = None
-            self._command("start", {**test["fixture"], "mode": "normal" if normal_baseline else "prepared"})
+            self._command("start", {**test["fixture"],
+                "mode": "normal" if normal_baseline else "prepared",
+                "_spawnHeightControl": height_control})
             owned_session = self.service.session["id"]
             identity = deepcopy(self.service.session["identity"])
-            if height_control:
-                with self.service.lock:
-                    self.service.worker.call("spawn-height-control.arm", {})
             if record_from_setup:
                 with self.service.lock:
                     initial_event_start_frame = self.service.snapshot["frame"]
@@ -352,7 +351,8 @@ class TestJobs:
                 if RAW_BOUNDARY_READERS.intersection(evaluator.measurements):
                     initial_record.update(initialEvents=initial_events, initialEventStartFrame=initial_event_start_frame)
                 evaluator.observe_record(initial_record)
-            elif "actor-binding-context-v1" in evaluator.measurements:
+            elif {"actor-binding-context-v1", "live-spawn-height-control-v1"}.intersection(
+                    evaluator.measurements):
                 evaluator.observe_initial(deepcopy(self.service.snapshot), initial_events,
                                           start_frame=initial_event_start_frame)
             else:
@@ -362,7 +362,8 @@ class TestJobs:
             # worker cannot erase prior progress or turn missing frames green.
             with open_observations(stream_path, "xt") as stream:
                 initial_row = {"phase": "setup", "initialSnapshot": self.service.snapshot}
-                if ({"actor-binding-context-v1"} | RAW_BOUNDARY_READERS).intersection(evaluator.measurements):
+                if ({"actor-binding-context-v1", "live-spawn-height-control-v1"}
+                        | RAW_BOUNDARY_READERS).intersection(evaluator.measurements):
                     initial_row.update(initialEvents=initial_events, initialEventStartFrame=initial_event_start_frame)
                 stream.write(_manifest_json(initial_row))
                 stream.flush()
@@ -472,6 +473,10 @@ class TestJobs:
                                     receipt = self._command(op, evaluator.wild_walk_args(args["subject"], snapshot))
                                 elif op == "wild-ledge.arm":
                                     receipt = self._command(op, evaluator.wild_ledge_args(args["subject"], snapshot))
+                                elif op == "condition-controller.arm":
+                                    receipt = self._command(
+                                        op, evaluator.condition_controller_args(
+                                            args["subject"], snapshot))
                                 elif op == "mount-pacing.arm":
                                     receipt = self._command(op, evaluator.mount_pacing_args(args["subject"], snapshot))
                                 elif op == "hop-arc.arm":
@@ -491,6 +496,10 @@ class TestJobs:
                                 elif op == "walk-intent.arm":
                                     receipt = self._command(op, evaluator.walk_intent_args(args, snapshot))
                                 elif op == "walk-intent.close":
+                                    receipt = self._command(op, args)
+                                elif op == "obstacle-intent.arm":
+                                    receipt = self._command(op, evaluator.obstacle_intent_args(args, snapshot))
+                                elif op == "obstacle-intent.close":
                                     receipt = self._command(op, args)
                                 elif op == "chain-retry":
                                     control_args = evaluator.chain_retry_args(args["subject"])
@@ -517,7 +526,7 @@ class TestJobs:
                                     elif op == "mount-teleport.restore":
                                         args = evaluator.mount_teleport_restore_args(args, snapshot)
                                     receipt = self._command(op, args)
-                                endpoint = (deepcopy(snapshot) if op in ("acceleration.end", "walk-intent.close", "walk-policy-control.close", "mount-pacing.close", "hop-arc.close", "wild-walk.close", "wild-ledge.close", "walk-corner.close", "walk-matrix.close", "stomp.close") else
+                                endpoint = (deepcopy(snapshot) if op in ("acceleration.end", "walk-intent.close", "obstacle-intent.close", "walk-policy-control.close", "mount-pacing.close", "hop-arc.close", "wild-walk.close", "wild-ledge.close", "condition-controller.close", "walk-corner.close", "walk-matrix.close", "stomp.close") else
                                             deepcopy(receipt["snapshot"]) if RAW_BOUNDARY_READERS.intersection(evaluator.measurements) else
                                             _command_snapshot(op, receipt, self.service.snapshot))
                                 command_record = {"phase": phase, "action": action["id"], "command": op,

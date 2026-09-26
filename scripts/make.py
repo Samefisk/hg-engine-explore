@@ -355,16 +355,35 @@ def VerifyOverworldFollowerSelectorOverlay(
         'OverworldFollowerSelector_IsReleaseTileAvailable',
         'OverworldFollowerSelector_BuildDirectedDirections',
     ]
+    condition_entry_name = 'gOverworldBehaviorConditionServiceEntry'
+    condition_callback_names = [
+        'OverworldBehaviorCondition_PrepareActor',
+        'OverworldBehaviorCondition_EvaluatePrepared',
+        'OverworldBehaviorCondition_ValidateResolveRequest',
+    ]
+    condition_gate_name = 'OverworldBehaviorConditionService_Get'
     symbols = {}
     output = subprocess.check_output([OBJDUMP, '-t', linked_path]).decode()
     for line in output.splitlines():
         parts = line.split()
-        if len(parts) >= 6 and parts[-1] in [entry_name, *callback_names]:
+        if len(parts) >= 6 and parts[-1] in [
+                entry_name,
+                *callback_names,
+                condition_entry_name,
+                *condition_callback_names,
+                condition_gate_name,
+        ]:
             symbols[parts[-1]] = (int(parts[0], 16), int(parts[-2], 16))
 
     missing = [
         name
-        for name in [entry_name, *callback_names]
+        for name in [
+            entry_name,
+            *callback_names,
+            condition_entry_name,
+            *condition_callback_names,
+            condition_gate_name,
+        ]
         if name not in symbols
     ]
     if missing:
@@ -376,7 +395,8 @@ def VerifyOverworldFollowerSelectorOverlay(
     entry_address, entry_size = symbols[entry_name]
     expected_entry_address = 0x023C0400
     expected_entry_size = 60
-    overlay_end = 0x023C22A0
+    callback_end = 0x023C22A0
+    overlay_end = 0x023C3000
     if (entry_address != expected_entry_address
             or entry_size != expected_entry_size):
         raise RuntimeError(
@@ -387,11 +407,32 @@ def VerifyOverworldFollowerSelectorOverlay(
 
     for name in callback_names:
         callback_address, _ = symbols[name]
-        if not expected_entry_address <= callback_address < overlay_end:
+        if not expected_entry_address <= callback_address < callback_end:
             raise RuntimeError(
                 f'overlay 152 callback {name} is outside its owned range: '
                 f'0x{callback_address:08X}'
             )
+
+    condition_entry_address, condition_entry_size = symbols[condition_entry_name]
+    if (condition_entry_address != callback_end or condition_entry_size != 24):
+        raise RuntimeError(
+            'overlay 152 condition service entry changed: '
+            f'address=0x{condition_entry_address:08X} '
+            f'size={condition_entry_size}'
+        )
+    for name in condition_callback_names:
+        callback_address, _ = symbols[name]
+        if not expected_entry_address < callback_address < overlay_end:
+            raise RuntimeError(
+                f'overlay 152 condition callback {name} is outside its owned range: '
+                f'0x{callback_address:08X}'
+            )
+    gate_address, _ = symbols[condition_gate_name]
+    if gate_address != 0x023C22B8:
+        raise RuntimeError(
+            'overlay 152 condition service gate moved: '
+            f'address=0x{gate_address:08X}'
+        )
 
     with open(output_path, 'rb') as file:
         overlay = file.read()
@@ -401,6 +442,8 @@ def VerifyOverworldFollowerSelectorOverlay(
         raise RuntimeError('packaged overlay 152 differs from its linked binary')
     if len(overlay) < expected_entry_size:
         raise RuntimeError('overlay 152 is shorter than its exported ABI entry')
+    if len(overlay) > overlay_end - expected_entry_address:
+        raise RuntimeError('overlay 152 exceeds its owned range')
 
     actual_header = struct.unpack_from('<IHH', overlay)
     expected_header = (0x3153464F, 5, expected_entry_size)
@@ -424,9 +467,27 @@ def VerifyOverworldFollowerSelectorOverlay(
         )
     if any((pointer & 1) == 0 for pointer in actual_callbacks):
         raise RuntimeError('overlay 152 exported a non-Thumb callback')
-    if any(not expected_entry_address <= (pointer & ~1) < overlay_end
+    if any(not expected_entry_address <= (pointer & ~1) < callback_end
             for pointer in actual_callbacks):
         raise RuntimeError('overlay 152 exported a callback outside its range')
+
+    condition_header = struct.unpack_from(
+        '<IHH4I',
+        overlay,
+        condition_entry_address - expected_entry_address,
+    )
+    expected_condition_callbacks = tuple(
+        symbols[name][0] | 1
+        for name in condition_callback_names
+    )
+    if condition_header != (
+            0x4342574F,
+            8,
+            condition_entry_size,
+            *expected_condition_callbacks,
+            0,
+    ):
+        raise RuntimeError('overlay 152 condition service ABI does not match')
 
     digest = hashlib.sha256(overlay).hexdigest()
     print(
@@ -528,7 +589,7 @@ def VerifyOverworldWildRuntimeOverlay(
         callback_in_owner = (
             0x023BE240 <= callback_code_address < 0x023BE3D8
             if is_role_controller
-            else callback_code_address == 0x023BA130
+            else callback_code_address == 0x023BA138
             if is_step_particle
             else expected_entry_address <= callback_code_address < overlay_end
         )
@@ -549,7 +610,7 @@ def VerifyOverworldWildRuntimeOverlay(
         raise RuntimeError('overlay 156 is shorter than its exported ABI entries')
 
     actual_header = struct.unpack_from('<IHH', overlay)
-    expected_header = (0x3152574F, 16, expected_entry_size)
+    expected_header = (0x3152574F, 17, expected_entry_size)
     if actual_header != expected_header:
         raise RuntimeError(
             'overlay 156 exported ABI magic/version/size does not match'
@@ -576,7 +637,7 @@ def VerifyOverworldWildRuntimeOverlay(
         callback_in_owner = (
             0x023BE240 <= callback_code_address < 0x023BE3D8
             if name == 'OverworldRoleController_Reduce'
-            else callback_code_address == 0x023BA130
+            else callback_code_address == 0x023BA138
             if name == 'OverworldWildRuntime_PlayStepDirtParticle'
             else expected_entry_address <= callback_code_address < overlay_end
         )

@@ -424,7 +424,7 @@ def load_debug_descriptor(path: Path) -> dict[str, Any]:
     )
     if trace_capacity > 256 or trace_capacity & (trace_capacity - 1) != 0:
         raise ValidationFailure(f"{path}: public trace capacity is invalid")
-    if descriptor["facade"].get("version") != 1:
+    if descriptor["facade"].get("version") != 2:
         raise ValidationFailure(f"{path}: unsupported public actor facade")
     return descriptor
 
@@ -447,10 +447,10 @@ def resolve_movement_policy_state(
             "debug descriptor must expose one movementPolicy service"
         )
     service = matches[0]
-    if service.get("status") != "available" or service.get("version") != 4:
-        raise ValidationFailure("movementPolicy service is not available at version 4")
+    if service.get("status") != "available" or service.get("version") != 5:
+        raise ValidationFailure("movementPolicy service is not available at version 5")
     raise ValidationFailure(
-        "movementPolicy version 4 keeps actor policy state private"
+        "movementPolicy version 5 keeps actor policy state private"
     )
 
 
@@ -574,7 +574,10 @@ def decode_actor_state(data: bytes, descriptor: dict[str, Any]) -> dict[str, Any
     version, size = values[:2]
     flags = values[28:44]
     inactive_zero = version == 0 and size == 0 and flags[12] == 0
-    if not inactive_zero and (version != 1 or size != actor_state.size):
+    if not inactive_zero and (
+        version != descriptor["facade"]["version"]
+        or size != actor_state.size
+    ):
         raise ValidationFailure(
             f"actor snapshot header differs: version={version} size={size}"
         )

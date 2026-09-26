@@ -5,8 +5,8 @@ import struct
 
 from tools.overworld.devtools_field_cleanup import symbol
 
-STATE_SIZE = 964
-OFFSETS = (734, 744, 784)
+STATE_SIZE = 944
+OFFSETS = (714, 724, 764)
 CODE = (
     ("OverworldWildSpawns_StartMovementCrashShake", 72,
      "f4b00962374934bfeb10cbe154cbab4a0cde6e69820235bce26fc5b6f8ccea15"),

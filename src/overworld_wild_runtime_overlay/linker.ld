@@ -17,7 +17,7 @@ OverworldWalk_SkidTiles = 0x023BF4D6 | 1;
 OverworldWalk_SkidTime = 0x023BF4F0 | 1;
 OverworldWalk_StompApplies = 0x023BF504 | 1;
 OverworldWalk_IsFortyFiveDegreeTurn = 0x023BF5E2 | 1;
-OverworldWildRuntime_PlayStepDirtParticle = 0x023BA130 | 1;
+OverworldWildRuntime_PlayStepDirtParticle = 0x023BA138 | 1;
 
 SECTIONS {
         /* This resident overlay has no compiler-helper relocations. Keep the
@@ -50,6 +50,7 @@ SECTIONS {
                 . = ORIGIN(rom) + 0xB50;
                 KEEP(*(.overworld_wild_runtime_acknowledge))
                 KEEP(*(.overworld_wild_runtime_landing_particle))
+                KEEP(*(.overworld_wild_runtime_acknowledge_tail))
                 ASSERT(. <= ORIGIN(rom) + 0xBC4,
                     "explicit Actor Motion boundary exceeds receipt reserve");
                 . = ORIGIN(rom) + 0xBC4;

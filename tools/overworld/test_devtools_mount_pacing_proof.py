@@ -11,7 +11,7 @@ from tools.overworld.test_devtools_mount_pacing_measurement import pacing_fixtur
 
 def replay(fault=None):
     baseline,subject,receipt,rows=pacing_fixture()
-    meter=MountedPacingMeasurement(100)
+    meter=MountedPacingMeasurement(200)
     meter.arm(subject,baseline,receipt)
     negative=MountedPacingNegative(fault) if fault else None
     for snapshot,events in rows:
@@ -78,7 +78,7 @@ class MountedPacingProofTests(unittest.TestCase):
         # Exercise the controller's direct retained-vector check separately
         # from the meter's unchanged-stream rejection.
         motions = value["measurements"][KIND]["windows"][0]["motions"]
-        motions[3]["duration"] = 8
+        motions[3]["duration"] = 16
         with self.assertRaisesRegex(ValueError,"mounted Cyndaquil acceleration duration differs"):
             measurements(value,self.record())
 

@@ -10,6 +10,7 @@ from tools.overworld.devtools_actor_inspect_probe import ActorInspectProbe, Acto
 class Session:
     def __init__(self):
         self.rt = SimpleNamespace(EXECUTED_FRAME_COUNT=100, ACTOR_DESCRIPTOR={
+            "facade": dict(version=2),
             "state": dict(address=0x02010000, size=2448, actorStride=172,
                           offsets=dict(actors=68, fieldEpoch=12, mapGeneration=46)),
             "capacities": dict(actors=10),
@@ -31,10 +32,10 @@ class Session:
                               object_manager=0x02060000, object_id=231, object_map_id=33,
                               current_map_id=33, script_id=2074, encounter_generation=4))
         raw = bytearray(88)
-        struct.pack_into("<HH6HI", raw, 0, 1, 88, 7, 65535, 2, 3, 4, 0, 99)
+        struct.pack_into("<HH6HI", raw, 0, 2, 88, 7, 65535, 2, 3, 4, 0, 99)
         raw[84] = 1
         self.put(0x02010000, bytes(2448))
-        self.put(0x02010000, struct.pack("<IHH", 0x5353574F, 1, 2448))
+        self.put(0x02010000, struct.pack("<IHH", 0x5353574F, 2, 2448))
         self.put(0x0201000c, struct.pack("<H", 2))
         self.put(0x0201002e, struct.pack("<H", 3))
         self.actor_address = 0x02010000 + 68 + 7 * 172

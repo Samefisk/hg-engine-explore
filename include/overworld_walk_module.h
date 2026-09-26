@@ -6,10 +6,21 @@
 struct FIELD_PLAYER_AVATAR;
 struct LocalMapObject;
 struct OverworldActorPolicyState;
-struct OverworldActorWalkPolicyCall;
 struct OverworldMountRuntimeState;
+void OverworldWalk_EaseMountedWalk(
+    struct OverworldMountRuntimeState *mount,
+    struct LocalMapObject *player);
+void OverworldWalk_RefreshMountedGraphics(
+    struct LocalMapObject *player,
+    struct LocalMapObject *mount);
+void OverworldMountGait_Apply(
+    struct OverworldMountRuntimeState *mount,
+    struct LocalMapObject *player,
+    struct LocalMapObject *follower);
+struct OverworldActorWalkPolicyCall;
 
 #define OVERWORLD_WALK_DECELERATE_TIME_ADDR 0x023BF400
+#define OVERWORLD_BEHAVIOR_CONDITION_TRACE_RECORD_ADDR 0x023BF408
 #define OVERWORLD_WALK_PROPOSE_STEP_ADDR 0x023BF45C
 #define OVERWORLD_WALK_CLAMP_TIME_ADDR 0x023BF488
 #define OVERWORLD_WALK_ACCELERATE_TIME_ADDR 0x023BF49E

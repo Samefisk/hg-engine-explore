@@ -38,9 +38,9 @@ class NativeSpawnHeightReadControl:
         need(not session.closed and emu is not None and not session.native_bridge_active,
              "spawn height control needs a live normal native callback")
         source, world, slot = clean["sourceIdentity"], clean["worldContext"], clean["slot"]
-        need(type(slot) is int and 0 <= slot < 7 and source["species"] == 165
+        need(type(slot) is int and 0 <= slot < 7 and source["species"] == 179
              and source["active"] and source["encounter_generation"] > 0,
-             "spawn height control needs an active Wild Ledyba encounter")
+             "spawn height control needs an active Wild Mareep encounter")
         pointer = source["object"]
         need(type(pointer) is int and pointer % 4 == 0
              and 0x02000000 <= pointer <= 0x02400000 - 0x12C, "invalid native object span")
@@ -63,7 +63,8 @@ class NativeSpawnHeightReadControl:
              and lookup["eligible_count"] == 1 and lookup["pointer_matches"] is True,
              "native Wild ownership is unavailable")
         parent = record["_spawn"]
-        need(parent["startup"]["locomotion"] == 4
+        need(record.get("initialPlacement") is True
+             and parent["startup"]["locomotion"] == 7
              and parent["startup"]["target"] == parent["position"] == clean["target"]
              and parent["slot"] == slot and parent["worldContext"] == world
              and parent["preparedPointer"] == clean["preparedPointer"]
@@ -76,7 +77,7 @@ class NativeSpawnHeightReadControl:
 
     def capture(self, session, record, read_fn):
         clean = read_fn()
-        if self.state != "armed" or clean.get("sourceIdentity", {}).get("species") != 165:
+        if self.state != "armed" or clean.get("sourceIdentity", {}).get("species") != 179:
             return clean
         self.state = "capturing"
         try:

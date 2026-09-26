@@ -35,7 +35,7 @@ def authenticate_mount(session):
             "mounted Begin differs from linked/package code")
     entry = session.packaged_code(ENTRY_ADDRESS, 32)
     require(len(entry) == 32 and struct.unpack_from("<IHHI", entry) ==
-            (0x544E554D, 9, 32, address | 1), "mounted entry ABI/callback differs")
+            (0x544E554D, 11, 32, address | 1), "mounted entry ABI/callback differs")
     # Begin copies the Owner and binding into this exact fixed allocation.
     require(struct.pack("<I", state) in code, "mounted Begin lacks linked state anchor")
     return dict(stateAddress=state, stateBytes=STATE_BYTES, entryHex=entry.hex(),
@@ -100,7 +100,7 @@ class MountWalkFixture:
                 "fixture mounted binding differs from live subject")
         generation, phase, cancel, motion, reserved = struct.unpack_from("<IBBBB", raw, 96)
         pending = {i: raw[i] for i in (120, 123, 128, 148, 149, 150, 151, 180, 182, 183) if raw[i]}
-        require(generation > 0 and (phase, cancel, motion, reserved) == (2, 0, 0, 0)
+        require(generation > 0 and (phase, cancel, motion, reserved) == (3, 0, 0, 0)
                 and raw[122] == 1 and not pending,
                 "fixture mounted motion/input/stream state is not idle: "
                 + str(dict(generation=generation, phase=phase, cancel=cancel, motion=motion,

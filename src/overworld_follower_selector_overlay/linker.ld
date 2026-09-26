@@ -2,8 +2,8 @@
 OUTPUT_ARCH(arm)
 MEMORY {
 
-        rom     : ORIGIN = 0x023C0400, LENGTH = 0x1EA0
-        ewram   : ORIGIN = 0x023C0400, LENGTH = 0x1EA0
+        rom     : ORIGIN = 0x023C0400, LENGTH = 0x2C00
+        ewram   : ORIGIN = 0x023C0400, LENGTH = 0x2C00
 }
 
 SECTIONS {
@@ -30,8 +30,8 @@ SECTIONS {
                 *(.bss)
                 . = ALIGN(4);
                 __bss_end__ = . ;
-                ASSERT(__bss_end__ <= ORIGIN(rom) + LENGTH(rom),
-                    "overworld follower selector overlay exceeds RAM region");
+                ASSERT(__bss_end__ <= ORIGIN(rom) + 0x1E00,
+                    "overworld follower selector core overlaps spatial tail");
         _end = __bss_end__ ;
         __end__ = __bss_end__ ;
         } >rom = 0xff
@@ -55,8 +55,27 @@ SECTIONS {
                 ASSERT(OverworldSpawnSpatial_IsObjectOnPlayerTile
                         == ORIGIN(rom) + 0x1E64,
                     "spawn spatial object-tile helper moved");
+                *(.text.OverworldVision_IsValidSpec)
                 ASSERT(. <= ORIGIN(rom) + 0x1EA0,
                     "spawn spatial selector tail exceeds resident slot");
                 . = ORIGIN(rom) + 0x1EA0;
+        } >rom = 0xff
+
+        .overworld_behavior_conditions ORIGIN(rom) + 0x1EA0 : {
+                KEEP(*(.overworld_behavior_condition_service_entry))
+                ASSERT(gOverworldBehaviorConditionServiceEntry
+                        == ORIGIN(rom) + 0x1EA0,
+                    "condition service entry moved");
+                ASSERT(. == ORIGIN(rom) + 0x1EB8,
+                    "condition service entry size changed");
+                KEEP(*(.overworld_behavior_condition_service_gate))
+                ASSERT(OverworldBehaviorConditionService_Get
+                        == ORIGIN(rom) + 0x1EB8,
+                    "condition service gate moved");
+                *(.text.OverworldBehaviorCondition_*)
+                *(.text.OverworldVision_*)
+                ASSERT(. <= ORIGIN(rom) + LENGTH(rom) - 0x10,
+                    "condition service leaves less than 16 bytes headroom");
+                . = ORIGIN(rom) + LENGTH(rom);
         } >rom = 0xff
 }

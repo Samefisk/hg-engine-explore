@@ -18,20 +18,35 @@ OWBD_CLASS_RULE_SIZE = 16
 OWBD_SPECIES_RULE_SIZE = 4
 OWBD_OVERRIDE_PROFILE_SIZE = 212
 OWBD_OVERRIDE_MEMBER_SIZE = 2
-OWBD_CONDITIONAL_STATE_SIZE = 8
-OWBD_CONDITIONAL_TERRAIN_MASK_ALLOWED = 0x03FF
-OWBD_CONDITIONAL_MOVEMENT_SPEED_MAX = 32
-OWBD_CONDITIONAL_PROFILE_NONE = 0xFF
+OWBD_CONDITION_ENTRY_SIZE = 48
+OWBD_CONDITION_TERRAIN_MASK_ALLOWED = 0x03FF
+OWBD_CONDITION_MOVEMENT_SPEED_MAX = 32
+OWBD_CONDITION_MAX_ENTRIES = 32
+OWBD_PROFILE_KIND_NORMAL = 0
+OWBD_PROFILE_KIND_CONDITIONAL = 1
+OWBD_CONDITION_SUBJECT_APPLICATION_NONE = 0xFF
+OWBD_CONDITION_TERRAIN_SPEED = 2
+OWBD_CONDITION_TARGET_CANNOT_SEE_SUBJECT = 3
+OWBD_CONDITION_WHILE_TRUE = 0
+OWBD_CONDITION_TIMED = 1
+OWBD_CONDITION_TARGET_NONE = 0
+OWBD_CONDITION_TARGET_PLAYER = 1
+OWBD_CONDITION_TARGET_ACTOR = 2
+OWBD_CONDITION_TARGET_ROLE_MASK = 0x03
+OWBD_CONDITION_RANGE_VISION_CURRENT = 5
+OWBD_CONDITION_RANGE_VISION_CUSTOM = 6
+OWBD_VISION_OPTIONS_FORWARD_90 = 1
+OWBD_VISION_OPTIONS_ADJACENT_AWARENESS = 4
 OWBD_CHILL_ACTION_OFFSET = 12
 OWBD_CHILL_ACTION_FIELD_BIT = 1 << 12
 OWBD_LOCOMOTION_MAX = 11
 OWBD_SURFACE_MODEL_SIZE = 6
 OWBD_SURFACE_INSTANCE_SIZE = 8
 OWBD_SURFACE_TEMPLATE_SIZE = 2
-OWBD_MASK_ALLOWED = 0x07FFFFFF
+OWBD_MASK_ALLOWED = 0x3FFFFFFF
 OWBD_MASK2_ALLOWED = 0x7FFF
 OWBD_MASK3_ALLOWED = 0x3FFFFFFF
-OWBD_RELATIVE_MASK_ALLOWED = 0x05F101F8
+OWBD_RELATIVE_MASK_ALLOWED = 0x05F001F8
 OWBD_RELATIVE_MASK2_ALLOWED = 0x1F8F
 OWBD_RELATIVE_MASK3_ALLOWED = 0x0D40F8F3
 OWBD_BOUNDED_MASK_ALLOWED = 0x01C00180
@@ -94,6 +109,8 @@ OWBD_WALK_PAUSE_VARIANCE_MASK = 0xFE
 OWBD_CHAIN_PAUSE_ACTION_OFFSET = 31
 OWBD_CHAIN_PAUSE_ACTION_FIELD_BIT = 1 << 4
 OWBD_CHAIN_PAUSE_ACTION_MAX = 7
+OWBD_CHAIN_PAUSE_RANDOM_CHOICE = 1 << 7
+OWBD_CHAIN_PAUSE_CHOICE_MASK = 0x7F
 OWBD_CHAIN_REPOSITION_ALLOW_DIAGONAL_OFFSET = 64
 OWBD_CHAIN_REPOSITION_ALLOW_DIAGONAL_FIELD_BIT = 1 << 18
 OWBD_WALK_OPTIONS_OFFSET = 65
@@ -179,6 +196,13 @@ INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]+)"', re.MULTILINE)
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise ValueError(message)
+
+
+def valid_chain_pause_action(value: int) -> bool:
+    return value <= OWBD_CHAIN_PAUSE_ACTION_MAX or (
+        value & OWBD_CHAIN_PAUSE_RANDOM_CHOICE != 0
+        and value & OWBD_CHAIN_PAUSE_CHOICE_MASK != 0
+    )
 
 
 def read_define(source: Path, symbol: str) -> int:
@@ -323,7 +347,7 @@ def validate_owbd(path: Path, source: Path) -> None:
     expected_species_rule_count = read_define(source, "OWBD_SPECIES_CLASS_RULE_COUNT")
     expected_override_profile_count = read_define(source, "OWBD_OVERRIDE_PROFILE_COUNT")
     expected_override_member_count = read_define(source, "OWBD_OVERRIDE_MEMBER_COUNT")
-    expected_conditional_state_count = read_define(source, "OWBD_CONDITIONAL_STATE_COUNT")
+    expected_condition_entry_count = read_define(source, "OWBD_CONDITION_ENTRY_COUNT")
     expected_surface_model_count = read_define(source, "OWBD_SURFACE_MODEL_COUNT")
     expected_surface_instance_count = read_define(source, "OWBD_SURFACE_INSTANCE_COUNT")
     expected_surface_template_count = read_define(source, "OWBD_SURFACE_TEMPLATE_COUNT")
@@ -353,9 +377,9 @@ def validate_owbd(path: Path, source: Path) -> None:
         override_members_offset,
         override_member_count,
         override_member_size,
-        conditional_states_offset,
-        conditional_state_count,
-        conditional_state_size,
+        condition_entries_offset,
+        condition_entry_count,
+        condition_entry_size,
         surface_models_offset,
         surface_model_count,
         surface_model_size,
@@ -376,7 +400,8 @@ def validate_owbd(path: Path, source: Path) -> None:
     require(species_rule_count == expected_species_rule_count, f"{path}: bad species class rule count")
     require(override_profile_count == expected_override_profile_count, f"{path}: bad override profile count")
     require(override_member_count == expected_override_member_count, f"{path}: bad override member count")
-    require(conditional_state_count == expected_conditional_state_count, f"{path}: bad conditional state count")
+    require(condition_entry_count == expected_condition_entry_count, f"{path}: bad condition entry count")
+    require(condition_entry_count <= OWBD_CONDITION_MAX_ENTRIES, f"{path}: too many condition entries")
     require(surface_model_count == expected_surface_model_count, f"{path}: bad surface model count")
     require(surface_instance_count == expected_surface_instance_count, f"{path}: bad surface instance count")
     require(surface_template_count == expected_surface_template_count, f"{path}: bad surface template count")
@@ -386,7 +411,7 @@ def validate_owbd(path: Path, source: Path) -> None:
     require(species_rule_size == OWBD_SPECIES_RULE_SIZE, f"{path}: bad species class rule element size")
     require(override_profile_size == OWBD_OVERRIDE_PROFILE_SIZE, f"{path}: bad override profile element size")
     require(override_member_size == OWBD_OVERRIDE_MEMBER_SIZE, f"{path}: bad override member element size")
-    require(conditional_state_size == OWBD_CONDITIONAL_STATE_SIZE, f"{path}: bad conditional state element size")
+    require(condition_entry_size == OWBD_CONDITION_ENTRY_SIZE, f"{path}: bad condition entry element size")
     require(surface_model_size == OWBD_SURFACE_MODEL_SIZE, f"{path}: bad surface model element size")
     require(surface_instance_size == OWBD_SURFACE_INSTANCE_SIZE, f"{path}: bad surface instance element size")
     require(surface_template_size == OWBD_SURFACE_TEMPLATE_SIZE, f"{path}: bad surface template element size")
@@ -503,8 +528,9 @@ def validate_owbd(path: Path, source: Path) -> None:
             f"{path}: class profile {index} Walk pause variance must be between 0 and 32 frames",
         )
         require(
-            blob[profile_offset + OWBD_CHAIN_PAUSE_ACTION_OFFSET]
-                <= OWBD_CHAIN_PAUSE_ACTION_MAX,
+            valid_chain_pause_action(
+                blob[profile_offset + OWBD_CHAIN_PAUSE_ACTION_OFFSET]
+            ),
             f"{path}: class profile {index} chain pause action is invalid",
         )
         require(
@@ -519,8 +545,36 @@ def validate_owbd(path: Path, source: Path) -> None:
             & ~OWBD_ALLOWED_TERRAIN_ALL == 0,
             f"{path}: class profile {index} has undefined spawn-destination-policy bits",
         )
+    profile_condition_slices = []
     for index in range(override_profile_count):
         profile_offset = override_profiles_offset + index * override_profile_size
+        profile_kind, condition_start, condition_count = struct.unpack_from(
+            "<BBB",
+            blob,
+            profile_offset + 17,
+        )
+        require(
+            profile_kind in (OWBD_PROFILE_KIND_NORMAL, OWBD_PROFILE_KIND_CONDITIONAL),
+            f"{path}: override profile {index} has an invalid profile kind",
+        )
+        require(
+            condition_start <= condition_entry_count
+            and condition_count <= condition_entry_count - condition_start,
+            f"{path}: override profile {index} condition slice is out of range",
+        )
+        if profile_kind == OWBD_PROFILE_KIND_NORMAL:
+            require(
+                condition_count == 0,
+                f"{path}: normal override profile {index} owns conditions",
+            )
+        else:
+            require(
+                condition_count != 0,
+                f"{path}: conditional override profile {index} has no conditions",
+            )
+        profile_condition_slices.append(
+            (profile_kind, condition_start, condition_count)
+        )
         mask, mask2, mask3 = struct.unpack_from("<I H 2x I", blob, profile_offset + 20)
         relative_mask, relative_mask2, relative_mask3 = struct.unpack_from("<I H 2x I", blob, profile_offset + 104)
         at_least_mask, at_least_mask2, at_least_mask3 = struct.unpack_from("<I H 2x I", blob, profile_offset + 116)
@@ -574,11 +628,11 @@ def validate_owbd(path: Path, source: Path) -> None:
         require((mask2 & ~OWBD_MASK2_ALLOWED) == 0, f"{path}: override profile {index} mask2 has undefined bits")
         if mask2 & OWBD_CHAIN_PAUSE_ACTION_FIELD_BIT:
             require(
-                blob[
+                valid_chain_pause_action(blob[
                     profile_offset
                     + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
                     + OWBD_CHAIN_PAUSE_ACTION_OFFSET
-                ] <= OWBD_CHAIN_PAUSE_ACTION_MAX,
+                ]),
                 f"{path}: override profile {index} chain pause action is invalid",
             )
         require(
@@ -789,24 +843,106 @@ def validate_owbd(path: Path, source: Path) -> None:
         ), 1):
             require((at_least_word & at_most_word) == 0, f"{path}: override profile {index} has overlapping at-least/at-most mask{word}")
     override_members_end = range_end(path, "overrideMembers", override_members_offset, override_member_count, override_member_size, blob_size, 2, override_profiles_end)
-    conditional_states_end = range_end(path, "conditionalStates", conditional_states_offset, conditional_state_count, conditional_state_size, blob_size, 2, override_members_end)
-    for index in range(conditional_state_count):
-        parent_profile, override_profile, terrain_mask, terrain_override_mask, min_speed, max_speed = struct.unpack_from(
-            "<BBHHBB",
-            blob,
-            conditional_states_offset + index * conditional_state_size,
-        )
-        require(parent_profile < override_profile_count, f"{path}: conditional state {index} has an invalid parent profile")
-        require(override_profile == OWBD_CONDITIONAL_PROFILE_NONE or override_profile < override_profile_count, f"{path}: conditional state {index} has an invalid override profile")
-        require((terrain_mask & ~OWBD_CONDITIONAL_TERRAIN_MASK_ALLOWED) == 0, f"{path}: conditional state {index} enables an unknown terrain")
-        require((terrain_override_mask & ~OWBD_CONDITIONAL_TERRAIN_MASK_ALLOWED) == 0, f"{path}: conditional state {index} explicitly sets an unknown terrain")
-        require((terrain_mask & ~terrain_override_mask) == 0, f"{path}: conditional state {index} enables a terrain that is not explicit")
-        require(min_speed <= OWBD_CONDITIONAL_MOVEMENT_SPEED_MAX, f"{path}: conditional state {index} has an invalid no-faster-than Walk time")
-        require(max_speed <= OWBD_CONDITIONAL_MOVEMENT_SPEED_MAX, f"{path}: conditional state {index} has an invalid no-slower-than Walk time")
-        require((min_speed == 0) == (max_speed == 0), f"{path}: conditional state {index} has an incomplete Walk-time range")
-        require(min_speed <= max_speed, f"{path}: conditional state {index} Walk-time range is reversed")
-        require(terrain_override_mask != 0 or min_speed != 0 or max_speed != 0, f"{path}: conditional state {index} has no condition")
-    surface_models_end = range_end(path, "surfaceModels", surface_models_offset, surface_model_count, surface_model_size, blob_size, 2, conditional_states_end)
+    condition_entries_end = range_end(path, "conditionEntries", condition_entries_offset, condition_entry_count, condition_entry_size, blob_size, 4, override_members_end)
+    condition_ids = set()
+    covered_entries = set()
+    for profile_index, (profile_kind, condition_start, condition_count) in enumerate(profile_condition_slices):
+        if profile_kind != OWBD_PROFILE_KIND_CONDITIONAL:
+            continue
+        for entry_index in range(condition_start, condition_start + condition_count):
+            require(
+                entry_index not in covered_entries,
+                f"{path}: condition entry {entry_index} is owned by two profiles",
+            )
+            covered_entries.add(entry_index)
+            application_index = blob[
+                condition_entries_offset
+                + entry_index * condition_entry_size
+                + 34
+            ]
+            require(
+                application_index == profile_index,
+                f"{path}: condition entry {entry_index} names the wrong application",
+            )
+    require(
+        len(covered_entries) == condition_entry_count,
+        f"{path}: a condition entry has no conditional-profile owner",
+    )
+    for index in range(condition_entry_count):
+        offset = condition_entries_offset + index * condition_entry_size
+        (
+            terrain_mask,
+            terrain_override_mask,
+            duration_frames,
+            cooldown_frames,
+            subject_member_start,
+            subject_member_count,
+            target_member_start,
+            target_member_count,
+            condition_id,
+        ) = struct.unpack_from("<9H", blob, offset + 16)
+        (
+            application_index,
+            subject_mode,
+            subject_application_index,
+            kind,
+            activation_mode,
+            target_kind,
+            target_role_mask,
+            target_selection,
+            range_kind,
+            range_length,
+            chance_percent,
+            min_speed,
+            max_speed,
+        ) = struct.unpack_from("<13B", blob, offset + 34)
+        require(condition_id != 0xFFFF and condition_id not in condition_ids, f"{path}: condition entry {index} has an invalid or duplicate id")
+        condition_ids.add(condition_id)
+        require(application_index < override_profile_count, f"{path}: condition entry {index} has an invalid application")
+        require(subject_mode in (1, 2), f"{path}: condition entry {index} has an invalid subject mode")
+        require(subject_application_index == OWBD_CONDITION_SUBJECT_APPLICATION_NONE or subject_application_index < override_profile_count, f"{path}: condition entry {index} has an invalid subject application")
+        require(subject_member_start <= override_member_count and subject_member_count <= override_member_count - subject_member_start, f"{path}: condition entry {index} subject members are out of range")
+        require(target_member_start <= override_member_count and target_member_count <= override_member_count - target_member_start, f"{path}: condition entry {index} target members are out of range")
+        require(kind <= OWBD_CONDITION_TARGET_CANNOT_SEE_SUBJECT, f"{path}: condition entry {index} has an invalid condition kind")
+        require(activation_mode in (OWBD_CONDITION_WHILE_TRUE, OWBD_CONDITION_TIMED), f"{path}: condition entry {index} has an invalid activation mode")
+        if activation_mode == OWBD_CONDITION_WHILE_TRUE:
+            require(duration_frames == 0 and cooldown_frames == 0, f"{path}: while-true condition entry {index} has timers")
+        else:
+            require(duration_frames != 0, f"{path}: timed condition entry {index} has no duration")
+        require(target_kind <= OWBD_CONDITION_TARGET_ACTOR, f"{path}: condition entry {index} has an invalid target kind")
+        require((target_role_mask & ~OWBD_CONDITION_TARGET_ROLE_MASK) == 0, f"{path}: condition entry {index} has invalid target roles")
+        require(chance_percent <= 100, f"{path}: condition entry {index} has an invalid chance")
+        if kind == OWBD_CONDITION_TERRAIN_SPEED:
+            require(target_kind == OWBD_CONDITION_TARGET_NONE, f"{path}: terrain condition entry {index} has a target")
+            require((terrain_mask & ~OWBD_CONDITION_TERRAIN_MASK_ALLOWED) == 0, f"{path}: condition entry {index} enables an unknown terrain")
+            require((terrain_override_mask & ~OWBD_CONDITION_TERRAIN_MASK_ALLOWED) == 0, f"{path}: condition entry {index} explicitly sets an unknown terrain")
+            require((terrain_mask & ~terrain_override_mask) == 0, f"{path}: condition entry {index} enables a terrain that is not explicit")
+            require(min_speed <= OWBD_CONDITION_MOVEMENT_SPEED_MAX and max_speed <= OWBD_CONDITION_MOVEMENT_SPEED_MAX, f"{path}: condition entry {index} has an invalid Walk-time bound")
+            require(min_speed == 0 or max_speed == 0 or min_speed <= max_speed, f"{path}: condition entry {index} Walk-time range is reversed")
+            require(terrain_override_mask != 0 or min_speed != 0 or max_speed != 0, f"{path}: condition entry {index} has no condition")
+        else:
+            require(target_kind in (OWBD_CONDITION_TARGET_PLAYER, OWBD_CONDITION_TARGET_ACTOR), f"{path}: notice condition entry {index} has no target")
+            require(1 <= range_kind <= OWBD_CONDITION_RANGE_VISION_CUSTOM, f"{path}: condition entry {index} has an invalid range")
+            if range_kind == OWBD_CONDITION_RANGE_VISION_CURRENT:
+                require(range_length == 0 and min_speed == 0, f"{path}: current-Vision condition entry {index} has custom values")
+            elif range_kind == OWBD_CONDITION_RANGE_VISION_CUSTOM:
+                require(1 <= range_length <= 32, f"{path}: custom-Vision condition entry {index} has an invalid range")
+                require(
+                    min_speed in (
+                        OWBD_VISION_OPTIONS_FORWARD_90,
+                        OWBD_VISION_OPTIONS_FORWARD_90
+                        | OWBD_VISION_OPTIONS_ADJACENT_AWARENESS,
+                    ),
+                    f"{path}: custom-Vision condition entry {index} has invalid options",
+                )
+            else:
+                require(range_length <= 0xFF and min_speed == 0, f"{path}: condition entry {index} has invalid legacy range values")
+            require(max_speed == 0, f"{path}: notice condition entry {index} has a movement-speed value")
+            if target_kind == OWBD_CONDITION_TARGET_ACTOR:
+                require(target_role_mask != 0 and target_selection == 0, f"{path}: actor target condition entry {index} has an invalid selector")
+            else:
+                require(target_role_mask == 0 and target_member_count == 0, f"{path}: player target condition entry {index} has actor selector data")
+    surface_models_end = range_end(path, "surfaceModels", surface_models_offset, surface_model_count, surface_model_size, blob_size, 2, condition_entries_end)
     surface_instances_end = range_end(path, "surfaceInstances", surface_instances_offset, surface_instance_count, surface_instance_size, blob_size, 2, surface_models_end)
     surface_templates_end = range_end(path, "surfaceTemplates", surface_templates_offset, surface_template_count, surface_template_size, blob_size, 1, surface_instances_end)
     padded_surface_end = (surface_templates_end + 3) & ~3

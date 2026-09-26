@@ -26,7 +26,7 @@ def spawn_setup(species=19, locomotion=0):
     raw = struct.pack("<iiB3xIHBB4hBB",0,0,0,encounter["personality"],species,actor["form"],actor["level"],0,0,0,0,locomotion,0).hex()
     common = dict(slot=actor["handle"]["slot"],terrain=0,statePointer=world["statePointer"],fieldPointer=world["fieldPointer"],
         preparedPointer=0x02060000,worldContext=world,preparedPrefixHex=raw,preparedEncounter=encounter,
-        startup=dict(target=[0,0],origin=[0,0],locomotion=locomotion,hopDirection=0),position=[0,0],returnValue=1)
+        startup=dict(target=[0,0],origin=[0,0],locomotion=locomotion,hopDirection=0,targetBaseY=0),position=[0,0],returnValue=1)
     final = dict(common,observation="spawn-finalized",sequence=1,returnWorldContext=world,pairEligible=True)
     native = dict(common,observation="spawn-prepared",sequence=2,publicSubject=deepcopy(actor),finalization=dict(status="matched",receipt=final))
     receipt = dict(value=dict(slot=actor["handle"]["slot"],species=species,personality=actor["subjectIdentity"]),
@@ -197,6 +197,20 @@ class WildWalkContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"identity or own native destination"):
             _wild_spawn_setup(receipt,snapshot,species=234,locomotion=0)
 
+    def test_current_startup_height_is_required_for_walk_and_appear_hop(self):
+        for locomotion in (0, 7):
+            receipt,snapshot=spawn_setup(species=234,locomotion=locomotion)
+            for value in (None, -4096):
+                changed=deepcopy(receipt)
+                startup=changed["events"][0]["data"]["startup"]
+                if value is None:
+                    startup.pop("targetBaseY")
+                else:
+                    startup["targetBaseY"]=value
+                with self.subTest(locomotion=locomotion,targetBaseY=value),self.assertRaisesRegex(
+                        ValueError,"identity or own native destination"):
+                    _wild_spawn_setup(changed,snapshot,species=234,locomotion=locomotion)
+
     def test_other_species_destination_or_command_identity_rejected(self):
         for fault in ("pid","slot","site","raw","world","finalization","other-actor"):
             receipt,snapshot=spawn_setup(); native=receipt["events"][0]["data"]
@@ -228,6 +242,7 @@ class WildWalkContractTests(unittest.TestCase):
         evaluator=TestEvaluator(value); first=generic_snapshot();evaluator.observe(first,count_frame=False)
         after=deepcopy(first);after["frame"]+=1
         after["actors"][0]["handle"].update(value=131072,generation=2)
+        after["actors"][0]["subjectIdentity"]+=1
         with self.assertRaisesRegex(ValueError,"native attachment"): evaluator.bind("subject",after)
 
     def test_validated_prepared_attachment_retained_without_event_credit(self):

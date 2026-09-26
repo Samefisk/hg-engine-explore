@@ -10,6 +10,7 @@
 typedef int BOOL;
 #define TRUE 1
 #define FALSE 0
+#define OW_WILD_ACTOR_CONTROL_AUTONOMOUS 0
 /* @CONSTANTS@ */
 #define OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot) (1u << (slot))
 typedef struct LocalMapObject { int xCurr, yCurr; } LocalMapObject;
@@ -24,14 +25,18 @@ typedef struct OverworldWildSpawn {
     u8 form, level, terrain, shiny, active, objectId; u16 encounterGeneration;
 } OverworldWildSpawn;
 typedef struct OverworldWildSpawnStartup {
-    int startX, startY, targetX, targetY; u8 locomotion;
+    s16 targetX, targetY, startX, startY;
+    u8 locomotion, hopDirection;
+    s32 targetBaseY;
 } OverworldWildSpawnStartup;
+typedef struct OverworldWildBehaviorProfile { u8 bytes[144]; } OverworldWildBehaviorProfile;
 typedef struct OverworldWildPreparedSpawn {
     OverworldWildSpawnStartup startup;
     struct {
         u32 matchedClassRuleMask;
         u32 appliedOverrideMask;
         u32 fingerprint;
+        OverworldWildBehaviorProfile profile;
     } behaviorResolution;
 } OverworldWildPreparedSpawn;
 typedef struct Runtime {
@@ -39,18 +44,22 @@ typedef struct Runtime {
     u8 movementBehaviorLimitKeys[OW_WILD_MAX_SPAWNS];
     struct {
         s16 lastKnownX[OW_WILD_MAX_SPAWNS], lastKnownY[OW_WILD_MAX_SPAWNS];
-        u16 managerRestoreMask; u8 farSamples[OW_WILD_MAX_SPAWNS];
+        u16 managerRestoreMask;
+        u16 distanceDespawnPendingMask;
+        u8 farSamples[OW_WILD_MAX_SPAWNS];
     } spawnPresentations;
 } Runtime;
 typedef struct OverworldWildSpawnState {
     OverworldWildSpawn spawns[OW_WILD_MAX_SPAWNS];
     u8 movementBehaviorClasses[OW_WILD_MAX_SPAWNS];
+    u8 movementActorControlModes[OW_WILD_MAX_SPAWNS];
     Runtime runtime;
 } OverworldWildSpawnState;
 #define OW_WILD_RUNTIME(state) (&(state)->runtime)
 
-static unsigned checks, cases, bindCalls, unbindCalls, lookups, misses, hits;
-static unsigned runCalls, hopCalls, appearCalls, activeSlot;
+static unsigned checks, cases, bindCalls, unbindCalls, conditionPrepareCalls;
+static unsigned lookups, misses, hits;
+static unsigned runCalls, hopCalls, flyCalls, appearCalls, activeSlot;
 static BOOL actorActive, rejectBind, hopAccepted, cacheValid;
 static u32 fingerprint, matchedMask;
 static OverworldActorHandle acceptedHandle, unboundHandle;
@@ -82,6 +91,17 @@ static void __attribute__((unused)) OverworldWildSpawns_SetObjectTile(LocalMapOb
 { object->xCurr = x; object->yCurr = y; }
 static void OverworldWildSpawns_ApplySpawnPassThroughFlag(OverworldWildSpawnState *state, int slot, LocalMapObject *object)
 { (void)state; (void)slot; (void)object; }
+static BOOL OverworldWildSpawns_PrepareConditionsForSlot(
+    OverworldWildSpawnState *state, int slot, const OverworldActorHandle *handle,
+    const OverworldWildBehaviorProfile *stableProfile)
+{
+    (void)state;
+    CHECK(stableProfile != NULL);
+    conditionPrepareCalls++;
+    CHECK(actorActive && bindCalls == 1 && slot == (int)activeSlot);
+    CHECK(memcmp(handle, &acceptedHandle, sizeof(*handle)) == 0);
+    return TRUE;
+}
 static void OverworldWildSpawns_UpdateMankeyTreeTopPriorityBits(OverworldWildSpawnState *state, FieldSystem *field, int slot, LocalMapObject *object)
 { (void)state; (void)field; (void)object; HarnessProfileLookup(slot); }
 static void __attribute__((unused)) OverworldWildSpawns_SeedPreparedBehaviorProfile(
@@ -128,8 +148,22 @@ static struct { OverworldActorResult (*unbind)(const OverworldActorHandle *, u16
 #define HARNESS_SKIP_UNBIND(handle, reason) ((void)compatEntry.unbind, (void)(handle), (void)(reason), 0)
 static void OverworldWildSpawns_StartSpawnRun(OverworldWildSpawnState *state, FieldSystem *field, int slot, int x, int y)
 { (void)state; (void)field; (void)slot; (void)x; (void)y; runCalls++; }
-static BOOL OverworldWildSpawns_StartSpawnHop(OverworldWildSpawnState *state, FieldSystem *field, int slot, int sx, int sy, int tx, int ty)
-{ (void)state; (void)field; (void)sx; (void)sy; (void)tx; (void)ty; hopCalls++; HarnessProfileLookup(slot); return hopAccepted; }
+static BOOL OverworldWildSpawns_StartSpawnAirborne(
+    OverworldWildSpawnState *state,
+    FieldSystem *field,
+    int slot,
+    const OverworldWildSpawnStartup *startup,
+    const OverworldWildBehaviorProfile *resolvedProfile)
+{
+    (void)state;
+    (void)field;
+    CHECK(resolvedProfile != NULL);
+    hopCalls += startup->locomotion
+        == OW_WILD_BEHAVIOR_LOCOMOTION_HOP_FROM_OFF_SCREEN;
+    flyCalls += startup->locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_FLY_IN;
+    HarnessProfileLookup(slot);
+    return hopAccepted;
+}
 static void OverworldWildSpawns_StartSpawnAppearHop(OverworldWildSpawnState *state, FieldSystem *field, int slot)
 { (void)state; (void)field; (void)slot; appearCalls++; }
 
@@ -144,7 +178,7 @@ static void RunCase(int slot, int mode, BOOL reject, BOOL hopSucceeds, u16 oldGe
     FieldSystem field = {&location};
     OverworldWildRolledEncounter encounter = {393047622, 165, 0, 4};
     OverworldWildPreparedSpawn prepared = {
-        .startup = {548, 373, 548, 389, mode},
+        .startup = {548, 389, 548, 373, mode, 0, 0},
         .behaviorResolution = {
             .matchedClassRuleMask = 192,
             .fingerprint = 3976342989u ^ slot,
@@ -156,8 +190,9 @@ static void RunCase(int slot, int mode, BOOL reject, BOOL hopSucceeds, u16 oldGe
     cacheValid = TRUE;
     fingerprint = 0xABCDEF;
     matchedMask = 0x55;
-    bindCalls = unbindCalls = lookups = misses = hits = 0;
-    runCalls = hopCalls = appearCalls = 0;
+    bindCalls = unbindCalls = conditionPrepareCalls = 0;
+    lookups = misses = hits = 0;
+    runCalls = hopCalls = flyCalls = appearCalls = 0;
     memset(&acceptedHandle, 0, sizeof(acceptedHandle));
     state.spawns[slot].encounterGeneration = oldGeneration;
     OverworldWildSpawns_InitSpawnSlotState(&state, &field, 0, slot, &object,
@@ -168,15 +203,19 @@ static void RunCase(int slot, int mode, BOOL reject, BOOL hopSucceeds, u16 oldGe
     CHECK(state.spawns[slot].encounterGeneration == (oldGeneration == 65535 ? 1 : oldGeneration + 1));
     if (reject) {
         CHECK(!started && actorActive && unbindCalls == 0);
+        CHECK(conditionPrepareCalls == 0);
         CHECK(lookups == 0 && fingerprint == 0xABCDEF && matchedMask == 0x55);
         CHECK(runCalls == 0 && hopCalls == 0 && appearCalls == 0);
         return;
     }
+    CHECK(conditionPrepareCalls == 1);
     CHECK(misses == 0 && fingerprint == (3976342989u ^ activeSlot) && matchedMask == 192);
     CHECK(hopCalls == (mode == OW_WILD_BEHAVIOR_LOCOMOTION_HOP_FROM_OFF_SCREEN));
+    CHECK(flyCalls == (mode == OW_WILD_BEHAVIOR_LOCOMOTION_FLY_IN));
     CHECK(runCalls == (mode == OW_WILD_BEHAVIOR_LOCOMOTION_MOVE_FROM_OFF_SCREEN));
     CHECK(appearCalls == (mode == OW_WILD_BEHAVIOR_LOCOMOTION_APPEAR_HOP));
-    if (!hopSucceeds && mode == OW_WILD_BEHAVIOR_LOCOMOTION_HOP_FROM_OFF_SCREEN) {
+    if (!hopSucceeds && (mode == OW_WILD_BEHAVIOR_LOCOMOTION_HOP_FROM_OFF_SCREEN
+            || mode == OW_WILD_BEHAVIOR_LOCOMOTION_FLY_IN)) {
         CHECK(!started && !actorActive && unbindCalls == 1);
         CHECK(memcmp(&unboundHandle, &acceptedHandle, sizeof(acceptedHandle)) == 0);
         return;
@@ -190,10 +229,11 @@ int main(void)
     const int modes[] = {OW_WILD_BEHAVIOR_LOCOMOTION_NONE,
         OW_WILD_BEHAVIOR_LOCOMOTION_MOVE_FROM_OFF_SCREEN,
         OW_WILD_BEHAVIOR_LOCOMOTION_HOP_FROM_OFF_SCREEN,
-        OW_WILD_BEHAVIOR_LOCOMOTION_APPEAR_HOP};
+        OW_WILD_BEHAVIOR_LOCOMOTION_APPEAR_HOP,
+        OW_WILD_BEHAVIOR_LOCOMOTION_FLY_IN};
     const int slots[] = {0, OW_WILD_FOLLOWER_SLOT};
     for (unsigned slot = 0; slot < 2; slot++) {
-        for (unsigned mode = 0; mode < 4; mode++) {
+        for (unsigned mode = 0; mode < 5; mode++) {
             RunCase(slots[slot], modes[mode], FALSE, TRUE, 0);
             RunCase(slots[slot], modes[mode], FALSE, TRUE, 65535);
             RunCase(slots[slot], modes[mode], TRUE, TRUE, 5);
