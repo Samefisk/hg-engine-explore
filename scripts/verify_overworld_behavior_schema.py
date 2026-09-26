@@ -115,7 +115,7 @@ def main() -> int:
             fail(f"generated C metadata is incomplete for {field['key']}")
 
     validator = validator_metadata(schema)
-    for word, expected in {"1": 0x07FEBFED, "2": 0x00007FFF, "3": 0x3FFFFFFB}.items():
+    for word, expected in {"1": 0x3FFFFFFF, "2": 0x00007FFF, "3": 0x3FFFFFFF}.items():
         if validator["allowedOverrideMasks"][word] != expected:
             fail(f"generated allowed mask {word} is wrong")
 
@@ -169,7 +169,7 @@ def main() -> int:
     if any(fragment not in header_text for fragment in required_turn_skid_macros):
         fail("C header does not publish the packed turn-skid option contract")
 
-    print("behavior schema: 72 storage fields and 67 authoring fields match compact v79 contracts")
+    print(f"behavior schema: {schema['compactSize']} bytes and {len(authoring_fields)} authoring fields match compact v{schema['blobVersion']} contracts")
     return 0
 
 

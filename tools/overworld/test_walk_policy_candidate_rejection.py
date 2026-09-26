@@ -18,13 +18,16 @@ ROOT = Path(__file__).resolve().parents[2]
 RUNTIME = ROOT / "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c"
 WILD = ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
 ACTOR = ROOT / "src/overworld_actor_system_overlay/overworld_actor_system_overlay.c"
+CHAIN = ROOT / "src/overworld_mount_chain_overlay/overworld_mount_chain_overlay.c"
 
 
 def harness_source():
     spec = importlib.util.spec_from_file_location("candidate_bodies", ROOT / "scripts/verify_overworld_role_controller.py")
     extract = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(extract)
-    runtime, wild, actor = RUNTIME.read_text(), WILD.read_text(), ACTOR.read_text()
+    runtime, wild, actor, chain = (
+        RUNTIME.read_text(), WILD.read_text(), ACTOR.read_text(), CHAIN.read_text()
+    )
     walk_module = (
         ROOT / "src/pokemon_move_history_overlay/overworld_walk_module.c"
     ).read_text()
@@ -44,7 +47,7 @@ def harness_source():
 
     declarations = [declaration(movement, "typedef struct " + name + " {") for name in (
         "OverworldWildWalkMomentumState", "OverworldActorPolicyView", "OverworldActorPolicyProfileBinding",
-        "OverworldActorWalkPolicyCall")]
+        "OverworldActorPolicyProfileTransaction", "OverworldActorWalkPolicyCall")]
     declarations += [declaration(movement, "typedef enum " + name + " {") for name in (
         "OverworldActorWalkPolicyOperation", "OverworldActorWalkPolicyDecision",
         "OverworldActorWalkPolicyStartResult")]
@@ -79,7 +82,11 @@ def harness_source():
             if match: definitions[match[1]] = line
     actor_wrapper = "static BOOL ActorSystem_ReduceWalk(OverworldActorWalkPolicyCall *call) {" \
         + extract.function_bodies(actor)["ActorSystem_ReduceWalk"] + "}\n"
-    text = "\n".join(declarations + functions) + SUPPORT + actor_wrapper + adapter + DRIVER
+    displayed_time = "static void OverworldWalk_SelectDisplayedTimeImpl(OverworldActorWalkPolicyCall *call, const OverworldActorStateSnapshot *snapshot, const OverworldActorPolicyState *policy) {" \
+        + extract.function_bodies(chain)["OverworldWalk_SelectDisplayedTimeImpl"] + "}\n"
+    displayed_time += "void OverworldWalk_SelectDisplayedTime(OverworldActorWalkPolicyCall *call, const OverworldActorStateSnapshot *snapshot, const OverworldActorPolicyState *policy) {" \
+        + extract.function_bodies(chain)["OverworldWalk_SelectDisplayedTime"] + "}\n"
+    text = "\n".join(declarations + functions) + SUPPORT + displayed_time + actor_wrapper + adapter + DRIVER
     wanted = set(re.findall(r"\b(?:OW_WILD|OVERWORLD_ACTOR_WALK|OVERWORLD_WALK)_[A-Z_0-9]+\b", text))
     included, macros = set(), []
     while wanted:
@@ -91,7 +98,7 @@ def harness_source():
     # Only field/transport stubs use host-sized structures. Policy structures
     # and role enums/packing are the current source declarations, not replicas.
     return PRELUDE + "\n".join(macros + declarations) + HELPERS + "\n".join(functions) \
-        + SUPPORT + actor_wrapper + adapter + DRIVER
+        + SUPPORT + displayed_time + actor_wrapper + adapter + DRIVER
 
 
 PRELUDE = r"""
@@ -115,6 +122,7 @@ HELPERS = r"""
 #define OverworldWalk_SkidTiles OverworldWalkTimingPolicy_SkidTiles
 #define OverworldWalk_SkidTime OverworldWalkTimingPolicy_SkidTime
 #define OverworldWalk_StompApplies OverworldWalkTimingPolicy_StompApplies
+#define OVERWORLD_WALK_SELECT_DISPLAYED_TIME OverworldWalk_SelectDisplayedTime
 void OverworldWalk_MarkPlannedStopSkid(
     const OverworldActorPolicyState *policy,
     OverworldActorWalkPolicyCall *call);
@@ -134,7 +142,37 @@ _Static_assert(offsetof(OverworldActorWalkPolicyCall, decision)
 static unsigned checks, reductions, executions;
 static u8 lastStepFlags;
 static OverworldWildBehaviorProfileData lane;
-typedef struct OverworldActorStateSnapshot { u32 commitSequence; } OverworldActorStateSnapshot;
+typedef struct OverworldActorStateSnapshot {
+    u16 version, size;
+    struct {
+        u16 slot, generation, fieldEpoch, mapGeneration;
+        u16 encounterGeneration, reserved;
+    } handle;
+    u32 subjectIdentity;
+    u32 behaviorFingerprint, matchedLayerMask, lastCommandSequence;
+    u32 commitSequence;
+} OverworldActorStateSnapshot;
+_Static_assert(offsetof(OverworldActorStateSnapshot, handle.encounterGeneration) == 12
+    && offsetof(OverworldActorStateSnapshot, subjectIdentity) == 16
+    && offsetof(OverworldActorStateSnapshot, commitSequence) == 32,
+    "snapshot hash input offsets match the public ABI");
+static OverworldActorStateSnapshot SnapshotForHigh(u8 high)
+{
+    OverworldActorStateSnapshot snapshot = {0};
+    for (u32 identity = 0; identity < 65536; identity++) {
+        u32 state = identity;
+        state ^= state >> 16;
+        state *= 0x7FEB352Du;
+        state ^= state >> 15;
+        state *= 0x846CA68Bu;
+        state ^= state >> 16;
+        if ((state >> 24) == high) {
+            snapshot.subjectIdentity = identity;
+            return snapshot;
+        }
+    }
+    abort();
+}
 typedef struct OverworldActorRuntimeSlot {
     OverworldActorStateSnapshot snapshot;
     OverworldActorPolicyState policy;
@@ -198,6 +236,8 @@ static void Check(BOOL condition, const char *message)
 static void Seed(void)
 {
     gOverworldActorSystemState.slots[0].snapshot.commitSequence = 0;
+    gOverworldActorSystemState.slots[0].snapshot.subjectIdentity = 0x12345678u;
+    gOverworldActorSystemState.slots[0].snapshot.handle.encounterGeneration = 7;
     memset(&selected, 0xA5, sizeof(selected));
     selected.walkMomentum = (OverworldWildWalkMomentumState){4, 2, 8, 8, 0, 0, 3, 6};
     selected.chainStepsRemaining = 10;
@@ -208,6 +248,7 @@ static void Seed(void)
     selected.stopPending = FALSE;
     selected.pendingStep = OVERWORLD_ACTOR_WALK_PENDING_NONE;
     selected.pendingSkid = FALSE;
+    selected.lastWalkTime = 0;
     memset(&lane, 0, sizeof(lane)); lane.chillSpeed = 8;
 }
 static OverworldActorWalkPolicyCall Input(u8 direction)
@@ -366,6 +407,31 @@ int main(int argc, char **argv)
         Check(selected.walkMomentum.resumeSpeed==4,
             "turn skid did not prepare recovery one acceleration level slower");
 
+        Seed(); lane.walkAccelerationStep=1; lane.tilesBeforeTurnSkid=1;
+        lane.hopAllowNonCardinal=OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY;
+        selected.walkMomentum=(OverworldWildWalkMomentumState){3,0,2,8,0,0,6,0};
+        selected.lastWalkTime=4;
+        call=Input(1);
+        OverworldActorWalkPolicy_ReduceInput(&selected,&call);
+        Check(call.distance==2 && call.travelTime==8 && call.reserved[0]==5
+            && selected.walkMomentum.speed==2,
+            "turn skid ignored the displayed four-frame Walk speed");
+        call.operation=OVERWORLD_ACTOR_WALK_POLICY_START_RESULT;
+        call.startResult=OVERWORLD_ACTOR_WALK_POLICY_START_ACCEPTED;
+        OverworldActorWalkPolicy_ReduceStartResult(&selected,&call);
+        Check(selected.walkMomentum.resumeSpeed==5,
+            "turn skid recovery jumped back to nominal momentum");
+
+        Seed(); lane.walkAccelerationStep=1;
+        lane.hopAllowNonCardinal=OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY;
+        selected.walkMomentum=(OverworldWildWalkMomentumState){3,0,2,8,0,0,6,0};
+        selected.lastWalkTime=7;
+        call=Input(1);
+        OverworldActorWalkPolicy_ReduceInput(&selected,&call);
+        Check(call.distance==0 && call.travelTime==8
+            && (call.stepFlags&OVERWORLD_ACTOR_WALK_STEP_SKID)==0,
+            "ordinary turn ignored the displayed seven-frame Walk speed");
+
         for (u8 speed=5; speed<=7; speed++) {
             Seed(); lane.walkAccelerationStep=0; lane.tilesBeforeTurnSkid=1;
             lane.hopAllowNonCardinal=OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY;
@@ -402,17 +468,21 @@ int main(int argc, char **argv)
         Check((call.stepFlags&OVERWORLD_ACTOR_WALK_STEP_PLANNED_SKID_PATH)!=0
             && call.reserved[OVERWORLD_ACTOR_WALK_POLICY_SKID_PATH_TILES_INDEX]==call.distance,
             "opted-in turn skid did not reserve its exact skid path");
-        OverworldWildWalkMomentumState momentumBefore=selected.walkMomentum;
-        u8 chainBefore=selected.chainStepsRemaining;
         call.operation=OVERWORLD_ACTOR_WALK_POLICY_START_RESULT;
         call.startResult=OVERWORLD_ACTOR_WALK_POLICY_START_BLOCKED;
         OverworldActorWalkPolicy_ReduceStartResult(&selected,&call);
-        Check(call.decision==OVERWORLD_ACTOR_WALK_POLICY_IGNORED
+        Check(call.decision==OVERWORLD_ACTOR_WALK_POLICY_CONSUMED
             && call.effect==OVERWORLD_ACTOR_WORLD_EFFECT_NONE
             && selected.pendingStep==OVERWORLD_ACTOR_WALK_PENDING_NONE
-            && !memcmp(&momentumBefore,&selected.walkMomentum,sizeof(momentumBefore))
-            && selected.chainStepsRemaining==chainBefore,
-            "blocked planned turn skid changed momentum, chain state, or crash output");
+            && selected.walkMomentum.direction==OW_WILD_WALK_DIRECTION_NONE
+            && selected.walkMomentum.speed==lane.chillSpeed,
+            "blocked planned turn skid did not brake safely");
+        call=Input(1);
+        OverworldActorWalkPolicy_ReduceInput(&selected,&call);
+        Check(call.decision==OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP
+            && call.stepDirection==1
+            && (call.stepFlags&OVERWORLD_ACTOR_WALK_STEP_SKID)==0,
+            "blocked skid did not permit the requested turn on retry");
     } else if (!strcmp(argv[1], "surface-validation")) {
         Seed();
         lane.hopAllowNonCardinal=OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY;
@@ -440,26 +510,28 @@ int main(int argc, char **argv)
         OverworldActorWalkPolicyCall call=Input(0);
         ReduceWalk(&call);
         Check(call.decision==OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP
-            && call.travelTime==8 && call.reserved[0]==8
+            && call.travelTime==22 && call.reserved[0]==8
             && selected.variancePhase==0,
             "first varied Walk proposal or nominal speed differs");
         call.startResult=OVERWORLD_ACTOR_WALK_POLICY_START_BLOCKED;
         call.operation=OVERWORLD_ACTOR_WALK_POLICY_START_RESULT;
         ReduceWalk(&call);
-        Check(selected.variancePhase==0 && selected.walkMomentum.speed==8,
+        Check(selected.variancePhase==0 && selected.walkMomentum.speed==8
+            && gOverworldActorSystemState.slots[0].snapshot.commitSequence==0,
             "blocked Walk consumed variance or changed momentum");
         call=Input(0);
         ReduceWalk(&call);
-        Check(call.travelTime==8, "blocked Walk rerolled its candidate");
+        Check(call.travelTime==22, "blocked Walk rerolled its candidate");
         call.startResult=OVERWORLD_ACTOR_WALK_POLICY_START_ACCEPTED;
         call.operation=OVERWORLD_ACTOR_WALK_POLICY_START_RESULT;
         ReduceWalk(&call);
-        Check(selected.variancePhase==0 && selected.walkMomentum.speed==8,
+        Check(selected.variancePhase==0 && selected.walkMomentum.speed==8
+            && gOverworldActorSystemState.slots[0].snapshot.commitSequence==0,
             "accepted varied Walk changed chain variance or nominal momentum");
         gOverworldActorSystemState.slots[0].snapshot.commitSequence++;
         call=Input(0);
         ReduceWalk(&call);
-        Check(call.travelTime==17 && selected.walkMomentum.speed==8,
+        Check(call.travelTime==32 && selected.walkMomentum.speed==8,
             "next varied Walk did not use the next capped duration");
         Seed(); lane.hopAllowNonCardinal=OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY;
         lane.chainRepositionAllowDiagonal=
@@ -481,16 +553,193 @@ int main(int argc, char **argv)
         lane.chainRepositionAllowDiagonal=
             OW_WILD_BEHAVIOR_CHAIN_REPOSITION_DIAGONAL_OPTIONS(0, 5);
         selected.walkMomentum.direction=OW_WILD_WALK_DIRECTION_NONE;
+        const u8 expectedSix[6]={5,7,6,4,8,5};
         for (u8 sequence=0; sequence<6; sequence++) {
             gOverworldActorSystemState.slots[0].snapshot.commitSequence=sequence;
             call=Input(0); ReduceWalk(&call);
             Check(call.decision==OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP
-                && call.travelTime==3+sequence,
-                "3-frame Walk variance did not preserve the full 3..8 range");
+                && call.travelTime==expectedSix[sequence],
+                "Walk keyed sample differs from its committed step");
             call.startResult=OVERWORLD_ACTOR_WALK_POLICY_START_ACCEPTED;
             call.operation=OVERWORLD_ACTOR_WALK_POLICY_START_RESULT;
             ReduceWalk(&call);
         }
+        Seed(); lane.hopAllowNonCardinal=OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY;
+        lane.maxWalkSpeed=1; lane.tilesToAccelerate=1;
+        lane.walkAccelerationStep=1;
+        lane.chainRepositionAllowDiagonal=
+            OW_WILD_BEHAVIOR_CHAIN_REPOSITION_DIAGONAL_OPTIONS(0, 2);
+        selected.walkMomentum.direction=OW_WILD_WALK_DIRECTION_NONE;
+        const u8 expectedExtras[24]={1,2,1,0,2,1,2,2,2,0,0,2,
+                                     0,0,0,2,2,1,0,1,1,0,2,1};
+        for (u8 sequence=0; sequence<24; sequence++) {
+            u8 nominalTime=sequence<8 ? 8-sequence : 1;
+            gOverworldActorSystemState.slots[0].snapshot.commitSequence=sequence;
+            selected.walkMomentum.speed=nominalTime;
+            /* Isolate keyed draws with no completed cap-speed tiles. */
+            selected.walkMomentum.tileCounter=0;
+            call=Input(0); ReduceWalk(&call);
+            Check(call.decision==OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP
+                && call.reserved[0]==nominalTime
+                && call.travelTime==nominalTime+expectedExtras[sequence],
+                "per-tile variance changed nominal momentum or kept the old cycle");
+            call.startResult=OVERWORLD_ACTOR_WALK_POLICY_START_ACCEPTED;
+            call.operation=OVERWORLD_ACTOR_WALK_POLICY_START_RESULT;
+            ReduceWalk(&call);
+            Check(selected.variancePhase==0,
+                "Walk variance changed the Movement Chain random phase");
+            Check(selected.lastWalkTime==call.travelTime,
+                "accepted Walk did not retain its actual travel time");
+        }
+        call=Input(OW_WILD_WALK_DIRECTION_NONE);
+        ReduceWalk(&call);
+        Check((call.stepFlags&OVERWORLD_ACTOR_WALK_STEP_SKID)!=0,
+            "stop did not request the normal skid");
+        call.startResult=OVERWORLD_ACTOR_WALK_POLICY_START_ACCEPTED;
+        call.operation=OVERWORLD_ACTOR_WALK_POLICY_START_RESULT;
+        ReduceWalk(&call);
+        Check(selected.lastWalkTime==0,
+            "skid retained the previous Walk timing run");
+    } else if (!strcmp(argv[1], "variance-fade")) {
+        OverworldActorStateSnapshot high = SnapshotForHigh(255);
+        for (u8 cap=1; cap<=32; cap++) {
+            for (u8 amount=0; amount<=33; amount++) {
+                for (u8 authored=0; authored<=32; authored++) {
+                    Seed();
+                    lane.chillSpeed=32; lane.maxWalkSpeed=cap;
+                    lane.tilesToAccelerate=3; lane.walkAccelerationStep=amount;
+                    lane.hopAllowNonCardinal=OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY;
+                    lane.chainRepositionAllowDiagonal=
+                        OW_WILD_BEHAVIOR_CHAIN_REPOSITION_DIAGONAL_OPTIONS(0, authored);
+                    selected.walkMomentum=(OverworldWildWalkMomentumState){0,0,cap,32,0,0,0,0};
+                    gOverworldActorSystemState.slots[0].snapshot=high;
+                    u8 remaining=authored;
+                    for (u8 step=0; step<34; step++) {
+                        OverworldActorWalkPolicyCall call=Input(0); ReduceWalk(&call);
+                        u8 expected=cap+remaining>32 ? 32 : cap+remaining;
+                        Check(call.travelTime==expected,
+                            "maximum-speed variance did not fade by the acceleration amount");
+                        u8 before=selected.walkMomentum.tileCounter;
+                        call.operation=OVERWORLD_ACTOR_WALK_POLICY_START_RESULT;
+                        call.startResult=OVERWORLD_ACTOR_WALK_POLICY_START_BLOCKED;
+                        ReduceWalk(&call);
+                        Check(selected.walkMomentum.tileCounter==before,
+                            "rejected Walk consumed variance fade");
+                        call=Input(0); ReduceWalk(&call);
+                        Check(call.travelTime==expected, "blocked retry rerolled variance fade");
+                        call.operation=OVERWORLD_ACTOR_WALK_POLICY_START_RESULT;
+                        call.startResult=OVERWORLD_ACTOR_WALK_POLICY_START_ACCEPTED;
+                        ReduceWalk(&call);
+                        call.operation=OVERWORLD_ACTOR_WALK_POLICY_COMMIT;
+                        call.flags=OVERWORLD_ACTOR_WALK_POLICY_FLAG_WALK_ACCEPTED;
+                        call.distance=1; call.direction=0; ReduceWalk(&call);
+                        Check(selected.walkMomentum.speed==cap, "fade changed nominal max speed");
+                        u8 after=selected.walkMomentum.tileCounter;
+                        ReduceWalk(&call);
+                        Check(selected.walkMomentum.tileCounter==after, "duplicate commit faded twice");
+                        if (amount==33) remaining/=2;
+                        else remaining=remaining>amount ? remaining-amount : 0;
+                    }
+                }
+            }
+        }
+        Seed();
+        lane.chillSpeed=6; lane.maxWalkSpeed=4;
+        lane.tilesToAccelerate=3; lane.walkAccelerationStep=2;
+        lane.hopAllowNonCardinal=OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY;
+        lane.chainRepositionAllowDiagonal=
+            OW_WILD_BEHAVIOR_CHAIN_REPOSITION_DIAGONAL_OPTIONS(0, 4);
+        selected.walkMomentum=(OverworldWildWalkMomentumState){0,0,6,6,0,0,0,0};
+        gOverworldActorSystemState.slots[0].snapshot=high;
+        const u8 expectedTimes[]={10,10,10,8,6,4};
+        for (u8 step=0; step<6; step++) {
+            OverworldActorWalkPolicyCall call=Input(0); ReduceWalk(&call);
+            Check(call.travelTime==expectedTimes[step],
+                "fade began before the first max-speed tile or used acceleration cadence");
+            call.operation=OVERWORLD_ACTOR_WALK_POLICY_START_RESULT;
+            call.startResult=OVERWORLD_ACTOR_WALK_POLICY_START_ACCEPTED; ReduceWalk(&call);
+            call.operation=OVERWORLD_ACTOR_WALK_POLICY_COMMIT;
+            call.flags=OVERWORLD_ACTOR_WALK_POLICY_FLAG_WALK_ACCEPTED;
+            call.distance=1; call.direction=0; ReduceWalk(&call);
+        }
+        lane.tilesToAccelerate=0;
+        OverworldActorWalkPolicyCall call=Input(0); ReduceWalk(&call);
+        Check(call.travelTime==8, "disabled acceleration removed authored variance");
+        selected.pendingStep=OVERWORLD_ACTOR_WALK_PENDING_NONE;
+        lane.tilesToAccelerate=3;
+        call=Input(1); call.decision=OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP;
+        call.travelTime=4; call.stepFlags=OVERWORLD_ACTOR_WALK_STEP_RESET_ACCELERATION;
+        OverworldWalk_SelectDisplayedTime(&call, &high, &selected);
+        Check(call.travelTime==8, "accepted-turn proposal kept the faded variance range");
+        OverworldActorWalkPolicy_ResetState(&selected, TRUE, 6, 0);
+        Check(selected.walkMomentum.tileCounter==0, "momentum reset retained variance fade");
+    } else if (!strcmp(argv[1], "speed-matrix")) {
+        Seed();
+        selected.walkMomentum.tileCounter=0;
+        lane.tilesToAccelerate=1;
+        lane.walkAccelerationStep=1;
+        OverworldActorStateSnapshot sample = SnapshotForHigh(0x12);
+        for (u8 variance=0; variance<=32; variance++) {
+            lane.chainRepositionAllowDiagonal=
+                OW_WILD_BEHAVIOR_CHAIN_REPOSITION_DIAGONAL_OPTIONS(0, variance);
+            for (u8 previous=1; previous<=32; previous++) {
+                for (u8 nominal=1; nominal<=previous; nominal++) {
+                    selected.lastWalkTime=previous;
+                    OverworldActorWalkPolicyCall call=Input(0);
+                    call.decision=OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP;
+                    call.travelTime=nominal;
+                    OverworldWalk_SelectDisplayedTime(&call, &sample, &selected);
+                    u32 expected=nominal+(((0x12u)*(variance+1u))>>8);
+                    if (expected>32) expected=32;
+                    Check(call.travelTime==expected,
+                        "Walk variance was clipped by the previous tile");
+                }
+            }
+        }
+        for (u8 variance=0; variance<=32; variance++) {
+            lane.chainRepositionAllowDiagonal=
+                OW_WILD_BEHAVIOR_CHAIN_REPOSITION_DIAGONAL_OPTIONS(0, variance);
+            for (u8 value=0; value<=variance; value++) {
+                u8 high=(u8)((value*256u+variance)/(variance+1u));
+                OverworldActorWalkPolicyCall call=Input(0);
+                call.decision=OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP;
+                /* A zero nominal isolates the selected extra from the
+                 * normal 32-frame final-duration cap. */
+                call.travelTime=0;
+                OverworldActorStateSnapshot valueSample = SnapshotForHigh(high);
+                OverworldWalk_SelectDisplayedTime(&call, &valueSample, &selected);
+                Check(call.travelTime==value,
+                    "Walk random mapping cannot select every authored extra frame");
+            }
+        }
+    } else if (!strcmp(argv[1], "turn-slew")) {
+        Seed();
+        OverworldActorStateSnapshot zeroExtra = SnapshotForHigh(0);
+        lane.chainRepositionAllowDiagonal=
+            OW_WILD_BEHAVIOR_CHAIN_REPOSITION_DIAGONAL_OPTIONS(0, 2);
+        lane.tilesToAccelerate=1;
+        lane.walkAccelerationStep=1;
+        for (u8 prior=1; prior<=20; prior+=7) {
+            selected.lastWalkTime=prior;
+            gOverworldActorSystemState.slots[0].snapshot.commitSequence=1;
+            OverworldActorWalkPolicyCall call=Input(1);
+            call.decision=OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP;
+            call.stepFlags=OVERWORLD_ACTOR_WALK_STEP_RESET_ACCELERATION;
+            call.travelTime=prior+1;
+            OverworldWalk_SelectDisplayedTime(&call, &zeroExtra, &selected);
+            Check(call.travelTime==prior+1,
+                "turn Walk lost its own variance value");
+        }
+    } else if (!strcmp(argv[1], "command-skips-display-time")) {
+        Seed();
+        OverworldActorWalkPolicyCall call=Input(0);
+        call.operation=OVERWORLD_ACTOR_WALK_POLICY_SAMPLE_VARIANCE;
+        call.lane=NULL;
+        call.decision=OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP;
+        call.stepFlags=0;
+        call.travelTime=19;
+        Check(ReduceWalk(&call) && call.travelTime==19,
+            "non-input command entered the Walk timing helper");
     } else if (!strcmp(argv[1], "chain-does-not-stop-skid")) {
         Seed();
         lane.chillSpeed = 12;
@@ -519,7 +768,7 @@ int main(int argc, char **argv)
         Check((call.stepFlags & OVERWORLD_ACTOR_WALK_STEP_PLANNED_STOP_SKID) == 0
             && call.reserved[OVERWORLD_ACTOR_WALK_POLICY_STOP_SKID_TILES_INDEX] == 0,
             "HOP_FORWARD chain incorrectly started lifecycle stop-skid planning");
-    } else if (!strcmp(argv[1], "runner-turn-runway")) {
+    } else if (!strcmp(argv[1], "runner-wall-approach")) {
         Seed();
         lane.chillSpeed = 8;
         lane.maxWalkSpeed = 4;
@@ -529,26 +778,24 @@ int main(int argc, char **argv)
         lane.chainPauseAction = OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_FORWARD;
         lane.tilesBeforeTurnSkid = OW_WILD_BEHAVIOR_TURN_SKID_OPTIONS(1, 1, 1);
         lane.hopAllowNonCardinal = OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY;
-        selected.walkMomentum = (OverworldWildWalkMomentumState){3, 0, 8, 8, 0, 0, 0, 0};
+        selected.walkMomentum = (OverworldWildWalkMomentumState){3, 0, 4, 8, 0, 0, 3, 0};
         selected.chainStepsRemaining = 6;
         OverworldActorWalkPolicyCall call = Input(3);
         ReduceWalk(&call);
         Check(call.decision == OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP
             && call.stepDirection == 3
-            && (call.stepFlags & OVERWORLD_ACTOR_WALK_STEP_PLANNED_SKID_PATH) != 0
-            && call.reserved[OVERWORLD_ACTOR_WALK_POLICY_SKID_PATH_TILES_INDEX]
-                == OverworldWalk_SkidTiles(lane.maxWalkSpeed),
-            "Runner normal step did not reserve its future turn-skid runway");
-        OverworldWildWalkMomentumState momentumBefore = selected.walkMomentum;
+            && (call.stepFlags & OVERWORLD_ACTOR_WALK_STEP_PLANNED_SKID_PATH) == 0
+            && call.reserved[OVERWORLD_ACTOR_WALK_POLICY_SKID_PATH_TILES_INDEX] == 0,
+            "ordinary Sprint Walk still requires a future skid runway");
         u8 chainBefore = selected.chainStepsRemaining;
         call.operation = OVERWORLD_ACTOR_WALK_POLICY_START_RESULT;
-        call.startResult = OVERWORLD_ACTOR_WALK_POLICY_START_BLOCKED;
+        call.startResult = OVERWORLD_ACTOR_WALK_POLICY_START_ACCEPTED;
         ReduceWalk(&call);
-        Check(call.decision == OVERWORLD_ACTOR_WALK_POLICY_IGNORED
-            && selected.pendingStep == OVERWORLD_ACTOR_WALK_PENDING_NONE
-            && !memcmp(&momentumBefore, &selected.walkMomentum, sizeof(momentumBefore))
+        Check(selected.pendingStep == OVERWORLD_ACTOR_WALK_PENDING_ACCEPTED
+            && selected.walkMomentum.direction == 3
+            && selected.walkMomentum.speed == 4
             && selected.chainStepsRemaining == chainBefore,
-            "blocked Runner runway did not reject the candidate without changing momentum");
+            "clear step toward a wall did not keep its normal Walk momentum");
 
         Seed();
         lane.chillSpeed = 8; lane.maxWalkSpeed = 4;
@@ -559,7 +806,7 @@ int main(int argc, char **argv)
         call.flags = OVERWORLD_ACTOR_WALK_POLICY_FLAG_CRASH_ON_BLOCKED;
         ReduceWalk(&call);
         Check((call.stepFlags & OVERWORLD_ACTOR_WALK_STEP_PLANNED_SKID_PATH) == 0,
-            "mounted Runner proposal incorrectly reserved Wild-only runway");
+            "mounted Sprint proposal still reserves a future runway");
 
         Seed();
         lane.chillSpeed = 8; lane.maxWalkSpeed = 4;
@@ -569,7 +816,7 @@ int main(int argc, char **argv)
         call = Input(3);
         ReduceWalk(&call);
         Check((call.stepFlags & OVERWORLD_ACTOR_WALK_STEP_PLANNED_SKID_PATH) == 0,
-            "zero turn-skid threshold incorrectly reserved future runway");
+            "zero turn-skid threshold reserved a future runway");
     } else if (!strcmp(argv[1], "runner-turn-complete")) {
         Seed();
         lane.chillSpeed = 8;
@@ -606,17 +853,35 @@ int main(int argc, char **argv)
             | OVERWORLD_ACTOR_WALK_POLICY_FLAG_CHAIN_ENABLED;
         ReduceWalk(&call);
         Check(call.decision == OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP
+            && call.stepDirection == 3 && call.distance == 1
+            && (call.stepFlags & (OVERWORLD_ACTOR_WALK_STEP_SKID
+                    | OVERWORLD_ACTOR_WALK_STEP_CONTINUATION))
+                == (OVERWORLD_ACTOR_WALK_STEP_SKID
+                    | OVERWORLD_ACTOR_WALK_STEP_CONTINUATION),
+            "Runner turn skid missed its second tile");
+        call.operation = OVERWORLD_ACTOR_WALK_POLICY_START_RESULT;
+        call.startResult = OVERWORLD_ACTOR_WALK_POLICY_START_ACCEPTED;
+        ReduceWalk(&call);
+        OverworldWildSpawns_InitPolicyCall(
+            &call, 0, OVERWORLD_ACTOR_WALK_POLICY_COMMIT);
+        call.lane = &lane;
+        call.direction = 3;
+        call.distance = 1;
+        call.laneState = 0;
+        call.flags = OVERWORLD_ACTOR_WALK_POLICY_FLAG_WALK_ACCEPTED
+            | OVERWORLD_ACTOR_WALK_POLICY_FLAG_CHAIN_ENABLED;
+        ReduceWalk(&call);
+        Check(call.decision == OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP
             && call.stepDirection == 0 && call.facingDirection == 0
             && (call.stepFlags & (OVERWORLD_ACTOR_WALK_STEP_POST_SKID
                     | OVERWORLD_ACTOR_WALK_STEP_VALIDATE
                     | OVERWORLD_ACTOR_WALK_STEP_PLANNED_SKID_PATH))
                 == (OVERWORLD_ACTOR_WALK_STEP_POST_SKID
-                    | OVERWORLD_ACTOR_WALK_STEP_VALIDATE
-                    | OVERWORLD_ACTOR_WALK_STEP_PLANNED_SKID_PATH)
+                    | OVERWORLD_ACTOR_WALK_STEP_VALIDATE)
             && call.reserved[OVERWORLD_ACTOR_WALK_POLICY_SKID_PATH_TILES_INDEX]
-                == OverworldWalk_SkidTiles(lane.maxWalkSpeed)
+                == 0
             && selected.walkMomentum.direction == 0,
-            "Runner turn skid recovery did not reserve the next turn runway");
+            "Runner turn skid recovery still reserves a future turn runway");
         call.operation = OVERWORLD_ACTOR_WALK_POLICY_START_RESULT;
         call.startResult = OVERWORLD_ACTOR_WALK_POLICY_START_ACCEPTED;
         ReduceWalk(&call);
@@ -644,6 +909,10 @@ def execute(source, case):
 
 
 class WalkPolicyCandidateRejectionTests(unittest.TestCase):
+    def test_maximum_speed_variance_fades_per_committed_step(self):
+        result = execute(harness_source(), "variance-fade")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_forbidden_candidates_preserve_complete_policy(self):
         result = execute(harness_source(), "rejected")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -663,12 +932,24 @@ class WalkPolicyCandidateRejectionTests(unittest.TestCase):
         result = execute(harness_source(), "variance")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_non_input_command_does_not_enter_walk_timing(self):
+        result = execute(harness_source(), "command-skips-display-time")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_turn_walk_retains_per_tile_variance(self):
+        result = execute(harness_source(), "turn-slew")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_full_variance_is_independent_of_previous_speed_at_every_setting(self):
+        result = execute(harness_source(), "speed-matrix")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_movement_chain_never_starts_stop_skid(self):
         result = execute(harness_source(), "chain-does-not-stop-skid")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_runner_normal_step_reserves_future_turn_skid_runway(self):
-        result = execute(harness_source(), "runner-turn-runway")
+    def test_runner_can_walk_toward_a_wall_without_future_skid_runway(self):
+        result = execute(harness_source(), "runner-wall-approach")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_runner_turn_skid_commits_requested_direction(self):

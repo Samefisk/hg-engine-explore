@@ -1,20 +1,20 @@
 {
   "schemaVersion": 1,
   "id": "profile.resolve.follower-mounted-parity",
-  "title": "Mounted Owner lane matches forced follower resolution",
+  "title": "Mounted override inherits normal Sprint movement",
   "status": "active",
   "capabilities": ["profile.composition", "mount.lifecycle"],
   "proofLevel": "S1",
   "costTier": 1,
   "fixture": {"rom": null, "save": null, "seed": 0},
   "events": [
-    {"at": 0, "kind": "setup", "value": "Resolve the same follower subject for follower and mounted projection"}
+    {"at": 0, "kind": "setup", "value": "Resolve Stantler normally, as Follower, and with Mounted only"}
   ],
-  "stop": {"frameBudget": 1, "condition": "Both projections return resolved Owner lanes"},
+  "stop": {"frameBudget": 1, "condition": "All three projections return resolved Owner lanes"},
   "expect": {
     "requiredEvents": [],
     "forbiddenEvents": [],
-    "invariants": ["Follower and mounted Owner fingerprints match", "Mounted control does not create a profile role"]
+    "invariants": ["Mounted has a distinct fingerprint", "Mounted inherits every normal selected Sprint profile field", "Mounted keeps normal Sprint locomotion primitives", "Waddle sway also remains inherited", "Follower remains a separate override"]
   },
   "capture": "none",
   "adapter": {

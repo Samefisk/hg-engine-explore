@@ -185,3 +185,151 @@ def check_pool_spawn_surface(spawn, terminal_snapshot, *, source_sha256, authore
         return _check(spawn, terminal_snapshot, source_sha256, authored_profiles, verified_stop_boundary)
     except (KeyError, TypeError, AttributeError, IndexError, OverflowError) as error:
         raise ValueError("incomplete spawn surface evidence") from error
+
+
+def check_natural_appear_hop_surface(spawn, terminal_snapshot, *, species=179):
+    """Validate the first native height read for one natural Appear Hop.
+
+    This is the current recorder-calibration path. It deliberately does not
+    claim legacy POOL placement or off-screen Hop geometry.
+    """
+    try:
+        _need(spawn.get("observation") == "spawn-prepared"
+              and spawn.get("setupMode") == "normal"
+              and spawn.get("returnValue") == 1,
+              "natural Appear Hop needs one successful normal spawn")
+        _need(spawn.get("startup", {}).get("locomotion") == 7
+              and spawn.get("startup", {}).get("target") == spawn.get("position")
+              and spawn.get("startup", {}).get("origin") == spawn.get("position"),
+              "natural Appear Hop startup differs")
+        h = spawn.get("initialLandingHeight")
+        _need(isinstance(h, dict) and h.get("status") == "observed"
+              and h.get("observationVersion") == 1
+              and h.get("initialPlacement") is True,
+              "native initial landing height is missing")
+        world = spawn["worldContext"]
+        target = spawn["position"]
+        subject = spawn["publicSubject"]
+        _need(subject.get("species") == species and subject.get("role") == "WILD"
+              and spawn.get("preparedEncounter", {}).get("species") == species,
+              "natural Appear Hop subject differs")
+        for key in ("slot", "preparedPointer", "preparedEncounter", "worldContext"):
+            _need(h.get(key) == spawn.get(key), "landing binding differs: " + key)
+        _need(h.get("target") == target, "landing target differs")
+        _need(h.get("nativeReturnKind") == "void" and h.get("returnValue") is None,
+              "landing-height native return contract differs")
+        source = h.get("sourceIdentity")
+        _need(isinstance(source, dict)
+              and all(source.get(key) == spawn["preparedEncounter"].get(key)
+                      for key in ("species", "form", "level", "personality")),
+              "landing encounter differs")
+        _engine(h.get("engineIdentity"), source, world)
+        _engine(h.get("engineIdentityAfter"), source, world)
+        _need(h["engineIdentity"] == h["engineIdentityAfter"],
+              "native landing engine changed")
+        _need(terminal_snapshot.get("observationBoundary") == "main-task-queue-completion"
+              and terminal_snapshot.get("prepared") is False
+              and all(terminal_snapshot.get("context", {}).get(key) == world[key]
+                      for key in ("mapId", "fieldEpoch", "mapGeneration")),
+              "terminal boundary/world differs")
+        actors = [actor for actor in terminal_snapshot.get("actors", [])
+                  if actor.get("handle") == subject.get("handle")]
+        _need(len(actors) == 1, "terminal actor is missing or duplicated")
+        actor = actors[0]
+        _need(live_identity(actor, actor.get("sourceIdentity", {}),
+                            actor.get("engineIdentity", {}), species=species,
+                            role="WILD", current_epoch=world["fieldEpoch"])
+              and actor.get("sourceIdentity") == source
+              and all(actor.get(key) == subject.get(key) for key in
+                      ("species", "form", "level", "subjectIdentity",
+                       "authorityGeneration", "engineAnchorGeneration",
+                       "presentationGeneration")),
+              "terminal subject differs")
+        _engine(actor.get("engineIdentity"), source, world)
+        _need(actor.get("motionPhase") == "IDLE"
+              and actor.get("reservationId") == 0
+              and actor.get("inputOwnership") == 0,
+              "terminal control is not returned")
+        for suffix, snapshot_key in (("ActorFrame", "actorFrame"),
+                                     ("NativeCycle", "nativeCycle")):
+            clocks = [h.get("entry" + suffix), h.get("return" + suffix),
+                      terminal_snapshot.get(snapshot_key)]
+            _need(all(_int(value) and value >= 0 for value in clocks)
+                  and clocks == sorted(clocks),
+                  "landing clocks are missing or after terminal")
+        query, refresh = h.get("surfaceQuery"), h.get("heightRefresh")
+        _need(isinstance(query, dict) and query.get("kind") == "surface"
+              and query.get("point") == target
+              and query.get("returnValue") == 0 and query.get("hit") is None,
+              "natural landing uses an unknown or authored surface")
+        _need(isinstance(refresh, dict) and refresh.get("kind") == "height-refresh"
+              and refresh.get("objectPointer") == source["object"]
+              and refresh.get("returnValue") == 1
+              and h.get("heightSource") == "native-refresh",
+              "native height refresh did not succeed")
+        flags = refresh.get("positionBefore", {}).get("flags")
+        _need(_int(flags) and not flags & IGNORE_HEIGHTS,
+              "native height refresh ignored terrain")
+        for detail in (query, refresh):
+            for key, suffix in (("actorFrame", "ActorFrame"),
+                                ("nativeCycle", "NativeCycle")):
+                clocks = [h["entry" + suffix], detail.get("entry", {}).get(key),
+                          detail.get("returned", {}).get(key), h["return" + suffix]]
+                _need(all(_int(value) for value in clocks)
+                      and clocks == sorted(clocks), "native child clocks differ")
+        before, after, terminal = h["positionBefore"], h["positionAfter"], actor["engineObject"]
+        _need(all(_int(pose.get("pos_y")) for pose in (before, after, terminal)),
+              "native Y is missing")
+        _need(refresh.get("positionAfter", {}).get("pos_y") == after["pos_y"]
+              == terminal["pos_y"], EXPECTED_HEIGHT_REASON)
+        _need(terminal.get("unk88_y") == 0,
+              "terminal retains a separate jump offset")
+        _need(_int(terminal.get("flags")) and terminal["flags"] & 1
+              and not terminal["flags"] & 2,
+              "terminal native object is not ready")
+        for pose in (after, terminal):
+            _need([pose.get("x"), pose.get("y")] == target
+                  and [pose.get("pos_x"), pose.get("pos_z")]
+                      == [(coordinate << 16) + 0x8000 for coordinate in target],
+                  "native landing pose is not the target center")
+        cells = []
+        for name in ("loadedTerrainBefore", "loadedTerrain"):
+            record = h.get(name, {})
+            cell = record.get("cell")
+            _need(record.get("status") == "observed" and isinstance(cell, dict),
+                  "loaded target terrain is unknown")
+            provenance = cell.get("provenance", {})
+            raw = cell.get("attribute")
+            _need([cell.get("x"), cell.get("y")] == target
+                  and provenance.get("fieldPointer") == world["fieldPointer"]
+                  and provenance.get("landDataIdentity") == "current-map-matrix"
+                  and provenance.get("store") in
+                      ("full-terrain-attributes", "rolling-land-manager")
+                  and _int(provenance.get("landDataId"))
+                  and provenance["landDataId"] != 0xFFFF
+                  and _int(provenance.get("attributeAddress"))
+                  and provenance["attributeAddress"] % 2 == 0
+                  and 0x02000000 <= provenance["attributeAddress"] < 0x02400000
+                  and _int(raw) and 0 <= raw <= 65535
+                  and provenance.get("rawWord") == raw,
+                  "loaded terrain provenance differs")
+            _need(cell.get("behavior") == raw & 255
+                  and type(cell.get("collision")) is bool
+                  and cell["collision"] == bool(raw & 0x8000)
+                  and cell.get("terrain_class") == (raw >> 8) & 127,
+                  "terrain decode differs")
+            _need(not cell["collision"] and cell["behavior"] in LAND_BEHAVIORS,
+                  "natural landing target is blocked or not land")
+            cells.append(cell)
+        _need(cells[0] == cells[1],
+              "loaded terrain changed during landing height resolution")
+        return {"passed": True, "acceptedProof": False,
+                "scope": "natural Appear Hop initial native height and terminal pose",
+                "subject": deepcopy(subject), "target": target,
+                "nativeLandingY": after["pos_y"],
+                "terminalFrame": terminal_snapshot["actorFrame"]}
+    except (KeyError, TypeError, AttributeError, IndexError, OverflowError) as error:
+        raise ValueError("incomplete natural Appear Hop surface evidence") from error
+
+
+EXPECTED_HEIGHT_REASON = "terminal Y differs from native landing height"

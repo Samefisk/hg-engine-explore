@@ -259,11 +259,13 @@ def build_condition_preview(
                 staged_conditions,
                 staged_runtime,
                 staged_resolver,
+                staged_vision,
                 staged_main,
                 _staged_actor_header,
                 _staged_conditions_header,
                 _staged_runtime_header,
                 _staged_resolver_header,
+                _staged_vision_header,
             ) = _stage_native_sources(
                 root,
                 generated_root,
@@ -271,11 +273,13 @@ def build_condition_preview(
                     "lib/overworld/overworld_behavior_conditions.c",
                     "lib/overworld/overworld_behavior_condition_runtime.c",
                     "lib/overworld/overworld_behavior_resolver.c",
+                    "lib/overworld/overworld_vision.c",
                     "tools/overworld-viewer-v2/native/overworld_behavior_condition_preview_main.c",
                     "include/overworld_actor_system.h",
                     "include/overworld_behavior_conditions.h",
                     "include/overworld_behavior_condition_runtime.h",
                     "include/overworld_behavior_resolver.h",
+                    "include/overworld_vision.h",
                 ),
             )
             command = compiler + [
@@ -288,6 +292,7 @@ def build_condition_preview(
                 str(staged_conditions),
                 str(staged_runtime),
                 str(staged_resolver),
+                str(staged_vision),
                 str(staged_main),
                 str(generated_source),
                 "-o", str(temporary),
@@ -333,7 +338,7 @@ def preview_conditions(
         observation["frame"], observation["x"], observation["y"],
         player["x"], player["y"], player["valid"], observation["facing"],
         observation["movementSpeed"], request.get("chanceSeed", observation["frame"]),
-        len(candidates), len(states),
+        player["facingAndOcclusion"], len(candidates), len(states),
     )
     lines = [" ".join(str(int(value)) for value in header)]
     for candidate in candidates:
@@ -344,6 +349,7 @@ def preview_conditions(
             handle["slot"], handle["generation"], handle["fieldEpoch"],
             handle["mapGeneration"], handle["encounterGeneration"],
             candidate["x"], candidate["y"], candidate["valid"],
+            candidate["facingAndOcclusion"],
         )))
     for state in states:
         lines.append(" ".join(str(int(value)) for value in (

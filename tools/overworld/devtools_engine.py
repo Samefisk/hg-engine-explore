@@ -132,7 +132,7 @@ LAND_MANAGER_TILE_WIDTH_OFFSET = 0xCC
 LAND_CHUNK_MATRIX_INDEX_OFFSET = 0x860
 LAND_CHUNK_MODEL_LOADED_OFFSET = 0x864
 BEHAVIOR_DATA_MAGIC = 0x4F574244
-BEHAVIOR_DATA_VERSION = 79
+BEHAVIOR_DATA_VERSION = 81
 BEHAVIOR_DATA_HEADER_SIZE = 84
 SURFACE_TYPE_NAMES = ("rooftop", "signpost", "mailbox", "flowerbed", "canopy")
 SURFACE_HEIGHT_PAGE_NATIVE_GROUND = 0x1F
@@ -748,6 +748,46 @@ def boot(emu, save_path, dsv, on_rom_open=None):
         field_ready = (
             unsigned(emu, field_system + 0x6C) if field_system else 0
         )
+        ready_task_field = unsigned(
+            emu, MOUNT_SYMBOLS["sFieldReadyTaskFieldSystem"]
+        ) if MOUNT_SYMBOLS is not None else 0
+        ready_task_map = unsigned(
+            emu, MOUNT_SYMBOLS["sFieldReadyTaskMapId"], 2
+        ) if MOUNT_SYMBOLS is not None else 0
+        pending_flags = unsigned(
+            emu, MOUNT_SYMBOLS["gOverworldWildResidentData"], 1
+        ) if MOUNT_SYMBOLS is not None else 0
+        selector_flags = unsigned(emu, 0x023C8148, 1)
+        selector_entry = (
+            SELECTOR_SYMBOLS["gOverworldFollowerSelectorOverlayEntry"]
+            if SELECTOR_SYMBOLS is not None else 0
+        )
+        selector_magic = unsigned(emu, selector_entry) if selector_entry else 0
+        selector_version = (
+            unsigned(emu, selector_entry + 4, 2) if selector_entry else 0
+        )
+        selector_size = (
+            unsigned(emu, selector_entry + 6, 2) if selector_entry else 0
+        )
+        selector_null_callbacks = sum(
+            1 << index
+            for index in range(13)
+            if selector_entry
+            and unsigned(emu, selector_entry + 8 + index * 4) == 0
+        )
+        wild_entry = (
+            WILD_SYMBOLS["gOverworldWildSpawnsOverlayEntry"]
+            if WILD_SYMBOLS is not None else 0
+        )
+        wild_callback = unsigned(emu, wild_entry) if wild_entry else 0
+        wild_last_state = (
+            unsigned(emu, WILD_SYMBOLS["sOverworldWildLastState"])
+            if WILD_SYMBOLS is not None else 0
+        )
+        behavior_blob = (
+            unsigned(emu, WILD_SYMBOLS["sOverworldWildBehaviorDataBlob"])
+            if WILD_SYMBOLS is not None else 0
+        )
         raise RuntimeError(
             "save did not reach the overworld before input limit: "
             f"field=0x{field_system:08X}, "
@@ -756,7 +796,16 @@ def boot(emu, save_path, dsv, on_rom_open=None):
             f"fieldRoot=0x{field_root:08X}, "
             f"fieldOverlay=0x{field_overlay:08X}, "
             f"taskman=0x{field_taskman:08X}, "
-            f"fieldReady=0x{field_ready:08X}"
+            f"fieldReady=0x{field_ready:08X}, "
+            f"readyTaskField=0x{ready_task_field:08X}, "
+            f"readyTaskMap=0x{ready_task_map:04X}, "
+            f"pendingFlags=0x{pending_flags:02X}, "
+            f"selectorFlags=0x{selector_flags:02X}, "
+            f"selectorEntry=0x{selector_magic:08X}/v{selector_version}"
+            f"/s{selector_size}/null0x{selector_null_callbacks:X}, "
+            f"wildCallback=0x{wild_callback:08X}, "
+            f"wildLastState=0x{wild_last_state:08X}, "
+            f"behaviorBlob=0x{behavior_blob:08X}"
         )
 
 
@@ -780,10 +829,10 @@ def _wild_staged_layout():
     """Immutable worker package binding; ARM header tests anchor these offsets."""
     from tools.overworld.devtools_field_cleanup import symbol
     address, _, _ = symbol((REPO / "build/linked.o").read_bytes(),
-                           "sOverworldWildSpawnState", 1, expected_size=944)
+                           "sOverworldWildSpawnState", 1, expected_size=952)
     image = (REPO / "build/overworld_wild_spawns_overlay_linked.o").read_bytes()
     entry, _, code = symbol(image,
-                           "OverworldWildSpawns_ClearStagedHopTargetLocal", 2, expected_size=108)
+                           "OverworldWildSpawns_ClearStagedHopTargetLocal", 2, expected_size=116)
     # Only these two Thumb BL displacements may change as linked code moves.
     # All loads, stores, offsets, literals and other instructions stay exact.
     calls = ((14, "OverworldWildSpawns_ClearStagedHopMovementListTask"),
@@ -791,7 +840,7 @@ def _wild_staged_layout():
     shape = bytearray(code)
     for offset, _ in calls:
         shape[offset:offset + 4] = bytes(4)
-    if len(code) != 108 or hashlib.sha256(shape).hexdigest() != "32640eb55adfe6067a92dc0a10d6dd5c0df7796ca514765a3c7a702872edb8c3":
+    if len(code) != 116 or hashlib.sha256(shape).hexdigest() != "0ed50c8d10543d5fe3287096bc4d6d69b9698efd3bd2c4668c6e1dd3fa2d55f9":
         raise ValueError("staged-motion-layout-code-unknown")
     for offset, name in calls:
         high, low = struct.unpack_from("<HH", code, offset)
@@ -813,7 +862,7 @@ def wild_staged_motion(emu, slot):
         if type(slot) is not int or not 0 <= slot < 10:
             raise ValueError("staged-motion-slot-out-of-bounds")
         address, entry, code = _wild_staged_layout()
-        if address != WILD_STATE or address & 3 or not 0x02000000 <= address <= 0x02400000 - 944:
+        if address != WILD_STATE or address & 3 or not 0x02000000 <= address <= 0x02400000 - 952:
             raise ValueError("staged-motion-state-owner-differs")
         def read(pointer, size):
             data = bytes(emu.memory.unsigned[pointer:pointer + size:1])
@@ -823,7 +872,7 @@ def wild_staged_motion(emu, slot):
         if read(entry, len(code)) != code:
             raise ValueError("staged-motion-live-code-differs-or-overlay-absent")
         # A single bounded state read also retains the slot's current object.
-        data = read(address, 944)
+        data = read(address, 952)
         pending, distance = data[684 + slot], data[664 + slot]
         result.update(known=True, reason="observed", pending=pending, distance=distance,
                       pendingDirection=data[414 + slot], pendingDistance=data[424 + slot],

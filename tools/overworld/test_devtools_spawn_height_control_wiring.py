@@ -36,6 +36,8 @@ class SpawnHeightWiringTests(unittest.TestCase):
         directory = tempfile.TemporaryDirectory(prefix="height-wiring-")
         self.addCleanup(directory.cleanup)
         f = SpawnHeightFixture(directory.name)
+        f.source["species"] = 179
+        f.actor["species"] = 179
         f.closed, f.native_bridge_active, f.completed_frames = False, False, 11
         f.spawn_height_control = NativeSpawnHeightReadControl()
         f.spawn_height_control.arm()
@@ -58,11 +60,11 @@ class SpawnHeightWiringTests(unittest.TestCase):
 
     def test_installed_callback_reads_real_height_three_times_and_consumes_once(self):
         f, writes = self.fixture()
-        f.start(); f.height(); f.refresh(); f.surface(result=0)
+        f.start_initial(); f.height(caller=f.spawn_prepared); f.refresh(); f.surface(result=0)
         f.finish_height()
         self.assertIsNone(f.hooks.error)
         self.assertEqual(f.observer.spawn_height_contexts, [])
-        events = f.finish()
+        events = f.finish_initial()
         self.assertIsNone(f.hooks.error)
         controls = [e["data"] for e in events if e["data"]["observation"] == "spawn-height-read-control"]
         self.assertEqual(len(controls), 1)
@@ -74,6 +76,33 @@ class SpawnHeightWiringTests(unittest.TestCase):
         normal = next(e["data"] for e in events if e["data"]["observation"] == "spawn-landing-height")
         self.assertEqual(normal["positionAfter"], control["clean"]["positionAfter"])
         self.assertEqual(writes, [struct.pack("<i", 12288), struct.pack("<i", 8192)])
+
+    def test_completed_boot_frames_retain_only_the_controlled_appear_hop(self):
+        f, _ = self.fixture()
+        f.start_initial(); f.height(caller=f.spawn_prepared); f.refresh(); f.surface(result=0)
+        f.finish_height(); f.returned(1)
+        commands = ((255, 0, 0), (48, 0, 0), (48, 4096, 1),
+                    (62, 2048, 1), (74, 0, 1), (255, 0, 1),
+                    (62, 0, 0), (255, 0, 0))
+        for frame, (command, face_y, controller) in enumerate(commands, 12):
+            actor = deepcopy(f.actor)
+            actor.update(controllerState=controller)
+            actor["engineObject"] = {**deepcopy(f.player), "movement_cmd": command,
+                                     "face_y": face_y}
+            snapshot = {"frame": frame, "nativeCycle": frame + 10,
+                "actorFrame": frame + 100, "actors": [actor],
+                "context": {"mapId": f.map_id, "fieldEpoch": 2,
+                            "mapGeneration": 3},
+                "observationBoundary": "main-task-queue-completion",
+                "prepared": False}
+            f.observer.completed_frame(frame)
+            f.observer.completed_snapshot(snapshot)
+        events = f.observer.drain()
+        samples = [event for event in events
+                   if event["data"]["observation"] == "spawn-appear-hop-frame"]
+        self.assertEqual([event["data"]["actor"]["engineObject"]["movement_cmd"]
+                          for event in samples], [48, 48, 62, 74, 255, 62, 255])
+        self.assertTrue(f.observer.spawn_height_trace["complete"])
 
     def test_restore_failure_exits_from_callback_before_normal_publication(self):
         f, writes = self.fixture()
@@ -87,7 +116,7 @@ class SpawnHeightWiringTests(unittest.TestCase):
             exits.append(error)
             raise SystemExit(70)  # Model worker exit without ending the host test.
         f.abort_native_control = abort
-        f.start(); f.height(); f.refresh(); f.surface(result=0)
+        f.start_initial(); f.height(caller=f.spawn_prepared); f.refresh(); f.surface(result=0)
         with self.assertRaises(SystemExit): f.finish_height()
         self.assertEqual(len(exits), 1)
         self.assertTrue(exits[0].fatal)

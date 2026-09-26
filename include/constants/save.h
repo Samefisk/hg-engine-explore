@@ -11,9 +11,9 @@
 #define DYNAMIC_REGION_SIZE 0x2F000
 #define DYNAMIC_REGION_BYTEWIDE_SIZE 0x2F
 /*
- * Keep 0x98D0 bytes out of the boot heap allocation so resident overlays 158,
- * 157, 156, 155, and 153 remain beyond the complete SDK FNT+FAT archive
- * allocation with at least the required 0xC00 archive margin.
+ * Keep the established boot heap capacity. Resident mount action and chain
+ * code live in the reserved ITCM region, not inside this heap or the SDK
+ * FNT+FAT archive allocation.
  */
 #define NEW_HEAP3_SIZE 0x106730
 

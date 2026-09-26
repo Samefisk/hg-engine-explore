@@ -136,7 +136,6 @@ def actor_chain_receipt_errors(actor_source: str, runtime_source: str) -> list[s
     receipt = "policy->pendingStep=OVERWORLD_ACTOR_WALK_PENDING_CHAIN;"
     guard = (
         "if(motion->plan.commitPolicy==OVERWORLD_MOTION_COMMIT_NORMAL"
-        "&&actor->role!=OVERWORLD_ACTOR_ROLE_MOUNTED"
         "&&policy->pendingStep==OVERWORLD_ACTOR_WALK_PENDING_NONE"
         "&&(walkPolicy==NULL||(walkPolicy->stepFlags&OVERWORLD_ACTOR_WALK_STEP_SKID)==0)){"
         + receipt + "}"
@@ -170,7 +169,7 @@ def verify_actor_chain_receipt(actor_source: str, runtime_source: str) -> None:
     # Bounded copied function fixtures avoid coupling controls to unrelated code.
     actor = "void ActorSystem_TryAcknowledgeMotionCommit(void) {" + body + "}"
     mutations = {
-        "mounted chain enabled": actor.replace("actor->role != OVERWORLD_ACTOR_ROLE_MOUNTED", "actor->role == OVERWORLD_ACTOR_ROLE_MOUNTED", 1),
+        "chain receipt disabled": actor.replace("policy->pendingStep = OVERWORLD_ACTOR_WALK_PENDING_CHAIN;", "policy->pendingStep = OVERWORLD_ACTOR_WALK_PENDING_NONE;", 1),
         "skid counts as chain": actor.replace("OVERWORLD_ACTOR_WALK_STEP_SKID) == 0", "OVERWORLD_ACTOR_WALK_STEP_SKID) != 0", 1),
         "no-chain motion counts": actor.replace("motion->plan.commitPolicy == OVERWORLD_MOTION_COMMIT_NORMAL", "motion->plan.commitPolicy != OVERWORLD_MOTION_COMMIT_NORMAL", 1),
         "failed acknowledgement counts": actor.replace("decision != OVERWORLD_MOTION_DECISION_ACCEPTED", "decision == OVERWORLD_MOTION_DECISION_ACCEPTED", 1),
@@ -469,9 +468,9 @@ def main() -> int:
     require(
         skid_tiles,
         (
-            "travelTime >= 7",
-            "travelTime >= 3",
-            "travelTime == 2 ? 2 : 4",
+            "travelTime <= 1",
+            "travelTime <= 4",
+            "travelTime <= 6",
         ),
         "Walk skid distance bands",
     )
@@ -582,7 +581,9 @@ def main() -> int:
     require(
         chain_pause,
         (
-            "pauseAction == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE",
+            "encodedPauseAction == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE",
+            "OW_WILD_BEHAVIOR_CHAIN_PAUSE_RANDOM_CHOICE",
+            "OverworldActorWalkPolicy_SelectChainPauseAction(",
             "policy->pendingStep != OVERWORLD_ACTOR_WALK_PENDING_CHAIN",
             "OVERWORLD_ACTOR_WALK_POLICY_FLAG_CHAIN_ENABLED",
             "policy->chainStepsRemaining = 0;",
@@ -593,6 +594,15 @@ def main() -> int:
             "call->decision = OVERWORLD_ACTOR_WALK_POLICY_CONSUMED;",
         ),
         "typed Walk chain eligibility and action",
+    )
+    require(
+        function_body(runtime, "OverworldActorWalkPolicy_SelectChainPauseAction"),
+        (
+            "gf_rand() & 7u",
+            "actionMask & (1u << action)",
+            "return action + 1u;",
+        ),
+        "uniform Movement Chain pause-action selection",
     )
     verify_chain_trace(runtime)
 
@@ -993,9 +1003,10 @@ def main() -> int:
         (
             "#define OW_WILD_SPAWNER_SPAWN_HOP_DISTANCE 16",
             "#define OW_WILD_SPAWNER_OFFSCREEN_SAFE_MARGIN_TILES 4",
+            "#define OW_WILD_SPAWNER_OFFSCREEN_COMMIT_RUNWAY_TILES 1",
             "direction = OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_UP",
             "triedDirections",
-            "int bestVisibleTravel = state != NULL ? -0x7FFFFFFF : 0;",
+            "int bestVisibleTravel = state != NULL ? -0x7FFFFFFF : -1;",
             "OverworldWildSpawns_GetSpawnHopVisibleTravelScore(",
             "minimumCandidateDistance = state == NULL",
             "for (candidateDistance = OW_WILD_SPAWNER_SPAWN_HOP_DISTANCE;",
@@ -1003,6 +1014,7 @@ def main() -> int:
             "entryDistance >= OW_WILD_SPAWNER_SPAWN_HOP_DISTANCE",
             "OverworldWildSpawns_Abs(candidateX - playerX)",
             "+ OW_WILD_SPAWNER_OFFSCREEN_SAFE_MARGIN_TILES",
+            "+ OW_WILD_SPAWNER_OFFSCREEN_COMMIT_RUNWAY_TILES",
             "OverworldWildSpawns_Abs(candidateY - playerY)",
             "GetMetatileBehaviorAt(fieldSystem, candidateX, candidateY) == 0xFF",
             "terrain == OW_WILD_SPAWN_TERRAIN_LAND",

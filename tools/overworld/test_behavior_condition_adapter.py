@@ -23,12 +23,12 @@ def function(source: str, name: str, next_name: str) -> str:
 
 
 class BehaviorConditionAdapterTests(unittest.TestCase):
-    def test_adapter_v10_outcome_exposes_independent_timed_endings(self):
+    def test_adapter_v11_outcome_exposes_independent_timed_endings(self):
         harness = r"""
 #include "overworld_behavior_condition_adapter.h"
 
-typedef char VersionMustBe10[
-    OVERWORLD_BEHAVIOR_CONDITION_ADAPTER_VERSION == 10 ? 1 : -1];
+typedef char VersionMustBe11[
+    OVERWORLD_BEHAVIOR_CONDITION_ADAPTER_VERSION == 11 ? 1 : -1];
 typedef char EntryMustBe28[
     sizeof(OverworldBehaviorConditionAdapterEntry) == 28 ? 1 : -1];
 typedef char OutcomeMustBe6[

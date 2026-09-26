@@ -91,7 +91,7 @@ class ConditionControllerMeasurement:
                 and condition.get("cooldownFrames") == CONDITION_COOLDOWN
                 and condition.get("targetKind") == "actor"
                 and condition.get("targetRole") == TARGET_ROLE
-                and profile.get("id") == "ambush-plant-active"
+                and profile.get("id") == "ambush"
                 and profile.get("applicationIndex") == CONDITION_APPLICATION,
                 "controlled condition fixture differs")
         require(set(callbacks) == {"adapterEvaluate", "wildEvaluate"}
@@ -137,8 +137,8 @@ class ConditionControllerMeasurement:
             reader = self._reader(receipt, closed=False)
             require(reader.get("subject") == self.subject
                     and reader.get("startFrame") == snapshot.get("frame")
-                    and reader.get("guestMemoryWriteBytes") == 3
-                    and reader.get("guestMemoryWriteOperations") == 3
+                    and reader.get("guestMemoryWriteBytes") == 5
+                    and reader.get("guestMemoryWriteOperations") == 5
                     and reader.get("catalogPatch", {}).get("applied") is True
                     and reader["catalogPatch"].get("restored") is False,
                     "arm receipt differs")
@@ -347,8 +347,8 @@ class ConditionControllerMeasurement:
                 "STALE_TARGET did not stop the next intent")
         reader = self._reader(self.cleanup, closed=True)
         state_reset = reader.get("controlledStateReset", {})
-        require(reader.get("guestMemoryWriteBytes") == 28
-                and reader.get("guestMemoryWriteOperations") == 9
+        require(reader.get("guestMemoryWriteBytes") == 32
+                and reader.get("guestMemoryWriteOperations") == 13
                 and state_reset.get("bytesWritten") == 20
                 and state_reset.get("writeOperations") == 2
                 and state_reset.get("stateAfterHex") == "00" * 16

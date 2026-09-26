@@ -45,6 +45,7 @@ def harness_source(root: Path, fixture: Path) -> str:
         "OW_WILD_BEHAVIOR_LOCOMOTION_MOVE_FROM_OFF_SCREEN",
         "OW_WILD_BEHAVIOR_LOCOMOTION_HOP_FROM_OFF_SCREEN",
         "OW_WILD_BEHAVIOR_LOCOMOTION_APPEAR_HOP",
+        "OW_WILD_BEHAVIOR_LOCOMOTION_FLY_IN",
         "OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_PARAM_TICK",
         "OW_WILD_SPAWNER_MANKEY_TREE_TOP_RENDER_OVERRIDE_SAVE_ENABLED",
         "OW_WILD_SPAWNER_MANKEY_TREE_TOP_DRAW_CALLBACK_OVERRIDE_ENABLED",
@@ -108,11 +109,25 @@ def main() -> int:
             "        prepared);",
             "(void)prepared;"),
         "missing failed-hop unbind": (
-            "(void)OVERWORLD_ACTOR_SYSTEM_COMPAT_ENTRY->unbind(",
-            "(void)HARNESS_SKIP_UNBIND("),
+            "(void)OVERWORLD_ACTOR_SYSTEM_COMPAT_ENTRY->unbind(\n"
+            "            &handle,\n"
+            "            OVERWORLD_ACTOR_REASON_CONTEXT_LOST);\n"
+            "        return FALSE;\n"
+            "    } else if (startup->locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_APPEAR_HOP)",
+            "(void)HARNESS_SKIP_UNBIND(\n"
+            "            &handle,\n"
+            "            OVERWORLD_ACTOR_REASON_CONTEXT_LOST);\n"
+            "        return FALSE;\n"
+            "    } else if (startup->locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_APPEAR_HOP)"),
         "wrong failed-hop handle": (
-            "&handle,\n            OVERWORLD_ACTOR_REASON_CONTEXT_LOST",
-            "&(OverworldActorHandle){.slot = 9, .generation = 1},\n            OVERWORLD_ACTOR_REASON_CONTEXT_LOST"),
+            "&handle,\n"
+            "            OVERWORLD_ACTOR_REASON_CONTEXT_LOST);\n"
+            "        return FALSE;\n"
+            "    } else if (startup->locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_APPEAR_HOP)",
+            "&(OverworldActorHandle){.slot = 9, .generation = 1},\n"
+            "            OVERWORLD_ACTOR_REASON_CONTEXT_LOST);\n"
+            "        return FALSE;\n"
+            "    } else if (startup->locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_APPEAR_HOP)"),
     }
     rejection = re.search(
         r"(if\s*\(!OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY->bindActor\([^;{}]+\)\)\s*\{)(\s*return FALSE;)", source)

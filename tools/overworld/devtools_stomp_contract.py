@@ -160,7 +160,7 @@ def validate_feedback(window,case,bindings):
                 and struct.unpack_from('<I',data,32)[0]==init['renderPointer']
                 and 0x02000000<=init['renderPointer']<0x02400000 and type(init['returnValue']) is int
                 and init['returnValue']==1,'dust native render initialization failed')
-            require(sound['args'][0]==2183 and start['soundId']==2183
+            require(sound['args'][0]==1606 and start['soundId']==1606
                 and type(start['returnValue']) is int and start['returnValue']==1,'native stomp sound start failed')
     require(window.get('counts')==counts,'feedback scoped counts differ')
     require(starts==1,'native START_RESULT count differs')

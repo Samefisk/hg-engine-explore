@@ -39,25 +39,23 @@ def contract():
         "engine-boundary": [{
             "name": "runner-stop-normal-none-boundary", "operator": "eq",
             "type": "array", "validator": "meaningful-observation",
-            "expected": [255, 3, 1, 8, 7, 135, 0, 0],
+            "expected": [255, 3, 2, 8, 7, 135, 0, 0],
         }],
         "logical-commit": [{
             "name": "runner-stop-commit-and-target", "operator": "eq",
-            "type": "object", "validator": "wild-teleport-terminal-v1",
-            "requiredKeys": [
-                "origin", "target", "preCommit", "terminalCommit",
-                "terminalLogical",
-            ],
+            "type": "object", "validator": "terminal-boundary-target-v1",
+            "requiredCount": 2,
+            "requiredKeys": ["boundaryCount", "final", "target"],
         }],
         "rendered-motion": [{
-            "name": "runner-stop-one-tile-eight-frame-walk", "operator": "eq",
+            "name": "runner-stop-two-eight-frame-tiles", "operator": "eq",
             "type": "array", "validator": "meaningful-observation",
-            "expected": [1, 8],
+            "expected": [2, 8, 8],
         }],
         "frame-pacing": [{
             "name": "runner-stop-elapsed-schedule", "operator": "eq",
             "type": "array", "validator": "meaningful-observation",
-            "expected": list(range(9)),
+            "expected": [list(range(9)), list(range(9))],
         }],
         "control-release": [{
             "name": "runner-stop-terminal-control", "operator": "eq",
@@ -113,62 +111,40 @@ def measurements(replay, record):
     started = decode_call(meter["startResult"]["responseHex"])
     require(meter.get("stopSpeed") == 4
             and proposal[10] == 0xFF and proposal[13] == 3
-            and proposal[11] == 1 and proposal[19] == 8
+            and proposal[11] == 2 and proposal[19] == 8
             and proposal[20] == STOP_STEP_FLAGS
             and started[20] == (STOP_STEP_FLAGS | STEP_PLANNED_SKID_PATH)
-            and started[25] == 1
+            and started[25] == 2
             and all(raw[22] == 0 and raw[23] == 0
                     for raw in (proposal, started)),
             "Runner stop skid is not a normal NONE request independent of Movement Chain")
 
-    motion = meter["motion"]
-    require(meter.get("completeMotions") == 1
-            and motion["kind"] == "WALK" and motion["duration"] == 8
-            and motion["handle"] == actor["handle"]
-            and motion["fingerprint"] == actor["behaviorFingerprint"]
-            and complete_travel(motion)
-            and motion["commitAfter"] == ((motion["commitBefore"] + 1) & 0xFFFFFFFF),
-            "Runner stop skid lacks one complete eight-frame Walk")
-    delta = [target - origin
-             for origin, target in zip(motion["origin"], motion["target"])]
-    require(sum(abs(value) for value in delta) == 1,
-            "Runner stop skid did not move exactly one tile")
-    elapsed = [sample["elapsed"] for sample in motion["samples"]]
-    require(elapsed == list(range(8))
-            and motion.get("travelEnd", {}).get("elapsed") == 8,
-            "Runner stop-skid elapsed schedule differs")
-
-    traces = meter["traces"]
-    starts = [event for event in traces
-              if event["frame"] == meter["policyFrame"]
-              and event["data"].get("event") == "MOTION_STARTED"
-              and (event["data"].get("valueA"), event["data"].get("valueB"))
-                  == (1, 8)]
-    require(len(starts) == 1,
-            "Runner stop skid lacks its native motion start")
-    start_sequence = starts[0]["data"]["sequence"]
-    lifecycle = (
-        ("LOGICAL_COMMIT", motion["commitFrame"], motion["commitAfter"], 1),
-        ("MOTION_FINISHED", motion["finishFrame"], motion["commitAfter"], 1),
-        ("CONTROL_RETURNED", motion["finishFrame"], 0, motion["commitAfter"]),
-    )
-    sequences = [start_sequence]
-    for name, frame, value_a, value_b in lifecycle:
-        rows = [event for event in traces
-                if event["data"].get("sequence", 0) > start_sequence
-                and event["data"].get("event") == name]
-        require(len(rows) == 1 and rows[0]["frame"] == frame
-                and rows[0]["data"].get("reason") == "OK"
-                and (rows[0]["data"].get("valueA"),
-                     rows[0]["data"].get("valueB")) == (value_a, value_b),
-                "Runner stop skid lacks native " + name)
-        sequences.append(rows[0]["data"]["sequence"])
-    require(sequences == sorted(set(sequences))
-            and not any(event["data"].get("event") == "MOTION_CANCELED"
-                        and start_sequence < event["data"].get("sequence", 0)
-                            <= sequences[-1]
-                        for event in traces),
-            "Runner stop-skid native lifecycle differs")
+    continuation_request = decode_call(meter["continuation"]["requestHex"])
+    continuation = decode_call(meter["continuation"]["responseHex"])
+    require(continuation_request[11] == continuation[11] == 1
+            and continuation_request[15] == continuation[15] == 1
+            and continuation_request[16] == 2 and continuation[16] == 1
+            and continuation_request[17:21] == continuation[17:21]
+            and continuation[17] == continuation[18] == proposal[17]
+            and continuation[19:21] == bytes((8, 0x13))
+            and all(raw[22] == raw[23] == 0 for raw in (continuation_request, continuation)),
+            "Runner stop-skid continuation differs")
+    motions = meter["motions"]
+    require(meter.get("completeMotions") == len(motions) == 2
+            and motions[0]["startFrame"] == meter["policyFrame"]
+            and motions[1]["startFrame"] == meter["continuationFrame"]
+            and motions[0]["target"] == motions[1]["origin"]
+            and motions[0]["commitAfter"] == motions[1]["commitBefore"]
+            and motions[0]["finishFrame"] <= motions[1]["startFrame"]
+            and end["logical"] == dict(zip(("x", "y"), motions[-1]["target"])),
+            "Runner stop skid lacks its exact two-tile continuation")
+    started_profile = meter["startResult"].get("publicSubjectAfter", {})
+    require(type(started_profile.get("behaviorFingerprint")) is int
+            and started_profile["behaviorFingerprint"] != 0,
+            "Runner stop skid lacks its started movement profile")
+    for motion in motions:
+        _check_tile(motion, actor, started_profile["behaviorFingerprint"],
+                    meter["traces"], proposal[17])
 
     identity_flags = [
         1, actor["role"], actor["species"],
@@ -186,13 +162,12 @@ def measurements(replay, record):
             started[20], started[22], started[23],
         ]),
         ("logical-commit", "runner-stop-commit-and-target", {
-            "origin": motion["origin"], "target": motion["target"],
-            "preCommit": motion["commitBefore"],
-            "terminalCommit": motion["commitAfter"],
-            "terminalLogical": end["logical"],
+            "boundaryCount": 2, "final": motions[-1]["terminalLogical"],
+            "target": motions[-1]["target"],
         }),
-        ("rendered-motion", "runner-stop-one-tile-eight-frame-walk", [1, 8]),
-        ("frame-pacing", "runner-stop-elapsed-schedule", elapsed + [8]),
+        ("rendered-motion", "runner-stop-two-eight-frame-tiles", [2, 8, 8]),
+        ("frame-pacing", "runner-stop-elapsed-schedule",
+         [[sample["elapsed"] for sample in motion["samples"]] + [8] for motion in motions]),
         ("control-release", "runner-stop-terminal-control",
          [end["motionKind"], end["motionPhase"], end["reservationId"]]),
     )
@@ -201,6 +176,54 @@ def measurements(replay, record):
         "operator": "eq", "expected": deepcopy(value), "passed": True,
     } for claim, name, value in values]
 
+
+def _check_tile(motion, actor, fingerprint, traces, direction):
+    require(motion["kind"] == "WALK" and motion["duration"] == 8
+            and motion["handle"] == actor["handle"]
+            and motion["fingerprint"] == fingerprint
+            and complete_travel(motion)
+            and motion["commitAfter"] == ((motion["commitBefore"] + 1) & 0xFFFFFFFF),
+            "Runner stop skid lacks one complete eight-frame Walk")
+    delta = [target - origin
+             for origin, target in zip(motion["origin"], motion["target"])]
+    require(delta == {0: [0, -1], 1: [0, 1], 2: [-1, 0], 3: [1, 0]}[direction],
+            "Runner stop skid did not move exactly one tile")
+    elapsed = [sample["elapsed"] for sample in motion["samples"]]
+    require(elapsed == list(range(8))
+            and motion.get("travelEnd", {}).get("elapsed") == 8,
+            "Runner stop-skid elapsed schedule differs")
+
+    starts = [event for event in traces
+              if event["frame"] == motion["startFrame"]
+              and event["data"].get("event") == "MOTION_STARTED"
+              and (event["data"].get("valueA"), event["data"].get("valueB"))
+                  == (1, 8)]
+    require(len(starts) == 1,
+            "Runner stop skid lacks its native motion start")
+    start_sequence = starts[0]["data"]["sequence"]
+    lifecycle = (
+        ("LOGICAL_COMMIT", motion["commitFrame"], motion["commitAfter"], 1),
+        ("MOTION_FINISHED", motion["finishFrame"], motion["commitAfter"], 1),
+        ("CONTROL_RETURNED", motion["finishFrame"], 0, motion["commitAfter"]),
+    )
+    sequences = [start_sequence]
+    for name, frame, value_a, value_b in lifecycle:
+        rows = [event for event in traces
+                if event["frame"] == frame
+                and event["data"].get("sequence", 0) > start_sequence
+                and event["data"].get("event") == name]
+        require(len(rows) == 1 and rows[0]["frame"] == frame
+                and rows[0]["data"].get("reason") == "OK"
+                and (rows[0]["data"].get("valueA"),
+                     rows[0]["data"].get("valueB")) == (value_a, value_b),
+                "Runner stop skid lacks native " + name)
+        sequences.append(rows[0]["data"]["sequence"])
+    require(sequences == sorted(set(sequences))
+            and not any(event["data"].get("event") == "MOTION_CANCELED"
+                        and start_sequence < event["data"].get("sequence", 0)
+                            <= sequences[-1]
+                        for event in traces),
+            "Runner stop-skid native lifecycle differs")
 
 class RunnerStopSkidNegative:
     def __init__(self, fault):
@@ -303,7 +326,7 @@ def validate_negative_result(result, fault):
         "runner-stop-held-input": "Runner stop skid requires neutral input",
         "runner-stop-not-none": "Runner stop skid was not completed",
         "runner-stop-chain-action": "used a Movement Chain action or pause action",
-        "runner-stop-blocked": "start was not one accepted planned tile",
+        "runner-stop-blocked": "start was not two accepted planned tiles",
         "runner-stop-wrong-time": "normal NONE proposal differs",
         "runner-stop-missing-control": "lacks native CONTROL_RETURNED",
     }[fault]

@@ -10,12 +10,12 @@
     "kind": "controlled-case",
     "expectationSource": "documentation/overworld-system/README.md#system-contracts",
     "actor": "WILD species 234 (Stantler), acquired through spawn; live handle and attached presentation required",
-    "trigger": "Leave the same live Runner Stantler on neutral input until its two-tile planned straight runway blocks and it selects a clear perpendicular turn",
-    "observable": "The blocked planned straight request is ignored, the alternate eight-frame skid is accepted, and one six-frame post-skid recovery Walk commits in the new direction",
+    "trigger": "Leave the same live Runner Stantler on neutral input until its three-tile planned straight runway blocks and it selects a clear perpendicular turn after two skid tiles",
+    "observable": "The blocked straight request is ignored. Two eight-frame skid Walks each commit in the original direction, then the perpendicular recovery Walk uses nominal time five plus the exact identity-and-commit keyed variance. Its complete elapsed schedule and third commit are required",
     "setupAudit": "complete",
     "setupMutations": [{
       "phase": "before-observation", "target": "fixture",
-      "change": "Disposable test.sav, native Stantler spawn at map33 (586,404), and exact identity bind. Do not change the profile, terrain, input, policy state, direction choice, collision result, or motion during observation."
+      "change": "Teleport only the disposable session's player to map33 (585,406), then spawn a native Stantler at (586,404) and bind its exact identity. Do not change the profile, terrain, input, policy state, direction choice, collision result, or motion during observation."
     }],
     "limits": [
       "Prepared spawning does not prove natural population spawning.",
@@ -29,7 +29,7 @@
     "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true
   }],
   "events": [
-    {"at": 0, "kind": "setup", "value": "Spawn and bind Wild Stantler at map33 (586,404)"},
+    {"at": 0, "kind": "setup", "value": "Teleport disposable player to map33 (585,406), then spawn and bind Wild Stantler at (586,404)"},
     {"at": 1, "kind": "lifecycle", "value": "Keep input neutral and retain the blocked planned straight request, accepted turn skid, and accepted recovery Walk"}
   ],
   "stop": {"frameBudget": 300, "condition": "The selected Stantler completes the turn skid and post-skid recovery"},
@@ -37,31 +37,33 @@
     "requiredEvents": ["MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
     "forbiddenEvents": ["MOTION_CANCELED", "CONTEXT_CHANGED", "ACTOR_REBOUND", "CONTROL_REBOUND"],
     "invariants": [
-      "The planned two-tile straight corridor is rejected while its immediate tile remains the skid target",
-      "The alternate perpendicular turn reserves the skid tile and its first post-turn tile",
-      "The eight-frame skid and six-frame recovery each move one tile and commit exactly once",
+      "The planned three-tile straight corridor is rejected while the two skid tiles and perpendicular exit remain clear",
+      "The alternate turn reserves two skid tiles and its first post-turn tile",
+      "Both eight-frame skid tiles and the exactly keyed recovery each move one tile and commit once",
       "Movement Chain action and pause action stay zero",
       "No active actors share a nonzero target reservation"
     ],
     "orderedEvents": [
       {"id": "skid-start", "event": "MOTION_STARTED", "reason": "OK", "valueA": {"equals": 1}, "valueB": {"equals": 8}},
       {"id": "skid-commit", "event": "LOGICAL_COMMIT", "reason": "OK", "valueB": {"equals": 1}},
-      {"id": "recovery-start", "event": "MOTION_STARTED", "reason": "OK", "valueA": {"equals": 1}, "valueB": {"equals": 6}},
+      {"id": "second-skid-start", "event": "MOTION_STARTED", "reason": "OK", "valueA": {"equals": 1}, "valueB": {"equals": 8}},
+      {"id": "second-skid-commit", "event": "LOGICAL_COMMIT", "reason": "OK", "valueB": {"equals": 1}},
+      {"id": "recovery-start", "event": "MOTION_STARTED", "reason": "OK", "valueA": {"equals": 1}},
       {"id": "recovery-commit", "event": "LOGICAL_COMMIT", "reason": "OK", "valueB": {"equals": 1}},
       {"id": "recovery-control", "event": "CONTROL_RETURNED", "reason": "OK"}
     ],
     "eventCounts": [
-      {"event": "MOTION_STARTED", "reason": "OK", "valueA": {"equals": 1}, "valueB": {"equals": 8}, "minimum": 1, "maximum": 1},
-      {"event": "MOTION_STARTED", "reason": "OK", "valueA": {"equals": 1}, "valueB": {"equals": 6}, "minimum": 1, "maximum": 1},
-      {"event": "LOGICAL_COMMIT", "reason": "OK", "valueB": {"equals": 1}, "minimum": 2, "maximum": 2},
-      {"event": "MOTION_FINISHED", "reason": "OK", "valueB": {"equals": 1}, "minimum": 2, "maximum": 2},
-      {"event": "CONTROL_RETURNED", "reason": "OK", "minimum": 2, "maximum": 2}
+      {"event": "MOTION_STARTED", "reason": "OK", "valueA": {"equals": 1}, "valueB": {"equals": 8}, "minimum": 2, "maximum": 2},
+      {"event": "MOTION_STARTED", "reason": "OK", "valueA": {"equals": 1}, "minimum": 3, "maximum": 3},
+      {"event": "LOGICAL_COMMIT", "reason": "OK", "valueB": {"equals": 1}, "minimum": 3, "maximum": 3},
+      {"event": "MOTION_FINISHED", "reason": "OK", "valueB": {"equals": 1}, "minimum": 3, "maximum": 3},
+      {"event": "CONTROL_RETURNED", "reason": "OK", "minimum": 3, "maximum": 3}
     ]
   },
   "capture": "none",
   "adapter": {
     "kind": "devtools-test", "test": "walk.wild.runner-turn-runway",
     "claims": ["natural-input", "live-actor-identity", "profile-resolution", "collision-decision", "engine-boundary", "logical-commit", "rendered-motion", "frame-pacing", "control-release"],
-    "minimumFrames": 14
+    "minimumFrames": 22
   }
 }

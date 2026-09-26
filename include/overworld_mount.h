@@ -3,6 +3,7 @@
 
 #include "overworld_actor_system.h"
 #include "overworld_wild_behavior_data.h"
+#include "overworld_wild_movement.h"
 #include "pokemon.h"
 #include "types.h"
 
@@ -15,12 +16,14 @@
 #define OVERWORLD_MOUNT_TOGGLE_DOWN \
     (*(volatile u8 *)(OVERWORLD_MOUNT_TOGGLE_LATCH_ADDR + 1))
 #define OVERWORLD_MOUNT_OVERLAY_MAGIC 0x544E554D /* MUNT */
-#define OVERWORLD_MOUNT_OVERLAY_VERSION 9
+#define OVERWORLD_MOUNT_OVERLAY_VERSION 11
+#define OVERWORLD_MOUNT_ACTIVE_FLAG 1
+#define OVERWORLD_MOUNT_RELEASE_HANDOFF_FRAMES 1
 
 typedef enum OverworldMountPhase {
     OVERWORLD_MOUNT_PHASE_NONE = 0,
-    OVERWORLD_MOUNT_PHASE_BOUND,
-    OVERWORLD_MOUNT_PHASE_RIDING,
+    OVERWORLD_MOUNT_PHASE_BOUND = 1,
+    OVERWORLD_MOUNT_PHASE_RIDING = 3,
 } OverworldMountPhase;
 
 typedef enum OverworldMountMotionMode {
@@ -61,9 +64,11 @@ typedef struct OverworldMountSnapshot {
     OverworldMountBinding binding;
     u32 sessionGeneration;
     u8 phase;
+    /* While phase is NONE, this is the short Wild-AI ownership handoff.
+     * While mounted, bit zero retains the follower's prior paused state. */
+    u8 reserved;
     u8 lastCancelReason;
     u8 motionMode;
-    u8 reserved;
 } OverworldMountSnapshot;
 
 typedef struct OverworldMountOverlayEntry {
@@ -74,8 +79,8 @@ typedef struct OverworldMountOverlayEntry {
         FieldSystem *fieldSystem,
         const OverworldMountBinding *binding,
         const OverworldWildBehaviorProfile *profile,
-        const OverworldWildBehaviorPrimitives *primitives,
-        const OverworldWildSurfaceCatalog *surfaceCatalog);
+        const OverworldWildSurfaceCatalog *surfaceCatalog,
+        OverworldActorPolicyProfileTransaction *policyTransaction);
     void (*cancel)(u8 reason);
     BOOL (*transition)(const OverworldActorTransitionCall *call);
     void (*onPlayerStep)(void);

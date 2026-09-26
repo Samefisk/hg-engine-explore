@@ -185,7 +185,7 @@ def replay_raw(rows=None,test=None):
 
 
 class StompMeasurementTests(unittest.TestCase):
-    def test_saved_shared_input_completes_only_retained_first_case(self):
+    def test_saved_shared_input_with_old_sound_is_rejected(self):
         import gzip
         import hashlib
         from tools.overworld.devtools_test_contract import TestEvaluator,validate_test
@@ -199,11 +199,9 @@ class StompMeasurementTests(unittest.TestCase):
         e.install_measurements(measurement_inputs(test,root))
         for line in gzip.open(artifact,'rt'):
             report=e.observe_record(json.loads(line),full_report=False)
-            self.assertNotEqual(report['state'],'failed',report['failures'])
-        meter=e.measurements['live-stomp-control-v1'].natural
-        self.assertEqual((meter.frames,len(meter.cases)),(4,1))
-        self.assertEqual([p['operation'] for p in meter.cases[0]['policies']],[1,0,1,2,3,0])
-        self.assertFalse(e.finish()['passed'])  # Case two and terminal control were never run.
+            if report['state']=='failed':break
+        self.assertEqual(report['state'],'failed')
+        self.assertIn('native stomp sound start failed',str(report['failures']))
     def test_saved_first_frame_replays_but_missing_remainder_does_not_pass(self):
         import gzip
         import hashlib

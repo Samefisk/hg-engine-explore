@@ -945,7 +945,9 @@ class FieldReturnBridge:
 
 
 class DevtoolsSession:
-    def __init__(self, rt, rom, save, session_dir):
+    def __init__(self, rt, rom, save, session_dir, *, spawn_height_control=False):
+        require(type(spawn_height_control) is bool,
+                "spawn height control flag must be boolean", "invalid-argument")
         self.rt = rt
         self.directory = Path(session_dir).resolve()
         require(self.directory.is_dir(), "session folder is missing", "invalid-path")
@@ -982,9 +984,11 @@ class DevtoolsSession:
         self.native_observation = None
         self.script_warp_heap_free_observer = None
         self.observer_control = None
+        self.spawn_height_control = None
         self.route_control = None
         self.chain_retry_control = None
         self.walk_intent = None
+        self.obstacle_intent = None
         self.walk_policy_control = None
         self.mount_pacing = None
         self.wild_walk = None
@@ -1003,6 +1007,10 @@ class DevtoolsSession:
         require(rt.ACTOR_DESCRIPTOR["state"]["offsets"]["actors"] == 68
                 and rt.ACTOR_DESCRIPTOR["state"]["offsets"]["fieldEpoch"] == 12,
                 "diagnostic actor context layout changed", "abi-mismatch")
+        if spawn_height_control:
+            from tools.overworld.devtools_spawn_height_control import NativeSpawnHeightReadControl
+            self.spawn_height_control = NativeSpawnHeightReadControl()
+            self.spawn_height_control.arm()
         rt.ROM = self.rom
         self.emu = rt.h.create_emulator()
         try:
@@ -1113,6 +1121,8 @@ class DevtoolsSession:
                     self.chain_retry_control.completed_boundary()
                 if getattr(self, "walk_intent", None) is not None:
                     self.walk_intent.completed_boundary()
+                if getattr(self, "obstacle_intent", None) is not None:
+                    self.obstacle_intent.completed_boundary()
                 if getattr(self, "mount_pacing", None) is not None:
                     self.mount_pacing.completed_boundary()
                 if getattr(self, "hop_arc", None) is not None:
@@ -1143,6 +1153,8 @@ class DevtoolsSession:
                     value["chainRetryControl"] = self.chain_retry_control.result()
                 if getattr(self, "walk_intent", None) is not None:
                     value["walkIntent"] = self.walk_intent.result()
+                if getattr(self, "obstacle_intent", None) is not None:
+                    value["obstacleIntent"] = self.obstacle_intent.result()
                 if getattr(self, "walk_policy_control", None) is not None:
                     value["walkPolicyControl"] = self.walk_policy_control.result()
                 if getattr(self, "mount_pacing", None) is not None:
@@ -1170,6 +1182,13 @@ class DevtoolsSession:
                 value["partyObservation"] = {"frame": self.completed_frames,
                     "boundary": "main-task-queue-completion",
                     "nativeGetterChecks": list(self.party_getter_checks.values())}
+                completed_snapshot = getattr(self.native_observation, "completed_snapshot", None)
+                if completed_snapshot is not None:
+                    self.callback_costs.call(
+                        "sampler:spawn-height-trace",
+                        completed_snapshot,
+                        value,
+                    )
                 profile_keys = tuple(value["nativeObservation"]["profileFingerprints"])
                 if profile_keys != getattr(self, "latest_profile_keys", None):
                     self.latest_resolved_profiles = self.callback_costs.call(
@@ -1878,6 +1897,35 @@ class DevtoolsSession:
         return dict(closed=True, advancedFrames=0, walkIntent=self.walk_intent.result()
                     if getattr(self, "walk_intent", None) is not None else None)
 
+    def obstacle_intent_arm(self, args):
+        from tools.overworld.devtools_records import select_current_actor
+        from tools.overworld.devtools_obstacle_intent import NativeObstacleIntent
+        require(isinstance(args, dict) and set(args) == {"subject", "maxFrames"}
+                and self.prepared and not self.native_bridge_active
+                and getattr(self, "obstacle_intent", None) is None,
+                "Obstacle intent requires one prepared bound subject", "invalid-argument")
+        subject = select_current_actor(self.snapshot(diagnostic_details=False), args["subject"])
+        control = NativeObstacleIntent(self, subject, args["maxFrames"])
+        actor = control.current()["actor"]
+        position = actor.get("logical") or {}
+        require((position.get("x"), position.get("y")) in control.LANDINGS
+                and actor.get("motionKind") == "NONE" and actor.get("motionPhase") == "IDLE"
+                and actor.get("commitSequence") == 0,
+                "Obstacle intent requires the reviewed idle approach tile", "invalid-argument")
+        control.origin = (position["x"], position["y"])
+        control.initial_commit = actor["commitSequence"]
+        control.install()
+        self.obstacle_intent = control
+        return dict(armed=True, prepared=True, frame=self.completed_frames,
+                    snapshot=self.snapshot(diagnostic_details=False),
+                    obstacleIntent=control.result())
+
+    def obstacle_intent_close(self):
+        control = getattr(self, "obstacle_intent", None)
+        require(control is not None, "Obstacle intent was not armed", "invalid-argument")
+        control.close()
+        return dict(closed=True, advancedFrames=0, obstacleIntent=control.result())
+
     def chain_retry_close(self):
         if self.chain_retry_control is not None:
             self.chain_retry_control.close()
@@ -2383,6 +2431,7 @@ class DevtoolsSession:
             require(policy_control is None or policy_control.failure is None,
                     "Walk policy reader control failed", "walk-policy-control-invalid")
             intent = getattr(self, "walk_intent", None)
+            obstacle_intent = getattr(self, "obstacle_intent", None)
             pacing = getattr(self, "mount_pacing", None)
             require(pacing is None or pacing.failure is None,
                     "Mount pacing reader failed", "mount-pacing-invalid")
@@ -2420,6 +2469,12 @@ class DevtoolsSession:
             require(intent is None or intent.failure is None, "Walk intent control failed", "walk-intent-invalid")
             if intent is not None and not intent.closed and self.completed_frames - intent.start_frame > intent.max_frames:
                 intent.fail("Walk intent frame budget exceeded")
+            require(obstacle_intent is None or obstacle_intent.failure is None,
+                    "Obstacle intent control failed", "obstacle-intent-invalid")
+            if (obstacle_intent is not None and not obstacle_intent.closed
+                    and self.completed_frames - obstacle_intent.start_frame > obstacle_intent.max_frames):
+                raise DevtoolsFailure("obstacle-intent-timeout",
+                                      "Obstacle intent did not complete within its frame bound")
             retry = getattr(self, "chain_retry_control", None)
             require(retry is None or retry.failure is None, "chain retry control failed", "chain-retry-control-invalid")
             control = getattr(self, "route_control", None)
@@ -2581,6 +2636,8 @@ class DevtoolsSession:
             value["chainRetryControl"] = self.chain_retry_control.result()
         if getattr(self, "walk_intent", None) is not None:
             value["walkIntent"] = self.walk_intent.result()
+        if getattr(self, "obstacle_intent", None) is not None:
+            value["obstacleIntent"] = self.obstacle_intent.result()
         if getattr(self, "walk_policy_control", None) is not None:
             value["walkPolicyControl"] = self.walk_policy_control.result()
         if getattr(self, "mount_pacing", None) is not None:
@@ -2658,6 +2715,21 @@ class DevtoolsSession:
             actor["lastCancelReasonName"] = rt.actor_probe._enum_name(rt.ACTOR_DESCRIPTOR, "OverworldActorReason", actor["lastCancelReason"], "OVERWORLD_ACTOR_REASON")
             if engine["in_manager"]:
                 actor["engineObject"] = rt.object_state(emu, engine["pointer"])
+                if actor["motionKind"] == "FLY_IN" and all(checks.values()):
+                    pose = actor["engineObject"]
+                    tile_x, tile_z = pose["pos_x"] >> 16, pose["pos_z"] >> 16
+                    cell = rt.loaded_terrain_cell(emu, tile_x, tile_z)
+                    runtime = rt.unsigned(emu, rt.WILD_STATE + rt.WILD_RUNTIME_PTR_OFFSET)
+                    require(runtime != 0, "Fly In shadow runtime is missing", "observation-missing")
+                    shadow_mask = rt.unsigned(emu, 0x023BE3FC, 2)
+                    actor["shadowPolicy"] = {
+                        "renderTile": [tile_x, tile_z],
+                        "logicalTile": [pose["x"], pose["y"]],
+                        "baseY": rt.signed(emu, runtime + 0x138 + slot * 4),
+                        "suppressed": bool(shadow_mask & (1 << slot)),
+                        "terrainLoaded": cell is not None,
+                        "surface": rt.loaded_surface_cell(emu, tile_x, tile_z, cell),
+                    }
             actor["crashPresentation"] = crash_reader.observe(
                 self.read, actor, self.completed_frames, rt.EXECUTED_FRAME_COUNT) if crash_reader is not None else {
                     "known": False, "reason": crash_error, "frame": self.completed_frames,
@@ -2671,6 +2743,82 @@ class DevtoolsSession:
         result["fieldControl"] = {"fieldPointer": self.field_pointer(),
                                   "taskPointer": rt.unsigned(emu, self.field_pointer() + 0x10),
                                   "actorTransitionPhase": rt.unsigned(emu, address + 40, 1)}
+        # The stock field camera follows the player's position vector. Keep
+        # its last drawn target beside the post-task pose so presentation
+        # checks can detect a frame-order mismatch, not only a rider/mount
+        # mismatch. Camera layout: pokeheartgold/include/camera.h.
+        camera = rt.unsigned(emu, self.field_pointer() + 0x24)
+        if camera:
+            result["camera"] = {
+                "pointer": camera,
+                "targetPointer": rt.unsigned(emu, camera + 0x54),
+                "lookAtTarget": [rt.signed(emu, camera + offset)
+                                 for offset in (0x20, 0x24, 0x28)],
+                "lastTarget": [rt.signed(emu, camera + offset)
+                               for offset in (0x48, 0x4C, 0x50)],
+            }
+        mounted = next((actor for actor in actors
+                        if actor.get("role") == "MOUNTED"
+                        and actor.get("engineIdentity", {}).get("in_manager")), None)
+        if mounted is not None:
+            def graphics_pose(object_pointer):
+                callback = rt.unsigned(emu, object_pointer + 0xC8)
+                state_words = [rt.unsigned(emu, object_pointer + 0x108 + offset)
+                               for offset in range(0, 0x20, 4)]
+                # Stock rider and Pokémon map sprites use different callback
+                # layouts for their graphics pointer (overlay 1).
+                graphics = (state_words[1] if callback == 0x021F88F1 else
+                            state_words[0] if callback == 0x021F7895 else 0)
+                return {
+                    "objectPointer": object_pointer,
+                    "graphicsCallback": callback,
+                    "graphicsStateWords": state_words,
+                    "graphicsPointer": graphics,
+                    "graphics": [rt.signed(emu, graphics + offset)
+                                 for offset in (0, 4, 8)] if graphics else None,
+                    "position": [rt.signed(emu, object_pointer + offset)
+                                 for offset in (0x70, 0x74, 0x78)],
+                    "face": [rt.signed(emu, object_pointer + offset)
+                             for offset in (0x7C, 0x80, 0x84)],
+                    "extra": [rt.signed(emu, object_pointer + offset)
+                              for offset in (0x88, 0x8C, 0x90)],
+                    "jump": [rt.signed(emu, object_pointer + offset)
+                             for offset in (0x94, 0x98, 0x9C)],
+                }
+            result["mountedDrawPose"] = {
+                "player": graphics_pose(rt.player_ptr(emu)),
+                "mount": graphics_pose(mounted["engineIdentity"]["pointer"]),
+            }
+            # Stock native shadows are separate field-effect slots. Their
+            # update tasks run before the late mounted pose sync, so retain
+            # their actual draw positions beside the two MapObject sprites.
+            resource = rt.unsigned(emu, self.field_pointer() + 0x44)
+            manager = rt.unsigned(emu, resource + 0x1C) if resource else 0
+            shadow_slots = []
+            shadow_pool = {"resource": resource, "manager": manager}
+            if 0x02000000 <= manager < 0x02400000:
+                count = rt.unsigned(emu, manager)
+                pool = rt.unsigned(emu, manager + 0xC)
+                shadow_pool.update(count=count, pool=pool)
+                if count <= 128 and 0x02000000 <= pool < 0x02400000:
+                    owners = {rt.player_ptr(emu), mounted["engineIdentity"]["pointer"]}
+                    for index in range(count):
+                        slot = pool + index * 0xC8
+                        flags = rt.unsigned(emu, slot)
+                        callback = rt.unsigned(emu, slot + 0xB4)
+                        owner = rt.unsigned(emu, slot + 0x4C)
+                        if (flags & 1 and owner in owners
+                                and callback in (0x021FD719, 0x021FD92D)):
+                            shadow_slots.append({
+                                "index": index, "pointer": slot,
+                                "owner": owner, "callback": callback,
+                                "flags": flags,
+                                "hidden": rt.unsigned(emu, slot + 0x3C, 2),
+                                "position": [rt.signed(emu, slot + offset)
+                                             for offset in (0x24, 0x28, 0x2C)],
+                            })
+            result["mountedDrawPose"]["shadows"] = shadow_slots
+            result["mountedDrawPose"]["shadowPool"] = shadow_pool
         if self.native_observation is not None:
             result["nativeObservation"] = self.native_observation.snapshot(include_profiles=details)
         if getattr(self, "spawn_cost_probe", None) is not None:
@@ -3780,6 +3928,8 @@ class DevtoolsSession:
                     self.chain_retry_control.close()
                 if getattr(self, "walk_intent", None) is not None:
                     self.walk_intent.close(disposing=True)
+                if getattr(self, "obstacle_intent", None) is not None:
+                    self.obstacle_intent.close(disposing=True)
                 if getattr(self, "walk_policy_control", None) is not None:
                     self.walk_policy_control.close()
                 if getattr(self, "mount_pacing", None) is not None:

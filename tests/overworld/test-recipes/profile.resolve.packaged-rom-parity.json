@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "profile.resolve.packaged-rom-parity",
-  "title": "Eight packaged resolver cases match Workshop",
+  "title": "Nine packaged resolver cases match Workshop",
   "mode": "prepared",
   "fixture": {"rom": "test.nds", "save": "test.sav"},
   "expectationSource": "tests/overworld/scenarios/profile.resolve.packaged-rom-parity.json",
@@ -10,7 +10,7 @@
   "subjects": [],
   "setup": [],
   "actions": [
-    {"id": "resolve-eight-cases", "op": "resolver.probe", "args": {},
+    {"id": "resolve-nine-cases", "op": "resolver.probe", "args": {},
      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}}
   ],
   "assertions": [{"kind": "measurement-complete", "measurement": "packaged-resolver-parity-v1", "when": "final"}],

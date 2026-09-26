@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.stantler-sprint-wall-approach",
+  "title": "Mounted Sprint approaches a solid wall and turns onto a clear tile",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/architecture.md#5-motion-module-policy",
+  "requirements": ["current.mounted-stantler-wall-approach"],
+  "budgets": {"maxSeconds": 140, "maxFrames": 220, "noProgressFrames": 120, "minObservedFrames": 120},
+  "subjects": [{"id": "stantler", "species": 234, "role": "MOUNTED", "acquire": "existing"}],
+  "setup": [
+    {"id": "saved-wall-lane", "op": "assert", "args": {"predicate": {"kind": "player-settled-at", "map": 33, "x": 585, "z": 406}},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "own-stantler", "op": "party", "args": {"slot": 0, "species": 234, "level": 50, "hp": 1, "status": 0},
+      "budget": {"maxSeconds": 15, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "mount-own-stantler", "op": "spawn", "args": {"species": 234, "role": "mounted", "slot": 0},
+      "budget": {"maxSeconds": 30, "maxFrames": 180, "noProgressFrames": 120}},
+    {"id": "bind-stantler", "op": "bind", "args": {"subject": "stantler"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "hold-right-to-wall", "op": "step", "args": {"frames": 120, "keys": ["RIGHT"]},
+      "budget": {"maxSeconds": 45, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "turn-up-from-wall", "op": "step", "args": {"frames": 64, "keys": ["UP"],
+      "until": {"kind": "player-settled-at", "map": 33, "x": 589, "z": 405}},
+      "budget": {"maxSeconds": 30, "maxFrames": 64, "noProgressFrames": 64}},
+    {"id": "release-through-up-commit", "op": "step", "args": {"frames": 16, "keys": [],
+      "until": {"kind": "actor-field", "subject": "stantler", "path": "motionPhase", "operator": "eq", "value": "IDLE"}},
+      "budget": {"maxSeconds": 10, "maxFrames": 16, "noProgressFrames": 16}}
+  ],
+  "assertions": [
+    {"kind": "actor-field", "subject": "stantler", "path": "identityVerified", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "actor-field", "subject": "stantler", "path": "presentationAttached", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "frame-count", "operator": "gte", "value": 120}
+  ]
+}

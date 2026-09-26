@@ -276,6 +276,11 @@ class UnmountedZeroStutterMeasurement:
             "mask": mask,
             "pauseFrames": lane[fields["hopPause"]["offset"]],
             "maxDistance": lane[fields["hopMaxDistance"]["offset"]],
+            "sourceSha256": self.source_sha256,
+            "subjectIdentity": actor.get("subjectIdentity"),
+            "species": actor.get("species"),
+            "role": actor.get("role"),
+            "identityVerified": actor.get("identityVerified"),
         }
         require(value["pauseFrames"] == MANKEY_PROFILE_HOP_PAUSE_FRAMES
                 and value["maxDistance"] == MANKEY_PROFILE_HOP_MAX_DISTANCE,
@@ -442,6 +447,11 @@ class UnmountedZeroStutterMeasurement:
                 "profileMask": (self.profile or {}).get("mask"),
                 "profilePauseFrames": (self.profile or {}).get("pauseFrames"),
                 "profileMaxDistance": (self.profile or {}).get("maxDistance"),
+                "profileSourceSha256": (self.profile or {}).get("sourceSha256"),
+                "profileSubjectIdentity": (self.profile or {}).get("subjectIdentity"),
+                "profileSpecies": (self.profile or {}).get("species"),
+                "profileRole": (self.profile or {}).get("role"),
+                "profileIdentityVerified": (self.profile or {}).get("identityVerified"),
             },
             "pacing": {
                 "sampleCount": self.pacing_samples,

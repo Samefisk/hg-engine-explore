@@ -15,7 +15,7 @@ def validate_recipe(value, measurement):
             or value["fixture"] != {"rom": "test.nds", "save": "test.sav"} \
             or value["requirements"] != [REQUIREMENT] \
             or value["budgets"] != {"maxSeconds": 180, "maxFrames": 221,
-                                     "noProgressFrames": 64, "minObservedFrames": 94} \
+                                     "noProgressFrames": 64, "minObservedFrames": 102} \
             or value["subjects"] != [{"id": subject, "species": 155,
                                        "role": "MOUNTED", "acquire": "existing"}]:
         raise ValueError("turn-skid exact fixture, subject or bounds differ")

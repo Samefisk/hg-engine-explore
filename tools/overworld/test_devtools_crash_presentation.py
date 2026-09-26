@@ -129,7 +129,7 @@ class CrashPresentationTests(unittest.TestCase):
             "-Iinclude","-I.","-x","c","-S","-emit-llvm","-o","-","-"],input=source,
             cwd=root,text=True,capture_output=True,check=True,timeout=15)
         row=next(line for line in result.stdout.splitlines() if line.startswith("@offsets ="))
-        self.assertEqual(tuple(map(int,re.findall(r"i32 (\d+)",row))), (crash.STATE_SIZE,*crash.OFFSETS))
+        self.assertEqual(tuple(map(int,re.findall(r"i32 (\d+)",row))), (952,*crash.OFFSETS))
 
 
 if __name__ == "__main__": unittest.main()

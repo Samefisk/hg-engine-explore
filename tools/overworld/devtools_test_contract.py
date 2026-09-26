@@ -22,14 +22,17 @@ from tools.overworld.devtools_movement_predicates import (
 ACTOR_PATHS = frozenset({"role", "species", "lane", "motionKind", "motionPhase", "commitSequence",
     "lastCommandSequence", "active", "presentationAttached", "identityVerified", "inputOwnership",
     "logical.x", "logical.y", "render.x", "render.y", "origin.x", "origin.y", "target.x", "target.y",
-    "motionElapsed", "motionDuration", "lastDecisionName", "lastCancelReasonName", "form", "level"})
+    "motionElapsed", "motionDuration", "movementPolicy.speed", "lastDecisionName",
+    "lastCancelReasonName", "form", "level"})
 PLAYER_PATHS = frozenset({"x", "y", "pos_x", "pos_y", "pos_z", "facing", "movement_cmd",
                           "movement_step"})
 EVENTS = frozenset({"ACTOR_ATTACHED", "ACTOR_DETACHED", "CONTROL_REBOUND", "PROFILE_RESOLVED",
     "LANE_CHANGED", "INTENT_CREATED", "CANDIDATE_REJECTED", "PLAN_ACCEPTED", "MOTION_STARTED",
     "STREAM_WAITING", "STREAM_ADVANCED", "PATH_ADVANCED", "LOGICAL_COMMIT", "WORLD_EFFECT",
     "PRESENTATION_SYNCED", "MOTION_FINISHED", "MOTION_CANCELED", "CONTEXT_CHANGED", "ACTOR_REBOUND",
-    "CONTROL_RETURNED", "MOUNT_PRESENTATION_POSITION", "MOUNT_PRESENTATION_STATE"})
+    "CONTROL_RETURNED", "MOUNT_PRESENTATION_POSITION", "MOUNT_PRESENTATION_STATE",
+    "CONDITION_EVALUATED", "CONDITION_TIMERS", "CONDITION_TARGET",
+    "CONDITIONAL_RESOLVED"})
 OPERATORS = frozenset({"eq", "ne", "gte", "lte"})
 ROLES = frozenset({"WILD", "FOLLOWER", "MOUNTED", "SCRIPTED"})
 MODES = frozenset({"normal", "prepared", "observer-control"})
@@ -43,7 +46,9 @@ CHAIN_RETRY = "chain-retry-v1"
 ACCELERATION = "acceleration-parity-v1"
 WALK_POLICY_CONTROL = "live-walk-policy-control-v1"
 MOUNT_PACING = "mounted-frame-pacing-v1"
+MOUNT_SPEED_SLEW = "mounted-speed-slew-v1"
 MOUNT_CONTROL_STRESS = "mounted-control-stress-v1"
+MOUNT_DETACH_FOLLOWER_RESUME = "mount-detach-follower-resume-v1"
 MOUNTED_HOP_ARC = "mounted-hop-arc-v1"
 MOUNTED_NEAREST_DIAGONAL = "mounted-nearest-diagonal-v1"
 MOUNT_POSE_CONTROL = "live-mount-pose-control-v1"
@@ -81,8 +86,14 @@ CRASH_KINDS = {CRASH, CRASH_CONTROL}
 TURN_SKID = "turn-skid-v1"
 WILD_BATTLE_HANDOFF = "wild-battle-handoff-v1"
 CONDITION_CONTROLLER = "live-condition-controller-v1"
+PROFILE_FEATURE_MEASUREMENTS = frozenset({
+    "notice-player-runtime-v1", "stalker-runtime-v1", "playful-runtime-v1",
+    "startled-runtime-v1", "fly-in-runtime-v1", "waddle-runtime-v1",
+    "floaty-bounce-hop-pause-v1",
+    "held-control-runtime-v1", "blocked-wild-facing-v1",
+})
 RAW_BOUNDARY_MEASUREMENTS = frozenset({
-    WALK_POLICY_CONTROL, MOUNT_PACING, MOUNT_CONTROL_STRESS,
+    WALK_POLICY_CONTROL, MOUNT_PACING, MOUNT_SPEED_SLEW, MOUNT_CONTROL_STRESS, MOUNT_DETACH_FOLLOWER_RESUME,
     MOUNTED_HOP_ARC, MOUNTED_NEAREST_DIAGONAL, MOUNT_POSE_CONTROL,
     WILD_WALK, WILD_LEDGE, WILD_TELEPORT, RUNNER_STOP_SKID, RUNNER_TURN_RUNWAY, MOUNTED_STREAMING,
     MOUNTED_CARDINAL_STREAMING, MOUNTED_WALK_TRANSITION,
@@ -93,10 +104,11 @@ RAW_BOUNDARY_MEASUREMENTS = frozenset({
     *CORNER_KINDS, *MATRIX_KINDS, *STOMP_KINDS, *CRASH_KINDS,
 })
 PROFILE_MEASUREMENTS = POOL_MEASUREMENTS | {HEIGHT_CONTROL}
-RAW_MEASUREMENTS = frozenset({"unmounted-cadence-v1", "unmounted-game-cadence-v1", "center-entry-exit-v1", "cyndaquil-normal-setup-v1", ROUTE_CONTROL, RESOLVER_PARITY, CONDITION_SERVICE, ACTOR_INSPECT, ACCELERATION, WALK_POLICY_CONTROL, MOUNT_PACING, MOUNT_CONTROL_STRESS, MOUNTED_HOP_ARC, MOUNTED_NEAREST_DIAGONAL, MOUNT_POSE_CONTROL, WILD_WALK, WILD_LEDGE, WILD_TELEPORT, RUNNER_STOP_SKID, RUNNER_TURN_RUNWAY, WILD_TRANSITION, FOLLOWER_TRANSITION, MOUNTED_STREAMING, MOUNTED_CARDINAL_STREAMING, MOUNTED_WALK_TRANSITION, MOUNTED_HOP_TRANSITION, LAND_SURF, SPAWN_WORK_BUDGET, UNMOUNTED_ZERO_STUTTER, POPULATION_FAST_TRAVEL, MOUNTED_TELEPORT_MATRIX, WILD_CLEAR_CONTROL, TURN_SKID, WILD_BATTLE_HANDOFF, CONDITION_CONTROLLER, *CORNER_KINDS, *MATRIX_KINDS, *STOMP_KINDS, *CRASH_KINDS})
+RAW_MEASUREMENTS = frozenset({"unmounted-cadence-v1", "unmounted-game-cadence-v1", "center-entry-exit-v1", "cyndaquil-normal-setup-v1", ROUTE_CONTROL, RESOLVER_PARITY, CONDITION_SERVICE, ACTOR_INSPECT, ACCELERATION, WALK_POLICY_CONTROL, MOUNT_PACING, MOUNT_SPEED_SLEW, MOUNT_CONTROL_STRESS, MOUNT_DETACH_FOLLOWER_RESUME, MOUNTED_HOP_ARC, MOUNTED_NEAREST_DIAGONAL, MOUNT_POSE_CONTROL, WILD_WALK, WILD_LEDGE, WILD_TELEPORT, RUNNER_STOP_SKID, RUNNER_TURN_RUNWAY, WILD_TRANSITION, FOLLOWER_TRANSITION, MOUNTED_STREAMING, MOUNTED_CARDINAL_STREAMING, MOUNTED_WALK_TRANSITION, MOUNTED_HOP_TRANSITION, LAND_SURF, SPAWN_WORK_BUDGET, UNMOUNTED_ZERO_STUTTER, POPULATION_FAST_TRAVEL, MOUNTED_TELEPORT_MATRIX, WILD_CLEAR_CONTROL, TURN_SKID, WILD_BATTLE_HANDOFF, CONDITION_CONTROLLER, *CORNER_KINDS, *MATRIX_KINDS, *STOMP_KINDS, *CRASH_KINDS})
 MEASUREMENTS = frozenset({"ledyba-chain-v1", "live-observer-control-v1", "actor-binding-context-v1",
     HEIGHT_CONTROL, CHAIN_RETRY, MOUNT_CONTROL_STRESS, MOUNTED_HOP_ARC,
-    MOUNTED_NEAREST_DIAGONAL, APPEAR_HOP}) | POOL_MEASUREMENTS | RAW_MEASUREMENTS
+    MOUNTED_NEAREST_DIAGONAL, APPEAR_HOP}) | POOL_MEASUREMENTS | RAW_MEASUREMENTS \
+    | PROFILE_FEATURE_MEASUREMENTS
 RAW_MEASUREMENTS = RAW_MEASUREMENTS | {WARP_GATE}
 MEASUREMENTS = MEASUREMENTS | {WARP_GATE}
 
@@ -170,9 +182,10 @@ def _wild_spawn_setup(receipt, snapshot, species=19, locomotion=0):
     position = [int.from_bytes(raw[n:n+4],"little",signed=True) for n in (0,4)]
     target = [int.from_bytes(raw[n:n+2],"little",signed=True) for n in (20,22)]
     origin = [int.from_bytes(raw[n:n+2],"little",signed=True) for n in (24,26)]
+    expected_startup = dict(target=target,origin=origin,locomotion=raw[28],hopDirection=raw[29],targetBaseY=0)
     if encounter != spawn["preparedEncounter"] or encounter["species"] != species or encounter["personality"] != value["personality"] \
             or position != spawn["position"] or target != position or origin != target \
-            or spawn["startup"] != dict(target=target,origin=origin,locomotion=raw[28],hopDirection=raw[29]) \
+            or spawn["startup"] != expected_startup \
             or raw[28] != locomotion:
         raise ValueError("wild Walk spawn identity or own native destination differs")
     public = spawn["publicSubject"]
@@ -246,6 +259,7 @@ def validate_predicate(value, subject_ids):
         _shape(value, {"kind", "measurement", "stage"}, {"when"}, "predicate")
         stages = {"live-observer-control-v1": ("baseline", "render-detected", "complete"),
                   MOUNT_PACING: ("main-started", "main-complete", "recovery-started", "recovery-complete"),
+                  MOUNT_SPEED_SLEW: ("main-started", "main-complete", "gait-settled"),
                   MATRIX: ("case-started", "case-complete", "gate-complete", "gate-released"),
                   MATRIX_CONTROL: ("case-started", "case-complete", "gate-complete", "gate-released"),
                   STOMP: ("case-started", "case-complete"),
@@ -267,6 +281,8 @@ def validate_predicate(value, subject_ids):
                   MOUNTED_TELEPORT_MATRIX: ("case-started", "case-complete"),
                   WARP_GATE: ("case-started", "case-complete", "teleports-complete", "walk-started", "arrived"),
                   CONDITION_CONTROLLER: ("stale-target-observed",),
+                  "stalker-runtime-v1": ("unseen-motion-complete",),
+                  "playful-runtime-v1": ("actor-play-complete",),
                   CHAIN_RETRY: ("baseline", "complete"),
                   ROUTE_CONTROL: ("baseline", "cpu-detected", "player-detected", "complete")}
         if value["stage"] not in stages.get(value["measurement"], ()):
@@ -482,11 +498,31 @@ def validate_test(value):
                 _shape(action["args"], set(), label="Walk intent close args")
                 if phase != "setup" or value["mode"] != "prepared":
                     raise ValueError("Walk intent close requires prepared setup")
+            elif op == "obstacle-intent.arm":
+                _shape(action["args"], {"subject", "maxFrames"},
+                       label="obstacle intent args")
+                if (phase != "actions" or value["mode"] != "prepared"
+                        or action["args"]["subject"] not in subjects):
+                    raise ValueError("Obstacle intent requires a prepared bound subject")
+                _int(action["args"]["maxFrames"], "obstacle intent frames", 1, 120)
+            elif op == "obstacle-intent.close":
+                _shape(action["args"], set(), label="obstacle intent close args")
+                if phase != "actions" or value["mode"] != "prepared":
+                    raise ValueError("Obstacle intent close requires prepared observation")
             elif op == "actor-inspect.probe":
                 _shape(action["args"], {"subject"}, label="actor Inspect args")
                 if not inspect_case or phase != "actions" or value["mode"] != "prepared" \
                         or action["args"]["subject"] not in subjects:
                     raise ValueError("actor Inspect requires its exact prepared subject measurement")
+            elif op == "terrain":
+                if value["id"] != "world.streaming.stantler-mounted-route" \
+                        or phase != "actions" or value["mode"] != "prepared" \
+                        or action["id"] not in ("route-terrain", "recovery-terrain"):
+                    raise ValueError("terrain probe requires the mounted Stantler route")
+                _shape(action["args"], {"radius"}, label="mounted route terrain args")
+                action["args"] = validate_command(op, action["args"])
+                if action["args"]["radius"] != (1 if action["id"] == "route-terrain" else 2):
+                    raise ValueError("mounted route terrain radius differs")
             elif op in {"step", *PREPARED_OPS}:
                 raw_args = action["args"]
                 until = None
@@ -688,12 +724,14 @@ def validate_test(value):
                     or value["subjects"] != [{"id": subject, "species": 234,
                                                "role": "WILD", "acquire": "spawn"}] \
                     or value["budgets"]["maxFrames"] > 600 \
-                    or [action["op"] for action in value["setup"]] != ["spawn", "bind"] \
+                    or [action["op"] for action in value["setup"]] != ["teleport", "spawn", "bind"] \
                     or [action["op"] for action in value["actions"]] != ["wait"] \
                     or value["assertions"] != [expected]:
                 raise ValueError("Runner stop skid requires its exact neutral Stantler fixture")
-            spawn = value["setup"][0]["args"]
-            if spawn != {"species": 234, "form": 0, "role": "wild", "level": 10,
+            spawn = value["setup"][1]["args"]
+            if value["setup"][0]["args"] != {"map": 33, "x": 585, "z": 406,
+                                                "facing": 3} \
+                    or spawn != {"species": 234, "form": 0, "role": "wild", "level": 10,
                          "x": 584, "z": 406} \
                     or value["actions"][0]["args"] != {"predicate": expected}:
                 raise ValueError("Runner stop-skid Route 29 inputs differ")
@@ -709,12 +747,14 @@ def validate_test(value):
                                                "role": "WILD", "acquire": "spawn"}] \
                     or value["budgets"] != {"maxSeconds": 120, "maxFrames": 300,
                                              "noProgressFrames": 240,
-                                             "minObservedFrames": 14} \
-                    or [action["op"] for action in value["setup"]] != ["spawn", "bind"] \
+                                             "minObservedFrames": 22} \
+                    or [action["op"] for action in value["setup"]] != ["teleport", "spawn", "bind"] \
                     or [action["op"] for action in value["actions"]] != ["wait"] \
                     or value["assertions"] != [expected]:
                 raise ValueError("Runner turn runway requires its exact neutral Stantler fixture")
-            if value["setup"][0]["args"] != {
+            if value["setup"][0]["args"] != {"map": 33, "x": 585, "z": 406,
+                                                "facing": 3} \
+                    or value["setup"][1]["args"] != {
                     "species": 234, "form": 0, "role": "wild", "level": 10,
                     "x": 586, "z": 404} \
                     or value["actions"][0]["args"] != {"predicate": expected}:
@@ -1052,6 +1092,36 @@ def validate_test(value):
                     or value["actions"][3]["args"] != {"predicate": expected_stage}:
                 raise ValueError("population fast-travel Route29 inputs differ")
             continue
+        if isinstance(measurement, dict) and measurement.get("kind") == MOUNT_DETACH_FOLLOWER_RESUME:
+            _shape(measurement, {"kind", "subject"},
+                   label="mount detach follower resume measurement")
+            subject = measurement["subject"]
+            expected = {"kind": "measurement-complete",
+                        "measurement": MOUNT_DETACH_FOLLOWER_RESUME,
+                        "when": "final"}
+            if value["mode"] != "prepared" \
+                    or value["requirements"] != ["current.mount-detach-follower-resume"] \
+                    or value["subjects"] != [{"id": subject, "species": 155,
+                                               "role": "MOUNTED", "acquire": "existing"}] \
+                    or value["budgets"] != {"maxSeconds": 120, "maxFrames": 240,
+                                             "noProgressFrames": 48,
+                                             "minObservedFrames": 1} \
+                    or [action["op"] for action in value["setup"]] != [
+                        "teleport", "party", "spawn", "step", "bind"] \
+                    or [action["op"] for action in value["actions"]] != ["step", "step"] \
+                    or value["assertions"] != [expected]:
+                raise ValueError("mount detach follower resume requires its exact short route")
+            if [action["args"] for action in value["setup"]] != [
+                    {"map": 33, "x": 584, "z": 403, "facing": 3},
+                    {"slot": 0, "species": 155, "level": 10, "hp": 1, "status": 0},
+                    {"species": 155, "form": 0, "role": "mounted", "slot": 0, "level": 5},
+                    {"frames": 16, "keys": []},
+                    {"subject": subject}] \
+                    or [action["args"] for action in value["actions"]] != [
+                        {"frames": 1, "keys": ["SELECT"]},
+                        {"frames": 32, "keys": ["RIGHT"]}]:
+                raise ValueError("mount detach follower resume inputs differ")
+            continue
         if isinstance(measurement, dict) and measurement.get("kind") == MOUNT_CONTROL_STRESS:
             _shape(measurement, {"kind", "subject", "contract"}, label="mounted control stress measurement")
             subject = measurement["subject"]
@@ -1197,6 +1267,30 @@ def validate_test(value):
                 if args.get(predicate_key) != expected or (predicate_key == "until" and args.get("keys") != ["RIGHT"]):
                     raise ValueError("mounted pacing input must stop at its exact semantic boundary")
             continue
+        if isinstance(measurement, dict) and measurement.get("kind") == MOUNT_SPEED_SLEW:
+            _shape(measurement, {"kind", "subject"}, label="mounted speed measurement")
+            if value["mode"] != "prepared" or value["subjects"] != [
+                    {"id": measurement["subject"], "species": 234,
+                     "role": "MOUNTED", "acquire": "existing"}] \
+                    or value["budgets"]["maxFrames"] > 1200:
+                raise ValueError("mounted speed requires one current bounded Stantler")
+            if any(a["op"] not in ("teleport", "party", "spawn", "bind", "step", "wait")
+                   or "skipIf" in a for a in value["setup"]):
+                raise ValueError("mounted speed setup must end before its input window")
+            if [a["op"] for a in value["actions"]] != [
+                    "mount-pacing.arm", "step", "wait", "wait", "mount-pacing.close"]:
+                raise ValueError("mounted speed needs one held Right run and close")
+            if value["actions"][0]["args"]["subject"] != measurement["subject"]:
+                raise ValueError("mounted speed arm subject differs")
+            for index, stage, key in ((1, "main-started", "until"),
+                                      (2, "main-complete", "predicate"),
+                                      (3, "gait-settled", "predicate")):
+                args = value["actions"][index]["args"]
+                expected = {"kind": "measurement-stage", "measurement": MOUNT_SPEED_SLEW,
+                            "stage": stage, "when": "final"}
+                if args.get(key) != expected or (key == "until" and args.get("keys") != ["RIGHT"]):
+                    raise ValueError("mounted speed input must stop at its exact motion boundary")
+            continue
         if isinstance(measurement, dict) and measurement.get("kind") == WALK_POLICY_CONTROL:
             _shape(measurement, {"kind", "subject"}, label="Walk reader control measurement")
             if value["mode"] != "observer-control" or len(value["subjects"]) != 1 or value["subjects"][0]["id"] != measurement["subject"] or value["subjects"][0]["role"] not in ("WILD", "MOUNTED") or value["subjects"][0]["acquire"] != "existing" or value["budgets"]["maxFrames"] > 1200:
@@ -1284,15 +1378,31 @@ def validate_test(value):
                     "accept_host_cpu_hitches": measurement["kind"] == "unmounted-game-cadence-v1"}
                    if measurement["kind"] in ("unmounted-cadence-v1", "unmounted-game-cadence-v1") else {}))
             continue
+        if isinstance(measurement, dict) and measurement.get("kind") in PROFILE_FEATURE_MEASUREMENTS:
+            _shape(measurement, {"kind", "subject"}, label="profile feature measurement")
+            from tools.overworld.devtools_profile_feature_measurement import FEATURES
+            config = FEATURES[measurement["kind"]]
+            expected_subjects = [
+                {"id": name, "species": species, "role": "WILD", "acquire": "spawn"}
+                for name, species in config["subjects"]
+            ]
+            if value["mode"] != "prepared" or value["subjects"] != expected_subjects \
+                    or measurement["subject"] != expected_subjects[0]["id"]:
+                raise ValueError(
+                    "profile feature measurement requires its exact prepared Wild subjects")
+            continue
         _shape(measurement, {"kind", "subject"}, label="measurement")
         subject = next((item for item in value["subjects"] if item["id"] == measurement["subject"]), None)
         expected_mode = {"ledyba-chain-v1": "normal", "live-observer-control-v1": "observer-control",
                          CHAIN_RETRY: "prepared",
                          HEIGHT_CONTROL: "observer-control",
                          **dict.fromkeys(POOL_MEASUREMENTS, "normal")}.get(measurement["kind"])
+        expected_species = 179 if measurement["kind"] == HEIGHT_CONTROL else 165
         if expected_mode is None or value["mode"] != expected_mode or not subject \
-                or (subject["species"], subject["role"], subject["acquire"]) != (165, "WILD", "spawn"):
-            raise ValueError("Ledyba measurement requires the exact naturally acquired Wild subject and mode")
+                or (subject["species"], subject["role"], subject["acquire"]) \
+                    != (expected_species, "WILD", "spawn"):
+            raise ValueError(
+                "measurement requires its exact naturally acquired Wild subject and mode")
     predicates = value["assertions"] + [predicate for action in value["setup"] + value["actions"]
         for key in ("predicate", "until") if (predicate := action["args"].get(key)) is not None]
     predicates += [action["skipIf"] for action in value["setup"] if "skipIf" in action]
@@ -1317,7 +1427,7 @@ def validate_test(value):
                 and CONDITION_CONTROLLER not in declared):
             raise ValueError(
                 "condition controller action needs its exact measurement")
-        if op.startswith("mount-pacing.") and not {MOUNT_PACING, MOUNT_POSE_CONTROL}.intersection(declared):
+        if op.startswith("mount-pacing.") and not {MOUNT_PACING, MOUNT_SPEED_SLEW, MOUNT_POSE_CONTROL}.intersection(declared):
             raise ValueError("mounted pacing action needs its exact measurement")
         if op.startswith("hop-arc.") and not {MOUNTED_HOP_ARC, MOUNTED_NEAREST_DIAGONAL}.intersection(declared):
             raise ValueError("Hop arc action needs its exact measurement")
@@ -1386,6 +1496,10 @@ def _handle(value):
     return tuple(value[key] for key in HANDLE_FIELDS)
 
 
+def _actor_identity(value):
+    return (value.get("species"), value.get("role"), value.get("subjectIdentity"))
+
+
 class TestEvaluator:
     """Incremental checks; failures are append-only, success requires finish()."""
     def __init__(self, test):
@@ -1396,6 +1510,7 @@ class TestEvaluator:
         self.frames = 0
         self.sampled_frames = 0
         self.first_handles = None
+        self.first_subjects = None
         self.events = Counter()
         self._prepared_attached = set()
         self.spawn_setup = None
@@ -1543,6 +1658,15 @@ class TestEvaluator:
                 self.measurements[kind] = AppearHopMeasurement(
                     max_frames=self.test["budgets"]["maxFrames"])
                 continue
+            if kind in PROFILE_FEATURE_MEASUREMENTS:
+                if source != {"contractVersion": 1}:
+                    raise ValueError("profile feature contract input is missing")
+                from tools.overworld.devtools_profile_feature_measurement import (
+                    ProfileFeatureMeasurement,
+                )
+                self.measurements[kind] = ProfileFeatureMeasurement(
+                    kind, self.test, max_frames=self.test["budgets"]["maxFrames"])
+                continue
             if kind == WILD_TRANSITION:
                 if source != {"contractVersion": 1}:
                     raise ValueError("Wild transition contract input is missing")
@@ -1625,12 +1749,28 @@ class TestEvaluator:
                 from tools.overworld.devtools_mount_pacing_measurement import MountedPacingMeasurement
                 self.measurements[kind] = MountedPacingMeasurement(max_frames=self.test["budgets"]["maxFrames"])
                 continue
+            if kind == MOUNT_SPEED_SLEW:
+                if source != {"contractVersion": 1}:
+                    raise ValueError("mounted speed contract input is missing")
+                from tools.overworld.devtools_mount_speed_slew_measurement import MountedSpeedSlewMeasurement
+                self.measurements[kind] = MountedSpeedSlewMeasurement(
+                    max_frames=self.test["budgets"]["maxFrames"])
+                continue
             if kind == MOUNT_CONTROL_STRESS:
                 if source != {"contractVersion": 1}:
                     raise ValueError("mounted control stress contract input is missing")
                 from tools.overworld.devtools_mount_control_stress import MountControlStressMeasurement
                 self.measurements[kind] = MountControlStressMeasurement(
                     specification["contract"], max_frames=self.test["budgets"]["maxFrames"])
+                continue
+            if kind == MOUNT_DETACH_FOLLOWER_RESUME:
+                if source != {"contractVersion": 1}:
+                    raise ValueError("mount detach follower resume contract input is missing")
+                from tools.overworld.devtools_mount_detach_follower_resume import (
+                    MountDetachFollowerResumeMeasurement,
+                )
+                self.measurements[kind] = MountDetachFollowerResumeMeasurement(
+                    self.test, max_frames=self.test["budgets"]["maxFrames"])
                 continue
             if kind == MOUNTED_HOP_ARC:
                 if source != {"contractVersion": 1}:
@@ -1998,6 +2138,12 @@ class TestEvaluator:
         subject = select_current_actor(snapshot, self.subjects[args["subject"]])
         return validate_command("walk-intent.arm", {**args, "subject": subject})
 
+    def obstacle_intent_args(self, args, snapshot):
+        if snapshot != self.latest or args["subject"] not in self.subjects:
+            raise ValueError("Obstacle intent needs the current bound subject")
+        subject = select_current_actor(snapshot, self.subjects[args["subject"]])
+        return validate_command("obstacle-intent.arm", {**args, "subject": subject})
+
     def _acceleration_prefix(self, snapshot, events, *, start_frame, boundary=None, allow_normal=False):
         """Consume complete excluded setup data; never grant event/frame credit."""
         frame = _int(snapshot.get("frame"), "setup frame", start_frame, 0xFFFFFFFF)
@@ -2057,7 +2203,7 @@ class TestEvaluator:
         return {"subject": select_current_actor(snapshot, self.subjects[subject])}
 
     def mount_pacing_args(self, subject, snapshot):
-        if not {MOUNT_PACING, MOUNT_POSE_CONTROL}.intersection(self.measurements) or subject not in self.subjects:
+        if not {MOUNT_PACING, MOUNT_SPEED_SLEW, MOUNT_POSE_CONTROL}.intersection(self.measurements) or subject not in self.subjects:
             raise ValueError("mounted pacing requires its bound subject")
         return {"subject": select_current_actor(snapshot, self.subjects[subject]),
                 "maxFrames": self.test["budgets"]["maxFrames"]}
@@ -2165,6 +2311,7 @@ class TestEvaluator:
                                      "initial frame", 0, snapshot["frame"]), allow_normal=True)
             self.latest = deepcopy(snapshot)
             self.first_handles = {_handle(a["handle"]) for a in snapshot["actors"] if a.get("active") is True}
+            self.first_subjects = {_actor_identity(a) for a in snapshot["actors"] if a.get("active") is True}
             return
         if self.latest is None or record.get("phase") not in ("setup", "observe"):
             raise ValueError("Walk control initial boundary or phase missing")
@@ -2182,10 +2329,12 @@ class TestEvaluator:
                 same_boundary = snapshot == self.latest or (
                     meter_kind in (MOUNTED_STREAMING, MOUNTED_CARDINAL_STREAMING,
                                    MOUNTED_WALK_TRANSITION, MOUNTED_HOP_TRANSITION,
+                                   MOUNT_DETACH_FOLLOWER_RESUME,
                                    LAND_SURF, SPAWN_WORK_BUDGET, UNMOUNTED_ZERO_STUTTER,
                                    POPULATION_FAST_TRAVEL, WARP_GATE)
                     and _same_mounted_reader_boundary(self.latest, snapshot))
-                if phase != "setup" or (meter.initial is not None and meter_kind != MOUNT_CONTROL_STRESS) \
+                if phase != "setup" or (meter.initial is not None and meter_kind not in (
+                        MOUNT_CONTROL_STRESS, MOUNT_DETACH_FOLLOWER_RESUME)) \
                         or not same_boundary or self.bind(action["args"]["subject"], snapshot) != receipt:
                     raise ValueError("Walk control binding differs")
                 if meter_kind == MOUNTED_STREAMING:
@@ -2386,8 +2535,8 @@ class TestEvaluator:
                         or receipt.get("acceptedProof") is not False
                         or fixture.get("catalogPatch", {}).get("applied") is not True
                         or fixture["catalogPatch"].get("restored") is not False
-                        or fixture.get("guestMemoryWriteBytes") != 3
-                        or fixture.get("guestMemoryWriteOperations") != 3):
+                        or fixture.get("guestMemoryWriteBytes") != 5
+                        or fixture.get("guestMemoryWriteOperations") != 5):
                     raise ValueError("condition controller fixture receipt differs")
             elif command in ("condition-controller.arm",
                               "condition-controller.close") \
@@ -2408,7 +2557,7 @@ class TestEvaluator:
                     meter.arm(expected["subject"], snapshot, receipt)
                 else:
                     meter.close(snapshot, receipt)
-            elif command.startswith("mount-pacing.") and meter_kind in (MOUNT_PACING, MOUNT_POSE_CONTROL):
+            elif command.startswith("mount-pacing.") and meter_kind in (MOUNT_PACING, MOUNT_SPEED_SLEW, MOUNT_POSE_CONTROL):
                 if phase != "observe" or not _same_mounted_reader_boundary(snapshot, self.latest):
                     raise ValueError("mounted pacing command advanced or changed the boundary")
                 if command == "mount-pacing.arm":
@@ -2510,7 +2659,7 @@ class TestEvaluator:
             else:
                 self._events(events, snapshot["frame"])
                 if self.failures: return
-                if meter_kind == MOUNT_PACING:
+                if meter_kind in (MOUNT_PACING, MOUNT_SPEED_SLEW):
                     _mounted_input_boundary(self.latest, snapshot, events, meter.subject,
                         0x10 if action["op"] == "step" else 0,
                         self._raw_action_frames[key] - len(rows) + row_index == 0)
@@ -2572,6 +2721,7 @@ class TestEvaluator:
             self._acceleration_prefix(snapshot, record.get("initialEvents"), start_frame=start, allow_normal=True)
             self.latest = deepcopy(snapshot)
             self.first_handles = {_handle(a["handle"]) for a in snapshot["actors"] if a.get("active") is True}
+            self.first_subjects = {_actor_identity(a) for a in snapshot["actors"] if a.get("active") is True}
             return
         if self.latest is None:
             raise ValueError("acceleration initial boundary is missing")
@@ -2771,6 +2921,11 @@ class TestEvaluator:
                     continue
                 event_frame = _int(event.get("frame"), "prepared event frame", previous, frame)
                 self._events([event], event_frame)
+                if event.get("kind") == "native" \
+                        and event.get("data", {}).get("event") == "ACTOR_ATTACHED":
+                    data = event["data"]
+                    self._prepared_attached.add((data["actorHandle"], *[
+                        data["actor"][key] for key in HANDLE_FIELDS if key != "value"]))
                 previous = event_frame
                 if self.failures:
                     raise ValueError("prepared handoff trace status failed")
@@ -2792,6 +2947,26 @@ class TestEvaluator:
                     receipt, snapshot, species=35, locomotion=7)
                 self._prepared_attached.add(
                     _handle(self.spawn_setup["subject"]["handle"]))
+            if record["command"] == "spawn" and any(
+                    action["op"] == "obstacle-intent.arm" for action in self.test["actions"]):
+                obstacle_spawn = _wild_spawn_setup(
+                    receipt, snapshot, species=234, locomotion=7)
+                self._prepared_attached.add(
+                    _handle(obstacle_spawn["subject"]["handle"]))
+            if record["command"] == "spawn":
+                for kind in PROFILE_FEATURE_MEASUREMENTS.intersection(self.measurements):
+                    self.measurements[kind].observe_prepared(receipt, snapshot)
+                if PROFILE_FEATURE_MEASUREMENTS.intersection(self.measurements):
+                    prepared_subjects = [
+                        event.get("data", {}).get("publicSubject")
+                        for event in events
+                        if event.get("kind") == "native-observation"
+                        and event.get("data", {}).get("observation") == "spawn-prepared"
+                    ]
+                    if len(prepared_subjects) != 1 or not isinstance(prepared_subjects[0], dict):
+                        raise ValueError("profile feature spawn lacks one prepared public subject")
+                    selected = select_current_actor(snapshot, prepared_subjects[0])
+                    self._prepared_attached.add(_handle(selected["handle"]))
             self._prepared_command_refresh_frame = frame
             try:
                 result = self.observe(snapshot,count_frame=False)
@@ -2847,12 +3022,23 @@ class TestEvaluator:
 
     def _candidates(self, subject_id, snapshot):
         spec = self.specs[subject_id]
+        height_subject = self.measurements.get(HEIGHT_CONTROL)
+        height_subject = height_subject.result().get("subject") \
+            if height_subject is not None else None
         candidates = []
         for actor in snapshot.get("actors", []):
             if actor.get("species") == spec["species"] and actor.get("role") == spec["role"] and actor.get("active") is True:
+                measured_height_actor = bool(height_subject) \
+                    and actor.get("handle") == height_subject.get("handle")
                 if subject_id in self.subjects and actor.get("handle") != self.subjects[subject_id]["handle"]:
                     continue
-                if spec["acquire"] == "spawn" and self.first_handles is not None and _handle(actor["handle"]) in self.first_handles:
+                if spec["acquire"] == "spawn" and not measured_height_actor \
+                        and self.first_handles is not None \
+                        and _handle(actor["handle"]) in self.first_handles:
+                    continue
+                if spec["acquire"] == "spawn" and not measured_height_actor \
+                        and self.first_subjects is not None \
+                        and _actor_identity(actor) in self.first_subjects:
                     continue
                 if spec["acquire"] == "spawn" and self.spawn_setup is not None and actor.get("handle") != self.spawn_setup["subject"]["handle"]:
                     continue
@@ -2903,6 +3089,9 @@ class TestEvaluator:
         if "actor-binding-context-v1" in self.measurements:
             measured = self.measurements["actor-binding-context-v1"].result().get("subject")
             candidates = [actor for actor in candidates if measured and actor["handle"] == measured["handle"]]
+        if HEIGHT_CONTROL in self.measurements:
+            measured = self.measurements[HEIGHT_CONTROL].result().get("subject")
+            candidates = [actor for actor in candidates if measured and actor["handle"] == measured["handle"]]
         if len(candidates) != 1: raise ValueError("subject must name exactly one verified live actor")
         actor = candidates[0]
         selected = select_current_actor(snapshot, actor)
@@ -2913,7 +3102,13 @@ class TestEvaluator:
             return deepcopy(self.subjects[subject_id])
         if self.specs[subject_id]["acquire"] == "spawn":
             key = _handle(selected["handle"])
-            if self.first_handles is None or key in self.first_handles or (self.events[(key, "ACTOR_ATTACHED")] < 1 and key not in self._prepared_attached):
+            measured = self.measurements.get(HEIGHT_CONTROL)
+            measured = measured.result().get("subject") if measured is not None else None
+            measured_height_actor = bool(measured) and selected["handle"] == measured.get("handle")
+            if self.first_handles is None or (not measured_height_actor and (
+                    key in self.first_handles or
+                    (self.events[(key, "ACTOR_ATTACHED")] < 1
+                     and key not in self._prepared_attached))):
                 raise ValueError("spawn acquisition needs a new full handle and observed native attachment")
         self.subjects[subject_id] = selected
         if MOUNT_CONTROL_STRESS in self.measurements:
@@ -2922,6 +3117,13 @@ class TestEvaluator:
             if specification["subject"] != subject_id:
                 raise ValueError("mounted control stress bind subject differs")
             self.measurements[MOUNT_CONTROL_STRESS].arm(
+                selected, snapshot, trace_sequences=self.last_sequence)
+        if MOUNT_DETACH_FOLLOWER_RESUME in self.measurements:
+            specification = next(item for item in self.test["measurements"]
+                                 if item["kind"] == MOUNT_DETACH_FOLLOWER_RESUME)
+            if specification["subject"] != subject_id:
+                raise ValueError("mount detach follower resume bind subject differs")
+            self.measurements[MOUNT_DETACH_FOLLOWER_RESUME].arm(
                 selected, snapshot, trace_sequences=self.last_sequence)
         if self.latest is not None and not self.sampled_frames and snapshot["frame"] > self.latest["frame"]:
             # Prepared native setup can advance many unmeasured frames. Bind
@@ -2980,6 +3182,9 @@ class TestEvaluator:
             candidates = self._candidates(subject, snapshot)
             if "actor-binding-context-v1" in self.measurements:
                 measured = self.measurements["actor-binding-context-v1"].result().get("subject")
+                return bool(measured and any(actor["handle"] == measured["handle"] for actor in candidates))
+            if HEIGHT_CONTROL in self.measurements:
+                measured = self.measurements[HEIGHT_CONTROL].result().get("subject")
                 return bool(measured and any(actor["handle"] == measured["handle"] for actor in candidates))
             if len(candidates) > 1: raise ValueError("subject acquisition is ambiguous")
             if not candidates: return False
@@ -3098,13 +3303,21 @@ class TestEvaluator:
         """Consume an exact record-start prefix without assertion/motion credit."""
         if self.latest is not None or self.subjects or self.closed:
             raise ValueError("initial prefix is only valid before observation")
-        if self.uses_raw_records or set(self.measurements) != {"actor-binding-context-v1"}:
-            raise ValueError("initial prefix requires the binding measurement")
+        kinds = set(self.measurements)
+        if self.uses_raw_records or kinds not in (
+                {"actor-binding-context-v1"}, {HEIGHT_CONTROL}):
+            raise ValueError("initial prefix requires the binding or height measurement")
+        height_control = kinds == {HEIGHT_CONTROL}
         try:
             end = _int(snapshot.get("frame"), "initial frame", 0, 0xFFFFFFFF)
             start = _int(end if start_frame is None else start_frame, "initial start frame", 0, end)
             if not isinstance(events, list) or len(events) > 8192:
                 raise ValueError("initial event prefix exceeds its bound")
+            if height_control and not events:
+                # Older retained host fixtures begin their natural spawn on
+                # the next sampled frame. They still must complete the same
+                # meter; an empty prefix grants no boot evidence.
+                return self.observe(snapshot, count_frame=False)
             native_sequence = None
             for event in events:
                 # Native diagnostics are installed before boot and first drain
@@ -3118,11 +3331,26 @@ class TestEvaluator:
                     if native_sequence is not None and sequence != native_sequence + 1:
                         raise ValueError("initial native prefix has a sequence gap")
                     native_sequence = sequence
-                    if data.get("setupMode") != "normal" or data.get("observation") == "actor-binding-context":
-                        raise ValueError("binding capture started before its declared boundary")
+                    if data.get("setupMode") != "normal" \
+                            or (not height_control
+                                and data.get("observation") == "actor-binding-context"):
+                        raise ValueError("initial native capture started outside its declared boundary")
             if native_sequence is not None and native_sequence != snapshot.get("nativeObservation", {}).get("sequence"):
                 raise ValueError("initial native prefix does not reach the endpoint")
             if self.failures:
+                return self.result()
+            if height_control:
+                measured = self.measurements[HEIGHT_CONTROL].observe_initial(snapshot, events)
+                if measured["failures"]:
+                    return self.fail("measurement-failed", HEIGHT_CONTROL,
+                                     measured["failures"])
+                self.first_handles = {_handle(actor["handle"])
+                                      for actor in snapshot.get("actors", [])
+                                      if actor.get("active") is True}
+                self.first_subjects = {_actor_identity(actor)
+                                       for actor in snapshot.get("actors", [])
+                                       if actor.get("active") is True}
+                self.latest = deepcopy(snapshot)
                 return self.result()
             # _events checks identities and sequences but its meaning counts
             # belong outside this proof window. Preserve only stream counters.
@@ -3156,6 +3384,7 @@ class TestEvaluator:
             if not isinstance(snapshot.get("actors"), list) and not absent_setup: raise ValueError("snapshot has no actor list")
             if self.first_handles is None and not absent_setup:
                 self.first_handles = {_handle(actor["handle"]) for actor in snapshot["actors"] if actor.get("active") is True}
+                self.first_subjects = {_actor_identity(actor) for actor in snapshot["actors"] if actor.get("active") is True}
             self.latest = deepcopy(snapshot)
             self.sampled_frames += bool(count_frame)
             if self.sampled_frames > self.test["budgets"]["maxFrames"]: raise ValueError("overall observation frame budget exceeded")
@@ -3170,6 +3399,8 @@ class TestEvaluator:
             for kind, measurement in self.measurements.items():
                 if kind in RAW_MEASUREMENTS: continue  # already advanced at this exact raw boundary
                 specification = next(item for item in self.test["measurements"] if item["kind"] == kind)
+                if kind == APPEAR_HOP and self.spawn_setup is None:
+                    continue
                 if kind == MOUNT_CONTROL_STRESS:
                     stress_subject = specification["subject"]
                     # Prepared setup is outside the stress window. Binding arms

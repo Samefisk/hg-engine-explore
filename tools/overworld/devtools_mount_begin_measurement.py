@@ -6,7 +6,7 @@ the recipe, setup receipts, producer sources and retained file before replay.
 from copy import deepcopy
 
 from tools.overworld.devtools_records import select_current_actor
-from tools.overworld.devtools_role_profile_proof import inspect_transfer, WITNESS
+from tools.overworld.devtools_role_profile_proof import inspect_transfer, MOUNT_BEGIN_WITNESS as WITNESS
 from tools.overworld.devtools_runtime import actor_identity_checks
 
 KIND = "mount-begin-current-follower-v1"
@@ -213,7 +213,7 @@ class MountBeginMeasurement:
                         and actor.get("motionPhase") == "IDLE"
                         and all(self.latest["selector"].get(k) == 0 for k in ("rawHeld","rawNew","newKeys","heldKeys")),
                         "terminal selector/motion/reservation/input is not closed")
-                self.profile = inspect_transfer(self.profile_events, self.current, self.mounted)
+                self.profile = inspect_transfer(self.profile_events, self.current, self.mounted, witness=WITNESS)
             except (ValueError, KeyError, TypeError, IndexError) as error:
                 self.failures.append(str(error))
         self.closed = True

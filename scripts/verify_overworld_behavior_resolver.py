@@ -15,18 +15,26 @@ from typing import Any
 PROFILE_SIZE = 72
 PROFILE_FIELD_OFFSETS = {
     "chillState": 0,
+    "visionRange": 1,
+    "alertTime": 3,
     "stamina": 5,
     "restTime": 6,
     "chillSpeed": 7,
     "spawnState": 11,
     "chillAction": 12,
+    "chillTarget": 13,
     "hopAllowNonCardinal": 19,
     "hopMinDistance": 20,
     "hopMaxDistance": 21,
     "hopPause": 22,
+    "overworldLimit": 26,
+    "ramAccelerationSteps": 29,
+    "ramMaxSpeed": 30,
     "chainPause": 30,
     "chainPauseAction": 31,
     "hopTime": 36,
+    "continueWhenArrived": 42,
+    "avoidPreviousTile": 43,
     "chainMovementVariance": 44,
     "chainPauseVariance": 45,
     "hopElevationTimeScale": 48,
@@ -35,12 +43,17 @@ PROFILE_FIELD_OFFSETS = {
     "maxWalkSpeed": 51,
     "hopAllowVerticalObstacles": 56,
     "chainPauseActionChance": 67,
+    "walkOptions": 65,
+    "wanderStraightChance": 66,
     "walkPause": 68,
+    "walkTimeVariance": 64,
     "walkPauseVariance": 63,
     "tilesBeforeTurnSkid": 69,
     "stopSkid": 69,
     "planTurnSkidPath": 69,
+    "walkStompTime": 70,
     "walkAccelerationStep": 71,
+    "walkSwayWidth": 46,
 }
 LANE_OFFSETS = {"owner": 0, "tired": PROFILE_SIZE}
 PRIMITIVE_FIELD_OFFSETS = {
@@ -232,6 +245,8 @@ def _assert_field(profile: bytes, name: str, expected: int) -> None:
     actual = profile[offset]
     if field == "walkPauseVariance":
         actual = (actual & 0xFE) >> 1
+    elif field == "walkTimeVariance":
+        actual = (actual & 0xFE) >> 1
     elif field == "tilesBeforeTurnSkid":
         actual &= 0x3F
     elif field == "stopSkid":
@@ -334,10 +349,10 @@ def _run_override_order_scenario(
     corpus: dict[str, Any],
     root: Path,
 ) -> dict[str, Any]:
-    vector = _find_vector(corpus, "conditional-rooftop-replay")
+    vector = _find_vector(corpus, "conditional-perch-replay")
     application_indexes = _application_indexes(root)
-    bird_index = application_indexes["apply-bird"]
-    rooftop_index = application_indexes["apply-bird-rooftop"]
+    bird_index = application_indexes["apply-small-bird-hop"]
+    perch_index = application_indexes["apply-perch"]
     result = adapter.resolve(
         blob,
         vector["request"],
@@ -353,16 +368,16 @@ def _run_override_order_scenario(
             for index, step in enumerate(trace)
             if step.get("lane") == lane
             and (step.get("kind"), step.get("sourceIndex"))
-            in ((3, bird_index), (4, rooftop_index))
+            in ((3, bird_index), (4, perch_index))
         ]
         identities = [
             (step["kind"], step["sourceIndex"])
             for _, step in steps
         ]
-        if identities != [(3, bird_index), (4, rooftop_index)]:
+        if identities != [(3, bird_index), (4, perch_index)]:
             raise AssertionError(
                 f"lane {lane} override order/count is {identities}; "
-                f"expected {[(3, bird_index), (4, rooftop_index)]}"
+                f"expected {[(3, bird_index), (4, perch_index)]}"
             )
         if steps[0][1]["profileHex"] == steps[1][1]["profileHex"]:
             raise AssertionError(f"lane {lane} later override made no profile change")
@@ -383,27 +398,86 @@ def _run_follower_mounted_parity_scenario(
     corpus: dict[str, Any],
     root: Path,
 ) -> dict[str, Any]:
-    vector = _find_vector(corpus, "forced-follower-profile")
+    vector = _find_vector(corpus, "stantler-sprint-one-frame-acceleration")
     catalog = _load_json(root / "data/overworld_behavior_profiles.json")
-    follower_index = _application_indexes(root)[
+    application_indexes = _application_indexes(root)
+    follower_index = application_indexes[
         catalog["runtimeBindings"]["followerApplication"]
     ]
+    mounted_index = application_indexes[
+        catalog["runtimeBindings"]["mountedApplication"]
+    ]
+    normal_request = dict(vector["request"])
+    follower_request = dict(normal_request)
+    follower_request["forcedOverrideMask"] = 1 << follower_index
+    mounted_request = dict(normal_request)
+    mounted_request["forcedOverrideMask"] = 1 << mounted_index
+    normal = adapter.resolve(
+        blob,
+        normal_request,
+        root=root,
+        executable=executable,
+    )
     follower = adapter.resolve(
         blob,
-        vector["request"],
+        follower_request,
         root=root,
         executable=executable,
     )
     mounted = adapter.resolve(
         blob,
-        vector["request"],
+        mounted_request,
         root=root,
         executable=executable,
     )
-    _verify_result(follower, vector["expected"])
-    _verify_result(mounted, vector["expected"])
-    if follower != mounted:
-        raise AssertionError("follower and mounted Owner resolution differ")
+    _verify_result(normal, vector["expected"])
+    normal_profile = _profile_bytes(normal)
+    follower_profile = _profile_bytes(follower)
+    mounted_profile = _profile_bytes(mounted)
+    for lane in LANE_OFFSETS:
+        for field, expected in (
+            ("tilesToAccelerate", 1),
+            ("maxWalkSpeed", 4),
+            ("walkAccelerationStep", 1),
+            ("walkTimeVariance", 2),
+            ("tilesBeforeTurnSkid", 1),
+            ("planTurnSkidPath", 1),
+            ("stopSkid", 1),
+        ):
+            _assert_field(follower_profile, f"{lane}.{field}", expected)
+    if mounted_profile != normal_profile:
+        raise AssertionError("Mounted changed the selected Sprint Owner profile")
+    if follower_profile == normal_profile:
+        raise AssertionError("Follower control did not change its own profile")
+    if mounted["fingerprint"] in (normal["fingerprint"], follower["fingerprint"]):
+        raise AssertionError("Mounted did not produce its own resolved profile")
+    if mounted["primitivesHex"] != normal["primitivesHex"]:
+        raise AssertionError("Mounted changed Sprint locomotion primitives")
+    if mounted["forcedOverrideMask"] != 1 << mounted_index:
+        raise AssertionError("Mounted unexpectedly forced the Follower layer")
+    waddle_request = dict(_find_vector(corpus, "default-class-and-lanes")["request"])
+    waddle_request["species"] = 69  # Bellsprout has authored Waddle sway.
+    waddle_mounted_request = dict(waddle_request)
+    waddle_mounted_request["forcedOverrideMask"] = 1 << mounted_index
+    waddle_follower_request = dict(waddle_request)
+    waddle_follower_request["forcedOverrideMask"] = 1 << follower_index
+    waddle_normal = adapter.resolve(
+        blob, waddle_request, root=root, executable=executable,
+    )
+    waddle_mounted = adapter.resolve(
+        blob, waddle_mounted_request, root=root, executable=executable,
+    )
+    waddle_follower = adapter.resolve(
+        blob, waddle_follower_request, root=root, executable=executable,
+    )
+    for lane in LANE_OFFSETS:
+        _assert_field(_profile_bytes(waddle_normal),
+                      f"{lane}.walkSwayWidth", 4)
+        _assert_field(_profile_bytes(waddle_follower),
+                      f"{lane}.chillSpeed", 8)
+    if (_profile_bytes(waddle_mounted) != _profile_bytes(waddle_normal)
+            or waddle_mounted["primitivesHex"] != waddle_normal["primitivesHex"]):
+        raise AssertionError("Mounted changed the selected Waddle profile")
     request_header = (root / "include/overworld_behavior_resolver.h").read_text()
     request_fields = request_header.split(
         "typedef struct BehaviorResolveRequest {", 1
@@ -412,23 +486,26 @@ def _run_follower_mounted_parity_scenario(
         raise AssertionError("resolver request has grown a mount-specific role")
     forced_steps = [
         (step["lane"], step["sourceIndex"])
-        for step in follower["trace"]
+        for step in mounted["trace"]
         if step.get("kind") == 3
-        and step.get("sourceIndex") == follower_index
+        and step.get("sourceIndex") == mounted_index
         and step.get("flags", 0) & 0x06 == 0x06
     ]
     if forced_steps != [
-        (0, follower_index), (2, follower_index)
+        (0, mounted_index), (2, mounted_index)
     ]:
         raise AssertionError(
-            f"forced follower layer was not applied once per lane: {forced_steps}"
+            f"forced Mounted layer was not applied once per lane: {forced_steps}"
         )
     return {
         "passed": True,
         "scenario": "profile.resolve.follower-mounted-parity",
-        "fingerprint": follower["fingerprint"],
-        "forcedOverrideMask": follower["forcedOverrideMask"],
-        "ownerProfileHex": follower["profileHex"][: PROFILE_SIZE * 2],
+        "sprintFingerprint": normal["fingerprint"],
+        "followerFingerprint": follower["fingerprint"],
+        "mountedFingerprint": mounted["fingerprint"],
+        "forcedOverrideMask": mounted["forcedOverrideMask"],
+        "ownerProfileHex": mounted["profileHex"][: PROFILE_SIZE * 2],
+        "waddleMountedFingerprint": waddle_mounted["fingerprint"],
     }
 
 
@@ -463,8 +540,8 @@ def main() -> int:
     if not blob.is_file():
         parser.error(f"behavior blob does not exist: {blob}")
     corpus = _load_json(golden_path)
-    if corpus.get("blobVersion") != 78:
-        parser.error("golden vectors do not target behavior blob v78")
+    if corpus.get("blobVersion") != 81:
+        parser.error("golden vectors do not target behavior blob v81")
     vectors = corpus.get("vectors")
     if not isinstance(vectors, list) or not vectors:
         parser.error("golden vector file has no vectors")

@@ -11,16 +11,16 @@
     "expectationSource": "documentation/overworld-system/README.md#system-contracts",
     "actor": "WILD species 234 (Stantler), acquired through spawn; live handle and attached presentation required",
     "trigger": "Leave the same live Runner Stantler near the player on neutral input through its normal alert run until the Tired lifecycle requests a stop",
-    "observable": "A normal NONE Walk-policy request starts one accepted one-tile eight-frame stop skid from speed four, commits once, and returns idle with no Movement Chain movement, action, or pause action",
+    "observable": "A normal NONE Walk-policy request at speed four plans two skid tiles. Both eight-frame Walk motions have an accepted start, exact elapsed samples and one commit; the second is the native skid continuation. The actor then returns idle with no Movement Chain action or pause action",
     "setupAudit": "complete",
     "setupMutations": [{
       "phase": "before-observation",
       "target": "fixture",
-      "change": "Disposable test.sav, native Stantler spawn at map33 (584,406), and exact identity bind. Do not change the behavior profile, controller state, timer, input, timing, chain action, chain pause, path, or actor state during observation."
+      "change": "Teleport only the disposable session's player to map33 (585,406), then spawn a native Stantler at (584,406) and bind its exact identity. Do not change the behavior profile, controller state, timer, input, timing, chain action, chain pause, path, or actor state during observation."
     }],
     "limits": [
       "Prepared spawning does not prove natural population spawning.",
-      "This proves the Runner Tired stop on the fixed Route 29 save position. It does not prove every possible terrain target.",
+      "This proves the Runner Tired stop at the fixed Route 29 test position. It does not prove travel to that site or every possible terrain target.",
       "Registration alone is not runtime acceptance; the checked shared test must pass on the current ROM."
     ]
   },
@@ -30,7 +30,7 @@
     "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true
   }],
   "events": [
-    {"at": 0, "kind": "setup", "value": "Spawn and bind Wild Stantler at map33 (584,406)"},
+    {"at": 0, "kind": "setup", "value": "Teleport disposable player to map33 (585,406), then spawn and bind Wild Stantler at (584,406)"},
     {"at": 1, "kind": "lifecycle", "value": "Keep input neutral and retain one normal Tired stop skid from NONE request through control return"}
   ],
   "stop": {"frameBudget": 600, "condition": "The selected Stantler completes one normal stop skid and returns idle"},
@@ -38,10 +38,10 @@
     "requiredEvents": ["MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
     "forbiddenEvents": ["MOTION_CANCELED", "CONTEXT_CHANGED", "ACTOR_REBOUND", "CONTROL_REBOUND"],
     "invariants": [
-      "The Tired stop input has direction NONE, distance one, travel time eight, and stop-skid flags",
-      "The accepted start has one planned tile",
+      "The Tired stop input has direction NONE, distance two, travel time eight, and stop-skid flags",
+      "The accepted start plans two tiles and its accepted continuation has one tile remaining",
       "Movement Chain action and pause action stay zero",
-      "The motion moves exactly one tile and commits exactly once",
+      "Each of the two eight-frame motions moves one tile in the retained direction and commits once",
       "No active actors share a nonzero target reservation",
       "Every active actor handle uses the current field epoch",
       "Every active actor has an attached presentation"
@@ -53,16 +53,16 @@
       {"id": "control", "event": "CONTROL_RETURNED", "reason": "OK"}
     ],
     "eventCounts": [
-      {"event": "MOTION_STARTED", "reason": "OK", "valueA": {"equals": 1}, "valueB": {"equals": 8}, "minimum": 1, "maximum": 1},
-      {"event": "LOGICAL_COMMIT", "reason": "OK", "valueB": {"equals": 1}, "minimum": 1, "maximum": 1},
-      {"event": "MOTION_FINISHED", "reason": "OK", "valueB": {"equals": 1}, "minimum": 1, "maximum": 1},
-      {"event": "CONTROL_RETURNED", "reason": "OK", "minimum": 1, "maximum": 1}
+      {"event": "MOTION_STARTED", "reason": "OK", "valueA": {"equals": 1}, "valueB": {"equals": 8}, "minimum": 2, "maximum": 2},
+      {"event": "LOGICAL_COMMIT", "reason": "OK", "valueB": {"equals": 1}, "minimum": 2, "maximum": 2},
+      {"event": "MOTION_FINISHED", "reason": "OK", "valueB": {"equals": 1}, "minimum": 2, "maximum": 2},
+      {"event": "CONTROL_RETURNED", "reason": "OK", "minimum": 2, "maximum": 2}
     ]
   },
   "capture": "none",
   "adapter": {
     "kind": "devtools-test", "test": "walk.wild.runner-stop-skid",
     "claims": ["natural-input", "live-actor-identity", "engine-boundary", "logical-commit", "rendered-motion", "frame-pacing", "control-release"],
-    "minimumFrames": 12
+    "minimumFrames": 20
   }
 }

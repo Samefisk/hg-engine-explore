@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "mount.begin-current-follower",
-  "title": "Mount begin binds the current follower",
+  "title": "Mount begin waits for a player step and binds the current follower",
   "status": "active",
   "capabilities": [
     "actor.system",
@@ -13,19 +13,19 @@
     "kind": "controlled-case",
     "expectationSource": "documentation/overworld-system/README.md#system-contracts",
     "actor": "MOUNTED species 56 (mankey), acquired through mount; live handle and attached presentation required",
-    "trigger": "Press Select to mount; Request one Hop with the rebound current follower",
-    "observable": "Each accepted motion has exactly one terminal result; No logical commit occurs after motion cancellation; Control returns after the selected motion finishes or cancels; No active actors share a nonzero target reservation; Every active actor handle uses the current field epoch; Every active actor has an attached presentation",
+    "trigger": "Start a normal player run, press Select during the tile step, then request one Hop after the current follower mounts",
+    "observable": "The stock player step finishes before mount control begins; the same Mankey completes one later Hop and moves beyond the run tile; each accepted motion has exactly one terminal result; control returns after the selected motion finishes or cancels",
     "setupAudit": "complete",
     "setupMutations": [
       {
         "phase": "before-observation",
         "target": "fixture",
-        "change": "Shared prepared native spawn of saved Igglybuff 174 party slot 3 as previous follower. No profile or timer writes. After record start, normal Y opens saved highlight 2 and Y confirms Mankey 56. Wait for that exact current follower to finish its selection movement and release its reservation before closed-selector Select mounts it."
+        "change": "Shared prepared native spawn of saved Igglybuff 174 party slot 3 as previous follower. No profile or timer writes. After record start, normal Y opens saved highlight 2 and Y confirms Mankey 56. Wait for that exact current follower to settle, start a normal player run, then press Select during the tile step."
       }
     ],
     "limits": [
       "Prepared previous-follower setup cannot prove natural spawning. The three native Y/Y/Select edges occur after setup with normal timers and unchanged profiles.",
-      "One full same-subject Hop proves this mount/control witness, not rendered trajectory, general movement timing or a soak.",
+      "One full same-subject Hop after a moving Select proves this handoff and control witness, not general movement timing or a soak.",
       "Public producer contract: Hop motionKind is 2 for START and COMMIT/FINISH. CONTROL_RETURNED valueA is mounted inputOwnership 1, not the Wild value 0. ACTOR_REBOUND reports roles 2 to 3; CONTROL_REBOUND reports input owners 0 to 1."
     ]
   },
@@ -65,7 +65,7 @@
     {
       "at": 1,
       "kind": "input",
-      "value": "Press Select to mount"
+      "value": "Start a normal player run, then press Select during its tile step"
     },
     {
       "at": 2,
@@ -75,7 +75,7 @@
   ],
   "stop": {
     "frameBudget": 600,
-    "condition": "Same current follower is mounted and completes exactly one Hop, or first missing/invalid native observation"
+    "condition": "The player step finishes, then the same current follower mounts and completes exactly one Hop, or first missing/invalid native observation"
   },
   "expect": {
     "requiredEvents": [

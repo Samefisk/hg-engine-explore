@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "actor.held-control-resume",
+  "title": "Held actor stops autonomy and resumes its Routine",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/profile-building-blocks-implementation-plan.md#pb9--integrated-verification",
+  "requirements": ["current.held-actor-control-resume"],
+  "budgets": {"maxSeconds": 180, "maxFrames": 900, "noProgressFrames": 300, "minObservedFrames": 1},
+  "subjects": [
+    {"id": "mankey", "species": 56, "role": "WILD", "acquire": "spawn"},
+    {"id": "rattata", "species": 19, "role": "WILD", "acquire": "spawn"}
+  ],
+  "measurements": [{"kind": "held-control-runtime-v1", "subject": "mankey"}],
+  "setup": [
+    {"id": "open-area", "op": "teleport", "args": {"map": 33, "x": 585, "z": 407, "facing": 1}, "budget": {"maxSeconds": 30, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "spawn-mankey", "op": "spawn", "args": {"species": 56, "role": "wild", "level": 5, "x": 586, "z": 406}, "budget": {"maxSeconds": 30, "maxFrames": 80, "noProgressFrames": 80}},
+    {"id": "spawn-rattata", "op": "spawn", "args": {"species": 19, "role": "wild", "level": 5, "x": 587, "z": 406}, "budget": {"maxSeconds": 30, "maxFrames": 80, "noProgressFrames": 80}},
+    {"id": "bind-mankey", "op": "bind", "args": {"subject": "mankey"}, "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "bind-rattata", "op": "bind", "args": {"subject": "rattata"}, "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [{"id": "observe-held-cycle", "op": "wait", "args": {"predicate": {"kind": "measurement-complete", "measurement": "held-control-runtime-v1", "when": "final"}}, "budget": {"maxSeconds": 150, "maxFrames": 800, "noProgressFrames": 300}}],
+  "assertions": [{"kind": "measurement-complete", "measurement": "held-control-runtime-v1", "when": "final"}]
+}

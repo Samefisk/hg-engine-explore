@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.startled.timed-retreat",
+  "title": "Startled retreats for its timed window",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/profile-building-blocks-implementation-plan.md#pb9--integrated-verification",
+  "requirements": ["current.startled-timed-retreat"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 360, "noProgressFrames": 180, "minObservedFrames": 1},
+  "subjects": [{"id": "bellsprout", "species": 69, "role": "WILD", "acquire": "spawn"}],
+  "measurements": [{"kind": "startled-runtime-v1", "subject": "bellsprout"}],
+  "setup": [
+    {"id": "open-area", "op": "teleport", "args": {"map": 33, "x": 585, "z": 406, "facing": 1}, "budget": {"maxSeconds": 30, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "spawn-bellsprout", "op": "spawn", "args": {"species": 69, "role": "wild", "level": 5, "x": 585, "z": 405}, "budget": {"maxSeconds": 30, "maxFrames": 80, "noProgressFrames": 80}},
+    {"id": "bind-bellsprout", "op": "bind", "args": {"subject": "bellsprout"}, "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [{"id": "observe-retreat", "op": "wait", "args": {"predicate": {"kind": "measurement-complete", "measurement": "startled-runtime-v1", "when": "final"}}, "budget": {"maxSeconds": 90, "maxFrames": 300, "noProgressFrames": 180}}],
+  "assertions": [{"kind": "measurement-complete", "measurement": "startled-runtime-v1", "when": "final"}]
+}

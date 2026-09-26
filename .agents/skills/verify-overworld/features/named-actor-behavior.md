@@ -10,6 +10,9 @@ empty spawn slot from passing as live proof.
 - `named-motion` proves the same actor starts and finishes the target motion.
 - `ledyba-chain-pause` requires Ledyba's normal chain interval and pause action.
 - `ledyba-chain-retry` covers the controlled retry/reposition case only.
+- `floaty-bounce-hop-pause` checks two normal Jigglypuff Hops. A host
+  catalog check guards Igglybuff's shared Floaty Bounce assignment, but this
+  live test gives no Igglybuff cadence credit.
 
 ## How to get to it (user POV)
 
@@ -58,6 +61,13 @@ Preconditions:
   evidence: it does not clear the tree/roof/flower-bed surface-legality report
   or prove later mobility. See the POOL measurement in
   [checked tests](../../../../documentation/overworld-system/devtools-tests.md).
+- **Floaty Bounce Hop pause.** Run
+  `scripts/owctl scenario run profile.floaty-bounce-hop-pause --json` on the
+  current ROM. It prepares Wild Jigglypuff at Route 29 (592,402), then checks
+  two complete ordinary Hops from that actor. Each needs the resolved Hop
+  time 12, the authored 10-frame settle, a rendered landing, logical commit,
+  and control return. The prepared Mankey at (594,402) is setup only. The
+  copied zero-pause control must fail. This does not prove natural spawning.
 - **Inspect proof.** Open the returned manifest and locate live identity,
   controlled-action, commit, engine-boundary, rendered-motion, and
   control-release measurements for the controlled case. Do not relabel its

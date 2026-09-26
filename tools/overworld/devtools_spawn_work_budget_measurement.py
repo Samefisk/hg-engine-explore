@@ -28,6 +28,8 @@ ENTRY_TARGET_MAX_DISTANCE_TILES = 16
 ENTRY_OFFSCREEN_MARGIN_TILES = 4
 ENTRY_VIEW_HALF_WIDTH_TILES = 8
 ENTRY_VIEW_HALF_HEIGHT_TILES = 6
+EXPECTED_ENTRY_LOCOMOTION = 9
+EXPECTED_ENTRY_MOTION_KIND = "FLY_IN"
 
 
 def require(value, reason):
@@ -447,7 +449,7 @@ class SpawnWorkBudgetMeasurement:
         require(all(type(value) is int for value in origin)
                 and isinstance(target, list) and len(target) == 2
                 and all(type(value) is int for value in target)
-                and startup.get("locomotion") == 4
+                and startup.get("locomotion") == EXPECTED_ENTRY_LOCOMOTION
                 and final.get("position") == target
                 and final.get("startup", {}).get("target") == target
                 and final.get("startup", {}).get("origin") == origin
@@ -482,8 +484,8 @@ class SpawnWorkBudgetMeasurement:
             "distanceProgress": 0,
             "maximumRenderDisplacement": 0,
             "observedFrames": 0,
-            "ownerHopFrames": 0,
-            "spawnHopObserved": False,
+            "ownerEntryFrames": 0,
+            "spawnMotionObserved": False,
         }
         self.resumed_finalizer_ticks.append(finalizer_ticks)
         self.attempt.update(
@@ -499,18 +501,18 @@ class SpawnWorkBudgetMeasurement:
         actors = [actor for actor in snapshot.get("actors", [])
                   if actor.get("handle") == self.entry["handle"]]
         require(len(actors) == 1,
-                "spawn-work Move entry actor lost its exact identity")
+                "spawn-work Fly In actor lost its exact identity")
         actor = actors[0]
         require(actor.get("active") is True
                 and actor.get("identityVerified") is True
                 and actor.get("subjectIdentity") == self.entry["subjectIdentity"]
                 and actor.get("species") == self.entry["species"],
-                "spawn-work Move entry actor changed identity")
+                "spawn-work Fly In actor changed identity")
         logical = actor.get("logical", {})
         render = actor.get("render", {})
         require(all(type(logical.get(key)) is int for key in ("x", "y"))
                 and all(type(render.get(key)) is int for key in ("x", "y")),
-                "spawn-work Move entry lacks logical or rendered position")
+                "spawn-work Fly In actor lacks logical or rendered position")
         distance = (abs(self.entry["target"][0] - logical["x"])
                     + abs(self.entry["target"][1] - logical["y"]))
         render_displacement = (abs(render["x"] - self.entry["origin"][0])
@@ -521,9 +523,10 @@ class SpawnWorkBudgetMeasurement:
             self.entry["startDistance"] - self.entry["minimumDistance"])
         self.entry["maximumRenderDisplacement"] = max(
             self.entry["maximumRenderDisplacement"], render_displacement)
-        if actor.get("lane") == "OWNER" and actor.get("motionKind") == "HOP":
-            self.entry["ownerHopFrames"] += 1
-            self.entry["spawnHopObserved"] = True
+        if (actor.get("lane") == "OWNER"
+                and actor.get("motionKind") == EXPECTED_ENTRY_MOTION_KIND):
+            self.entry["ownerEntryFrames"] += 1
+            self.entry["spawnMotionObserved"] = True
 
     def observe(self, snapshot, events):
         if self.failures or self.closed:
@@ -582,7 +585,7 @@ class SpawnWorkBudgetMeasurement:
         return bool(self.attempt and self.attempt.get("completed")
                     and self.entry
                     and self.context_transition
-                    and self.entry["spawnHopObserved"]
+                    and self.entry["spawnMotionObserved"]
                     and self.entry["distanceProgress"] >= MINIMUM_ENTRY_PROGRESS
                     and self.entry["maximumRenderDisplacement"] >= MINIMUM_ENTRY_PROGRESS
                     and self.post_spawn_pacing_samples >= POST_SPAWN_PACING_SAMPLES

@@ -1,20 +1,20 @@
 {
   "schemaVersion": 1,
   "id": "walk.turn-skid.control-release",
-  "title": "Mounted cardinal turn skid retains direction and returns control",
+  "title": "Mounted cardinal turn skid faces the turn while sliding and returns control",
   "status": "active",
   "capabilities": [
     "walk.skid",
     "mount.presentation"
   ],
-  "proofLevel": "S3",
+  "proofLevel": "S4",
   "costTier": 3,
   "verification": {
     "kind": "controlled-case",
     "expectationSource": "documentation/overworld_walk_frame_timing_spec.md",
     "actor": "MOUNTED species 155 (cyndaquil), acquired through mount; live handle and attached presentation required",
-    "trigger": "Place the disposable fixture on a clear Cherrygrove lane; mount Cyndaquil; hold Right through thirteen acceleration Walks; reverse to Left through one skid motion; release Left when the recovery Walk starts",
-    "observable": "The thirteen Walk durations are 8,8,8,7,7,7,6,6,6,5,5,5,4; the reversal keeps Right-facing skid presentation, emits one skid dust effect, commits one 8-frame skid motion and one 5-frame recovery Walk, then returns idle control facing Left",
+    "trigger": "Place the disposable fixture on a clear Cherrygrove lane; mount Cyndaquil; hold Right through thirteen acceleration Walks; reverse to Left through two skid tiles; release Left when the recovery Walk starts",
+    "observable": "The thirteen Walk durations are 8,8,8,7,7,7,6,6,6,5,5,5,4; the reversal faces Left throughout two 8-frame skid tiles while traveling Right, emits one skid dust effect, commits one 5-frame Left recovery Walk, then returns idle control facing Left",
     "setupAudit": "complete",
     "setupMutations": [
       {
@@ -63,7 +63,7 @@
     {
       "at": 2,
       "kind": "input",
-      "value": "Hold Left through one Right-facing skid motion and release it when the Left recovery Walk starts"
+      "value": "Hold Left through two Left-facing, Right-traveling skid tiles and release it when the Left recovery Walk starts"
     },
     {
       "at": 3,
@@ -78,7 +78,7 @@
   ],
   "stop": {
     "frameBudget": 221,
-    "condition": "Thirteen acceleration Walks, one skid motion, one recovery Walk, and the reader close finish"
+    "condition": "Thirteen acceleration Walks, two skid tiles, one recovery Walk, and the reader close finish"
   },
   "expect": {
     "requiredEvents": [
@@ -170,6 +170,6 @@
     "kind": "devtools-test",
     "test": "walk.turn-skid.control-release",
     "claims": ["natural-input", "live-actor-identity", "logical-commit", "rendered-motion", "frame-pacing", "feedback-effect", "control-release"],
-    "minimumFrames": 94
+    "minimumFrames": 102
   }
 }

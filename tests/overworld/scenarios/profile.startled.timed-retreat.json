@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.startled.timed-retreat",
+  "title": "Startled repeatedly retreats through its 44-frame window",
+  "status": "active",
+  "capabilities": ["condition.evaluation", "alert", "chase"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "data/overworld_behavior_profiles.json",
+    "actor": "One prepared WILD Bellsprout (species 69) with Meander, Waddle, and the Startled conditional Attitude on one open lane.",
+    "trigger": "Move the player into Bellsprout's current Vision at an idle intent boundary and keep the player fixed through the authored timed activation and its first later Routine intent.",
+    "observable": "Requirement current.startled-timed-retreat: condition-startled-notices-player captures PLAYER, emits one exclamation, remains active for exactly 44 completed game frames, submits repeated accepted retreat intents away from the captured player during that window, preserves Bellsprout's current locomotion, and resumes its base Routine after expiry. Cooldown is 164 frames.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use a disposable test.sav, checked teleport to map 33, native Bellsprout spawn on a clear retreat lane, exact bind, and checked player placement outside Vision. Do not change the authored condition, timers, locomotion, target, collision results, or actor state during observation."
+      }
+    ],
+    "limits": [
+      "The bound runtime observer retains the exact timed activation, motion starts, away-from-player displacement, expiry, and Routine return. Its copied-data controls reject missing subject and missing feature evidence.",
+      "A motion accepted before frame 44 may finish. Expiry changes only the next intent and must not cancel accepted movement.",
+      "Prepared placement proves one clear retreat lane, not every plant species or blocked fallback."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [
+    {"id": "bellsprout", "species": 69, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}
+  ],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Spawn and bind Bellsprout on a clear lane with the player outside current Vision."},
+    {"at": 1, "kind": "lifecycle", "value": "Trigger Startled at an idle boundary and retain every completed frame of the 44-frame activation."},
+    {"at": 2, "kind": "lifecycle", "value": "Observe at least two accepted retreats away from the player, activation expiry, control return, and the first base Routine intent."}
+  ],
+  "stop": {"frameBudget": 360, "condition": "The 44-frame Startled window expires after repeated retreat and Bellsprout's base Routine resumes."},
+  "expect": {
+    "requiredEvents": ["INTENT_CREATED", "MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["MOTION_CANCELED", "ACTOR_REBOUND", "CONTEXT_CHANGED"],
+    "invariants": [
+      "Startled owns condition-startled-notices-player with duration 44 and cooldown 164",
+      "Every Startled displacement increases distance from the captured player",
+      "At least two retreat intents start during the active window",
+      "The actor's locomotion does not change and the base Routine resumes after expiry"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "profile.startled.timed-retreat",
+    "claims": ["live-actor-identity", "profile-resolution", "engine-boundary", "rendered-motion", "frame-pacing", "control-release"],
+    "minimumFrames": 1
+  }
+}

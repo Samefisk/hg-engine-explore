@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.stantler-turn-skid-facing",
+  "title": "Mounted Stantler keeps the new facing through a turn skid",
+  "status": "active",
+  "capabilities": ["walk.skid", "mount.presentation"],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld_walk_frame_timing_spec.md",
+    "actor": "One current mounted Stantler (species 234, party slot 0) on map 33",
+    "trigger": "From a checked idle lane, hold Right 49 frames and require the last displayed Walk to be four frames, then turn directly Down for 18 frames",
+    "observable": "The normal Down turn starts two eight-frame skid tiles that travel two tiles east. Player and mounted Stantler face Down on all sixteen skid frames. Each tile has one exact native start, commit, finish and control return, followed by the Down recovery Walk. A missing second tile or commit must fail.",
+    "setupAudit": "complete",
+    "setupMutations": [{"phase": "before-observation", "target": "fixture",
+      "change": "Copy test.nds and test.sav. Teleport to map 33 (586,402), prepare party slot 0 level-10 Stantler, mount, settle 16 neutral frames and bind its live actor. Do not edit its Sprint profile, policy, motion, facing, input or terrain during observation."}],
+    "limits": [
+      "Prepared setup gives no skid proof; both input windows are normal keys. The fixed run-up must still end at a displayed four-frame Walk; a different source profile or timing requires a checked run-up, not relaxed acceptance.",
+      "This exact Stantler turn does not replace the longer Sprint Walk or obstacle-Hop tests.",
+      "Registration alone is not runtime acceptance; the checked test must pass on the current ROM."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "stantler", "species": 234, "role": "MOUNTED", "acquisition": "mount",
+    "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Prepare and bind one mounted Stantler at map 33 (586,402)"},
+    {"at": 1, "kind": "input", "value": "Hold Right for 49 completed frames"},
+    {"at": 2, "kind": "input", "value": "Hold Down for eighteen completed frames through both turn-skid tiles and recovery start"}
+  ],
+  "stop": {"frameBudget": 300, "condition": "Sixteen Down-facing east-travel skid frames, two skid commits and Down recovery start"},
+  "expect": {
+    "requiredEvents": ["MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["MOTION_CANCELED", "CONTEXT_CHANGED", "ACTOR_REBOUND", "CONTROL_REBOUND"],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "mount.stantler-turn-skid-facing",
+    "claims": ["natural-input", "live-actor-identity", "logical-commit", "rendered-motion", "frame-pacing", "control-release"],
+    "minimumFrames": 67}
+}

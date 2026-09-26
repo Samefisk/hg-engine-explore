@@ -120,7 +120,7 @@ def _entry(prepared, scratch, world, index):
         stored = target["handle"]
         matches = []
         for actor_index in range(actor_count):
-            offset = 30 + actor_index * 20
+            offset = 38 + actor_index * 20
             handle = struct.unpack_from("<6H", world, offset)
             if (world[offset + 16] != 0
                     and (handle[0], handle[1], handle[4])

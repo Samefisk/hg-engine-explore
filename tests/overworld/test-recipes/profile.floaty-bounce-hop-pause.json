@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.floaty-bounce-hop-pause",
+  "title": "Floaty Bounce keeps a pause between Jigglypuff Hops",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "data/overworld_behavior_profiles.json#floaty-bounce",
+  "requirements": ["current.floaty-bounce-hop-pause"],
+  "budgets": {"maxSeconds": 180, "maxFrames": 900, "noProgressFrames": 450, "minObservedFrames": 2},
+  "subjects": [{"id": "jigglypuff", "species": 39, "role": "WILD", "acquire": "spawn"}],
+  "measurements": [{"kind": "floaty-bounce-hop-pause-v1", "subject": "jigglypuff"}],
+  "setup": [
+    {"id": "route29-open-area", "op": "teleport", "args": {"map": 33, "x": 585, "z": 402, "facing": 1}, "budget": {"maxSeconds": 30, "maxFrames": 80, "noProgressFrames": 80}},
+    {"id": "spawn-mankey-background", "op": "spawn", "args": {"species": 56, "role": "wild", "level": 5, "x": 594, "z": 402}, "budget": {"maxSeconds": 30, "maxFrames": 80, "noProgressFrames": 80}},
+    {"id": "spawn-jigglypuff", "op": "spawn", "args": {"species": 39, "role": "wild", "level": 5, "x": 592, "z": 402}, "budget": {"maxSeconds": 30, "maxFrames": 80, "noProgressFrames": 80}},
+    {"id": "bind-jigglypuff", "op": "bind", "args": {"subject": "jigglypuff"}, "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "observe-two-normal-hops", "op": "wait", "args": {"predicate": {"kind": "measurement-complete", "measurement": "floaty-bounce-hop-pause-v1", "when": "final"}}, "budget": {"maxSeconds": 150, "maxFrames": 700, "noProgressFrames": 450}}
+  ],
+  "assertions": [{"kind": "measurement-complete", "measurement": "floaty-bounce-hop-pause-v1", "when": "final"}]
+}

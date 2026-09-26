@@ -10,23 +10,23 @@ Screenshots are stored in `documentation/ticket-attachments/<ticket-id>/`. Do no
 
 <!-- tickets:append-below -->
 
-<!-- ticket:TKT-0005:start -->
-## TKT-0005 — Change runner profile to use obstacle-clearing forward jumps
+<!-- ticket:TKT-0007:start -->
+## TKT-0007 — Consider linear Walk speed with fractional tile timing
 
 - Type: task
 - Status: open
 - Priority: normal
-- Created: 2026-09-18T08:59:25Z
-- Updated: 2026-09-18T08:59:25Z
+- Created: 2026-09-25T22:33:04Z
+- Updated: 2026-09-25T22:33:04Z
 - Area: Not provided
 
 ### Report
 
-Update the runner profile: replace the current forward jump chain pause action with a forward jump that jumps over obstacles. Keep the jump at 2 tiles forward. The runner profile should no longer have a chain movement action.
+Maybe for later; benched for now. Current Walk acceleration reduces travel time by whole frames per tile, so each one-frame reduction gives a larger speed gain near one frame per tile. Consider storing speed as fractional tiles per frame and carrying fractional tile time across accepted Walk tiles. For example, a target of 6.4 frames per tile could use whole-frame tile times that total 32 frames across five tiles. Keep the existing whole-frame motion and tile commit model. This ticket records the idea only; no implementation is requested now.
 
 ### Expected result
 
-Runner uses a 2-tile forward jump to jump over obstacles, and the runner profile has no chain movement action.
+If pursued, equal acceleration increments produce equal changes in average tiles per frame across Wild, Follower, and Mounted Walk.
 
 ### Actual result
 
@@ -38,7 +38,7 @@ Not applicable.
 
 ### Acceptance checks
 
-- [ ] Runner profile uses the obstacle-clearing 2-tile forward jump; the forward jump chain pause action is removed; no chain movement action remains on runner.
+- [ ] The requested outcome is complete, and the relevant checks pass.
 
 ### Screenshots
 
@@ -46,43 +46,43 @@ No screenshots supplied.
 
 ### Work notes
 
-- 2026-09-18T08:59:25Z — Created from Codex chat.
+- 2026-09-25T22:33:04Z — Created from Codex chat.
 
 ### Completion evidence
 
 Not complete.
 
-<!-- ticket:TKT-0005:end -->
+<!-- ticket:TKT-0007:end -->
 
-<!-- ticket:TKT-0006:start -->
-## TKT-0006 — Allow active and tired states to select profiles by Pokémon pool
+<!-- ticket:TKT-0008:start -->
+## TKT-0008 — Stantler always faces north when it stops as a follower
 
-- Type: task
+- Type: bug
 - Status: open
 - Priority: normal
-- Created: 2026-09-18T09:26:27Z
-- Updated: 2026-09-18T09:26:27Z
+- Created: 2026-09-26T05:03:19Z
+- Updated: 2026-09-26T05:03:19Z
 - Area: Not provided
 
 ### Report
 
-Add the ability for an active state and/or tired state to have multiple profiles with different Pokémon pools. For example, when Rattata is active, apply override profile A; when Sentret is active, apply override profile B.
+Stantler always looks north when it stops as a follower.
 
 ### Expected result
 
-Active and/or tired states can select different profiles based on the active Pokémon pool, such as applying override profile A for Rattata and override profile B for Sentret.
+Not provided.
 
 ### Actual result
 
-Not applicable.
+Stantler looks north whenever it stops as a follower.
 
 ### Reproduction steps
 
-- Not applicable.
+- Not provided.
 
 ### Acceptance checks
 
-- [ ] Active and/or tired state supports multiple profiles with different Pokémon pools; Rattata selects override profile A; Sentret selects override profile B.
+- [ ] The reported behavior no longer occurs in the stated case, and the relevant checks pass.
 
 ### Screenshots
 
@@ -90,10 +90,54 @@ No screenshots supplied.
 
 ### Work notes
 
-- 2026-09-18T09:26:27Z — Created from Codex chat.
+- 2026-09-26T05:03:19Z — Created from Codex chat.
 
 ### Completion evidence
 
 Not complete.
 
-<!-- ticket:TKT-0006:end -->
+<!-- ticket:TKT-0008:end -->
+
+<!-- ticket:TKT-0009:start -->
+## TKT-0009 — Overworld Pokémon turns every frame when it cannot move
+
+- Type: bug
+- Status: open
+- Priority: normal
+- Created: 2026-09-26T05:05:24Z
+- Updated: 2026-09-26T05:05:24Z
+- Area: Not provided
+
+### Report
+
+When an overworld Pokémon cannot move, it tends to turn around every frame. One example is Flabébé after it notices the player while it has nowhere to move.
+
+### Expected result
+
+Not provided.
+
+### Actual result
+
+The Pokémon repeatedly turns instead of staying facing one direction while it cannot move.
+
+### Reproduction steps
+
+- Place Flabébé where it has nowhere to move, then let it notice the player. Watch its facing while it remains unable to move.
+
+### Acceptance checks
+
+- [ ] The reported behavior no longer occurs in the stated case, and the relevant checks pass.
+
+### Screenshots
+
+No screenshots supplied.
+
+### Work notes
+
+- 2026-09-26T05:05:24Z — Created from Codex chat.
+
+### Completion evidence
+
+Not complete.
+
+<!-- ticket:TKT-0009:end -->

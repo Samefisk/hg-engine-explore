@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.floaty-bounce-hop-pause",
+  "title": "Floaty Bounce Jigglypuff keeps its Hop rhythm",
+  "status": "active",
+  "capabilities": ["hop"],
+  "proofLevel": "S4",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "data/overworld_behavior_profiles.json",
+    "actor": "One prepared WILD Jigglypuff (species 39) with the normal Floaty Bounce routine, current identity, attached presentation, and Hop locomotion.",
+    "trigger": "On Route 29 map 33, put the player at (585,402), prepare Mankey at (594,402) and Jigglypuff at (592,402), bind Jigglypuff, then observe two complete ordinary Hops without changing its profile or timers.",
+    "observable": "Requirement current.floaty-bounce-hop-pause: Jigglypuff resolves Hop time 12 and Hop pause 10. Two normal Hops use the authored travel time for their tile distances, finish logical and rendered motion, then each retains exactly 10 completed settle frames before control returns. A zero-gap successor or a shortened Hop fails.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use disposable test.sav, checked teleport to Route 29, native Mankey and Jigglypuff spawns at their declared land tiles, and an exact Jigglypuff bind. Do not alter profile values, Hop timing, cooldowns, target choice, actor motion, or the observer during measurement."
+      }
+    ],
+    "limits": [
+      "Only Jigglypuff has live cadence proof; the shared Igglybuff Floaty Bounce authoring value has a separate host check. Prepared spawning does not prove natural population selection.",
+      "The meter excludes any partially observed setup spawn Hop, then requires two complete ordinary Hops from the same bound actor and resolved fingerprint. Its copied-data control changes an accepted Hop pause to zero and must fail.",
+      "The frame claim applies to this flat Route 29 fixture, not every elevation or distance. No image or video is used."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [
+    {"id": "jigglypuff", "species": 39, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}
+  ],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Bind current Jigglypuff with Floaty Bounce at the checked Route 29 land fixture."},
+    {"at": 1, "kind": "lifecycle", "value": "Observe first complete ordinary Hop, its authored 10-frame settle, logical commit, rendered landing, and control return."},
+    {"at": 2, "kind": "lifecycle", "value": "Observe second complete ordinary Hop with the same resolved profile and the same 10-frame settle."}
+  ],
+  "stop": {"frameBudget": 900, "condition": "Two complete normal Jigglypuff Hops each retain exactly 10 settle frames and return control."},
+  "expect": {
+    "requiredEvents": ["MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["MOTION_CANCELED", "ACTOR_REBOUND", "CONTEXT_CHANGED"],
+    "invariants": [
+      "The live resolved Owner lane has Hop locomotion, Hop time 12, and Hop pause 10",
+      "Each of two ordinary Hops has exact flat-distance travel time and a complete rendered landing",
+      "Each Hop has 10 settle frames; the next Hop does not start before the prior one finishes"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "profile.floaty-bounce-hop-pause",
+    "claims": ["live-actor-identity", "profile-resolution", "logical-commit", "rendered-motion", "frame-pacing", "control-release"],
+    "minimumFrames": 2
+  }
+}

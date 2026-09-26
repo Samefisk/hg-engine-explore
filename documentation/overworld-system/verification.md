@@ -378,7 +378,7 @@ its own graph can never satisfy.
 | Hop (`hop`) | Motion Module | Wild, Mounted | S1, S3, S4 |
 | Ledge Hop (`hop.ledge`) | Motion planner | Wild, Mounted | S1, S3 |
 | Teleport (`teleport`) | Motion Module | Wild, Mounted | S1, S3, S4 |
-| Chain movement (`chain.movement`) | Role controllers | Wild, Follower | S1, S3 |
+| Chain movement (`chain.movement`) | Role controllers | Wild, Follower, Mounted | S1, S3 |
 | Mount lifecycle (`mount.lifecycle`) | Mounted role adapter | Follower, Mounted | S2, S3, S4 |
 | Mounted presentation (`mount.presentation`) | Mounted presentation adapter | Mounted | S3, S4 |
 | Terrain streaming (`world.streaming`) | World adapter | Mounted | S3 |
@@ -386,6 +386,7 @@ its own graph can never satisfy.
 | Warp gating (`world.warp-gating`) | World reactions | Mounted | S3 |
 | Wild population (`population`) | Population module | Wild | S1, S3, S5 |
 | Conditional profile activation (`condition.evaluation`) | Behavior Condition Evaluator | Wild, Follower | S0, S1, S3 |
+| Shared Current and Custom Vision (`vision`) | Vision service | Wild, Follower | S0, S1 |
 | Owner and Tired behavior lanes (`profile.state`) | Behavior Resolver | Wild, Follower, Mounted | S0, S1 |
 | Condition-triggered presentation (`alert`) | Role controllers (presentation) | Wild, Follower | S0, S1 |
 | Spawn policy (`spawn`) | Population module | Wild | S0, S1, S3 |
@@ -750,8 +751,8 @@ complete explicit scan,
 exactly one profile receipt for the attempt, completed game-update boundaries,
 zero terrain-matcher queries on setup, exactly 20 resumed batches, no update
 above the 12-query cap, no resumed finalizer above its guest-work
-budget, and one successful prepared Hoothoot on the next update. That actor
-must use its normal spawn Hop from the retained off-screen origin to the
+budget, and one successful prepared encounter actor on the next update. That actor
+must use its normal Fly In from the retained off-screen origin to the
 retained target. The test measures every main loop from the first strict
 post-seam update through the loop after actor creation. Zero
 late loops is the only pass: `gSystem.frameCounter` must stay at or below `2`,

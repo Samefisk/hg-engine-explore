@@ -33,7 +33,7 @@ REMOVED_ALERT_FIELDS = {
 }
 
 
-class BehaviorCatalogV4Tests(unittest.TestCase):
+class BehaviorCatalogV5CutoverTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.catalog = json.loads(VIEWER.BEHAVIOR_CATALOG_SOURCE.read_text())
@@ -52,20 +52,20 @@ class BehaviorCatalogV4Tests(unittest.TestCase):
             header,
         )
 
-    def test_only_catalog_v4_is_accepted(self) -> None:
-        self.assertEqual(self.catalog["catalogVersion"], 4)
+    def test_checked_in_catalog_is_v5_and_old_versions_are_rejected(self) -> None:
+        self.assertEqual(self.catalog["catalogVersion"], 5)
         for old_version in (1, 2, 3):
             changed = copy.deepcopy(self.catalog)
             changed["catalogVersion"] = old_version
             with self.assertRaisesRegex(
-                VIEWER.ParseError, "unsupported behavior catalog version; expected 4"
+                VIEWER.ParseError, "unsupported behavior catalog version; expected 4 or 5"
             ):
                 VIEWER.validate_behavior_catalog(changed)
 
-    def test_only_authoring_schema_v4_remains(self) -> None:
-        schema = json.loads(VIEWER.BEHAVIOR_AUTHORING_SCHEMA.read_text())
-        self.assertEqual(schema["$id"], "behavior-authoring-v4.schema.json")
-        self.assertEqual(schema["properties"]["catalogVersion"]["const"], 4)
+    def test_v5_is_the_current_authoring_schema(self) -> None:
+        schema = json.loads(VIEWER.BEHAVIOR_AUTHORING_SCHEMA_V5.read_text())
+        self.assertEqual(schema["$id"], "behavior-authoring-v5.schema.json")
+        self.assertEqual(schema["properties"]["catalogVersion"]["const"], 5)
         schema_dir = VIEWER.BEHAVIOR_AUTHORING_SCHEMA.parent
         self.assertFalse((schema_dir / "behavior-authoring-v2.schema.json").exists())
         self.assertFalse((schema_dir / "behavior-authoring-v3.schema.json").exists())
@@ -102,24 +102,26 @@ class BehaviorCatalogV4Tests(unittest.TestCase):
         ):
             VIEWER.validate_behavior_catalog(changed)
 
-    def test_default_active_names_remain_as_conditional_data(self) -> None:
-        profile = self.profile("default-active")
+    def test_notice_player_replaces_default_active(self) -> None:
+        profile = self.profile("notice-player")
         application = next(
             item for item in self.catalog["applications"]
-            if item["id"] == "apply-default-active"
+            if item["id"] == "apply-notice-player"
         )
         self.assertEqual(profile["kind"], "conditional")
         self.assertTrue(profile["conditions"])
         self.assertEqual(application["profile"], profile["id"])
-        self.assertEqual(application["target"]["mode"], "disabled")
+        self.assertNotIn("target", application)
 
     def test_profile_owned_conditions_can_use_independent_subject_pools(self) -> None:
         changed = copy.deepcopy(self.catalog)
-        profile = self.profile("bird-rooftop", changed)
+        profile = self.profile("perch", changed)
         extra = copy.deepcopy(profile["conditions"][0])
-        extra["id"] = "condition-bird-rooftop-other-pool"
+        extra["id"] = "condition-perch-other-pool"
         extra["subjects"] = {
-            "application": "apply-flying-insect"
+            "mode": "members",
+            "match": VIEWER.default_behavior_match_raws(),
+            "members": ["SPECIES_BEEDRILL"],
         }
         profile["conditions"].append(extra)
         VIEWER.validate_behavior_catalog(changed)
@@ -147,17 +149,20 @@ class BehaviorCatalogV4Tests(unittest.TestCase):
             application_index[self.catalog["runtimeBindings"]["defaultTiredApplication"]],
         )
 
-    def test_field_schema_reserves_removed_storage_without_authoring_it(self) -> None:
+    def test_field_schema_uses_removed_storage_for_vision_and_walk_sway(self) -> None:
         source = json.loads(VIEWER.BEHAVIOR_SCHEMA_SOURCE.read_text())
         generated = json.loads(VIEWER.BEHAVIOR_SCHEMA_METADATA.read_text())
         self.assertEqual(source["schemaVersion"], 2)
-        self.assertEqual(source["blobVersion"], 78)
+        self.assertEqual(source["blobVersion"], 81)
         by_offset = {field["offset"]: field for field in source["fields"]}
-        self.assertEqual(by_offset[46]["key"], "reserved46")
-        self.assertTrue(by_offset[46]["reserved"])
+        self.assertEqual(by_offset[1]["key"], "visionRange")
+        self.assertEqual(by_offset[4]["key"], "visionCone")
+        self.assertEqual(by_offset[14]["key"], "visionAdjacentAwareness")
+        self.assertEqual(by_offset[46]["key"], "walkSwayWidth")
+        self.assertNotIn("reserved", by_offset[46])
         self.assertEqual(by_offset[47]["key"], "tiredProfile")
-        self.assertNotIn(
-            "reserved46", {field["key"] for field in generated["editor"]["fields"]}
+        self.assertIn(
+            "walkSwayWidth", {field["key"] for field in generated["editor"]["fields"]}
         )
 
     def test_legacy_lowering_entry_points_are_gone(self) -> None:

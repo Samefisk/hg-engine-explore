@@ -4,6 +4,7 @@ from copy import deepcopy
 from tools.overworld.devtools_spawn_work_budget_measurement import (
     ENTRY_OFFSCREEN_MARGIN_TILES,
     ENTRY_TARGET_MAX_DISTANCE_TILES,
+    EXPECTED_ENTRY_LOCOMOTION,
     EXPECTED_SCAN_CANDIDATES,
     EXPECTED_DESTINATION_UPDATES,
     KIND,
@@ -60,7 +61,7 @@ def contract():
             {
                 "name": "spawn-work-entry-actor-identity", "operator": "eq",
                 "type": "array", "validator": "meaningful-observation",
-                "expected": [1, "WILD", 163, 1],
+                "expected": [1, "WILD", 1, 1],
             },
         ],
         "profile-resolution": [
@@ -127,9 +128,9 @@ def contract():
                 "minimum": ENTRY_OFFSCREEN_MARGIN_TILES,
             },
             {
-                "name": "spawn-work-entry-normal-hop-evidence", "operator": "eq",
+                "name": "spawn-work-entry-normal-fly-in-evidence", "operator": "eq",
                 "type": "array", "validator": "meaningful-observation",
-                "expected": [4, 1],
+                "expected": [EXPECTED_ENTRY_LOCOMOTION, 1],
             },
             {
                 "name": "spawn-work-entry-distance-progress", "operator": "gte",
@@ -205,14 +206,15 @@ def measurements(replay, record):
             and attempt.get("successfulSpawnCount") == 1
             and meter.get("contextTransition", {}).get("from", {}).get("mapId") == 33
             and meter.get("contextTransition", {}).get("to", {}).get("mapId") == 67
-            and entry.get("locomotion") == 4
-            and entry.get("species") == 163
+            and entry.get("locomotion") == EXPECTED_ENTRY_LOCOMOTION
+            and type(entry.get("species")) is int and entry["species"] > 0
+            and entry["species"] == attempt.get("encounter", {}).get("species")
             and type(entry.get("targetDistance")) is int
             and 1 <= entry["targetDistance"] <= ENTRY_TARGET_MAX_DISTANCE_TILES
             and type(entry.get("offscreenClearance")) is int
             and entry["offscreenClearance"] >= ENTRY_OFFSCREEN_MARGIN_TILES
-            and entry.get("spawnHopObserved") is True
-            and entry.get("ownerHopFrames", 0) > 0
+            and entry.get("spawnMotionObserved") is True
+            and entry.get("ownerEntryFrames", 0) > 0
             and entry.get("distanceProgress", 0) >= MINIMUM_ENTRY_PROGRESS
             and entry.get("maximumRenderDisplacement", 0) >= MINIMUM_ENTRY_PROGRESS
             and type(attempt.get("maxResumedFinalizerArm9Ticks")) is int
@@ -241,10 +243,12 @@ def measurements(replay, record):
         },
         {
             "claim": "live-actor-identity", "name": "spawn-work-entry-actor-identity",
-            "value": [1, "WILD", entry["species"],
+            "value": [1, "WILD",
+                      int(entry["species"] == attempt["encounter"]["species"]),
                       int(bool(entry.get("subjectIdentity")))],
-            "operator": "eq", "expected": [1, "WILD", 163, 1],
-            "passed": entry["species"] == 163 and bool(entry.get("subjectIdentity")),
+            "operator": "eq", "expected": [1, "WILD", 1, 1],
+            "passed": entry["species"] == attempt["encounter"]["species"]
+                and bool(entry.get("subjectIdentity")),
         },
         {
             "claim": "profile-resolution", "name": "spawn-work-profile-receipt-count",
@@ -308,9 +312,9 @@ def measurements(replay, record):
             "passed": entry["offscreenClearance"] >= ENTRY_OFFSCREEN_MARGIN_TILES,
         },
         {
-            "claim": "logical-commit", "name": "spawn-work-entry-normal-hop-evidence",
-            "value": [entry["locomotion"], int(entry["spawnHopObserved"])],
-            "operator": "eq", "expected": [4, 1],
+            "claim": "logical-commit", "name": "spawn-work-entry-normal-fly-in-evidence",
+            "value": [entry["locomotion"], int(entry["spawnMotionObserved"])],
+            "operator": "eq", "expected": [EXPECTED_ENTRY_LOCOMOTION, 1],
             "passed": True,
         },
         {

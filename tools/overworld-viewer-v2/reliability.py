@@ -1076,8 +1076,8 @@ def resolve_conditional_preview(legacy: ModuleType, payload: dict[str, Any]) -> 
     if not isinstance(catalog, dict):
         catalog = legacy.load_behavior_catalog_v4()
     legacy.validate_behavior_catalog(catalog)
-    if catalog.get("catalogVersion") != 4:
-        raise ValueError("condition preview needs a V4 profile catalog")
+    if catalog.get("catalogVersion") not in {4, 5}:
+        raise ValueError("condition preview needs a V4 or V5 profile catalog")
 
     subject_input = payload.get("subject")
     observation = payload.get("observation")
@@ -1163,6 +1163,11 @@ def resolve_conditional_preview(legacy: ModuleType, payload: dict[str, Any]) -> 
             "valid": _parse_bool(str(player_input.get("valid", True))),
             "x": signed(player_input.get("x", 12), "player x"),
             "y": signed(player_input.get("y", 10), "player y"),
+            "facingAndOcclusion": (
+                bounded(player_input.get("facing", 1), "player facing", 0, 3)
+                | (4 if _parse_bool(str(player_input.get("occludedFromSubject", False))) else 0)
+                | (8 if _parse_bool(str(player_input.get("occludedToSubject", False))) else 0)
+            ),
         },
     }
 
@@ -1194,6 +1199,11 @@ def resolve_conditional_preview(legacy: ModuleType, payload: dict[str, Any]) -> 
             "x": signed(candidate_input.get("x", 12 + index), f"candidate {candidate_id} x"),
             "y": signed(candidate_input.get("y", 10), f"candidate {candidate_id} y"),
             "valid": _parse_bool(str(candidate_input.get("valid", True))),
+            "facingAndOcclusion": (
+                bounded(candidate_input.get("facing", 1), f"candidate {candidate_id} facing", 0, 3)
+                | (4 if _parse_bool(str(candidate_input.get("occludedFromSubject", False))) else 0)
+                | (8 if _parse_bool(str(candidate_input.get("occludedToSubject", False))) else 0)
+            ),
         })
 
     profiles_by_id = {profile["id"]: profile for profile in catalog["profiles"]}
@@ -1321,7 +1331,11 @@ def resolve_conditional_preview(legacy: ModuleType, payload: dict[str, Any]) -> 
             "name": profile["name"],
             "matched": bool(matched_mask & bit) or bool(conditional_mask & bit),
             "applied": bool(applied_mask & bit),
-            "summary": "Conditional activation" if profile["kind"] == "conditional" else application["target"]["mode"],
+            "summary": (
+                "Conditional activation"
+                if profile["kind"] == "conditional"
+                else application.get("target", {}).get("mode", "linked")
+            ),
             "fields": list(profile.get("fields", {})),
             "changes": changes_by_application.get(index, []),
         })

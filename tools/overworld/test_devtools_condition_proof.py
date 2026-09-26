@@ -310,6 +310,11 @@ def fixture():
 
 
 class ConditionProofTests(unittest.TestCase):
+    def test_actor_targets_use_the_vision_aware_world_header(self):
+        test, rows, oracle = fixture()
+        measured = condition_measurements(test, rows, {}, ROOT, oracle=oracle)
+        self.assertEqual(measured["caseProof"]["caseCount"], len(CASE_NAMES))
+
     def check(self, test, rows, oracle):
         return condition_measurements(test, iter(rows), {}, ROOT, oracle=oracle)
 

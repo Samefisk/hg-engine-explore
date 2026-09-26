@@ -26,22 +26,27 @@ OWBD_PROFILE_KIND_NORMAL = 0
 OWBD_PROFILE_KIND_CONDITIONAL = 1
 OWBD_CONDITION_SUBJECT_APPLICATION_NONE = 0xFF
 OWBD_CONDITION_TERRAIN_SPEED = 2
+OWBD_CONDITION_TARGET_CANNOT_SEE_SUBJECT = 3
 OWBD_CONDITION_WHILE_TRUE = 0
 OWBD_CONDITION_TIMED = 1
 OWBD_CONDITION_TARGET_NONE = 0
 OWBD_CONDITION_TARGET_PLAYER = 1
 OWBD_CONDITION_TARGET_ACTOR = 2
 OWBD_CONDITION_TARGET_ROLE_MASK = 0x03
+OWBD_CONDITION_RANGE_VISION_CURRENT = 5
+OWBD_CONDITION_RANGE_VISION_CUSTOM = 6
+OWBD_VISION_OPTIONS_FORWARD_90 = 1
+OWBD_VISION_OPTIONS_ADJACENT_AWARENESS = 4
 OWBD_CHILL_ACTION_OFFSET = 12
 OWBD_CHILL_ACTION_FIELD_BIT = 1 << 12
 OWBD_LOCOMOTION_MAX = 11
 OWBD_SURFACE_MODEL_SIZE = 6
 OWBD_SURFACE_INSTANCE_SIZE = 8
 OWBD_SURFACE_TEMPLATE_SIZE = 2
-OWBD_MASK_ALLOWED = 0x07FFFFFF
+OWBD_MASK_ALLOWED = 0x3FFFFFFF
 OWBD_MASK2_ALLOWED = 0x7FFF
 OWBD_MASK3_ALLOWED = 0x3FFFFFFF
-OWBD_RELATIVE_MASK_ALLOWED = 0x05F101F8
+OWBD_RELATIVE_MASK_ALLOWED = 0x05F001F8
 OWBD_RELATIVE_MASK2_ALLOWED = 0x1F8F
 OWBD_RELATIVE_MASK3_ALLOWED = 0x0D40F8F3
 OWBD_BOUNDED_MASK_ALLOWED = 0x01C00180
@@ -104,6 +109,8 @@ OWBD_WALK_PAUSE_VARIANCE_MASK = 0xFE
 OWBD_CHAIN_PAUSE_ACTION_OFFSET = 31
 OWBD_CHAIN_PAUSE_ACTION_FIELD_BIT = 1 << 4
 OWBD_CHAIN_PAUSE_ACTION_MAX = 7
+OWBD_CHAIN_PAUSE_RANDOM_CHOICE = 1 << 7
+OWBD_CHAIN_PAUSE_CHOICE_MASK = 0x7F
 OWBD_CHAIN_REPOSITION_ALLOW_DIAGONAL_OFFSET = 64
 OWBD_CHAIN_REPOSITION_ALLOW_DIAGONAL_FIELD_BIT = 1 << 18
 OWBD_WALK_OPTIONS_OFFSET = 65
@@ -189,6 +196,13 @@ INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]+)"', re.MULTILINE)
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise ValueError(message)
+
+
+def valid_chain_pause_action(value: int) -> bool:
+    return value <= OWBD_CHAIN_PAUSE_ACTION_MAX or (
+        value & OWBD_CHAIN_PAUSE_RANDOM_CHOICE != 0
+        and value & OWBD_CHAIN_PAUSE_CHOICE_MASK != 0
+    )
 
 
 def read_define(source: Path, symbol: str) -> int:
@@ -514,8 +528,9 @@ def validate_owbd(path: Path, source: Path) -> None:
             f"{path}: class profile {index} Walk pause variance must be between 0 and 32 frames",
         )
         require(
-            blob[profile_offset + OWBD_CHAIN_PAUSE_ACTION_OFFSET]
-                <= OWBD_CHAIN_PAUSE_ACTION_MAX,
+            valid_chain_pause_action(
+                blob[profile_offset + OWBD_CHAIN_PAUSE_ACTION_OFFSET]
+            ),
             f"{path}: class profile {index} chain pause action is invalid",
         )
         require(
@@ -613,11 +628,11 @@ def validate_owbd(path: Path, source: Path) -> None:
         require((mask2 & ~OWBD_MASK2_ALLOWED) == 0, f"{path}: override profile {index} mask2 has undefined bits")
         if mask2 & OWBD_CHAIN_PAUSE_ACTION_FIELD_BIT:
             require(
-                blob[
+                valid_chain_pause_action(blob[
                     profile_offset
                     + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
                     + OWBD_CHAIN_PAUSE_ACTION_OFFSET
-                ] <= OWBD_CHAIN_PAUSE_ACTION_MAX,
+                ]),
                 f"{path}: override profile {index} chain pause action is invalid",
             )
         require(
@@ -888,7 +903,7 @@ def validate_owbd(path: Path, source: Path) -> None:
         require(subject_application_index == OWBD_CONDITION_SUBJECT_APPLICATION_NONE or subject_application_index < override_profile_count, f"{path}: condition entry {index} has an invalid subject application")
         require(subject_member_start <= override_member_count and subject_member_count <= override_member_count - subject_member_start, f"{path}: condition entry {index} subject members are out of range")
         require(target_member_start <= override_member_count and target_member_count <= override_member_count - target_member_start, f"{path}: condition entry {index} target members are out of range")
-        require(kind <= OWBD_CONDITION_TERRAIN_SPEED, f"{path}: condition entry {index} has an invalid condition kind")
+        require(kind <= OWBD_CONDITION_TARGET_CANNOT_SEE_SUBJECT, f"{path}: condition entry {index} has an invalid condition kind")
         require(activation_mode in (OWBD_CONDITION_WHILE_TRUE, OWBD_CONDITION_TIMED), f"{path}: condition entry {index} has an invalid activation mode")
         if activation_mode == OWBD_CONDITION_WHILE_TRUE:
             require(duration_frames == 0 and cooldown_frames == 0, f"{path}: while-true condition entry {index} has timers")
@@ -907,7 +922,22 @@ def validate_owbd(path: Path, source: Path) -> None:
             require(terrain_override_mask != 0 or min_speed != 0 or max_speed != 0, f"{path}: condition entry {index} has no condition")
         else:
             require(target_kind in (OWBD_CONDITION_TARGET_PLAYER, OWBD_CONDITION_TARGET_ACTOR), f"{path}: notice condition entry {index} has no target")
-            require(1 <= range_kind <= 4 and range_length <= 0xFF, f"{path}: condition entry {index} has an invalid range")
+            require(1 <= range_kind <= OWBD_CONDITION_RANGE_VISION_CUSTOM, f"{path}: condition entry {index} has an invalid range")
+            if range_kind == OWBD_CONDITION_RANGE_VISION_CURRENT:
+                require(range_length == 0 and min_speed == 0, f"{path}: current-Vision condition entry {index} has custom values")
+            elif range_kind == OWBD_CONDITION_RANGE_VISION_CUSTOM:
+                require(1 <= range_length <= 32, f"{path}: custom-Vision condition entry {index} has an invalid range")
+                require(
+                    min_speed in (
+                        OWBD_VISION_OPTIONS_FORWARD_90,
+                        OWBD_VISION_OPTIONS_FORWARD_90
+                        | OWBD_VISION_OPTIONS_ADJACENT_AWARENESS,
+                    ),
+                    f"{path}: custom-Vision condition entry {index} has invalid options",
+                )
+            else:
+                require(range_length <= 0xFF and min_speed == 0, f"{path}: condition entry {index} has invalid legacy range values")
+            require(max_speed == 0, f"{path}: notice condition entry {index} has a movement-speed value")
             if target_kind == OWBD_CONDITION_TARGET_ACTOR:
                 require(target_role_mask != 0 and target_selection == 0, f"{path}: actor target condition entry {index} has an invalid selector")
             else:

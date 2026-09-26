@@ -39,8 +39,8 @@ def harness_source():
     source = start.harness_source().split("static void RunCase(", 1)[0]
     source = replace_once(source, '#include "overworld_motion_model.h"',
                           '#include "overworld_motion_model.h"\n#include "overworld_role_controller.h"')
-    source = replace_once(source, "u8 walkOptions, hopSwayWidth;",
-                          "u8 walkOptions, hopSwayWidth, hopTime, hopPause, chainRepositionJumpCount, chainRepositionDistance, "
+    source = replace_once(source, "u8 walkOptions, walkSwayWidth, hopSwayWidth, spawnHopSwayWidth, spawnHopTime;",
+                          "u8 walkOptions, walkSwayWidth, hopSwayWidth, spawnHopSwayWidth, spawnHopTime, hopTime, hopPause, chainRepositionJumpCount, chainRepositionDistance, "
                           "chainRepositionAllowCardinal, chainRepositionAllowDiagonal, chainRepositionDust; u16 chillAllowedTerrainMask;")
     source = replace_once(
         source,
@@ -48,9 +48,13 @@ def harness_source():
         "typedef struct OverworldWildBehaviorProfile { union { OverworldWildBehaviorProfileData lane; OverworldWildBehaviorProfileData owner; }; "
         "OverworldWildBehaviorProfileData tired; u8 jumpLevel, stamina, tiredState; } OverworldWildBehaviorProfile;",
     )
-    source = replace_once(source, "u8 chainStepsRemaining, chainPauseTicks, chainPauseAction, motionPhase, actorActive;",
-                          "u8 chainStepsRemaining, chainPauseTicks, chainPauseAction, motionPhase, actorActive; "
-                          "struct { u8 direction, tileCounter, speed, baseSpeed, spotState, skidRemaining, turnDirection, resumeSpeed; } walkMomentum;")
+    source = replace_once(
+        source,
+        "typedef struct OverworldWildWalkMomentumState { u8 speed; } OverworldWildWalkMomentumState;",
+        "typedef struct OverworldWildWalkMomentumState { "
+        "u8 direction, tileCounter, speed, baseSpeed, spotState, skidRemaining, turnDirection, resumeSpeed; "
+        "} OverworldWildWalkMomentumState;",
+    )
     source = replace_once(source, "u8 movementCustomJumpPrepActive[10], movementCustomJumpActive[10];",
                           "u8 movementCustomJumpPrepActive[10], movementCustomJumpActive[10], movementEmotePlayHopSound[10], "
                           "movementMankeyTreeTopLandingExpected[10], movementMankeyTreeTopSettled[10]; "
@@ -65,7 +69,7 @@ def harness_source():
     source = replace_once(source, "u16 movementInProgressMask;", """
     u16 movementInProgressMask;
     struct { LocalMapObject *object; u8 active; } spawns[10];
-    u8 movementStagedHopPending[10], movementCooldowns[10];
+    u8 movementCooldowns[10];
     u8 movementEmoteJumpsRemaining[10], movementEmoteTimers[10], movementEmoteSteps[10];
     u8 movementEmoteDirections[10], movementEmoteEndStates[10], movementEmoteBubbleIds[10];
     u8 movementEmoteShowBubbleEachJump[10], movementEmotePlayCryOnHop[10];

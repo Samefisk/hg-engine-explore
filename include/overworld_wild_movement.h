@@ -35,6 +35,8 @@ struct OverworldWildSpawnState;
 
 typedef struct OverworldWildWalkMomentumState {
     u8 direction;
+    /* Below max: acceleration cadence. At max: completed cap-speed Walks
+     * used to fade time variance; saturates at 255. Reset with momentum. */
     u8 tileCounter;
     u8 speed;
     u8 baseSpeed;
@@ -60,6 +62,7 @@ typedef enum OverworldActorWalkPolicyOperation {
     OVERWORLD_ACTOR_WALK_POLICY_CHAIN_REPOSITION_FINISH,
     OVERWORLD_ACTOR_WALK_POLICY_CHAIN_PUT_PENDING = 13,
     OVERWORLD_ACTOR_WALK_POLICY_PUBLISH_EFFECT = 14,
+    OVERWORLD_ACTOR_WALK_POLICY_SWAP_PROFILE = 15,
 } OverworldActorWalkPolicyOperation;
 
 typedef enum OverworldActorWalkPolicyDecision {
@@ -114,7 +117,7 @@ typedef struct OverworldActorPolicyView {
     u8 pendingStep;
     u8 pendingSkid;
     u8 streamState;
-    u8 reserved;
+    u8 lastWalkTime;
     u16 pendingFirstPathAdvance;
     u16 pendingLastPathAdvance;
     u8 actorActive;
@@ -126,6 +129,11 @@ typedef struct OverworldActorPolicyProfileBinding {
     u32 matchedLayerMask;
 } OverworldActorPolicyProfileBinding;
 
+typedef struct OverworldActorPolicyProfileTransaction {
+    OverworldActorPolicyProfileBinding next;
+    OverworldActorPolicyProfileBinding prior;
+} OverworldActorPolicyProfileTransaction;
+
 typedef struct OverworldActorWalkPolicyCall {
     u16 version;
     u16 size;
@@ -133,6 +141,7 @@ typedef struct OverworldActorWalkPolicyCall {
         const struct OverworldWildBehaviorProfileData *lane;
         OverworldActorPolicyView *policyView;
         const OverworldActorPolicyProfileBinding *profileBinding;
+        OverworldActorPolicyProfileTransaction *profileTransaction;
     };
     u8 actorSlot;
     u8 operation;
@@ -159,6 +168,8 @@ typedef char OverworldActorPolicyViewSizeMustRemain32Bytes[
     sizeof(OverworldActorPolicyView) == 32 ? 1 : -1];
 typedef char OverworldActorPolicyProfileBindingSizeMustRemain8Bytes[
     sizeof(OverworldActorPolicyProfileBinding) == 8 ? 1 : -1];
+typedef char OverworldActorPolicyProfileTransactionSizeMustRemain16Bytes[
+    sizeof(OverworldActorPolicyProfileTransaction) == 16 ? 1 : -1];
 typedef BOOL (*OverworldActorWalkPolicyReduceFunc)(
     OverworldActorWalkPolicyCall *call);
 

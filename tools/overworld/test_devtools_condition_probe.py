@@ -8,9 +8,11 @@ from tools.overworld.devtools_condition_probe import (
     CASE_NAMES,
     ConditionProbe,
     ConditionProbeError,
+    WORLD_BYTES,
     buffer_layout,
     build_test_blob,
     fixture_patch_plan,
+    world_bytes,
 )
 
 
@@ -19,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def source_blob():
     raw = bytearray(4096)
-    struct.pack_into("<IHHI", raw, 0, 0x4F574244, 79, 84, len(raw))
+    struct.pack_into("<IHHI", raw, 0, 0x4F574244, 80, 84, len(raw))
     struct.pack_into("<IHH", raw, 36, 84, 4, 212)
     struct.pack_into("<IHH", raw, 44, 932, 1, 2)
     struct.pack_into("<IHH", raw, 52, 936, 4, 48)
@@ -56,6 +58,16 @@ class Session:
 
 
 class ConditionProbeTests(unittest.TestCase):
+    def test_world_fixture_matches_current_vision_aware_layout(self):
+        raw = world_bytes(100)
+        self.assertEqual(len(raw), WORLD_BYTES)
+        self.assertEqual(WORLD_BYTES, 240)
+        self.assertEqual(raw[26:35], bytes((3, 8, 1, 2, 2, 3, 5, 3, 5)))
+        self.assertEqual(raw[38:50], struct.pack("<6H", 1, 2, 3, 4, 12, 0))
+        self.assertEqual(raw[54:58], bytes((1, 2, 3, 5)))
+        self.assertEqual(raw[58:70], struct.pack("<6H", 2, 3, 3, 4, 13, 0))
+        self.assertEqual(raw[74:78], bytes((1, 2, 3, 5)))
+
     def fixture(self):
         session = Session()
         probe = ConditionProbe(

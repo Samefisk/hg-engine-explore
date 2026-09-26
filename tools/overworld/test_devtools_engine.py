@@ -72,10 +72,10 @@ class WildStagedMotionTests(unittest.TestCase):
         address, entry, code = engine._wild_staged_layout()
         self.assertGreater(address, 0x02000000)
         self.assertGreater(entry, 0x02000000)
-        self.assertEqual(len(code), 108)
+        self.assertEqual(len(code), 116)
         compiler = shutil.which("arm-none-eabi-gcc") or "/opt/homebrew/bin/arm-none-eabi-gcc"
         source = '#include "overworld_wild_spawns_internal.h"\n#include <stddef.h>\n'
-        source += '_Static_assert(sizeof(OverworldWildSpawnState)==944,"size");\n'
+        source += '_Static_assert(sizeof(OverworldWildSpawnState)==952,"size");\n'
         source += '_Static_assert(OW_WILD_MAX_SPAWNS==10,"slots");\n'
         for name, offset in (("movementStagedHopPending", 684), ("movementStagedHopDistances", 664),
                              ("movementPendingDirections", 414), ("movementPendingDistances", 424),
@@ -104,7 +104,7 @@ class WildStagedMotionTests(unittest.TestCase):
         from tools.overworld.devtools_field_cleanup import symbol
         image = (ROOT / "build/overworld_wild_spawns_overlay_linked.o").read_bytes()
         original_entry, _, original_code = symbol(image,
-            "OverworldWildSpawns_ClearStagedHopTargetLocal", 2, expected_size=108)
+            "OverworldWildSpawns_ClearStagedHopTargetLocal", 2, expected_size=116)
         names = ("OverworldWildSpawns_ClearStagedHopMovementListTask",
                  "OverworldWildSpawns_ClearCustomJumpLocal")
         originals = [symbol(image, name, 2)[0] for name in names]
@@ -125,8 +125,8 @@ class WildStagedMotionTests(unittest.TestCase):
                 elif fault == "opcode": code[17] ^= 0x08
                 elif fault == "other-byte": code[40] ^= 1
                 table = {
-                    "sOverworldWildSpawnState": (0x02300000, 944, None),
-                    "OverworldWildSpawns_ClearStagedHopTargetLocal": (entry, 108, bytes(code)),
+                    "sOverworldWildSpawnState": (0x02300000, 952, None),
+                    "OverworldWildSpawns_ClearStagedHopTargetLocal": (entry, 116, bytes(code)),
                     names[0]: (targets[0], 2, b"\x70\x47"),
                     names[1]: (targets[1], 2, b"\x70\x47"),
                 }

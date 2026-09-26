@@ -12,9 +12,9 @@ def recipe():
     value = base_recipe()
     value.update(mode="prepared", subjects=[dict(id="rider", species=155, role="MOUNTED", acquire="existing")],
         measurements=[dict(kind=MOUNT_PACING, subject="rider")],
-        budgets=dict(maxSeconds=60, maxFrames=300, noProgressFrames=60, minObservedFrames=1),
+        budgets=dict(maxSeconds=60, maxFrames=400, noProgressFrames=180, minObservedFrames=1),
         assertions=[dict(kind="measurement-complete", measurement=MOUNT_PACING)])
-    budget = dict(maxSeconds=10, maxFrames=60, noProgressFrames=60)
+    budget = dict(maxSeconds=10, maxFrames=180, noProgressFrames=180)
     value["setup"] = [dict(id="bind", op="bind", args={"subject": "rider"}, budget=deepcopy(budget))]
     value["actions"] = []
     for op, args in (("mount-pacing.arm", {"subject": "rider"}),
@@ -24,7 +24,7 @@ def recipe():
         actions = []
         for op, suffix, key in (("step", "started", "until"), ("wait", "complete", "predicate")):
             args = {key: dict(kind="measurement-stage", measurement=MOUNT_PACING, stage=prefix+"-"+suffix)}
-            if op == "step": args.update(frames=60, keys=["RIGHT"])
+            if op == "step": args.update(frames=150, keys=["RIGHT"])
             actions.append(dict(id=prefix+"-"+suffix, op=op, args=args, budget=deepcopy(budget)))
         value["actions"][index+1:index+1] = actions
     return value

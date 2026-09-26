@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.select-mid-run",
+  "title": "Select during a run mounts the moving Mankey within eight game frames",
+  "mode": "normal",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "tests/overworld/scenarios/mount.select-mid-run.json",
+  "requirements": ["current.mount-select-mid-run"],
+  "budgets": {"maxSeconds": 90, "maxFrames": 240, "noProgressFrames": 90, "minObservedFrames": 1},
+  "subjects": [{"id": "mankey", "species": 56, "role": "MOUNTED", "acquire": "existing"}],
+  "setup": [],
+  "actions": [
+    {"id": "wait-saved-follower", "op": "wait", "args": {"predicate": {"kind": "follower-settled", "species": 56, "partySlot": 2}},
+     "budget": {"maxSeconds": 10, "maxFrames": 90, "noProgressFrames": 90}},
+    {"id": "start-player-run", "op": "step", "args": {"frames": 4, "keys": ["RIGHT"]},
+     "budget": {"maxSeconds": 5, "maxFrames": 4, "noProgressFrames": 4}},
+    {"id": "press-select-during-run", "op": "step", "args": {"frames": 1, "keys": ["RIGHT", "SELECT"]},
+     "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "keep-right-until-mounted", "op": "step", "args": {"frames": 8, "keys": ["RIGHT"], "until": {"kind": "actor-present", "subject": "mankey"}},
+     "budget": {"maxSeconds": 5, "maxFrames": 8, "noProgressFrames": 8}},
+    {"id": "bind-current-mount", "op": "bind", "args": {"subject": "mankey"},
+     "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "start-mounted-hop", "op": "step", "args": {"frames": 30, "keys": ["RIGHT"], "until": {"kind": "actor-field", "subject": "mankey", "path": "motionPhase", "operator": "eq", "value": "MOVING"}},
+     "budget": {"maxSeconds": 10, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "wait-hop-terminal", "op": "wait", "args": {"predicate": {"kind": "actor-field", "subject": "mankey", "path": "motionPhase", "operator": "eq", "value": "IDLE"}},
+     "budget": {"maxSeconds": 15, "maxFrames": 90, "noProgressFrames": 90}}
+  ],
+  "assertions": [
+    {"kind": "actor-field", "subject": "mankey", "path": "identityVerified", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "actor-field", "subject": "mankey", "path": "presentationAttached", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "actor-field", "subject": "mankey", "path": "inputOwnership", "operator": "eq", "value": 1, "when": "always"},
+    {"kind": "actor-field", "subject": "mankey", "path": "motionPhase", "operator": "eq", "value": "IDLE"},
+    {"kind": "actor-field", "subject": "mankey", "path": "commitSequence", "operator": "gte", "value": 1},
+    {"kind": "frame-count", "operator": "gte", "value": 1}
+  ]
+}

@@ -589,7 +589,7 @@ def VerifyOverworldWildRuntimeOverlay(
         callback_in_owner = (
             0x023BE240 <= callback_code_address < 0x023BE3D8
             if is_role_controller
-            else callback_code_address == 0x023BA130
+            else callback_code_address == 0x023BA138
             if is_step_particle
             else expected_entry_address <= callback_code_address < overlay_end
         )
@@ -637,7 +637,7 @@ def VerifyOverworldWildRuntimeOverlay(
         callback_in_owner = (
             0x023BE240 <= callback_code_address < 0x023BE3D8
             if name == 'OverworldRoleController_Reduce'
-            else callback_code_address == 0x023BA130
+            else callback_code_address == 0x023BA138
             if name == 'OverworldWildRuntime_PlayStepDirtParticle'
             else expected_entry_address <= callback_code_address < overlay_end
         )

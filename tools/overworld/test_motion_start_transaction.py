@@ -12,7 +12,7 @@ class MotionStartTransactionTests(unittest.TestCase):
                                 cwd=root, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("PASS 16 motion-start cases", result.stdout)
-        self.assertEqual(result.stdout.count("PASS known-bad transaction rejected:"), 6)
+        self.assertEqual(result.stdout.count("PASS known-bad transaction rejected:"), 7)
         self.assertIn("PASS known-bad transaction rejected: prepare before owner readiness", result.stdout)
 
 

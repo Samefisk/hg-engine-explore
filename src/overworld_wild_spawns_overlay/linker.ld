@@ -21,6 +21,7 @@ OverworldWildOccupancy_Query = 0x023C0184 | 1;
 OverworldWildSpawnGuard_Read = 0x023C025C | 1;
 OverworldWildSpawnGuard_IsNearActiveSpawn = 0x023C034C | 1;
 OverworldWildSpawnGuard_IsSurfBehavior = 0x023C03D0 | 1;
+OverworldActor_PlayStompSound = 0x023BA118 | 1;
 
 SECTIONS {
         .text : {

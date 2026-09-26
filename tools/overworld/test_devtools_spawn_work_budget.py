@@ -1,4 +1,5 @@
 import unittest
+from copy import deepcopy
 
 from tools.overworld.devtools_spawn_work_budget_measurement import (
     EXPECTED_DESTINATION_UPDATES,
@@ -75,7 +76,7 @@ def snapshot(index):
             "logical": {"x": 596, "y": actor_y},
             "render": {"x": 596, "y": actor_y},
             "lane": "OWNER",
-            "motionKind": "HOP",
+            "motionKind": "FLY_IN",
         })
     return {
         "frame": frame,
@@ -138,7 +139,7 @@ def events(index):
             "guestTiming": {"arm9Ticks": 600},
             "returnValue": 1,
             "position": [596, 398],
-            "startup": {"target": [596, 398], "origin": [596, 382], "locomotion": 4},
+            "startup": {"target": [596, 398], "origin": [596, 382], "locomotion": 9},
         }}, {"kind": "native-observation", "data": {
             "observation": "spawn-object-create",
             "slot": 0,
@@ -153,7 +154,7 @@ def events(index):
             "finalization": {"status": "matched", "receipt": {
                 "finalizationId": finalization_id,
             }},
-            "startup": {"target": [596, 398], "origin": [596, 382], "locomotion": 4},
+            "startup": {"target": [596, 398], "origin": [596, 382], "locomotion": 9},
             "publicSubject": {
                 "handle": SPAWN_HANDLE,
                 "subjectIdentity": ENCOUNTER["personality"],
@@ -308,8 +309,8 @@ class SpawnWorkBudgetTests(unittest.TestCase):
         self.assertEqual(result["entry"]["startDistance"], 16)
         self.assertEqual(result["entry"]["targetDistance"], 16)
         self.assertEqual(result["entry"]["offscreenClearance"], 10)
-        self.assertTrue(result["entry"]["spawnHopObserved"])
-        self.assertGreater(result["entry"]["ownerHopFrames"], 0)
+        self.assertTrue(result["entry"]["spawnMotionObserved"])
+        self.assertGreater(result["entry"]["ownerEntryFrames"], 0)
         self.assertGreaterEqual(result["entry"]["distanceProgress"], 4)
         self.assertGreaterEqual(result["entry"]["maximumRenderDisplacement"], 4)
         self.assertEqual(result["pacing"]["lateMainLoopCount"], 0)
@@ -323,6 +324,21 @@ class SpawnWorkBudgetTests(unittest.TestCase):
             }},
         )
         self.assertEqual([row["passed"] for row in rows], [True] * 23)
+
+    def test_acceptance_uses_the_prepared_encounter_species(self):
+        result = deepcopy(replay())
+        result["attempt"]["encounter"]["species"] = 16
+        result["entry"]["species"] = 16
+        rows = measurements(
+            {"passed": True, "failures": [], "measurements": {KIND: result}},
+            {"sessionId": "session-test", "sessionCleanup": {
+                "sessionId": "session-test", "closed": True, "errors": [],
+            }},
+        )
+        identity = next(row for row in rows
+                        if row["name"] == "spawn-work-entry-actor-identity")
+        self.assertEqual(identity["value"], [1, "WILD", 1, 1])
+        self.assertTrue(identity["passed"])
 
     def test_all_copied_faults_fail_for_their_named_reason(self):
         for fault in FAULTS:

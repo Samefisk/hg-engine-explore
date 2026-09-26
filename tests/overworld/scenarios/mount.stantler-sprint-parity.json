@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.stantler-sprint-parity",
+  "title": "Mounted Stantler keeps Sprint Walk speed and cardinal input",
+  "status": "active",
+  "capabilities": ["mount.lifecycle", "walk.acceleration"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "data/overworld_behavior_profiles.json",
+    "actor": "One prepared current Mounted Stantler (species 234, party slot 0), with the same live handle and attached presentation on map 33",
+    "trigger": "After checked location and party setup, hold Right for 160 completed game frames, release until the current motion ends, then hold Up and Right together for 40 frames",
+    "observable": "On a clear lane, normal mounted input accelerates from nominal Walk speed 8 to 4 and stays at 4. Each checked Walk travels one cardinal tile with at most two display frames of authored variance. No Hop starts. Two-direction input never starts a diagonal Walk or changes both player axes in one frame.",
+    "setupAudit": "complete",
+    "setupMutations": [{
+      "phase": "before-observation",
+      "target": "fixture",
+      "change": "Use a disposable save, checked teleport to map 33 (585,402), prepared party slot 0 Stantler, native Mounted spawn and exact-subject bind. Do not write profile, speed, direction, chain state, RNG, Hop timing or input during observation."
+    }],
+    "limits": [
+      "Prepared party and position do not prove natural capture, selection or spawning.",
+      "The Right run tests the real mounted Sprint resolver and Walk momentum. No action is forced and no timer is edited.",
+      "This is one clear-lane run and one two-direction input window, not every terrain or mounted species.",
+      "Copied-data controls must reject a missing Walk start, slow Walk, unexpected Hop, reset speed after acceleration, diagonal target and changed actor. The separate owner-reader control must remain accepted."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "stantler", "species": 234, "role": "MOUNTED", "acquisition": "mount",
+    "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Place the player on the checked clear map 33 lane, prepare Stantler in party slot 0, then mount and bind that same live actor"},
+    {"at": 1, "kind": "input", "value": "Hold Right for 160 completed frames under the resolved Sprint profile; release until the current motion ends"},
+    {"at": 2, "kind": "input", "value": "Hold Up and Right together for 40 completed frames without changing movement policy"}
+  ],
+  "stop": {"frameBudget": 360, "condition": "At least eight natural clear-lane Walks finish, nominal Walk speed reaches and stays at 4, no Hop starts, and the two-direction window remains cardinal-only"},
+  "expect": {
+    "requiredEvents": ["MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["MOTION_CANCELED", "CONTEXT_CHANGED", "ACTOR_REBOUND", "CONTROL_REBOUND"],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "mount.stantler-sprint-parity",
+    "claims": ["natural-input", "live-actor-identity", "logical-commit", "frame-pacing", "control-release"],
+    "minimumFrames": 160}
+}

@@ -340,7 +340,8 @@ class SharedNativeObserverTests(unittest.TestCase):
         self.assertEqual(len(bytes.fromhex(spawn["preparedPrefixHex"])), 30)
         self.assertEqual(spawn["preparedEncounter"], {"personality": 99, "species": 165, "form": 0, "level": 5})
         self.assertEqual(spawn["startup"], {"target": [552, 383], "origin": [550, 381],
-                                         "locomotion": 4, "hopDirection": 0})
+                                         "locomotion": 4, "hopDirection": 0,
+                                         "targetBaseY": 0})
         self.assertEqual(spawn["jumpReceipts"][0]["playerAtEntry"],
                          {"pointer": 0x02210000, "mapId": 34, "tile": [550, 381]})
         profiles = f.observer.snapshot(include_profiles=True)["resolvedProfiles"]
@@ -906,10 +907,10 @@ class SpawnFinalizationObserverTests(unittest.TestCase):
         program = '#include "overworld_wild_helper.h"\n#include <stddef.h>\n' + declaration[0] + ';\n' + '''
 _Static_assert(sizeof(OverworldWildSpawnPosition) == 12, "position");
 _Static_assert(sizeof(OverworldWildRolledEncounter) == 8, "encounter");
-_Static_assert(sizeof(OverworldWildSpawnStartup) == 10, "startup");
+_Static_assert(sizeof(OverworldWildSpawnStartup) == 16, "startup");
 _Static_assert(offsetof(OverworldWildPreparedSpawn, encounter) == 12, "input encounter");
 _Static_assert(offsetof(OverworldWildPreparedSpawn, startup) == 20, "input boundary");
-_Static_assert(offsetof(OverworldWildPreparedSpawn, startup) + sizeof(OverworldWildSpawnStartup) == 30, "final boundary");
+_Static_assert(offsetof(OverworldWildPreparedSpawn, startup) + sizeof(OverworldWildSpawnStartup) == 36, "final boundary");
 _Static_assert(__builtin_types_compatible_p(__typeof__(&OverworldWildSpawns_FinalizePreparedSpawn),
     BOOL (*)(OverworldWildSpawnState *, FieldSystem *, OverworldWildSpawnTerrain, int, OverworldWildPreparedSpawn *)), "native ABI");
 '''

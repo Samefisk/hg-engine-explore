@@ -7,6 +7,7 @@ commit, rendered motion, and control return for each movement primitive.
 
 - `walk-timing` covers cardinal frame values and acceleration.
 - `walk-diagonal` covers legal diagonal movement and corner blocking.
+- `walk-blocked-facing` covers Wild Exeggcute trapped on a tree canopy.
 - `walk-skid` covers one-step turn deceleration, turn skid, and control release.
 - `hop` covers cardinal, nearest diagonal, mounted, and ledge movement.
 - `teleport` covers fixed and per-tile timing.
@@ -29,6 +30,7 @@ Preconditions:
 
 - **Walk timing.** Run `scripts/owctl scenario run walk.cardinal.frames-1-32 --json` and `scripts/owctl scenario run walk.acceleration.mounted-parity --json`. Exact frame and terminal-boundary measurements pass.
 - **Diagonal Walk.** Run `scripts/owctl scenario run walk.diagonal.corner-block --json`. Natural input, the blocked decision, the legal commit, and control return pass.
+- **Blocked Wild facing.** Run `scripts/owctl scenario run walk.wild.blocked-facing --json`. The current Wild Exeggcute must keep one facing and one tile for 128 continuous completed frames on the blocked canopy at map 33 (580,409).
 - **Mounted stomp.** Run `observation.stomp-policy-control`, then
   `walk.stomp.feedback` through `owctl scenario run`. Reuse a current accepted
   reader control when the controller permits it. The two prepared Cyndaquil

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "mount.begin-current-follower",
-  "title": "Select mounts the newly selected current follower and completes one Hop",
+  "title": "Select during a player step mounts after the step and completes one Hop",
   "mode": "prepared",
   "fixture": {"rom": "test.nds", "save": "test.sav"},
   "expectationSource": "tests/overworld/scenarios/mount.begin-current-follower.json",
@@ -27,8 +27,10 @@
      "budget": {"maxSeconds": 10, "maxFrames": 120, "noProgressFrames": 120}},
     {"id": "wait-follower-settled", "op": "wait", "args": {"predicate": {"kind": "follower-settled", "species": 56, "partySlot": 2}},
      "budget": {"maxSeconds": 10, "maxFrames": 120, "noProgressFrames": 120}},
-    {"id": "press-select", "op": "step", "args": {"frames": 6, "keys": ["SELECT"], "until": {"kind": "selector-field", "path": "newKeys", "operator": "eq", "value": 4}},
-     "budget": {"maxSeconds": 5, "maxFrames": 6, "noProgressFrames": 6}},
+    {"id": "start-player-run", "op": "step", "args": {"frames": 5, "keys": ["RIGHT"]},
+     "budget": {"maxSeconds": 5, "maxFrames": 5, "noProgressFrames": 5}},
+    {"id": "press-select-during-run", "op": "step", "args": {"frames": 1, "keys": ["RIGHT", "SELECT"]},
+     "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
     {"id": "wait-current-mount", "op": "wait", "args": {"predicate": {"kind": "actor-present", "subject": "mankey"}},
      "budget": {"maxSeconds": 10, "maxFrames": 120, "noProgressFrames": 120}},
     {"id": "bind-current-mount", "op": "bind", "args": {"subject": "mankey"},
@@ -43,6 +45,8 @@
     {"kind": "actor-field", "subject": "mankey", "path": "presentationAttached", "operator": "eq", "value": true, "when": "always"},
     {"kind": "actor-field", "subject": "mankey", "path": "inputOwnership", "operator": "eq", "value": 1, "when": "always"},
     {"kind": "actor-field", "subject": "mankey", "path": "motionPhase", "operator": "eq", "value": "IDLE"},
+    {"kind": "actor-field", "subject": "mankey", "path": "commitSequence", "operator": "gte", "value": 1},
+    {"kind": "player-field", "path": "x", "operator": "gte", "value": 588},
     {"kind": "selector-field", "path": "state", "operator": "eq", "value": 0},
     {"kind": "frame-count", "operator": "gte", "value": 1}
   ]

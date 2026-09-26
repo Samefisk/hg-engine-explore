@@ -35,6 +35,7 @@ typedef enum OverworldMotionKind {
     OVERWORLD_MOTION_KIND_TELEPORT = 3,
     OVERWORLD_MOTION_KIND_SKID = 4,
     OVERWORLD_MOTION_KIND_REPOSITION = 5,
+    OVERWORLD_MOTION_KIND_FLY_IN = 6,
 } OverworldMotionKind;
 
 typedef enum OverworldMotionPhase {

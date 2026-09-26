@@ -702,7 +702,7 @@ class RuntimeRetirementTests(unittest.TestCase):
         self.assertEqual(scenario["adapter"]["kind"], "devtools-test")
         self.assertEqual(scenario["status"], "active")
         migration = control._runtime_migration_summary()
-        self.assertEqual(migration["requirementCount"], 40)
+        self.assertEqual(migration["requirementCount"], 41)
         requirements = json.loads((control.REPO / "tools/overworld/runtime_proof_migration.json").read_text())["requirements"]
         expected_pending = {key for key, value in requirements.items() if value["status"] == "pending"}
         self.assertEqual(migration["pendingCount"], len(expected_pending))
@@ -749,11 +749,11 @@ class RuntimeRetirementTests(unittest.TestCase):
                 control._scenario_run(args)
         lock.assert_not_called(); command.assert_not_called()
 
-    def test_all_40_requirements_retained_and_contract_change_rejected(self):
+    def test_all_41_requirements_retained_and_contract_change_rejected(self):
         repo = control.REPO
         registry = json.loads((repo / "tools/overworld/runtime_proof_registry.json").read_text())
         migration = json.loads((repo / "tools/overworld/runtime_proof_migration.json").read_text())
-        self.assertEqual(len(validate_runtime_migration(migration, registry)["requirements"]), 40)
+        self.assertEqual(len(validate_runtime_migration(migration, registry)["requirements"]), 41)
         self.assertFalse([key for key, item in migration["requirements"].items()
                           if item["status"] == "pending"])
         key = "legacy.turn-skid"

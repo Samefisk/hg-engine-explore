@@ -257,11 +257,27 @@ class SummaryNativeTransportTests(unittest.TestCase):
                     (ROOT / "build/summary_move_relearn_native/summary_move_relearn_native_bootstrap").is_file(),
                     "requires the built macOS bootstrap; does not load an emulator")
 class SummaryBootstrapLaunchTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from scripts.generate_summary_move_relearn_native_inventory import build_inventory
+        cls.inventory = ROOT / "scripts/summary_move_relearn_native_inventory.txt"
+        cls.inventory_is_current = (
+            cls.inventory.read_bytes() == build_inventory().encode("utf-8")
+        )
+
+    def require_current_inventory(self):
+        if not self.inventory_is_current:
+            self.skipTest(
+                "sealed inventory is stale; regenerate with "
+                "python3 scripts/generate_summary_move_relearn_native_inventory.py "
+                "and reseal the native bootstrap"
+            )
+
     def launch_help(self, relative):
         from scripts.summary_move_relearn_protected_spawn import run_native_bootstrap
         from scripts.verify_summary_move_relearn import (
             NATIVE_BOOTSTRAP_EXPECTED_SHA256, NATIVE_BOOTSTRAP_EXPECTED_CDHASH)
-        inventory = ROOT / "scripts/summary_move_relearn_native_inventory.txt"
+        inventory = self.inventory
         return run_native_bootstrap([
             str(ROOT / "build/summary_move_relearn_native/summary_move_relearn_native_bootstrap"),
             "--inventory", str(inventory), "--expected-inventory-sha256",
@@ -274,14 +290,23 @@ class SummaryBootstrapLaunchTests(unittest.TestCase):
             capture_output=True, text=True, timeout=60)
 
     def test_exact_party_helper_help_reaches_parser_without_core(self):
+        self.require_current_inventory()
         result = self.launch_help("scripts/verify_pokemon_move_history_party_integrity.py")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("--reload-sav", result.stdout)
 
     def test_other_sealed_python_source_is_not_an_allowed_entrypoint(self):
+        self.require_current_inventory()
         result = self.launch_help("tools/overworld/melonds_backend.py")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Python invocation policy differs", result.stderr)
+
+    def test_stale_inventory_fails_before_python_transport_policy(self):
+        if self.inventory_is_current:
+            self.skipTest("sealed inventory is current")
+        result = self.launch_help("scripts/verify_pokemon_move_history_party_integrity.py")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("closure differs", result.stderr)
 
 
 if __name__ == "__main__":

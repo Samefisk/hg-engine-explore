@@ -55,8 +55,10 @@ OVERLAY_SOURCE = ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns
 HELPER_SOURCE = ROOT / "src/overworld_wild_helper_overlay/overworld_wild_helper_overlay.c"
 BEHAVIOR_DATA_SOURCE = ROOT / "data/OverworldWildBehaviorData.c"
 BEHAVIOR_DATA_HEADER = ROOT / "include/overworld_wild_behavior_data.h"
+OVERWORLD_VISION_HEADER = ROOT / "include/overworld_vision.h"
 BEHAVIOR_CATALOG_SOURCE = ROOT / "data/overworld_behavior_profiles.json"
 BEHAVIOR_AUTHORING_SCHEMA = ROOT / "tools/overworld/schemas/behavior-authoring-v4.schema.json"
+BEHAVIOR_AUTHORING_SCHEMA_V5 = ROOT / "tools/overworld/schemas/behavior-authoring-v5.schema.json"
 BEHAVIOR_CATALOG_GENERATOR = ROOT / "scripts/generate_overworld_behavior_catalog.py"
 BEHAVIOR_SCHEMA_SOURCE = ROOT / "tools/overworld/behavior_schema.json"
 BEHAVIOR_SCHEMA_METADATA = ROOT / "tools/overworld/generated/behavior_schema.json"
@@ -167,6 +169,7 @@ DATA_SOURCE_FILES = (
     HELPER_SOURCE,
     BEHAVIOR_DATA_SOURCE,
     BEHAVIOR_DATA_HEADER,
+    OVERWORLD_VISION_HEADER,
     BEHAVIOR_CATALOG_SOURCE,
     BEHAVIOR_AUTHORING_SCHEMA,
     BEHAVIOR_CATALOG_GENERATOR,
@@ -196,6 +199,7 @@ DEFINE_SOURCE_FILES = [
     SPAWNS_PUBLIC_HEADER,
     SPAWNS_INTERNAL_HEADER,
     BEHAVIOR_DATA_HEADER,
+    OVERWORLD_VISION_HEADER,
     OVERLAY_SOURCE,
     HELPER_SOURCE,
     BEHAVIOR_DATA_SOURCE,
@@ -217,8 +221,8 @@ MACRO_LABEL_CACHES: OrderedDict[int, tuple[dict[str, int], dict[tuple[str, int |
 _BEHAVIOR_SCHEMA = json.loads(BEHAVIOR_SCHEMA_SOURCE.read_text(encoding="utf-8"))
 _BEHAVIOR_SCHEMA_GENERATED = json.loads(BEHAVIOR_SCHEMA_METADATA.read_text(encoding="utf-8"))
 _BEHAVIOR_SCHEMA_EDITOR = _BEHAVIOR_SCHEMA_GENERATED.get("editor", {})
-if _BEHAVIOR_SCHEMA.get("blobVersion") != 78 or len(_BEHAVIOR_SCHEMA_EDITOR.get("fields", ())) != 67:
-    raise RuntimeError("tools/overworld/behavior_schema.json is not the compact v78 schema")
+if _BEHAVIOR_SCHEMA.get("blobVersion") != 81 or len(_BEHAVIOR_SCHEMA_EDITOR.get("fields", ())) != 75:
+    raise RuntimeError("tools/overworld/behavior_schema.json is not the compact v81 schema")
 BEHAVIOR_SCHEMA_FIELDS = tuple(_BEHAVIOR_SCHEMA_EDITOR["fields"])
 PROFILE_FIELDS = [field["key"] for field in BEHAVIOR_SCHEMA_FIELDS]
 PROFILE_STORAGE_FIELDS = [
@@ -365,6 +369,15 @@ CANONICAL_CHAIN_PAUSE_ACTION_RAWS = [
     "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE",
     "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_FORWARD",
 ]
+CHAIN_PAUSE_RANDOM_CHOICE_RAW = "OW_WILD_BEHAVIOR_CHAIN_PAUSE_RANDOM_CHOICE"
+CHAIN_PAUSE_RANDOM_CHOICE_VALUE = 0x80
+CANONICAL_CHAIN_PAUSE_CHOICE_RAWS = [
+    raw.replace(
+        "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_",
+        "OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_",
+    )
+    for raw in CANONICAL_CHAIN_PAUSE_ACTION_RAWS[1:]
+]
 
 CANONICAL_ALLOWED_TILE_RAWS = [
     "OW_WILD_BEHAVIOR_ALLOWED_TILE_LAND",
@@ -404,6 +417,8 @@ CANONICAL_PROFILE_FIELD_RAWS = {
     "stopSkid": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
     "continueWhenArrived": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
     "avoidPreviousTile": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
+    "visionCone": ["OVERWORLD_VISION_CONE_FORWARD_90"],
+    "visionAdjacentAwareness": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
 }
 
 PROFILE_OPTION_EXCLUDED_SUFFIXES = (
@@ -471,9 +486,7 @@ GROUP_PREFIX = "OW_WILD_BEHAVIOR_GROUP_"
 TERRAIN_PREFIX = "OW_WILD_SPAWN_TERRAIN_"
 DESTINATION_PREFIX = "OW_WILD_SPAWN_DESTINATION_"
 PROFILE_PREFIX = "OW_WILD_BEHAVIOR_PROFILE_"
-RUNTIME_OWNED_CLASS_SYMBOLS = {
-    "OW_WILD_BEHAVIOR_CLASS_PICKED_UP",
-}
+RUNTIME_OWNED_CLASS_SYMBOLS: set[str] = set()
 OVERRIDE_PROFILE_NAME_RE = re.compile(r"/\*\s*profile\s*:\s*(.*?)\s*\*/", re.S)
 OVERRIDE_PROFILE_NO_TARGET_CLASS_RAW = "0xFE"
 OVERRIDE_PROFILE_NO_TARGET_CLASS_VALUE = 0xFE
@@ -1254,6 +1267,29 @@ NATIVE_PROFILE_LANE_SIZE = int(_BEHAVIOR_SCHEMA["compactSize"])
 
 
 def native_profile_value(macros: dict[str, int], field: str, value: int) -> dict:
+    if field == "chainPauseAction" \
+            and value & CHAIN_PAUSE_RANDOM_CHOICE_VALUE:
+        selected = [
+            raw
+            for index, raw in enumerate(CANONICAL_CHAIN_PAUSE_CHOICE_RAWS)
+            if value & (1 << index)
+        ]
+        if selected:
+            raw = " | ".join([CHAIN_PAUSE_RANDOM_CHOICE_RAW, *selected])
+            result = make_value(raw, field, macros)
+            result["value"] = value
+            action_raws = [
+                choice.replace(
+                    "OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_",
+                    "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_",
+                )
+                for choice in selected
+            ]
+            result["label"] = "Random: " + " / ".join(
+                macro_label(action, macros.get(action), field, macros)
+                for action in action_raws
+            )
+            return result
     for raw in CANONICAL_PROFILE_FIELD_RAWS.get(field, ()):
         try:
             if eval_c_expr(raw, macros) == value:
@@ -1355,6 +1391,8 @@ def canonical_profile_change_raw(
     if field == "chillTarget" \
             and cleaned == "OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT":
         return "OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER"
+    if field == "mountStride" and cleaned not in {"0", "1", "2", "3"}:
+        raise ValueError("mountStride must be 0..3 (16, 32, 48, or 64 pixels per cycle)")
     if field not in NUMERIC_PROFILE_FIELDS:
         canonical_options = CANONICAL_PROFILE_FIELD_RAWS.get(field, ())
         evaluated = numeric_raw(cleaned, field, macros)
@@ -1459,6 +1497,10 @@ def parse_mask(raw: str, macros: dict[str, int], override_fields: dict[str, str]
 
 
 _PACKED_PROFILE_STORAGE = {
+    "mountBounce": (
+        "OW_WILD_BEHAVIOR_MOUNT_GAIT_OPTIONS",
+        (("mountBounce", 0, 2), ("mountStride", 2, 2), ("mountSettle", 4, 2), ("mountLean", 6, 2)),
+    ),
     "chainRepositionAllowCardinal": (
         "OW_WILD_BEHAVIOR_CHAIN_REPOSITION_CARDINAL_OPTIONS",
         (("chainRepositionAllowCardinal", 0, 1), ("walkPauseVariance", 1, 7)),
@@ -2066,7 +2108,19 @@ def add_value_option(options: list[dict], seen: set[str], raw: str, field: str, 
     raw = clean_token(raw)
     if not raw or raw in seen:
         return
-    options.append(value_option(raw, field, macros))
+    option = value_option(raw, field, macros)
+    if field == "chainPauseAction" \
+            and "OW_WILD_BEHAVIOR_CHAIN_PAUSE_RANDOM_CHOICE" in raw:
+        choice_prefix = "OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_"
+        action_prefix = "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_"
+        labels = []
+        for symbol in re.findall(
+                r"\bOW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_[A-Z0-9_]+\b", raw):
+            action = action_prefix + symbol.removeprefix(choice_prefix)
+            labels.append(macro_label(action, macros.get(action), field, macros))
+        if labels:
+            option["label"] = "Random: " + " / ".join(labels)
+    options.append(option)
     seen.add(raw)
 
 
@@ -2104,6 +2158,10 @@ def build_edit_options(macros: dict[str, int], class_profiles: list[dict[str, di
         elif field in FIELD_PREFIXES:
             for symbol in profile_option_symbols_for_prefix(field, macros):
                 add_value_option(options, seen, symbol, field, macros)
+        elif field == "mountStride":
+            for value in range(4):
+                add_value_option(options, seen, str(value), field, macros)
+                options[-1]["label"] = f"{16 * (value + 1)} px per cycle"
         elif field == "walkAccelerationStep":
             for value in (0, 33, *range(1, 33)):
                 add_value_option(options, seen, str(value), field, macros)
@@ -4597,8 +4655,9 @@ def build_data(
     for override in variable_overrides:
         order = override["order"]
         runtime_owned_override = order - 1 in {
-            macros.get("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON", -1),
-            macros.get("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_TIRED", -1),
+            macros.get("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER", -1),
+            macros.get("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_MOUNTED", -1),
+            macros.get("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_REST", -1),
         }
         override_name = override_profile_names.get(order, "")
         override_name = override_name or f"Override #{order}: {override['summary']}"
@@ -4652,8 +4711,8 @@ def build_data(
         order = override["order"]
         name = override_profile_names.get(order, "") or f"Override #{order}: {override['summary']}"
         raw = str(order - 1)
-        if name == "Default Tired":
-            raw = "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_TIRED"
+        if name == "Rest":
+            raw = "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_REST"
         reference_options.append({"raw": raw, "value": order - 1, "label": name})
     edit_options["tiredProfile"] = reference_options
 
@@ -4945,6 +5004,12 @@ def format_profile_initializer(raws: dict[str, str], indent: str) -> str:
     for field in PROFILE_STORAGE_FIELDS:
         if field in PROFILE_RESERVED_FIELDS:
             value = "0"
+        elif field == "mountBounce":
+            value = (
+                "OW_WILD_BEHAVIOR_MOUNT_GAIT_OPTIONS("
+                f"{raws[field]}, {raws['mountStride']}, "
+                f"{raws['mountSettle']}, {raws['mountLean']})"
+            )
         elif field == "chainRepositionAllowCardinal":
             value = (
                 "OW_WILD_BEHAVIOR_CHAIN_REPOSITION_CARDINAL_OPTIONS("
@@ -5279,11 +5344,17 @@ def _catalog_override_raw(field: str, authored: object) -> str:
     raise ParseError(f"catalog field {field} has unknown operator {operator_name}")
 
 
-def _catalog_object(value: object, label: str, fields: set[str]) -> dict:
+def _catalog_object(
+        value: object,
+        label: str,
+        fields: set[str],
+        optional_fields: set[str] | None = None,
+) -> dict:
     if not isinstance(value, dict):
         raise ParseError(f"{label} must be an object")
+    optional_fields = optional_fields or set()
     missing = fields - set(value)
-    unexpected = set(value) - fields
+    unexpected = set(value) - fields - optional_fields
     if missing or unexpected:
         details = []
         if missing:
@@ -5299,6 +5370,50 @@ def _catalog_expression(value: object, label: str) -> None:
         raise ParseError(f"{label} must be an integer or expression string")
     if isinstance(value, str) and not clean_token(value):
         raise ParseError(f"{label} must not be empty")
+
+
+def _validate_catalog_chain_pause_action(value: object, label: str) -> None:
+    if isinstance(value, bool):
+        raise ParseError(f"{label} must be a chain pause action or action set")
+    numeric_value: int | None = None
+    if isinstance(value, int):
+        numeric_value = value
+    elif isinstance(value, str):
+        raw = clean_token(value)
+        if raw in CANONICAL_CHAIN_PAUSE_ACTION_RAWS:
+            return
+        if re.fullmatch(r"(?:0[xX][0-9A-Fa-f]+|[0-9]+)", raw):
+            numeric_value = int(raw, 0)
+        else:
+            parts = [clean_token(part) for part in raw.split("|")]
+            if parts.count(CHAIN_PAUSE_RANDOM_CHOICE_RAW) != 1:
+                raise ParseError(f"{label} needs the random-choice marker")
+            choices = [
+                part for part in parts
+                if part != CHAIN_PAUSE_RANDOM_CHOICE_RAW
+            ]
+            if not choices:
+                raise ParseError(f"{label} needs at least one pause action")
+            if len(choices) != len(set(choices)):
+                raise ParseError(f"{label} has a duplicate pause action")
+            unknown = set(choices) - set(CANONICAL_CHAIN_PAUSE_CHOICE_RAWS)
+            if unknown:
+                raise ParseError(
+                    f"{label} contains an unknown pause action: "
+                    + ", ".join(sorted(unknown))
+                )
+            return
+    else:
+        raise ParseError(f"{label} must be a chain pause action or action set")
+
+    if numeric_value is None or numeric_value < 0 or numeric_value > 0xFF:
+        raise ParseError(f"{label} must fit u8 storage")
+    if numeric_value <= len(CANONICAL_CHAIN_PAUSE_ACTION_RAWS) - 1:
+        return
+    choices = numeric_value & (CHAIN_PAUSE_RANDOM_CHOICE_VALUE - 1)
+    if numeric_value & CHAIN_PAUSE_RANDOM_CHOICE_VALUE and choices != 0:
+        return
+    raise ParseError(f"{label} is not a valid chain pause action set")
 
 
 def _validate_catalog_match(value: object, label: str) -> None:
@@ -5322,6 +5437,15 @@ def _validate_catalog_override_field(field: str, authored: object, label: str) -
     }:
         raise ParseError(f"{label}.{field} has an unknown operator: {operator_name}")
     if operator_name == "replace":
+        if field in {"mountBounce", "mountStride", "mountSettle", "mountLean"}:
+            if isinstance(authored["value"], bool) or str(authored["value"]) not in {"0", "1", "2", "3"}:
+                raise ParseError(f"{label}.{field}.value must be an integer 0..3")
+            return
+        if field == "chainPauseAction":
+            _validate_catalog_chain_pause_action(
+                authored["value"], f"{label}.{field}.value"
+            )
+            return
         _catalog_expression(authored["value"], f"{label}.{field}.value")
         return
 
@@ -5355,6 +5479,7 @@ def _validate_catalog_override_field(field: str, authored: object, label: str) -
 
 
 BEHAVIOR_CATALOG_SCHEMA = "../tools/overworld/schemas/behavior-authoring-v4.schema.json"
+BEHAVIOR_CATALOG_SCHEMA_V5 = "../tools/overworld/schemas/behavior-authoring-v5.schema.json"
 BEHAVIOR_FIELD_SCHEMA = "../tools/overworld/behavior_schema.json"
 CATALOG_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 MAX_CONDITION_ENTRIES = 32
@@ -5364,7 +5489,31 @@ CONDITION_RANGE_KINDS = {
     "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS",
     "OW_WILD_BEHAVIOR_ALERT_RANGE_CARDINAL_LINE",
     "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS",
+    "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CURRENT",
+    "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CUSTOM",
 }
+CONDITIONAL_VISION_FIELDS = {
+    "visionRange",
+    "visionCone",
+    "visionAdjacentAwareness",
+}
+PROFILE_CLASSIFICATIONS = {
+    "archetype",
+    "capability",
+    "attitude",
+    "style",
+    "follower-mount",
+    "modifier",
+}
+PROFILE_CLASSIFICATIONS_V5 = (
+    "routine",
+    "placement",
+    "capability",
+    "attitude",
+    "style",
+    "follower-mount",
+    "modifier",
+)
 CONDITION_TERRAIN_BITS = {
     raw: 1 << index
     for index, (_key, _label, raw) in enumerate(ALLOWED_TERRAIN_OPTIONS)
@@ -5563,12 +5712,12 @@ def _validate_catalog_condition_when(value: object, label: str) -> str:
     if kind == "notice-target":
         condition = _catalog_object(value, label, {
             "kind", "rangeKind", "rangeLength", "chancePercent",
-        })
+        }, {"visionOptions"})
         range_kind = condition["rangeKind"]
         if (
             isinstance(range_kind, bool)
             or not (
-                isinstance(range_kind, int) and 1 <= range_kind <= 4
+                isinstance(range_kind, int) and 1 <= range_kind <= 6
                 or isinstance(range_kind, str) and range_kind in CONDITION_RANGE_KINDS
             )
         ):
@@ -5579,12 +5728,56 @@ def _validate_catalog_condition_when(value: object, label: str) -> str:
         _catalog_bounded_integer(
             condition["chancePercent"], f"{label}.chancePercent", 0, 100
         )
+        vision_options = _catalog_bounded_integer(
+            condition.get("visionOptions", 0), f"{label}.visionOptions", 0, 7
+        )
+        if range_kind in {
+            5, "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CURRENT",
+        } and (condition["rangeLength"] != 0 or vision_options != 0):
+            raise ParseError(f"{label} current Vision must not store custom values")
+        if range_kind in {
+            6, "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CUSTOM",
+        } and (not 1 <= condition["rangeLength"] <= 32 or (vision_options & 3) != 1):
+            raise ParseError(f"{label} custom Vision is invalid")
         return kind
-    raise ParseError(f"{label}.kind must be terrain-motion or notice-target")
+    if kind == "target-cannot-see-subject":
+        condition = _catalog_object(value, label, {
+            "kind", "rangeKind", "rangeLength", "chancePercent",
+        }, {"visionOptions"})
+        range_kind = condition["rangeKind"]
+        if range_kind not in {
+            5,
+            6,
+            "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CURRENT",
+            "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CUSTOM",
+        }:
+            raise ParseError(f"{label}.rangeKind must use current or custom Vision")
+        _catalog_bounded_integer(
+            condition["rangeLength"], f"{label}.rangeLength", 0, 0xFF
+        )
+        _catalog_bounded_integer(
+            condition["chancePercent"], f"{label}.chancePercent", 0, 100
+        )
+        vision_options = _catalog_bounded_integer(
+            condition.get("visionOptions", 0), f"{label}.visionOptions", 0, 7
+        )
+        if range_kind in {
+            5, "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CURRENT",
+        } and (condition["rangeLength"] != 0 or vision_options != 0):
+            raise ParseError(f"{label} current Vision must not store custom values")
+        if range_kind in {
+            6, "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CUSTOM",
+        } and (not 1 <= condition["rangeLength"] <= 32 or (vision_options & 3) != 1):
+            raise ParseError(f"{label} custom Vision is invalid")
+        return kind
+    raise ParseError(
+        f"{label}.kind must be terrain-motion, notice-target, or "
+        "target-cannot-see-subject"
+    )
 
 
-def validate_behavior_catalog(catalog: object) -> None:
-    """Validate the one supported conditional-profile authoring package."""
+def _validate_behavior_catalog_v4(catalog: object) -> None:
+    """Validate the legacy v4 authoring package without modifying it."""
 
     top_fields = {
         "catalogVersion", "schema", "fieldSchema", "generatedCompatibilityOutput",
@@ -5616,7 +5809,10 @@ def validate_behavior_catalog(catalog: object) -> None:
             required.add("conditions")
         elif kind != "normal":
             raise ParseError(f"{label}.kind must be normal or conditional")
-        profile = _catalog_object(raw_profile, label, required)
+        profile = _catalog_object(raw_profile, label, required, {"classification"})
+        classification = profile.get("classification")
+        if classification is not None and classification not in PROFILE_CLASSIFICATIONS:
+            raise ParseError(f"{label}.classification is not supported")
         profile_id = _validate_catalog_id(profile["id"], f"{label}.id")
         if profile_id in profiles_by_id:
             raise ParseError(f"profile ID is duplicated: {profile_id}")
@@ -5643,7 +5839,7 @@ def validate_behavior_catalog(catalog: object) -> None:
     if root["kind"] != "normal" or root["parent"] is not None:
         raise ParseError("the root profile must be normal and parentless")
     if set(root["fields"]) != set(PROFILE_FIELDS):
-        raise ParseError("the root profile must name every v78 authoring field")
+        raise ParseError("the root profile must name every v79 authoring field")
     for field, authored in root["fields"].items():
         if authored["operator"] != "replace":
             raise ParseError(f"root profile field {field} must use replace")
@@ -5710,7 +5906,7 @@ def validate_behavior_catalog(catalog: object) -> None:
         "classOrder", "speciesSelectors", "pickedUpProfile",
         "followerApplication", "defaultTiredApplication",
         "forcedAsleepApplication", "forcedAsleepClassToken",
-    })
+    }, {"mountedApplication"})
     class_order = runtime["classOrder"]
     if not isinstance(class_order, list) or not class_order or len(class_order) > 0xFF:
         raise ParseError("runtimeBindings.classOrder must contain 1..255 entries")
@@ -5776,9 +5972,12 @@ def validate_behavior_catalog(catalog: object) -> None:
     picked_up = _validate_catalog_id(runtime["pickedUpProfile"], "runtimeBindings.pickedUpProfile")
     if picked_up not in class_profile_ids:
         raise ParseError("runtime picked-up profile needs a class binding")
-    for field in (
+    runtime_application_fields = [
         "followerApplication", "defaultTiredApplication", "forcedAsleepApplication",
-    ):
+    ]
+    if "mountedApplication" in runtime:
+        runtime_application_fields.append("mountedApplication")
+    for field in runtime_application_fields:
         application_id = _validate_catalog_id(runtime[field], f"runtimeBindings.{field}")
         if application_id not in applications_by_id:
             raise ParseError(f"runtime-owned application is missing: {application_id}")
@@ -5844,6 +6043,11 @@ def validate_behavior_catalog(catalog: object) -> None:
             )
             if condition_kind == "notice-target" and condition["target"]["kind"] == "none":
                 raise ParseError(f"{label} notice-target needs a player or actor target")
+            if condition_kind == "target-cannot-see-subject" \
+                    and condition["target"]["kind"] == "none":
+                raise ParseError(
+                    f"{label} target-cannot-see-subject needs a player or actor target"
+                )
             if condition_kind == "terrain-motion" and condition["target"]["kind"] != "none":
                 raise ParseError(f"{label} terrain-motion must be targetless")
     if total_condition_count > MAX_CONDITION_ENTRIES:
@@ -5852,6 +6056,588 @@ def validate_behavior_catalog(catalog: object) -> None:
         )
     if combined_member_count > 0xFFFF:
         raise ParseError("combined application and condition member table exceeds u16 storage")
+
+
+def _validate_v5_named_pool(value: object, label: str) -> dict:
+    pool = _catalog_object(
+        value,
+        label,
+        {"id", "name", "mode", "match", "members"},
+    )
+    _validate_catalog_id(pool["id"], f"{label}.id")
+    name = pool["name"]
+    if (
+        not isinstance(name, str)
+        or not name.strip()
+        or "*/" in name
+        or "\n" in name
+        or "\r" in name
+    ):
+        raise ParseError(f"{label}.name is invalid")
+    if pool["mode"] not in {"members", "all"}:
+        raise ParseError(f"{label}.mode must be members or all")
+    _validate_catalog_target(
+        {
+            "mode": pool["mode"],
+            "match": pool["match"],
+            "members": pool["members"],
+        },
+        label,
+    )
+    return pool
+
+
+def _resolve_v5_pool_reference(
+    value: object,
+    label: str,
+    pools_by_id: dict[str, dict],
+) -> dict:
+    if isinstance(value, dict) and set(value) == {"pool"}:
+        pool_id = _validate_catalog_id(value["pool"], f"{label}.pool")
+        pool = pools_by_id.get(pool_id)
+        if pool is None:
+            raise ParseError(f"{label} references missing named pool {pool_id}")
+        return {
+            "mode": pool["mode"],
+            "match": copy.deepcopy(pool["match"]),
+            "members": copy.deepcopy(pool["members"]),
+        }
+    target = _catalog_object(value, label, {"mode", "match", "members"})
+    if target["mode"] not in {"members", "all"}:
+        raise ParseError(f"{label}.mode must be members or all")
+    _validate_catalog_target(target, label)
+    return copy.deepcopy(target)
+
+
+def _resolve_v5_actor_target(
+    value: object,
+    label: str,
+    pools_by_id: dict[str, dict],
+) -> dict:
+    if not isinstance(value, dict) or value.get("kind") != "actor" or "pool" not in value:
+        _validate_catalog_condition_target(value, label)
+        return copy.deepcopy(value)
+    target = _catalog_object(
+        value,
+        label,
+        {"kind", "roles", "selection", "pool"},
+    )
+    pool_id = _validate_catalog_id(target["pool"], f"{label}.pool")
+    pool = pools_by_id.get(pool_id)
+    if pool is None:
+        raise ParseError(f"{label} references missing named pool {pool_id}")
+    defaults = default_behavior_match_raws()
+    unsupported = [
+        field
+        for field in MATCH_FIELDS
+        if field != "groupMask" and pool["match"][field] != defaults[field]
+    ]
+    if unsupported:
+        raise ParseError(
+            f"{label} named pool {pool_id} uses match fields that actor targets "
+            f"cannot represent: {', '.join(unsupported)}"
+        )
+    resolved = {
+        "kind": "actor",
+        "roles": copy.deepcopy(target["roles"]),
+        "selection": target["selection"],
+        "groupMask": copy.deepcopy(pool["match"]["groupMask"]),
+        "members": copy.deepcopy(pool["members"]),
+    }
+    _validate_catalog_condition_target(resolved, label)
+    return resolved
+
+
+def _normalize_v5_condition_when(value: object, label: str) -> dict:
+    """Lower the v5 Vision vocabulary into the compact runtime fields."""
+
+    if not isinstance(value, dict):
+        raise ParseError(f"{label} must be an object")
+    kind = value.get("kind")
+    if kind == "notice-target" and "rangeKind" in value:
+        _validate_catalog_condition_when(value, label)
+        return copy.deepcopy(value)
+    if kind == "terrain-motion":
+        _validate_catalog_condition_when(value, label)
+        return copy.deepcopy(value)
+    if kind not in {"notice-target", "target-cannot-see-subject"}:
+        raise ParseError(
+            f"{label}.kind must be terrain-motion, notice-target, or "
+            "target-cannot-see-subject"
+        )
+    condition = _catalog_object(
+        value,
+        label,
+        {"kind", "vision", "chancePercent"},
+    )
+    chance = _catalog_bounded_integer(
+        condition["chancePercent"], f"{label}.chancePercent", 0, 100
+    )
+    vision = condition["vision"]
+    if not isinstance(vision, dict):
+        raise ParseError(f"{label}.vision must be an object")
+    mode = vision.get("mode")
+    if mode == "current":
+        _catalog_object(vision, f"{label}.vision", {"mode"})
+        range_kind = "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CURRENT"
+        range_length = 0
+        options = 0
+    elif mode == "custom":
+        custom = _catalog_object(
+            vision,
+            f"{label}.vision",
+            {"mode", "range", "cone", "adjacentAwareness"},
+        )
+        range_length = _catalog_bounded_integer(
+            custom["range"],
+            f"{label}.vision.range",
+            1,
+            32,
+        )
+        if custom["cone"] != "forward-90":
+            raise ParseError(f"{label}.vision.cone must be forward-90")
+        if not isinstance(custom["adjacentAwareness"], bool):
+            raise ParseError(
+                f"{label}.vision.adjacentAwareness must be true or false"
+            )
+        range_kind = "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CUSTOM"
+        options = 1 | (4 if custom["adjacentAwareness"] else 0)
+    else:
+        raise ParseError(f"{label}.vision.mode must be current or custom")
+    return {
+        "kind": kind,
+        "rangeKind": range_kind,
+        "rangeLength": range_length,
+        "chancePercent": chance,
+        "visionOptions": options,
+    }
+
+
+def _v5_explicit_link_application_ids(catalog: dict) -> set[str]:
+    linked = {
+        catalog["runtimeBindings"][field]
+        for field in (
+            "followerApplication",
+            "mountedApplication",
+            "defaultTiredApplication",
+            "forcedAsleepApplication",
+        )
+    }
+    for profile in catalog["profiles"]:
+        authored = profile.get("fields", {}).get("tiredProfile")
+        if isinstance(authored, dict) and isinstance(authored.get("value"), str):
+            linked.add(authored["value"])
+    return linked
+
+
+def _normalize_behavior_catalog_v5(catalog: object) -> dict:
+    """Lower v5 authoring ownership into the validated v4 runtime source shape."""
+
+    top_fields = {
+        "catalogVersion", "schema", "fieldSchema", "generatedCompatibilityOutput",
+        "rootProfile", "profiles", "selectors", "pools", "applications",
+        "runtimeBindings",
+    }
+    catalog = _catalog_object(catalog, "behavior catalog", top_fields)
+    if catalog["catalogVersion"] != 5:
+        raise ParseError("unsupported behavior catalog version; expected 5")
+    if catalog["schema"] != BEHAVIOR_CATALOG_SCHEMA_V5:
+        raise ParseError("unsupported behavior authoring schema; expected version 5")
+    if catalog["fieldSchema"] != BEHAVIOR_FIELD_SCHEMA:
+        raise ParseError("behavior catalog names an unexpected field schema")
+    if catalog["generatedCompatibilityOutput"] != "OverworldWildBehaviorData.c":
+        raise ParseError("behavior catalog names an unexpected generated output")
+    root_profile_id = _validate_catalog_id(catalog["rootProfile"], "rootProfile")
+
+    runtime = _catalog_object(
+        catalog["runtimeBindings"],
+        "runtimeBindings",
+        {
+            "classOrder", "speciesSelectors", "followerApplication", "mountedApplication",
+            "defaultTiredApplication", "forcedAsleepApplication",
+            "forcedAsleepClassToken",
+        },
+    )
+
+    raw_profiles = catalog["profiles"]
+    if not isinstance(raw_profiles, list) or not raw_profiles:
+        raise ParseError("behavior catalog needs at least one profile")
+    profiles_by_id: dict[str, dict] = {}
+    normalized_profiles = []
+    for index, raw_profile in enumerate(raw_profiles):
+        label = f"profile {index}"
+        if not isinstance(raw_profile, dict):
+            raise ParseError(f"{label} must be an object")
+        kind = raw_profile.get("kind")
+        required = {"id", "name", "parent", "kind", "fields"}
+        if kind == "conditional":
+            required.add("conditions")
+        elif kind != "normal":
+            raise ParseError(f"{label}.kind must be normal or conditional")
+        profile = _catalog_object(raw_profile, label, required, {"classification"})
+        profile_id = _validate_catalog_id(profile["id"], f"{label}.id")
+        if profile_id in profiles_by_id:
+            raise ParseError(f"profile ID is duplicated: {profile_id}")
+        classification = profile.get("classification")
+        if classification is not None and classification not in PROFILE_CLASSIFICATIONS_V5:
+            raise ParseError(f"{label}.classification is not supported")
+        if profile_id != root_profile_id and classification is None:
+            raise ParseError(
+                f"{label}.classification is required for every non-root profile"
+            )
+        profiles_by_id[profile_id] = profile
+        normalized = copy.deepcopy(profile)
+        if kind == "conditional":
+            owned_vision_fields = CONDITIONAL_VISION_FIELDS & set(profile["fields"])
+            if owned_vision_fields:
+                raise ParseError(
+                    f"{label} cannot override Vision fields; put custom Vision "
+                    "on the condition: " + ", ".join(sorted(owned_vision_fields))
+                )
+        if classification in {"routine", "placement"}:
+            normalized["classification"] = "archetype"
+        normalized_profiles.append(normalized)
+
+    raw_pools = catalog["pools"]
+    if not isinstance(raw_pools, list):
+        raise ParseError("behavior catalog pools must be an array")
+    pools_by_id: dict[str, dict] = {}
+    pool_names = []
+    for index, raw_pool in enumerate(raw_pools):
+        label = f"named pool {index}"
+        pool = _validate_v5_named_pool(raw_pool, label)
+        pool_id = pool["id"]
+        if pool_id in pools_by_id:
+            raise ParseError(f"named pool ID is duplicated: {pool_id}")
+        pools_by_id[pool_id] = pool
+        pool_names.append(pool["name"].casefold())
+    if len(pool_names) != len(set(pool_names)):
+        raise ParseError("named pool names must be unique")
+
+    applications = catalog["applications"]
+    if not isinstance(applications, list) or not applications:
+        raise ParseError("behavior catalog needs at least one application")
+    if len(applications) > MAX_RUNTIME_OVERRIDE_PROFILES:
+        raise ParseError(
+            f"behavior catalog supports at most {MAX_RUNTIME_OVERRIDE_PROFILES} applications"
+        )
+    explicit_links = _v5_explicit_link_application_ids(catalog)
+    normalized_applications = []
+    application_ids = set()
+    application_pool_owners: dict[str, str] = {}
+    classification_rank = {
+        classification: index
+        for index, classification in enumerate(PROFILE_CLASSIFICATIONS_V5)
+    }
+    previous_classification_rank = -1
+    disabled_target = {
+        "mode": "disabled",
+        "match": default_behavior_match_raws(),
+        "members": [],
+    }
+    for index, raw_application in enumerate(applications):
+        label = f"application {index}"
+        application = _catalog_object(
+            raw_application,
+            label,
+            {"id", "profile"},
+            {"target"},
+        )
+        application_id = _validate_catalog_id(application["id"], f"{label}.id")
+        if application_id in application_ids:
+            raise ParseError(f"application ID is duplicated: {application_id}")
+        application_ids.add(application_id)
+        profile_id = _validate_catalog_id(application["profile"], f"{label}.profile")
+        profile = profiles_by_id.get(profile_id)
+        if profile is None:
+            raise ParseError(f"{label} references missing profile {profile_id}")
+        classification = profile.get("classification")
+        if classification is None:
+            raise ParseError(
+                f"{label} references profile {profile_id} without a classification"
+            )
+        current_classification_rank = classification_rank[classification]
+        if current_classification_rank < previous_classification_rank:
+            expected_order = ", ".join(PROFILE_CLASSIFICATIONS_V5)
+            raise ParseError(
+                f"{label} breaks application classification order; expected "
+                f"{expected_order}"
+            )
+        previous_classification_rank = current_classification_rank
+        has_target = "target" in application
+        if profile["kind"] == "conditional" and has_target:
+            raise ParseError(f"conditional {label} must not have a target")
+        if profile["kind"] == "normal" and not has_target \
+                and application_id not in explicit_links:
+            raise ParseError(
+                f"normal {label} needs a target or an explicit link/system binding"
+            )
+        normalized_applications.append({
+            "id": application_id,
+            "profile": profile_id,
+            "target": (
+                _resolve_v5_pool_reference(
+                    application["target"], f"{label}.target", pools_by_id
+                )
+                if has_target
+                else copy.deepcopy(disabled_target)
+            ),
+        })
+        if (
+            has_target
+            and isinstance(application["target"], dict)
+            and set(application["target"]) == {"pool"}
+            and profile["kind"] == "normal"
+        ):
+            application_pool_owners.setdefault(
+                application["target"]["pool"], application_id
+            )
+
+    normalized_profiles_by_id = {
+        profile["id"]: profile for profile in normalized_profiles
+    }
+    for profile_id, source_profile in profiles_by_id.items():
+        if source_profile["kind"] != "conditional":
+            continue
+        normalized_profile = normalized_profiles_by_id[profile_id]
+        normalized_conditions = []
+        for index, raw_condition in enumerate(source_profile["conditions"]):
+            label = f"conditional profile {profile_id} condition {index}"
+            condition = _catalog_object(
+                raw_condition,
+                label,
+                {"id", "subjects", "when", "activation", "target"},
+            )
+            if isinstance(condition["subjects"], dict) \
+                    and "application" in condition["subjects"]:
+                raise ParseError(
+                    f"{label}.subjects cannot reference another application's target"
+                )
+            normalized = copy.deepcopy(condition)
+            normalized["when"] = _normalize_v5_condition_when(
+                condition["when"], f"{label}.when"
+            )
+            resolved_subjects = _resolve_v5_pool_reference(
+                condition["subjects"], f"{label}.subjects", pools_by_id
+            )
+            subject_pool_id = (
+                condition["subjects"].get("pool")
+                if isinstance(condition["subjects"], dict)
+                else None
+            )
+            matching_application = application_pool_owners.get(subject_pool_id)
+            normalized["subjects"] = (
+                {"application": matching_application}
+                if matching_application is not None
+                else resolved_subjects
+            )
+            normalized["target"] = _resolve_v5_actor_target(
+                condition["target"], f"{label}.target", pools_by_id
+            )
+            normalized_conditions.append(normalized)
+        normalized_profile["conditions"] = normalized_conditions
+
+    normalized_catalog = copy.deepcopy(catalog)
+    normalized_catalog.pop("pools")
+    normalized_catalog["catalogVersion"] = 4
+    normalized_catalog["schema"] = BEHAVIOR_CATALOG_SCHEMA
+    normalized_catalog["profiles"] = normalized_profiles
+    normalized_catalog["applications"] = normalized_applications
+    normalized_catalog["runtimeBindings"] = copy.deepcopy(runtime)
+    normalized_catalog["runtimeBindings"]["pickedUpProfile"] = catalog["rootProfile"]
+    _validate_behavior_catalog_v4(normalized_catalog)
+    return normalized_catalog
+
+
+def _behavior_catalog_v4_with_vision_defaults(catalog: dict) -> dict:
+    upgraded = copy.deepcopy(catalog)
+    root_id = upgraded.get("rootProfile")
+    root = next(
+        (
+            profile
+            for profile in upgraded.get("profiles", [])
+            if profile.get("id") == root_id
+        ),
+        None,
+    )
+    if root is not None:
+        for field, value in (("mountBounce", 2), ("mountStride", 2), ("mountSettle", 1), ("mountLean", 1)):
+            root["fields"].setdefault(field, {"operator": "replace", "value": value})
+        root["fields"].setdefault(
+            "walkSwayWidth",
+            {"operator": "replace", "value": 0},
+        )
+        root["fields"].setdefault(
+            "visionRange",
+            {"operator": "replace", "value": "OVERWORLD_VISION_DEFAULT_RANGE"},
+        )
+        root["fields"].setdefault(
+            "visionCone",
+            {"operator": "replace", "value": "OVERWORLD_VISION_CONE_FORWARD_90"},
+        )
+        root["fields"].setdefault(
+            "visionAdjacentAwareness",
+            {"operator": "replace", "value": "OW_WILD_BEHAVIOR_BOOL_YES"},
+        )
+    return upgraded
+
+
+def validate_behavior_catalog(catalog: object) -> None:
+    """Validate supported v4 import or v5 authoring data without mutation."""
+
+    if not isinstance(catalog, dict):
+        raise ParseError("behavior catalog must be an object")
+    version = catalog.get("catalogVersion")
+    if version == 4:
+        _validate_behavior_catalog_v4(
+            _behavior_catalog_v4_with_vision_defaults(catalog)
+        )
+        return
+    if version == 5:
+        _normalize_behavior_catalog_v5(catalog)
+        return
+    raise ParseError("unsupported behavior catalog version; expected 4 or 5")
+
+
+def migrate_behavior_catalog_v4_to_v5(catalog: object) -> dict:
+    """Return a deterministic v5 copy; never modify the supplied catalog."""
+
+    if not isinstance(catalog, dict):
+        raise ParseError("behavior catalog must be an object")
+    version = catalog.get("catalogVersion")
+    if version == 5:
+        validate_behavior_catalog(catalog)
+        return copy.deepcopy(catalog)
+    if version != 4:
+        raise ParseError(
+            "migration input must be catalog version 4 or already-migrated version 5"
+        )
+    source_catalog = _behavior_catalog_v4_with_vision_defaults(catalog)
+    _validate_behavior_catalog_v4(source_catalog)
+    migrated = {}
+    for key, value in source_catalog.items():
+        if key == "applications":
+            migrated["pools"] = []
+        migrated[key] = copy.deepcopy(value)
+    migrated["catalogVersion"] = 5
+    migrated["schema"] = BEHAVIOR_CATALOG_SCHEMA_V5
+    migrated["runtimeBindings"].pop("pickedUpProfile", None)
+
+    classification_map = {
+        "archetype": "routine",
+        "capability": "capability",
+        "attitude": "attitude",
+        "style": "style",
+        "follower-mount": "follower-mount",
+        "modifier": "modifier",
+    }
+    profiles_by_id = {profile["id"]: profile for profile in migrated["profiles"]}
+    for profile in migrated["profiles"]:
+        classification = profile.get("classification")
+        if classification is not None:
+            profile["classification"] = classification_map[classification]
+
+    source_applications = {
+        application["id"]: application
+        for application in source_catalog["applications"]
+    }
+    borrowed_application_ids = []
+    for profile in source_catalog["profiles"]:
+        for condition in profile.get("conditions", []):
+            subjects = condition["subjects"]
+            if set(subjects) == {"application"} \
+                    and subjects["application"] not in borrowed_application_ids:
+                borrowed_application_ids.append(subjects["application"])
+    pool_by_application = {}
+    for application_id in borrowed_application_ids:
+        source_application = source_applications.get(application_id)
+        if source_application is None:
+            raise ParseError(
+                f"condition subjects reference missing application {application_id}"
+            )
+        source_target = source_application["target"]
+        if source_target["mode"] == "disabled":
+            raise ParseError(
+                f"condition subjects reference disabled application {application_id}"
+            )
+        pool_id = f"subjects-{application_id}"
+        pool_by_application[application_id] = pool_id
+        migrated["pools"].append({
+            "id": pool_id,
+            "name": f"Subjects: {application_id}",
+            "mode": source_target["mode"],
+            "match": copy.deepcopy(source_target["match"]),
+            "members": copy.deepcopy(source_target["members"]),
+        })
+    explicit_links = _v5_explicit_link_application_ids(migrated)
+    for application in migrated["applications"]:
+        profile = profiles_by_id[application["profile"]]
+        target = application["target"]
+        if profile["kind"] == "conditional":
+            application.pop("target")
+        elif target["mode"] == "disabled":
+            if application["id"] not in explicit_links:
+                raise ParseError(
+                    f"normal application {application['id']} is disabled without an "
+                    "explicit link/system binding"
+                )
+            application.pop("target")
+        elif application["id"] in pool_by_application:
+            application["target"] = {
+                "pool": pool_by_application[application["id"]]
+            }
+
+    for profile in migrated["profiles"]:
+        for condition in profile.get("conditions", []):
+            when = condition["when"]
+            range_kind = when.get("rangeKind")
+            if when.get("kind") in {
+                "notice-target", "target-cannot-see-subject",
+            } and range_kind in {
+                5,
+                6,
+                "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CURRENT",
+                "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CUSTOM",
+            }:
+                if range_kind in {
+                    5,
+                    "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CURRENT",
+                }:
+                    vision = {"mode": "current"}
+                else:
+                    options = when.get("visionOptions", 0)
+                    vision = {
+                        "mode": "custom",
+                        "range": when["rangeLength"],
+                        "cone": "forward-90",
+                        "adjacentAwareness": bool(options & 4),
+                    }
+                condition["when"] = {
+                    "kind": when["kind"],
+                    "vision": vision,
+                    "chancePercent": when["chancePercent"],
+                }
+            subjects = condition["subjects"]
+            if set(subjects) != {"application"}:
+                continue
+            source_id = subjects["application"]
+            source_application = source_applications.get(source_id)
+            if source_application is None:
+                raise ParseError(
+                    f"condition {condition['id']} references missing application {source_id}"
+                )
+            condition["subjects"] = {"pool": pool_by_application[source_id]}
+
+    validate_behavior_catalog(migrated)
+    return migrated
+
+
+def _runtime_source_behavior_catalog(catalog: dict) -> dict:
+    if catalog.get("catalogVersion") == 5:
+        return _normalize_behavior_catalog_v5(catalog)
+    if catalog.get("catalogVersion") == 4:
+        return _behavior_catalog_v4_with_vision_defaults(catalog)
+    return catalog
 
 
 def _lower_profile_reference(authored: dict, application_indexes: dict[str, int]) -> dict:
@@ -5864,9 +6650,11 @@ def _lower_profile_reference(authored: dict, application_indexes: dict[str, int]
 
 
 def project_behavior_catalog_runtime(catalog: dict) -> dict:
-    """Project canonical v4 authoring into the positional ROM table shape."""
+    """Project supported authoring data into the positional ROM table shape."""
 
     validate_behavior_catalog(catalog)
+    source_version = catalog["catalogVersion"]
+    catalog = _runtime_source_behavior_catalog(catalog)
     profiles_by_id = {profile["id"]: profile for profile in catalog["profiles"]}
     application_indexes = {
         application["id"]: index
@@ -5950,7 +6738,7 @@ def project_behavior_catalog_runtime(catalog: dict) -> dict:
         override_profiles.append(profile)
 
     return {
-        "catalogVersion": 4,
+        "catalogVersion": source_version,
         "classProfiles": class_profiles,
         "classRules": class_rules,
         "speciesClassRules": species_rules,
@@ -6004,6 +6792,7 @@ def catalog_class_profiles(
 
 
 def catalog_override_profile_names(catalog: dict) -> dict[int, str]:
+    catalog = _runtime_source_behavior_catalog(catalog)
     profiles_by_id = {profile["id"]: profile for profile in catalog["profiles"]}
     return {
         index: profiles_by_id[application["profile"]]["name"]
@@ -6019,8 +6808,9 @@ def apply_catalog_symbol_values(catalog: dict, macros: dict[str, int]) -> None:
         for index, profile in enumerate(catalog["overrideProfiles"])
     }
     for symbol, name in (
-        ("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON", "Follower Pokemon"),
-        ("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_TIRED", "Default Tired"),
+        ("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER", "Follower"),
+        ("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_MOUNTED", "Mounted"),
+        ("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_REST", "Rest"),
     ):
         if name.casefold() in override_orders:
             macros[symbol] = override_orders[name.casefold()]
@@ -6125,8 +6915,8 @@ def _format_catalog_condition_entry(entry: dict, indent: str) -> str:
 def render_behavior_catalog(catalog: dict, raw_source: str) -> str:
     """Render named authoring data into the fixed-layout compatibility blob."""
     validate_behavior_catalog(catalog)
-    canonical_catalog = catalog
-    catalog = project_behavior_catalog_runtime(canonical_catalog)
+    canonical_catalog = _runtime_source_behavior_catalog(catalog)
+    catalog = project_behavior_catalog_runtime(catalog)
     class_profiles = catalog.get("classProfiles")
     class_rules = catalog.get("classRules")
     species_rules = catalog.get("speciesClassRules")
@@ -6299,17 +7089,20 @@ def render_behavior_catalog(catalog: dict, raw_source: str) -> str:
             min_speed = str(when["minMovementSpeed"])
             max_speed = str(when["maxMovementSpeed"])
         else:
-            kind = (
-                "OW_WILD_BEHAVIOR_CONDITION_PLAYER_NOTICED"
-                if target["kind"] == "player"
-                else "OW_WILD_BEHAVIOR_CONDITION_POKEMON_NOTICED"
-            )
+            if when["kind"] == "target-cannot-see-subject":
+                kind = "OW_WILD_BEHAVIOR_CONDITION_TARGET_CANNOT_SEE_SUBJECT"
+            else:
+                kind = (
+                    "OW_WILD_BEHAVIOR_CONDITION_PLAYER_NOTICED"
+                    if target["kind"] == "player"
+                    else "OW_WILD_BEHAVIOR_CONDITION_POKEMON_NOTICED"
+                )
             terrain_mask = "0"
             terrain_override_mask = "0"
             range_kind = clean_token(str(when["rangeKind"]))
             range_length = str(when["rangeLength"])
             chance_percent = str(when["chancePercent"])
-            min_speed = "0"
+            min_speed = str(when.get("visionOptions", 0))
             max_speed = "0"
         role_symbols = {
             "wild": "OW_WILD_BEHAVIOR_CONDITION_TARGET_ROLE_WILD",
@@ -6399,6 +7192,7 @@ def render_behavior_catalog(catalog: dict, raw_source: str) -> str:
 
 def render_behavior_catalog_header(raw_header: str, catalog: dict, raw_source: str) -> str:
     validate_behavior_catalog(catalog)
+    catalog = _runtime_source_behavior_catalog(catalog)
     runtime_application_orders = {
         application["id"]: order
         for order, application in enumerate(catalog["applications"])
@@ -6414,19 +7208,27 @@ def render_behavior_catalog_header(raw_header: str, catalog: dict, raw_source: s
     counts = behavior_blob_counts(raw_source)
     for symbol, profile_name, binding_name in (
         (
-            "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER_POKEMON",
-            "Follower Pokemon",
+            "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER",
+            "Follower",
             "followerApplication",
         ),
         (
-            "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_DEFAULT_TIRED",
-            "Default Tired",
+            "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_MOUNTED",
+            "Mounted",
+            "mountedApplication",
+        ),
+        (
+            "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_REST",
+            "Rest",
             "defaultTiredApplication",
         ),
     ):
         if symbol not in raw_header:
             continue
-        order = runtime_application_orders.get(runtime_application_ids[binding_name])
+        application_id = runtime_application_ids.get(binding_name)
+        if application_id is None:
+            continue
+        order = runtime_application_orders.get(application_id)
         if order is None:
             raise ParseError(f"runtime-owned {profile_name} override must exist exactly once")
         raw_header = replace_define_value(raw_header, symbol, order)
@@ -15433,7 +16235,7 @@ HTML = r"""<!doctype html>
     const PROFILE_NUMBER_FIELD_LIMITS = {"alertTime":{"min":0,"max":255},"stamina":{"min":0,"max":255},"restTime":{"min":0,"max":255},"chillSpeed":{"min":1,"max":32},"range":{"min":0,"max":255},"hopMinDistance":{"min":0,"max":12},"hopMaxDistance":{"min":0,"max":12},"hopPause":{"min":0,"max":255},"teleportTime":{"min":0,"max":64},"teleportPause":{"min":0,"max":255},"overworldLimit":{"min":0,"max":10},"spawnDestinationMinDistance":{"min":1,"max":8},"spawnDestinationMaxDistance":{"min":1,"max":8},"ramAccelerationSteps":{"min":0,"max":32},"ramMaxSpeed":{"min":0,"max":255},"chillAllowedTerrainMask":{"min":0,"max":1023},"chillAllowedTerrainOverrideMask":{"min":0,"max":1023},"hopTime":{"min":0,"max":64},"chaseBoostDistance":{"min":0,"max":32},"chaseBoostSpeed":{"min":0,"max":32},"hopSpinSpeed":{"min":0,"max":15},"spawnHopTime":{"min":0,"max":64},"circleRadius":{"min":0,"max":8},"chainMovementVariance":{"min":0,"max":32},"chainPauseVariance":{"min":0,"max":255},"tiredProfile":{"min":0,"max":255},"hopElevationTimeScale":{"min":0,"max":255},"hopElevationArcScale":{"min":0,"max":255},"tilesToAccelerate":{"min":1,"max":32},"maxWalkSpeed":{"min":1,"max":32},"spawnDestinationMask":{"min":0,"max":1023},"spawnDestinationOverrideMask":{"min":0,"max":1023},"chainRepositionJumpCount":{"min":1,"max":8},"hopSwayWidth":{"min":0,"max":8},"spawnHopSwayWidth":{"min":0,"max":8},"chainRepositionSpeed":{"min":1,"max":32},"chainRepositionDistance":{"min":1,"max":5},"walkOptions":{"min":0,"max":255},"wanderStraightChance":{"min":0,"max":100},"chainPauseActionChance":{"min":0,"max":100},"walkPause":{"min":0,"max":255},"tilesBeforeTurnSkid":{"min":0,"max":32},"walkStompTime":{"min":0,"max":32},"walkAccelerationStep":{"min":0,"max":33},"walkTimeVariance":{"min":0,"max":32},"walkPauseVariance":{"min":0,"max":32}};
     const PROFILE_FIELD_HINTS = {
       profileId: "Optional behavior-family label. Most profiles can leave this as Default.",
-      chillAllowedTerrainMask: "Per-terrain On/Off values for this Chill behavior.",
+      chillAllowedTerrainMask: "Per-terrain On/Off values for this behavior.",
       tiredAllowedTile: "Tile type this Tired behavior may target.",
       chillAllowedTerrainOverrideMask: "Terrains that are explicit instead of inherited.",
       tiredAllowedTile2: "Optional second tile type this Tired behavior may target.",
@@ -15459,7 +16261,7 @@ HTML = r"""<!doctype html>
       chainRepositionAllowDiagonal: "Allow diagonal Reposition directions.",
       spawnHopTime: "Ticks for the forced off-screen spawn hop. 0 is immediate.",
       spawnHopSwayWidth: "Side-to-side drift during the forced off-screen spawn hop. 0 disables sway. Max 8 px.",
-      hopSpinSpeed: "Ticks per 90-degree facing turn during Chill Hop. 0 disables spin. Max 15.",
+      hopSpinSpeed: "Ticks per 90-degree facing turn during Hop. 0 disables spin. Max 15.",
       hopSwayWidth: "Side-to-side drift during each Hop. 0 disables sway. Max 8 px.",
       overworldLimit: "Maximum active spawns for this profile or override bucket. 0 is unlimited.",
     };
@@ -15503,10 +16305,10 @@ HTML = r"""<!doctype html>
       jumpLevel: { label: "Jump height", shortLabel: "Jump", category: "spawn", subgroup: "Movement", iconFamily: "movement" },
       overworldLimit: { label: "Active spawn limit", shortLabel: "Limit", category: "spawn", subgroup: "Limits", iconFamily: "capacity", rowIcon: true },
 
-      chillState: { label: "Chill behavior", shortLabel: "Behavior", category: "chill", subgroup: "Behavior", iconFamily: "behavior" },
-      chillTarget: { label: "Chill target", shortLabel: "Target", category: "chill", subgroup: "Targeting", iconFamily: "condition" },
-      chillAction: { label: "Chill movement", shortLabel: "Movement", category: "chill", subgroup: "Movement", iconFamily: "movement" },
-      chillSpeed: { label: "Chill Walk time", shortLabel: "Walk time", unit: "frames", category: "chill", subgroup: "Timing", iconFamily: "timing" },
+      chillState: { label: "Behavior", shortLabel: "Behavior", category: "chill", subgroup: "Behavior", iconFamily: "behavior" },
+      chillTarget: { label: "Target", shortLabel: "Target", category: "chill", subgroup: "Targeting", iconFamily: "condition" },
+      chillAction: { label: "Movement", shortLabel: "Movement", category: "chill", subgroup: "Movement", iconFamily: "movement" },
+      chillSpeed: { label: "Walk time", shortLabel: "Walk time", unit: "frames", category: "chill", subgroup: "Timing", iconFamily: "timing" },
       tilesToAccelerate: { label: "Tiles to accelerate", shortLabel: "Acceleration", unit: "tiles", category: "chill", subgroup: "Movement", iconFamily: "speed" },
       walkAccelerationStep: { label: "Acceleration amount", shortLabel: "Amount", unit: "frames", category: "chill", subgroup: "Movement", iconFamily: "speed" },
       walkTimeVariance: { label: "Walk time variance", shortLabel: "Variance", unit: "frames", category: "chill", subgroup: "Timing", iconFamily: "timing" },
@@ -15533,7 +16335,7 @@ HTML = r"""<!doctype html>
       teleportPause: { label: "Teleport pause", shortLabel: "Pause", unit: "ticks", category: "chill", subgroup: "Timing", iconFamily: "timing" },
       ramAccelerationSteps: { label: "Chain move count", shortLabel: "Chain", unit: "moves", category: "chill", subgroup: "Movement", iconFamily: "movement" },
       ramMaxSpeed: { label: "Chain pause", shortLabel: "Pause", unit: "ticks", category: "chill", subgroup: "Timing", iconFamily: "timing" },
-      chainPauseAction: { label: "Chain pause action", shortLabel: "Action", category: "chill", subgroup: "Movement", iconFamily: "movement", rowIcon: true },
+      chainPauseAction: { label: "Chain pause actions", shortLabel: "Actions", category: "chill", subgroup: "Movement", iconFamily: "movement", rowIcon: true },
       chainPauseActionChance: { label: "Pause action chance", shortLabel: "Action chance", unit: "%", category: "chill", subgroup: "Movement", iconFamily: "trigger" },
       chainRepositionJumpCount: { label: "Reposition moves", shortLabel: "Moves", unit: "moves", category: "chill", subgroup: "Movement", iconFamily: "movement" },
       chainRepositionSpeed: { label: "Reposition Walk time", shortLabel: "Reposition time", unit: "frames", category: "chill", subgroup: "Timing", iconFamily: "timing" },
@@ -15606,7 +16408,7 @@ HTML = r"""<!doctype html>
       },
       {
         key: "chill",
-        label: "Chill",
+        label: "Behavior",
         icon: "leaf",
         typeClass: "type-grass",
         fields: [
@@ -15695,7 +16497,7 @@ HTML = r"""<!doctype html>
     ];
     const PRIMITIVE_GROUPS = [
       { key: "spawn", label: "Spawn", icon: "footstep", typeClass: "type-movement", fields: ["spawnLocomotion"] },
-      { key: "chill", label: "Chill", icon: "leaf", typeClass: "type-grass", fields: ["chillLocomotion", "chillTarget"] },
+      { key: "chill", label: "Behavior", icon: "leaf", typeClass: "type-grass", fields: ["chillLocomotion", "chillTarget"] },
       { key: "alert", label: "Alert", icon: "target", typeClass: "type-placement", fields: ["alertLogic", "alertReaction"] },
       { key: "tired", label: "Tired", icon: "clock", typeClass: "type-flow", fields: ["tiredLocomotion", "tiredTarget", "tiredReaction"] },
     ];
@@ -17587,7 +18389,7 @@ HTML = r"""<!doctype html>
       if (spawnStateUsesHopTime(spawnStateRaw) || (isOverrideProfile(item) && !spawnStateRaw)) {
         fields.push(profileEditFieldItem(item, "spawnHopTime", {
           className: "profile-suboption-field",
-          hint: "Ticks for the forced off-screen spawn hop. 0 is immediate. Hop turn speed is edited under Chill.",
+          hint: "Ticks for the forced off-screen spawn hop. 0 is immediate. Hop turn speed is edited under Movement Style.",
         }));
         fields.push(profileEditFieldItem(item, "spawnHopSwayWidth", {
           className: "profile-suboption-field",
@@ -18047,7 +18849,7 @@ HTML = r"""<!doctype html>
       if (canSelectTarget) {
         fields.push(profileEditFieldItem(item, "chillTarget", {
           className: "profile-suboption-field",
-          hint: "Where this chill behavior tries to go. Movement style decides how it gets there.",
+          hint: "Where this behavior tries to go. Movement Style decides how it gets there.",
         }));
       }
       if (usesAllowedTile) {
@@ -18259,11 +19061,11 @@ HTML = r"""<!doctype html>
           referenceField,
           {
             fieldKey,
-            subgroup: "Linked Chill profile",
+            subgroup: "Linked Behavior profile",
             html: `
               <div class="profile-linked-chill-editor" data-linked-profile-index="${esc(linkedItem.index)}">
                 <div class="profile-subgroup-head">
-                  <span class="profile-subgroup-title">${esc(stateLabel)} uses ${esc(profileDisplayName(linkedItem))} · Chill</span>
+                  <span class="profile-subgroup-title">${esc(stateLabel)} uses ${esc(profileDisplayName(linkedItem))} · Behavior</span>
                   <span class="profile-subgroup-count">${esc(linkedChillItems.length)}</span>
                 </div>
                 <div class="profile-architecture-fields">${linkedChillItems.map(field => field.html).join("")}</div>
@@ -18454,7 +19256,7 @@ HTML = r"""<!doctype html>
       const chips = [
         ["shield", "type-test", "Family", profilePendingDisplay(item, "profileId")],
         ["target", "type-placement", "Spawn", profilePendingDisplay(item, "spawnState")],
-        ["clock", "type-flow", "Chill Walk time", profilePendingDisplay(item, "chillSpeed")],
+        ["clock", "type-flow", "Walk time", profilePendingDisplay(item, "chillSpeed")],
         ["ruler", "type-placement", "Range", profilePendingDisplay(item, "range")]
       ];
       return chips.map(([icon, typeClass, label, value]) => `

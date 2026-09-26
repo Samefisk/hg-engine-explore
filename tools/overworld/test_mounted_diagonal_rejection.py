@@ -27,6 +27,15 @@ def harness_source():
     behavior = (ROOT / "include/overworld_wild_behavior_data.h").read_text()
     direction = (ROOT / "include/overworld_walk_direction_policy.h").read_text()
     timing = (ROOT / "include/overworld_walk_timing_policy.h").read_text().replace('#include "types.h"', '')
+    table_match = re.search(
+        r'sOverworldWalkDirectionKeys:\\n"\s*"\.hword ([^"\\n]+)\\n"\s*"\.hword ([^"\\n]+)',
+        walk,
+    )
+    if table_match is None:
+        raise AssertionError("mounted direction-key table was not found")
+    direction_keys = ", ".join(
+        item.strip() for row in table_match.groups() for item in row.split(",")
+    )
     # Portable direction bodies are real code; only their target type include
     # is omitted because the motion model supplies the host integer types.
     direction = direction.replace('#include "types.h"', '')
@@ -68,7 +77,8 @@ def harness_source():
         line = definitions[name]
         macros.append(line)
         wanted.update(re.findall(r"\b[A-Z][A-Z_0-9]+\b", line.split(name, 1)[1]))
-    return PRELUDE + direction + timing + "\n".join(macros) + "\n" + request + SUPPORT + "\n".join(functions) + DRIVER
+    table = "static const u16 sOverworldWalkDirectionKeys[] = {" + direction_keys + "};\n"
+    return PRELUDE + direction + timing + "\n".join(macros) + "\n" + request + SUPPORT + table + "\n".join(functions) + DRIVER
 
 
 PRELUDE = r'''

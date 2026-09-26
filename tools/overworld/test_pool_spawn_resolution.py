@@ -39,6 +39,15 @@ LAND = "OW_WILD_SPAWN_DESTINATION_LAND"
 SCHEMA = json.loads((ROOT / "tools/overworld/behavior_schema.json").read_text())
 FIELDS = {field["key"]: field for field in SCHEMA["fields"]}
 
+LAND_APPLICATION = "apply-scavenger"
+MODERN_MASK_APPLICATION = "apply-sprint"
+POOL_APPLICATION = "apply-floaty-bounce"
+ALL_SURFACES_APPLICATION = "apply-small-bird-hop"
+EMPTY_APPLICATION = "apply-erratic-flutter"
+ZERO_EXPLICIT_APPLICATION = "apply-meander"
+TIRED_LINK_APPLICATION = "apply-hop-around"
+TIRED_APPLICATION = "apply-fly-in"
+
 
 def authored(**values):
     return {key: {"operator": "replace", "value": value} for key, value in values.items()}
@@ -77,34 +86,56 @@ class PoolSpawnResolutionTests(unittest.TestCase):
         neutral = {}
         for application in matrix["applications"]:
             matrix_profiles[application["profile"]]["fields"] = copy.deepcopy(neutral)
-        layers = [
-            authored(spawnDestination=LAND),
-            authored(spawnDestinationMask=4, spawnDestinationOverrideMask=1023),
-            authored(spawnDestination=POOL),
-            authored(spawnDestinationMask=15, spawnDestinationOverrideMask=1023),
-            neutral,
-            authored(spawnDestinationMask=0, spawnDestinationOverrideMask=0),
-            authored(tiredProfile="apply-default-active"),
-            authored(spawnDestination=POOL),
-            authored(spawnDestinationMask=8, spawnDestinationOverrideMask=1023),
-        ]
-        for index, fields in enumerate(layers):
-            application = matrix["applications"][index]
+        applications = {
+            application["id"]: application for application in matrix["applications"]
+        }
+        fixture_fields = {
+            LAND_APPLICATION: authored(spawnDestination=LAND),
+            MODERN_MASK_APPLICATION: authored(
+                spawnDestinationMask=4,
+                spawnDestinationOverrideMask=1023,
+            ),
+            POOL_APPLICATION: authored(spawnDestination=POOL),
+            ALL_SURFACES_APPLICATION: authored(
+                spawnDestinationMask=15,
+                spawnDestinationOverrideMask=1023,
+            ),
+            EMPTY_APPLICATION: neutral,
+            ZERO_EXPLICIT_APPLICATION: authored(
+                spawnDestinationMask=0,
+                spawnDestinationOverrideMask=0,
+            ),
+            TIRED_LINK_APPLICATION: authored(tiredProfile=TIRED_APPLICATION),
+            TIRED_APPLICATION: authored(
+                spawnDestinationMask=8,
+                spawnDestinationOverrideMask=1023,
+            ),
+        }
+        for application_id, fields in fixture_fields.items():
+            application = applications[application_id]
             matrix_profiles[application["profile"]]["fields"] = fields
+        cls.application_indexes = {
+            application["id"]: index
+            for index, application in enumerate(matrix["applications"])
+        }
         matrix_path = cls.temp / "layer-catalog.json"
         matrix_path.write_text(json.dumps(matrix))
         cls.matrix_native = native_resolver.build(
             ROOT, force=True, catalog=matrix_path, output=cls.temp / "layer-resolver"
         )
 
-    def resolve_layers(self, *layers):
+    def resolve_layers(self, *application_ids):
+        forced_mask = sum(
+            1 << self.application_indexes[application_id]
+            for application_id in application_ids
+        )
         result = native_resolver.resolve(None, {
             "species": 0, "level": 1, "terrain": 0, "behaviorClass": 0,
-            "forcedOverrideMask": sum(1 << layer for layer in layers),
+            "forcedOverrideMask": forced_mask,
         }, root=ROOT, executable=self.matrix_native)
         self.assertEqual(result["status"], 0)
         self.assertEqual(result["traceDropped"], 0)
-        self.assertEqual(result["forcedOverrideMask"], sum(1 << layer for layer in layers))
+        self.assertEqual(result["forcedOverrideMask"], forced_mask)
         return result
 
     def assert_destinations(self, result, expected):
@@ -116,9 +147,9 @@ class PoolSpawnResolutionTests(unittest.TestCase):
                     "spawnDestinationOverrideMask": explicit,
                 })
 
-    def test_actual_ledyba_owner_and_tired_preserve_own_pool_site(self):
+    def test_actual_ledyba_routine_and_tired_preserve_own_pool_site(self):
         flying = next(profile for profile in self.catalog["overrideProfiles"]
-                      if profile["name"] == "Flying insect")
+                      if profile["name"] == "Erratic Flutter")
         flying_index = self.catalog["overrideProfiles"].index(flying)
         self.assertEqual(flying["fields"]["spawnDestination"], authored(spawnDestination=POOL)["spawnDestination"])
         for terrain in (0, 1):
@@ -135,28 +166,54 @@ class PoolSpawnResolutionTests(unittest.TestCase):
                     })
 
     def test_pool_clears_prior_legacy_land_in_all_lanes(self):
-        self.assert_destinations(self.resolve_layers(0), [(LAND, 1, 1023)] * 2)
-        self.assert_destinations(self.resolve_layers(0, 2), [(POOL, 15, 0)] * 2)
+        self.assert_destinations(
+            self.resolve_layers(LAND_APPLICATION),
+            [(LAND, 1, 1023)] * 2,
+        )
+        self.assert_destinations(
+            self.resolve_layers(LAND_APPLICATION, POOL_APPLICATION),
+            [(POOL, 15, 0)] * 2,
+        )
 
     def test_pool_clears_prior_modern_mask_in_all_lanes(self):
-        self.assert_destinations(self.resolve_layers(1), [(POOL, 4, 1023)] * 2)
-        self.assert_destinations(self.resolve_layers(1, 2), [(POOL, 15, 0)] * 2)
+        self.assert_destinations(
+            self.resolve_layers(MODERN_MASK_APPLICATION),
+            [(POOL, 4, 1023)] * 2,
+        )
+        self.assert_destinations(
+            self.resolve_layers(MODERN_MASK_APPLICATION, POOL_APPLICATION),
+            [(POOL, 15, 0)] * 2,
+        )
 
     def test_later_explicit_modern_all_surface_selection_is_retained(self):
-        for earlier in ((), (0,), (1,)):
+        for earlier in ((), (LAND_APPLICATION,), (MODERN_MASK_APPLICATION,)):
             with self.subTest(earlier=earlier):
-                self.assert_destinations(self.resolve_layers(*earlier, 2, 3), [(POOL, 15, 1023)] * 2)
+                self.assert_destinations(
+                    self.resolve_layers(
+                        *earlier,
+                        POOL_APPLICATION,
+                        ALL_SURFACES_APPLICATION,
+                    ),
+                    [(POOL, 15, 1023)] * 2,
+                )
 
     def test_base_empty_and_zero_explicit_inheritance_are_unchanged(self):
         self.assert_destinations(self.resolve_layers(), [(POOL, 15, 0)] * 2)
-        for prior in ((), (0,), (1,)):
-            for unchanged in ((4,), (5,), (4, 5)):
+        for prior in ((), (LAND_APPLICATION,), (MODERN_MASK_APPLICATION,)):
+            for unchanged in (
+                (EMPTY_APPLICATION,),
+                (ZERO_EXPLICIT_APPLICATION,),
+                (EMPTY_APPLICATION, ZERO_EXPLICIT_APPLICATION),
+            ):
                 with self.subTest(prior=prior, unchanged=unchanged):
                     self.assertEqual(self.resolve_layers(*prior)["profileHex"],
                                      self.resolve_layers(*prior, *unchanged)["profileHex"])
 
     def test_tired_modern_selection_remains_lane_local(self):
-        self.assert_destinations(self.resolve_layers(0, 6), [
+        self.assert_destinations(self.resolve_layers(
+            LAND_APPLICATION,
+            TIRED_LINK_APPLICATION,
+        ), [
             (LAND, 1, 1023), (LAND, 8, 1023),
         ])
 

@@ -120,7 +120,7 @@ class Stream:
             events = [self.trace("MOTION_STARTED", ids[kind], 8)] if elapsed == 0 else []
             if spawn and elapsed == 0:
                 startup = {"origin": origin, "target": target, "locomotion": 4,
-                           "hopDirection": 3}
+                           "hopDirection": 3, "targetBaseY": 0}
                 encounter = {"personality": self.actor["subjectIdentity"], "species": 165,
                              "form": 0, "level": 5}
                 prefix = struct.pack("<iiB3xIHBB4hBB", *target, 0,

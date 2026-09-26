@@ -4,7 +4,7 @@
 #include "overworld_behavior_condition_runtime.h"
 
 #define OVERWORLD_BEHAVIOR_CONDITION_ADAPTER_MAGIC 0x4143574F /* OWCA */
-#define OVERWORLD_BEHAVIOR_CONDITION_ADAPTER_VERSION 10
+#define OVERWORLD_BEHAVIOR_CONDITION_ADAPTER_VERSION 11
 #define OVERWORLD_BEHAVIOR_CONDITION_TRACE_RECORD_ADDR 0x023BF408
 
 #define OVERWORLD_BEHAVIOR_CONDITION_TARGET_ROLE_MOUNTED (1u << 2)
@@ -31,6 +31,10 @@ typedef struct OverworldWildBehaviorConditionRuntime {
     BehaviorResolveResult resolution;
     OverworldWildBehaviorContext context;
     OverworldWildBehaviorConditionFrame frame;
+    /* Stable Vision is resolved once without conditional applications and
+     * reused by every condition at later intent boundaries. */
+    OverworldVisionSpec currentVisions[
+        OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS];
     /* Inspection is condition-workspace data, not call-stack data.  A wild
      * intent boundary already has a deep field-task call chain. */
     OverworldActorSnapshot actorSnapshot;
@@ -47,8 +51,8 @@ typedef struct OverworldWildBehaviorConditionRuntime {
 
 #if !defined(OVERWORLD_BEHAVIOR_HOST) \
     && !defined(OVERWORLD_ACTOR_SYSTEM_HOST)
-typedef char OverworldWildBehaviorConditionRuntimeBudgetMustRemain2044Bytes[
-    sizeof(OverworldWildBehaviorConditionRuntime) == 2044 ? 1 : -1];
+typedef char OverworldWildBehaviorConditionRuntimeBudgetMustRemain2072Bytes[
+    sizeof(OverworldWildBehaviorConditionRuntime) == 2072 ? 1 : -1];
 typedef char OverworldWildBehaviorConditionScratchOffsetMustRemain520[
     offsetof(OverworldWildBehaviorConditionRuntime, scratch) == 520 ? 1 : -1];
 typedef char OverworldWildBehaviorConditionResultOffsetMustRemain552[
@@ -57,23 +61,23 @@ typedef char OverworldWildBehaviorConditionResolutionOffsetMustRemain1136[
     offsetof(OverworldWildBehaviorConditionRuntime, resolution) == 1136
         ? 1
         : -1];
-typedef char OverworldWildBehaviorConditionActorSnapshotOffsetMustRemain1744[
-    offsetof(OverworldWildBehaviorConditionRuntime, actorSnapshot) == 1744
+typedef char OverworldWildBehaviorConditionActorSnapshotOffsetMustRemain1772[
+    offsetof(OverworldWildBehaviorConditionRuntime, actorSnapshot) == 1772
         ? 1
         : -1];
-typedef char OverworldWildBehaviorConditionActiveMasksOffsetMustRemain1920[
+typedef char OverworldWildBehaviorConditionActiveMasksOffsetMustRemain1948[
     offsetof(OverworldWildBehaviorConditionRuntime, activeApplicationMasks)
-            == 1920
+            == 1948
         ? 1
         : -1];
-typedef char OverworldWildBehaviorConditionTimedMasksOffsetMustRemain1960[
+typedef char OverworldWildBehaviorConditionTimedMasksOffsetMustRemain1988[
     offsetof(
         OverworldWildBehaviorConditionRuntime,
-        timedWinningApplicationMasks) == 1960
+        timedWinningApplicationMasks) == 1988
         ? 1
         : -1];
-typedef char OverworldWildBehaviorConditionTargetValidOffsetMustRemain2040[
-    offsetof(OverworldWildBehaviorConditionRuntime, targetValidMask) == 2040
+typedef char OverworldWildBehaviorConditionTargetValidOffsetMustRemain2068[
+    offsetof(OverworldWildBehaviorConditionRuntime, targetValidMask) == 2068
         ? 1
         : -1];
 #endif
@@ -119,6 +123,10 @@ typedef u16 (*OverworldBehaviorConditionTerrainFunc)(
     int x,
     int y);
 
+typedef void (*OverworldBehaviorConditionPopulateVisibilityFunc)(
+    FieldSystem *fieldSystem,
+    OverworldBehaviorConditionWorldView *world);
+
 typedef OverworldBehaviorConditionStatus
 (*OverworldBehaviorConditionPrepareActorAdapterFunc)(
     OverworldWildBehaviorConditionRuntime *runtime,
@@ -126,6 +134,7 @@ typedef OverworldBehaviorConditionStatus
     const void *blobBytes,
     u32 blobSize,
     const OverworldActorHandle *subject,
+    const OverworldWildBehaviorProfile *stableProfile,
     u8 slot,
     OverworldBehaviorConditionBuildContextFunc buildContext);
 
@@ -153,6 +162,7 @@ typedef OverworldBehaviorConditionStatus
     OverworldBehaviorConditionBuildContextFunc buildContext,
     OverworldBehaviorConditionIsCurrentSpawnFunc isCurrentSpawn,
     OverworldBehaviorConditionTerrainFunc terrainAt,
+    OverworldBehaviorConditionPopulateVisibilityFunc populateVisibility,
     OverworldBehaviorConditionAdapterOutcome *outcome);
 
 typedef struct OverworldBehaviorConditionAdapterEntry {

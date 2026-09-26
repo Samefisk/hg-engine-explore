@@ -70,65 +70,45 @@ class WorkshopConditionalPreviewTests(unittest.TestCase):
         evaluation = result["conditionEvaluation"]
         self.assertEqual(
             evaluation["activeApplicationIds"],
-            ["apply-default-active", "apply-bird-rooftop"],
+            ["apply-perch", "apply-notice-player"],
         )
         self.assertEqual(
             evaluation["winningCondition"]["conditionId"],
-            "condition-bird-rooftop",
+            "condition-notice-player",
         )
         self.assertEqual(
             evaluation["targetSource"],
             {
-                "profileId": "default-active",
-                "applicationId": "apply-default-active",
-                "conditionId": "condition-aggressive-chase-notices-player",
+                "profileId": "notice-player",
+                "applicationId": "apply-notice-player",
+                "conditionId": "condition-notice-player",
                 "target": {"kind": "player"},
             },
         )
         layer = next(
             layer
             for layer in result["resolverLayers"]
-            if layer["id"] == "apply-bird-rooftop"
+            if layer["id"] == "apply-perch"
         )
         self.assertTrue(layer["applied"])
         self.assertEqual(layer["profileKind"], "conditional")
         self.assertIn("chillState", {change["field"] for change in layer["changes"]})
-        self.assertIn("apply-bird-rooftop", result["appliedApplicationIds"])
+        self.assertIn("apply-perch", result["appliedApplicationIds"])
 
     def test_actor_target_timer_state_round_trips_and_role_filter_is_shared(self) -> None:
         catalog = copy.deepcopy(self.catalog)
-        profile = next(
-            item for item in catalog["profiles"] if item["id"] == "bird-rooftop"
+        playful = next(
+            profile for profile in catalog["profiles"]
+            if profile["id"] == "playful"
         )
-        profile["conditions"].append(
-            {
-                "id": "condition-bird-notices-pikachu",
-                "subjects": {"application": "apply-bird"},
-                "when": {
-                    "kind": "notice-target",
-                    "rangeKind": "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS",
-                    "rangeLength": 5,
-                    "chancePercent": 100,
-                },
-                "activation": {
-                    "mode": "timed",
-                    "durationFrames": 10,
-                    "cooldownFrames": 20,
-                },
-                "target": {
-                    "kind": "actor",
-                    "roles": ["wild"],
-                    "selection": "nearest",
-                    "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-                    "members": ["SPECIES_PIKACHU"],
-                },
-            }
-        )
+        playful["conditions"][0]["target"]["roles"] = ["wild"]
         payload = self.payload(catalog, terrain_mask=65)
+        payload["subject"]["species"] = "SPECIES_CLEFAIRY"
+        payload["observation"]["player"]["valid"] = False
         payload["candidates"] = [
             {
                 "id": "target-a",
-                "species": "SPECIES_PIKACHU",
+                "species": "SPECIES_CLEFABLE",
                 "role": "wild",
                 "valid": True,
                 "x": 11,
@@ -139,18 +119,12 @@ class WorkshopConditionalPreviewTests(unittest.TestCase):
         first = reliability.resolve_conditional_preview(VIEWER, payload)
         evaluation = first["conditionEvaluation"]
         winner = evaluation["winningCondition"]
-        self.assertEqual(winner["conditionId"], "condition-bird-notices-pikachu")
-        rooftop = next(
-            item
-            for item in evaluation["entries"]
-            if item["conditionId"] == "condition-bird-rooftop"
-        )
+        self.assertEqual(winner["conditionId"], "condition-playful-notices-compatible-actor")
         actor_entry = next(
             item
             for item in evaluation["entries"]
-            if item["conditionId"] == "condition-bird-notices-pikachu"
+            if item["conditionId"] == "condition-playful-notices-compatible-actor"
         )
-        self.assertFalse(rooftop["winsProfile"])
         self.assertTrue(actor_entry["winsProfile"])
         self.assertEqual(
             evaluation["targetSource"]["target"],
@@ -159,10 +133,10 @@ class WorkshopConditionalPreviewTests(unittest.TestCase):
         state = next(
             item
             for item in evaluation["nextState"]
-            if item["conditionId"] == "condition-bird-notices-pikachu"
+            if item["conditionId"] == "condition-playful-notices-compatible-actor"
         )
-        self.assertEqual(state["activeUntil"], 110)
-        self.assertEqual(state["cooldownUntil"], 120)
+        self.assertEqual(state["activeUntil"], 520)
+        self.assertEqual(state["cooldownUntil"], 530)
 
         payload["observation"]["frame"] = 105
         payload["candidates"][0]["x"] = 30
@@ -172,7 +146,7 @@ class WorkshopConditionalPreviewTests(unittest.TestCase):
         held = next(
             item
             for item in second["conditionEvaluation"]["entries"]
-            if item["conditionId"] == "condition-bird-notices-pikachu"
+            if item["conditionId"] == "condition-playful-notices-compatible-actor"
         )
         self.assertFalse(held["conditionTrue"])
         self.assertTrue(held["active"])
@@ -185,7 +159,7 @@ class WorkshopConditionalPreviewTests(unittest.TestCase):
         actor_entry = next(
             item
             for item in filtered["conditionEvaluation"]["entries"]
-            if item["conditionId"] == "condition-bird-notices-pikachu"
+            if item["conditionId"] == "condition-playful-notices-compatible-actor"
         )
         self.assertTrue(actor_entry["subjectMatched"])
         self.assertFalse(actor_entry["conditionTrue"])

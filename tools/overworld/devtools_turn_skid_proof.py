@@ -7,7 +7,7 @@ from tools.overworld.devtools_turn_skid_measurement import (
 
 CLAIMS = ('natural-input', 'live-actor-identity', 'logical-commit',
           'rendered-motion', 'frame-pacing', 'feedback-effect', 'control-release')
-CONTRACT = {'natural-input': [{'name': 'turn-skid-acceleration-durations', 'operator': 'eq', 'type': 'array', 'validator': 'meaningful-observation', 'expected': [8, 8, 8, 7, 7, 7, 6, 6, 6, 5, 5, 5, 4]}], 'live-actor-identity': [{'name': 'mounted-cyndaquil-identity-flags', 'operator': 'eq', 'type': 'array', 'validator': 'meaningful-observation', 'expected': [1, 'MOUNTED', 155, 1, 1, 1]}], 'logical-commit': [{'name': 'turn-skid-terminal-boundaries-and-target', 'operator': 'eq', 'type': 'object', 'validator': 'terminal-boundary-target-v1', 'requiredCount': 2, 'requiredKeys': ['boundaryCount', 'final', 'target']}], 'rendered-motion': [{'name': 'turn-skid-pair-and-facing', 'operator': 'eq', 'type': 'array', 'validator': 'meaningful-observation', 'expected': [0, 2, 2]}], 'frame-pacing': [{'name': 'turn-skid-motion-schedules', 'operator': 'eq', 'type': 'array', 'validator': 'meaningful-observation', 'expected': [[0, 1, 2, 3, 4, 5, 6, 7], [0, 1, 2, 3, 4]]}], 'feedback-effect': [{'name': 'turn-skid-dust-effect-count', 'operator': 'eq', 'type': 'integer', 'validator': 'meaningful-observation', 'expected': 1}], 'control-release': [{'name': 'turn-skid-recovery-state', 'operator': 'eq', 'type': 'array', 'validator': 'turn-skid-recovery-v1'}]}
+CONTRACT = {'natural-input': [{'name': 'turn-skid-acceleration-durations', 'operator': 'eq', 'type': 'array', 'validator': 'meaningful-observation', 'expected': [8, 8, 8, 7, 7, 7, 6, 6, 6, 5, 5, 5, 4]}], 'live-actor-identity': [{'name': 'mounted-cyndaquil-identity-flags', 'operator': 'eq', 'type': 'array', 'validator': 'meaningful-observation', 'expected': [1, 'MOUNTED', 155, 1, 1, 1]}], 'logical-commit': [{'name': 'turn-skid-terminal-boundaries-and-target', 'operator': 'eq', 'type': 'object', 'validator': 'terminal-boundary-target-v1', 'requiredCount': 3, 'requiredKeys': ['boundaryCount', 'final', 'target']}], 'rendered-motion': [{'name': 'turn-skid-pair-and-facing', 'operator': 'eq', 'type': 'array', 'validator': 'meaningful-observation', 'expected': [0, 2, 2]}, {'name': 'turn-skid-facing-through-drift', 'operator': 'eq', 'type': 'array', 'validator': 'meaningful-observation', 'expected': [3, 2, 16]}], 'frame-pacing': [{'name': 'turn-skid-motion-schedules', 'operator': 'eq', 'type': 'array', 'validator': 'meaningful-observation', 'expected': [[0, 1, 2, 3, 4, 5, 6, 7], [0, 1, 2, 3, 4, 5, 6, 7], [0, 1, 2, 3, 4]]}], 'feedback-effect': [{'name': 'turn-skid-dust-effect-count', 'operator': 'eq', 'type': 'integer', 'validator': 'meaningful-observation', 'expected': 1}], 'control-release': [{'name': 'turn-skid-recovery-state', 'operator': 'eq', 'type': 'array', 'validator': 'turn-skid-recovery-v1'}]}
 
 
 def contract():
@@ -47,6 +47,8 @@ def measurements(replay, record):
             for m in motions[ACCELERATION_MOTION_COUNT:]),
             final=final, target=plans[-1]['target']),
         'turn-skid-pair-and-facing': [0, meter['terminal']['player']['facing'], terminal['engineObject']['facing']],
+        'turn-skid-facing-through-drift': [plans[ACCELERATION_MOTION_COUNT]['direction'],
+            plans[ACCELERATION_MOTION_COUNT]['facing'], len(meter['skidFacingFrames'])],
         'turn-skid-motion-schedules': [
             [t['before']['elapsed'] for t in m['ticks']]
             + [m['ticks'][-1]['after']['elapsed']]
@@ -61,7 +63,7 @@ def measurements(replay, record):
 
 
 FAULTS = ('turn-skid-absent-subject', 'turn-skid-bad-elapsed', 'turn-skid-missing-dust',
-          'turn-skid-missing-commit')
+          'turn-skid-missing-commit', 'turn-skid-old-facing')
 
 
 class TurnSkidNegative:
@@ -84,6 +86,16 @@ class TurnSkidNegative:
                               if a.get('handle', {}).get('value') in handles), None)
                 if actor is not None:
                     snapshot['actors'].remove(actor); self.mutated = True; return changed
+        elif self.fault == FAULTS[4]:
+            for snapshot in changed.get('samples', []):
+                actor = next((a for a in snapshot.get('actors', [])
+                              if a.get('handle', {}).get('value') in handles
+                              and a.get('motionKind') == 'SKID'), None)
+                if actor is not None:
+                    snapshot['player']['facing'] = 3
+                    actor['engineObject']['facing'] = 3
+                    self.mutated = True
+                    return changed
         else:
             for event in changed.get('events', []):
                 data = event.get('data', {})

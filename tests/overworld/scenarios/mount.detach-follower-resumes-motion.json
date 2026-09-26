@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.detach-follower-resumes-motion",
+  "title": "Detached Cyndaquil promptly resumes follower motion",
+  "status": "active",
+  "capabilities": ["mount.lifecycle"],
+  "proofLevel": "S4",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/README.md#system-contracts",
+    "actor": "One prepared party Cyndaquil starts idle and mounted in follower slot 7. The same current handle becomes the unmounted Follower.",
+    "trigger": "Press SELECT once to detach, release SELECT by holding RIGHT, and move the player far enough to clear the follower's next tile.",
+    "observable": "The same Cyndaquil emits one Mounted-to-Follower ACTOR_REBOUND and one owned-to-autonomous CONTROL_REBOUND, then creates, accepts, renders, commits and finishes its first normal follower Walk no later than one completed frame after the player clears the follower's next tile.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use private test.sav; teleport to map33 tile584/403; prepare party slot0 as species155 level10 HP1 status0; spawn that party subject mounted, settle16 frames, and bind its current identity. Do not change actor timers, cooldowns, profiles, targets, collision or motion during observation."
+      }
+    ],
+    "limits": [
+      "Prepared party and mount setup do not prove natural acquisition or the mount selection UI.",
+      "The scenario proves only the first normal follower Walk after detach on this clear Route 29 fixture.",
+      "Copied-data controls reject a missing actor, either missing rebound receipt, and a follower held idle past the post-clearance resume bound."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [
+    {"id": "cyndaquil", "species": 155, "role": "MOUNTED", "acquisition": "mount", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}
+  ],
+  "roleProof": [
+    {"role": "Follower", "claim": "live-actor-identity", "measurement": "mount-detach-follower-role"}
+  ],
+  "events": [
+    {"at": 0, "kind": "input", "value": "Press SELECT once to detach the mounted Cyndaquil."},
+    {"at": 1, "kind": "input", "value": "Release SELECT and hold RIGHT until the player moves one normal tile away."},
+    {"at": 2, "kind": "lifecycle", "value": "Observe the same autonomous Follower complete its first normal Walk."}
+  ],
+  "stop": {"frameBudget": 240, "condition": "The first detached follower Walk has completed or the post-clearance resume bound has failed."},
+  "expect": {
+    "requiredEvents": ["ACTOR_REBOUND", "CONTROL_REBOUND", "INTENT_CREATED", "PLAN_ACCEPTED", "MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["MOTION_CANCELED", "ACTOR_DETACHED", "CONTEXT_CHANGED"],
+    "invariants": [
+      "The mounted and follower views name the same current Cyndaquil handle and source object",
+      "Detached control is autonomous with no retained reservation",
+      "The first follower Walk starts no later than one completed frame after the player clears its next tile",
+      "The first follower Walk has contiguous rendered travel, one logical commit and one autonomous control return"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "mount.detach-follower-resumes-motion",
+    "claims": ["natural-input", "live-actor-identity", "profile-resolution", "engine-boundary", "logical-commit", "rendered-motion", "frame-pacing", "control-release"],
+    "minimumFrames": 1
+  }
+}

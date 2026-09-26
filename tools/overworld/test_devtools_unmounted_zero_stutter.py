@@ -290,6 +290,11 @@ class UnmountedZeroStutterTests(unittest.TestCase):
         self.assertEqual(result["failures"], [])
         self.assertEqual(result["hopRhythm"]["profileFingerprint"], FINGERPRINT)
         self.assertEqual(result["hopRhythm"]["profileMask"], MATCHED_MASK)
+        self.assertEqual(
+            result["hopRhythm"]["profileSubjectIdentity"],
+            SUBJECT["subjectIdentity"],
+        )
+        self.assertEqual(result["hopRhythm"]["profileSourceSha256"], SOURCE)
 
     def test_pre_window_field_rebind_rejects_replacement_actor(self):
         meter = UnmountedZeroStutterMeasurement(
@@ -332,6 +337,18 @@ class UnmountedZeroStutterTests(unittest.TestCase):
         self.assertEqual(result["pacing"]["lateMainLoopCount"], 0)
         self.assertEqual(result["pacing"]["sampleCount"], MINIMUM_FRAMES)
         self.assertGreaterEqual(result["spawnWork"]["joinedWitnessCount"], 1)
+        rows = measurements(
+            {"passed": True, "failures": [], "measurements": {KIND: result}},
+            {"sessionId": "test", "sessionCleanup": {
+                "sessionId": "test", "closed": True, "errors": [],
+            }},
+        )
+        self.assertEqual([row["passed"] for row in rows], [True] * 11)
+
+    def test_conditional_final_profile_still_accepts_bound_base_profile(self):
+        result = run()
+        result["subject"]["behaviorFingerprint"] = FINGERPRINT + 1
+        result["subject"]["matchedLayerMask"] = MATCHED_MASK + 1
         rows = measurements(
             {"passed": True, "failures": [], "measurements": {KIND: result}},
             {"sessionId": "test", "sessionCleanup": {

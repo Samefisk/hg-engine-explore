@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.notice-player.routine-return",
+  "title": "Notice Player pauses once and returns to Routine",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/profile-building-blocks-implementation-plan.md#pb9--integrated-verification",
+  "requirements": ["current.notice-player-routine-return"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 600, "noProgressFrames": 180, "minObservedFrames": 1},
+  "subjects": [{"id": "mareep", "species": 179, "role": "WILD", "acquire": "spawn"}],
+  "measurements": [{"kind": "notice-player-runtime-v1", "subject": "mareep"}],
+  "setup": [
+    {"id": "open-area", "op": "teleport", "args": {"map": 33, "x": 585, "z": 406, "facing": 1}, "budget": {"maxSeconds": 30, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "spawn-mareep", "op": "spawn", "args": {"species": 179, "role": "wild", "level": 5, "x": 585, "z": 405}, "budget": {"maxSeconds": 30, "maxFrames": 60, "noProgressFrames": 60}},
+    {"id": "bind-mareep", "op": "bind", "args": {"subject": "mareep"}, "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [{"id": "observe-notice", "op": "wait", "args": {"predicate": {"kind": "measurement-complete", "measurement": "notice-player-runtime-v1", "when": "final"}}, "budget": {"maxSeconds": 90, "maxFrames": 500, "noProgressFrames": 180}}],
+  "assertions": [{"kind": "measurement-complete", "measurement": "notice-player-runtime-v1", "when": "final"}]
+}

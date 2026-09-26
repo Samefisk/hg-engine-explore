@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "id": "world.streaming.stantler-mounted-route",
+  "title": "Mounted Stantler keeps nearby terrain loaded on the 840-frame route",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/README.md#system-contracts and the measured mounted Stantler 840-frame terrain-loss reproduction",
+  "requirements": ["current.mounted-stantler-terrain-route"],
+  "budgets": {"maxSeconds": 360, "maxFrames": 1300, "noProgressFrames": 120, "minObservedFrames": 960},
+  "subjects": [{"id": "stantler", "species": 234, "role": "MOUNTED", "acquire": "existing"}],
+  "setup": [
+    {"id": "route-origin", "op": "teleport", "args": {"map": 33, "x": 585, "z": 402, "facing": 3},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "prepare-own-stantler", "op": "party", "args": {"slot": 0, "species": 234, "level": 10, "hp": 1, "status": 0},
+      "budget": {"maxSeconds": 20, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "mount-own-stantler", "op": "spawn", "args": {"species": 234, "role": "mounted", "slot": 0},
+      "budget": {"maxSeconds": 30, "maxFrames": 180, "noProgressFrames": 120}},
+    {"id": "bind-stantler", "op": "bind", "args": {"subject": "stantler"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "route-right-1", "op": "step", "args": {"frames": 120, "keys": ["RIGHT"]},
+      "budget": {"maxSeconds": 70, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "route-right-2", "op": "step", "args": {"frames": 120, "keys": ["RIGHT"]},
+      "budget": {"maxSeconds": 70, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "route-up-1", "op": "step", "args": {"frames": 120, "keys": ["UP"]},
+      "budget": {"maxSeconds": 70, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "route-left-1", "op": "step", "args": {"frames": 120, "keys": ["LEFT"]},
+      "budget": {"maxSeconds": 70, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "route-left-2", "op": "step", "args": {"frames": 120, "keys": ["LEFT"]},
+      "budget": {"maxSeconds": 70, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "route-up-2", "op": "step", "args": {"frames": 120, "keys": ["UP"]},
+      "budget": {"maxSeconds": 70, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "route-down", "op": "step", "args": {"frames": 120, "keys": ["DOWN"]},
+      "budget": {"maxSeconds": 70, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "route-terrain", "op": "terrain", "args": {"radius": 1},
+      "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "recovery-right", "op": "step", "args": {"frames": 120, "keys": ["RIGHT"]},
+      "budget": {"maxSeconds": 70, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "recovery-terrain", "op": "terrain", "args": {"radius": 2},
+      "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "assertions": [
+    {"kind": "actor-field", "subject": "stantler", "path": "identityVerified", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "actor-field", "subject": "stantler", "path": "presentationAttached", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "frame-count", "operator": "gte", "value": 960}
+  ]
+}

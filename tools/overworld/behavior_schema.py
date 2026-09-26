@@ -1,4 +1,4 @@
-"""Canonical v78 behavior schema validation and deterministic code generation."""
+"""Canonical v81 behavior schema validation and deterministic code generation."""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ DISPLAY_UNITS = {
     "pixels": "px",
     "moves": "moves",
     "pokemon": "Pokémon",
+    "strength": "level",
 }
 FIELD_KEYS = {
     "id", "key", "path", "cType", "offset", "unit", "bounds", "lane",
@@ -56,12 +57,12 @@ def validate_schema(schema: dict[str, Any]) -> None:
     _require(isinstance(schema, dict), "schema root must be an object")
     _require(set(schema) == TOP_LEVEL_KEYS, "schema root keys are not exact")
     _require(schema["schemaVersion"] == 2, "unsupported schemaVersion; expected 2")
-    _require(schema["blobVersion"] == 78, "schema must describe blob v78")
+    _require(schema["blobVersion"] == 81, "schema must describe blob v81")
     _require(schema["compactSize"] == 72, "compact layout must remain 72 bytes")
-    _require(schema["tailPadding"] == 0, "compact v77 must use all 72 bytes")
+    _require(schema["tailPadding"] == 0, "compact v81 must use all 72 bytes")
     _require(schema["compactCType"] == "OverworldWildBehaviorProfileData", "unexpected compact C type")
     fields = schema["fields"]
-    _require(isinstance(fields, list) and len(fields) == 72, "schema must contain exactly 72 fields")
+    _require(isinstance(fields, list) and len(fields) == 75, "schema must contain exactly 75 fields")
     lanes = set(schema["lanes"])
     operators = set(schema["operatorKinds"])
     features = set(schema["featureIds"])
@@ -98,7 +99,7 @@ def validate_schema(schema: dict[str, Any]) -> None:
         storage_max = (1 << (8 * TYPE_SIZES[field["cType"]])) - 1
         _require(0 <= bounds["min"] <= bounds["max"] <= storage_max, f"{prefix}.bounds exceed {field['cType']}")
         _require(isinstance(field["editorNumeric"], bool), f"{prefix}.editorNumeric must be boolean")
-        _require(isinstance(field["introducedIn"], int) and field["introducedIn"] <= 78, f"{prefix}.introducedIn is invalid")
+        _require(isinstance(field["introducedIn"], int) and field["introducedIn"] <= 81, f"{prefix}.introducedIn is invalid")
         mask = field["mask"]
         _require(set(mask) == {"word", "bit", "symbol"}, f"{prefix}.mask keys are not exact")
         _require(mask["word"] in (1, 2, 3) and 0 <= mask["bit"] < 32, f"{prefix}.mask position is invalid")
@@ -141,7 +142,7 @@ def validate_schema(schema: dict[str, Any]) -> None:
         seen_masks.add((mask["word"], mask["bit"]))
     expected_bits = set(range((schema["compactSize"] - schema["tailPadding"]) * 8))
     _require(occupied_bits == expected_bits, "fields must cover bytes 0-71 exactly")
-    expected_mask_counts = {1: 27, 2: 15, 3: 30}
+    expected_mask_counts = {1: 30, 2: 15, 3: 30}
     for word, count in expected_mask_counts.items():
         bits = sorted(bit for mask_word, bit in seen_masks if mask_word == word)
         _require(bits == list(range(count)), f"override mask word {word} must use contiguous bits 0-{count - 1}")
@@ -217,17 +218,40 @@ def migration_metadata(schema: dict[str, Any]) -> dict[str, Any]:
     return {
         "currentBlobVersion": schema["blobVersion"],
         "versions": [{
-            "version": 78,
+            "version": 79,
             "fieldKeys": [
                 field["key"] for field in schema["fields"]
-                if not field.get("reserved")
+                if not field.get("reserved") and field["introducedIn"] <= 79
             ],
+        }, {
+            "version": 80,
+            "fieldKeys": [
+                field["key"] for field in schema["fields"]
+                if not field.get("reserved") and field["introducedIn"] <= 80
+            ],
+        }, {
+            "version": 81,
+            "fieldKeys": [field["key"] for field in schema["fields"]],
         }],
-        "v77ToV78": {
+        "v78ToV79": {
             "preservesCompactSize": True,
             "changes": [
-                "Active profile binding and old alert-condition fields are removed.",
-                "Their compact bytes remain reserved so the profile stays 72 bytes.",
+                "Three reserved bytes become shared Vision range, cone, and adjacent-awareness fields.",
+                "The compact profile remains 72 bytes.",
+            ],
+        },
+        "v79ToV80": {
+            "preservesCompactSize": True,
+            "changes": [
+                "The remaining reserved owner-lane byte becomes Walk horizontal sway.",
+                "Walk sway no longer shares the packed Walk options field.",
+            ],
+        },
+        "v80ToV81": {
+            "preservesCompactSize": True,
+            "changes": [
+                "Reserved byte 16 stores four independent mounted Walk presentation controls.",
+                "All existing movement fields and offsets remain unchanged.",
             ],
         },
     }

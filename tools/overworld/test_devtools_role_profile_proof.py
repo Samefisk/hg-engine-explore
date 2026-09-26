@@ -9,13 +9,14 @@ from tools.overworld.devtools_role_profile_proof import inspect_transfer,inspect
 from tools.overworld import test_devtools_role_profile as reader_tests
 
 
-def endpoints(events):
+def endpoints(events, witness=WITNESS):
     # Explicitly synthetic host snapshots, NOT saved native endpoint evidence.
     owner=events[0]["data"]["ownerBefore"]
     actor=dict(**deepcopy(owner["publicSubject"]),active=True,presentationAttached=True,identityVerified=True,
         engineIdentity=deepcopy(owner["engineIdentity"]),lane="OWNER",inputOwnership=0)
-    mon=dict(slot=2,species=56,personality=WITNESS["subjectIdentity"],form=0,level=3,
-             identityVerified=True,isEgg=False,hp=20)
+    mon=dict(slot=2,species=witness["species"],personality=witness["subjectIdentity"],
+             form=witness["form"],level=witness["level"],
+             identityVerified=True,isEgg=False,hp=1,status=0)
     initial=dict(frame=events[0]["frame"]-1,nativeCycle=events[0]["data"]["entryNativeCycle"]-1,
         fieldAvailable=True,observationBoundary="main-task-queue-completion",context=deepcopy(owner["context"]),
         actors=[actor],party=[{}, {},mon],selector={"activeFollowerPartySlot":2})
@@ -37,16 +38,27 @@ class RoleProfileProofTests(unittest.TestCase):
             beforeClock=dict(frame=733,nativeCycle=1860),afterClock=dict(frame=733,nativeCycle=1860))
         return events,initial,final
 
-    def fixture(self):
+    def fixture(self, witness=WITNESS):
         r,s,a,source,engine,regs,put,_=reader_tests.RoleProfileTests().fixture()
-        a.update(WITNESS);source.update(species=56,personality=WITNESS["subjectIdentity"],level=3)
+        a.update(witness);source.update(species=witness["species"],personality=witness["subjectIdentity"],
+                                        form=witness["form"],level=witness["level"])
         g=r.getter_after(r.getter_before(),{})
-        regs.r0=s.field_pointer();regs.r1=0x02212000
-        binding=struct.pack("<IHHHHBBBB",WITNESS["subjectIdentity"],56,33,3,4,0,3,2,0)
-        put(regs.r1,binding);put(regs.sp,struct.pack("<I",0x02213000))
+        follower_profile=bytearray.fromhex(g["profileHex"])
+        follower_profile[11]^=1
+        g["profileHex"]=follower_profile.hex()
+        mounted_profile=bytes(range(144))
+        put(regs.r2,mounted_profile)
+        regs.r0=s.field_pointer();regs.r1=0x02212000;regs.r3=0x02213000
+        binding=struct.pack("<IHHHHBBBB",witness["subjectIdentity"],witness["species"],33,3,4,
+                            witness["form"],witness["level"],2,0)
+        transaction=0x027E3100
+        put(regs.r1,binding);put(regs.sp,struct.pack("<I",transaction))
+        put(transaction,struct.pack("<IIII",3,4,0,0))
         before=r.mount_before()
-        put(r.mount_state,struct.pack("<II",s.field_pointer(),0x02213000)+bytes(range(72))+binding+
+        put(transaction,struct.pack("<IIII",3,4,1,2))
+        put(r.mount_state,struct.pack("<II",s.field_pointer(),0x02213000)+mounted_profile[:72]+binding+
             struct.pack("<IBBBB",7,1,0,0,0))
+        a.update(behaviorFingerprint=3,matchedLayerMask=4)
         m=r.mount_after(before,{"returnValue":1})
         events=[]
         for seq,name,data in ((194,"role-profile-getter",g),(198,"role-profile-mount",m)):
@@ -54,7 +66,10 @@ class RoleProfileProofTests(unittest.TestCase):
                 "observation":name,"sequence":seq,"entryActorFrame":300,"returnActorFrame":300,
                 "entryNativeCycle":1860,"returnNativeCycle":1860,"setupMode":"prepared",
                 "returnValue":None if name.endswith("getter") else 1,**data}))
-        return events,*endpoints(events)
+        initial,final=endpoints(events,witness)
+        final["actors"][0]["behaviorFingerprint"]=3
+        final["actors"][0]["matchedLayerMask"]=4
+        return events,initial,final
 
     def test_exact_transfer_is_detached_and_not_input_or_motion_acceptance(self):
         e,i,f=self.fixture();old=deepcopy((e,i,f));p=inspect_transfer(e,i,f)
@@ -64,7 +79,7 @@ class RoleProfileProofTests(unittest.TestCase):
         self.assertEqual((e,i,f),old)
 
     def test_wrong_owner_bytes_missing_calls_and_clock_controls(self):
-        for fault in ("pid","object","role","lane","ownership","profile","primitives","ownerbytes",
+        for fault in ("pid","object","role","lane","ownership","profile","mounted-policy","ownerbytes",
                       "missing-getter","missing-mount","duplicate-mount","clock","stale","party","pointer","heap"):
             e,i,f=self.fixture();g=e[0]["data"];m=e[1]["data"]
             if fault=="pid":f["actors"][0]["subjectIdentity"]+=1
@@ -73,7 +88,7 @@ class RoleProfileProofTests(unittest.TestCase):
             if fault=="lane":f["actors"][0]["lane"]="TIRED"
             if fault=="ownership":f["actors"][0]["inputOwnership"]=0
             if fault=="profile":m["profileHex"]="ff"+m["profileHex"][2:]
-            if fault=="primitives":m["primitivesHex"]="ff"+m["primitivesHex"][2:]
+            if fault=="mounted-policy":m["mountedPolicyFingerprint"]^=1
             if fault=="ownerbytes":m["ownerHex"]="ff"+m["ownerHex"][2:]
             if fault=="missing-getter":e.pop(0)
             if fault=="missing-mount":e.pop()
@@ -81,7 +96,7 @@ class RoleProfileProofTests(unittest.TestCase):
             if fault=="clock":m["entryNativeCycle"]-=1
             if fault=="stale":f["context"]["mapGeneration"]+=1
             if fault=="party":f["party"][2]["personality"]+=1
-            if fault=="pointer":m["profilePointer"]+=4
+            if fault=="pointer":m["profilePointer"]=1
             if fault=="heap":m["owner"]["heapGeneration"]+=1
             with self.subTest(fault=fault),self.assertRaises(ValueError):inspect_transfer(e,i,f)
 
@@ -91,9 +106,10 @@ class RoleProfileProofTests(unittest.TestCase):
         original=path.read_bytes()
         events=json.loads(original)["receipt"]["profileObservation"]["events"]
         initial,final=endpoints(events)
-        proof=inspect_transfer(events,initial,final)
-        self.assertEqual(proof["getterSequence"],195)
-        self.assertEqual(proof["mountSequence"],198)
+        # This old-ROM receipt bound Follower bytes as Mounted. It is retained
+        # as a rejected regression witness, not current mounted proof.
+        with self.assertRaisesRegex(ValueError,"Follower-only profile"):
+            inspect_transfer(events,initial,final)
         self.assertEqual(path.read_bytes(),original)
 
     def test_copied_controls_and_no_input_mutation(self):

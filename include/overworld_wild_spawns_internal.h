@@ -6,6 +6,7 @@
 #define OW_WILD_SPAWN_ENTRY_NONE 0
 #define OW_WILD_SPAWN_ENTRY_MOVE 1
 #define OW_WILD_SPAWN_ENTRY_HOP 2
+#define OW_WILD_SPAWN_ENTRY_FLY_IN 3
 #include "overworld_wild_behavior_data.h"
 #include "overworld_wild_movement.h"
 #include "overworld_actor_system.h"
@@ -94,6 +95,11 @@ typedef enum OverworldWildDespawnAuthorization {
     OW_WILD_DESPAWN_CLEAR_LOGICAL_ONLY,
     OW_WILD_DESPAWN_DELETE_VERIFIED_OBJECT,
 } OverworldWildDespawnAuthorization;
+
+typedef enum OverworldWildActorControlMode {
+    OW_WILD_ACTOR_CONTROL_AUTONOMOUS = 0,
+    OW_WILD_ACTOR_CONTROL_HELD,
+} OverworldWildActorControlMode;
 
 typedef struct OverworldWildSpawn {
     LocalMapObject *object;
@@ -251,6 +257,7 @@ typedef struct OverworldWildSpawnState {
     s16 followerReleaseX;
     s16 followerReleaseY;
     u8 followerReleaseState;
+    u8 movementActorControlModes[OW_WILD_MAX_SPAWNS];
 } OverworldWildSpawnState;
 
 typedef char OverworldWildActiveFollowerPartySlotOffsetMustRemain3A5[
@@ -261,6 +268,10 @@ typedef char OverworldWildCaptureTargetMaskOffsetMustRemain3A6[
     offsetof(OverworldWildSpawnState, captureTargetMask) == 0x3A6 ? 1 : -1];
 typedef char OverworldWildFollowerReleaseStateOffsetMustRemain3AC[
     offsetof(OverworldWildSpawnState, followerReleaseState) == 0x3AC
+        ? 1
+        : -1];
+typedef char OverworldWildActorControlModesOffsetMustRemain3AD[
+    offsetof(OverworldWildSpawnState, movementActorControlModes) == 0x3AD
         ? 1
         : -1];
 

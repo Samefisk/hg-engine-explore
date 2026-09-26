@@ -6,7 +6,6 @@
 #pragma GCC optimize("no-if-conversion", "no-tree-loop-optimize", "no-tree-ter")
 
 #define OVERWORLD_HOP_OBSTACLE_CLEARANCE_FX32 (1 << FX32_SHIFT)
-#define OVERWORLD_HOP_OFFSCREEN_DISTANCE 16
 #define OVERWORLD_HOP_PLANNER_CODE \
     __attribute__((section(".overworld_actor_hop_planner_code"), noinline, \
         optimize("Os")))
@@ -87,10 +86,11 @@ OverworldActorHopPlanner_PlanTrajectory(
     u32 totalFrames;
     u32 arcHeightQ4;
     u32 tileIndex;
+    BOOL spawnEntry = (call->spotState
+        & OVERWORLD_ACTOR_HOP_PLAN_FLAG_SPAWN_ENTRY) != 0;
 
-    if (lane == NULL || call->fieldSystem == NULL
-        || call->surfaceCatalog == NULL || call->object == NULL
-        || call->distance == 0) {
+    /* The resident caller owns the catalog and object lifetime. */
+    if (lane == NULL || call->fieldSystem == NULL || call->distance == 0) {
         return OVERWORLD_MOTION_DECISION_PROFILE;
     }
     if (call->operation == OVERWORLD_ACTOR_HOP_PLAN_FLAT_TRAJECTORY) {
@@ -102,7 +102,9 @@ OverworldActorHopPlanner_PlanTrajectory(
         arcHeightQ4 = 0;
     } else {
         trajectory = OVERWORLD_WILD_SURFACE_SERVICE_ENTRY->calculateJumpTrajectory(
-            lane->hopTime,
+            spawnEntry
+                ? lane->spawnHopTime
+                : lane->hopTime,
             call->distance,
             call->targetBaseY - call->startBaseY,
             lane->hopElevationTimeScale
@@ -133,7 +135,7 @@ OverworldActorHopPlanner_PlanTrajectory(
             (call->targetY << 16) + 0x8000,
             tileIndex,
             call->distance) >> 16;
-        if (call->distance != OVERWORLD_HOP_OFFSCREEN_DISTANCE) {
+        if (!spawnEntry) {
             if (!OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY->querySurface(
                     call->fieldSystem,
                     call->surfaceCatalog,
@@ -198,7 +200,7 @@ OverworldActorHopPlanner_PlanTrajectory(
                 continue;
             }
             if (call->operation == OVERWORLD_ACTOR_HOP_PLAN_FLAT_TRAJECTORY
-                || lane->hopAllowVerticalObstacles != 1) {
+                || (!spawnEntry && lane->hopAllowVerticalObstacles != 1)) {
                 return OVERWORLD_MOTION_DECISION_BLOCKED;
             }
             required = (u32)(obstructionDelta / unitArc) + 1;

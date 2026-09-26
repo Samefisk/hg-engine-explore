@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.stantler-sprint-obstacle-hop",
+  "title": "Mounted Sprint crosses one static obstacle and resumes Walk",
+  "status": "active",
+  "capabilities": ["hop", "mount.lifecycle", "walk.acceleration"],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "data/overworld_behavior_profiles.json",
+    "actor": "One prepared current Mounted Stantler (species 234, party slot 0) at map 33 tile (580,397)",
+    "trigger": "Hold Right toward the blocked static tile (581,397), release during the two-tile Hop to (582,397), then hold Right through normal Walk acceleration",
+    "observable": "Exactly one natural two-tile forward Hop starts from (580,397), crosses blocked (581,397), commits at (582,397), and returns control. Its duration is twice current Sprint Walk speed. On the clear side, the same Stantler resumes one-tile cardinal Walk and reaches speed 4 without another Hop.",
+    "setupAudit": "complete",
+    "setupMutations": [{
+      "phase": "before-observation",
+      "target": "fixture",
+      "change": "Use a disposable save, checked map 33 teleport to (580,397), prepared party slot 0 Stantler, native Mounted spawn and exact-subject bind. Do not edit profile, speed, Hop target, timers or input during observation."
+    }],
+    "limits": [
+      "Prepared party and position do not prove natural capture, selection or spawning.",
+      "Retained native terrain readback identified map 33 (581,397) as static blocked, with clear start (580,397) and landing (582,397). This actor reader checks the exact Hop route but does not re-read collision during this run.",
+      "This proves one eastward static obstacle and normal recovery, not arbitrary obstacles, Wild AI choices, map transitions or long-term movement.",
+      "Copied-data controls reject a short landing, wrong origin, wrong timing, lost commit, reset Walk speed and changed actor. The separate owner-reader control must remain accepted."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "stantler", "species": 234, "role": "MOUNTED", "acquisition": "mount",
+    "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Place the player at (580,397), prepare and mount own Stantler, then bind the live actor"},
+    {"at": 1, "kind": "input", "value": "Hold Right until the obstacle Hop starts"},
+    {"at": 2, "kind": "input", "value": "Release Right and observe the Hop terminal boundary"},
+    {"at": 3, "kind": "input", "value": "Hold Right again until normal Sprint Walk reaches speed 4"}
+  ],
+  "stop": {"frameBudget": 240, "condition": "One two-tile obstacle Hop has committed and returned control, then same-actor cardinal Walk reaches speed 4"},
+  "expect": {
+    "requiredEvents": ["MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["MOTION_CANCELED", "CONTEXT_CHANGED", "ACTOR_REBOUND", "CONTROL_REBOUND"],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "mount.stantler-sprint-obstacle-hop",
+    "claims": ["natural-input", "live-actor-identity", "collision-decision", "logical-commit", "frame-pacing", "control-release"],
+    "minimumFrames": 16}
+}

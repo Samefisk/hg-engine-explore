@@ -147,6 +147,26 @@ class LiveIdentityTests(unittest.TestCase):
 
 
 class MotionRecorderTests(unittest.TestCase):
+    def test_fly_in_waits_for_logical_landing_after_rendered_commit(self):
+        recorder = MotionRecorder()
+        actor = actor_state()
+        actor.update(motionKind="FLY_IN")
+        for frame in range(1, 4):
+            actor["motionElapsed"] = frame
+            recorder.observe(frame, actor, rendered(frame))
+
+        actor.update(motionPhase="IDLE", motionKind="NONE",
+                     motionElapsed=4, commitSequence=1)
+        recorder.observe(4, actor, rendered(4))
+        self.assertIsNotNone(recorder.current)
+        self.assertEqual(recorder.completed, [])
+
+        actor["logical"] = copy.deepcopy(actor["target"])
+        recorder.observe(5, actor, rendered(4))
+        self.assertEqual(recorder.failures, [])
+        self.assertEqual(len(recorder.completed), 1)
+        self.assertEqual(recorder.completed[0]["terminalLogical"], [2, 2])
+
     def test_two_frame_successor_keeps_the_observed_prior_endpoint(self):
         for dx, dz in ((1,0),(-1,0),(0,1),(0,-1),(1,1)):
             for fault in (None, 'old-logical', 'new-logical', 'pose', 'gap', 'commit'):

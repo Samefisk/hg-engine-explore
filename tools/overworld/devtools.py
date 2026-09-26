@@ -327,6 +327,10 @@ class Service:
     def _start(self, args):
         if self.worker is not None:
             raise DevtoolsError("session-exists", "Stop or reset the current session first.")
+        spawn_height_control = args.get("_spawnHeightControl", False)
+        if type(spawn_height_control) is not bool or set(args) - {
+                "rom", "save", "mode", "_spawnHeightControl"}:
+            raise ValueError("internal start arguments differ")
         rom = (self.root / args["rom"]).resolve()
         save = (self.root / args["save"]).resolve()
         if rom.suffix.lower() != ".nds" or save.suffix.lower() not in {".dsv", ".sav"}:
@@ -355,7 +359,7 @@ class Service:
         self.recording = None
         self.recording_active = False
         self.last_error = None
-        self.start_args = deepcopy(args)
+        self.start_args = {key: deepcopy(args[key]) for key in ("rom", "save", "mode")}
         self.session = {"id": self.directory.name, "state": "starting", "mode": args["mode"],
                         "acceptedProof": False, "startedAt": _utc(), "directory": str(self.directory)}
         try:
@@ -379,7 +383,12 @@ class Service:
             self.worker = self.worker_factory(self.root, self.directory)
             self.worker.job_deadline = getattr(self, "job_deadline", None)
             self.worker.job_cancel = getattr(self, "job_cancel", None)
-            result = self.worker.call("open", {"rom": identity["rom"]["copy"], "save": identity["save"]["copy"], "sessionDir": str(self.directory)})
+            result = self.worker.call("open", {
+                "rom": identity["rom"]["copy"],
+                "save": identity["save"]["copy"],
+                "sessionDir": str(self.directory),
+                "spawnHeightControl": spawn_height_control,
+            })
             self._observe(result)
             self.session["state"] = "ready"
             self._persist()

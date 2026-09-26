@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.stantler-sprint-obstacle-hop",
+  "title": "Mounted Sprint Stantler Hops one blocked tile then resumes Walk",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "data/overworld_behavior_profiles.json",
+  "requirements": ["current.mounted-stantler-obstacle-hop"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 240, "noProgressFrames": 120, "minObservedFrames": 16},
+  "subjects": [{"id": "stantler", "species": 234, "role": "MOUNTED", "acquire": "existing"}],
+  "setup": [
+    {"id": "blocked-sprint-front", "op": "teleport", "args": {"map": 33, "x": 580, "z": 397, "facing": 3},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "own-stantler", "op": "party", "args": {"slot": 0, "species": 234, "level": 50, "hp": 1, "status": 0},
+      "budget": {"maxSeconds": 15, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "mount-own-stantler", "op": "spawn", "args": {"species": 234, "role": "mounted", "slot": 0},
+      "budget": {"maxSeconds": 30, "maxFrames": 180, "noProgressFrames": 120}},
+    {"id": "bind-stantler", "op": "bind", "args": {"subject": "stantler"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "right-into-blocked-front", "op": "step", "args": {"frames": 32, "keys": ["RIGHT"],
+      "until": {"kind": "actor-field", "subject": "stantler", "path": "motionKind", "operator": "eq", "value": "HOP"}},
+      "budget": {"maxSeconds": 20, "maxFrames": 32, "noProgressFrames": 32}},
+    {"id": "release-through-hop", "op": "step", "args": {"frames": 48, "keys": [],
+      "until": {"kind": "actor-field", "subject": "stantler", "path": "motionPhase", "operator": "eq", "value": "IDLE"}},
+      "budget": {"maxSeconds": 25, "maxFrames": 48, "noProgressFrames": 48}},
+    {"id": "walk-after-obstacle", "op": "step", "args": {"frames": 64, "keys": ["RIGHT"],
+      "until": {"kind": "actor-field", "subject": "stantler", "path": "movementPolicy.speed", "operator": "eq", "value": 4}},
+      "budget": {"maxSeconds": 30, "maxFrames": 64, "noProgressFrames": 64}}
+  ],
+  "assertions": [
+    {"kind": "actor-field", "subject": "stantler", "path": "identityVerified", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "actor-field", "subject": "stantler", "path": "presentationAttached", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "frame-count", "operator": "gte", "value": 16}
+  ]
+}

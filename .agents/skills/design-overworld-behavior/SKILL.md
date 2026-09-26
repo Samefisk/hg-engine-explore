@@ -1,150 +1,166 @@
 ---
 name: design-overworld-behavior
-description: Design or refine hg-engine overworld Pokémon behavior from reusable profile layers. Use when the user asks how a Pokémon should move, requests a full behavior or one archetype, capability, attitude, or style trait, or wants a behavior made ready for personal playtesting. Use author-overworld-profile for the later catalog edit and mechanical proof.
+description: Design or refine hg-engine overworld Pokémon behavior by composing reusable Routine, Placement, Capability, Attitude, Style, Follower/Mount, and Modifier profiles. Use for a full Pokémon behavior, one reusable behavior block, a conditional response, or a playtest-ready design. Use author-overworld-profile for the later catalog edit and mechanical proof.
 ---
 
 # Design overworld behavior
 
-Design the smallest clear behavior that makes the Pokémon feel alive. Match the
-scope the user requested: a full behavior, one layer, advice only, or an
-implemented and testable iteration. Do not add the other layers when the user
-asked for only an archetype, capability, attitude, or style trait.
+Design the smallest clear composition that makes the Pokémon feel alive. Match
+the user's scope: advice only, one reusable block, a complete composition, or
+an implemented playtest iteration. Do not add unrelated blocks.
 
-## Use the layer model
+Use the terms in [`CONTEXT.md`](../../../CONTEXT.md). Read the target catalog
+and authoring rules in
+[`authoring-debugging.md`](../../../documentation/overworld-system/authoring-debugging.md#profile-building-block-model)
+before naming a new block.
 
-The complete root profile is always present. It supplies valid values, so an
-override profile does not need to be complete. Do not call an archetype the
-root or base profile.
+## Compose building blocks
 
-Compose behavior in this design order:
+The complete `Default` root is always present. It supplies valid values. Each
+override profile should express one visible idea and use one classification:
 
-1. **Archetype** — exactly one. It gives the Pokémon its normal movement
-   language and rhythm. Examples include Bird, Flying insect, and Scavenger.
-2. **Capabilities** — zero or more. Each grants one substantial, reusable thing
-   the Pokémon can do when the game finds it appropriate. Examples include
-   Throwing, Aggressive Ram, and Canopy Hopper. A capability does not need to
-   own its trigger.
-3. **Attitude** — zero or one at a time. It says what the Pokémon wants and how
-   it relates to the player or world: aggressive, avoidant, curious, and so on.
-   No attitude layer means neutral.
-4. **Style traits** — zero or more compatible traits. They change how the
-   chosen behavior is performed. For example, Rash can make an Aggressive
-   approach faster and less careful.
-5. **Follower/Mount** — runtime role layers. Apply them after the Pokémon's
-   normal archetype, capabilities, attitude, and style traits so the role can
-   adapt the composed behavior for following or mounting without becoming the
-   Pokémon's normal identity.
-6. **Modifiers** — reserved for later small numeric changes derived from facts
-   such as stats, size, or nature. The current authoring context does not expose
-   the agreed inputs or rules. Do not invent or author this layer yet.
+1. **Routine** — ordinary movement language and rhythm. Examples: Meander,
+   Sprint, Small Bird Hop, and Idle.
+2. **Placement** — spawn or world-placement rule. Examples: Fly In, Canopy
+   Access, and Flower Bed.
+3. **Capability** — one reusable ability or permission. Examples: Teleport,
+   Long Hop, Throw, and Ram.
+4. **Attitude** — one reusable response or relationship. Examples: Startled,
+   Playful, Ambush, and Skittish.
+5. **Style** — a compatible change to how movement looks. Waddle is a Style.
+6. **Follower/Mount** — a System-owned role adaptation.
+7. **Modifier** — a final small or System-owned override. Asleep is a
+   Modifier.
 
-Keep profile applications in this same order: archetypes first, then
-capabilities, attitudes, style traits, Follower/Mount, and modifiers last. A
-later layer may refine an earlier result, so do not append a capability after
-an attitude merely to avoid moving an existing application. The resolver uses
-the application array order; profile definition order does not compose the
-behavior. Keep a conditional helper beside the layer that owns it.
+Applications use this order. Later matching profiles override earlier values
+field by field. Manual order inside one classification is meaningful. A
+complete Pokémon design can use several blocks from one classification when
+their fields and visible purposes are compatible.
 
-Profiles compose only through their local operators. A parent supplies
-authoring inheritance; profile applications create the behavior stack. One
-resolved field has one value. When two desired ideas need the same field,
-choose the result that best sells the Pokémon instead of describing both as
-simultaneously active.
+An archetype is only informal shorthand for the final composition. It is not a
+saved classification. Do not create a large profile merely because the whole
+composition needs a name.
 
-The layer model is the design target, not a claim that every current profile is
-already cleanly separated. Inspect a reused profile's local operators. Preserve
-its established result unless the requested behavior needs a split; do not
-turn ordinary behavior work into an unrelated taxonomy cleanup.
+Conditional and System are badges, not classifications. Follower, Mounted,
+and Asleep are visible System profiles, but they cannot be assigned as ordinary
+Pokémon layers. Mounted is an empty override and inherits all fields from the
+selected Pokémon profiles. Being carried is internal held actor control; it is
+not a profile.
 
-### Conditions and lanes
+## Keep one visible idea per block
 
-Design the Owner and Tired results. There is no Active lane. A conditional
-profile changes the same resolved Owner/Tired behavior only while one of its
-owned conditions is active. Entries inside one profile are independent and the
-last listed active entry wins. Different conditional profiles compose in normal
-application order.
+A block can own several fields when they support one visible result. Sprint can
+own fast Walk, acceleration, skids, and its occasional forward Hop because they
+together produce one running Routine. Long Hop owns only long-Hop tuning, so it
+can combine with Scavenger without copying that Routine.
 
-Decide whether a response is while-true or timed. For timed responses, choose
-duration and cooldown separately. Choose whether the condition targets the
-player, one matching Pokémon, or no target. The controller evaluates at the
-next intent boundary and never interrupts an accepted motion.
+Do not hide spawn, reaction, tired, and ordinary movement rules in one large
+profile. Split them by visible responsibility. Reuse an existing block when it
+already expresses the requested idea.
 
-### Archetype
+Profiles compose only through local field operators. One resolved field has
+one value. When two ideas write the same field, inspect the application order
+and choose the intended winner. Do not describe both values as simultaneous.
 
-Assign the closest existing archetype first. Create another only when a useful
-group of Pokémon has no convincing home. Keep the roster conservative, but do
-not force a clearly homeless group into a poor fit.
+## Design conditional behavior
 
-An evolution normally keeps its archetype. Change it only when its body, role,
-or movement identity changes enough that the old movement language no longer
-fits. Do not use evolution stage itself as a movement modifier.
+A conditional profile owns every fact needed to activate it:
 
-Treat the current `nervous-scavenger` profile as the Scavenger archetype. The
-stable ID retains its old wording for compatibility; the displayed name is
-`Scavenger`. Its alert, spawn, and lane-link values are established archetype
-behavior, not a reason to split it during an unrelated request.
+- its ordered condition entries;
+- each entry's subject pool;
+- its predicate and Vision choice when needed;
+- while-true or timed activation;
+- duration and cooldown for timed activation;
+- no target, the player, or one compatible actor.
 
-### Capability
+It has no normal Pokémon assignment. The Workshop derives its faded overview
+members from the union of its condition subject pools.
 
-A capability owns only the fields needed to grant and tune its substantial
-mechanic or movement permission. It does not own general attitude or ordinary
-movement rhythm. Keep small gestures inside the archetype, attitude, or style;
-do not create profiles such as `Mareep electric hop` or `Startle hop` merely to
-hold one small flourish.
+Condition entries in one profile are independent and do not stack. If several
+entries are admitted, the last listed entry wins for that profile. Different
+conditional profiles still compose in normal application order. One condition
+captures at most one target. A timed trigger restarts duration when it
+retriggers, and it cannot retrigger during cooldown. A changed condition takes
+effect at the next intent boundary; accepted motion finishes.
 
-Canopy Hopper is a capability. Its base application only grants canopy terrain
-permission. Its conditional child owns the Hop primitive and its canopy Hop
-tuning. For entry, resolve that child against the chosen canopy destination
-before normal ground collision can reject the tree. This leaves the Pokémon's
-normal land primitive and land Hop tuning unchanged. It does not own general
-chase, spawn, population, attitude, or ordinary movement rhythm.
+Use a named pool when the same Pokémon set has a real reused meaning. Use an
+inline pool for a one-off set. A named pool can be used by a normal assignment,
+a condition subject, or an actor-target filter, but it cannot contain another
+pool. `Baby Pokémon` and `Playful Pokémon` are shared pools. Teleport and
+Stalker keep direct membership lists; do not create a synthetic spectral pool.
 
-### Attitude and style
+## Use Vision consistently
 
-Attitude owns intent, targets, attention, and the response to the player or
-environment. It may tune travel time, stamina, pauses, and similar intensity,
-but it must preserve the archetype's movement primitive. Skittish can speed up
-a bird's hops; it cannot turn the bird into a walker.
+Vision is one shared actor service. The standard Vision is a three-tile,
+90-degree forward cone with adjacent awareness, blocked by solid terrain.
+Actors do not block sight.
 
-Only one attitude is active. A conditional attitude can replace the normal
-attitude while its condition holds, then normal resolution returns when the
-condition ends. Capabilities and compatible style traits remain. A trait such
-as Rash can stack with Aggressive because Rash is style, not a second attitude.
+Use **Current Vision** by default. It is resolved from `Default`, normal
+applications, and a forced-role profile when the actor binds. Conditional
+applications are excluded, so a conditional profile cannot change the Vision
+that activates itself.
+
+Use **Custom Vision** only when one condition needs a deliberate exception.
+The custom value belongs to that condition and does not change the actor's
+Current Vision. Vision is evaluated at intent boundaries, not each frame.
+
+## Respect Placement and control ownership
+
+Fly In is a Placement for birds and flying insects. It begins offscreen at
+flying height, descends to a prevalidated destination, lands at that surface's
+exact height, and then hands control to the normal Routine. It is not a long
+Hop and has no per-profile timing controls.
+
+Hop From Off Screen is the separate eight-tile Hop effect used by blocks such
+as Floaty Bounce and Long Hop. Do not use it to imitate flight.
+
+Held actor control owns pickup, carry, throw, drop, cancel, and release. Do not
+design a Picked Up profile or behavior class.
 
 ## Design the behavior
 
-1. Write one short motion sentence that names the feeling and the key visible
-   behavior. Example: “Mareep moves in calm grazing bursts and gives one small
-   hop when startled.”
+1. Write one short motion sentence that names the feeling and key visible
+   action. Example: “Mareep meanders calmly, notices the player, then resumes
+   grazing.”
 2. Inspect the subject's current resolved behavior and provenance. Do not infer
-   its result from profile names alone.
-3. Choose the closest archetype. Add only the requested capabilities, attitude,
-   and style traits that support the motion sentence. Keep Follower/Mount after
-   those layers and modifiers last.
-4. Tune the clear center of the behavior first: primitive, target, movement
-   chain, travel time, pause, and response. Preserve the archetype primitive
-   when tuning attitude or style.
-5. Refine with the existing chance and variance fields only after the main
-   rhythm feels right. Use one or two useful sources of variation, such as
-   chain length, chain pause, or travel-time variance. Variation should remove
-   repetition without becoming a visible gimmick.
-6. Remove fields and layers that do not help sell the motion sentence. One
-   excellent cue is better than several weak cues.
+   behavior from names alone.
+3. Select the smallest existing Routine and any needed Placement, Capability,
+   Attitude, or Style blocks.
+4. For each conditional block, choose its subject pool, predicate, Current or
+   Custom Vision, activation lifetime, and one target source.
+5. Check conflicts in classification and manual application order. Confirm the
+   intended later writer for every shared field.
+6. Tune the main rhythm first: primitive, target, travel time, chain, pause,
+   and response. A smaller travel-time value is faster.
+   For Walk, keep the per-step pause and pause variance at zero. A pause after
+   every tile reads as lag. If a deliberately slow Routine needs a pause, make
+   it long enough to read as an intentional stop and prove that feel in play.
+   Do not use a one-move Movement Chain with Walk: use no chain, or at least
+   two moves. This rule does not apply to Hop chains.
+   A Movement Chain can select several pause actions. One overall chance
+   admits the set, then one selected action runs at random with equal weight.
+   With `N` selected actions, each action's approximate chance is the overall
+   chance divided by `N`. If a second action should keep the first action's old
+   frequency, double the overall chance when the result is at most 100%.
+   Meander is the reference: `Look Around` plus `Pause` at 50% gives about 25%
+   Look Around, 25% Pause, and 50% no action. A lone `Pause` keeps its legacy
+   always-run behavior. Use `Pause` for an idle stop; do not use the per-step
+   Walk pause for this rhythm.
+7. Add chance and variance only when they remove visible repetition. Remove
+   fields and blocks that do not support the motion sentence.
 
 For field meaning, units, bounds, lanes, and operators, read the relevant entry
 in [`behavior_schema.json`](../../../tools/overworld/behavior_schema.json).
-Remember that a smaller travel time is faster.
 
-## Author the design
+## Author and prove the design
 
 For an implementation request, read and follow
 [`author-overworld-profile`](../author-overworld-profile/SKILL.md). Use the
-named catalog, selectors, applications, and resolver proof from that skill.
-Keep the application's order consistent with the full layer model and inspect
-the final Owner and Tired lanes plus condition and target provenance. If a
-requested behavior needs a mechanic that the
-profile schema or runtime does not support, name that product gap; do not fake
-it with an unrelated field.
+named catalog, ordered applications, resolver provenance, and focused proof.
+Inspect the final Owner and Tired lanes, admitted conditions, captured target,
+Current Vision source, and field winners. If the schema or runtime lacks the
+needed mechanic, name that product gap instead of imitating it with an
+unrelated field.
 
 Correct resolution proves what the game received. It does not prove that the
 movement feels natural. Prepare a ROM that the user can play before asking for
@@ -154,27 +170,23 @@ aesthetic feedback.
 
 For an ordinary land Pokémon, use the Workshop's reversible **Route-only
 encounter** on Route 29 to make the subject the only enabled encounter. Keep
-the source encounter entries as the saved baseline. Load and follow the
-available `hg-engine-delta-build` skill for the test ROM, then tell the user
-where to go and what motion to watch.
+the source encounter entries as the saved baseline. Use the available
+`hg-engine-delta-build` skill for the test ROM, then tell the user where to go
+and what motion to watch.
 
 If the behavior needs water, rooftops, canopies, or another feature absent from
-Route 29, select the earliest practical natural map that contains it. Keep the
-test simple for the user. Do not change the behavior merely to make Route 29
-support it.
+Route 29, use the earliest practical natural map that contains it. Do not
+change the behavior only to fit Route 29.
 
-Leave the temporary route-only encounter active across feedback rounds. Apply
-the user's feedback to the same motion sentence and repeat the authoring,
-proof, build, and playtest handoff. This is an iteration ready for review, not
-a finished behavior.
+Keep the temporary route-only encounter across feedback rounds. Apply feedback
+to the same motion sentence, then repeat authoring, proof, build, and playtest.
 
 When the user accepts the behavior:
 
 1. Clear the temporary route-only encounter.
 2. Rebuild the normal ROM.
 3. Confirm the requested resolved behavior and required profile proof still
-   pass, and that no test encounter setup remains.
+   pass, and that no temporary encounter setup remains.
 
 If the user takes over before acceptance, state the exact temporary encounter,
-map, ROM, and remaining proof gap. The user is the final judge of whether the
-motion sparks joy.
+map, ROM, and remaining proof gap. The user is the final judge of feel.

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "spawn.fly-in.uneven-height",
+  "title": "Fly In lands at the exact uneven destination height",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/profile-building-blocks-implementation-plan.md#pb9--integrated-verification",
+  "requirements": ["current.fly-in-uneven-height"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 240, "noProgressFrames": 120, "minObservedFrames": 1},
+  "subjects": [{"id": "pidgey", "species": 16, "role": "WILD", "acquire": "spawn"}],
+  "measurements": [{"kind": "fly-in-runtime-v1", "subject": "pidgey"}],
+  "setup": [
+    {"id": "route29-signpost-range", "op": "teleport", "args": {"map": 33, "x": 585, "z": 405, "facing": 1}, "budget": {"maxSeconds": 30, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "spawn-pidgey", "op": "spawn", "args": {"species": 16, "role": "wild", "level": 5, "x": 581, "z": 397}, "budget": {"maxSeconds": 30, "maxFrames": 80, "noProgressFrames": 80}},
+    {"id": "bind-pidgey", "op": "bind", "args": {"subject": "pidgey"}, "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [{"id": "finish-fly-in", "op": "wait", "args": {"predicate": {"kind": "measurement-complete", "measurement": "fly-in-runtime-v1", "when": "final"}}, "budget": {"maxSeconds": 60, "maxFrames": 180, "noProgressFrames": 120}}],
+  "assertions": [{"kind": "measurement-complete", "measurement": "fly-in-runtime-v1", "when": "final"}]
+}

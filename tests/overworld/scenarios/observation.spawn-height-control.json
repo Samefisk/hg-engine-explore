@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "observation.spawn-height-control",
-  "title": "Native own-target Ledyba height reader rejects a restored wrong-Y read",
+  "title": "Native own-target Mareep height reader rejects a restored wrong-Y read",
   "status": "active",
   "capabilities": [
     "actor.system"
@@ -11,15 +11,15 @@
   "verification": {
     "kind": "observer-control",
     "expectationSource": "documentation/overworld-system/verification.md#memory-backed-proof",
-    "actor": "One naturally spawned WILD Ledyba (165), bound to its own prepared encounter, current native object, world and later full actor handle.",
-    "trigger": "Follow the same normal route as spawn.ledyba-pool-site. At the authenticated own-target native height-reader return, read clean state, change only this object's native Y by 4096, read through the identical reader, restore the original four bytes, and read again before any guest instruction resumes.",
-    "observable": "The complete natural spawn baseline passes the existing POOL surface checker. The same checker rejects only the measured bad preparation Y with terminal Y differs from native landing height. Exact same-actor restoration must match the original reader output. This is recorder calibration only.",
+    "actor": "One naturally spawned WILD Mareep (179), bound to its own prepared encounter, current native object, world and later full actor handle.",
+    "trigger": "From the saved Route 29 start, follow the reviewed normal route until Mareep appears. At the authenticated own-target native height-reader return for its initial Appear Hop, read clean state, change only this object's native Y by 4096, read through the identical reader, restore the original four bytes, and read again before any guest instruction resumes.",
+    "observable": "The complete natural Appear Hop baseline passes the current initial-landing surface checker. The same checker rejects only the measured bad preparation Y with terminal Y differs from native landing height. Exact same-actor restoration must match the original reader output. This is recorder calibration only.",
     "setupAudit": "complete",
     "setupMutations": [
       {
         "phase": "before-observation",
         "target": "fixture",
-        "change": "Copy unchanged test.nds and test.sav. Use the same reviewed 137 normal-route setup actions. No teleport, party edit, forced spawn, borrowed destination, clock/RNG override or timer reset."
+        "change": "Copy unchanged test.nds and test.sav. Use the reviewed 169-action normal route. No teleport, party edit, forced spawn, borrowed destination, clock/RNG override or timer reset."
       },
       {
         "phase": "before-observation",
@@ -29,11 +29,11 @@
       {
         "phase": "during-observation",
         "target": "actors",
-        "change": "Within one native callback only, save the selected Wild Ledyba object's four Y bytes, write Y+4096, run the same full native reader, restore the original bytes in finally and run the reader again. No emulated instruction or input runs between reads. A failed restore terminates only the disposable worker before guest execution can resume."
+        "change": "Within one native callback only, save the selected Wild Mareep object's four Y bytes, write Y+4096, run the same full native reader, restore the original bytes in finally and run the reader again. No emulated instruction or input runs between reads. A failed restore terminates only the disposable worker before guest execution can resume."
       }
     ],
     "limits": [
-      "Requires successful native height refresh at this encounter's own legacy POOL target, loaded metatile permission, no authored surface, clean full spawn Hop and control return. Missing/changed source identity, world, target or timing fails.",
+      "Requires successful native height refresh at this encounter's own initial landing target, loaded metatile permission, no authored surface, clean full Appear Hop and control return. Missing or changed source identity, world, target or timing fails.",
       "One fault and two native writes only. No full-state rollback or game state healing. Recorder control cannot supply normal-play, chain, stutter, other species/role, or universal terrain proof.",
       "Whole job capped at 6000 completed game frames and 300 seconds; final action at512 frames/60 seconds. At least16 bound-subject observation frames. Missing data, restoration or rejection fails.",
       "Capture is off. Controller replays current retained memory data and rejects absent/stale subjects and missing/tampered native fault/restore meaning. It cannot accept copied-data mutation as live recorder calibration."
@@ -41,7 +41,7 @@
     "control": {
       "boundary": "live-runtime",
       "fault": "Temporarily change only the selected native object's Y by4096 during the same reader callback, then restore it before guest execution.",
-      "expectedFailure": "The unchanged surface checker rejects terminal Y differs from native landing height; clean and restored reads match exactly."
+      "expectedFailure": "The initial-landing surface checker rejects terminal Y differs from native landing height; clean and restored reads match exactly."
     }
   },
   "fixture": {
@@ -54,8 +54,8 @@
   },
   "subjects": [
     {
-      "id": "ledyba",
-      "species": 165,
+      "id": "mareep",
+      "species": 179,
       "role": "WILD",
       "acquisition": "spawn",
       "minimum": 1,
@@ -68,7 +68,7 @@
     {
       "at": 0,
       "kind": "setup",
-      "value": "Normal input route acquires the real Wild Ledyba at its own native spawn destination."
+      "value": "Normal input route acquires the real Wild Mareep at its own native spawn destination."
     },
     {
       "at": 1,
@@ -78,7 +78,7 @@
     {
       "at": 2,
       "kind": "lifecycle",
-      "value": "Complete the natural spawn Hop; unchanged surface checker accepts clean landing and rejects only the retained measured wrong-Y receipt."
+      "value": "Complete the natural Appear Hop; the initial-landing surface checker accepts clean landing and rejects only the retained measured wrong-Y receipt."
     }
   ],
   "stop": {

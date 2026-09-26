@@ -30,8 +30,8 @@ def harness_source():
         raise ValueError("motion-start fixture driver differs")
     source = source[:source.index(marker)]
     source = replace_once(source,
-        "typedef struct OverworldWildBehaviorProfileData { u8 walkOptions, hopSwayWidth; } OverworldWildBehaviorProfileData;",
-        "typedef struct OverworldWildBehaviorProfileData { u8 walkOptions, hopSwayWidth; "
+        "typedef struct OverworldWildBehaviorProfileData { u8 walkOptions, walkSwayWidth, hopSwayWidth, spawnHopSwayWidth, spawnHopTime; } OverworldWildBehaviorProfileData;",
+        "typedef struct OverworldWildBehaviorProfileData { u8 walkOptions, walkSwayWidth, hopSwayWidth, spawnHopSwayWidth, spawnHopTime; "
         "u8 hopTime, hopElevationTimeScale, hopElevationArcScale, hopAllowVerticalObstacles; } OverworldWildBehaviorProfileData;")
     source = replace_once(source,
         "{ static const OverworldWildBehaviorDataBlob blob = {0}; return &blob; }",
@@ -54,8 +54,9 @@ def harness_source():
     definitions = []
     for path, names in (
         (ROOT / "include/types.h", ("FX32_SHIFT",)),
-        (ROOT / "include/overworld_wild_behavior_data.h", ("OW_WILD_BEHAVIOR_JUMP_ARC_HEIGHT_MIN_Q4", "OW_WILD_SURFACE_ID_NATIVE_GROUND")),
-        (PLANNER, ("OVERWORLD_HOP_OBSTACLE_CLEARANCE_FX32", "OVERWORLD_HOP_OFFSCREEN_DISTANCE")),
+        (ROOT / "include/overworld_wild_behavior_data.h", ("OW_WILD_BEHAVIOR_JUMP_ARC_HEIGHT_MIN_Q4", "OW_WILD_SURFACE_ID_NATIVE_GROUND", "OW_WILD_SURFACE_ID_NATIVE_CANOPY")),
+        (PLANNER, ("OVERWORLD_HOP_OBSTACLE_CLEARANCE_FX32",)),
+        (ROOT / "include/overworld_actor_system_internal.h", ("OVERWORLD_ACTOR_HOP_PLAN_FLAG_SPAWN_ENTRY",)),
         (WILD, ("OW_WILD_SPAWNER_CHAIN_REPOSITION_SKID", "OW_WILD_SPAWNER_CHAIN_REPOSITION_STEP")),
     ):
         for name in names:

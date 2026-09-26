@@ -10,7 +10,7 @@ CATALOG = ROOT / "data/overworld_behavior_profiles.json"
 
 # A behavior with a deliberate landing pause must be named here. Keeping this
 # list explicit prevents new Hop profiles from gaining pauses by copy/paste.
-HOP_PAUSE_OPT_INS = {"hopping-scavenger": 5}
+HOP_PAUSE_OPT_INS = {"hop-around": 4, "long-hop": 5, "floaty-bounce": 10}
 
 
 class HopPauseDefaultsTests(unittest.TestCase):

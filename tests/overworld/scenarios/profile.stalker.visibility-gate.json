@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.stalker.visibility-gate",
+  "title": "Stalker advances only while unseen and resumes Routine when seen",
+  "status": "active",
+  "capabilities": ["condition.evaluation", "vision", "chase"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "data/overworld_behavior_profiles.json",
+    "actor": "One prepared WILD Gastly (species 92) with Teleport as its normal Capability, Stalker as its conditional Capability, and one current attached presentation.",
+    "trigger": "At idle intent boundaries, first face the player away from Gastly. After one complete Stalker move, face north toward Gastly.",
+    "observable": "Requirement current.stalker-visibility-gate: condition-stalker-unseen-by-player applies while true, captures PLAYER, and advances only toward the tile behind the player while Gastly is unseen. At the first intent boundary after the player sees Gastly, Stalker submits no advance and Gastly's base Routine supplies the next accepted intent.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use a disposable test.sav, set party slot 2 HP to zero so no follower occupies the rear tile, checked teleport to map 33, native Gastly spawn, exact bind, and checked player/Gastly placement with a clear behind-player tile. Do not edit Vision, condition state, profile bytes, target, timers, or movement during observation."
+      }
+    ],
+    "limits": [
+      "The bound runtime observer retains condition decisions and complete motions across unseen and seen intent boundaries. Its copied-data controls reject missing subject and missing feature evidence.",
+      "The exact conditional contract is profile stalker, condition condition-stalker-unseen-by-player, listed Ghost-family subjects, while-true activation, PLAYER target, target-cannot-see-subject, and current Vision.",
+      "A completed motion may finish after visibility changes. The changed condition first affects the next intent boundary."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [
+    {"id": "gastly", "species": 92, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}
+  ],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "In the disposable save copy, faint the active follower before the route teleport, then spawn and bind Gastly with the north tile behind the south-facing player clear."},
+    {"at": 1, "kind": "lifecycle", "value": "Observe at least one unseen Stalker intent advance toward the behind-player tile."},
+    {"at": 2, "kind": "input", "value": "After accepted motion returns control, face north so current Vision sees Gastly."},
+    {"at": 3, "kind": "lifecycle", "value": "Observe zero Stalker advances while seen and one accepted base Routine intent."}
+  ],
+  "stop": {"frameBudget": 900, "condition": "Gastly advances while unseen, then the seen boundary suppresses Stalker and the base Routine resumes."},
+  "expect": {
+    "requiredEvents": ["INTENT_CREATED", "MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["MOTION_CANCELED", "ACTOR_REBOUND", "CONTEXT_CHANGED"],
+    "invariants": [
+      "Every Stalker proposal targets only the tile behind the player",
+      "Visibility changes do not cancel accepted motion",
+      "No Stalker advance starts while the player sees Gastly",
+      "The first accepted seen intent comes from Gastly's base Routine"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "profile.stalker.visibility-gate",
+    "claims": ["live-actor-identity", "profile-resolution", "engine-boundary", "rendered-motion", "control-release"],
+    "minimumFrames": 1
+  }
+}

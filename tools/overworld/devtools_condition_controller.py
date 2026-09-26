@@ -1,9 +1,9 @@
 """Live Wild-controller proof for one conditional-profile intent boundary.
 
-The packaged condition-service probe uses copied inputs.  This module is a
-separate, controlled runtime witness.  Its fixture changes only the target
-predicate of the existing Ambush Plant condition in the disposable emulator
-process.  The unchanged Wild controller, condition adapter, resolver, profile,
+The packaged condition-service probe uses copied inputs. This module is a
+separate, controlled runtime witness. Its fixture changes only the target and
+range predicate of the existing Ambush condition in the disposable emulator
+process. The unchanged Wild controller, condition adapter, resolver, profile,
 and motion path remain the code under test.
 
 The native reader records real controller calls.  During the first accepted
@@ -26,14 +26,14 @@ SUBJECT_SPECIES = 70  # Weepinbell
 SUBJECT_ROLE = "WILD"
 TARGET_ROLE = "FOLLOWER"
 
-PROFILE_ID = "ambush-plant-active"
+PROFILE_ID = "ambush"
 PROFILE_BYTES = 212
 PROFILE_DATA_OFFSET = 32
 
-CONDITION_ID = 11350
-CONDITION_NAME = "condition-ambush-plant-notices-player"
-CONDITION_APPLICATION = 13
-CONDITION_SUBJECT_APPLICATION = 12
+CONDITION_ID = 49529
+CONDITION_NAME = "condition-ambush-notices-player"
+CONDITION_APPLICATION = 21
+CONDITION_SUBJECT_APPLICATION = 0xFF
 CONDITION_DURATION = 36
 CONDITION_COOLDOWN = 126
 CONDITION_BYTES = 48
@@ -44,6 +44,7 @@ CONDITION_TIMED = 1
 TARGET_PLAYER = 1
 TARGET_ACTOR = 2
 TARGET_ROLE_FOLLOWER = 1 << 1
+RANGE_VISION_CURRENT = 5
 RANGE_RADIUS = 4
 
 BEHAVIOR_CHASE = 3
@@ -60,7 +61,7 @@ PREPARED_STATE_BYTES = 16
 PREPARED_STATE_POINTER_OFFSET = 12
 PREPARED_SOURCE_INDICES_OFFSET = 16
 TARGET_GENERATION_IN_STATE = 10
-RUNTIME_ACTIVE_MASKS_OFFSET = 1920
+RUNTIME_ACTIVE_MASKS_OFFSET = 1948
 
 
 def require(value, reason):
@@ -77,7 +78,7 @@ def _blob_sections(blob):
             "behavior blob is truncated")
     magic, version, header_size, blob_size = struct.unpack_from("<IHHI", blob)
     require((magic, version, header_size, blob_size)
-            == (0x4F574244, 79, 84, len(blob)),
+            == (0x4F574244, 80, 84, len(blob)),
             "behavior blob header differs")
     sections = {}
     for name, header_offset, expected_stride in (
@@ -138,7 +139,7 @@ def _profile_contract(blob, sections):
 def build_live_controller_fixture(source):
     """Patch only player-kind/target bytes in one authenticated live blob copy.
 
-    The returned bytes are intended for a disposable emulator process.  The
+    The returned bytes are intended for a disposable emulator process. The
     receipt lists the exact changed offsets so the command adapter can patch
     and later restore the same live addresses.
     """
@@ -158,10 +159,10 @@ def build_live_controller_fixture(source):
         and raw[38] == CONDITION_TIMED
         and raw[39] == TARGET_PLAYER
         and raw[40] == 0
-        and raw[42] == RANGE_RADIUS
-        and raw[43] == 4
+        and raw[42] == RANGE_VISION_CURRENT
+        and raw[43] == 0
         and raw[44] == 100,
-        "authored Ambush Plant condition differs",
+        "authored Ambush condition differs",
     )
     profile = _profile_contract(source, sections)
     patched = bytearray(source)
@@ -170,6 +171,9 @@ def build_live_controller_fixture(source):
          CONDITION_POKEMON_NOTICED, "condition-kind"),
         (condition_offset + 39, TARGET_PLAYER, TARGET_ACTOR, "target-kind"),
         (condition_offset + 40, 0, TARGET_ROLE_FOLLOWER, "target-role"),
+        (condition_offset + 42, RANGE_VISION_CURRENT,
+         RANGE_RADIUS, "range-kind"),
+        (condition_offset + 43, 0, 4, "range-length"),
     )
     for offset, before, after, _name in changes:
         require(patched[offset] == before, "fixture source byte differs")
@@ -202,7 +206,7 @@ def build_live_controller_fixture(source):
             {"offset": offset, "before": before, "after": after, "field": name}
             for offset, before, after, name in changes
         ],
-        "scope": ("disposable live behavior blob: three predicate bytes only; "
+        "scope": ("disposable live behavior blob: five predicate bytes only; "
                   "the conditional profile and all actor state stay unchanged"),
     }
 

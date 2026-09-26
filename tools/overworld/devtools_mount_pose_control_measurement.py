@@ -47,6 +47,44 @@ def validate_control(control, pose):
         and control.get('restoredRegisters') == registers
         and all(type(v) is int and 0 <= v <= 0xFFFFFFFF for v in registers.values()),
         "mounted pose control register receipt differs")
+    if clean.get("gait") is not None:
+        require(clean["gait"] == pose.get("gait"),
+                "mounted gait control differs from its completed capsule or inputs")
+        paused = clean.get("pausedGaitClock")
+        if paused is not None:
+            require(set(paused) == {"completedStamp", "nativeStamp", "completedFrame",
+                    "completedActorFrame", "completedNativeCycle", "pausedNativeCycle"}
+                and all(type(v) is int and v >= 0 for v in paused.values())
+                and paused["completedStamp"] == pose["gait"]["input"]["stamp"]
+                and paused["nativeStamp"] <= 0xFFFFFFFF
+                and ((paused["nativeStamp"] - paused["completedStamp"]) & 0xFFFFFFFF) in (1, 2)
+                and paused["completedFrame"] == pose["frame"]
+                and paused["completedActorFrame"] == pose["actorFrame"]
+                and paused["completedNativeCycle"] == pose["nativeCycle"]
+                and paused["pausedNativeCycle"] == clock["nativeCycle"],
+                "mounted gait paused clock is not bound to the completed sample")
+            raw = deepcopy(clean)
+            del raw["pausedGaitClock"]
+            raw["gait"]["input"]["stamp"] = paused["nativeStamp"]
+            require(control.get("latestRawPose") == raw,
+                    "mounted gait paused raw reader receipt differs")
+        gait_control = control.get("gaitOffsetControl", {})
+        expected = deepcopy(clean)
+        expected["mount"]["unk88_y"] += 1
+        require(gait_control.get("clean") == clean and gait_control.get("bad") == expected
+                and gait_control.get("restored") == clean
+                and gait_control.get("address") == clean["mountPointer"] + 0x8C
+                and gait_control.get("originalHex") == clean["mount"]["unk88_y"].to_bytes(2, "little", signed=True).hex()
+                and gait_control.get("changedHex") == expected["mount"]["unk88_y"].to_bytes(2, "little", signed=True).hex()
+                and gait_control.get("clock") == clock
+                and gait_control.get("restoredClock") == clock,
+                "mounted gait same-reader offset fault or restoration differs")
+        try:
+            check_pair_pose(gait_control["bad"])
+        except ValueError:
+            pass
+        else:
+            raise ValueError("mounted gait native offset fault passed the checker")
 
 
 class MountedPoseControlMeasurement:
@@ -71,7 +109,7 @@ class MountedPoseControlMeasurement:
         require(value.get('armed') is True and value.get('closed') is closed
             and value.get('failure') is None and value.get('acceptedProof') is False
             and value.get('subject')==self.subject and value.get('startFrame')==self.initial['frame']
-            and value.get('guestMemoryWrites')==(2 if self.control else 0)
+            and value.get('guestMemoryWrites')==((4 if self.control.get('gaitOffsetControl') else 2) if self.control else 0)
             and value.get('poseCalibration')==self.control, 'mounted pose reader state differs')
 
     def arm(self, subject, snapshot, receipt, trace_sequences=None):

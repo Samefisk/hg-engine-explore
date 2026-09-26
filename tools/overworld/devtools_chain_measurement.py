@@ -151,7 +151,8 @@ class LedybaChainMeasurement:
         self.observation_group = "render"
         tx, tz, ox, oz, locomotion, direction = struct.unpack_from("<4hBB", raw, 20)
         origin, target = [ox, oz], [tx, tz]
-        startup = {"origin": origin, "target": target, "locomotion": locomotion, "hopDirection": direction}
+        startup = {"origin": origin, "target": target, "locomotion": locomotion,
+                   "hopDirection": direction, "targetBaseY": 0}
         # PrepareSpawnStartup takes this Hop destination from this encounter's
         # selected spawn position. Borrowed destinations can strand an actor
         # on another species' tree/roof/flower-bed surface.

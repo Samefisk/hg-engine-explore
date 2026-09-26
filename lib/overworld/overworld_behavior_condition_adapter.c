@@ -10,6 +10,11 @@
 #include <stdlib.h>
 #endif
 
+typedef u16 OverworldBehaviorConditionVisionWord
+    __attribute__((may_alias));
+typedef u16 OverworldBehaviorConditionHandleHalfword
+    __attribute__((may_alias));
+
 static void OverworldBehaviorConditionAdapter_Free(void *memory)
 {
 #if defined(OVERWORLD_BEHAVIOR_HOST) \
@@ -57,6 +62,8 @@ static void OverworldBehaviorConditionAdapter_ClearActor(
         OverworldBehaviorConditionAdapter_Free(prepared->states);
     }
     memset(prepared, 0, sizeof(*prepared));
+    runtime->currentVisions[slot].range = 0;
+    runtime->currentVisions[slot].options = 0;
     OverworldBehaviorConditionAdapter_ClearResolution(runtime, slot);
 }
 
@@ -88,17 +95,21 @@ OverworldBehaviorConditionAdapter_PrepareActor(
     const void *blobBytes,
     u32 blobSize,
     const OverworldActorHandle *subject,
+    const OverworldWildBehaviorProfile *stableProfile,
     u8 slot,
     OverworldBehaviorConditionBuildContextFunc buildContext)
 {
-    const OverworldBehaviorConditionServiceEntry *service =
-        OverworldBehaviorConditionAdapter_GetService();
+    const OverworldBehaviorConditionServiceEntry *service;
     OverworldBehaviorConditionStatus status;
+    u16 vision;
 
     if (runtime == NULL || state == NULL || blobBytes == NULL
-        || subject == NULL || buildContext == NULL
-        || slot >= OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS
-        || service == NULL) {
+        || subject == NULL || stableProfile == NULL || buildContext == NULL
+        || slot >= OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS) {
+        return OVERWORLD_BEHAVIOR_CONDITION_INVALID_ARGUMENT;
+    }
+    service = OverworldBehaviorConditionAdapter_GetService();
+    if (service == NULL) {
         return OVERWORLD_BEHAVIOR_CONDITION_INVALID_ARGUMENT;
     }
     OverworldBehaviorConditionAdapter_ClearActor(runtime, slot);
@@ -110,6 +121,15 @@ OverworldBehaviorConditionAdapter_PrepareActor(
         OW_WILD_SPAWN_TERRAIN_LAND,
         FALSE);
     runtime->context.behaviorClass = state->movementBehaviorClasses[slot];
+    vision = stableProfile->owner.visionRange
+        | ((u16)((stableProfile->owner.visionCone
+                      & OVERWORLD_VISION_CONE_MASK)
+                     | (stableProfile->owner.visionAdjacentAwareness
+                           ? OVERWORLD_VISION_ADJACENT_AWARENESS
+                           : 0))
+            << 8);
+    *(OverworldBehaviorConditionVisionWord *)&runtime->currentVisions[slot] =
+        vision;
     status = service->prepareActor(
         blobBytes,
         blobSize,
@@ -120,19 +140,51 @@ OverworldBehaviorConditionAdapter_PrepareActor(
         OverworldBehaviorConditionAdapter_ClearActor(runtime, slot);
         return status;
     }
-    runtime->frame.valid = FALSE;
     return OVERWORLD_BEHAVIOR_CONDITION_OK;
 }
 
-static BOOL OverworldBehaviorConditionAdapter_HandleEquals(
+static BOOL __attribute__((noinline, optimize("Os")))
+OverworldBehaviorConditionAdapter_HandleEquals(
     const OverworldActorHandle *left,
     const OverworldActorHandle *right)
 {
-    return left->slot == right->slot
-        && left->generation == right->generation
-        && left->fieldEpoch == right->fieldEpoch
-        && left->mapGeneration == right->mapGeneration
-        && left->encounterGeneration == right->encounterGeneration;
+    const OverworldBehaviorConditionHandleHalfword *leftValues =
+        (const OverworldBehaviorConditionHandleHalfword *)left;
+    const OverworldBehaviorConditionHandleHalfword *rightValues =
+        (const OverworldBehaviorConditionHandleHalfword *)right;
+    u8 index;
+
+    /* World observations are only halfword aligned. ARM9 unaligned word
+     * loads rotate data, so compare the native halfword fields. */
+    for (index = 0; index < 5; index++) {
+        if (leftValues[index] != rightValues[index]) {
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+static inline void __attribute__((always_inline))
+OverworldBehaviorConditionAdapter_PopulateSubject(
+    OverworldWildBehaviorConditionRuntime *runtime,
+    FieldSystem *fieldSystem,
+    const OverworldBehaviorConditionPreparedActor *prepared,
+    const LocalMapObject *object,
+    u8 slot,
+    u8 subjectMovementSpeed,
+    OverworldBehaviorConditionTerrainFunc terrainAt)
+{
+    OverworldBehaviorConditionWorldView *world = &runtime->frame.world;
+
+    world->subjectTerrainMask = terrainAt(
+        fieldSystem, object->xCurr, object->yCurr);
+    world->subject = prepared->subject;
+    world->subjectX = (s16)object->xCurr;
+    world->subjectY = (s16)object->yCurr;
+    world->subjectFacing = object->curFacing;
+    world->subjectMovementSpeed = subjectMovementSpeed;
+    world->subjectVisionRange = runtime->currentVisions[slot].range;
+    world->subjectVisionOptions = runtime->currentVisions[slot].options;
 }
 
 static BOOL __attribute__((noinline, optimize("Os")))
@@ -148,7 +200,6 @@ OverworldBehaviorConditionAdapter_BuildFrame(
     OverworldWildBehaviorConditionFrame *frame = &runtime->frame;
     int slot;
 
-    memset(&query, 0, sizeof(query));
     query.version = OVERWORLD_ACTOR_SYSTEM_ABI_VERSION;
     query.size = sizeof(query);
     query.kind = OVERWORLD_ACTOR_INSPECT_SYSTEM;
@@ -161,16 +212,12 @@ OverworldBehaviorConditionAdapter_BuildFrame(
         && frame->world.frame == systemSnapshot->frame) {
         return TRUE;
     }
-    memset(frame, 0, sizeof(*frame));
+    /* The actor list is compact. Every field read below actorCount is
+     * replaced in this pass. Visibility replaces all player fields later. */
+    frame->world.actorCount = 0;
+    frame->actorSlotMask = 0;
     frame->world.frame = systemSnapshot->frame;
     frame->traceArmed = systemSnapshot->trace.armed;
-    if (fieldSystem->playerAvatar != NULL) {
-        frame->world.playerValid = TRUE;
-        frame->world.playerX =
-            (s16)GetPlayerXCoord(fieldSystem->playerAvatar);
-        frame->world.playerY =
-            (s16)GetPlayerYCoord(fieldSystem->playerAvatar);
-    }
     for (slot = 0; slot < OW_WILD_MAX_SPAWNS; slot++) {
         OverworldBehaviorConditionPreparedActor *prepared =
             &runtime->actors[slot];
@@ -193,6 +240,9 @@ OverworldBehaviorConditionAdapter_BuildFrame(
         observation->x = (s16)spawn->object->xCurr;
         observation->y = (s16)spawn->object->yCurr;
         observation->valid = TRUE;
+        observation->facingAndOcclusion = spawn->object->curFacing;
+        observation->visionRange = runtime->currentVisions[slot].range;
+        observation->visionOptions = runtime->currentVisions[slot].options;
         candidate = &frame->candidates[index];
         buildContext(
             &candidate->context,
@@ -238,9 +288,12 @@ OverworldBehaviorConditionAdapter_ResolveTarget(
     const OverworldBehaviorConditionTargetReference *target =
         &runtime->result.resolvedTarget;
     OverworldWildBehaviorConditionFrame *frame = &runtime->frame;
+    s16 targetX;
+    s16 targetY;
+    u16 targetBit = (u16)(1u << slot);
     u8 index;
 
-    runtime->targetValidMask &= (u16)~(1u << slot);
+    runtime->targetValidMask &= (u16)~targetBit;
     if (target->kind == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE) {
         return TRUE;
     }
@@ -248,32 +301,33 @@ OverworldBehaviorConditionAdapter_ResolveTarget(
         if (!frame->world.playerValid) {
             return FALSE;
         }
-        runtime->targetX[slot] = frame->world.playerX;
-        runtime->targetY[slot] = frame->world.playerY;
-        outcome->targetDx = frame->world.playerX - frame->world.subjectX;
-        outcome->targetDy = frame->world.playerY - frame->world.subjectY;
-        runtime->targetValidMask |= 1u << slot;
-        return TRUE;
-    }
-    if (target->kind != OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR) {
+        targetX = frame->world.playerX;
+        targetY = frame->world.playerY;
+    } else {
+        if (target->kind != OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR) {
+            return FALSE;
+        }
+        for (index = 0; index < frame->world.actorCount; index++) {
+            const OverworldBehaviorConditionActorObservation *actor =
+                &frame->world.actors[index];
+
+            if (OverworldBehaviorConditionAdapter_HandleEquals(
+                    &target->actor, &actor->actor)) {
+                targetX = actor->x;
+                targetY = actor->y;
+                goto resolved;
+            }
+        }
         return FALSE;
     }
-    for (index = 0; index < frame->world.actorCount; index++) {
-        const OverworldBehaviorConditionActorObservation *actor =
-            &frame->world.actors[index];
 
-        if (actor->valid
-            && OverworldBehaviorConditionAdapter_HandleEquals(
-                &target->actor, &actor->actor)) {
-            runtime->targetX[slot] = actor->x;
-            runtime->targetY[slot] = actor->y;
-            outcome->targetDx = actor->x - frame->world.subjectX;
-            outcome->targetDy = actor->y - frame->world.subjectY;
-            runtime->targetValidMask |= 1u << slot;
-            return TRUE;
-        }
-    }
-    return FALSE;
+resolved:
+    runtime->targetX[slot] = targetX;
+    runtime->targetY[slot] = targetY;
+    outcome->targetDx = targetX - frame->world.subjectX;
+    outcome->targetDy = targetY - frame->world.subjectY;
+    runtime->targetValidMask |= targetBit;
+    return TRUE;
 }
 
 static OverworldBehaviorConditionStatus
@@ -289,10 +343,10 @@ OverworldBehaviorConditionAdapter_EvaluateActor(
     OverworldBehaviorConditionBuildContextFunc buildContext,
     OverworldBehaviorConditionIsCurrentSpawnFunc isCurrentSpawn,
     OverworldBehaviorConditionTerrainFunc terrainAt,
+    OverworldBehaviorConditionPopulateVisibilityFunc populateVisibility,
     OverworldBehaviorConditionAdapterOutcome *outcome)
 {
-    const OverworldBehaviorConditionServiceEntry *service =
-        OverworldBehaviorConditionAdapter_GetService();
+    const OverworldBehaviorConditionServiceEntry *service;
     OverworldBehaviorConditionPreparedActor *prepared;
     OverworldWildSpawn *spawn;
     LocalMapObject *object;
@@ -305,9 +359,14 @@ OverworldBehaviorConditionAdapter_EvaluateActor(
     u8 index;
 
     if (runtime == NULL || state == NULL || fieldSystem == NULL
-        || blobBytes == NULL || outcome == NULL
-        || slot >= OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS
-        || service == NULL) {
+        || blobBytes == NULL || buildContext == NULL
+        || isCurrentSpawn == NULL || terrainAt == NULL
+        || populateVisibility == NULL || outcome == NULL
+        || slot >= OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS) {
+        return OVERWORLD_BEHAVIOR_CONDITION_INVALID_ARGUMENT;
+    }
+    service = OverworldBehaviorConditionAdapter_GetService();
+    if (service == NULL) {
         return OVERWORLD_BEHAVIOR_CONDITION_INVALID_ARGUMENT;
     }
     memset(outcome, 0, sizeof(*outcome));
@@ -316,7 +375,6 @@ OverworldBehaviorConditionAdapter_EvaluateActor(
     object = spawn->object;
     if (!OverworldBehaviorConditionAdapter_BuildFrame(
             state, fieldSystem, runtime, buildContext, isCurrentSpawn)
-        || !prepared->valid || object == NULL
         || (runtime->frame.actorSlotMask & (1u << slot)) == 0) {
         OverworldBehaviorConditionAdapter_ClearActor(runtime, slot);
         return OVERWORLD_BEHAVIOR_CONDITION_STALE_TARGET;
@@ -330,13 +388,15 @@ OverworldBehaviorConditionAdapter_EvaluateActor(
         OW_WILD_SPAWN_TERRAIN_LAND,
         FALSE);
     runtime->context.behaviorClass = state->movementBehaviorClasses[slot];
-    runtime->frame.world.subjectTerrainMask =
-        terrainAt(fieldSystem, object->xCurr, object->yCurr);
-    runtime->frame.world.subject = prepared->subject;
-    runtime->frame.world.subjectX = (s16)object->xCurr;
-    runtime->frame.world.subjectY = (s16)object->yCurr;
-    runtime->frame.world.subjectFacing = object->curFacing;
-    runtime->frame.world.subjectMovementSpeed = subjectMovementSpeed;
+    OverworldBehaviorConditionAdapter_PopulateSubject(
+        runtime,
+        fieldSystem,
+        prepared,
+        object,
+        slot,
+        subjectMovementSpeed,
+        terrainAt);
+    populateVisibility(fieldSystem, &runtime->frame.world);
     status = service->evaluatePrepared(
         blobBytes,
         blobSize,
@@ -354,8 +414,11 @@ OverworldBehaviorConditionAdapter_EvaluateActor(
 
     if (runtime->result.activeApplicationMask
             != runtime->activeApplicationMasks[slot]) {
-        memset(&runtime->request, 0, sizeof(runtime->request));
         runtime->request.context = runtime->context;
+        runtime->request.forcedOverrideMask =
+            forcedOverrideProfileIndex >= 0
+                ? 1u << forcedOverrideProfileIndex
+                : 0;
         runtime->request.behaviorClass = runtime->context.behaviorClass;
         runtime->request.requestVersion = BEHAVIOR_RESOLVE_REQUEST_VERSION;
         runtime->request.activeConditionalMask =
@@ -365,10 +428,9 @@ OverworldBehaviorConditionAdapter_EvaluateActor(
             runtime->result.resolvedTargetSourceApplication;
         runtime->request.resolvedTargetConditionId =
             runtime->result.resolvedTargetConditionId;
-        if (forcedOverrideProfileIndex >= 0) {
-            runtime->request.forcedOverrideMask =
-                1u << forcedOverrideProfileIndex;
-        }
+        runtime->request.reserved = 0;
+        runtime->request.reserved2[0] = 0;
+        runtime->request.reserved2[1] = 0;
         memcpy(
             &runtime->request.resolvedTarget,
             &runtime->result.resolvedTarget,

@@ -10,12 +10,12 @@
     "kind": "observer-control",
     "expectationSource": "documentation/overworld-system/verification.md#memory-backed-proof",
     "actor": "Current mounted Cyndaquil155, current field and attached player anchor, idle after excluded warmup.",
-    "trigger": "Arm the same pose reader, observe one complete idle update, change only mount pos_x by one without executing guest instructions, then restore exact bytes.",
-    "observable": "The same reader and unchanged pair checker reject the changed position. Clean and restored data match exactly. Native clocks and registers do not change. Reader and private session close.",
+    "trigger": "After the warmup and completed stop skid settle, arm the same pose reader and observe one complete idle update. Without guest execution, change mount pos_x by one and restore, then change its gait offset by one and restore.",
+    "observable": "The same reader and unchanged pair checker reject each changed position or gait offset. Each clean and restored sample matches exactly. Native clocks and registers do not change. Reader and private session close.",
     "setupAudit": "complete",
     "setupMutations": [
-      {"phase": "before-observation", "target": "fixture", "change": "Disposable test.sav; checked own-path teleport, party0 Cyndaquil and mounted spawn. Ten north input frames and an idle wait are excluded warmup, not movement proof. No other species destination or user save is changed."},
-      {"phase": "during-observation", "target": "observation", "change": "Paused same-reader control changes only the exact current mount pos_x bytes by one, restores in finally and verifies readback. Failed restore stops the private core."}
+      {"phase": "before-observation", "target": "fixture", "change": "Disposable test.sav; checked own-path teleport, party0 Cyndaquil and mounted spawn. Ten north input frames,32 neutral frames for the pending stop skid, and the strict idle wait are excluded warmup. No other species destination or user save is changed."},
+      {"phase": "during-observation", "target": "observation", "change": "Paused same-reader controls change the exact current mount pos_x and gait-offset bytes by one separately. Each restores in finally and verifies readback. Failed restore stops the private core."}
     ],
     "limits": ["This is reader calibration only. It grants no natural movement, spawning, terrain, pacing or soak credit."],
     "control": {"boundary": "live-runtime", "fault": "Current mount position differs by one in native memory during a stopped-guest read.", "expectedFailure": "The unchanged pair checker rejects that read; exact restored read passes before execution resumes."}

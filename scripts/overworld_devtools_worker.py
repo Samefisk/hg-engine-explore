@@ -53,7 +53,12 @@ def main():
                 from tools.overworld import devtools_engine as rt
                 rt.initialize(native)
                 from tools.overworld.devtools_runtime import DevtoolsSession
-                session = DevtoolsSession(rt, args["rom"], args["save"], args["sessionDir"])
+                if set(args) - {"rom", "save", "sessionDir", "spawnHeightControl"}:
+                    raise ValueError("open arguments differ")
+                session = DevtoolsSession(
+                    rt, args["rom"], args["save"], args["sessionDir"],
+                    spawn_height_control=args.get("spawnHeightControl", False),
+                )
                 result = session.snapshot()
             else:
                 if session is None or session.closed:
@@ -174,6 +179,8 @@ def main():
                     result = session.walk_corner_close()
                 elif operation == "walk-intent.arm":
                     result = session.walk_intent_arm(args)
+                elif operation == "obstacle-intent.arm":
+                    result = session.obstacle_intent_arm(args)
                 elif operation == "walk-policy-control.arm":
                     result = session.walk_policy_control_arm(args)
                 elif operation == "mount-pacing.arm":
@@ -224,6 +231,10 @@ def main():
                     if args:
                         raise ValueError("walk-intent.close takes no arguments")
                     result = session.walk_intent_close()
+                elif operation == "obstacle-intent.close":
+                    if args:
+                        raise ValueError("obstacle-intent.close takes no arguments")
+                    result = session.obstacle_intent_close()
                 elif operation in ("teleport", "spawn", "party"):
                     result = getattr(session, operation)(args)
                 elif operation == "close":

@@ -34,13 +34,37 @@ class SharedRoleProfileControllerTests(unittest.TestCase):
             result["actors"] = [actor]
             return result
         initial, mounted = enrich(initial), enrich(mounted)
+        boot = deepcopy(initial)
+        boot["frame"] -= 2; boot["nativeCycle"] -= 2
+        boot["actors"] = []
+        boot["selector"]["activeFollowerPartySlot"] = 0xFF
+        boot["party"][2].update(species=56, form=0, level=3, hp=20, status=0)
+        party_snapshot = deepcopy(initial)
+        party_snapshot["frame"] -= 1; party_snapshot["nativeCycle"] -= 1
+        party_snapshot["actors"] = []
+        party_snapshot["selector"]["activeFollowerPartySlot"] = 0xFF
         final = deepcopy(mounted)
         final["frame"] += 1; final["nativeCycle"] += 1
+        def setup_boundary(snapshot):
+            return dict(eventsDrained=True, traceSequences={}, frame=snapshot["frame"],
+                        nativeCycle=snapshot["nativeCycle"])
+        party_receipt = dict(snapshot=deepcopy(party_snapshot), preparedOnly=True,
+            value=dict(slot=2, action="replace", memoryPreflights=[]),
+            party=deepcopy(party_snapshot["party"]), personality=2920357538, events=[],
+            setupBoundary=setup_boundary(party_snapshot))
+        follower_receipt = dict(snapshot=deepcopy(initial), preparedOnly=True,
+            lifecycle="prepared-native-follower-lifecycle",
+            requestedSubject=dict(slot=2, role="FOLLOWER", species=234, personality=2920357538,
+                                  form=0, level=5), events=[], setupBoundary=setup_boundary(initial))
         receipt = dict(snapshot=deepcopy(mounted), preparedOnly=True, profileDiagnostics="owner-transfer",
             lifecycle="prepared-native-follower-lifecycle", events=deepcopy(events),
             profileObservation=dict(acceptedProof=False, events=deepcopy(events)),
-            setupBoundary=dict(eventsDrained=True, traceSequences={}, frame=mounted["frame"], nativeCycle=mounted["nativeCycle"]))
-        self.rows = [dict(phase="setup", initialSnapshot=initial),
+            setupBoundary=setup_boundary(mounted))
+        self.rows = [dict(phase="setup", initialSnapshot=boot),
+            dict(phase="setup", action="prepare-sprint-stantler", command="party",
+                 receipt=party_receipt, snapshot=party_snapshot),
+            dict(phase="setup", action="prepare-sprint-follower", command="spawn",
+                 receipt=follower_receipt, snapshot=initial),
             dict(phase="setup", action="mount-current-follower", command="spawn", receipt=receipt, snapshot=mounted),
             dict(phase="setup", action="bind-mount", command="bind", snapshot=deepcopy(mounted),
                  receipt=select_current_actor(mounted, mounted["actors"][0])),
@@ -64,9 +88,9 @@ class SharedRoleProfileControllerTests(unittest.TestCase):
         registration["recipeSha256"] = fixtures.sha(source)
         (self.f.root / "tools/overworld/runtime_proof_registry.json").write_text(json.dumps(registry))
         self.control_rows = deepcopy(self.rows)
-        self.control_rows.pop(3)  # Control recording starts before prepared setup.
+        self.control_rows.pop(5)  # Control recording starts before prepared setup.
         events, _, _ = role_fixtures.RoleProfileProofTests().calibrated_fixture()
-        receipt = self.control_rows[1]["receipt"]
+        receipt = self.control_rows[3]["receipt"]
         receipt.update(profileDiagnostics="owner-transfer-control", events=deepcopy(events))
         receipt["profileObservation"]["events"] = deepcopy(events)
         directory = self.f.root / "build/overworld-devtools/test-owner-control"
@@ -108,7 +132,7 @@ class SharedRoleProfileControllerTests(unittest.TestCase):
         with patch.object(control,"source_record",return_value={"hash":"source"}):
             return control.finalize_shared_test(self.test,self.record,self.f.root)
 
-    def test_exact_five_row_transfer_accepts_only_narrow_claim(self):
+    def test_exact_seven_row_transfer_accepts_only_narrow_claim(self):
         self.assertTrue(self.record["evaluation"]["passed"], self.record["evaluation"])
         result=self.finish()
         self.assertTrue(result["acceptedProof"],result)
@@ -134,7 +158,7 @@ class SharedRoleProfileControllerTests(unittest.TestCase):
                     if fault=="cleanup":self.control_record["sessionCleanup"]["closed"]=False
                     if fault=="unaccepted":self.control_record["acceptedProof"]=False
                     if fault=="native-bytes":
-                        receipt=self.control_rows[1]["receipt"]
+                        receipt=self.control_rows[3]["receipt"]
                         data=receipt["profileObservation"]["events"][-1]["data"]
                         data["ownerHex"]="ff"+data["ownerHex"][2:]
                         receipt["events"]=deepcopy(receipt["profileObservation"]["events"])
@@ -150,10 +174,10 @@ class SharedRoleProfileControllerTests(unittest.TestCase):
         for mirror in (False, True):
             with self.subTest(mirrored_stream=mirror):
                 original=deepcopy(self.rows)
-                data=self.rows[1]["receipt"]["profileObservation"]["events"][1]["data"]
+                data=self.rows[3]["receipt"]["profileObservation"]["events"][1]["data"]
                 data["profileHex"]="ff"+data["profileHex"][2:]
                 if mirror:
-                    self.rows[1]["receipt"]["events"]=deepcopy(self.rows[1]["receipt"]["profileObservation"]["events"])
+                    self.rows[3]["receipt"]["events"]=deepcopy(self.rows[3]["receipt"]["profileObservation"]["events"])
                 self.refresh()
                 self.assertTrue(self.record["evaluation"]["passed"])
                 self.assertFalse(self.finish()["acceptedProof"])
@@ -163,11 +187,11 @@ class SharedRoleProfileControllerTests(unittest.TestCase):
         for fault in ("missing", "clock", "identity", "phase", "field"):
             with self.subTest(fault=fault):
                 original=deepcopy(self.rows)
-                boundary=self.rows[3]["boundarySnapshot"]
-                if fault=="missing":self.rows.pop(3)
+                boundary=self.rows[5]["boundarySnapshot"]
+                if fault=="missing":self.rows.pop(5)
                 elif fault=="clock":boundary["nativeCycle"]-=1
                 elif fault=="identity":boundary["actors"][0]["identityVerified"]=False
-                elif fault=="phase":self.rows[3]["phase"]="setup"
+                elif fault=="phase":self.rows[5]["phase"]="setup"
                 else:boundary["fieldAvailable"]=False
                 with self.assertRaises((ValueError, control.ValidationFailure)):
                     control._shared_role_transfer(self.rows,self.record)
@@ -175,9 +199,9 @@ class SharedRoleProfileControllerTests(unittest.TestCase):
 
     def test_endpoint_uses_recording_boundary_not_bind_clock(self):
         for key in ("frame", "nativeCycle"):
-            self.rows[3]["boundarySnapshot"][key]+=2
-            self.rows[4]["samples"][0][key]+=2
-        self.rows[4]["cycleIntervals"][0]["completedGameFrame"]+=2
+            self.rows[5]["boundarySnapshot"][key]+=2
+            self.rows[6]["samples"][0][key]+=2
+        self.rows[6]["cycleIntervals"][0]["completedGameFrame"]+=2
         self.refresh()
         result=self.finish()
         self.assertTrue(result["acceptedProof"],result)

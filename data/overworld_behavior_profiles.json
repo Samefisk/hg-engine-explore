@@ -1,6 +1,6 @@
 {
-  "catalogVersion": 4,
-  "schema": "../tools/overworld/schemas/behavior-authoring-v4.schema.json",
+  "catalogVersion": 5,
+  "schema": "../tools/overworld/schemas/behavior-authoring-v5.schema.json",
   "fieldSchema": "../tools/overworld/behavior_schema.json",
   "generatedCompatibilityOutput": "OverworldWildBehaviorData.c",
   "rootProfile": "default",
@@ -11,6 +11,22 @@
       "parent": null,
       "kind": "normal",
       "fields": {
+        "mountBounce": {
+          "operator": "replace",
+          "value": 2
+        },
+        "mountStride": {
+          "operator": "replace",
+          "value": 2
+        },
+        "mountSettle": {
+          "operator": "replace",
+          "value": 1
+        },
+        "mountLean": {
+          "operator": "replace",
+          "value": 1
+        },
         "chillState": {
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_KIND_WANDER"
@@ -173,7 +189,7 @@
         },
         "tiredProfile": {
           "operator": "replace",
-          "value": "apply-default-tired"
+          "value": "apply-rest"
         },
         "hopElevationTimeScale": {
           "operator": "replace",
@@ -257,7 +273,7 @@
         },
         "walkPause": {
           "operator": "replace",
-          "value": "32"
+          "value": "0"
         },
         "tilesBeforeTurnSkid": {
           "operator": "replace",
@@ -278,1006 +294,31 @@
         "walkPauseVariance": {
           "operator": "replace",
           "value": "0"
-        }
-      }
-    },
-    {
-      "id": "aggressive-chase",
-      "name": "Agressive Chase",
-      "parent": "default",
-      "kind": "normal",
-      "fields": {
-        "alertEmote": {
-          "operator": "replace",
-          "value": "OW_WILD_SPAWNER_BUBBLE_ID_ANGRY"
         },
-        "alertTime": {
+        "walkSwayWidth": {
           "operator": "replace",
-          "value": "15"
+          "value": 0
         },
-        "stamina": {
+        "visionRange": {
           "operator": "replace",
-          "value": "40"
+          "value": "OVERWORLD_VISION_DEFAULT_RANGE"
         },
-        "restTime": {
+        "visionCone": {
           "operator": "replace",
-          "value": "4"
+          "value": "OVERWORLD_VISION_CONE_FORWARD_90"
         },
-        "spawnState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR"
-        },
-        "chillAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_HOP"
-        },
-        "hopMinDistance": {
-          "operator": "replace",
-          "value": "2"
-        },
-        "hopMaxDistance": {
-          "operator": "replace",
-          "value": "3"
-        },
-        "hopPause": {
-          "operator": "replace",
-          "value": "0"
-        },
-        "ramAccelerationSteps": {
-          "operator": "replace",
-          "value": "3"
-        },
-        "ramMaxSpeed": {
-          "operator": "replace",
-          "value": "4"
-        },
-        "chainPauseAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE"
-        },
-        "chainRepositionJumpCount": {
-          "operator": "replace",
-          "value": "3"
-        },
-        "hopSwayWidth": {
-          "operator": "replace",
-          "value": "5"
-        },
-        "spawnHopSwayWidth": {
-          "operator": "replace",
-          "value": "1"
-        },
-        "chainRepositionSpeed": {
-          "operator": "replace",
-          "value": "16"
-        },
-        "chainRepositionDistance": {
-          "operator": "replace",
-          "value": "1"
-        }
-      }
-    },
-    {
-      "id": "aggressive-ram",
-      "name": "Aggressive Ram",
-      "parent": "default",
-      "kind": "normal",
-      "fields": {
-        "alertEmote": {
-          "operator": "replace",
-          "value": "OW_WILD_SPAWNER_BUBBLE_ID_ANGRY"
-        },
-        "stamina": {
-          "operator": "replace",
-          "value": "6"
-        },
-        "restTime": {
-          "operator": "replace",
-          "value": "4"
-        },
-        "spawnState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR"
-        },
-        "hopMaxDistance": {
-          "operator": "replace",
-          "value": "2"
-        },
-        "ramAccelerationSteps": {
-          "operator": "replace",
-          "value": "3"
-        },
-        "ramMaxSpeed": {
-          "operator": "replace",
-          "value": "4"
-        },
-        "chainPauseAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE"
-        },
-        "chainRepositionJumpCount": {
-          "operator": "replace",
-          "value": "3"
-        },
-        "hopSwayWidth": {
-          "operator": "replace",
-          "value": "5"
-        },
-        "spawnHopSwayWidth": {
-          "operator": "replace",
-          "value": "1"
-        },
-        "chainRepositionSpeed": {
-          "operator": "replace",
-          "value": "16"
-        },
-        "chainRepositionDistance": {
-          "operator": "replace",
-          "value": "1"
-        }
-      }
-    },
-    {
-      "id": "picked-up",
-      "name": "Picked Up",
-      "parent": "default",
-      "kind": "normal",
-      "fields": {
-        "chillState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_KIND_NONE"
-        },
-        "alertEmote": {
-          "operator": "replace",
-          "value": "OW_WILD_SPAWNER_BUBBLE_ID_NONE"
-        },
-        "alertTime": {
-          "operator": "replace",
-          "value": "0"
-        },
-        "stamina": {
-          "operator": "replace",
-          "value": "0"
-        },
-        "restTime": {
-          "operator": "replace",
-          "value": "0"
-        },
-        "jumpLevel": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_JUMP_LEVEL_NONE"
-        },
-        "profileId": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_PROFILE_PICKED_UP"
-        },
-        "spawnState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR"
-        },
-        "chillAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_NONE"
-        },
-        "hopMaxDistance": {
-          "operator": "replace",
-          "value": "1"
-        },
-        "ramAccelerationSteps": {
-          "operator": "replace",
-          "value": "3"
-        },
-        "ramMaxSpeed": {
-          "operator": "replace",
-          "value": "4"
-        },
-        "chillAllowedTerrainMask": {
-          "operator": "replace",
-          "value": "0"
-        },
-        "chainRepositionJumpCount": {
-          "operator": "replace",
-          "value": "3"
-        },
-        "hopSwayWidth": {
-          "operator": "replace",
-          "value": "5"
-        },
-        "spawnHopSwayWidth": {
-          "operator": "replace",
-          "value": "1"
-        },
-        "chainRepositionSpeed": {
-          "operator": "replace",
-          "value": "16"
-        },
-        "chainRepositionDistance": {
-          "operator": "replace",
-          "value": "1"
-        }
-      }
-    },
-    {
-      "id": "teleport-stalker-override",
-      "name": "Teleport Stalker",
-      "parent": "default",
-      "kind": "normal",
-      "fields": {
-        "range": {
-          "operator": "replace",
-          "value": 32
-        },
-        "profileId": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_PROFILE_DEFAULT"
-        },
-        "chillAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT"
-        },
-        "teleportTime": {
-          "operator": "replace",
-          "value": 9
-        },
-        "teleportPause": {
-          "operator": "replace",
-          "value": 30
-        }
-      }
-    },
-    {
-      "id": "canopy-hopper",
-      "name": "Canopy Hopper",
-      "parent": "default",
-      "kind": "normal",
-      "fields": {
-        "chillAllowedTerrainMask": {
-          "operator": "replace",
-          "value": 4
-        },
-        "chillAllowedTerrainOverrideMask": {
-          "operator": "replace",
-          "value": 4
-        }
-      }
-    },
-    {
-      "id": "canopy-hop-surface",
-      "name": "Canopy Hopper · On Canopy",
-      "parent": "canopy-hopper",
-      "kind": "conditional",
-      "conditions": [
-        {
-          "id": "condition-canopy-hopper-on-canopy",
-          "subjects": {
-            "application": "apply-canopy-hopper"
-          },
-          "when": {
-            "kind": "terrain-motion",
-            "terrainMask": "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY",
-            "terrainOverrideMask": "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY",
-            "minMovementSpeed": 0,
-            "maxMovementSpeed": 0
-          },
-          "activation": {
-            "mode": "while-true"
-          },
-          "target": {
-            "kind": "none"
-          }
-        }
-      ],
-      "fields": {
-        "hopAllowNonCardinal": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_AND_DIAGONAL"
-        },
-        "hopMinDistance": {
-          "operator": "replace",
-          "value": 1
-        },
-        "hopMaxDistance": {
-          "operator": "replace",
-          "value": 6
-        },
-        "chillAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_HOP"
-        },
-        "hopTime": {
-          "operator": "replace",
-          "value": 7
-        },
-        "hopElevationTimeScale": {
-          "operator": "replace",
-          "value": 30
-        },
-        "hopElevationArcScale": {
-          "operator": "replace",
-          "value": 150
-        },
-        "hopAllowVerticalObstacles": {
+        "visionAdjacentAwareness": {
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_BOOL_YES"
         }
       }
     },
     {
-      "id": "throwing",
-      "name": "Throwing!",
-      "parent": "default",
-      "kind": "normal",
-      "fields": {
-        "alertEmote": {
-          "operator": "replace",
-          "value": "OW_WILD_SPAWNER_BUBBLE_ID_ANGRY"
-        },
-        "alertTime": {
-          "operator": "replace",
-          "value": 20
-        },
-        "stamina": {
-          "operator": "replace",
-          "value": 60
-        },
-        "alertSpecialAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW"
-        }
-      }
-    },
-    {
-      "id": "playful",
-      "name": "Playful!",
-      "parent": "default",
-      "kind": "normal",
-      "fields": {
-        "alertEmote": {
-          "operator": "replace",
-          "value": "OW_WILD_SPAWNER_BUBBLE_ID_HEART"
-        },
-        "alertTime": {
-          "operator": "replace",
-          "value": 20
-        },
-        "stamina": {
-          "operator": "replace",
-          "value": 60
-        }
-      }
-    },
-    {
-      "id": "floaty-bounce",
-      "name": "Floaty Bounce",
-      "parent": "default",
-      "kind": "normal",
-      "fields": {
-        "spawnState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_SPAWN_STATE_HOP_FROM_OFF_SCREEN"
-        },
-        "chillAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_HOP"
-        },
-        "hopAllowNonCardinal": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY"
-        },
-        "hopMinDistance": {
-          "operator": "replace",
-          "value": 1
-        },
-        "hopMaxDistance": {
-          "operator": "replace",
-          "value": 8
-        },
-        "hopPause": {
-          "operator": "replace",
-          "value": 0
-        },
-        "hopTime": {
-          "operator": "replace",
-          "value": 12
-        },
-        "hopSpinSpeed": {
-          "operator": "replace",
-          "value": 14
-        },
-        "spawnHopTime": {
-          "operator": "replace",
-          "value": 12
-        },
-        "hopAllowVerticalObstacles": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_BOOL_NO"
-        },
-        "hopSwayWidth": {
-          "operator": "replace",
-          "value": 4
-        }
-      }
-    },
-    {
-      "id": "bird",
-      "name": "Bird",
-      "parent": "default",
-      "kind": "normal",
-      "fields": {
-        "spawnState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_SPAWN_STATE_HOP_FROM_OFF_SCREEN"
-        },
-        "chillAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_HOP"
-        },
-        "hopAllowNonCardinal": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY"
-        },
-        "hopMinDistance": {
-          "operator": "replace",
-          "value": 1
-        },
-        "hopMaxDistance": {
-          "operator": "replace",
-          "value": 2
-        },
-        "hopPause": {
-          "operator": "replace",
-          "value": 0
-        },
-        "ramAccelerationSteps": {
-          "operator": "replace",
-          "value": 1
-        },
-        "ramMaxSpeed": {
-          "operator": "replace",
-          "value": 30
-        },
-        "chainPauseAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE"
-        },
-        "chillAllowedTerrainMask": {
-          "operator": "replace",
-          "value": 449
-        },
-        "chillAllowedTerrainOverrideMask": {
-          "operator": "replace",
-          "value": 453
-        },
-        "hopTime": {
-          "operator": "replace",
-          "value": 6
-        },
-        "spawnHopTime": {
-          "operator": "replace",
-          "value": 12
-        },
-        "chainMovementVariance": {
-          "operator": "replace",
-          "value": 2
-        },
-        "chainPauseVariance": {
-          "operator": "replace",
-          "value": 20
-        },
-        "hopElevationTimeScale": {
-          "operator": "replace",
-          "value": 100
-        },
-        "hopElevationArcScale": {
-          "operator": "replace",
-          "value": 50
-        },
-        "spawnDestinationMask": {
-          "operator": "replace",
-          "value": 448
-        },
-        "spawnDestinationOverrideMask": {
-          "operator": "replace",
-          "value": 1023
-        },
-        "spawnHopSwayWidth": {
-          "operator": "replace",
-          "value": 4
-        }
-      }
-    },
-    {
-      "id": "flying-insect",
-      "name": "Flying insect",
-      "parent": "default",
-      "kind": "normal",
-      "fields": {
-        "alertEmote": {
-          "operator": "replace",
-          "value": "OW_WILD_SPAWNER_BUBBLE_ID_ANGRY"
-        },
-        "alertTime": {
-          "operator": "replace",
-          "value": 10
-        },
-        "stamina": {
-          "operator": "replace",
-          "value": 32
-        },
-        "restTime": {
-          "operator": "replace",
-          "value": 20
-        },
-        "chillSpeed": {
-          "operator": "replace",
-          "value": "5"
-        },
-        "range": {
-          "operator": "replace",
-          "value": 32
-        },
-        "jumpLevel": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH"
-        },
-        "profileId": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_PROFILE_DEFAULT"
-        },
-        "spawnState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_SPAWN_STATE_HOP_FROM_OFF_SCREEN"
-        },
-        "chillAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER"
-        },
-        "spawnDestination": {
-          "operator": "replace",
-          "value": "OW_WILD_SPAWN_DESTINATION_POOL"
-        },
-        "hopAllowNonCardinal": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_DIAGONAL_ONLY"
-        },
-        "hopMinDistance": {
-          "operator": "replace",
-          "value": 1
-        },
-        "hopMaxDistance": {
-          "operator": "replace",
-          "value": 1
-        },
-        "hopPause": {
-          "operator": "replace",
-          "value": 0
-        },
-        "alertSpecialAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE"
-        },
-        "ramAccelerationSteps": {
-          "operator": "replace",
-          "value": 8
-        },
-        "chainPauseAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_SKIDS"
-        },
-        "hopSpinSpeed": {
-          "operator": "replace",
-          "value": 0
-        },
-        "spawnHopTime": {
-          "operator": "replace",
-          "value": 8
-        },
-        "avoidPreviousTile": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_BOOL_YES"
-        },
-        "chainMovementVariance": {
-          "operator": "replace",
-          "value": 6
-        },
-        "tiredProfile": {
-          "operator": "replace",
-          "value": "apply-default-tired"
-        },
-        "hopElevationArcScale": {
-          "operator": "replace",
-          "value": 0
-        },
-        "chainRepositionJumpCount": {
-          "operator": "replace",
-          "value": 4
-        },
-        "hopSwayWidth": {
-          "operator": "replace",
-          "value": 0
-        },
-        "chainRepositionSpeed": {
-          "operator": "replace",
-          "value": 2
-        },
-        "chainRepositionDistance": {
-          "operator": "replace",
-          "value": 2
-        },
-        "chainRepositionDust": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_BOOL_NO"
-        },
-        "chainRepositionAllowCardinal": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_BOOL_NO"
-        },
-        "chainRepositionAllowDiagonal": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_BOOL_YES"
-        },
-        "walkOptions": {
-          "operator": "replace",
-          "value": 96
-        },
-        "wanderStraightChance": {
-          "operator": "replace",
-          "value": 0
-        },
-        "chainPauseActionChance": {
-          "operator": "replace",
-          "value": 60
-        },
-        "walkPause": {
-          "operator": "replace",
-          "value": 0
-        },
-        "tilesBeforeTurnSkid": {
-          "operator": "replace",
-          "value": 0
-        },
-        "walkTimeVariance": {
-          "operator": "replace",
-          "value": 5
-        }
-      }
-    },
-    {
-      "id": "gentle-grazer",
-      "name": "Gentle grazer",
-      "parent": "default",
-      "kind": "normal",
-      "fields": {
-        "chillSpeed": {
-          "operator": "replace",
-          "value": 14
-        },
-        "alertEmote": {
-          "operator": "replace",
-          "value": "OW_WILD_SPAWNER_BUBBLE_ID_EXCLAMATION_MARK"
-        },
-        "alertTime": {
-          "operator": "replace",
-          "value": 12
-        },
-        "ramAccelerationSteps": {
-          "operator": "replace",
-          "value": 2
-        },
-        "chainMovementVariance": {
-          "operator": "replace",
-          "value": 5
-        },
-        "ramMaxSpeed": {
-          "operator": "replace",
-          "value": 24
-        },
-        "chainPauseVariance": {
-          "operator": "replace",
-          "value": 36
-        },
-        "chainPauseAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND"
-        },
-        "chainPauseActionChance": {
-          "operator": "replace",
-          "value": 25
-        },
-        "avoidPreviousTile": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_BOOL_YES"
-        },
-        "walkOptions": {
-          "operator": "replace",
-          "value": 32
-        },
-        "wanderStraightChance": {
-          "operator": "replace",
-          "value": 65
-        },
-        "walkPause": {
-          "operator": "replace",
-          "value": 0
-        },
-        "walkPauseVariance": {
-          "operator": "replace",
-          "value": 6
-        },
-        "walkTimeVariance": {
-          "operator": "replace",
-          "value": 2
-        }
-      }
-    },
-    {
-      "id": "runner",
-      "name": "Runner",
-      "parent": "default",
-      "kind": "normal",
-      "fields": {
-        "chillSpeed": {
-          "operator": "replace",
-          "value": "8"
-        },
-        "ramAccelerationSteps": {
-          "operator": "replace",
-          "value": 6
-        },
-        "ramMaxSpeed": {
-          "operator": "replace",
-          "value": 8
-        },
-        "chainPauseAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_FORWARD"
-        },
-        "avoidPreviousTile": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_BOOL_YES"
-        },
-        "chainMovementVariance": {
-          "operator": "replace",
-          "value": 2
-        },
-        "chainPauseVariance": {
-          "operator": "replace",
-          "value": 4
-        },
-        "tilesToAccelerate": {
-          "operator": "replace",
-          "value": "1"
-        },
-        "maxWalkSpeed": {
-          "operator": "replace",
-          "value": "4"
-        },
-        "walkAccelerationStep": {
-          "operator": "replace",
-          "value": "1"
-        },
-        "wanderStraightChance": {
-          "operator": "replace",
-          "value": 80
-        },
-        "walkPause": {
-          "operator": "replace",
-          "value": 0
-        },
-        "tilesBeforeTurnSkid": {
-          "operator": "replace",
-          "value": "1"
-        },
-        "planTurnSkidPath": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_BOOL_YES"
-        },
-        "stopSkid": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_BOOL_YES"
-        },
-        "spawnState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR_HOP"
-        },
-        "chillAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER"
-        },
-        "walkTimeVariance": {
-          "operator": "replace",
-          "value": "2"
-        }
-      }
-    },
-    {
-      "id": "skittish",
-      "name": "Skittish",
-      "parent": "default",
-      "kind": "conditional",
-      "conditions": [
-        {
-          "id": "condition-baby-notices-player",
-          "subjects": {
-            "application": "apply-baby-pokemon"
-          },
-          "when": {
-            "kind": "notice-target",
-            "rangeKind": "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS",
-            "rangeLength": 3,
-            "chancePercent": 100
-          },
-          "activation": {
-            "mode": "timed",
-            "durationFrames": 960,
-            "cooldownFrames": 970
-          },
-          "target": {
-            "kind": "player"
-          }
-        },
-        {
-          "id": "condition-igglybuff-notices-player",
-          "subjects": {
-            "mode": "members",
-            "match": {
-              "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-              "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-              "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-              "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-              "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-              "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-              "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-            },
-            "members": [
-              "SPECIES_IGGLYBUFF"
-            ]
-          },
-          "when": {
-            "kind": "notice-target",
-            "rangeKind": "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS",
-            "rangeLength": 3,
-            "chancePercent": 100
-          },
-          "activation": {
-            "mode": "timed",
-            "durationFrames": 240,
-            "cooldownFrames": 250
-          },
-          "target": {
-            "kind": "player"
-          }
-        }
-      ],
-      "fields": {
-        "chillState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_KIND_FLEE"
-        }
-      }
-    },
-    {
-      "id": "test",
-      "name": "Test",
-      "parent": "default",
-      "kind": "normal",
-      "fields": {
-        "chillState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_KIND_IDLE"
-        },
-        "chillSpeed": {
-          "operator": "replace",
-          "value": 8
-        },
-        "spawnState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR_HOP"
-        },
-        "spawnDestination": {
-          "operator": "replace",
-          "value": "OW_WILD_SPAWN_DESTINATION_FRONT_OF_PLAYER"
-        }
-      }
-    },
-    {
-      "id": "forced-asleep",
-      "name": "Forced asleep",
-      "parent": "default",
-      "kind": "normal",
-      "fields": {
-        "stamina": {
-          "operator": "replace",
-          "value": 1
-        },
-        "restTime": {
-          "operator": "replace",
-          "value": 4
-        }
-      }
-    },
-    {
-      "id": "flower",
-      "name": "Flower",
-      "parent": "default",
-      "kind": "normal",
-      "fields": {
-        "spawnState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR_HOP"
-        },
-        "chillAllowedTerrainMask": {
-          "operator": "replace",
-          "value": 512
-        },
-        "chillAllowedTerrainOverrideMask": {
-          "operator": "replace",
-          "value": 1023
-        },
-        "spawnDestinationMask": {
-          "operator": "replace",
-          "value": 512
-        },
-        "spawnDestinationOverrideMask": {
-          "operator": "replace",
-          "value": 1023
-        }
-      }
-    },
-    {
-      "id": "bird-rooftop",
-      "name": "Bird Rooftop",
-      "parent": "default",
-      "kind": "conditional",
-      "conditions": [
-        {
-          "id": "condition-bird-rooftop",
-          "subjects": {
-            "application": "apply-bird"
-          },
-          "when": {
-            "kind": "terrain-motion",
-            "terrainMask": "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX",
-            "terrainOverrideMask": "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX",
-            "minMovementSpeed": 0,
-            "maxMovementSpeed": 0
-          },
-          "activation": {
-            "mode": "while-true"
-          },
-          "target": {
-            "kind": "none"
-          }
-        }
-      ],
-      "fields": {
-        "chillState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_KIND_CHASE"
-        },
-        "chillAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_HOP"
-        },
-        "chillTarget": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_TARGET_NONE"
-        },
-        "chillAllowedTerrainMask": {
-          "operator": "replace",
-          "value": 0
-        },
-        "chillAllowedTerrainOverrideMask": {
-          "operator": "replace",
-          "value": 1
-        }
-      }
-    },
-    {
-      "id": "nervous-scavenger",
+      "id": "scavenger",
       "name": "Scavenger",
       "parent": "default",
       "kind": "normal",
+      "classification": "routine",
       "fields": {
         "chillState": {
           "operator": "replace",
@@ -1361,7 +402,7 @@
         },
         "tiredProfile": {
           "operator": "replace",
-          "value": "apply-nervous-scavenger"
+          "value": "apply-rest"
         },
         "tilesToAccelerate": {
           "operator": "replace",
@@ -1406,47 +447,85 @@
       }
     },
     {
-      "id": "hopping-scavenger",
-      "name": "Hopping Scavenger",
+      "id": "sprint",
+      "name": "Sprint",
       "parent": "default",
       "kind": "normal",
+      "classification": "routine",
       "fields": {
-        "chillState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_KIND_WANDER"
-        },
-        "alertEmote": {
-          "operator": "replace",
-          "value": "OW_WILD_SPAWNER_BUBBLE_ID_EXCLAMATION_MARK"
-        },
-        "alertTime": {
-          "operator": "replace",
-          "value": 10
-        },
-        "stamina": {
-          "operator": "replace",
-          "value": 20
-        },
-        "restTime": {
-          "operator": "replace",
-          "value": 10
-        },
         "chillSpeed": {
           "operator": "replace",
-          "value": 7
+          "value": "8"
         },
-        "range": {
+        "hopMinDistance": {
           "operator": "replace",
-          "value": 32
+          "value": 2
         },
-        "jumpLevel": {
+        "hopMaxDistance": {
           "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH"
+          "value": 2
         },
-        "profileId": {
+        "hopAllowVerticalObstacles": {
           "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_PROFILE_DEFAULT"
+          "value": "OW_WILD_BEHAVIOR_BOOL_YES"
         },
+        "avoidPreviousTile": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_BOOL_YES"
+        },
+        "tilesToAccelerate": {
+          "operator": "replace",
+          "value": "1"
+        },
+        "maxWalkSpeed": {
+          "operator": "replace",
+          "value": "4"
+        },
+        "walkAccelerationStep": {
+          "operator": "replace",
+          "value": "1"
+        },
+        "wanderStraightChance": {
+          "operator": "replace",
+          "value": 80
+        },
+        "walkPause": {
+          "operator": "replace",
+          "value": 0
+        },
+        "tilesBeforeTurnSkid": {
+          "operator": "replace",
+          "value": "1"
+        },
+        "planTurnSkidPath": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_BOOL_YES"
+        },
+        "stopSkid": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_BOOL_YES"
+        },
+        "spawnState": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR_HOP"
+        },
+        "chillAction": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER"
+        },
+        "walkTimeVariance": {
+          "operator": "replace",
+          "value": "2"
+        }
+      }
+    },
+    {
+      "id": "floaty-bounce",
+      "name": "Floaty Bounce",
+      "parent": "default",
+      "kind": "normal",
+      "classification": "routine",
+      "fields": {
         "spawnState": {
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_SPAWN_STATE_HOP_FROM_OFF_SCREEN"
@@ -1455,89 +534,9 @@
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_LOCOMOTION_HOP"
         },
-        "chillTarget": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_TARGET_NONE"
-        },
-        "playerAdjacentDirectionMasks": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_PLAYER_ADJACENT_ALL_STATES"
-        },
-        "spawnDestination": {
-          "operator": "replace",
-          "value": "OW_WILD_SPAWN_DESTINATION_GRASS"
-        },
-        "battleTrigger": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_NONE"
-        },
-        "ramAccelerationSteps": {
-          "operator": "replace",
-          "value": 3
-        },
-        "ramMaxSpeed": {
-          "operator": "replace",
-          "value": 36
-        },
-        "chainPauseAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND"
-        },
-        "chainMovementVariance": {
-          "operator": "replace",
-          "value": 2
-        },
-        "chainPauseVariance": {
-          "operator": "replace",
-          "value": 24
-        },
-        "tiredProfile": {
-          "operator": "replace",
-          "value": "apply-hopping-scavenger"
-        },
-        "tilesToAccelerate": {
-          "operator": "replace",
-          "value": 1
-        },
-        "maxWalkSpeed": {
-          "operator": "replace",
-          "value": 4
-        },
-        "walkOptions": {
-          "operator": "replace",
-          "value": 0
-        },
-        "wanderStraightChance": {
-          "operator": "replace",
-          "value": 50
-        },
-        "chainPauseActionChance": {
-          "operator": "replace",
-          "value": 30
-        },
-        "walkPause": {
-          "operator": "replace",
-          "value": 0
-        },
-        "tilesBeforeTurnSkid": {
-          "operator": "replace",
-          "value": 3
-        },
-        "avoidPreviousTile": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_BOOL_YES"
-        },
-        "walkAccelerationStep": {
-          "operator": "replace",
-          "value": 1
-        },
-        "walkTimeVariance": {
-          "operator": "replace",
-          "value": 2
-        },
         "hopAllowNonCardinal": {
           "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_AND_DIAGONAL"
+          "value": "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_ONLY"
         },
         "hopMinDistance": {
           "operator": "replace",
@@ -1545,131 +544,44 @@
         },
         "hopMaxDistance": {
           "operator": "replace",
-          "value": 6
+          "value": 8
         },
         "hopPause": {
           "operator": "replace",
-          "value": 5
+          "value": 10
         },
         "hopTime": {
           "operator": "replace",
-          "value": 7
+          "value": 12
+        },
+        "hopSpinSpeed": {
+          "operator": "replace",
+          "value": 14
         },
         "spawnHopTime": {
           "operator": "replace",
-          "value": 8
+          "value": 12
         },
-        "hopElevationTimeScale": {
+        "hopAllowVerticalObstacles": {
           "operator": "replace",
-          "value": 30
+          "value": "OW_WILD_BEHAVIOR_BOOL_NO"
         },
-        "hopElevationArcScale": {
-          "operator": "replace",
-          "value": 150
-        }
-      }
-    },
-    {
-      "id": "follower-pokemon",
-      "name": "Follower Pokemon",
-      "parent": "default",
-      "kind": "normal",
-      "fields": {
-        "chillState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_KIND_CHASE"
-        },
-        "chillSpeed": {
-          "operator": "atMost",
-          "value": 8
-        },
-        "spawnState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR_HOP"
-        },
-        "chillTarget": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER"
-        },
-        "spawnDestination": {
-          "operator": "replace",
-          "value": "OW_WILD_SPAWN_DESTINATION_ONE_TILE_BEHIND_PLAYER"
-        },
-        "chillAllowedTerrainMask": {
-          "operator": "replace",
-          "value": 1
-        },
-        "chillAllowedTerrainOverrideMask": {
-          "operator": "replace",
-          "value": 1
-        },
-        "walkPause": {
-          "operator": "replace",
-          "value": 0
-        }
-      }
-    },
-    {
-      "id": "aggressive-ram-override",
-      "name": "Aggressive Ram Boost",
-      "parent": "default",
-      "kind": "normal",
-      "fields": {
-        "chillState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_KIND_WANDER"
-        },
-        "alertEmote": {
-          "operator": "replace",
-          "value": "OW_WILD_SPAWNER_BUBBLE_ID_ANGRY"
-        },
-        "alertTime": {
-          "operator": "replace",
-          "value": 10
-        },
-        "stamina": {
-          "operator": "replace",
-          "value": 6
-        },
-        "restTime": {
+        "hopSwayWidth": {
           "operator": "replace",
           "value": 4
-        },
-        "chillSpeed": {
-          "operator": "replace",
-          "value": 16
-        },
-        "range": {
-          "operator": "replace",
-          "value": 32
-        },
-        "jumpLevel": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH"
-        },
-        "profileId": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_PROFILE_DEFAULT"
-        },
-        "spawnState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR"
-        },
+        }
+      }
+    },
+    {
+      "id": "small-bird-hop",
+      "name": "Small Bird Hop",
+      "parent": "default",
+      "kind": "normal",
+      "classification": "routine",
+      "fields": {
         "chillAction": {
           "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER"
-        },
-        "chillTarget": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_TARGET_NONE"
-        },
-        "spawnDestination": {
-          "operator": "replace",
-          "value": "OW_WILD_SPAWN_DESTINATION_POOL"
-        },
-        "battleTrigger": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_MOVEMENT_CRASH"
+          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_HOP"
         },
         "hopAllowNonCardinal": {
           "operator": "replace",
@@ -1687,367 +599,260 @@
           "operator": "replace",
           "value": 0
         },
-        "teleportTime": {
-          "operator": "replace",
-          "value": 9
-        },
-        "teleportPause": {
-          "operator": "replace",
-          "value": 30
-        },
-        "alertSpecialAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE"
-        },
-        "spawnDestinationMinDistance": {
-          "operator": "replace",
-          "value": 1
-        },
-        "spawnDestinationMaxDistance": {
-          "operator": "replace",
-          "value": 5
-        },
         "ramAccelerationSteps": {
           "operator": "replace",
-          "value": 0
+          "value": 1
         },
         "ramMaxSpeed": {
           "operator": "replace",
-          "value": 0
+          "value": 30
+        },
+        "chainPauseAction": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE"
         },
         "chillAllowedTerrainMask": {
           "operator": "replace",
-          "value": 1
+          "value": 449
         },
         "chillAllowedTerrainOverrideMask": {
           "operator": "replace",
-          "value": 127
+          "value": 453
+        },
+        "hopTime": {
+          "operator": "replace",
+          "value": 6
         },
         "chainMovementVariance": {
           "operator": "replace",
-          "value": 0
+          "value": 2
         },
         "chainPauseVariance": {
           "operator": "replace",
-          "value": 0
+          "value": 20
         },
-        "walkOptions": {
+        "hopElevationTimeScale": {
           "operator": "replace",
-          "value": 17
+          "value": 100
         },
-        "walkStompTime": {
+        "hopElevationArcScale": {
           "operator": "replace",
-          "value": 8
+          "value": 50
+        },
+        "spawnDestinationMask": {
+          "operator": "replace",
+          "value": 448
+        },
+        "spawnDestinationOverrideMask": {
+          "operator": "replace",
+          "value": 1023
         }
       }
     },
     {
-      "id": "default-active",
-      "name": "Default Active",
+      "id": "erratic-flutter",
+      "name": "Erratic Flutter",
       "parent": "default",
-      "kind": "conditional",
-      "conditions": [
-        {
-          "id": "condition-default-notices-player",
-          "subjects": {
-            "mode": "all",
-            "match": {
-              "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-              "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-              "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-              "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-              "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-              "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-              "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_DEFAULT"
-            },
-            "members": []
-          },
-          "when": {
-            "kind": "notice-target",
-            "rangeKind": "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS",
-            "rangeLength": 3,
-            "chancePercent": 100
-          },
-          "activation": {
-            "mode": "timed",
-            "durationFrames": 960,
-            "cooldownFrames": 970
-          },
-          "target": {
-            "kind": "player"
-          }
+      "kind": "normal",
+      "classification": "routine",
+      "fields": {
+        "stamina": {
+          "operator": "replace",
+          "value": 32
         },
-        {
-          "id": "condition-aggressive-chase-notices-player",
-          "subjects": {
-            "mode": "all",
-            "match": {
-              "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-              "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-              "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-              "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-              "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-              "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-              "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_AGRESSIVE_CHASE"
-            },
-            "members": []
-          },
-          "when": {
-            "kind": "notice-target",
-            "rangeKind": "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS",
-            "rangeLength": 3,
-            "chancePercent": 100
-          },
-          "activation": {
-            "mode": "timed",
-            "durationFrames": 160,
-            "cooldownFrames": 164
-          },
-          "target": {
-            "kind": "player"
-          }
+        "restTime": {
+          "operator": "replace",
+          "value": 20
         },
-        {
-          "id": "condition-aggressive-ram-notices-player",
-          "subjects": {
-            "mode": "all",
-            "match": {
-              "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-              "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-              "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-              "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-              "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-              "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-              "behaviorClass": "OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM"
-            },
-            "members": []
-          },
-          "when": {
-            "kind": "notice-target",
-            "rangeKind": "OW_WILD_BEHAVIOR_ALERT_RANGE_CARDINAL_LINE",
-            "rangeLength": 14,
-            "chancePercent": 100
-          },
-          "activation": {
-            "mode": "timed",
-            "durationFrames": 96,
-            "cooldownFrames": 100
-          },
-          "target": {
-            "kind": "player"
-          }
+        "chillSpeed": {
+          "operator": "replace",
+          "value": "5"
         },
-        {
-          "id": "condition-nervous-scavenger-notices-player",
-          "subjects": {
-            "application": "apply-nervous-scavenger"
-          },
-          "when": {
-            "kind": "notice-target",
-            "rangeKind": "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS",
-            "rangeLength": 3,
-            "chancePercent": 100
-          },
-          "activation": {
-            "mode": "timed",
-            "durationFrames": 140,
-            "cooldownFrames": 150
-          },
-          "target": {
-            "kind": "player"
-          }
+        "range": {
+          "operator": "replace",
+          "value": 32
         },
-        {
-          "id": "condition-hopping-scavenger-notices-player",
-          "subjects": {
-            "application": "apply-hopping-scavenger"
-          },
-          "when": {
-            "kind": "notice-target",
-            "rangeKind": "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS",
-            "rangeLength": 3,
-            "chancePercent": 100
-          },
-          "activation": {
-            "mode": "timed",
-            "durationFrames": 240,
-            "cooldownFrames": 250
-          },
-          "target": {
-            "kind": "player"
-          }
+        "jumpLevel": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_JUMP_LEVEL_BOTH"
         },
-        {
-          "id": "condition-flying-insect-notices-player",
-          "subjects": {
-            "application": "apply-flying-insect"
-          },
-          "when": {
-            "kind": "notice-target",
-            "rangeKind": "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS",
-            "rangeLength": 7,
-            "chancePercent": 100
-          },
-          "activation": {
-            "mode": "timed",
-            "durationFrames": 160,
-            "cooldownFrames": 180
-          },
-          "target": {
-            "kind": "player"
-          }
+        "profileId": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_PROFILE_DEFAULT"
         },
-        {
-          "id": "condition-gentle-grazer-notices-player",
-          "subjects": {
-            "application": "apply-gentle-grazer"
-          },
-          "when": {
-            "kind": "notice-target",
-            "rangeKind": "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS",
-            "rangeLength": 2,
-            "chancePercent": 80
-          },
-          "activation": {
-            "mode": "timed",
-            "durationFrames": 280,
-            "cooldownFrames": 290
-          },
-          "target": {
-            "kind": "player"
-          }
+        "chillAction": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER"
         },
-        {
-          "id": "condition-throwing-notices-player",
-          "subjects": {
-            "application": "apply-throwing"
-          },
-          "when": {
-            "kind": "notice-target",
-            "rangeKind": "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS",
-            "rangeLength": 2,
-            "chancePercent": 100
-          },
-          "activation": {
-            "mode": "timed",
-            "durationFrames": 2880,
-            "cooldownFrames": 2890
-          },
-          "target": {
-            "kind": "player"
-          }
+        "spawnDestination": {
+          "operator": "replace",
+          "value": "OW_WILD_SPAWN_DESTINATION_POOL"
         },
-        {
-          "id": "condition-hopping-thrower-notices-player",
-          "subjects": {
-            "mode": "members",
-            "match": {
-              "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-              "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-              "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-              "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-              "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-              "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-              "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-            },
-            "members": [
-              "SPECIES_MANKEY",
-              "SPECIES_PRIMEAPE",
-              "SPECIES_ANNIHILAPE"
-            ]
-          },
-          "when": {
-            "kind": "notice-target",
-            "rangeKind": "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS",
-            "rangeLength": 2,
-            "chancePercent": 100
-          },
-          "activation": {
-            "mode": "timed",
-            "durationFrames": 720,
-            "cooldownFrames": 730
-          },
-          "target": {
-            "kind": "player"
-          }
+        "hopAllowNonCardinal": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_DIAGONAL_ONLY"
         },
-        {
-          "id": "condition-playful-notices-player",
-          "subjects": {
-            "application": "apply-playful"
-          },
-          "when": {
-            "kind": "notice-target",
-            "rangeKind": "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS",
-            "rangeLength": 3,
-            "chancePercent": 100
-          },
-          "activation": {
-            "mode": "timed",
-            "durationFrames": 2880,
-            "cooldownFrames": 2890
-          },
-          "target": {
-            "kind": "player"
-          }
+        "hopMinDistance": {
+          "operator": "replace",
+          "value": 1
         },
-        {
-          "id": "condition-playful-scavenger-notices-player",
-          "subjects": {
-            "mode": "members",
-            "match": {
-              "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-              "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-              "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-              "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-              "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-              "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-              "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-            },
-            "members": [
-              "SPECIES_SENTRET",
-              "SPECIES_FURRET",
-              "SPECIES_AIPOM",
-              "SPECIES_AMBIPOM"
-            ]
-          },
-          "when": {
-            "kind": "notice-target",
-            "rangeKind": "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS",
-            "rangeLength": 3,
-            "chancePercent": 100
-          },
-          "activation": {
-            "mode": "timed",
-            "durationFrames": 420,
-            "cooldownFrames": 430
-          },
-          "target": {
-            "kind": "player"
-          }
+        "hopMaxDistance": {
+          "operator": "replace",
+          "value": 1
+        },
+        "hopPause": {
+          "operator": "replace",
+          "value": 0
+        },
+        "ramAccelerationSteps": {
+          "operator": "replace",
+          "value": 8
+        },
+        "chainPauseAction": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_SKIDS"
+        },
+        "hopSpinSpeed": {
+          "operator": "replace",
+          "value": 0
+        },
+        "avoidPreviousTile": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_BOOL_YES"
+        },
+        "chainMovementVariance": {
+          "operator": "replace",
+          "value": 6
+        },
+        "tiredProfile": {
+          "operator": "replace",
+          "value": "apply-rest"
+        },
+        "hopElevationArcScale": {
+          "operator": "replace",
+          "value": 0
+        },
+        "chainRepositionJumpCount": {
+          "operator": "replace",
+          "value": 4
+        },
+        "hopSwayWidth": {
+          "operator": "replace",
+          "value": 0
+        },
+        "chainRepositionSpeed": {
+          "operator": "replace",
+          "value": 2
+        },
+        "chainRepositionDistance": {
+          "operator": "replace",
+          "value": 2
+        },
+        "chainRepositionDust": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_BOOL_NO"
+        },
+        "chainRepositionAllowCardinal": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_BOOL_NO"
+        },
+        "chainRepositionAllowDiagonal": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_BOOL_YES"
+        },
+        "walkOptions": {
+          "operator": "replace",
+          "value": 96
+        },
+        "wanderStraightChance": {
+          "operator": "replace",
+          "value": 0
+        },
+        "chainPauseActionChance": {
+          "operator": "replace",
+          "value": 60
+        },
+        "walkPause": {
+          "operator": "replace",
+          "value": 0
+        },
+        "tilesBeforeTurnSkid": {
+          "operator": "replace",
+          "value": 0
+        },
+        "walkTimeVariance": {
+          "operator": "replace",
+          "value": 5
         }
-      ],
-      "fields": {}
+      }
     },
     {
-      "id": "default-tired",
-      "name": "Default Tired",
+      "id": "meander",
+      "name": "Meander",
       "parent": "default",
       "kind": "normal",
-      "fields": {}
+      "classification": "routine",
+      "fields": {
+        "chillSpeed": {
+          "operator": "replace",
+          "value": 14
+        },
+        "ramAccelerationSteps": {
+          "operator": "replace",
+          "value": 2
+        },
+        "chainMovementVariance": {
+          "operator": "replace",
+          "value": 5
+        },
+        "ramMaxSpeed": {
+          "operator": "replace",
+          "value": 24
+        },
+        "chainPauseVariance": {
+          "operator": "replace",
+          "value": 36
+        },
+        "chainPauseAction": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_CHAIN_PAUSE_RANDOM_CHOICE | OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_LOOK_AROUND | OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_PAUSE"
+        },
+        "chainPauseActionChance": {
+          "operator": "replace",
+          "value": 50
+        },
+        "avoidPreviousTile": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_BOOL_YES"
+        },
+        "walkOptions": {
+          "operator": "replace",
+          "value": 32
+        },
+        "wanderStraightChance": {
+          "operator": "replace",
+          "value": 65
+        },
+        "walkPause": {
+          "operator": "replace",
+          "value": 0
+        },
+        "walkPauseVariance": {
+          "operator": "replace",
+          "value": 0
+        },
+        "walkTimeVariance": {
+          "operator": "replace",
+          "value": 2
+        }
+      }
     },
     {
-      "id": "baby-pokemon",
-      "name": "Baby Pokemon",
+      "id": "hop-around",
+      "name": "Hop Around",
       "parent": "default",
       "kind": "normal",
-      "fields": {}
-    },
-    {
-      "id": "swaying-plant",
-      "name": "Swaying Plant",
-      "parent": "default",
-      "kind": "normal",
+      "classification": "routine",
       "fields": {
         "chillState": {
           "operator": "replace",
@@ -2071,7 +876,7 @@
         },
         "chillAction": {
           "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER"
+          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_HOP"
         },
         "chillTarget": {
           "operator": "replace",
@@ -2101,14 +906,6 @@
           "operator": "replace",
           "value": 50
         },
-        "tiredProfile": {
-          "operator": "replace",
-          "value": "apply-swaying-plant-tired"
-        },
-        "walkOptions": {
-          "operator": "replace",
-          "value": 40
-        },
         "wanderStraightChance": {
           "operator": "replace",
           "value": 60
@@ -2120,136 +917,35 @@
         "tilesBeforeTurnSkid": {
           "operator": "replace",
           "value": 0
-        }
-      }
-    },
-    {
-      "id": "swaying-plant-active",
-      "name": "Swaying Plant Active",
-      "parent": "swaying-plant",
-      "kind": "conditional",
-      "conditions": [
-        {
-          "id": "condition-swaying-plant-notices-player",
-          "subjects": {
-            "application": "apply-swaying-plant"
-          },
-          "when": {
-            "kind": "notice-target",
-            "rangeKind": "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS",
-            "rangeLength": 3,
-            "chancePercent": 100
-          },
-          "activation": {
-            "mode": "timed",
-            "durationFrames": 44,
-            "cooldownFrames": 164
-          },
-          "target": {
-            "kind": "player"
-          }
-        }
-      ],
-      "fields": {
-        "chillState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_KIND_WANDER"
         },
-        "chillAction": {
+        "hopAllowNonCardinal": {
           "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER"
+          "value": "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_AND_DIAGONAL"
         },
-        "chillTarget": {
+        "hopMinDistance": {
           "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_TARGET_NONE"
+          "value": 1
         },
-        "chillSpeed": {
-          "operator": "replace",
-          "value": 11
-        },
-        "ramAccelerationSteps": {
-          "operator": "replace",
-          "value": 3
-        },
-        "ramMaxSpeed": {
-          "operator": "replace",
-          "value": 24
-        },
-        "chainMovementVariance": {
+        "hopMaxDistance": {
           "operator": "replace",
           "value": 2
         },
-        "chainPauseVariance": {
+        "hopPause": {
           "operator": "replace",
-          "value": 24
+          "value": 4
         },
-        "chainPauseAction": {
+        "hopTime": {
           "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND"
-        },
-        "wanderStraightChance": {
-          "operator": "replace",
-          "value": 70
+          "value": 7
         }
       }
     },
     {
-      "id": "swaying-plant-tired",
-      "name": "Swaying Plant Tired",
-      "parent": "swaying-plant",
-      "kind": "normal",
-      "fields": {
-        "chillState": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_KIND_WANDER"
-        },
-        "chillAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER"
-        },
-        "chillTarget": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_TARGET_NONE"
-        },
-        "chillSpeed": {
-          "operator": "replace",
-          "value": 20
-        },
-        "ramAccelerationSteps": {
-          "operator": "replace",
-          "value": 1
-        },
-        "ramMaxSpeed": {
-          "operator": "replace",
-          "value": 96
-        },
-        "chainMovementVariance": {
-          "operator": "replace",
-          "value": 1
-        },
-        "chainPauseVariance": {
-          "operator": "replace",
-          "value": 60
-        },
-        "chainPauseAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND"
-        },
-        "wanderStraightChance": {
-          "operator": "replace",
-          "value": 40
-        },
-        "walkPause": {
-          "operator": "replace",
-          "value": 8
-        }
-      }
-    },
-    {
-      "id": "ambush-plant",
-      "name": "Ambush Plant",
+      "id": "idle",
+      "name": "Idle",
       "parent": "default",
       "kind": "normal",
+      "classification": "routine",
       "fields": {
         "chillState": {
           "operator": "replace",
@@ -2262,14 +958,6 @@
         "chillTarget": {
           "operator": "replace",
           "value": "OW_WILD_BEHAVIOR_TARGET_NONE"
-        },
-        "alertEmote": {
-          "operator": "replace",
-          "value": "OW_WILD_SPAWNER_BUBBLE_ID_EXCLAMATION_MARK"
-        },
-        "alertTime": {
-          "operator": "replace",
-          "value": 8
         },
         "stamina": {
           "operator": "replace",
@@ -2285,37 +973,810 @@
         },
         "tiredProfile": {
           "operator": "replace",
-          "value": "apply-ambush-plant-tired"
+          "value": "apply-rest"
         }
       }
     },
     {
-      "id": "ambush-plant-active",
-      "name": "Ambush Plant Active",
-      "parent": "ambush-plant",
+      "id": "drowsy-wander",
+      "name": "Drowsy Wander",
+      "parent": "default",
+      "kind": "normal",
+      "classification": "routine",
+      "fields": {
+        "chillSpeed": {
+          "operator": "replace",
+          "value": 20
+        },
+        "ramAccelerationSteps": {
+          "operator": "replace",
+          "value": 2
+        },
+        "chainMovementVariance": {
+          "operator": "replace",
+          "value": 4
+        },
+        "ramMaxSpeed": {
+          "operator": "replace",
+          "value": 72
+        },
+        "chainPauseVariance": {
+          "operator": "replace",
+          "value": 96
+        },
+        "chainPauseAction": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND"
+        },
+        "chainPauseActionChance": {
+          "operator": "replace",
+          "value": 70
+        },
+        "avoidPreviousTile": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_BOOL_YES"
+        },
+        "walkOptions": {
+          "operator": "replace",
+          "value": 32
+        },
+        "wanderStraightChance": {
+          "operator": "replace",
+          "value": 55
+        },
+        "walkPause": {
+          "operator": "replace",
+          "value": 0
+        },
+        "walkPauseVariance": {
+          "operator": "replace",
+          "value": 0
+        },
+        "walkTimeVariance": {
+          "operator": "replace",
+          "value": 6
+        }
+      }
+    },
+    {
+      "id": "perch",
+      "name": "Perch",
+      "parent": "default",
       "kind": "conditional",
+      "classification": "routine",
+      "fields": {
+        "chillState": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_KIND_CHASE"
+        },
+        "chillAction": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_HOP"
+        },
+        "chillTarget": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_TARGET_NONE"
+        },
+        "chillAllowedTerrainMask": {
+          "operator": "replace",
+          "value": 0
+        },
+        "chillAllowedTerrainOverrideMask": {
+          "operator": "replace",
+          "value": 1
+        }
+      },
       "conditions": [
         {
-          "id": "condition-ambush-plant-notices-player",
+          "id": "condition-perch-on-elevated-surface",
           "subjects": {
-            "application": "apply-ambush-plant"
+            "mode": "members",
+            "match": {
+              "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+              "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+              "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+              "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+              "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+              "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+              "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+            },
+            "members": [
+              "SPECIES_PIDGEY",
+              "SPECIES_PIDGEOTTO",
+              "SPECIES_PIDGEOT",
+              "SPECIES_SPEAROW",
+              "SPECIES_FEAROW",
+              "SPECIES_HOOTHOOT",
+              "SPECIES_NOCTOWL",
+              "SPECIES_DELIBIRD",
+              "SPECIES_TAILLOW",
+              "SPECIES_SWELLOW"
+            ]
+          },
+          "when": {
+            "kind": "terrain-motion",
+            "terrainMask": "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX",
+            "terrainOverrideMask": "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX",
+            "minMovementSpeed": 0,
+            "maxMovementSpeed": 0
+          },
+          "activation": {
+            "mode": "while-true"
+          },
+          "target": {
+            "kind": "none"
+          }
+        }
+      ]
+    },
+    {
+      "id": "rest",
+      "name": "Rest",
+      "parent": "default",
+      "kind": "normal",
+      "classification": "routine",
+      "fields": {}
+    },
+    {
+      "id": "fly-in",
+      "name": "Fly In",
+      "parent": "default",
+      "kind": "normal",
+      "classification": "placement",
+      "fields": {
+        "spawnState": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_SPAWN_STATE_FLY_IN"
+        }
+      }
+    },
+    {
+      "id": "canopy-access",
+      "name": "Canopy Access",
+      "parent": "default",
+      "kind": "normal",
+      "classification": "placement",
+      "fields": {
+        "chillAllowedTerrainMask": {
+          "operator": "replace",
+          "value": 4
+        },
+        "chillAllowedTerrainOverrideMask": {
+          "operator": "replace",
+          "value": 4
+        }
+      }
+    },
+    {
+      "id": "flower-bed",
+      "name": "Flower Bed",
+      "parent": "default",
+      "kind": "normal",
+      "classification": "placement",
+      "fields": {
+        "spawnState": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR_HOP"
+        },
+        "chillAllowedTerrainMask": {
+          "operator": "replace",
+          "value": 512
+        },
+        "chillAllowedTerrainOverrideMask": {
+          "operator": "replace",
+          "value": 1023
+        },
+        "spawnDestinationMask": {
+          "operator": "replace",
+          "value": 512
+        },
+        "spawnDestinationOverrideMask": {
+          "operator": "replace",
+          "value": 1023
+        }
+      }
+    },
+    {
+      "id": "notice-player",
+      "name": "Notice Player",
+      "parent": "default",
+      "kind": "conditional",
+      "classification": "capability",
+      "fields": {
+        "alertEmote": {
+          "operator": "replace",
+          "value": "OW_WILD_SPAWNER_BUBBLE_ID_EXCLAMATION_MARK"
+        },
+        "alertTime": {
+          "operator": "replace",
+          "value": 10
+        }
+      },
+      "conditions": [
+        {
+          "id": "condition-notice-player",
+          "subjects": {
+            "mode": "all",
+            "match": {
+              "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+              "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+              "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+              "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+              "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+              "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+              "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+            },
+            "members": []
           },
           "when": {
             "kind": "notice-target",
-            "rangeKind": "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS",
-            "rangeLength": 4,
+            "vision": {
+              "mode": "current"
+            },
             "chancePercent": 100
           },
           "activation": {
             "mode": "timed",
-            "durationFrames": 36,
-            "cooldownFrames": 126
+            "durationFrames": 960,
+            "cooldownFrames": 970
           },
           "target": {
             "kind": "player"
           }
         }
-      ],
+      ]
+    },
+    {
+      "id": "teleport",
+      "name": "Teleport",
+      "parent": "default",
+      "kind": "normal",
+      "classification": "capability",
+      "fields": {
+        "range": {
+          "operator": "replace",
+          "value": 32
+        },
+        "profileId": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_PROFILE_DEFAULT"
+        },
+        "chillAction": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT"
+        },
+        "teleportTime": {
+          "operator": "replace",
+          "value": 9
+        },
+        "teleportPause": {
+          "operator": "replace",
+          "value": 30
+        }
+      }
+    },
+    {
+      "id": "stalker",
+      "name": "Stalker",
+      "parent": "default",
+      "kind": "conditional",
+      "classification": "capability",
+      "fields": {
+        "chillState": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_KIND_CHASE"
+        },
+        "chillTarget": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER"
+        },
+        "playerAdjacentDirectionMasks": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_PLAYER_ADJACENT_BEHIND"
+        }
+      },
+      "conditions": [
+        {
+          "id": "condition-stalker-unseen-by-player",
+          "subjects": {
+            "mode": "members",
+            "match": {
+              "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+              "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+              "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+              "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+              "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+              "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+              "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+            },
+            "members": [
+              "SPECIES_GASTLY",
+              "SPECIES_HAUNTER",
+              "SPECIES_GENGAR",
+              "SPECIES_MISDREAVUS",
+              "SPECIES_SHEDINJA",
+              "SPECIES_SABLEYE",
+              "SPECIES_SHUPPET",
+              "SPECIES_BANETTE",
+              "SPECIES_DUSKULL",
+              "SPECIES_DUSCLOPS",
+              "SPECIES_DRIFLOON",
+              "SPECIES_DRIFBLIM",
+              "SPECIES_MISMAGIUS",
+              "SPECIES_SPIRITOMB",
+              "SPECIES_DUSKNOIR",
+              "SPECIES_FROSLASS",
+              "SPECIES_ROTOM",
+              "SPECIES_GIRATINA",
+              "SPECIES_GIRATINA_ORIGIN",
+              "SPECIES_YAMASK",
+              "SPECIES_COFAGRIGUS",
+              "SPECIES_FRILLISH",
+              "SPECIES_JELLICENT",
+              "SPECIES_LITWICK",
+              "SPECIES_LAMPENT",
+              "SPECIES_CHANDELURE",
+              "SPECIES_GOLETT",
+              "SPECIES_GOLURK",
+              "SPECIES_HONEDGE",
+              "SPECIES_DOUBLADE",
+              "SPECIES_AEGISLASH",
+              "SPECIES_PHANTUMP",
+              "SPECIES_TREVENANT",
+              "SPECIES_PUMPKABOO",
+              "SPECIES_GOURGEIST",
+              "SPECIES_HOOPA",
+              "SPECIES_DECIDUEYE",
+              "SPECIES_SANDYGAST",
+              "SPECIES_PALOSSAND",
+              "SPECIES_MIMIKYU",
+              "SPECIES_DHELMISE",
+              "SPECIES_LUNALA",
+              "SPECIES_MARSHADOW",
+              "SPECIES_BLACEPHALON",
+              "SPECIES_SINISTEA",
+              "SPECIES_POLTEAGEIST",
+              "SPECIES_CURSOLA",
+              "SPECIES_RUNERIGUS",
+              "SPECIES_DREEPY",
+              "SPECIES_DRAKLOAK",
+              "SPECIES_DRAGAPULT",
+              "SPECIES_SPECTRIER",
+              "SPECIES_BASCULEGION",
+              "SPECIES_SKELEDIRGE",
+              "SPECIES_CERULEDGE",
+              "SPECIES_BRAMBLIN",
+              "SPECIES_BRAMBLEGHAST",
+              "SPECIES_GREAVARD",
+              "SPECIES_HOUNDSTONE",
+              "SPECIES_FLUTTER_MANE",
+              "SPECIES_GIMMIGHOUL",
+              "SPECIES_GHOLDENGO",
+              "SPECIES_POLTCHAGEIST",
+              "SPECIES_SINISTCHA",
+              "SPECIES_PECHARUNT",
+              "SPECIES_MEGA_GENGAR",
+              "SPECIES_MEGA_SABLEYE",
+              "SPECIES_MEGA_BANETTE",
+              "SPECIES_MAROWAK_ALOLAN",
+              "SPECIES_MAROWAK_ALOLAN_LARGE",
+              "SPECIES_MIMIKYU_LARGE",
+              "SPECIES_MIMIKYU_BUSTED_LARGE",
+              "SPECIES_CORSOLA_GALARIAN",
+              "SPECIES_YAMASK_GALARIAN",
+              "SPECIES_AEGISLASH_BLADE",
+              "SPECIES_PUMPKABOO_SMALL",
+              "SPECIES_PUMPKABOO_LARGE",
+              "SPECIES_PUMPKABOO_SUPER",
+              "SPECIES_GOURGEIST_SMALL",
+              "SPECIES_GOURGEIST_LARGE",
+              "SPECIES_GOURGEIST_SUPER",
+              "SPECIES_ORICORIO_SENSU",
+              "SPECIES_MIMIKYU_BUSTED",
+              "SPECIES_NECROZMA_DAWN_WINGS",
+              "SPECIES_SINISTEA_ANTIQUE",
+              "SPECIES_POLTEAGEIST_ANTIQUE",
+              "SPECIES_CALYREX_SHADOW_RIDER",
+              "SPECIES_TYPHLOSION_HISUIAN",
+              "SPECIES_ZORUA_HISUIAN",
+              "SPECIES_ZOROARK_HISUIAN",
+              "SPECIES_FRILLISH_FEMALE",
+              "SPECIES_JELLICENT_FEMALE",
+              "SPECIES_BASCULEGION_FEMALE",
+              "SPECIES_GIMMIGHOUL_ROAMING",
+              "SPECIES_POLTCHAGEIST_MASTERPIECE",
+              "SPECIES_SINISTCHA_MASTERPIECE"
+            ]
+          },
+          "when": {
+            "kind": "target-cannot-see-subject",
+            "vision": {
+              "mode": "current"
+            },
+            "chancePercent": 100
+          },
+          "activation": {
+            "mode": "while-true"
+          },
+          "target": {
+            "kind": "player"
+          }
+        }
+      ]
+    },
+    {
+      "id": "long-hop",
+      "name": "Long Hop",
+      "parent": "default",
+      "kind": "normal",
+      "classification": "capability",
+      "fields": {
+        "chillAction": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_HOP"
+        },
+        "hopAllowNonCardinal": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_AND_DIAGONAL"
+        },
+        "hopMinDistance": {
+          "operator": "replace",
+          "value": 1
+        },
+        "hopMaxDistance": {
+          "operator": "replace",
+          "value": 6
+        },
+        "hopPause": {
+          "operator": "replace",
+          "value": 5
+        },
+        "hopTime": {
+          "operator": "replace",
+          "value": 7
+        },
+        "hopElevationTimeScale": {
+          "operator": "replace",
+          "value": 30
+        },
+        "hopElevationArcScale": {
+          "operator": "replace",
+          "value": 150
+        }
+      }
+    },
+    {
+      "id": "canopy-hop",
+      "name": "Canopy Hop",
+      "parent": "default",
+      "kind": "conditional",
+      "classification": "capability",
+      "fields": {
+        "hopAllowNonCardinal": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_AND_DIAGONAL"
+        },
+        "hopMinDistance": {
+          "operator": "replace",
+          "value": 1
+        },
+        "hopMaxDistance": {
+          "operator": "replace",
+          "value": 6
+        },
+        "chillAction": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_HOP"
+        },
+        "hopTime": {
+          "operator": "replace",
+          "value": 7
+        },
+        "hopElevationTimeScale": {
+          "operator": "replace",
+          "value": 30
+        },
+        "hopElevationArcScale": {
+          "operator": "replace",
+          "value": 150
+        },
+        "hopAllowVerticalObstacles": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_BOOL_YES"
+        }
+      },
+      "conditions": [
+        {
+          "id": "condition-canopy-hop-on-canopy",
+          "subjects": {
+            "mode": "members",
+            "match": {
+              "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+              "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+              "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+              "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+              "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+              "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+              "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+            },
+            "members": [
+              "SPECIES_MANKEY",
+              "SPECIES_PRIMEAPE",
+              "SPECIES_ANNIHILAPE",
+              "SPECIES_SENTRET",
+              "SPECIES_FURRET",
+              "SPECIES_AIPOM",
+              "SPECIES_AMBIPOM"
+            ]
+          },
+          "when": {
+            "kind": "terrain-motion",
+            "terrainMask": "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY",
+            "terrainOverrideMask": "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY",
+            "minMovementSpeed": 0,
+            "maxMovementSpeed": 0
+          },
+          "activation": {
+            "mode": "while-true"
+          },
+          "target": {
+            "kind": "none"
+          }
+        }
+      ]
+    },
+    {
+      "id": "throw",
+      "name": "Throw",
+      "parent": "default",
+      "kind": "conditional",
+      "classification": "capability",
+      "fields": {
+        "alertEmote": {
+          "operator": "replace",
+          "value": "OW_WILD_SPAWNER_BUBBLE_ID_ANGRY"
+        },
+        "alertTime": {
+          "operator": "replace",
+          "value": 20
+        },
+        "stamina": {
+          "operator": "replace",
+          "value": 60
+        },
+        "alertSpecialAction": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW"
+        }
+      },
+      "conditions": [
+        {
+          "id": "condition-throw-notices-player",
+          "subjects": {
+            "mode": "members",
+            "match": {
+              "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+              "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+              "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+              "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+              "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+              "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+              "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+            },
+            "members": [
+              "SPECIES_GEODUDE",
+              "SPECIES_GRAVELER",
+              "SPECIES_GOLEM",
+              "SPECIES_GEODUDE_ALOLAN",
+              "SPECIES_GRAVELER_ALOLAN",
+              "SPECIES_GOLEM_ALOLAN",
+              "SPECIES_MANKEY",
+              "SPECIES_PRIMEAPE",
+              "SPECIES_ANNIHILAPE"
+            ]
+          },
+          "when": {
+            "kind": "notice-target",
+            "vision": {
+              "mode": "current"
+            },
+            "chancePercent": 100
+          },
+          "activation": {
+            "mode": "timed",
+            "durationFrames": 2880,
+            "cooldownFrames": 2890
+          },
+          "target": {
+            "kind": "player"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ram",
+      "name": "Ram",
+      "parent": "default",
+      "kind": "conditional",
+      "classification": "capability",
+      "fields": {
+        "alertEmote": {
+          "operator": "replace",
+          "value": "OW_WILD_SPAWNER_BUBBLE_ID_ANGRY"
+        },
+        "alertTime": {
+          "operator": "replace",
+          "value": 10
+        },
+        "battleTrigger": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_BATTLE_TRIGGER_MOVEMENT_CRASH"
+        },
+        "chainMovementVariance": {
+          "operator": "replace",
+          "value": 0
+        },
+        "chainPauseVariance": {
+          "operator": "replace",
+          "value": 0
+        },
+        "walkOptions": {
+          "operator": "replace",
+          "value": 17
+        },
+        "walkStompTime": {
+          "operator": "replace",
+          "value": 8
+        },
+        "chillTarget": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_TARGET_PLAYER_CARDINAL_LINE"
+        },
+        "ramAccelerationSteps": {
+          "operator": "replace",
+          "value": 3
+        },
+        "ramMaxSpeed": {
+          "operator": "replace",
+          "value": 4
+        }
+      },
+      "conditions": [
+        {
+          "id": "condition-ram-notices-player",
+          "subjects": {
+            "mode": "members",
+            "match": {
+              "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+              "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+              "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+              "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+              "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+              "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+              "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+            },
+            "members": [
+              "SPECIES_PONYTA",
+              "SPECIES_RAPIDASH",
+              "SPECIES_ONIX",
+              "SPECIES_STEELIX",
+              "SPECIES_PHANPY",
+              "SPECIES_DONPHAN",
+              "SPECIES_GREAT_TUSK",
+              "SPECIES_PONYTA_GALARIAN",
+              "SPECIES_RAPIDASH_GALARIAN"
+            ]
+          },
+          "when": {
+            "kind": "notice-target",
+            "vision": {
+              "mode": "current"
+            },
+            "chancePercent": 100
+          },
+          "activation": {
+            "mode": "timed",
+            "durationFrames": 96,
+            "cooldownFrames": 100
+          },
+          "target": {
+            "kind": "player"
+          }
+        }
+      ]
+    },
+    {
+      "id": "heavy-stomp",
+      "name": "Heavy Stomp",
+      "parent": "default",
+      "kind": "normal",
+      "classification": "capability",
+      "fields": {
+        "walkStompTime": {
+          "operator": "replace",
+          "value": 32
+        },
+        "overworldLimit": {
+          "operator": "replace",
+          "value": 1
+        }
+      }
+    },
+    {
+      "id": "startled",
+      "name": "Startled",
+      "parent": "default",
+      "kind": "conditional",
+      "classification": "attitude",
+      "fields": {
+        "alertEmote": {
+          "operator": "replace",
+          "value": "OW_WILD_SPAWNER_BUBBLE_ID_EXCLAMATION_MARK"
+        },
+        "alertTime": {
+          "operator": "replace",
+          "value": 10
+        },
+        "chillState": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_KIND_FLEE"
+        },
+        "chillTarget": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_TARGET_AWAY_FROM_PLAYER"
+        }
+      },
+      "conditions": [
+        {
+          "id": "condition-startled-notices-player",
+          "subjects": {
+            "mode": "members",
+            "match": {
+              "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+              "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+              "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+              "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+              "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+              "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+              "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+            },
+            "members": [
+              "SPECIES_BELLSPROUT",
+              "SPECIES_ODDISH",
+              "SPECIES_GLOOM",
+              "SPECIES_VILEPLUME",
+              "SPECIES_BELLOSSOM",
+              "SPECIES_SUNFLORA",
+              "SPECIES_SUNKERN",
+              "SPECIES_CHERUBI",
+              "SPECIES_CHERRIM",
+              "SPECIES_CHERRIM_SUNSHINE"
+            ]
+          },
+          "when": {
+            "kind": "notice-target",
+            "vision": {
+              "mode": "current"
+            },
+            "chancePercent": 100
+          },
+          "activation": {
+            "mode": "timed",
+            "durationFrames": 44,
+            "cooldownFrames": 164
+          },
+          "target": {
+            "kind": "player"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ambush",
+      "name": "Ambush",
+      "parent": "default",
+      "kind": "conditional",
+      "classification": "attitude",
       "fields": {
         "chillState": {
           "operator": "replace",
@@ -2357,25 +1818,275 @@
           "operator": "replace",
           "value": 0
         }
-      }
+      },
+      "conditions": [
+        {
+          "id": "condition-ambush-notices-player",
+          "subjects": {
+            "mode": "members",
+            "match": {
+              "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+              "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+              "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+              "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+              "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+              "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+              "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+            },
+            "members": [
+              "SPECIES_WEEPINBELL",
+              "SPECIES_VICTREEBEL",
+              "SPECIES_CARNIVINE"
+            ]
+          },
+          "when": {
+            "kind": "notice-target",
+            "vision": {
+              "mode": "current"
+            },
+            "chancePercent": 100
+          },
+          "activation": {
+            "mode": "timed",
+            "durationFrames": 36,
+            "cooldownFrames": 126
+          },
+          "target": {
+            "kind": "player"
+          }
+        }
+      ]
     },
     {
-      "id": "ambush-plant-tired",
-      "name": "Ambush Plant Tired",
-      "parent": "ambush-plant",
-      "kind": "normal",
+      "id": "playful",
+      "name": "Playful",
+      "parent": "default",
+      "kind": "conditional",
+      "classification": "attitude",
       "fields": {
+        "alertEmote": {
+          "operator": "replace",
+          "value": "OW_WILD_SPAWNER_BUBBLE_ID_HEART"
+        },
+        "alertTime": {
+          "operator": "replace",
+          "value": 20
+        },
         "chillState": {
           "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_KIND_TIRED_EMOTE"
-        },
-        "chillAction": {
-          "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_LOCOMOTION_NONE"
+          "value": "OW_WILD_BEHAVIOR_KIND_CHASE"
         },
         "chillTarget": {
           "operator": "replace",
-          "value": "OW_WILD_BEHAVIOR_TARGET_NONE"
+          "value": "OW_WILD_BEHAVIOR_TARGET_CIRCLE_PLAYER"
+        },
+        "continueWhenArrived": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_BOOL_YES"
+        },
+        "circleRadius": {
+          "operator": "replace",
+          "value": 1
+        },
+        "chainPauseAction": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE"
+        },
+        "chainPauseActionChance": {
+          "operator": "replace",
+          "value": 60
+        },
+        "chillSpeed": {
+          "operator": "relativeThenAtLeast",
+          "value": -2,
+          "threshold": 1
+        },
+        "hopTime": {
+          "operator": "relativeThenAtLeast",
+          "value": -2,
+          "threshold": 1
+        }
+      },
+      "conditions": [
+        {
+          "id": "condition-playful-notices-compatible-actor",
+          "subjects": {
+            "pool": "playful-pokemon"
+          },
+          "when": {
+            "kind": "notice-target",
+            "vision": {
+              "mode": "current"
+            },
+            "chancePercent": 100
+          },
+          "activation": {
+            "mode": "timed",
+            "durationFrames": 420,
+            "cooldownFrames": 430
+          },
+          "target": {
+            "kind": "actor",
+            "roles": [
+              "wild",
+              "follower"
+            ],
+            "selection": "nearest",
+            "pool": "playful-pokemon"
+          }
+        },
+        {
+          "id": "condition-playful-notices-player",
+          "subjects": {
+            "pool": "playful-pokemon"
+          },
+          "when": {
+            "kind": "notice-target",
+            "vision": {
+              "mode": "current"
+            },
+            "chancePercent": 100
+          },
+          "activation": {
+            "mode": "timed",
+            "durationFrames": 420,
+            "cooldownFrames": 430
+          },
+          "target": {
+            "kind": "player"
+          }
+        }
+      ]
+    },
+    {
+      "id": "skittish",
+      "name": "Skittish",
+      "parent": "default",
+      "kind": "conditional",
+      "classification": "attitude",
+      "fields": {
+        "chillState": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_KIND_FLEE"
+        },
+        "chillTarget": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_TARGET_AWAY_FROM_PLAYER"
+        }
+      },
+      "conditions": [
+        {
+          "id": "condition-baby-notices-player",
+          "subjects": {
+            "pool": "baby-pokemon"
+          },
+          "when": {
+            "kind": "notice-target",
+            "vision": {
+              "mode": "current"
+            },
+            "chancePercent": 100
+          },
+          "activation": {
+            "mode": "timed",
+            "durationFrames": 960,
+            "cooldownFrames": 970
+          },
+          "target": {
+            "kind": "player"
+          }
+        }
+      ]
+    },
+    {
+      "id": "waddle",
+      "name": "Waddle",
+      "parent": "default",
+      "kind": "normal",
+      "classification": "style",
+      "fields": {
+        "walkSwayWidth": {
+          "operator": "replace",
+          "value": 4
+        }
+      }
+    },
+    {
+      "id": "follower",
+      "name": "Follower",
+      "parent": "default",
+      "kind": "normal",
+      "classification": "follower-mount",
+      "fields": {
+        "chillState": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_KIND_CHASE"
+        },
+        "chillSpeed": {
+          "operator": "atMost",
+          "value": 8
+        },
+        "spawnState": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_SPAWN_STATE_APPEAR_HOP"
+        },
+        "chillTarget": {
+          "operator": "replace",
+          "value": "OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER"
+        },
+        "spawnDestination": {
+          "operator": "replace",
+          "value": "OW_WILD_SPAWN_DESTINATION_ONE_TILE_BEHIND_PLAYER"
+        },
+        "chillAllowedTerrainMask": {
+          "operator": "replace",
+          "value": 1
+        },
+        "chillAllowedTerrainOverrideMask": {
+          "operator": "replace",
+          "value": 1
+        },
+        "walkPause": {
+          "operator": "replace",
+          "value": 0
+        }
+      }
+    },
+    {
+      "id": "mounted",
+      "name": "Mounted",
+      "parent": "default",
+      "kind": "normal",
+      "classification": "follower-mount",
+      "fields": {
+        "maxWalkSpeed": {
+          "operator": "atMost",
+          "value": 2
+        },
+        "chillSpeed": {
+          "operator": "atMost",
+          "value": 6
+        },
+        "ramMaxSpeed": {
+          "operator": "replace",
+          "value": "0"
+        }
+      }
+    },
+    {
+      "id": "asleep",
+      "name": "Asleep",
+      "parent": "default",
+      "kind": "normal",
+      "classification": "modifier",
+      "fields": {
+        "stamina": {
+          "operator": "replace",
+          "value": 1
+        },
+        "restTime": {
+          "operator": "replace",
+          "value": 4
         }
       }
     }
@@ -2431,7 +2142,7 @@
         "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
         "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
       },
-      "profile": "aggressive-chase"
+      "profile": "default"
     },
     {
       "id": "select-onix",
@@ -2444,7 +2155,7 @@
         "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
         "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
       },
-      "profile": "aggressive-ram"
+      "profile": "default"
     },
     {
       "id": "select-geodude",
@@ -2522,7 +2233,7 @@
         "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
         "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
       },
-      "profile": "aggressive-ram"
+      "profile": "default"
     },
     {
       "id": "select-phanpy",
@@ -2535,7 +2246,7 @@
         "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
         "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
       },
-      "profile": "aggressive-ram"
+      "profile": "default"
     },
     {
       "id": "select-donphan",
@@ -2548,7 +2259,7 @@
         "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
         "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
       },
-      "profile": "aggressive-ram"
+      "profile": "default"
     },
     {
       "id": "select-ponyta",
@@ -2561,7 +2272,7 @@
         "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
         "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
       },
-      "profile": "aggressive-ram"
+      "profile": "default"
     },
     {
       "id": "select-ponyta-galarian",
@@ -2574,7 +2285,7 @@
         "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
         "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
       },
-      "profile": "aggressive-ram"
+      "profile": "default"
     },
     {
       "id": "select-rapidash-galarian",
@@ -2587,7 +2298,7 @@
         "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
         "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
       },
-      "profile": "aggressive-ram"
+      "profile": "default"
     },
     {
       "id": "select-rapidash",
@@ -2600,7 +2311,7 @@
         "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
         "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
       },
-      "profile": "aggressive-ram"
+      "profile": "default"
     },
     {
       "id": "select-great-tusk",
@@ -2613,7 +2324,7 @@
         "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
         "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
       },
-      "profile": "aggressive-ram"
+      "profile": "default"
     },
     {
       "id": "select-shedinja",
@@ -3887,18 +3598,505 @@
         "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
         "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
       },
-      "profile": "test"
+      "profile": "default"
+    }
+  ],
+  "pools": [
+    {
+      "id": "baby-pokemon",
+      "name": "Baby Pokémon",
+      "mode": "members",
+      "match": {
+        "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+        "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+        "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+        "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+        "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+        "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+        "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+      },
+      "members": [
+        "SPECIES_CLEFFA",
+        "SPECIES_IGGLYBUFF",
+        "SPECIES_TOGEPI",
+        "SPECIES_TYROGUE",
+        "SPECIES_SMOOCHUM",
+        "SPECIES_ELEKID",
+        "SPECIES_MAGBY",
+        "SPECIES_AZURILL",
+        "SPECIES_WYNAUT",
+        "SPECIES_BUDEW",
+        "SPECIES_CHINGLING",
+        "SPECIES_BONSLY",
+        "SPECIES_MIME_JR",
+        "SPECIES_HAPPINY",
+        "SPECIES_MUNCHLAX",
+        "SPECIES_RIOLU",
+        "SPECIES_MANTYKE"
+      ]
+    },
+    {
+      "id": "playful-pokemon",
+      "name": "Playful Pokémon",
+      "mode": "members",
+      "match": {
+        "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+        "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+        "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+        "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+        "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+        "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+        "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+      },
+      "members": [
+        "SPECIES_CLEFAIRY",
+        "SPECIES_CLEFABLE",
+        "SPECIES_SENTRET",
+        "SPECIES_FURRET",
+        "SPECIES_AIPOM",
+        "SPECIES_AMBIPOM"
+      ]
     }
   ],
   "applications": [
     {
-      "id": "apply-teleport-stalker-override",
-      "profile": "teleport-stalker-override",
+      "id": "apply-scavenger",
+      "profile": "scavenger",
       "target": {
         "mode": "members",
         "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
           "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+        },
+        "members": [
+          "SPECIES_RATTATA",
+          "SPECIES_RATICATE",
+          "SPECIES_RATTATA_ALOLAN",
+          "SPECIES_RATICATE_ALOLAN",
+          "SPECIES_RATICATE_ALOLAN_LARGE",
+          "SPECIES_PICHU",
+          "SPECIES_PIKACHU",
+          "SPECIES_RAICHU",
+          "SPECIES_RAICHU_ALOLAN",
+          "SPECIES_PIKACHU_COSPLAY",
+          "SPECIES_PIKACHU_ROCK_STAR",
+          "SPECIES_PIKACHU_BELLE",
+          "SPECIES_PIKACHU_POP_STAR",
+          "SPECIES_PIKACHU_PH_D",
+          "SPECIES_PIKACHU_LIBRE",
+          "SPECIES_PIKACHU_ORIGINAL_CAP",
+          "SPECIES_PIKACHU_HOENN_CAP",
+          "SPECIES_PIKACHU_SINNOH_CAP",
+          "SPECIES_PIKACHU_UNOVA_CAP",
+          "SPECIES_PIKACHU_KALOS_CAP",
+          "SPECIES_PIKACHU_ALOLA_CAP",
+          "SPECIES_PIKACHU_PARTNER_CAP",
+          "SPECIES_PIKACHU_WORLD_CAP",
+          "SPECIES_PIKACHU_PARTNER",
+          "SPECIES_PLUSLE",
+          "SPECIES_MINUN",
+          "SPECIES_BIDOOF",
+          "SPECIES_BIBAREL",
+          "SPECIES_PACHIRISU",
+          "SPECIES_PATRAT",
+          "SPECIES_WATCHOG",
+          "SPECIES_MINCCINO",
+          "SPECIES_CINCCINO",
+          "SPECIES_EMOLGA",
+          "SPECIES_DEDENNE",
+          "SPECIES_SKWOVET",
+          "SPECIES_GREEDENT",
+          "SPECIES_MORPEKO",
+          "SPECIES_MORPEKO_HANGRY",
+          "SPECIES_PAWMI",
+          "SPECIES_PAWMO",
+          "SPECIES_PAWMOT",
+          "SPECIES_TANDEMAUS",
+          "SPECIES_MAUSHOLD",
+          "SPECIES_MAUSHOLD_FAMILY_OF_THREE",
+          "SPECIES_SENTRET",
+          "SPECIES_FURRET",
+          "SPECIES_AIPOM",
+          "SPECIES_AMBIPOM"
+        ]
+      }
+    },
+    {
+      "id": "apply-sprint",
+      "profile": "sprint",
+      "target": {
+        "mode": "members",
+        "match": {
+          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+        },
+        "members": [
+          "SPECIES_TAUROS",
+          "SPECIES_STANTLER",
+          "SPECIES_BLITZLE",
+          "SPECIES_ZEBSTRIKA",
+          "SPECIES_WYRDEER"
+        ]
+      }
+    },
+    {
+      "id": "apply-floaty-bounce",
+      "profile": "floaty-bounce",
+      "target": {
+        "mode": "members",
+        "match": {
+          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+        },
+        "members": [
+          "SPECIES_JIGGLYPUFF",
+          "SPECIES_WIGGLYTUFF",
+          "SPECIES_IGGLYBUFF",
+          "SPECIES_HOPPIP",
+          "SPECIES_SKIPLOOM",
+          "SPECIES_JUMPLUFF",
+          "SPECIES_FLABEBE",
+          "SPECIES_FLOETTE",
+          "SPECIES_FLORGES",
+          "SPECIES_FLABEBE_YELLOW_FLOWER",
+          "SPECIES_FLABEBE_ORANGE_FLOWER",
+          "SPECIES_FLABEBE_BLUE_FLOWER",
+          "SPECIES_FLABEBE_WHITE_FLOWER",
+          "SPECIES_FLOETTE_YELLOW_FLOWER",
+          "SPECIES_FLOETTE_ORANGE_FLOWER",
+          "SPECIES_FLOETTE_BLUE_FLOWER",
+          "SPECIES_FLOETTE_WHITE_FLOWER"
+        ]
+      }
+    },
+    {
+      "id": "apply-small-bird-hop",
+      "profile": "small-bird-hop",
+      "target": {
+        "mode": "members",
+        "match": {
+          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+        },
+        "members": [
+          "SPECIES_PIDGEY",
+          "SPECIES_PIDGEOTTO",
+          "SPECIES_PIDGEOT",
+          "SPECIES_SPEAROW",
+          "SPECIES_FEAROW",
+          "SPECIES_HOOTHOOT",
+          "SPECIES_NOCTOWL",
+          "SPECIES_DELIBIRD",
+          "SPECIES_TAILLOW",
+          "SPECIES_SWELLOW"
+        ]
+      }
+    },
+    {
+      "id": "apply-erratic-flutter",
+      "profile": "erratic-flutter",
+      "target": {
+        "mode": "members",
+        "match": {
+          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+        },
+        "members": [
+          "SPECIES_BEEDRILL",
+          "SPECIES_BUTTERFREE",
+          "SPECIES_SCYTHER",
+          "SPECIES_LEDYBA",
+          "SPECIES_LEDIAN",
+          "SPECIES_YANMA",
+          "SPECIES_BEAUTIFLY",
+          "SPECIES_MASQUERAIN",
+          "SPECIES_NINJASK",
+          "SPECIES_MOTHIM",
+          "SPECIES_COMBEE",
+          "SPECIES_VESPIQUEN",
+          "SPECIES_YANMEGA",
+          "SPECIES_VIVILLON",
+          "SPECIES_MEGA_PINSIR",
+          "SPECIES_VIVILLON_POLAR",
+          "SPECIES_VIVILLON_TUNDRA",
+          "SPECIES_VIVILLON_CONTINENTAL",
+          "SPECIES_VIVILLON_GARDEN",
+          "SPECIES_VIVILLON_ELEGANT",
+          "SPECIES_VIVILLON_MEADOW",
+          "SPECIES_VIVILLON_MODERN",
+          "SPECIES_VIVILLON_MARINE",
+          "SPECIES_VIVILLON_ARCHIPELAGO",
+          "SPECIES_VIVILLON_HIGH_PLAINS",
+          "SPECIES_VIVILLON_SANDSTORM",
+          "SPECIES_VIVILLON_RIVER",
+          "SPECIES_VIVILLON_MONSOON",
+          "SPECIES_VIVILLON_SAVANNA",
+          "SPECIES_VIVILLON_SUN",
+          "SPECIES_VIVILLON_OCEAN",
+          "SPECIES_VIVILLON_JUNGLE",
+          "SPECIES_VIVILLON_FANCY",
+          "SPECIES_VIVILLON_POKE_BALL"
+        ]
+      }
+    },
+    {
+      "id": "apply-meander",
+      "profile": "meander",
+      "target": {
+        "mode": "members",
+        "match": {
+          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+        },
+        "members": [
+          "SPECIES_MAREEP",
+          "SPECIES_FLAAFFY",
+          "SPECIES_AMPHAROS",
+          "SPECIES_MEGA_AMPHAROS",
+          "SPECIES_MILTANK",
+          "SPECIES_SKIDDO",
+          "SPECIES_GOGOAT",
+          "SPECIES_WOOLOO",
+          "SPECIES_DUBWOOL",
+          "SPECIES_BELLSPROUT",
+          "SPECIES_ODDISH",
+          "SPECIES_GLOOM",
+          "SPECIES_VILEPLUME",
+          "SPECIES_BELLOSSOM",
+          "SPECIES_SUNFLORA"
+        ]
+      }
+    },
+    {
+      "id": "apply-hop-around",
+      "profile": "hop-around",
+      "target": {
+        "mode": "members",
+        "match": {
+          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+        },
+        "members": [
+          "SPECIES_SUNKERN",
+          "SPECIES_CHERUBI",
+          "SPECIES_CHERRIM",
+          "SPECIES_CHERRIM_SUNSHINE"
+        ]
+      }
+    },
+    {
+      "id": "apply-idle",
+      "profile": "idle",
+      "target": {
+        "mode": "members",
+        "match": {
+          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+        },
+        "members": [
+          "SPECIES_WEEPINBELL",
+          "SPECIES_VICTREEBEL",
+          "SPECIES_CARNIVINE"
+        ]
+      }
+    },
+    {
+      "id": "apply-drowsy-wander",
+      "profile": "drowsy-wander",
+      "target": {
+        "mode": "members",
+        "match": {
+          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+        },
+        "members": [
+          "SPECIES_SNORLAX"
+        ]
+      }
+    },
+    {
+      "id": "apply-perch",
+      "profile": "perch"
+    },
+    {
+      "id": "apply-rest",
+      "profile": "rest"
+    },
+    {
+      "id": "apply-fly-in",
+      "profile": "fly-in",
+      "target": {
+        "mode": "members",
+        "match": {
+          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+        },
+        "members": [
+          "SPECIES_PIDGEY",
+          "SPECIES_PIDGEOTTO",
+          "SPECIES_PIDGEOT",
+          "SPECIES_SPEAROW",
+          "SPECIES_FEAROW",
+          "SPECIES_HOOTHOOT",
+          "SPECIES_NOCTOWL",
+          "SPECIES_DELIBIRD",
+          "SPECIES_TAILLOW",
+          "SPECIES_SWELLOW",
+          "SPECIES_BEEDRILL",
+          "SPECIES_BUTTERFREE",
+          "SPECIES_SCYTHER",
+          "SPECIES_LEDYBA",
+          "SPECIES_LEDIAN",
+          "SPECIES_YANMA",
+          "SPECIES_BEAUTIFLY",
+          "SPECIES_MASQUERAIN",
+          "SPECIES_NINJASK",
+          "SPECIES_MOTHIM",
+          "SPECIES_COMBEE",
+          "SPECIES_VESPIQUEN",
+          "SPECIES_YANMEGA",
+          "SPECIES_VIVILLON",
+          "SPECIES_MEGA_PINSIR",
+          "SPECIES_VIVILLON_POLAR",
+          "SPECIES_VIVILLON_TUNDRA",
+          "SPECIES_VIVILLON_CONTINENTAL",
+          "SPECIES_VIVILLON_GARDEN",
+          "SPECIES_VIVILLON_ELEGANT",
+          "SPECIES_VIVILLON_MEADOW",
+          "SPECIES_VIVILLON_MODERN",
+          "SPECIES_VIVILLON_MARINE",
+          "SPECIES_VIVILLON_ARCHIPELAGO",
+          "SPECIES_VIVILLON_HIGH_PLAINS",
+          "SPECIES_VIVILLON_SANDSTORM",
+          "SPECIES_VIVILLON_RIVER",
+          "SPECIES_VIVILLON_MONSOON",
+          "SPECIES_VIVILLON_SAVANNA",
+          "SPECIES_VIVILLON_SUN",
+          "SPECIES_VIVILLON_OCEAN",
+          "SPECIES_VIVILLON_JUNGLE",
+          "SPECIES_VIVILLON_FANCY",
+          "SPECIES_VIVILLON_POKE_BALL"
+        ]
+      }
+    },
+    {
+      "id": "apply-canopy-access",
+      "profile": "canopy-access",
+      "target": {
+        "mode": "members",
+        "match": {
+          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+        },
+        "members": [
+          "SPECIES_MANKEY",
+          "SPECIES_PRIMEAPE",
+          "SPECIES_ANNIHILAPE",
+          "SPECIES_SENTRET",
+          "SPECIES_FURRET",
+          "SPECIES_AIPOM",
+          "SPECIES_AMBIPOM"
+        ]
+      }
+    },
+    {
+      "id": "apply-flower-bed",
+      "profile": "flower-bed",
+      "target": {
+        "mode": "members",
+        "match": {
+          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+        },
+        "members": [
+          "SPECIES_SUNKERN",
+          "SPECIES_SUNFLORA",
+          "SPECIES_FLABEBE",
+          "SPECIES_FLOETTE",
+          "SPECIES_FLORGES",
+          "SPECIES_FLABEBE_YELLOW_FLOWER",
+          "SPECIES_FLABEBE_ORANGE_FLOWER",
+          "SPECIES_FLABEBE_BLUE_FLOWER",
+          "SPECIES_FLABEBE_WHITE_FLOWER",
+          "SPECIES_FLOETTE_YELLOW_FLOWER",
+          "SPECIES_FLOETTE_ORANGE_FLOWER",
+          "SPECIES_FLOETTE_BLUE_FLOWER",
+          "SPECIES_FLOETTE_WHITE_FLOWER"
+        ]
+      }
+    },
+    {
+      "id": "apply-notice-player",
+      "profile": "notice-player"
+    },
+    {
+      "id": "apply-teleport",
+      "profile": "teleport",
+      "target": {
+        "mode": "members",
+        "match": {
+          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
           "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
           "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
           "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
@@ -4006,80 +4204,17 @@
       }
     },
     {
-      "id": "apply-nervous-scavenger",
-      "profile": "nervous-scavenger",
-      "target": {
-        "mode": "members",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": [
-          "SPECIES_RATTATA",
-          "SPECIES_RATICATE",
-          "SPECIES_RATTATA_ALOLAN",
-          "SPECIES_RATICATE_ALOLAN",
-          "SPECIES_RATICATE_ALOLAN_LARGE",
-          "SPECIES_PICHU",
-          "SPECIES_PIKACHU",
-          "SPECIES_RAICHU",
-          "SPECIES_RAICHU_ALOLAN",
-          "SPECIES_PIKACHU_COSPLAY",
-          "SPECIES_PIKACHU_ROCK_STAR",
-          "SPECIES_PIKACHU_BELLE",
-          "SPECIES_PIKACHU_POP_STAR",
-          "SPECIES_PIKACHU_PH_D",
-          "SPECIES_PIKACHU_LIBRE",
-          "SPECIES_PIKACHU_ORIGINAL_CAP",
-          "SPECIES_PIKACHU_HOENN_CAP",
-          "SPECIES_PIKACHU_SINNOH_CAP",
-          "SPECIES_PIKACHU_UNOVA_CAP",
-          "SPECIES_PIKACHU_KALOS_CAP",
-          "SPECIES_PIKACHU_ALOLA_CAP",
-          "SPECIES_PIKACHU_PARTNER_CAP",
-          "SPECIES_PIKACHU_WORLD_CAP",
-          "SPECIES_PIKACHU_PARTNER",
-          "SPECIES_PLUSLE",
-          "SPECIES_MINUN",
-          "SPECIES_BIDOOF",
-          "SPECIES_BIBAREL",
-          "SPECIES_PACHIRISU",
-          "SPECIES_PATRAT",
-          "SPECIES_WATCHOG",
-          "SPECIES_MINCCINO",
-          "SPECIES_CINCCINO",
-          "SPECIES_EMOLGA",
-          "SPECIES_DEDENNE",
-          "SPECIES_SKWOVET",
-          "SPECIES_GREEDENT",
-          "SPECIES_MORPEKO",
-          "SPECIES_MORPEKO_HANGRY",
-          "SPECIES_PAWMI",
-          "SPECIES_PAWMO",
-          "SPECIES_PAWMOT",
-          "SPECIES_TANDEMAUS",
-          "SPECIES_MAUSHOLD",
-          "SPECIES_MAUSHOLD_FAMILY_OF_THREE",
-          "SPECIES_SENTRET",
-          "SPECIES_FURRET",
-          "SPECIES_AIPOM",
-          "SPECIES_AMBIPOM"
-        ]
-      }
+      "id": "apply-stalker",
+      "profile": "stalker"
     },
     {
-      "id": "apply-hopping-scavenger",
-      "profile": "hopping-scavenger",
+      "id": "apply-long-hop",
+      "profile": "long-hop",
       "target": {
         "mode": "members",
         "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
           "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
           "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
           "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
           "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
@@ -4094,13 +4229,25 @@
       }
     },
     {
-      "id": "apply-runner",
-      "profile": "runner",
+      "id": "apply-canopy-hop",
+      "profile": "canopy-hop"
+    },
+    {
+      "id": "apply-throw",
+      "profile": "throw"
+    },
+    {
+      "id": "apply-ram",
+      "profile": "ram"
+    },
+    {
+      "id": "apply-heavy-stomp",
+      "profile": "heavy-stomp",
       "target": {
         "mode": "members",
         "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
           "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
           "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
           "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
           "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
@@ -4108,181 +4255,44 @@
           "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
         },
         "members": [
-          "SPECIES_TAUROS",
-          "SPECIES_STANTLER",
-          "SPECIES_BLITZLE",
-          "SPECIES_ZEBSTRIKA",
-          "SPECIES_WYRDEER"
+          "SPECIES_GOLEM",
+          "SPECIES_RHYDON",
+          "SPECIES_SNORLAX",
+          "SPECIES_TYRANITAR",
+          "SPECIES_AGGRON",
+          "SPECIES_GROUDON",
+          "SPECIES_TORTERRA",
+          "SPECIES_HIPPOWDON",
+          "SPECIES_RHYPERIOR",
+          "SPECIES_MAMOSWINE",
+          "SPECIES_REGIGIGAS"
         ]
       }
     },
     {
-      "id": "apply-floaty-bounce",
-      "profile": "floaty-bounce",
+      "id": "apply-startled",
+      "profile": "startled"
+    },
+    {
+      "id": "apply-ambush",
+      "profile": "ambush"
+    },
+    {
+      "id": "apply-playful",
+      "profile": "playful"
+    },
+    {
+      "id": "apply-skittish",
+      "profile": "skittish"
+    },
+    {
+      "id": "apply-waddle",
+      "profile": "waddle",
       "target": {
         "mode": "members",
         "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
           "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": [
-          "SPECIES_JIGGLYPUFF",
-          "SPECIES_WIGGLYTUFF",
-          "SPECIES_IGGLYBUFF",
-          "SPECIES_HOPPIP",
-          "SPECIES_SKIPLOOM",
-          "SPECIES_JUMPLUFF",
-          "SPECIES_FLABEBE",
-          "SPECIES_FLOETTE",
-          "SPECIES_FLORGES",
-          "SPECIES_FLABEBE_YELLOW_FLOWER",
-          "SPECIES_FLABEBE_ORANGE_FLOWER",
-          "SPECIES_FLABEBE_BLUE_FLOWER",
-          "SPECIES_FLABEBE_WHITE_FLOWER",
-          "SPECIES_FLOETTE_YELLOW_FLOWER",
-          "SPECIES_FLOETTE_ORANGE_FLOWER",
-          "SPECIES_FLOETTE_BLUE_FLOWER",
-          "SPECIES_FLOETTE_WHITE_FLOWER"
-        ]
-      }
-    },
-    {
-      "id": "apply-bird",
-      "profile": "bird",
-      "target": {
-        "mode": "members",
-        "match": {
           "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": [
-          "SPECIES_PIDGEY",
-          "SPECIES_PIDGEOTTO",
-          "SPECIES_PIDGEOT",
-          "SPECIES_SPEAROW",
-          "SPECIES_FEAROW",
-          "SPECIES_HOOTHOOT",
-          "SPECIES_NOCTOWL",
-          "SPECIES_DELIBIRD",
-          "SPECIES_TAILLOW",
-          "SPECIES_SWELLOW"
-        ]
-      }
-    },
-    {
-      "id": "apply-flying-insect",
-      "profile": "flying-insect",
-      "target": {
-        "mode": "members",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": [
-          "SPECIES_BEEDRILL",
-          "SPECIES_BUTTERFREE",
-          "SPECIES_SCYTHER",
-          "SPECIES_LEDYBA",
-          "SPECIES_LEDIAN",
-          "SPECIES_YANMA",
-          "SPECIES_BEAUTIFLY",
-          "SPECIES_MASQUERAIN",
-          "SPECIES_NINJASK",
-          "SPECIES_MOTHIM",
-          "SPECIES_COMBEE",
-          "SPECIES_VESPIQUEN",
-          "SPECIES_YANMEGA",
-          "SPECIES_VIVILLON",
-          "SPECIES_MEGA_PINSIR",
-          "SPECIES_VIVILLON_POLAR",
-          "SPECIES_VIVILLON_TUNDRA",
-          "SPECIES_VIVILLON_CONTINENTAL",
-          "SPECIES_VIVILLON_GARDEN",
-          "SPECIES_VIVILLON_ELEGANT",
-          "SPECIES_VIVILLON_MEADOW",
-          "SPECIES_VIVILLON_MODERN",
-          "SPECIES_VIVILLON_MARINE",
-          "SPECIES_VIVILLON_ARCHIPELAGO",
-          "SPECIES_VIVILLON_HIGH_PLAINS",
-          "SPECIES_VIVILLON_SANDSTORM",
-          "SPECIES_VIVILLON_RIVER",
-          "SPECIES_VIVILLON_MONSOON",
-          "SPECIES_VIVILLON_SAVANNA",
-          "SPECIES_VIVILLON_SUN",
-          "SPECIES_VIVILLON_OCEAN",
-          "SPECIES_VIVILLON_JUNGLE",
-          "SPECIES_VIVILLON_FANCY",
-          "SPECIES_VIVILLON_POKE_BALL"
-        ]
-      }
-    },
-    {
-      "id": "apply-gentle-grazer",
-      "profile": "gentle-grazer",
-      "target": {
-        "mode": "members",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": [
-          "SPECIES_MAREEP",
-          "SPECIES_FLAAFFY",
-          "SPECIES_AMPHAROS",
-          "SPECIES_MEGA_AMPHAROS",
-          "SPECIES_MILTANK",
-          "SPECIES_SKIDDO",
-          "SPECIES_GOGOAT",
-          "SPECIES_WOOLOO",
-          "SPECIES_DUBWOOL"
-        ]
-      }
-    },
-    {
-      "id": "apply-default-active",
-      "profile": "default-active",
-      "target": {
-        "mode": "disabled",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": []
-      }
-    },
-    {
-      "id": "apply-swaying-plant",
-      "profile": "swaying-plant",
-      "target": {
-        "mode": "members",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
           "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
           "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
           "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
@@ -4295,373 +4305,21 @@
           "SPECIES_GLOOM",
           "SPECIES_VILEPLUME",
           "SPECIES_BELLOSSOM",
-          "SPECIES_SUNKERN",
-          "SPECIES_SUNFLORA",
-          "SPECIES_CHERUBI",
-          "SPECIES_CHERRIM",
-          "SPECIES_CHERRIM_SUNSHINE"
+          "SPECIES_SUNFLORA"
         ]
       }
     },
     {
-      "id": "apply-swaying-plant-active",
-      "profile": "swaying-plant-active",
-      "target": {
-        "mode": "disabled",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": []
-      }
+      "id": "apply-follower",
+      "profile": "follower"
     },
     {
-      "id": "apply-swaying-plant-tired",
-      "profile": "swaying-plant-tired",
-      "target": {
-        "mode": "disabled",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": []
-      }
+      "id": "apply-mounted",
+      "profile": "mounted"
     },
     {
-      "id": "apply-ambush-plant",
-      "profile": "ambush-plant",
-      "target": {
-        "mode": "members",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": [
-          "SPECIES_WEEPINBELL",
-          "SPECIES_VICTREEBEL",
-          "SPECIES_CARNIVINE"
-        ]
-      }
-    },
-    {
-      "id": "apply-ambush-plant-active",
-      "profile": "ambush-plant-active",
-      "target": {
-        "mode": "disabled",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": []
-      }
-    },
-    {
-      "id": "apply-ambush-plant-tired",
-      "profile": "ambush-plant-tired",
-      "target": {
-        "mode": "disabled",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": []
-      }
-    },
-    {
-      "id": "apply-default-tired",
-      "profile": "default-tired",
-      "target": {
-        "mode": "disabled",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": []
-      }
-    },
-    {
-      "id": "apply-canopy-hopper",
-      "profile": "canopy-hopper",
-      "target": {
-        "mode": "members",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": [
-          "SPECIES_MANKEY",
-          "SPECIES_PRIMEAPE",
-          "SPECIES_ANNIHILAPE",
-          "SPECIES_SENTRET",
-          "SPECIES_FURRET",
-          "SPECIES_AIPOM",
-          "SPECIES_AMBIPOM"
-        ]
-      }
-    },
-    {
-      "id": "apply-canopy-hop-surface",
-      "profile": "canopy-hop-surface",
-      "target": {
-        "mode": "disabled",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": []
-      }
-    },
-    {
-      "id": "apply-throwing",
-      "profile": "throwing",
-      "target": {
-        "mode": "members",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": [
-          "SPECIES_GEODUDE",
-          "SPECIES_GRAVELER",
-          "SPECIES_GOLEM",
-          "SPECIES_GEODUDE_ALOLAN",
-          "SPECIES_GRAVELER_ALOLAN",
-          "SPECIES_GOLEM_ALOLAN",
-          "SPECIES_MANKEY",
-          "SPECIES_PRIMEAPE",
-          "SPECIES_ANNIHILAPE"
-        ]
-      }
-    },
-    {
-      "id": "apply-flower",
-      "profile": "flower",
-      "target": {
-        "mode": "members",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": [
-          "SPECIES_SUNKERN",
-          "SPECIES_SUNFLORA",
-          "SPECIES_FLABEBE",
-          "SPECIES_FLOETTE",
-          "SPECIES_FLORGES",
-          "SPECIES_FLABEBE_YELLOW_FLOWER",
-          "SPECIES_FLABEBE_ORANGE_FLOWER",
-          "SPECIES_FLABEBE_BLUE_FLOWER",
-          "SPECIES_FLABEBE_WHITE_FLOWER",
-          "SPECIES_FLOETTE_YELLOW_FLOWER",
-          "SPECIES_FLOETTE_ORANGE_FLOWER",
-          "SPECIES_FLOETTE_BLUE_FLOWER",
-          "SPECIES_FLOETTE_WHITE_FLOWER"
-        ]
-      }
-    },
-    {
-      "id": "apply-bird-rooftop",
-      "profile": "bird-rooftop",
-      "target": {
-        "mode": "disabled",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": []
-      }
-    },
-    {
-      "id": "apply-aggressive-ram-override",
-      "profile": "aggressive-ram-override",
-      "target": {
-        "mode": "members",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": [
-          "SPECIES_PONYTA",
-          "SPECIES_RAPIDASH",
-          "SPECIES_ONIX",
-          "SPECIES_STEELIX",
-          "SPECIES_PHANPY",
-          "SPECIES_DONPHAN",
-          "SPECIES_GREAT_TUSK",
-          "SPECIES_PONYTA_GALARIAN",
-          "SPECIES_RAPIDASH_GALARIAN"
-        ]
-      }
-    },
-    {
-      "id": "apply-playful",
-      "profile": "playful",
-      "target": {
-        "mode": "members",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": [
-          "SPECIES_CLEFAIRY",
-          "SPECIES_CLEFABLE",
-          "SPECIES_SENTRET",
-          "SPECIES_FURRET",
-          "SPECIES_AIPOM",
-          "SPECIES_AMBIPOM"
-        ]
-      }
-    },
-    {
-      "id": "apply-skittish",
-      "profile": "skittish",
-      "target": {
-        "mode": "disabled",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": []
-      }
-    },
-    {
-      "id": "apply-baby-pokemon",
-      "profile": "baby-pokemon",
-      "target": {
-        "mode": "members",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": [
-          "SPECIES_CLEFFA",
-          "SPECIES_IGGLYBUFF",
-          "SPECIES_TOGEPI",
-          "SPECIES_TYROGUE",
-          "SPECIES_SMOOCHUM",
-          "SPECIES_ELEKID",
-          "SPECIES_MAGBY",
-          "SPECIES_AZURILL",
-          "SPECIES_WYNAUT",
-          "SPECIES_BUDEW",
-          "SPECIES_CHINGLING",
-          "SPECIES_BONSLY",
-          "SPECIES_MIME_JR",
-          "SPECIES_HAPPINY",
-          "SPECIES_MUNCHLAX",
-          "SPECIES_RIOLU",
-          "SPECIES_MANTYKE"
-        ]
-      }
-    },
-    {
-      "id": "apply-follower-pokemon",
-      "profile": "follower-pokemon",
-      "target": {
-        "mode": "disabled",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": []
-      }
-    },
-    {
-      "id": "apply-forced-asleep",
-      "profile": "forced-asleep",
-      "target": {
-        "mode": "all",
-        "match": {
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_CLASS_FORCED_ASLEEP"
-        },
-        "members": []
-      }
+      "id": "apply-asleep",
+      "profile": "asleep"
     }
   ],
   "runtimeBindings": {
@@ -4669,22 +4327,6 @@
       {
         "profile": "default",
         "symbol": "OW_WILD_BEHAVIOR_CLASS_DEFAULT"
-      },
-      {
-        "profile": "aggressive-chase",
-        "symbol": "OW_WILD_BEHAVIOR_CLASS_AGRESSIVE_CHASE"
-      },
-      {
-        "profile": "aggressive-ram",
-        "symbol": "OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM"
-      },
-      {
-        "profile": "picked-up",
-        "symbol": "OW_WILD_BEHAVIOR_CLASS_PICKED_UP"
-      },
-      {
-        "profile": "test",
-        "symbol": "OW_WILD_BEHAVIOR_CLASS_TEST"
       }
     ],
     "speciesSelectors": [
@@ -4803,10 +4445,10 @@
       "select-jigglypuff",
       "select-mewtwo-test"
     ],
-    "pickedUpProfile": "picked-up",
-    "followerApplication": "apply-follower-pokemon",
-    "defaultTiredApplication": "apply-default-tired",
-    "forcedAsleepApplication": "apply-forced-asleep",
+    "followerApplication": "apply-follower",
+    "mountedApplication": "apply-mounted",
+    "defaultTiredApplication": "apply-rest",
+    "forcedAsleepApplication": "apply-asleep",
     "forcedAsleepClassToken": "OW_WILD_BEHAVIOR_MATCH_CLASS_FORCED_ASLEEP"
   }
 }

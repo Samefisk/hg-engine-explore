@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.stantler-key-edge",
+  "title": "Fresh Right at a mounted Stantler Walk boundary starts without an idle frame or speed reset",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/architecture.md#8-path-advance-commit-and-reactions and data/overworld_behavior_profiles.json:sprint",
+  "requirements": ["current.mounted-stantler-key-edge"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 300, "noProgressFrames": 180, "minObservedFrames": 12},
+  "subjects": [{"id": "stantler", "species": 234, "role": "MOUNTED", "acquire": "existing"}],
+  "setup": [
+    {"id": "clear-sprint-lane", "op": "teleport", "args": {"map": 33, "x": 585, "z": 402, "facing": 3},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "own-stantler", "op": "party", "args": {"slot": 0, "species": 234, "level": 50, "hp": 1, "status": 0},
+      "budget": {"maxSeconds": 15, "maxFrames": 30, "noProgressFrames": 30}},
+    {"id": "mount-own-stantler", "op": "spawn", "args": {"species": 234, "role": "mounted", "slot": 0},
+      "budget": {"maxSeconds": 30, "maxFrames": 180, "noProgressFrames": 120}},
+    {"id": "bind-stantler", "op": "bind", "args": {"subject": "stantler"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "reach-speed-seven", "op": "step", "args": {"frames": 32, "keys": ["RIGHT"],
+      "until": {"kind": "actor-field", "subject": "stantler", "path": "movementPolicy.speed", "operator": "eq", "value": 7}},
+      "budget": {"maxSeconds": 15, "maxFrames": 32, "noProgressFrames": 32}},
+    {"id": "neutral-through-tile-end", "op": "step", "args": {"frames": 16, "keys": [],
+      "until": {"kind": "actor-field", "subject": "stantler", "path": "motionPhase", "operator": "eq", "value": "COMMIT_PENDING"}},
+      "budget": {"maxSeconds": 10, "maxFrames": 16, "noProgressFrames": 16}},
+    {"id": "fresh-right-edge", "op": "step", "args": {"frames": 2, "keys": ["RIGHT"]},
+      "budget": {"maxSeconds": 5, "maxFrames": 2, "noProgressFrames": 2}}
+  ],
+  "assertions": [
+    {"kind": "actor-field", "subject": "stantler", "path": "identityVerified", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "actor-field", "subject": "stantler", "path": "presentationAttached", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "frame-count", "operator": "gte", "value": 12}
+  ]
+}

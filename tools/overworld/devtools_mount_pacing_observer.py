@@ -117,6 +117,23 @@ class NativeMountedPacingObserver:
         self.started = self.session.completed_frames
         try:
             self.owner = self._current()
+            # Authenticate the added pose reader against the current linked
+            # gait code before interpreting its public C state layout.
+            from scripts.verify_pokemon_move_history_capture import elf_bytes_at, elf_section_layout
+            gait_object = self.session.rt.REPO / "build/overworld_mount_chain_overlay_linked.o"
+            sections = [row for row in elf_section_layout(gait_object) if row[2] == 0x01FF9D00]
+            self._require(len(sections) == 1 and sections[0][0] == 1 and sections[0][1] & 4,
+                          "gait code host differs")
+            size = sections[0][3]
+            self._require(self.session.rt.actor_memory_read(self.session.emu, 0x01FF9D00, size)
+                          == elf_bytes_at(gait_object, 0x01FF9D00, size),
+                          "gait reader does not match loaded product code")
+            presentation = [row for row in elf_section_layout(gait_object) if row[2] == 0x01FFA100]
+            self._require(len(presentation) == 1 and presentation[0][0] == 1 and presentation[0][1] & 4,
+                          "mounted presentation code host differs")
+            self._require(self.session.rt.actor_memory_read(self.session.emu, 0x01FFA100, presentation[0][3])
+                          == elf_bytes_at(gait_object, 0x01FFA100, presentation[0][3]),
+                          "mounted presentation reader does not match loaded product code")
             self.armed = True
             self._install("mount-pacing-presentation", "OverworldMount_SyncPresentation",
                           lambda: self._before("presentation"), self._after)
@@ -172,6 +189,8 @@ class NativeMountedPacingObserver:
         for name, pointer in (("player", current["playerPointer"]), ("mount", current["mountPointer"])):
             value[name].update(unk88_z=rt.signed(emu, pointer+0x90),
                                unk94_z=rt.signed(emu, pointer+0x9C))
+        from tools.overworld.devtools_mount_gait import read_gait
+        value["gait"] = read_gait(self.session, current)
         return value
 
     def _after(self, before, context):
@@ -216,6 +235,7 @@ class NativeMountedPacingObserver:
             subject=self.subject, startFrame=self.started, maxFrames=self.maximum,
             maxCallbacks=MAX_CALLBACKS, counts=self.counts, acceptedProof=False,
             latestCompletedPose=self.latest_completed_pose,
-            guestMemoryWrites=0 if getattr(self, "pose_calibration", None) is None else 2,
+            guestMemoryWrites=(0 if getattr(self, "pose_calibration", None) is None
+                               else 4 if self.pose_calibration.get("gaitOffsetControl") else 2),
             poseCalibration=deepcopy(getattr(self, "pose_calibration", None)),
             scope="native callback receipts; completion framing belongs to shared queue"))

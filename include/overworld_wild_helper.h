@@ -90,6 +90,7 @@ typedef struct OverworldWildSpawnStartup {
     s16 startY;
     u8 locomotion;
     u8 hopDirection;
+    s32 targetBaseY;
 } OverworldWildSpawnStartup;
 
 typedef struct OverworldWildPreparedSpawn {

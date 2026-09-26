@@ -213,9 +213,12 @@ reader, checker, fixture or recorder-control dependency. Tool work serves the
 selected game outcome; a new tool is not the next outcome by default.
 
 `profile.owner-reader-control` is the separate native reader calibration for
-`profile.follower-mounted-owner-transfer`. Both use the healthy saved Mankey
-directly. The control changes/restores one Owner byte without guest execution;
-the transfer uses read-only observations. The transfer gate rechecks a separate
+`profile.follower-mounted-owner-transfer`. Both prepare the same Sprint Stantler
+in party slot 2, start it as Follower, and mount that exact actor. The control
+changes/restores one Owner byte without guest execution; the transfer uses
+read-only observations. The transfer requires Mounted field and primitive
+bytes equal to the normal selected Owner result, not the Follower result,
+plus a distinct Mounted policy fingerprint. The gate rechecks a separate
 accepted control manifest with matching source, ROM, save and reader inputs.
 A manual calibration receipt or copied-data rejection cannot replace that
 dependency. Neither test grants normal Select input, Hop or movement proof.
@@ -806,9 +809,10 @@ The registered `spawn.appear-hop-timing` test checks the separate `APPEAR_HOP`
 startup. It uses one prepared native Wild Clefairy spawn and retains the exact
 finalized identity, resolved startup mode, engine command order, rendered
 same-tile arc, and controller state. The jump, delay, restore, and idle commands
-must be contiguous. `CHILL` must start on the first completed idle frame after
-restore; the timeout is only a stuck-command fallback. Prepared setup does not
-prove natural population selection or other spawn locomotion modes.
+must be contiguous. The observer retains the completed idle publication after
+restore, then requires routine control on the next completed frame. The timeout
+is only a stuck-command fallback. Prepared setup does not prove natural
+population selection or other spawn locomotion modes.
 
 The shared spawn observer also records `spawn-landing-height` at the same
 encounter's final own target, nested under its spawn Hop. It retains the actual
@@ -831,15 +835,16 @@ two separate current calibrations: `observation.live-actor-and-motion-control`
 and `observation.spawn-height-control`. Both must pass before the normal
 `spawn.ledyba-pool-site` run; they do not supply normal-play credit themselves.
 
-The `live-spawn-height-control-v1` test uses the same normal route. It arms
-after boot, before route input. At one authenticated native height-reader
-return for the actual Wild Ledyba, it reads clean state, changes only four
+The `live-spawn-height-control-v1` test uses one natural Wild Mareep from the
+saved Route 29 start. It arms before boot and records the actor's initial
+Appear Hop landing height. At one authenticated native height-reader return
+for that actor, it reads clean state, changes only four
 native Y bytes by4096, uses the same complete reader, restores those bytes in
 `finally`, then reads again. No guest instruction executes between those
 reads. A restoration failure exits only the disposable worker even if error
 logging fails. Source, object, world, own target, all four tap clocks and the
 next completed-frame publication must match the clean height receipt.
-After the complete clean spawn, the unchanged surface checker must reject
+After the complete clean spawn, the initial-landing surface checker must reject
 the measured bad Y for the exact terminal-height reason. Controller replay
 also rejects absent/stale subjects, missing fault meaning and changed restored
 data. These copied-data checks do not replace the native wrong-Y read.
@@ -968,7 +973,7 @@ batching error:
    scan. Require exactly one profile resolution and one metadata/class
    preparation for the complete automatic attempt. Later scan updates must
    reuse that prepared result. The completed attempt must create Hoothoot with
-   its normal off-screen spawn Hop. The copied repeated-preparation controls
+   its normal Fly In. The copied repeated-preparation controls
    and the slow-resumed-finalizer control
    must fail for their matching reasons. The same short run must record every
    stock main-loop wait in the strict window through the first post-spawn
@@ -1174,7 +1179,10 @@ missing callback still reaches the frame deadline. One arm per session,
 failed-arm cleanup and normal core disposal prevent leaked hooks. Receipts stay
 compact; events are retained once in the shared stream. Source tests are in the
 normal proof gate. The `mounted-frame-pacing-v1` pure evaluator retains all nine
-original rows and separates seven Right Walks from the recovery tile. Typed jobs
+checks and separates seven Right Walks from the recovery tile. Mounted
+Cyndaquil now uses its normal Default Owner time, not the Follower's old
+eight-frame cap. Its required seven travel times are `16, 16, 16, 15, 15,
+15, 14`; the separate recovery tile starts at 16 after a real stop. Typed jobs
 require one held-Right action until the seventh start, neutral completion, then
 one separately scoped Right recovery and close. At a key edge, only the first
 completed queue may retain the previous exact memory key mask: stock main polls

@@ -125,9 +125,31 @@ int main(void)
         ClearApplication(&blob->overrideProfiles[i]);
     }
 
+    /* Fly In is a spawn primitive. It must not normalize to Appear. */
+    blob->classProfiles[OW_WILD_BEHAVIOR_CLASS_DEFAULT].spawnState =
+        OW_WILD_BEHAVIOR_SPAWN_STATE_FLY_IN;
+    request = ExplicitRequest(0);
+    Resolve(blob, &request, &first, NULL);
+    assert(first.primitives.spawnLocomotion == 9);
+    blob->classProfiles[OW_WILD_BEHAVIOR_CLASS_DEFAULT].spawnState = 0;
+
+    /* Walk sway reused mask3 bit 2. The resolver must no longer discard it
+     * as the reserved field that occupied this bit before schema version 80. */
+    blob->overrideProfiles[0].targetMode =
+        OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL;
+    blob->overrideProfiles[0].match.behaviorClass = 0xFF;
+    blob->overrideProfiles[0].mask3 =
+        OW_WILD_BEHAVIOR_OVERRIDE3_WALK_SWAY_WIDTH;
+    blob->overrideProfiles[0].profile.walkSwayWidth = 4;
+    request = ExplicitRequest(0);
+    Resolve(blob, &request, &first, NULL);
+    assert(first.profile.owner.walkSwayWidth == 4);
+    ClearApplication(&blob->overrideProfiles[0]);
+
     /* normal, conditional, conditional, normal */
     blob->overrideProfiles[0].targetMode =
         OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL;
+    blob->overrideProfiles[0].match.behaviorClass = 0xFF;
     SetSpeed(&blob->overrideProfiles[0], 10);
 
     blob->overrideProfiles[1].profileKind =
@@ -148,7 +170,17 @@ int main(void)
 
     blob->overrideProfiles[3].targetMode =
         OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL;
+    blob->overrideProfiles[3].match.behaviorClass = 0xFF;
     SetSpeed(&blob->overrideProfiles[3], 30);
+
+    /* Held actor control lives outside the resolver, so ordinary profile
+     * composition has no special held-class branch. */
+    request = ExplicitRequest(0);
+    Resolve(blob, &request, &first, NULL);
+    assert(first.behaviorClass == OW_WILD_BEHAVIOR_CLASS_DEFAULT);
+    assert((first.matchedOverrideMask & ((1u << 0) | (1u << 3)))
+        == ((1u << 0) | (1u << 3)));
+    assert(first.profile.owner.chillSpeed == 30);
 
     blob->conditionEntries[0].applicationIndex = 1;
     blob->conditionEntries[0].conditionId = 101;

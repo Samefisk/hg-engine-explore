@@ -15,7 +15,8 @@ from tools.overworld.devtools_observer import NativeObservationError, public_byt
 
 FOLLOWER_SLOT = 7
 PROFILE_BYTES, PRIMITIVE_BYTES = 144, 8
-BINDING_BYTES, SNAPSHOT_BYTES, SNAPSHOT_OFFSET = 16, 96, 8
+BINDING_BYTES, POLICY_TRANSACTION_BYTES = 16, 16
+SNAPSHOT_BYTES, SNAPSHOT_OFFSET = 96, 8
 MAX_RECEIPTS = 128
 MAX_CAPTURES = 16
 
@@ -164,13 +165,14 @@ class RoleProfileObserver:
         owner = self._owner()
         if owner is None:
             return None
-        # The native getter permits either output to be NULL. Such calls do
-        # not observe a full transfer, but non-NULL buffers must still be valid.
+        # The native getter permits either output to be NULL. Mount Begin only
+        # needs the exact live profile; primitives remain a separate resolver
+        # parity claim. Any non-NULL output must still be valid.
         if regs.r2 != 0:
             public_bytes(self.session,regs.r2,PROFILE_BYTES)
         if regs.r3 != 0:
             public_bytes(self.session,regs.r3,PRIMITIVE_BYTES)
-        if regs.r2 == 0 or regs.r3 == 0:
+        if regs.r2 == 0:
             return None
         self._count()
         return self._track(dict(owner=owner,profilePointer=regs.r2,primitivesPointer=regs.r3,
@@ -178,10 +180,13 @@ class RoleProfileObserver:
 
     def getter_after(self, value, context):
         after = self._same(value["owner"])
+        primitives = ({"primitivesHex": public_bytes(
+                           self.session,value["primitivesPointer"],PRIMITIVE_BYTES).hex(),
+                       "primitivesPointer": value["primitivesPointer"]}
+                      if value["primitivesPointer"] != 0 else {})
         return dict(ownerBefore=value["owner"],ownerAfter=after,
             profileHex=public_bytes(self.session,value["profilePointer"],PROFILE_BYTES).hex(),
-            primitivesHex=public_bytes(self.session,value["primitivesPointer"],PRIMITIVE_BYTES).hex(),
-            profilePointer=value["profilePointer"],primitivesPointer=value["primitivesPointer"],
+            profilePointer=value["profilePointer"],**primitives,
             nestedResolverSequenceStart=value["resolverSequence"],
             nestedResolverSequenceEnd=self.observer.sequence,
             nativeReturnKind="void",returnValue=None,
@@ -201,25 +206,54 @@ class RoleProfileObserver:
                 (actor["subjectIdentity"],actor["species"],actor["form"],actor["level"],
                  owner["context"]["mapId"],actor["handle"]["mapGeneration"],actor["handle"]["encounterGeneration"])
                 and 0 <= slot < 6, "mount binding differs from follower")
-        surface = struct.unpack("<I",public_bytes(s,regs.sp,4))[0]
+        # OverworldMount_Begin uses the five-argument ARM ABI: the surface
+        # catalog is r3 and the policy transaction is the only stack argument.
+        surface = regs.r3
+        policy_transaction = struct.unpack(
+            "<I", public_bytes(s, regs.sp, 4))[0]
         # The public catalog consists of u16-based packed directory/instance
         # data. Its alignment is two, not the pointer/stack alignment of four.
         require(surface % 2 == 0 and 0x02000000 <= surface <= 0x02400000-4,
                 "surface catalog is outside halfword-aligned public RAM")
         require(len(s.read(surface,4)) == 4, "surface catalog read is incomplete")
+        # The caller owns this short-lived transaction in either main RAM or
+        # its public DTCM stack. public_bytes validates both bounded regions.
+        require(policy_transaction % 4 == 0,
+                "policy transaction is not word-aligned")
+        policy = public_bytes(s, policy_transaction, POLICY_TRANSACTION_BYTES)
+        mounted_fingerprint, mounted_mask = struct.unpack_from("<II", policy)
+        require(mounted_fingerprint != 0, "mounted policy fingerprint is zero")
         return self._track(dict(owner=owner,bindingHex=binding.hex(),partySlot=slot,
             profileHex=public_bytes(s,regs.r2,PROFILE_BYTES).hex(),
-            primitivesHex=public_bytes(s,regs.r3,PRIMITIVE_BYTES).hex(),surfacePointer=surface,
-            profilePointer=regs.r2,primitivesPointer=regs.r3))
+            surfacePointer=surface,profilePointer=regs.r2,
+            policyTransactionPointer=policy_transaction,
+            mountedPolicyFingerprint=mounted_fingerprint,
+            mountedPolicyMatchedLayerMask=mounted_mask))
 
     def mount_after(self, value, context):
         owner = self._same(value["owner"])
         require(context["returnValue"] == 1, "mount Begin rejected")
+        policy = public_bytes(
+            self.session,
+            value["policyTransactionPointer"],
+            POLICY_TRANSACTION_BYTES)
+        mounted_fingerprint, mounted_mask, prior_fingerprint, prior_mask = \
+            struct.unpack("<IIII", policy)
+        before = value["owner"]["publicSubject"]
+        require((mounted_fingerprint, mounted_mask)
+                    == (value["mountedPolicyFingerprint"],
+                        value["mountedPolicyMatchedLayerMask"])
+                and (prior_fingerprint, prior_mask)
+                    == (before["behaviorFingerprint"],
+                        before["matchedLayerMask"]),
+                "mounted policy transaction differs from follower identity")
         data = public_bytes(self.session,self.mount_state,SNAPSHOT_OFFSET+SNAPSHOT_BYTES)
         snapshot,generation,phase = self._check_mount_snapshot(value,owner,data)
         control = self._calibrate(value,owner,data) if self.control else None
         return dict(**value,ownerAfter=owner,ownerHex=snapshot[:72].hex(),sessionGeneration=generation,
-                    mountPhase=phase,scope="prepared mount Begin input-to-Owner transfer only",
+                    mountPhase=phase,priorPolicyFingerprint=prior_fingerprint,
+                    priorPolicyMatchedLayerMask=prior_mask,
+                    scope="prepared mount Begin input-to-Owner transfer only",
                     **({"readerControl":control} if control is not None else {}))
 
     def _check_mount_snapshot(self, value, owner, data):

@@ -8,9 +8,17 @@ from copy import deepcopy
 import hashlib
 import struct
 
-CASE_NAMES = ("default-class-and-lanes", "species-class-selection", "forced-follower-profile",
-              "stantler-runner-one-frame-acceleration", "conditional-rooftop-replay", "explicit-picked-up-class",
-              "legacy-forced-asleep-match-token", "explicit-canopy-conditional-application")
+CASE_NAMES = (
+    "default-class-and-lanes",
+    "pidgey-small-bird-fly-in",
+    "forced-follower-profile",
+    "stantler-sprint-one-frame-acceleration",
+    "forced-mounted-sprint-profile",
+    "conditional-perch-replay",
+    "conditional-playful-actor-target",
+    "forced-asleep-profile",
+    "mankey-canopy-capability-on-canopy",
+)
 METADATA = ("behaviorClass", "behaviorLimitKey", "speciesClassRuleIndex", "matchedClassRuleMask",
             "matchedOverrideMask", "forcedOverrideMask", "conditionalOverrideMask", "appliedOverrideMask",
             "fingerprint")

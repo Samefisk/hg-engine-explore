@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.bellsprout-waddle-sway",
+  "title": "Mounted Bellsprout keeps Waddle sway on a Meander Walk",
+  "status": "active",
+  "capabilities": ["mount.lifecycle", "walk.acceleration", "profile.composition"],
+  "proofLevel": "S4",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "data/overworld_behavior_profiles.json",
+    "actor": "One prepared current Mounted Bellsprout (species 69, party slot 0) with normal Meander and Waddle applications on a clear map 33 lane",
+    "trigger": "Start one natural rider-directed Right Walk, release Right when that Walk starts, and observe every completed frame through its idle return",
+    "observable": "The first Walk uses Meander nominal speed 14 with at most two authored variance frames. The same live player and dependent Bellsprout poses share a nonzero lateral Waddle sway to both sides during Walk, return to the lane center at the terminal and idle frames, advance only one logical Right tile, and emit one native terminal and control return.",
+    "setupAudit": "complete",
+    "setupMutations": [{
+      "phase": "before-observation",
+      "target": "fixture",
+      "change": "Use a disposable save, checked teleport to map 33 (585,402), prepared party slot 0 Bellsprout, native Mounted spawn and exact-subject bind. Do not write profile, pose, speed, motion, RNG or input during observation."
+    }],
+    "limits": [
+      "Prepared party and position do not prove natural capture, selection or spawning.",
+      "This proves one normal selected Meander+Waddle Walk under rider input, not nonzero Walk pause, AI target choice, every Waddle species, chains or long-run cadence.",
+      "The separate S1 resolver case proves the authored Waddle field value 4; this S4 case checks its live lateral effect and does not claim an exact fixed-point amplitude without a matched live sample.",
+      "Copied-data controls reject lost sway, player/Pokemon pose split, Follower speed cap, extra motion and changed identity. The native mount-pose reader control remains a separate acceptance dependency."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "bellsprout", "species": 69, "role": "MOUNTED", "acquisition": "mount",
+    "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Prepare map 33 and party Bellsprout, mount, then bind that exact live actor"},
+    {"at": 1, "kind": "input", "value": "Press Right until one Mounted Walk begins"},
+    {"at": 2, "kind": "lifecycle", "value": "Release Right and observe the full Walk pose, one terminal commit and idle return"}
+  ],
+  "stop": {"frameBudget": 300, "condition": "One Right Walk has completed with shared signed lateral sway and control return"},
+  "expect": {
+    "requiredEvents": ["MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["MOTION_CANCELED", "CONTEXT_CHANGED", "ACTOR_REBOUND", "CONTROL_REBOUND"],
+    "invariants": [
+      "One actor owns the Walk motion and one player object anchors it",
+      "The dependent Bellsprout and player horizontal poses match on each completed frame",
+      "Only lateral render position sways; logical motion targets one Right tile",
+      "The Walk has one terminal result and returns control"
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "mount.bellsprout-waddle-sway",
+    "claims": ["natural-input", "live-actor-identity", "profile-resolution", "logical-commit", "rendered-motion", "frame-pacing", "control-release"],
+    "minimumFrames": 14}
+}

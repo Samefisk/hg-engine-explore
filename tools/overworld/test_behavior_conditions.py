@@ -130,6 +130,17 @@ int main(void)
     assert(entry.active && entry.triggered);
     assert(entry.target.actor.slot == 2);
 
+    /* A Pokemon condition can observe actors without exporting one as the
+     * profile target. */
+    definitions[2] = PokemonWhile(4);
+    definitions[2].targetKind = OVERWORLD_BEHAVIOR_CONDITION_TARGET_NONE;
+    inputs[2].eligibleActorMask = 3;
+    assert(OverworldBehaviorCondition_EvaluateEntry(
+        &definitions[2], &inputs[2], &world, &states[2], &entry)
+        == OVERWORLD_BEHAVIOR_CONDITION_OK);
+    assert(entry.active);
+    assert(entry.target.kind == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE);
+
     world.actors[1].x = 30;
     world.actors[1].y = 30;
     assert(OverworldBehaviorCondition_EvaluateEntry(
@@ -268,6 +279,95 @@ int main(void)
         == OVERWORLD_BEHAVIOR_CONDITION_OK);
     assert(entry.active);
     world.subjectTerrainMask = 1;
+    assert(OverworldBehaviorCondition_EvaluateEntry(
+        &definitions[0], &inputs[0], &world, &states[0], &entry)
+        == OVERWORLD_BEHAVIOR_CONDITION_OK);
+    assert(!entry.active);
+
+    /* Shared current Vision, custom Vision, occlusion, and inverse Vision
+     * use the same bounded geometry for the player and actor targets. */
+    memset(states, 0, sizeof(states));
+    world.subjectX = 10;
+    world.subjectY = 10;
+    world.subjectFacing = OVERWORLD_VISION_FACING_NORTH;
+    world.subjectVisionRange = OVERWORLD_VISION_DEFAULT_RANGE;
+    world.subjectVisionOptions = OVERWORLD_VISION_DEFAULT_OPTIONS;
+    world.playerValid = 1;
+    world.playerX = 10;
+    world.playerY = 7;
+    world.playerFacingAndOcclusion = OVERWORLD_VISION_FACING_NORTH;
+    world.playerVisionRange = OVERWORLD_VISION_DEFAULT_RANGE;
+    world.playerVisionOptions = OVERWORLD_VISION_DEFAULT_OPTIONS;
+    definitions[0] = PlayerTimed(8);
+    definitions[0].activationMode = OVERWORLD_BEHAVIOR_CONDITION_WHILE_TRUE;
+    definitions[0].durationFrames = 0;
+    definitions[0].cooldownFrames = 0;
+    definitions[0].rangeKind =
+        OVERWORLD_BEHAVIOR_CONDITION_RANGE_VISION_CURRENT;
+    definitions[0].distance = 0;
+    assert(OverworldBehaviorCondition_EvaluateEntry(
+        &definitions[0], &inputs[0], &world, &states[0], &entry)
+        == OVERWORLD_BEHAVIOR_CONDITION_OK);
+    assert(entry.active && entry.conditionTrue);
+
+    world.playerFacingAndOcclusion =
+        OVERWORLD_VISION_FACING_NORTH
+        | OVERWORLD_BEHAVIOR_CONDITION_OBSERVATION_OCCLUDED_FROM_SUBJECT;
+    assert(OverworldBehaviorCondition_EvaluateEntry(
+        &definitions[0], &inputs[0], &world, &states[0], &entry)
+        == OVERWORLD_BEHAVIOR_CONDITION_OK);
+    assert(!entry.active && !entry.conditionTrue);
+
+    memset(&states[0], 0, sizeof(states[0]));
+    world.playerFacingAndOcclusion = OVERWORLD_VISION_FACING_NORTH;
+    definitions[0].rangeKind =
+        OVERWORLD_BEHAVIOR_CONDITION_RANGE_VISION_CUSTOM;
+    definitions[0].distance = 2;
+    definitions[0].reserved = OVERWORLD_VISION_DEFAULT_OPTIONS;
+    assert(OverworldBehaviorCondition_EvaluateEntry(
+        &definitions[0], &inputs[0], &world, &states[0], &entry)
+        == OVERWORLD_BEHAVIOR_CONDITION_OK);
+    assert(!entry.active);
+    definitions[0].distance = 3;
+    assert(OverworldBehaviorCondition_EvaluateEntry(
+        &definitions[0], &inputs[0], &world, &states[0], &entry)
+        == OVERWORLD_BEHAVIOR_CONDITION_OK);
+    assert(entry.active);
+
+    memset(&states[0], 0, sizeof(states[0]));
+    definitions[0].kind =
+        OVERWORLD_BEHAVIOR_CONDITION_TARGET_CANNOT_SEE_SUBJECT;
+    definitions[0].rangeKind =
+        OVERWORLD_BEHAVIOR_CONDITION_RANGE_VISION_CURRENT;
+    definitions[0].distance = 0;
+    definitions[0].reserved = 0;
+    assert(OverworldBehaviorCondition_EvaluateEntry(
+        &definitions[0], &inputs[0], &world, &states[0], &entry)
+        == OVERWORLD_BEHAVIOR_CONDITION_OK);
+    assert(entry.active && entry.target.kind
+        == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_PLAYER);
+    world.playerFacingAndOcclusion = OVERWORLD_VISION_FACING_SOUTH;
+    assert(OverworldBehaviorCondition_EvaluateEntry(
+        &definitions[0], &inputs[0], &world, &states[0], &entry)
+        == OVERWORLD_BEHAVIOR_CONDITION_OK);
+    assert(!entry.active);
+
+    memset(&states[0], 0, sizeof(states[0]));
+    definitions[0].targetKind =
+        OVERWORLD_BEHAVIOR_CONDITION_TARGET_MATCHED_ACTOR;
+    inputs[0].eligibleActorMask = 1;
+    world.actors[0].x = 10;
+    world.actors[0].y = 7;
+    world.actors[0].valid = 1;
+    world.actors[0].facingAndOcclusion = OVERWORLD_VISION_FACING_NORTH;
+    world.actors[0].visionRange = OVERWORLD_VISION_DEFAULT_RANGE;
+    world.actors[0].visionOptions = OVERWORLD_VISION_DEFAULT_OPTIONS;
+    assert(OverworldBehaviorCondition_EvaluateEntry(
+        &definitions[0], &inputs[0], &world, &states[0], &entry)
+        == OVERWORLD_BEHAVIOR_CONDITION_OK);
+    assert(entry.active && entry.target.kind
+        == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR);
+    world.actors[0].facingAndOcclusion = OVERWORLD_VISION_FACING_SOUTH;
     assert(OverworldBehaviorCondition_EvaluateEntry(
         &definitions[0], &inputs[0], &world, &states[0], &entry)
         == OVERWORLD_BEHAVIOR_CONDITION_OK);
@@ -548,7 +648,7 @@ class BehaviorConditionTests(unittest.TestCase):
         )
         self.assertIn("sizeof(*runtime->conditions)", ensure)
         self.assertIn(
-            "sizeof(OverworldWildBehaviorConditionRuntime) == 2044",
+            "sizeof(OverworldWildBehaviorConditionRuntime) == 2072",
             (ROOT / "include/overworld_behavior_condition_adapter.h")
             .read_text(),
         )
@@ -717,6 +817,7 @@ class BehaviorConditionTests(unittest.TestCase):
                 str(ROOT / "include"),
                 str(source),
                 str(ROOT / "lib/overworld/overworld_behavior_conditions.c"),
+                str(ROOT / "lib/overworld/overworld_vision.c"),
                 "-o",
                 str(binary),
             ]
@@ -752,6 +853,7 @@ class BehaviorConditionTests(unittest.TestCase):
                 str(ROOT / "include"),
                 str(source),
                 str(ROOT / "lib/overworld/overworld_behavior_conditions.c"),
+                str(ROOT / "lib/overworld/overworld_vision.c"),
                 str(ROOT / "lib/overworld/overworld_behavior_condition_runtime.c"),
                 str(ROOT / "data/OverworldWildBehaviorData.c"),
                 "-o",

@@ -30,6 +30,7 @@ Preconditions:
 
 - **Land and Surf.** Run `scripts/owctl scenario run population.land-surf-separation --json`. Surf attempts occur and Tentacool land spawns stay at zero.
 - **Streaming.** Run `scripts/owctl scenario run mount.streaming.cardinal-and-diagonal --json`. Both stream axes load and native stream pointers restore.
+- **Mounted Stantler terrain-loss route.** Run `scripts/owctl scenario run world.streaming.stantler-mounted-route --json`. One prepared level-10 Stantler follows RIGHT, RIGHT, UP, LEFT, LEFT, UP, DOWN for 120 completed frames each from map 33 (585,402). The native radius-one terrain grid at the route endpoint must be 9/9 loaded. After RIGHT120, the player must advance at least eight tiles east and the radius-two grid must be 25/25 loaded. This checks the old frozen endpoint and recovery, not every intermediate terrain frame.
 - **Transition.** Run `scripts/owctl scenario run mount.transition-mid-motion --json`. The map and field epoch change while the one motion completes and releases control.
 - **Warp gate.** Run `scripts/owctl scenario run warp.blocked-mid-motion --json`. The warp stays blocked during custom motion and works after normal movement.
 - **Population refill.** Run `scripts/owctl scenario run population.after-fast-travel --json`. Refill occurs and new actors per frame stay within the cap.

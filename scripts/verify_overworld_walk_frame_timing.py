@@ -57,8 +57,8 @@ int main(void)
     CHECK(OverworldWalkTimingPolicy_SkidTiles(7) == 0);
     CHECK(OverworldWalkTimingPolicy_SkidTiles(6) == 1);
     CHECK(OverworldWalkTimingPolicy_SkidTiles(5) == 1);
-    CHECK(OverworldWalkTimingPolicy_SkidTiles(4) == 1);
-    CHECK(OverworldWalkTimingPolicy_SkidTiles(3) == 1);
+    CHECK(OverworldWalkTimingPolicy_SkidTiles(4) == 2);
+    CHECK(OverworldWalkTimingPolicy_SkidTiles(3) == 2);
     CHECK(OverworldWalkTimingPolicy_SkidTiles(2) == 2);
     CHECK(OverworldWalkTimingPolicy_SkidTiles(1) == 4);
     CHECK(OverworldWalkTimingPolicy_SkidTime(20) == 32);

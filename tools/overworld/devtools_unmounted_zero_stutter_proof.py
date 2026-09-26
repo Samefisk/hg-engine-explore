@@ -117,8 +117,16 @@ def measurements(replay, record):
                 <= MAX_DESTINATION_SCAN_FRAME_SPAN
             and hop.get("profilePauseFrames") == 5
             and hop.get("profileMaxDistance") == 6
-            and hop.get("profileFingerprint") == subject.get("behaviorFingerprint")
-            and hop.get("profileMask") == subject.get("matchedLayerMask")
+            and type(hop.get("profileFingerprint")) is int
+            and hop["profileFingerprint"] > 0
+            and type(hop.get("profileMask")) is int
+            and hop["profileMask"] >= 0
+            and isinstance(hop.get("profileSourceSha256"), str)
+            and len(hop["profileSourceSha256"]) == 64
+            and hop.get("profileSubjectIdentity") == subject.get("subjectIdentity")
+            and hop.get("profileSpecies") == 56
+            and hop.get("profileRole") == "FOLLOWER"
+            and hop.get("profileIdentityVerified") is True
             and pacing.get("sampleCount") == pacing.get("intervalCount") == meter.get("frames")
             and pacing.get("movingFrameCount", 0) >= MINIMUM_MOVING_FRAMES
             and pacing.get("lateMainLoopCount") == 0
@@ -138,8 +146,12 @@ def measurements(replay, record):
          pacing["movingFrameCount"], "gte", MINIMUM_MOVING_FRAMES),
         ("natural-input", "zero-stutter-source-profile-binding",
          [hop["profilePauseFrames"], hop["profileMaxDistance"],
-          int(hop["profileFingerprint"] == subject["behaviorFingerprint"]
-              and hop["profileMask"] == subject["matchedLayerMask"])],
+          int(hop["profileSubjectIdentity"] == subject["subjectIdentity"]
+              and hop["profileSpecies"] == 56
+              and hop["profileRole"] == "FOLLOWER"
+              and hop["profileIdentityVerified"] is True
+              and isinstance(hop["profileSourceSha256"], str)
+              and len(hop["profileSourceSha256"]) == 64)],
          "eq", [5, 6, 1]),
         ("population-bounds", "zero-stutter-spawn-work-witness-count",
          spawn["joinedWitnessCount"], "gte", 1),

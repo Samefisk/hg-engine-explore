@@ -1,6 +1,6 @@
 """Controlled live observer for one Wild conditional-profile boundary.
 
-This is not the copied condition-service probe.  It patches three predicate
+This is not the copied condition-service probe. It patches five predicate
 bytes in the disposable process, observes the real Wild wrapper calling the
 real condition adapter, and restores every changed byte before close.
 """
@@ -37,7 +37,8 @@ RUNTIME_ACTORS_OFFSET = 0
 RUNTIME_SCRATCH_OFFSET = PREPARED_ACTOR_BYTES * 10
 RUNTIME_RESULT_OFFSET = RUNTIME_SCRATCH_OFFSET + 32
 RUNTIME_RESOLUTION_OFFSET = RUNTIME_RESULT_OFFSET + 540 + 44
-RUNTIME_ACTOR_SNAPSHOT_OFFSET = RUNTIME_RESOLUTION_OFFSET + 200 + 12 + 396
+RUNTIME_FRAME_OFFSET = RUNTIME_RESOLUTION_OFFSET + 200 + 12
+RUNTIME_ACTOR_SNAPSHOT_OFFSET = RUNTIME_RESOLUTION_OFFSET + 200 + 20 + 396 + 20
 RUNTIME_TIMED_MASKS_OFFSET = RUNTIME_ACTIVE_MASKS_OFFSET + 40
 RUNTIME_TARGET_X_OFFSET = RUNTIME_TIMED_MASKS_OFFSET + 40
 RUNTIME_TARGET_Y_OFFSET = RUNTIME_TARGET_X_OFFSET + 20
@@ -50,6 +51,8 @@ PREPARED_VALID_OFFSET = 49
 PREPARED_CAPACITY_OFFSET = 50
 
 MAX_CALLS = 16
+ADAPTER_STACK_ARGUMENT_BYTES = 36
+ADAPTER_OUTCOME_STACK_WORD = 8
 
 
 class ConditionControllerObservationFailure(NativeObservationError):
@@ -98,7 +101,7 @@ def _handle(raw):
 
 
 class LiveConditionControllerFixture:
-    """Own the exact three-byte live catalog patch and its restoration."""
+    """Own the exact five-byte live catalog patch and its restoration."""
 
     def __init__(self, session):
         self.session = session
@@ -411,8 +414,12 @@ class NativeConditionControllerObserver(NativeMountedPacingObserver):
         if not self.active_wrappers:
             return None
         self._check_deadline()
-        stack = public_bytes(self.session, regs.sp & 0xFFFFFFFF, 32)
-        words = struct.unpack("<8I", stack)
+        stack = public_bytes(
+            self.session,
+            regs.sp & 0xFFFFFFFF,
+            ADAPTER_STACK_ARGUMENT_BYTES,
+        )
+        words = struct.unpack("<9I", stack)
         runtime, state, field, blob = (
             getattr(regs, name) & 0xFFFFFFFF
             for name in ("r0", "r1", "r2", "r3"))
@@ -461,7 +468,10 @@ class NativeConditionControllerObserver(NativeMountedPacingObserver):
             "slot": self.slot,
             "runtimePointer": self._runtime(runtime),
             "statePointer": state_pointer,
-            "outcomePointer": _public_pointer(words[7], 8),
+            "outcomePointer": _public_pointer(
+                words[ADAPTER_OUTCOME_STACK_WORD],
+                8,
+            ),
             "preparedIndex": prepared_index,
             "wrapperCall": self.calls["wrapper"],
             "motionAtEntry": deepcopy(
@@ -495,6 +505,23 @@ class NativeConditionControllerObserver(NativeMountedPacingObserver):
                     "successful conditional resolution differs")
             else:
                 runtime = value["runtimePointer"]
+                prepared = runtime + self.slot * PREPARED_ACTOR_BYTES
+                prepared_count = self.session.rt.unsigned(
+                    self.session.emu,
+                    prepared + PREPARED_COUNT_OFFSET,
+                    1,
+                )
+                raw_result = public_bytes(
+                    self.session,
+                    runtime + RUNTIME_RESULT_OFFSET,
+                    540,
+                )
+                raw_world = public_bytes(
+                    self.session,
+                    runtime + RUNTIME_FRAME_OFFSET,
+                    240,
+                )
+                world_actor_count = raw_world[29]
                 receipt.update({
                     "staleTarget": self.target_fault["after"]
                         if self.target_fault else None,
@@ -506,6 +533,42 @@ class NativeConditionControllerObserver(NativeMountedPacingObserver):
                         self.session.emu,
                         runtime + RUNTIME_TARGET_VALID_OFFSET, 2)
                         & (1 << self.slot)),
+                    "diagnostic": {
+                        "preparedCount": prepared_count,
+                        "catalogEntryIndexes": list(public_bytes(
+                            self.session,
+                            prepared + PREPARED_CATALOG_INDICES_OFFSET,
+                            prepared_count,
+                        )),
+                        "statesHex": public_bytes(
+                            self.session,
+                            value["statePointer"],
+                            prepared_count * 16,
+                        ).hex(),
+                        "entryFlagsHex": public_bytes(
+                            self.session,
+                            runtime + RUNTIME_SCRATCH_OFFSET,
+                            prepared_count,
+                        ).hex(),
+                        "resultActiveApplicationMask":
+                            int.from_bytes(raw_result[0:4], "little"),
+                        "resultTriggeredApplicationMask":
+                            int.from_bytes(raw_result[4:8], "little"),
+                        "resultTargetHex": raw_result[8:22].hex(),
+                        "resultConditionId":
+                            int.from_bytes(raw_result[22:24], "little"),
+                        "worldSubjectHex": raw_world[0:12].hex(),
+                        "worldActorCount": world_actor_count,
+                        "worldActors": [
+                            {
+                                "handleHex": raw_world[
+                                    38 + index * 20:50 + index * 20
+                                ].hex(),
+                                "valid": raw_world[54 + index * 20],
+                            }
+                            for index in range(world_actor_count)
+                        ],
+                    },
                 })
             self.adapter_records.append(deepcopy(receipt))
             return receipt

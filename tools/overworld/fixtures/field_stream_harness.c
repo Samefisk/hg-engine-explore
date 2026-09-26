@@ -30,17 +30,12 @@ static OverworldActorCompatibilityEntry compatibility;
 #define OVERWORLD_ACTOR_SYSTEM_COMPAT_ENTRY (&compatibility)
 #define LONG_CALL
 
-static VecFx32 *watchedPosition;
-static void *watchedManager;
-static unsigned watcherChanges;
 void ov01_021F62E8(VecFx32 *position, void *manager)
 {
-    /* Reference contract: native watcher stores the selected position and
-     * initially copies its sample. Later sampling belongs to the engine. */
-    watchedPosition = position;
-    watchedManager = manager;
+    /* The stock bind helper changes the watcher and samples immediately.
+     * BEGIN/CANCEL must not call it: a bind is not a terrain sample. */
+    memcpy((u8 *)manager + 0xDC, &position, sizeof(position));
     memcpy((u8 *)manager + 0xD0, position, sizeof(*position));
-    watcherChanges++;
 }
 
 /* @PRODUCT_SERVICE@ */
@@ -59,8 +54,30 @@ static unsigned checks, pathCases, advances;
     exit(1); } } while (0)
 
 static s32 Center(int tile) { return tile * 0x10000 + 0x8000; }
+static VecFx32 *Watcher(void)
+{
+    VecFx32 *position;
+    memcpy(&position, manager.bytes + 0xDC, sizeof(position));
+    return position;
+}
+static void Sample(void)
+{
+    VecFx32 *position = Watcher();
+    CHECK(position != NULL);
+    memcpy(manager.bytes + 0xD0, position, sizeof(*position));
+}
+static void OnlyWatcherChanged(const Manager *before, VecFx32 *expected)
+{
+    const unsigned afterPointer = 0xDC + sizeof(VecFx32 *);
+    CHECK(Watcher() == expected);
+    CHECK(memcmp(manager.bytes, before->bytes, 0xDC) == 0);
+    CHECK(memcmp(manager.bytes + afterPointer,
+        before->bytes + afterPointer,
+        sizeof(manager.bytes) - afterPointer) == 0);
+}
 static void Reset(void)
 {
+    VecFx32 *playerPosition;
     memset(&sOverworldFieldTerrainStream, 0, sizeof(sOverworldFieldTerrainStream));
     memset(&manager, 0, sizeof(manager));
     memset(&field, 0, sizeof(field));
@@ -78,9 +95,9 @@ static void Reset(void)
     compatibility.version = OVERWORLD_ACTOR_SYSTEM_COMPAT_VERSION;
     compatibility.size = sizeof(compatibility);
     compatibility.getContext = GetContext;
-    watchedPosition = NULL;
-    watchedManager = NULL;
-    watcherChanges = 0;
+    playerPosition = (VecFx32 *)player.posVec;
+    memcpy(manager.bytes + 0xDC, &playerPosition, sizeof(playerPosition));
+    Sample();
 }
 static OverworldFieldTerrainStreamCall Call(unsigned operation, int dx, int dz)
 {
@@ -96,21 +113,16 @@ static OverworldFieldTerrainStreamCall Call(unsigned operation, int dx, int dz)
     call.operation = (u8)operation;
     return call;
 }
-static void Sample(void)
-{
-    CHECK(watchedPosition != NULL && watchedManager == &manager);
-    memcpy(manager.bytes + 0xD0, watchedPosition, sizeof(*watchedPosition));
-}
 static void Unchanged(const OverworldFieldTerrainStreamCall *call,
     OverworldFieldTerrainStreamResult expected)
 {
     const OverworldFieldTerrainStreamRuntime before = sOverworldFieldTerrainStream;
     const LocalMapObject oldPlayer = player;
-    const unsigned oldWatchers = watcherChanges;
+    const Manager oldManager = manager;
     CHECK(OverworldFieldService_TerrainStream(call) == expected);
     CHECK(memcmp(&before, &sOverworldFieldTerrainStream, sizeof(before)) == 0);
     CHECK(memcmp(&oldPlayer, &player, sizeof(player)) == 0);
-    CHECK(watcherChanges == oldWatchers);
+    CHECK(memcmp(&oldManager, &manager, sizeof(manager)) == 0);
 }
 static void Clear(void)
 {
@@ -171,8 +183,10 @@ static void ActiveIdentityCases(void)
     for (unsigned invalid = 0; invalid < 5; invalid++) {
         Reset();
         OverworldFieldTerrainStreamCall call = Call(OVERWORLD_FIELD_TERRAIN_STREAM_BEGIN, 8, 8);
+        const Manager beforeBegin = manager;
         CHECK(OverworldFieldService_TerrainStream(&call) == OVERWORLD_FIELD_TERRAIN_STREAM_WAITING);
-        CHECK(watchedPosition == &sOverworldFieldTerrainStream.watchedAnchor);
+        OnlyWatcherChanged(&beforeBegin,
+            &sOverworldFieldTerrainStream.watchedAnchor);
         Unchanged(&call, OVERWORLD_FIELD_TERRAIN_STREAM_RETRY_BUSY);
         call.motionIdentity++;
         Unchanged(&call, OVERWORLD_FIELD_TERRAIN_STREAM_RETRY_BUSY);
@@ -200,11 +214,13 @@ static void Travel(int dx, int dz)
 {
     Reset();
     OverworldFieldTerrainStreamCall call = Call(OVERWORLD_FIELD_TERRAIN_STREAM_BEGIN, dx, dz);
+    const Manager beforeBegin = manager;
     CHECK(OverworldFieldService_TerrainStream(&call) == OVERWORLD_FIELD_TERRAIN_STREAM_WAITING);
     CHECK(sOverworldFieldTerrainStream.active == TRUE);
     CHECK(sOverworldFieldTerrainStream.motionIdentity == 55);
     CHECK(sOverworldFieldTerrainStream.fieldSystem == &field);
-    CHECK(watcherChanges == 1);
+    OnlyWatcherChanged(&beforeBegin,
+        &sOverworldFieldTerrainStream.watchedAnchor);
     call.operation = OVERWORLD_FIELD_TERRAIN_STREAM_QUERY_IDLE;
     Unchanged(&call, OVERWORLD_FIELD_TERRAIN_STREAM_WAITING);
     call.operation = OVERWORLD_FIELD_TERRAIN_STREAM_POLL;
@@ -231,13 +247,12 @@ static void Travel(int dx, int dz)
     player.posVec[2] = Center(-4 + dz);
     CHECK(OverworldFieldService_TerrainStream(&call) == OVERWORLD_FIELD_TERRAIN_STREAM_READY);
     CHECK(sOverworldFieldTerrainStream.active == TRUE);
-    CHECK(watchedPosition == &sOverworldFieldTerrainStream.watchedAnchor);
+    CHECK(Watcher() == &sOverworldFieldTerrainStream.watchedAnchor);
     call.operation = OVERWORLD_FIELD_TERRAIN_STREAM_CANCEL;
+    const Manager beforeCancel = manager;
     CHECK(OverworldFieldService_TerrainStream(&call) == OVERWORLD_FIELD_TERRAIN_STREAM_IDLE);
     Clear();
-    CHECK(watchedPosition == (VecFx32 *)player.posVec);
-    CHECK(watcherChanges == 2);
-    CHECK(memcmp(manager.bytes + 0xD0, player.posVec, sizeof(player.posVec)) == 0);
+    OnlyWatcherChanged(&beforeCancel, (VecFx32 *)player.posVec);
     call.operation = OVERWORLD_FIELD_TERRAIN_STREAM_POLL;
     Unchanged(&call, OVERWORLD_FIELD_TERRAIN_STREAM_REJECTED);
     call.operation = OVERWORLD_FIELD_TERRAIN_STREAM_QUERY_IDLE;
@@ -257,10 +272,10 @@ static void CancelAndRestoreCases(void)
     field.manager = &manager;
     player.posVec[0] = Center(5);
     call.operation = OVERWORLD_FIELD_TERRAIN_STREAM_CANCEL;
+    const Manager beforeCancel = manager;
     CHECK(OverworldFieldService_TerrainStream(&call) == OVERWORLD_FIELD_TERRAIN_STREAM_IDLE);
     Clear();
-    CHECK(watchedPosition == (VecFx32 *)player.posVec && watcherChanges == 2);
-    CHECK(memcmp(manager.bytes + 0xD0, player.posVec, sizeof(player.posVec)) == 0);
+    OnlyWatcherChanged(&beforeCancel, (VecFx32 *)player.posVec);
     Unchanged(&call, OVERWORLD_FIELD_TERRAIN_STREAM_IDLE);
 
     Reset();
@@ -274,6 +289,43 @@ static void CancelAndRestoreCases(void)
     call.operation = OVERWORLD_FIELD_TERRAIN_STREAM_CANCEL;
     CHECK(OverworldFieldService_TerrainStream(&call) == OVERWORLD_FIELD_TERRAIN_STREAM_IDLE);
     Clear();
+}
+
+static void OneTileLagCase(void)
+{
+    Reset();
+    /* The player has moved east, but the stock manager has not yet sampled
+     * that position. Binding a new watcher must not erase this one-tile lag. */
+    player.posVec[0] = Center(2);
+    Sample();
+    player.posVec[0] = Center(3);
+    OverworldFieldTerrainStreamCall call = Call(
+        OVERWORLD_FIELD_TERRAIN_STREAM_BEGIN, 1, 0);
+    const Manager beforeBegin = manager;
+    CHECK(OverworldFieldService_TerrainStream(&call)
+        == OVERWORLD_FIELD_TERRAIN_STREAM_WAITING);
+    OnlyWatcherChanged(&beforeBegin,
+        &sOverworldFieldTerrainStream.watchedAnchor);
+    CHECK(*(s32 *)(manager.bytes + 0xD0) == Center(2));
+
+    call.operation = OVERWORLD_FIELD_TERRAIN_STREAM_POLL;
+    Unchanged(&call, OVERWORLD_FIELD_TERRAIN_STREAM_WAITING);
+    Sample();
+    CHECK(*(s32 *)(manager.bytes + 0xD0) == Center(3));
+    CHECK(OverworldFieldService_TerrainStream(&call)
+        == OVERWORLD_FIELD_TERRAIN_STREAM_WAITING);
+    CHECK(sOverworldFieldTerrainStream.watchedAnchor.x == Center(4));
+
+    player.posVec[0] = Center(4);
+    call.operation = OVERWORLD_FIELD_TERRAIN_STREAM_CANCEL;
+    const Manager beforeCancel = manager;
+    CHECK(OverworldFieldService_TerrainStream(&call)
+        == OVERWORLD_FIELD_TERRAIN_STREAM_IDLE);
+    Clear();
+    OnlyWatcherChanged(&beforeCancel, (VecFx32 *)player.posVec);
+    CHECK(*(s32 *)(manager.bytes + 0xD0) == Center(3));
+    Sample();
+    CHECK(*(s32 *)(manager.bytes + 0xD0) == Center(4));
 }
 
 static void RetargetAndRebindCases(void)
@@ -318,6 +370,7 @@ int main(void)
         Travel(paths[index][0], paths[index][1]);
     }
     CancelAndRestoreCases();
+    OneTileLagCase();
     RetargetAndRebindCases();
     printf("PASS actual Field stream service/wrapper: %u paths, %u sampled tile advances, %u assertions\n",
         pathCases, advances, checks);

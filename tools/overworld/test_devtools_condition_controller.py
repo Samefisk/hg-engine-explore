@@ -29,6 +29,8 @@ from tools.overworld.devtools_condition_controller_measurement import (
     ConditionControllerMeasurement,
 )
 from tools.overworld.devtools_condition_controller_observer import (
+    ADAPTER_OUTCOME_STACK_WORD,
+    ADAPTER_STACK_ARGUMENT_BYTES,
     LiveConditionControllerFixture,
     PREPARED_CATALOG_INDICES_OFFSET,
     PREPARED_COUNT_OFFSET,
@@ -56,17 +58,17 @@ SCENARIO = ROOT / "tests/overworld/scenarios/profile.condition.live-wild-control
 
 def source_blob():
     profile_offset = 84
-    profile_count = 31
+    profile_count = 27
     condition_offset = profile_offset + profile_count * 212
-    condition_count = 17
+    condition_count = 11
     raw = bytearray(condition_offset + condition_count * 48)
-    struct.pack_into("<IHHI", raw, 0, 0x4F574244, 79, 84, len(raw))
+    struct.pack_into("<IHHI", raw, 0, 0x4F574244, 80, 84, len(raw))
     struct.pack_into("<IHH", raw, 36, profile_offset, profile_count, 212)
     struct.pack_into("<IHH", raw, 52, condition_offset, condition_count, 48)
 
     profile = profile_offset + CONDITION_APPLICATION * 212
     raw[profile + 17] = 1
-    raw[profile + 18] = 16
+    raw[profile + 18] = 7
     raw[profile + 19] = 1
     struct.pack_into("<I", raw, profile + 20,
                      (1 << 0) | (1 << 12) | (1 << 13))
@@ -78,12 +80,12 @@ def source_blob():
     raw[data + 21] = 2
     raw[data + 36] = 6
 
-    condition = condition_offset + 16 * 48
+    condition = condition_offset + 7 * 48
     struct.pack_into("<HH", raw, condition + 20,
                      CONDITION_DURATION, CONDITION_COOLDOWN)
     struct.pack_into("<H", raw, condition + 32, CONDITION_ID)
     raw[condition + 34:condition + 45] = bytes((
-        CONDITION_APPLICATION, 1, 12, 0, 1, 1, 0, 0, 4, 4, 100,
+        CONDITION_APPLICATION, 1, 0xFF, 0, 1, 1, 0, 0, 5, 0, 100,
     ))
     return bytes(raw)
 
@@ -180,7 +182,7 @@ def live_rows():
     }
 
     def snapshot(frame, *, phase="IDLE", elapsed=0, closed=False,
-                 restored=False, writes=3, operations=3):
+                 restored=False, writes=5, operations=5):
         current = deepcopy(wild)
         if phase == "MOVING":
             current.update(
@@ -306,8 +308,8 @@ def live_rows():
             frame,
             phase="MOVING" if moving else "IDLE",
             elapsed=max(0, frame - 102),
-            writes=25 if frame >= 102 else 23,
-            operations=6 if frame >= 102 else 5,
+            writes=27 if frame >= 102 else 25,
+            operations=8 if frame >= 102 else 7,
         ))
     first = deepcopy(success)
     first["condition"]["triggered"] = True
@@ -350,7 +352,7 @@ def live_rows():
 
     arm_snapshot = snapshot(100)
     close_snapshot = snapshot(114, closed=True, restored=True,
-                              writes=28, operations=9)
+                              writes=32, operations=13)
     rows = [
         {
             "phase": "observe", "action": recipe["actions"][0]["id"],
@@ -417,27 +419,27 @@ class FixtureSession:
 
 
 class ConditionControllerTests(unittest.TestCase):
-    def test_three_byte_fixture_and_exact_restore(self):
+    def test_five_byte_fixture_and_exact_restore(self):
         source = source_blob()
         patched, receipt = build_live_controller_fixture(source)
         changed = [index for index, pair in enumerate(zip(source, patched))
                    if pair[0] != pair[1]]
         self.assertEqual(changed,
                          [item["offset"] for item in receipt["changes"]])
-        self.assertEqual(len(changed), 3)
+        self.assertEqual(len(changed), 5)
         self.assertEqual(restore_live_controller_fixture(patched, receipt),
                          source)
         self.assertEqual(receipt["condition"]["targetRole"], "FOLLOWER")
-        self.assertEqual(receipt["profile"]["id"], "ambush-plant-active")
+        self.assertEqual(receipt["profile"]["id"], "ambush")
 
     def test_fixture_rejects_changed_authored_contract(self):
         source = bytearray(source_blob())
-        condition_offset = struct.unpack_from("<I", source, 52)[0] + 16 * 48
+        condition_offset = struct.unpack_from("<I", source, 52)[0] + 7 * 48
         source[condition_offset + 44] = 99
-        with self.assertRaisesRegex(ValueError, "authored Ambush Plant"):
+        with self.assertRaisesRegex(ValueError, "authored Ambush"):
             build_live_controller_fixture(bytes(source))
 
-    def test_live_fixture_writes_and_restores_only_three_catalog_bytes(self):
+    def test_live_fixture_writes_and_restores_only_five_catalog_bytes(self):
         source = source_blob()
         with tempfile.TemporaryDirectory() as directory:
             build_path = Path(directory) / "build/OverworldWildBehaviorData.bin"
@@ -446,24 +448,26 @@ class ConditionControllerTests(unittest.TestCase):
             session = FixtureSession(source, Path(directory))
             fixture = LiveConditionControllerFixture(session)
             applied = fixture.apply()
-            self.assertEqual(applied["guestMemoryWriteBytes"], 3)
-            self.assertEqual(len(session.writes), 3)
+            self.assertEqual(applied["guestMemoryWriteBytes"], 5)
+            self.assertEqual(len(session.writes), 5)
             self.assertNotEqual(bytes(session.memory), source)
             restored = fixture.restore()
-            self.assertEqual(restored["guestMemoryWriteBytes"], 6)
-            self.assertEqual(len(session.writes), 6)
+            self.assertEqual(restored["guestMemoryWriteBytes"], 10)
+            self.assertEqual(len(session.writes), 10)
             self.assertEqual(bytes(session.memory), source)
 
     def test_runtime_offsets_and_generation_address_are_pinned(self):
+        self.assertEqual(ADAPTER_STACK_ARGUMENT_BYTES, 36)
+        self.assertEqual(ADAPTER_OUTCOME_STACK_WORD, 8)
         self.assertEqual(PREPARED_CATALOG_INDICES_OFFSET, 16)
         self.assertEqual(PREPARED_COUNT_OFFSET, 48)
         self.assertEqual(PREPARED_VALID_OFFSET, 49)
         self.assertEqual(RUNTIME_SCRATCH_OFFSET, 520)
         self.assertEqual(RUNTIME_RESULT_OFFSET, 552)
         self.assertEqual(RUNTIME_RESOLUTION_OFFSET, 1136)
-        self.assertEqual(RUNTIME_ACTOR_SNAPSHOT_OFFSET, 1744)
-        self.assertEqual(RUNTIME_ACTIVE_MASKS_OFFSET, 1920)
-        self.assertEqual(RUNTIME_TARGET_VALID_OFFSET, 2040)
+        self.assertEqual(RUNTIME_ACTOR_SNAPSHOT_OFFSET, 1772)
+        self.assertEqual(RUNTIME_ACTIVE_MASKS_OFFSET, 1948)
+        self.assertEqual(RUNTIME_TARGET_VALID_OFFSET, 2068)
         self.assertEqual(target_generation_address(0x02081000, 3),
                          0x02081000 + 3 * 16 + 10)
 

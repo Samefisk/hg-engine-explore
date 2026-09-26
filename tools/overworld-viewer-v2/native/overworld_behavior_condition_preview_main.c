@@ -4,8 +4,8 @@
 #include <string.h>
 
 #define HOST_TRACE_CAPACITY 96
-#define PREVIEW_HEADER_VALUES 23
-#define PREVIEW_CANDIDATE_VALUES 15
+#define PREVIEW_HEADER_VALUES 24
+#define PREVIEW_CANDIDATE_VALUES 16
 #define PREVIEW_STATE_VALUES 7
 #define HOST_REQUEST_VERSION 2
 
@@ -65,6 +65,39 @@ static int FindPreparedCondition(
         }
     }
     return -1;
+}
+
+static int ResolveCurrentVision(
+    const OverworldWildBehaviorDataBlob *blob,
+    const OverworldWildBehaviorContext *context,
+    u32 activeConditionalMask,
+    u16 winningConditionId,
+    u8 *range,
+    u8 *options)
+{
+    BehaviorResolveRequest request;
+    BehaviorResolveResult result;
+    BehaviorResolveStatus status;
+
+    memset(&request, 0, sizeof(request));
+    request.context = *context;
+    request.behaviorClass = context->behaviorClass;
+    request.activeConditionalMask = activeConditionalMask;
+    request.winningConditionId = winningConditionId;
+    request.targetSourceApplication = BEHAVIOR_RESOLVER_NO_APPLICATION;
+    request.resolvedTargetConditionId = BEHAVIOR_RESOLVER_NO_CONDITION;
+    request.requestVersion = HOST_REQUEST_VERSION;
+    status = BehaviorResolver_Resolve(
+        blob, sizeof(*blob), &request, &result, NULL);
+    if (status != BEHAVIOR_RESOLVE_OK) {
+        return 0;
+    }
+    *range = result.profile.owner.visionRange;
+    *options = result.profile.owner.visionCone
+        | (result.profile.owner.visionAdjacentAwareness
+            ? OVERWORLD_VISION_ADJACENT_AWARENESS
+            : 0);
+    return 1;
 }
 
 static void PrintTarget(
@@ -189,14 +222,16 @@ int main(void)
     BehaviorResolveStatus resolveStatus;
     u8 candidateCount;
     u16 stateCount;
+    u32 stableConditionalMask;
+    u16 stableWinningConditionId;
     int i;
 
     if (!ReadValues(header, PREVIEW_HEADER_VALUES)) {
         fprintf(stderr, "invalid condition preview header\n");
         return 2;
     }
-    candidateCount = (u8)header[21];
-    stateCount = (u16)header[22];
+    candidateCount = (u8)header[22];
+    stateCount = (u16)header[23];
     if (candidateCount > OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS
         || stateCount > OVERWORLD_BEHAVIOR_CONDITION_MAX_ENTRIES) {
         fprintf(stderr, "condition preview exceeds runtime bounds\n");
@@ -248,6 +283,9 @@ int main(void)
     world.subjectFacing = (u8)header[18];
     world.subjectMovementSpeed = (u8)header[19];
     world.subjectTerrainMask = (u16)header[6];
+    world.playerFacingAndOcclusion = (u8)header[21];
+    world.playerVisionRange = OVERWORLD_VISION_DEFAULT_RANGE;
+    world.playerVisionOptions = OVERWORLD_VISION_DEFAULT_OPTIONS;
     world.actorCount = candidateCount;
 
     memset(candidates, 0, sizeof(candidates));
@@ -273,6 +311,17 @@ int main(void)
         world.actors[i].x = (s16)values[12];
         world.actors[i].y = (s16)values[13];
         world.actors[i].valid = (u8)values[14];
+        world.actors[i].facingAndOcclusion = (u8)values[15];
+        if (!ResolveCurrentVision(
+                blob,
+                &candidates[i].context,
+                0,
+                BEHAVIOR_RESOLVER_NO_CONDITION,
+                &world.actors[i].visionRange,
+                &world.actors[i].visionOptions)) {
+            fprintf(stderr, "condition preview candidate vision failed\n");
+            return 1;
+        }
     }
 
     memset(&prepared, 0, sizeof(prepared));
@@ -285,6 +334,8 @@ int main(void)
             (unsigned)conditionStatus);
         return 1;
     }
+    stableConditionalMask = 0;
+    stableWinningConditionId = BEHAVIOR_RESOLVER_NO_CONDITION;
     for (i = 0; i < stateCount; i++) {
         long long values[PREVIEW_STATE_VALUES];
         int preparedIndex;
@@ -300,6 +351,11 @@ int main(void)
         entryState->flags = 0;
         if (values[1]) {
             entryState->flags |= OVERWORLD_BEHAVIOR_CONDITION_STATE_ACTIVE;
+            stableConditionalMask |= 1u
+                << blob->conditionEntries[
+                    prepared.catalogEntryIndexes[preparedIndex]
+                ].applicationIndex;
+            stableWinningConditionId = (u16)values[0];
         }
         if (values[2]) {
             entryState->flags |=
@@ -316,6 +372,16 @@ int main(void)
             entryState->targetEncounterGeneration =
                 world.actors[values[6]].actor.encounterGeneration;
         }
+    }
+    if (!ResolveCurrentVision(
+            blob,
+            &subjectContext,
+            stableConditionalMask,
+            stableWinningConditionId,
+            &world.subjectVisionRange,
+            &world.subjectVisionOptions)) {
+        fprintf(stderr, "condition preview subject vision failed\n");
+        return 1;
     }
 
     conditionStatus = OverworldBehaviorCondition_EvaluatePrepared(

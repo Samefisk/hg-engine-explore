@@ -2,6 +2,7 @@
 #define OVERWORLD_BEHAVIOR_CONDITIONS_H
 
 #include "overworld_actor_system.h"
+#include "overworld_vision.h"
 
 #define OVERWORLD_BEHAVIOR_CONDITION_MAX_APPLICATIONS 32
 #define OVERWORLD_BEHAVIOR_CONDITION_MAX_ENTRIES 32
@@ -25,6 +26,7 @@ typedef enum OverworldBehaviorConditionKind {
     OVERWORLD_BEHAVIOR_CONDITION_PLAYER_NOTICED = 0,
     OVERWORLD_BEHAVIOR_CONDITION_POKEMON_NOTICED = 1,
     OVERWORLD_BEHAVIOR_CONDITION_TERRAIN_SPEED = 2,
+    OVERWORLD_BEHAVIOR_CONDITION_TARGET_CANNOT_SEE_SUBJECT = 3,
 } OverworldBehaviorConditionKind;
 
 typedef enum OverworldBehaviorConditionActivationMode {
@@ -43,7 +45,15 @@ typedef enum OverworldBehaviorConditionRangeKind {
     OVERWORLD_BEHAVIOR_CONDITION_RANGE_FACING_LINE_CLOSE_RADIUS = 2,
     OVERWORLD_BEHAVIOR_CONDITION_RANGE_CARDINAL_LINE = 3,
     OVERWORLD_BEHAVIOR_CONDITION_RANGE_RADIUS = 4,
+    OVERWORLD_BEHAVIOR_CONDITION_RANGE_VISION_CURRENT = 5,
+    OVERWORLD_BEHAVIOR_CONDITION_RANGE_VISION_CUSTOM = 6,
 } OverworldBehaviorConditionRangeKind;
+
+#define OVERWORLD_BEHAVIOR_CONDITION_OBSERVATION_FACING_MASK 0x03
+#define OVERWORLD_BEHAVIOR_CONDITION_OBSERVATION_OCCLUDED_FROM_SUBJECT \
+    (1u << 2)
+#define OVERWORLD_BEHAVIOR_CONDITION_OBSERVATION_OCCLUDED_TO_SUBJECT \
+    (1u << 3)
 
 typedef enum OverworldBehaviorConditionTargetReferenceKind {
     OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE = 0,
@@ -62,7 +72,9 @@ typedef struct OverworldBehaviorConditionActorObservation {
     s16 x;
     s16 y;
     u8 valid;
-    u8 reserved[3];
+    u8 facingAndOcclusion;
+    u8 visionRange;
+    u8 visionOptions;
 } OverworldBehaviorConditionActorObservation;
 
 typedef struct OverworldBehaviorConditionWorldView {
@@ -77,6 +89,12 @@ typedef struct OverworldBehaviorConditionWorldView {
     u8 subjectMovementSpeed;
     u8 playerValid;
     u8 actorCount;
+    u8 playerFacingAndOcclusion;
+    u8 subjectVisionRange;
+    u8 subjectVisionOptions;
+    u8 playerVisionRange;
+    u8 playerVisionOptions;
+    u8 reserved[3];
     OverworldBehaviorConditionActorObservation
         actors[OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS];
 } OverworldBehaviorConditionWorldView;

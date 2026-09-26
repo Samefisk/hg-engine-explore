@@ -41,7 +41,9 @@ class StressFixture:
         self.actor["engineObject"] = deepcopy(p)
         if self.actor["role"] == "MOUNTED":
             p["face_y"]=32768
-            p["face_x"],p["face_z"]={0:(0,32768),1:(0,-32768),2:(32768,0),3:(-32768,0)}[facing]
+            p["face_x"],p["face_z"]={0:(0,32768),1:(0,-40960),2:(32768,0),3:(-32768,0),
+                                     4:(32768,32768),5:(-32768,32768),
+                                     6:(32768,-32768),7:(-32768,-32768)}[facing]
 
     def frame(self, meanings=(), select=False):
         s = self.snapshot

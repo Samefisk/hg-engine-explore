@@ -5,12 +5,13 @@ from pathlib import Path
 import unittest
 
 from tools.overworld.devtools_mount_begin_measurement import MountBeginMeasurement, HOP, negative_controls
+from tools.overworld.devtools_role_profile_proof import MOUNT_BEGIN_WITNESS
 from tools.overworld import test_devtools_role_profile_proof as profile_tests
 from tools.overworld import control
 
 
 def fixture():
-    profile, initial, final = profile_tests.RoleProfileProofTests().fixture()
+    profile, initial, final = profile_tests.RoleProfileProofTests().fixture(MOUNT_BEGIN_WITNESS)
     snapshots = []
     for frame in range(100, 112):
         s = deepcopy(final if frame >= 106 else initial)

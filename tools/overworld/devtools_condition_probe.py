@@ -18,7 +18,7 @@ PREPARED_STATE_COUNT = 4
 PREPARED_STATE_BYTES = 16
 PREPARED_BYTES = (PREPARED_STRUCT_BYTES
                   + PREPARED_STATE_COUNT * PREPARED_STATE_BYTES)
-WORLD_BYTES = 232
+WORLD_BYTES = 240
 CANDIDATE_BYTES = 32
 SCRATCH_BYTES = 32
 RESULT_BYTES = 540
@@ -104,7 +104,7 @@ def _entry(*, condition_id, application, kind, activation, target, role_mask,
     raw[34:47] = bytes((
         application,
         2,      # subject mode: all; subject application below owns matching
-        0,      # subject application: fixed normal profile zero
+        0xFF,   # V5 conditions own subjects; no application-owned subject
         kind,
         activation,
         target,
@@ -123,7 +123,7 @@ def _blob_header(blob):
     require(isinstance(blob, (bytes, bytearray)) and len(blob) >= 84,
             "condition source blob is truncated")
     magic, version, header_size, blob_size = struct.unpack_from("<IHHI", blob)
-    require(magic == 0x4F574244 and version == 79 and header_size == 84
+    require(magic == 0x4F574244 and version == 81 and header_size == 84
             and blob_size == len(blob), "condition source blob header differs")
     sections = {}
     for name, offset in (("overrideProfiles", 36), ("overrideMembers", 44),
@@ -230,12 +230,30 @@ def candidates_bytes():
 def world_bytes(frame, *, player_x=12, follower_generation=3):
     raw = bytearray(WORLD_BYTES)
     raw[:12] = handle_bytes(0, 1)
-    struct.pack_into("<I4hH4B", raw, 12, frame, 10, 10, player_x, 10,
-                     4, 3, 8, 1, 2)
-    raw[30:42] = handle_bytes(1, 2)
-    struct.pack_into("<hhB3x", raw, 42, 11, 10, 1)
-    raw[50:62] = handle_bytes(2, follower_generation)
-    struct.pack_into("<hhB3x", raw, 62, 12, 10, 1)
+    struct.pack_into(
+        "<I4hH9B3x",
+        raw,
+        12,
+        frame,
+        10,
+        10,
+        player_x,
+        10,
+        4,
+        3,  # subject facing: east
+        8,  # subject movement speed
+        1,  # player valid
+        2,  # actor count
+        2,  # player facing: west; no occlusion flags
+        3,  # subject Vision range
+        5,  # subject Vision: forward cone + adjacent awareness
+        3,  # player Vision range
+        5,  # player Vision: forward cone + adjacent awareness
+    )
+    raw[38:50] = handle_bytes(1, 2)
+    struct.pack_into("<hh4B", raw, 50, 11, 10, 1, 2, 3, 5)
+    raw[58:70] = handle_bytes(2, follower_generation)
+    struct.pack_into("<hh4B", raw, 70, 12, 10, 1, 2, 3, 5)
     return bytes(raw)
 
 
@@ -433,7 +451,11 @@ class ConditionProbe:
         ))
         returned = self._clock()
         observed = self._checked(world)
-        require(status == expected_status, "condition evaluate status differs")
+        require(
+            status == expected_status,
+            (f"condition evaluate status differs for {name}: "
+             f"expected {expected_status}, got {status}"),
+        )
         prepared = observed[offsets["prepared"]:
                             offsets["prepared"] + PREPARED_BYTES]
         scratch = observed[offsets["scratch"]:

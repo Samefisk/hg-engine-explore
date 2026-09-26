@@ -97,7 +97,7 @@ typedef struct {
 } BehaviorResolveResult;
 typedef struct { u32 personality; u16 species; u8 form, level; } OverworldWildRolledEncounter;
 typedef struct { int startX, startY; u8 headbuttTreeType; } OverworldWildSpawnPosition;
-typedef struct { s16 targetX, targetY, startX, startY; u8 locomotion, hopDirection; } OverworldWildSpawnStartup;
+typedef struct { s16 targetX, targetY, startX, startY; u8 locomotion, hopDirection; s32 targetBaseY; } OverworldWildSpawnStartup;
 typedef struct {
     OverworldWildSpawnPosition position;
     OverworldWildRolledEncounter encounter;

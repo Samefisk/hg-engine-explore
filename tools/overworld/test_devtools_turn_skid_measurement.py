@@ -6,7 +6,7 @@ import struct
 import unittest
 from tools.overworld.devtools_turn_skid_measurement import (
     ACCELERATION_MOTION_COUNT, MOTION_COUNT, TurnSkidMeasurement,
-    validate_motion, DURATIONS, KINDS,
+    validate_motion, validate_skid_presentation, DURATIONS, KINDS,
 )
 from tools.overworld.devtools_walk_matrix_observer import decode_motion, decode_sample
 from tools.overworld.devtools_turn_skid_proof import contract, TurnSkidNegative, FAULTS, validate_negative_result
@@ -15,17 +15,18 @@ from tools.overworld.devtools_turn_skid_proof import contract, TurnSkidNegative,
 def motion(index):
     duration, kind = DURATIONS[index], KINDS[index]
     direction = 3 if index < MOTION_COUNT - 1 else 2
+    facing = 3 if index < ACCELERATION_MOTION_COUNT else 2
     ticks = []
     def state(elapsed):
         raw = bytearray(52)
-        struct.pack_into('<HBBHH', raw, 0, 1, kind, direction, 1, 2)
+        struct.pack_into('<HBBHH', raw, 0, 1, kind, facing, 1, 2)
         struct.pack_into('<4h2i', raw, 8, 580, 400, 581 if direction == 3 else 579, 400, 0, 0)
         struct.pack_into('<HH', raw, 24, duration, 44)
         raw[28:30] = bytes((direction, 1))
         struct.pack_into('<4H4B', raw, 40, elapsed, 0, 0, 0, 2 if elapsed < duration else 3, 0, 0, 0)
         return decode_motion(bytes(raw))
     for elapsed in range(duration):
-        sample = decode_sample(struct.pack('<6i5H2B', *([0]*6), elapsed+1, duration, 0, 0, 0, direction, 1))
+        sample = decode_sample(struct.pack('<6i5H2B', *([0]*6), elapsed+1, duration, 0, 0, 0, facing, 1))
         ticks.append(dict(before=state(elapsed), after=state(elapsed+1), sample=sample))
     rows = [('MOTION_STARTED',kind,duration),('LOGICAL_COMMIT',11,kind),
             ('MOTION_FINISHED',11,kind),('CONTROL_RETURNED',1,11)]
@@ -34,6 +35,25 @@ def motion(index):
 
 
 class TurnSkidTests(unittest.TestCase):
+    def test_old_facing_through_skid_is_rejected(self):
+        changed = motion(ACCELERATION_MOTION_COUNT)
+        for tick in changed['ticks']:
+            for key in ('before', 'after'):
+                raw = bytearray.fromhex(tick[key]['rawHex'])
+                raw[3] = 3
+                tick[key] = decode_motion(bytes(raw))
+            raw = bytearray.fromhex(tick['sample']['rawHex'])
+            raw[-2] = 3
+            tick['sample'] = decode_sample(bytes(raw))
+        with self.assertRaisesRegex(ValueError, 'facing'):
+            validate_motion(changed, ACCELERATION_MOTION_COUNT)
+        actor = dict(motionKind='SKID', motionPhase='MOVING',
+                     engineObject=dict(facing=2))
+        self.assertTrue(validate_skid_presentation(dict(player=dict(facing=2)), actor))
+        actor['engineObject']['facing'] = 3
+        with self.assertRaisesRegex(ValueError, 'old facing'):
+            validate_skid_presentation(dict(player=dict(facing=3)), actor)
+
     def test_all_native_schedules_and_raw_byte_faults(self):
         for index in range(MOTION_COUNT):
             original = motion(index)
@@ -85,7 +105,8 @@ class TurnSkidTests(unittest.TestCase):
         events=[dict(data=dict(observation='walk-matrix-tick',movingWalk=True,before=dict(elapsed=0))),
                 dict(data=dict(observation='stomp-policy',effect=2,feedback=dict(dust=[{}]))),
                 dict(data=dict(event='LOGICAL_COMMIT'))]
-        snapshot=dict(actors=[dict(species=155,role='MOUNTED',handle=dict(value=7))])
+        snapshot=dict(player=dict(facing=2),actors=[dict(species=155,role='MOUNTED',
+            handle=dict(value=7),motionKind='SKID',engineObject=dict(facing=2))])
         original=deepcopy(events)
         for fault in FAULTS:
             negative=TurnSkidNegative(fault)

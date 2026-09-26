@@ -50,6 +50,17 @@ def direction_delta(direction):
     return {0: [0, -1], 1: [0, 1], 2: [-1, 0], 3: [1, 0]}[direction]
 
 
+def recovery_time(actor, commit):
+    """One braking level gives nominal five; retain its exact keyed variance."""
+    state = (actor["subjectIdentity"] ^ (actor["handle"]["encounterGeneration"] << 16) ^ commit) & 0xFFFFFFFF
+    state ^= state >> 16
+    state = (state * 0x7FEB352D) & 0xFFFFFFFF
+    state ^= state >> 15
+    state = (state * 0x846CA68B) & 0xFFFFFFFF
+    state ^= state >> 16
+    return 5 + (((state >> 24) * 3) >> 8)
+
+
 class RunnerTurnRunwayMeasurement:
     def __init__(self, max_frames=300):
         require(type(max_frames) is int and 1 <= max_frames <= 600,
@@ -62,6 +73,8 @@ class RunnerTurnRunwayMeasurement:
         self.traces = []
         self.straight_input = self.blocked_result = None
         self.turn_input = self.turn_result = self.post_skid_result = None
+        self.continuation = None
+        self.continuation_frame = None
         self.policy_frame = self.old_direction = self.turn_direction = None
         self.recorder = None
         self.motions = self.lifecycle = None
@@ -120,7 +133,7 @@ class RunnerTurnRunwayMeasurement:
                     and response[11] == 0 and response[17] == response[18] == response[10] \
                     and response[19] == 5 and response[20] == STRAIGHT_FLAGS \
                     and response[22] == response[23] == 0 \
-                    and response[24] == 4 and response[25] == 1:
+                    and response[24] == 4 and response[25] == 2:
                 self.straight_input, self.blocked_result = deepcopy(data), None
                 self.policy_frame, self.old_direction = event["frame"], response[10]
                 return
@@ -129,14 +142,26 @@ class RunnerTurnRunwayMeasurement:
                     and response[10] != self.old_direction:
                 old_delta, new_delta = direction_delta(self.old_direction), direction_delta(response[10])
                 require(sum(a * b for a, b in zip(old_delta, new_delta)) == 0
-                        and response[11] == 1 and response[17] == self.old_direction
+                        and response[11] == 2 and response[17] == self.old_direction
                         and response[18] == response[10] and response[19] == 8
                         and response[20] == TURN_FLAGS and response[22] == response[23] == 0
-                        and response[24] == 5 and response[25] == 1,
+                        and response[24] == 5 and response[25] == 2,
                         "Runner turn-runway alternate turn proposal differs")
                 self.turn_input, self.turn_direction = deepcopy(data), response[10]
                 return
         if operation != WALK_POLICY_START_RESULT:
+            return
+        if self.turn_result is not None and request[20] == 0x13:
+            require(self.continuation is None
+                    and request[11] == response[11] == 1
+                    and request[15] == response[15] == START_ACCEPTED
+                    and request[16] == DECISION_TRY_STEP and response[16] == DECISION_CONSUMED
+                    and request[17] == self.old_direction and request[18] == self.turn_direction
+                    and request[17:21] == response[17:21] and request[19] == 8
+                    and request[22] == request[23] == response[22] == response[23] == 0,
+                    "Runner turn-runway continuation differs")
+            self.continuation = deepcopy(data)
+            self.continuation_frame = event["frame"]
             return
         if self.turn_result is not None and response[20] == POST_SKID_FLAGS:
             require(request[15] == response[15] == START_ACCEPTED
@@ -145,7 +170,7 @@ class RunnerTurnRunwayMeasurement:
                     and request[11] == response[11] == 0
                     and request[17] == response[17] == self.turn_direction
                     and request[18] == response[18] == self.turn_direction
-                    and request[19] == response[19] == 6
+                    and request[19] == response[19] == recovery_time(self.actor, before["commitSequence"])
                     and request[22] == response[22] == request[23] == response[23] == 0
                     and request[24] == response[24] == 5
                     and request[25] == response[25] == 1,
@@ -228,7 +253,7 @@ class RunnerTurnRunwayMeasurement:
                         and actor.get("motionDuration") == 8 and actor.get("motionElapsed") == 0
                         and actor.get("movementPolicy", {}).get("direction") == self.old_direction
                         and actor.get("movementPolicy", {}).get("speed") == 8
-                        and actor.get("movementPolicy", {}).get("skid") == 1
+                        and actor.get("movementPolicy", {}).get("skid") == 2
                         and actor.get("movementPolicy", {}).get("turn") == self.turn_direction
                         and actor.get("movementPolicy", {}).get("resume") == 5
                         and actor.get("movementPolicy", {}).get("action") == 0
@@ -241,10 +266,11 @@ class RunnerTurnRunwayMeasurement:
                 self.recorder.observe(snapshot["frame"], actor, actor["engineObject"])
                 require(not self.recorder.failures,
                         "Runner turn-runway motion: " + str(self.recorder.failures))
-                if len(self.recorder.completed) >= 2:
-                    require(self.post_skid_result is not None,
+                require(len(self.recorder.completed) <= 3, "Runner turn-runway has extra completed motion")
+                if len(self.recorder.completed) == 3:
+                    require(self.post_skid_result is not None and self.continuation is not None,
                             "Runner turn-runway recovery lacks accepted start")
-                    self.motions = deepcopy(self.recorder.completed[:2])
+                    self.motions = deepcopy(self.recorder.completed)
                     self._check_motions(actor)
             if self.turn_result is None and self.policy_frame is not None \
                     and snapshot["frame"] > self.policy_frame:
@@ -256,21 +282,31 @@ class RunnerTurnRunwayMeasurement:
         return self.result()
 
     def _check_motions(self, actor):
-        first, second = self.motions
-        require([motion["duration"] for motion in self.motions] == [8, 6]
+        first, second, recovery = self.motions
+        duration = recovery_time(self.actor, recovery["commitBefore"])
+        require([motion["duration"] for motion in self.motions] == [8, 8, duration]
+                and first["startFrame"] == self.policy_frame
+                and second["startFrame"] == self.continuation_frame
                 and all(motion["kind"] == "WALK" and complete_travel(motion)
                         for motion in self.motions)
                 and first["target"] == second["origin"]
+                and second["target"] == recovery["origin"]
                 and [target - origin for origin, target in zip(first["origin"], first["target"])]
                     == direction_delta(self.old_direction)
                 and [target - origin for origin, target in zip(second["origin"], second["target"])]
+                    == direction_delta(self.old_direction)
+                and [target - origin for origin, target in zip(recovery["origin"], recovery["target"])]
                     == direction_delta(self.turn_direction),
                 "Runner turn-runway motion pair differs")
         require([sample["elapsed"] for sample in first["samples"]] == list(range(8))
-                and [sample["elapsed"] for sample in second["samples"]] == list(range(6))
+                and [sample["elapsed"] for sample in second["samples"]] == list(range(8))
+                and [sample["elapsed"] for sample in recovery["samples"]] == list(range(duration))
                 and all(motion["commitAfter"] == ((motion["commitBefore"] + 1) & 0xFFFFFFFF)
                         for motion in self.motions)
-                and actor.get("logical") == dict(zip(("x", "y"), second["target"])),
+                and all(before["commitAfter"] == after["commitBefore"]
+                        and before["finishFrame"] <= after["startFrame"]
+                        for before, after in zip(self.motions, self.motions[1:]))
+                and actor.get("logical") == dict(zip(("x", "y"), recovery["target"])),
                 "Runner turn-runway commits or elapsed schedules differ")
         lifecycle = []
         for motion in self.motions:
@@ -322,5 +358,7 @@ class RunnerTurnRunwayMeasurement:
             "blockedResult": deepcopy(self.blocked_result),
             "turnInput": deepcopy(self.turn_input), "turnResult": deepcopy(self.turn_result),
             "postSkidResult": deepcopy(self.post_skid_result),
+            "continuation": deepcopy(self.continuation),
+            "continuationFrame": self.continuation_frame,
             "motions": deepcopy(self.motions), "lifecycle": deepcopy(self.lifecycle),
         }

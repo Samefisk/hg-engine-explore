@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.stantler-sprint-npc-hop",
+  "title": "Mounted Sprint crosses a stock NPC on clear terrain",
+  "status": "active",
+  "capabilities": ["hop", "mount.lifecycle", "walk.acceleration"],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "data/overworld_behavior_profiles.json",
+    "actor": "One prepared current Mounted Stantler (species 234, party slot 0) at map 33 tile (599,395)",
+    "trigger": "Hold Right toward the stock NPC on clear tile (600,395), then release during the two-tile Hop to (601,395)",
+    "observable": "Exactly one natural two-tile forward Hop starts from (599,395), crosses the NPC tile (600,395), commits at the clear tile (601,395), and returns mounted control. Its duration is twice the starting Sprint Walk time.",
+    "setupAudit": "complete",
+    "setupMutations": [{
+      "phase": "before-observation",
+      "target": "fixture",
+      "change": "Use a disposable save, checked map 33 teleport to (599,395), prepared party slot 0 Stantler, native Mounted spawn and exact-subject bind. Do not edit the stock NPC, collision, profile, speed, Hop target, timers or input during observation."
+    }],
+    "limits": [
+      "Prepared party and position do not prove natural capture, selection or spawning.",
+      "This actor reader verifies the exact two-tile Hop route and native commit. It does not re-read the stock NPC's object record or terrain collision during this run; the Route 29 fixture must be checked separately before acceptance.",
+      "This proves one eastward NPC crossing with a clear landing, not arbitrary NPC movement, other Pokémon, static walls, Wild AI choices or long-term movement.",
+      "Copied-data controls reject a short landing, wrong origin, wrong timing, lost commit, lost control return, duplicate Hop start and changed actor. The separate owner-reader control must remain accepted."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "stantler", "species": 234, "role": "MOUNTED", "acquisition": "mount",
+    "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Place the player at (599,395), prepare and mount own Stantler, then bind the live actor"},
+    {"at": 1, "kind": "input", "value": "Hold Right until the NPC Hop starts"},
+    {"at": 2, "kind": "input", "value": "Release Right and observe the Hop terminal boundary"}
+  ],
+  "stop": {"frameBudget": 240, "condition": "One two-tile NPC Hop has committed at (601,395) and returned mounted control"},
+  "expect": {
+    "requiredEvents": ["MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["MOTION_CANCELED", "CONTEXT_CHANGED", "ACTOR_REBOUND", "CONTROL_REBOUND"],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "mount.stantler-sprint-npc-hop",
+    "claims": ["natural-input", "live-actor-identity", "collision-decision", "logical-commit", "frame-pacing", "control-release"],
+    "minimumFrames": 16}
+}

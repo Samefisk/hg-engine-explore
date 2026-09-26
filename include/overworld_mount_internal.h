@@ -13,6 +13,10 @@
 #define OVERWORLD_MOUNT_WALK_END_PENDING 1
 #define OVERWORLD_MOUNT_WALK_END_CONTINUATION_READY 2
 #define OVERWORLD_MOUNT_WALK_END_STOP 3
+/* A chain Hop uses the Walk reducer's current momentum through landing. */
+#define OVERWORLD_MOUNT_WALK_END_CHAIN_HOP 4
+#define OVERWORLD_MOUNT_WALK_COMMAND 0x0C
+#define OVERWORLD_MOUNT_RUN_COMMAND 0x58
 typedef struct OverworldMountFieldInput {
     u16 flags;
     u16 unk2;
@@ -52,8 +56,8 @@ typedef struct OverworldMountRuntimeState {
     u16 motionIdentity;
     /* One stock step signal retained while terminal stream acks complete. */
     u8 pendingFieldStep;
-    /* The first byte keeps the nominal Walk time across the mounted engine
-     * call. The second byte remains reserved for the fixed layout. */
+    /* Nominal Walk time. The second byte carries a proposed skid-path length
+     * until motion starts, then its resolved post-tile pause. */
     u8 reservedPolicyProfile[2];
     /* Fixed adapter-boundary storage. These bytes replaced retired mount-
      * local policy state without changing the fixed runtime layout. */
@@ -75,7 +79,11 @@ typedef struct OverworldMountRuntimeState {
     s16 motionTargetY;
     s32 motionStartBaseY;
     s32 motionTargetBaseY;
-    VecFx32 motionStreamAnchor;
+    /* The mounted bind replaces the actor policy identity. Keep the exact
+     * prior Follower identity so dismount can restore it for the same actor. */
+    u32 priorFollowerBehaviorFingerprint;
+    u32 priorFollowerMatchedLayerMask;
+    u32 reservedPriorFollowerPolicy;
     u8 motionStreamPreparing;
     u8 savedFollowerShadowSuppressed;
     u8 motionLandingPauseStarted;
@@ -88,6 +96,8 @@ typedef struct OverworldMountRuntimeState {
 #define OVERWORLD_MOUNT_BOUNDARY_MOTION_INDEX 3
 #define OVERWORLD_MOUNT_BOUNDARY_PHASE_INDEX 4
 #define OVERWORLD_MOUNT_WALK_NOMINAL_TIME_INDEX 0
+#define OVERWORLD_MOUNT_WALK_PAUSE_INDEX 1
+#define OVERWORLD_MOUNT_WALK_SKID_PATH_TILES_INDEX 1
 #define OVERWORLD_MOUNT_WALK_STEP_FLAGS_INDEX 5
 #define OVERWORLD_MOUNT_WALK_STEP_DIRECTION_INDEX 6
 #define OVERWORLD_MOUNT_WALK_FACING_DIRECTION_INDEX 7
@@ -106,6 +116,15 @@ typedef char OverworldMountMotionStartBaseYOffsetMustRemainA0[
     offsetof(OverworldMountRuntimeState, motionStartBaseY) == 0xA0 ? 1 : -1];
 typedef char OverworldMountMotionTargetBaseYOffsetMustRemainA4[
     offsetof(OverworldMountRuntimeState, motionTargetBaseY) == 0xA4 ? 1 : -1];
+typedef char OverworldMountPriorFollowerMaskMustFollowFingerprint[
+    offsetof(OverworldMountRuntimeState, priorFollowerMatchedLayerMask)
+        == offsetof(OverworldMountRuntimeState,
+            priorFollowerBehaviorFingerprint) + 4
+        ? 1 : -1];
+typedef char OverworldMountReleaseHandoffMustFollowPhase[
+    offsetof(OverworldMountSnapshot, reserved)
+        == offsetof(OverworldMountSnapshot, phase) + 1
+        ? 1 : -1];
 typedef char OverworldMountTogglePendingOffsetMustRemain96[
     offsetof(OverworldMountRuntimeState, bufferedTogglePending) == 0x96
         ? 1 : -1];

@@ -1,5 +1,15 @@
 #include "../../include/overworld_behavior_condition_runtime.h"
 
+/* The fixed follower-selector tail is small.  Its ROM build compiles the
+ * portable evaluator and catalog adapter as one unit so GCC can share their
+ * validation and target-handling paths.  Host tests keep the two public
+ * sources separate. */
+#if defined(OVERWORLD_BEHAVIOR_CONDITION_COMBINED_RUNTIME)
+#define OVERWORLD_BEHAVIOR_RUNTIME_ONLY 1
+#include "overworld_behavior_conditions.c"
+#include "overworld_vision.c"
+#endif
+
 #if !defined(OVERWORLD_BEHAVIOR_HOST) \
     && !defined(OVERWORLD_ACTOR_SYSTEM_HOST)
 #include "../../include/constants/file.h"
@@ -14,6 +24,10 @@
 #define CONDITION_RUNTIME_MATCH_ANY_U8 0xFF
 #define CONDITION_RUNTIME_MATCH_LEVEL_ANY 0
 
+#if defined(OVERWORLD_BEHAVIOR_CONDITION_COMBINED_RUNTIME)
+#define OverworldBehaviorCondition_HandleEquals \
+    OverworldBehaviorCondition_SameHandle
+#else
 static u8 OverworldBehaviorCondition_HandleEquals(
     const OverworldActorHandle *left,
     const OverworldActorHandle *right)
@@ -24,6 +38,7 @@ static u8 OverworldBehaviorCondition_HandleEquals(
         && left->mapGeneration == right->mapGeneration
         && left->encounterGeneration == right->encounterGeneration;
 }
+#endif
 
 static u8 OverworldBehaviorCondition_BlobValid(
     const OverworldWildBehaviorDataBlob *blob,
@@ -41,7 +56,8 @@ static u8 OverworldBehaviorCondition_BlobValid(
             <= OVERWORLD_BEHAVIOR_CONDITION_MAX_ENTRIES;
 }
 
-static u8 OverworldBehaviorCondition_ResolveConditionMatches(
+static u8 __attribute__((noinline, optimize("Os")))
+OverworldBehaviorCondition_ResolveConditionMatches(
     const OverworldWildBehaviorDataBlob *blob,
     u8 application,
     u16 conditionId,
@@ -148,9 +164,7 @@ static u8 OverworldBehaviorCondition_MatchApplies(
     const OverworldWildBehaviorContext *context,
     const OverworldWildBehaviorMatch *match)
 {
-    return context != NULL
-        && match != NULL
-        && (match->species == CONDITION_RUNTIME_MATCH_ANY_SPECIES
+    return (match->species == CONDITION_RUNTIME_MATCH_ANY_SPECIES
             || match->species == context->species)
         && (match->groupMask == 0
             || (context->groupFlags & match->groupMask) != 0)
@@ -244,25 +258,24 @@ static u8 OverworldBehaviorCondition_TargetPoolMatches(
     const OverworldWildBehaviorConditionEntry *entry,
     const OverworldBehaviorConditionCandidate *candidate)
 {
-    u8 groupMatch;
-    u8 memberMatch;
-
     if ((entry->targetRoleMask & candidate->roleMask) == 0) {
         return 0;
     }
-    groupMatch = entry->targetGroupMask != 0
-        && (candidate->context.groupFlags & entry->targetGroupMask) != 0;
-    memberMatch = OverworldBehaviorCondition_MemberMatches(
+    if ((candidate->context.groupFlags & entry->targetGroupMask) != 0) {
+        return 1;
+    }
+    if (entry->targetGroupMask == 0 && entry->targetMemberCount == 0) {
+        return 1;
+    }
+    return OverworldBehaviorCondition_MemberMatches(
         blob,
         entry->targetMemberStart,
         entry->targetMemberCount,
         candidate->context.species);
-    if (entry->targetGroupMask == 0 && entry->targetMemberCount == 0) {
-        return 1;
-    }
-    return groupMatch || memberMatch;
 }
 
+#if defined(OVERWORLD_BEHAVIOR_HOST) \
+    || defined(OVERWORLD_ACTOR_SYSTEM_HOST)
 static void __attribute__((noinline, optimize("Os")))
 OverworldBehaviorCondition_BuildDefinition(
     const OverworldWildBehaviorConditionEntry *entry,
@@ -282,8 +295,55 @@ OverworldBehaviorCondition_BuildDefinition(
     definition->chance = entry->chancePercent;
     definition->minMovementSpeed = entry->minMovementSpeed;
     definition->maxMovementSpeed = entry->maxMovementSpeed;
-    definition->reserved = 0;
+    definition->reserved = entry->rangeKind
+            == OVERWORLD_BEHAVIOR_CONDITION_RANGE_VISION_CUSTOM
+        ? entry->minMovementSpeed
+        : 0;
 }
+#else
+static void __attribute__((naked, noinline))
+OverworldBehaviorCondition_BuildDefinition(
+    const OverworldWildBehaviorConditionEntry *entry,
+    OverworldBehaviorConditionDefinition *definition)
+{
+    (void)entry;
+    (void)definition;
+    __asm__(
+        "ldrh r2, [r0, #16]\n"
+        "strh r2, [r1, #6]\n"
+        "ldrh r2, [r0, #18]\n"
+        "strh r2, [r1, #8]\n"
+        "ldrh r2, [r0, #20]\n"
+        "strh r2, [r1, #2]\n"
+        "ldrh r2, [r0, #22]\n"
+        "strh r2, [r1, #4]\n"
+        "add r0, #32\n"
+        "ldrh r2, [r0, #0]\n"
+        "strh r2, [r1, #0]\n"
+        "ldrb r2, [r0, #2]\n"
+        "strb r2, [r1, #10]\n"
+        "ldrb r2, [r0, #5]\n"
+        "strb r2, [r1, #11]\n"
+        "ldrb r2, [r0, #6]\n"
+        "strb r2, [r1, #12]\n"
+        "ldrb r2, [r0, #7]\n"
+        "strb r2, [r1, #13]\n"
+        "ldrh r2, [r0, #10]\n"
+        "strh r2, [r1, #14]\n"
+        "ldrh r2, [r0, #12]\n"
+        "strh r2, [r1, #16]\n"
+        "lsr r3, r2, #8\n"
+        "ldrb r2, [r0, #14]\n"
+        "strb r2, [r1, #18]\n"
+        "ldrb r2, [r0, #10]\n"
+        "cmp r2, #6\n"
+        "beq 1f\n"
+        "mov r3, #0\n"
+        "1:\n"
+        "strb r3, [r1, #19]\n"
+        "bx lr\n");
+}
+#endif
 
 static u8 OverworldBehaviorCondition_ChanceRoll(
     u32 chanceSeed,
@@ -310,18 +370,13 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_PrepareActor(
 {
     const OverworldWildBehaviorDataBlob *blob =
         (const OverworldWildBehaviorDataBlob *)blobBytes;
-    OverworldBehaviorConditionEntryState *states;
-    u16 stateCapacity;
     u16 i;
 
     if (subjectContext == NULL || subject == NULL || prepared == NULL) {
         return OVERWORLD_BEHAVIOR_CONDITION_INVALID_ARGUMENT;
     }
-    states = prepared->states;
-    stateCapacity = prepared->stateCapacity;
-    memset(prepared, 0, sizeof(*prepared));
-    prepared->states = states;
-    prepared->stateCapacity = stateCapacity;
+    prepared->count = 0;
+    prepared->valid = 0;
     if (!OverworldBehaviorCondition_BlobValid(blob, blobSize)) {
         return OVERWORLD_BEHAVIOR_CONDITION_INVALID_DEFINITION;
     }
@@ -330,9 +385,6 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_PrepareActor(
         if (!OverworldBehaviorCondition_SubjectApplies(
                 blob, &blob->conditionEntries[i], subjectContext)) {
             continue;
-        }
-        if (prepared->count >= OVERWORLD_BEHAVIOR_CONDITION_MAX_ENTRIES) {
-            return OVERWORLD_BEHAVIOR_CONDITION_INVALID_DEFINITION;
         }
         prepared->catalogEntryIndexes[prepared->count++] = i;
     }
@@ -395,7 +447,6 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluatePrepared(
             &prepared->subject, &world->subject)) {
         return OVERWORLD_BEHAVIOR_CONDITION_INVALID_DEFINITION;
     }
-    memset(scratch, 0, sizeof(*scratch));
     memset(result, 0, sizeof(*result));
     result->resolvedTargetConditionId =
         OVERWORLD_BEHAVIOR_CONDITION_NO_ENTRY;
@@ -409,8 +460,6 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluatePrepared(
     for (i = 0; i < OVERWORLD_BEHAVIOR_CONDITION_MAX_APPLICATIONS; i++) {
         result->winningConditionIds[i] =
             OVERWORLD_BEHAVIOR_CONDITION_NO_ENTRY;
-        result->targets[i].kind =
-            OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE;
     }
     /* Validate the complete prepared batch before any timer or target state
      * is changed. This keeps malformed later entries atomic with the portable
@@ -432,7 +481,6 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluatePrepared(
         u16 sourceIndex = prepared->catalogEntryIndexes[i];
         u8 candidateIndex;
         u8 application;
-        u8 flags = 0;
 
         entry = &blob->conditionEntries[sourceIndex];
         OverworldBehaviorCondition_BuildDefinition(entry, &definition);
@@ -460,16 +508,10 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluatePrepared(
         if (status != OVERWORLD_BEHAVIOR_CONDITION_OK) {
             return status;
         }
-        if (entryResult.active) {
-            flags |= OVERWORLD_BEHAVIOR_CONDITION_SCRATCH_ACTIVE;
-        }
-        if (entryResult.conditionTrue) {
-            flags |= OVERWORLD_BEHAVIOR_CONDITION_SCRATCH_TRUE;
-        }
-        if (entryResult.triggered) {
-            flags |= OVERWORLD_BEHAVIOR_CONDITION_SCRATCH_TRIGGERED;
-        }
-        scratch->entryFlags[i] = flags;
+        scratch->entryFlags[i] =
+            entryResult.active
+            | (entryResult.conditionTrue << 1)
+            | (entryResult.triggered << 2);
         if (!entryResult.active) {
             continue;
         }

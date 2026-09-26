@@ -23,6 +23,7 @@ def harness_source():
     production = SOURCE.read_text()
     definitions = {}
     for path in (SOURCE, ROOT / "include/overworld_wild_behavior_data.h",
+                 ROOT / "include/overworld_wild_spawns_internal.h",
                  ROOT / "include/map_events_internal.h", ROOT / "include/constants/sndseq.h"):
         normalized = path.read_text().replace("\\\n", " ")
         for name, line in re.findall(r"^(#define\s+([A-Za-z_]\w*)[^\n]*)$", normalized, re.M):
@@ -39,16 +40,19 @@ def harness_source():
                 constant(token)
     for name in (
         "OW_WILD_SPAWNER_CHAIN_PAUSE_PENDING", "OW_WILD_SPAWNER_CHAIN_REPOSITION_FLAT_MASK",
+        "OW_WILD_SPAWNER_STAGED_CHAIN_HOP_FORWARD_PENDING",
         "OW_WILD_SPAWNER_CHAIN_REPOSITION_GRID_MARKER", "OW_WILD_SPAWNER_CHAIN_REPOSITION_GRID_MARKER_MASK",
+        "OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_NONE",
         "OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT", "OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_LEFT",
-        "OW_WILD_BEHAVIOR_WALK_PRESERVES_FACING",
+        "OW_WILD_BEHAVIOR_WALK_PRESERVES_FACING", "OW_WILD_BEHAVIOR_WALK_SWAY_WIDTH",
         "OW_WILD_SPAWNER_CUSTOM_MOTION_WALK_FLAG", "OW_WILD_SPAWNER_CUSTOM_JUMP_SPIN_SPEED_MASK",
         "OW_WILD_SPAWNER_CUSTOM_JUMP_OWNED_BITS", "BIT_VANISH",
         "OW_WILD_SPAWNER_CANOPY_HOPPER_PARTNER_PREP_COMMAND", "OW_WILD_SPAWNER_CANOPY_HOPPER_PARTNER_RESTORE_COMMAND",
         "OW_WILD_SPAWNER_CANOPY_HOPPER_FREEZE_COMMAND", "OW_WILD_CUSTOM_MOTION_NONE",
         "OW_WILD_CUSTOM_MOTION_WALK", "OW_WILD_CUSTOM_MOTION_JUMP", "OW_WILD_SPAWNER_SPOT_EMOTE_SE",
         "OW_WILD_SPAWNER_HOP_START_SE", "OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK",
-        "OW_WILD_SPAWNER_MOVEMENT_BURST_UPDATE_STEPS"):
+        "OW_WILD_SPAWNER_MOVEMENT_BURST_UPDATE_STEPS", "OW_WILD_SPAWN_ENTRY_FLY_IN",
+        "OW_WILD_SPAWNER_FLY_IN_DURATION_FRAMES"):
         constant(name)
     source = FIXTURE.read_text()
     substitutions = {
@@ -123,6 +127,10 @@ def main():
         "rejected prep remains owned": (
             "runtime->movementCustomJumpPrepActive[slot] = FALSE;",
             "runtime->movementCustomJumpPrepActive[slot] = TRUE;"),
+        "facing changes before admission": (
+            "reason = OverworldWildSpawns_BeginSharedMotion(",
+            "OverworldWildSpawns_SetObjectFacing(object, direction);\n"
+            "    reason = OverworldWildSpawns_BeginSharedMotion("),
     }
     for label, (old, new) in mutations.items():
         mutant = execute(mutate_start_body(source, old, new))

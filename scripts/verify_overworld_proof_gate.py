@@ -181,6 +181,7 @@ TESTS = (
         "tools.overworld.test_devtools_crash_presentation",
         "tools.overworld.test_devtools_crash_measurement",
         "tools.overworld.test_grass_effect_guard",
+        "tools.overworld.test_dust_effect_guard",
         "tools.overworld.test_devtools_center_measurement",
         "tools.overworld.test_devtools_cyndaquil_setup_measurement",
         "tools.overworld.test_devtools_raw_chunk",

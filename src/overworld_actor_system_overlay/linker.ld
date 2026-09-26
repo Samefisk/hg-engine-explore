@@ -16,6 +16,7 @@ SECTIONS {
                 FILL (0xABCD)
                 KEEP(*(.text.OverworldBehaviorConditionAdapter_EvaluateActor))
                 KEEP(*(.text.OverworldBehaviorConditionAdapter_BuildFrame))
+                KEEP(*(.text.OverworldBehaviorConditionAdapter_ClearResolution))
                 KEEP(*(.overworld_condition_adapter_zero))
                 KEEP(*(.overworld_condition_adapter_constants))
                 ASSERT(. <= ORIGIN(rom) + 0x560,
@@ -52,6 +53,7 @@ SECTIONS {
                     "overworld actor locomotion selector exceeds its ABI slot");
                 . = ORIGIN(rom) + 0x62C;
                 KEEP(*(.overworld_actor_target_policy))
+                KEEP(*(.overworld_actor_target_constants))
                 ASSERT(. <= ORIGIN(rom) + 0x640,
                     "overworld actor target selector exceeds its ABI slot");
                 . = ORIGIN(rom) + 0x640;
@@ -68,9 +70,24 @@ SECTIONS {
                 *(.rodata.*)
                 *(.fini)
                 *(COMMON)
-                ASSERT(. <= ORIGIN(rom) + 0x3B90,
+                ASSERT(. <= ORIGIN(rom) + 0x3B1C,
+                    "overworld actor code overlaps one-frame Walk helper");
+                . = ORIGIN(rom) + 0x3B1C;
+                KEEP(*(.overworld_mount_one_frame_walk))
+                ASSERT(OverworldMount_FinishOneFrameWalk
+                        == ORIGIN(rom) + 0x3B1C,
+                    "mounted one-frame Walk helper ABI moved");
+                ASSERT(. <= ORIGIN(rom) + 0x3B40,
+                    "overworld actor code overlaps mount profile command");
+                . = ORIGIN(rom) + 0x3B40;
+                KEEP(*(.overworld_actor_mount_profile_command))
+                ASSERT(. <= ORIGIN(rom) + 0x3B78,
+                    "overworld mount profile command exceeds reserve");
+                . = ORIGIN(rom) + 0x3B78;
+                KEEP(*(.overworld_actor_stomp_sound))
+                ASSERT(. <= ORIGIN(rom) + 0x3B98,
                     "overworld actor code exceeds resident code reserve");
-                . = ORIGIN(rom) + 0x3B90;
+                . = ORIGIN(rom) + 0x3B98;
                 KEEP(*(.overworld_actor_step_particle))
                 KEEP(*(.overworld_actor_tail_constants))
                 ASSERT(. <= ORIGIN(rom) + 0x3BD0,

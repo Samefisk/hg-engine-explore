@@ -24,7 +24,7 @@ __asm__(
     ".thumb_func\n.thumb_set OverworldWildSpawns_ResolveWalkPause, 0x023DFFCC\n");
 
 /* Keep this fixed resident overlay inside its stable linker reserve. */
-#pragma GCC optimize("no-tree-forwprop")
+#pragma GCC optimize("no-tree-forwprop,no-tree-dominator-opts")
 
 #define OW_WILD_RUNTIME_FX32_ONE (1 << FX32_SHIFT)
 #define OW_WILD_RUNTIME_MATCH_ANY_SPECIES SPECIES_NONE
@@ -124,6 +124,7 @@ OverworldWildRuntime_RequestMotion(
     intent.swayWidth = swayWidth;
     intent.visibilityPolicy = visibilityPolicy;
     intent.pauseFrames = kind == OVERWORLD_MOTION_KIND_REPOSITION
+        || kind == OVERWORLD_MOTION_KIND_FLY_IN
         || (kind == OVERWORLD_MOTION_KIND_HOP
             && (state->movementStagedHopPending[slot]
                     == OW_WILD_RUNTIME_STAGED_HOP_LEDGE_PENDING
@@ -133,10 +134,14 @@ OverworldWildRuntime_RequestMotion(
         : kind == OVERWORLD_MOTION_KIND_WALK
             ? OverworldWildSpawns_ResolveWalkPause(lane)
             : lane->hopPause;
-    intent.pathAdvancePolicy = OVERWORLD_MOTION_PATH_ADVANCE_AUTHORITY;
+    intent.pathAdvancePolicy = kind == OVERWORLD_MOTION_KIND_FLY_IN
+        ? OVERWORLD_MOTION_PATH_ADVANCE_NONE
+        : OVERWORLD_MOTION_PATH_ADVANCE_AUTHORITY;
     *(u16 *)(void *)&intent.commitPolicy = kind == OVERWORLD_MOTION_KIND_REPOSITION
         ? OVERWORLD_MOTION_COMMIT_NO_CHAIN
-        : OVERWORLD_MOTION_COMMIT_NORMAL;
+        : kind == OVERWORLD_MOTION_KIND_FLY_IN
+            ? OVERWORLD_MOTION_COMMIT_PRESENTATION_ONLY
+            : OVERWORLD_MOTION_COMMIT_NORMAL;
 
     candidate.targetX = runtime->movementCustomJumpTargetX[slot];
     candidate.targetY = runtime->movementCustomJumpTargetY[slot];
@@ -398,7 +403,8 @@ OverworldWildRuntime_FillActorView(
         return;
     }
     mounted = slot == OW_WILD_FOLLOWER_SLOT
-        && OVERWORLD_MOUNT_OVERLAY_ENTRY->isActive();
+        && (OVERWORLD_MOUNT_OVERLAY_ENTRY->isActive()
+            & OVERWORLD_MOUNT_ACTIVE_FLAG);
     view->handle.mapGeneration = state->mapGeneration;
     view->handle.encounterGeneration = spawn->encounterGeneration;
     view->subjectIdentity = spawn->personality;
@@ -484,6 +490,7 @@ static void OverworldActorWalkPolicy_ResetState(
     policy->stopPending = FALSE;
     policy->pendingStep = OVERWORLD_ACTOR_WALK_PENDING_NONE;
     policy->pendingSkid = FALSE;
+    policy->lastWalkTime = 0;
     policy->chainStepsRemaining = 0;
     policy->deferredChainPauseTicks = 0;
     policy->deferredChainPauseAction = 0;
@@ -497,6 +504,7 @@ static void OverworldActorWalkPolicy_ReduceInput(
     u8 requestedDirection = call->direction;
     u8 baseSpeed = OverworldWalk_ClampTime(
         call->lane->chillSpeed);
+    u8 visibleSpeed;
     u8 skidTiles;
     u8 turnSpeed;
 
@@ -525,8 +533,12 @@ static void OverworldActorWalkPolicy_ReduceInput(
         call->decision = OVERWORLD_ACTOR_WALK_POLICY_CONSUMED;
         return;
     }
+    /* Walk variance may leave the displayed tile behind nominal momentum.
+     * A turn or stop must brake from the speed the player just saw. */
+    visibleSpeed = policy->lastWalkTime != 0
+        ? policy->lastWalkTime : state->speed;
     if (requestedDirection == OW_WILD_WALK_DIRECTION_NONE) {
-        skidTiles = OverworldWalk_SkidTiles(state->speed);
+        skidTiles = OverworldWalk_SkidTiles(visibleSpeed);
         if (state->direction != OW_WILD_WALK_DIRECTION_NONE && skidTiles != 0) {
             if ((call->flags & OVERWORLD_ACTOR_WALK_POLICY_FLAG_DEFER_STOP) != 0
                 && !policy->stopPending) {
@@ -537,7 +549,7 @@ static void OverworldActorWalkPolicy_ReduceInput(
             policy->stopPending = FALSE;
             OverworldWalk_ProposeStep(
                 policy, call, state->direction, state->direction,
-                OverworldWalk_SkidTime(state->speed),
+                OverworldWalk_SkidTime(visibleSpeed),
                 OVERWORLD_ACTOR_WALK_STEP_VALIDATE
                     | OVERWORLD_ACTOR_WALK_STEP_SKID
                     | OVERWORLD_ACTOR_WALK_STEP_STOP_SKID,
@@ -566,9 +578,9 @@ static void OverworldActorWalkPolicy_ReduceInput(
     skidTiles = OverworldWalk_IsFortyFiveDegreeTurn(
             state->direction, requestedDirection)
         ? 0
-        : OverworldWalk_SkidTiles(state->speed);
+        : OverworldWalk_SkidTiles(visibleSpeed);
     turnSpeed = OverworldWalk_DecelerateTime(
-        state->speed, state->baseSpeed, call->lane->walkAccelerationStep);
+        visibleSpeed, state->baseSpeed, call->lane->walkAccelerationStep);
     if (skidTiles != 0
         && (call->flags
             & OVERWORLD_ACTOR_WALK_POLICY_FLAG_SUPPRESS_TURN_SKID) == 0
@@ -578,7 +590,7 @@ static void OverworldActorWalkPolicy_ReduceInput(
             call->lane->tilesBeforeTurnSkid)) {
         OverworldWalk_ProposeStep(
             policy, call, state->direction, requestedDirection,
-            OverworldWalk_SkidTime(state->speed),
+            OverworldWalk_SkidTime(visibleSpeed),
             OVERWORLD_ACTOR_WALK_STEP_VALIDATE
                 | OVERWORLD_ACTOR_WALK_STEP_SKID,
             skidTiles);
@@ -606,16 +618,6 @@ static void OverworldActorWalkPolicy_ReduceStartResult(
         return;
     }
     if (call->startResult != OVERWORLD_ACTOR_WALK_POLICY_START_ACCEPTED) {
-        if ((call->stepFlags
-                    & OVERWORLD_ACTOR_WALK_STEP_PLANNED_SKID_PATH) != 0
-            && (call->stepFlags
-                    & OVERWORLD_ACTOR_WALK_STEP_STOP_SKID) == 0) {
-            /* A projected runway or turn path is one candidate. Reject it
-             * without turning the look-ahead result into a crash or stop. */
-            policy->pendingStep = OVERWORLD_ACTOR_WALK_PENDING_NONE;
-            call->decision = OVERWORLD_ACTOR_WALK_POLICY_IGNORED;
-            return;
-        }
         BOOL stopSkid = (call->stepFlags
                 & OVERWORLD_ACTOR_WALK_STEP_STOP_SKID) != 0
             || ((call->stepFlags & OVERWORLD_ACTOR_WALK_STEP_SKID) != 0
@@ -626,7 +628,10 @@ static void OverworldActorWalkPolicy_ReduceStartResult(
         policy->pendingStep = OVERWORLD_ACTOR_WALK_PENDING_NONE;
         if ((call->stepFlags & OVERWORLD_ACTOR_WALK_STEP_SKID) != 0) {
             call->decision = OVERWORLD_ACTOR_WALK_POLICY_CONSUMED;
+            /* A blocked planned turn skid brakes without a wall crash. */
             call->effect = stopSkid
+                    || (call->stepFlags
+                        & OVERWORLD_ACTOR_WALK_STEP_PLANNED_SKID_PATH) != 0
                 ? OVERWORLD_ACTOR_WORLD_EFFECT_NONE
                 : OVERWORLD_ACTOR_WORLD_EFFECT_CRASH;
             OverworldActorWalkPolicy_ResetState(
@@ -651,6 +656,7 @@ static void OverworldActorWalkPolicy_ReduceStartResult(
     }
     policy->pendingStep = OVERWORLD_ACTOR_WALK_PENDING_ACCEPTED;
     if ((call->stepFlags & OVERWORLD_ACTOR_WALK_STEP_SKID) != 0) {
+        policy->lastWalkTime = 0;
         state->speed = OverworldWalk_ClampTime(call->travelTime);
         if ((call->stepFlags & OVERWORLD_ACTOR_WALK_STEP_CONTINUATION) == 0) {
             state->skidRemaining = call->distance;
@@ -671,6 +677,7 @@ static void OverworldActorWalkPolicy_ReduceStartResult(
         /* ProposeStep stores nominal momentum before the Actor wrapper adds
          * per-tile presentation variance to travelTime. */
         state->speed = call->reserved[0];
+        policy->lastWalkTime = call->travelTime;
         if ((call->stepFlags & OVERWORLD_ACTOR_WALK_STEP_RESET_ACCELERATION) != 0) {
             state->tileCounter = 0;
             state->turnDirection = 0;
@@ -784,16 +791,17 @@ static void OverworldActorWalkPolicy_ReduceCommit(
     } else if (!OW_WILD_BEHAVIOR_WALK_DISABLES_ACCELERATION(
             call->lane->walkOptions)
         && call->lane->tilesToAccelerate != 0) {
-        if (state->speed > fastestTime) {
-            if (state->tileCounter != 0xFF) {
-                state->tileCounter++;
-            }
-            if (state->tileCounter >= call->lane->tilesToAccelerate) {
-                state->tileCounter = 0;
-                state->speed = OverworldWalk_AccelerateTime(
-                    state->speed, fastestTime,
-                    call->lane->walkAccelerationStep);
-            }
+        /* At the cap this counts completed cap-speed Walks. The event that
+         * first reaches the cap resets it, keeping full variance there. */
+        if (state->tileCounter != 0xFF) {
+            state->tileCounter++;
+        }
+        if (state->speed > fastestTime
+            && state->tileCounter >= call->lane->tilesToAccelerate) {
+            state->tileCounter = 0;
+            state->speed = OverworldWalk_AccelerateTime(
+                state->speed, fastestTime,
+                call->lane->walkAccelerationStep);
         }
     }
 }
@@ -803,13 +811,27 @@ static BOOL OverworldActorWalkPolicy_PublishEffect(
     u32 effect,
     u32 sequence);
 
+static u8 __attribute__((optimize("Os")))
+OverworldActorWalkPolicy_SelectChainPauseAction(u8 actionMask)
+{
+    u8 action;
+
+    /* The private caller receives a nonempty mask from the normalized lane. */
+    do {
+        action = (u8)(gf_rand() & 7u);
+    } while ((actionMask & (1u << action)) == 0);
+    return action + 1u;
+}
+
 static void __attribute__((optimize("Os")))
 OverworldActorWalkPolicy_ReduceChain(
     OverworldActorPolicyState *policy,
     OverworldActorStateSnapshot *actor,
     OverworldActorWalkPolicyCall *call)
 {
-    u8 pauseAction = call->lane->chainPauseAction;
+    u8 encodedPauseAction = call->lane->chainPauseAction;
+    u8 pauseAction;
+    u8 pauseTicks;
     u32 pauseFrames;
 
     if (policy->pendingStep != OVERWORLD_ACTOR_WALK_PENDING_CHAIN) {
@@ -838,23 +860,26 @@ OverworldActorWalkPolicy_ReduceChain(
     if (--policy->chainStepsRemaining != 0) {
         return;
     }
-    if (pauseAction == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE) {
+    if (encodedPauseAction == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE) {
         return;
     }
-    if (pauseAction != OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE
-        && call->lane->chainPauseActionChance != 0
-        && call->lane->chainPauseActionChance < 100
-        && (gf_rand() % 100) >= call->lane->chainPauseActionChance) {
+    if (call->lane->chainPauseActionChance != 0
+        && gf_rand() % 100u >= call->lane->chainPauseActionChance) {
         return;
     }
+    pauseAction = (encodedPauseAction
+            & OW_WILD_BEHAVIOR_CHAIN_PAUSE_RANDOM_CHOICE) != 0
+        ? OverworldActorWalkPolicy_SelectChainPauseAction(
+            encodedPauseAction & OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_MASK)
+        : encodedPauseAction;
     if (pauseAction == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE
         || pauseAction == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_FORWARD) {
-        call->chainTicks = 0;
+        pauseTicks = 0;
     } else if ((u8)(pauseAction
             - OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_STEPS)
         <= (OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_SKIDS
             - OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_STEPS)) {
-        call->chainTicks = call->lane->chainRepositionSpeed;
+        pauseTicks = call->lane->chainRepositionSpeed;
     } else {
         pauseFrames = call->lane->ramMaxSpeed;
         if (pauseFrames == 0
@@ -864,18 +889,19 @@ OverworldActorWalkPolicy_ReduceChain(
         policy->variancePhase = (u8)(policy->variancePhase * 73u + 41u);
         pauseFrames += (u8)(((u16)policy->variancePhase
             * (call->lane->chainPauseVariance + 1u)) >> 8);
-        call->chainTicks = (u8)((pauseFrames + 1u) / 2u);
+        pauseTicks = (u8)((pauseFrames + 1u) / 2u);
         if (pauseAction
             == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_JUMPS) {
-            call->chainTicks /= call->lane->chainRepositionJumpCount;
-            if (call->chainTicks == 0) {
-                call->chainTicks = 1;
+            pauseTicks /= call->lane->chainRepositionJumpCount;
+            if (pauseTicks == 0) {
+                pauseTicks = 1;
             }
-            call->chainTicks += call->chainTicks;
+            pauseTicks += pauseTicks;
         }
     }
     call->chainAction = pauseAction;
-    policy->deferredChainPauseTicks = call->chainTicks;
+    call->chainTicks = pauseTicks;
+    policy->deferredChainPauseTicks = pauseTicks;
     policy->deferredChainPauseAction = pauseAction | 0x80;
     /* PAUSE records the passive chain boundary but starts no presentation
      * effect. The Wild adapter only consumes its pause clock. */
@@ -913,6 +939,17 @@ OverworldActorWalkPolicy_ApplyCommand(
         call->policyView->actorActive = actor->active;
         call->policyView->motionPhase = actor->motionPhase;
         break;
+    case OVERWORLD_ACTOR_WALK_POLICY_SWAP_PROFILE: {
+        OverworldActorPolicyProfileTransaction *transaction =
+            call->profileTransaction;
+
+        transaction->prior.behaviorFingerprint =
+            policy->behaviorFingerprint;
+        transaction->prior.matchedLayerMask = policy->matchedLayerMask;
+        call->profileBinding = &transaction->next;
+        /* The swap and ordinary bind share the same identity commit. */
+    }
+        /* fall through */
     case OVERWORLD_ACTOR_WALK_POLICY_BIND_PROFILE:
         if (call->profileBinding == NULL) {
             return FALSE;
@@ -1041,7 +1078,8 @@ const OverworldActorWalkPolicyOwnerEntry gOverworldActorWalkPolicyOwnerEntry
         OverworldActorWalkPolicy_Reduce,
 };
 
-static BOOL OverworldWildRuntime_ValidateImpl(void)
+static BOOL __attribute__((section(".overworld_wild_runtime_acknowledge_tail"), used))
+OverworldWildRuntime_ValidateImpl(void)
 {
     const OverworldWildRuntimeOverlayEntry *entry =
         &gOverworldWildRuntimeOverlayEntry;

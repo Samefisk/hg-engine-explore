@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.stantler-key-edge",
+  "title": "Mounted Stantler accepts fresh Right at a Walk terminal edge",
+  "status": "active",
+  "capabilities": ["mount.lifecycle", "walk.acceleration"],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md#8-path-advance-commit-and-reactions and data/overworld_behavior_profiles.json:sprint",
+    "actor": "One prepared current Mounted Stantler (species 234, party slot 0) on the map 33 clear lane",
+    "trigger": "Hold Right to the second Walk at nominal speed 7, release during that tile until its COMMIT_PENDING sample, then press fresh Right on the next completed game frame",
+    "observable": "At the first native newKeys Right edge after the terminal Walk sample, the next Right Walk starts in that same completed frame at nominal Sprint speed 6, with one prior terminal result and no intervening input-bearing idle frame",
+    "setupAudit": "complete",
+    "setupMutations": [{
+      "phase": "before-observation",
+      "target": "fixture",
+      "change": "Use a disposable save, checked map 33 teleport to (585,402), prepared party slot 0 Stantler, native Mounted spawn and exact-subject bind. Do not edit profile, speed, chain, motion or input during observation."
+    }],
+    "limits": [
+      "Prepared party and position do not prove natural capture, selection or spawning.",
+      "The neutral interval is an intentional key release during the second Walk. A single first-queue stale pre-press key sample is allowed; the first true newKeys Right sample must start the Walk without idle or speed reset.",
+      "This is one clear-lane terminal key-edge transaction, not a full Sprint run, transition or obstacle case. The separate Stantler Sprint parity and obstacle scenarios own those claims.",
+      "Copied-data controls reject the preserved idle/reset symptom, missing edge/start and changed actor identity."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "stantler", "species": 234, "role": "MOUNTED", "acquisition": "mount",
+    "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Prepare the clear lane and party Stantler, mount, then bind that exact live actor"},
+    {"at": 1, "kind": "input", "value": "Hold Right to the second Sprint Walk start at speed 7"},
+    {"at": 2, "kind": "input", "value": "Release Right until that Walk reaches COMMIT_PENDING"},
+    {"at": 3, "kind": "input", "value": "Press fresh Right immediately, allowing at most one stale pre-press queue sample"}
+  ],
+  "stop": {"frameBudget": 300, "condition": "The fresh Right edge starts the next Walk in its same completed frame at speed 6"},
+  "expect": {
+    "requiredEvents": ["MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["MOTION_CANCELED", "CONTEXT_CHANGED", "ACTOR_REBOUND", "CONTROL_REBOUND"],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "mount.stantler-key-edge",
+    "claims": ["natural-input", "live-actor-identity", "logical-commit", "frame-pacing"],
+    "minimumFrames": 12}
+}

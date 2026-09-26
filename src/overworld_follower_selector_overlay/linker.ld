@@ -55,6 +55,7 @@ SECTIONS {
                 ASSERT(OverworldSpawnSpatial_IsObjectOnPlayerTile
                         == ORIGIN(rom) + 0x1E64,
                     "spawn spatial object-tile helper moved");
+                *(.text.OverworldVision_IsValidSpec)
                 ASSERT(. <= ORIGIN(rom) + 0x1EA0,
                     "spawn spatial selector tail exceeds resident slot");
                 . = ORIGIN(rom) + 0x1EA0;
@@ -72,8 +73,9 @@ SECTIONS {
                         == ORIGIN(rom) + 0x1EB8,
                     "condition service gate moved");
                 *(.text.OverworldBehaviorCondition_*)
-                ASSERT(. <= ORIGIN(rom) + LENGTH(rom),
-                    "condition service exceeds field-linked overlay tail");
+                *(.text.OverworldVision_*)
+                ASSERT(. <= ORIGIN(rom) + LENGTH(rom) - 0x10,
+                    "condition service leaves less than 16 bytes headroom");
                 . = ORIGIN(rom) + LENGTH(rom);
         } >rom = 0xff
 }

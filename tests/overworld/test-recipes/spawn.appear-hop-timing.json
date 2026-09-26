@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "spawn.appear-hop-timing",
-  "title": "Wild Clefairy Appear Hop returns control on its final restore",
+  "title": "Wild Clefairy Appear Hop returns control after its idle handoff",
   "mode": "prepared",
   "fixture": {
     "rom": "test.nds",

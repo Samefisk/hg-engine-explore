@@ -22,9 +22,10 @@ class SpawnHeightFixture(RepositionFixture):
         self.rt.loaded_terrain_cell = lambda _emu, _x, _y: deepcopy(self.terrain)
         self.resolve = self.symbols["OverworldWildSpawns_ResolveObjectLandingHeight"]
         self.apply = self.symbols["OverworldWildSpawns_ApplySurfaceHeight"]
+        self.spawn_prepared = self.symbols["OverworldWildSpawns_SpawnPreparedEncounter"]
         regions = []
         for address, data in self.code_regions:
-            if address in (self.resolve, self.apply):
+            if address in (self.resolve, self.apply, self.spawn_prepared):
                 data = bytearray(data)
                 data[8:12] = struct.pack("<HH", 0xF000, 0xF800)
                 data = bytes(data)
@@ -41,8 +42,13 @@ class SpawnHeightFixture(RepositionFixture):
         self.enter("spawn-motion", sp=0x027E3780, lr=0x02001101,
                    r0=self.rt.WILD_STATE, r1=0x02231000, r2=0, r3=self.source["object"])
 
+    def start_initial(self):
+        self.prepare_spawn(origin=self.target, target=self.target, locomotion=7)
+        self.enter("spawn-prepared", r0=self.rt.WILD_STATE, r1=0x02231000, r2=0, r3=0)
+
     def height(self, *, point=None, object_pointer=None, caller=None):
-        self.enter("spawn-landing-height", sp=0x027E3700, lr=(caller or self.timed) + 13,
+        self.height_caller = caller or self.timed
+        self.enter("spawn-landing-height", sp=0x027E3700, lr=self.height_caller + 13,
                    r0=0x02231000, r1=object_pointer or self.source["object"], r2=(point or self.target)[0],
                    r3=(point or self.target)[1])
         self.player.update(x=self.target[0], y=self.target[1])
@@ -63,7 +69,12 @@ class SpawnHeightFixture(RepositionFixture):
 
     def finish_height(self):
         self.player["pos_y"] = 8192
-        self.returned(0xDEADBEEF, sp=0x027E3700, address=self.timed + 12)
+        self.returned(0xDEADBEEF, sp=0x027E3700, address=self.height_caller + 12)
+
+    def finish_initial(self):
+        self.returned(1)
+        self.observer.completed_frame(12)
+        return self.observer.drain()
 
     def finish(self):
         self.returned(1, sp=0x027E3780, address=0x02001100)

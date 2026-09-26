@@ -57,7 +57,7 @@ class ResolverProbe:
             if isinstance(vector, dict)
         } if isinstance(vectors, list) else {}
         self.vectors = [by_name.get(name) for name in CASE_NAMES]
-        require(corpus.get("blobVersion") == 78
+        require(corpus.get("blobVersion") == 81
                 and all(isinstance(vector, dict) for vector in self.vectors),
                 "canonical resolver cases differ")
         self.requests = [request_bytes(v["request"]) for v in self.vectors]

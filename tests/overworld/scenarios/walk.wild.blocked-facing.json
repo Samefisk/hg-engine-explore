@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "id": "walk.wild.blocked-facing",
+  "title": "A blocked Wild Exeggcute keeps its committed facing",
+  "status": "active",
+  "capabilities": ["walk", "walk.exact", "terrain"],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md#5-motion-module-policy",
+    "actor": "One prepared WILD Exeggcute (species 102), bound by current identity on the authored canopy at map 33 tile (580,409)",
+    "trigger": "Keep input neutral while normal Wild AI repeatedly finds no admitted destination from the blocked canopy tile",
+    "observable": "For 128 continuous completed game frames, Exeggcute stays idle on the same tile with the same facing and no logical commit",
+    "setupAudit": "complete",
+    "setupMutations": [{
+      "phase": "before-observation",
+      "target": "fixture",
+      "change": "Use checked teleport to map 33, native Wild spawn at (580,409), and exact identity bind. Do not change its profile, facing, AI timers, terrain, collision, or motion during observation."
+    }],
+    "limits": [
+      "Prepared spawning proves the blocked movement response on the real canopy geometry, not natural Headbutt encounter selection.",
+      "This covers the reported Exeggcute tree trap and the shared blocked-facing rule for Wild movement.",
+      "The checked run must retain all 128 completed frames from one melonDS session."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{
+    "id": "exeggcute", "species": 102, "role": "WILD", "acquisition": "spawn",
+    "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true
+  }],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Place and bind Exeggcute on the authored blocked canopy tile."},
+    {"at": 1, "kind": "lifecycle", "value": "Observe 128 continuous completed frames under normal Wild AI and neutral player input."}
+  ],
+  "stop": {"frameBudget": 360, "condition": "The same Exeggcute completes 128 stable frames, or the first facing, position, motion, commit, identity, terrain, or stream failure"},
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": ["MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_CANCELED", "ACTOR_REBOUND", "CONTEXT_CHANGED"],
+    "invariants": [
+      "The subject remains species 102 in the Wild role with current identity and attached presentation",
+      "Map 33 tile (580,409) remains loaded, colliding authored canopy",
+      "Facing and logical position do not change",
+      "No motion starts and no logical commit occurs"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test", "test": "walk.wild.blocked-facing",
+    "claims": ["live-actor-identity", "terrain-selection", "rendered-motion", "frame-pacing"],
+    "minimumFrames": 128
+  }
+}

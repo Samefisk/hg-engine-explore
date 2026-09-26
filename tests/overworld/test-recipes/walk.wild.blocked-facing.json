@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "walk.wild.blocked-facing",
+  "title": "Blocked Wild Exeggcute keeps one facing",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/architecture.md#5-motion-module-policy",
+  "requirements": ["current.blocked-wild-facing"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 360, "noProgressFrames": 180, "minObservedFrames": 128},
+  "subjects": [{"id": "exeggcute", "species": 102, "role": "WILD", "acquire": "spawn"}],
+  "measurements": [{"kind": "blocked-wild-facing-v1", "subject": "exeggcute"}],
+  "setup": [
+    {"id": "load-tree-area", "op": "teleport", "args": {"map": 33, "x": 582, "z": 407, "facing": 2},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "spawn-tree-exeggcute", "op": "spawn", "args": {"species": 102, "form": 0, "role": "wild", "level": 5, "x": 580, "z": 409},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "bind-tree-exeggcute", "op": "bind", "args": {"subject": "exeggcute"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "observe-blocked-facing", "op": "wait", "args": {"predicate": {"kind": "measurement-complete", "measurement": "blocked-wild-facing-v1", "when": "final"}},
+      "budget": {"maxSeconds": 60, "maxFrames": 180, "noProgressFrames": 180}}
+  ],
+  "assertions": [{"kind": "measurement-complete", "measurement": "blocked-wild-facing-v1", "when": "final"}]
+}

@@ -75,7 +75,7 @@ def main() -> int:
     )
 
     for required in (
-        "#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 79",
+        "#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 81",
         "u8 walkPause;",
         "#define OW_WILD_BEHAVIOR_OVERRIDE3_WALK_PAUSE (1u << 22)",
         "#define OW_WILD_BEHAVIOR_OVERRIDE3_WALK_PAUSE_VARIANCE (1u << 27)",
