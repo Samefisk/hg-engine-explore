@@ -96,6 +96,16 @@ unchanged Continue save with the existing Mankey. Do not prepare party,
 follower, spawn, or population state. Zero late loops is the only pass. Keep D1
 open if this test is red or the user still reports a hitch on the same ROM.
 
+## Maps
+
+Map edits go through the override tree `data/maps/` and `tools/maps`; read
+[the map-system guide](documentation/map-system/README.md) first. For new or
+reshaped terrain that must look like vanilla, use
+[design-map-look](.agents/skills/design-map-look/SKILL.md): write an ASCII
+layout, generate from vanilla cells, pass the score gates, then prove in game.
+Do not hand-author map geometry or judge looks from images; the user reviews
+the final look.
+
 ## Helper agents
 
 Use helpers for independent investigation, implementation, or review when that work can shorten the task or improve its result. This is authorized unless the user says otherwise. Give each helper a bounded assignment, owned files where relevant, and an expected result. Reconcile results before reporting completion or changing shared files.
