@@ -100,6 +100,8 @@ display lists in 672/676 models. Lands 468, 473, 475 and 476 (all
 - Size limits:
   - Error: more than 2048 polygons or 6144 vertices, which is one frame's
     hardware capacity.
+  - Error: more than 0xF000 bytes, the game's model buffer
+    (`MAP_LOAD_PRIMARY_BUFFER_SIZE`; see formats.md, "Game buffer limits").
   - Warning: more than the vanilla maximum of 1706 polygons, 4854 vertices or
     61420 bytes.
 
@@ -109,10 +111,9 @@ The builder unrolls strips, so its output is larger than vanilla.
 
 ## Not verified
 
-- **In-game loading and rendering.** No generated model has been loaded by
-  the game yet. Name binding, visuals, culling and lighting are unproven.
-- **The game's land_data/model buffer limit.** I did not find it in the
-  decomp. Stay under the vanilla maximum.
+- **Rendering.** A generated model loads in game and its map stays walkable
+  (`tools.maps.proof_model`), but visuals, culling and lighting are judged by
+  a person, not by tools.
 - **Collision and heights.** The model does not provide them. Tiles and BDHC
   must be authored separately to match.
 - **Texture-matrix materials** (flag 0x1FCF, texImageParam 0x40030000, used on

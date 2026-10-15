@@ -239,6 +239,13 @@ _BUILDING_FIELDS = ("modelId", "x", "y", "z", "rotX", "rotY", "rotZ",
 _BUILDING_FORMAT = "<I" + "i" * 11
 _BUILDING_SIZE = struct.calcsize(_BUILDING_FORMAT)  # 48
 
+# Field loader buffers (src/field/map_load_manager.c, map_load_buffers.c,
+# bdhc.c, map_prop_manager.c in the full decompilation under .codex-reference/):
+BGS_MAX_BYTES = 0x200     # LoadedMap.soundplates.data
+MAX_BUILDINGS = 32        # MAP_PROP_MAX
+MODEL_MAX_BYTES = 0xF000  # MAP_LOAD_PRIMARY_BUFFER_SIZE, the model's buffer
+BDHC_MAX_BYTES = 0x9000   # BDHC_BUFFER_SIZE: the six arrays after the 16-byte header
+
 
 def decode_tiles(data: bytes) -> dict:
     values = struct.unpack(f"<{TILE_GRID * TILE_GRID}H", data)
@@ -309,6 +316,9 @@ def validate_bdhc(spec: dict) -> None:
 
 def encode_bdhc(spec: dict) -> bytes:
     validate_bdhc(spec)
+    arrays = sum(len(spec[key]) * struct.calcsize(fmt) for key, fmt in _BDHC_ARRAYS)
+    if arrays > BDHC_MAX_BYTES:
+        raise FormatError(f"BDHC arrays are {arrays} bytes; the game's buffer holds {BDHC_MAX_BYTES:#x}")
     out = bytearray(b"BDHC")
     out += struct.pack("<6H", *(len(spec[key]) for key, _ in _BDHC_ARRAYS))
     for key, fmt in _BDHC_ARRAYS:
@@ -350,9 +360,13 @@ def decode_land_model(data: bytes) -> bytes:
 
 def encode_land(spec: dict, model: bytes) -> bytes:
     bgs = bytes.fromhex(spec["backgroundSound"])
-    if len(bgs) % 4 or len(bgs) > 0xFFFF:
+    if len(bgs) % 4 or len(bgs) > BGS_MAX_BYTES:
         raise FormatError(f"background-sound block is {len(bgs)} bytes; it must be a multiple of 4 "
-                          "so the model stays 4-byte aligned")
+                          f"(model alignment) and at most {BGS_MAX_BYTES:#x} (the game's buffer)")
+    if len(spec["buildings"]) > MAX_BUILDINGS:
+        raise FormatError(f"{len(spec['buildings'])} buildings; the game loads at most {MAX_BUILDINGS} per chunk")
+    if len(model) > MODEL_MAX_BYTES:
+        raise FormatError(f"model is {len(model)} bytes; the game's model buffer holds {MODEL_MAX_BYTES:#x}")
     tiles = encode_tiles(spec["tiles"])
     buildings = b"".join(_pack(_BUILDING_FORMAT, *(b[f] for f in _BUILDING_FIELDS))
                          for b in spec["buildings"])

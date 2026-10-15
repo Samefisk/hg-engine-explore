@@ -20,6 +20,8 @@ import struct
 import sys
 from pathlib import Path
 
+from . import codecs
+
 FX = 4096  # 1.0 in fx32 / fx16
 
 
@@ -790,7 +792,9 @@ def validate(data: bytes, texset: dict | None = None) -> tuple[list[str], list[s
             for p in model["palettes"]:
                 if p["name"] not in texset["palettes"]:
                     errors.append(f"palette {p['name']} is not in the area NSBTX")
-    if len(data) > VANILLA_MAX["bytes"]:
+    if len(data) > codecs.MODEL_MAX_BYTES:
+        errors.append(f"{len(data)} bytes > the game's model buffer ({codecs.MODEL_MAX_BYTES:#x})")
+    elif len(data) > VANILLA_MAX["bytes"]:
         warnings.append(f"{len(data)} bytes > largest vanilla chunk model ({VANILLA_MAX['bytes']})")
     return errors, warnings
 

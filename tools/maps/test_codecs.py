@@ -92,6 +92,21 @@ class SyntheticEdits(unittest.TestCase):
         with self.assertRaises(codecs.FormatError):
             codecs.encode_land(land, b"BMD0")
 
+    def test_game_buffer_limits(self):
+        bdhc = {"points": [], "normals": [], "constants": [], "plates": [], "strips": [], "access": []}
+        land = {"backgroundSound": "", "tiles": _blank_tiles(), "buildings": [], "bdhc": bdhc}
+        codecs.encode_land(land, b"BMD0")
+        with self.subTest("background sound"), self.assertRaises(codecs.FormatError):
+            codecs.encode_land({**land, "backgroundSound": "00" * (codecs.BGS_MAX_BYTES + 4)}, b"BMD0")
+        building = dict.fromkeys(codecs._BUILDING_FIELDS, 0)
+        with self.subTest("buildings"), self.assertRaises(codecs.FormatError):
+            codecs.encode_land({**land, "buildings": [building] * (codecs.MAX_BUILDINGS + 1)}, b"BMD0")
+        with self.subTest("model"), self.assertRaises(codecs.FormatError):
+            codecs.encode_land(land, b"\0" * (codecs.MODEL_MAX_BYTES + 4))
+        points = [[0, 0]] * (codecs.BDHC_MAX_BYTES // 8 + 1)
+        with self.subTest("bdhc"), self.assertRaises(codecs.FormatError):
+            codecs.encode_bdhc({**bdhc, "points": points})
+
     def test_header_bitfield_overflow(self):
         spec = dict.fromkeys(("wildEncounterBank", "areaDataBank", "moveModelBank", "worldMapX",
                               "worldMapY", "matrixId", "scriptsBank", "scriptHeaderBank", "msgBank",

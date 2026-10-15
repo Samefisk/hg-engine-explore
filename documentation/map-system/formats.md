@@ -77,7 +77,8 @@ at `0x14` (pokeheartgold `src/terrain_attributes.c`). It is used only in the
 field modes that set `unk0_10` in `field_warp_tasks.c` (modes 3 and 4, which
 look Battle Tower related). Do not add background sound to land data loaded
 in those modes. The block length must stay a multiple of 4 so the model stays
-4-byte aligned; the encoder enforces this.
+4-byte aligned, and at most 0x200 bytes (the game's buffer); the encoder
+enforces both.
 
 **Tiles**: 32 × 32 little-endian u16, row-major. Bits 0–7 = tile behavior
 (`enum TILE_BEHAVIOR`, pokeheartgold `include/constants/metatile_behavior.h`),
@@ -87,8 +88,7 @@ bit 15 = collision. The spec stores these as three 32-row text layers:
 
 **Buildings**: 48-byte records — `u32 modelId`, position `x y z`, rotation
 `rotX rotY rotZ`, scale `scaleX scaleY scaleZ` (fx32 / angle ints), two unused
-words. Vanilla maximum is 30 per file; the game's real limit is in
-undecompiled code, so the encoder does not enforce one yet.
+words. The game loads at most 32 per chunk (vanilla maximum 30).
 
 **NSBMD**: kept as `model.nsbmd` beside `land.json`; textures come from the
 area's map texture set, not the file. No open tool writes NSBMD yet.
@@ -121,6 +121,24 @@ Four arrays, each prefixed by a u32 count:
 Field names match pokeheartgold's `zone_event/*.json`, which uses symbols where
 we store numbers. **The whole file must be smaller than 0x800 bytes**; the
 encoder refuses larger files. The largest vanilla file is 1,660 bytes.
+
+## Game buffer limits
+
+From the field loader in the full decompilation
+(`.codex-reference/pokeheartgold-full/src/field/`). The encoders enforce all
+four; vanilla maximums in brackets.
+
+| Data | Limit | Source | Vanilla max |
+|---|---|---|---|
+| Background-sound block | 0x200 bytes | `LoadedMap.soundplates.data`, `map_load_manager.c` | 392 |
+| Buildings per chunk | 32 | `MAP_PROP_MAX`, `map_prop_manager.c` | 30 |
+| Chunk model (NSBMD) | 0xF000 bytes | `MAP_LOAD_PRIMARY_BUFFER_SIZE`, `map_load_buffers.h` | 61,420 |
+| BDHC arrays (after the 16-byte header) | 0x9000 bytes | `BDHC_BUFFER_SIZE`, `bdhc.c` | 10,778 |
+
+The same source confirms the land-data header order (tiles, buildings, model,
+BDHC), that the model file must hold exactly one model, and the loaded-chunk
+layout the devtools readers use (`modelFile` at +0x854, `modelLoaded` at
++0x864).
 
 ## Other limits to respect
 

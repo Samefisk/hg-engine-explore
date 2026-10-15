@@ -2,7 +2,10 @@
 
 How agents change HeartGold maps. Layouts and game limits are in
 [formats.md](formats.md); the tooling research is in
-[research/report.md](research/report.md).
+[research/report.md](research/report.md). For how the game loads maps, read
+the field overlays in `.codex-reference/pokeheartgold-full/src/field/`
+(full decompilation; see `.codex-reference/README.local.md`) before guessing
+from binaries.
 
 ## Edit loop
 
