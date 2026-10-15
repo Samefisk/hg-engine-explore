@@ -74,24 +74,40 @@ def generate(layout_text: str, map_id: int, land_id: int, overrides: Path,
         report["written"] = False
         return report
 
-    model_bytes, tiles, corners = kits.compose(kit, grid, f"gen_{land_id:04d}")
-    bdhc = bdhc_gen.bdhc_from_corners(corners)
-    land = {"backgroundSound": "", "tiles": tiles, "buildings": [], "bdhc": bdhc}
-    codecs.encode_land(land, model_bytes)  # every game limit is checked here
-    target = overrides / "land" / f"{land_id:04d}"
-    target.mkdir(parents=True, exist_ok=True)
-    (target / "land.json").write_text(json.dumps(land, indent=1) + "\n")
-    (target / "model.nsbmd").write_bytes(model_bytes)
-    report.update(written=str(target), modelBytes=len(model_bytes))
+    # Multi-chunk layouts are solved as one grid (so chunk seams are solved
+    # too), then split into chunks with consecutive land ids in reading order.
+    lands, sizes, outputs = [], [], []
+    chunk_w = len(grid[0]) // layout.GRID
+    for cx, cz, _rows in layout.chunks(rows):
+        this_land = land_id + cz * chunk_w + cx
+        part = [row[cx * layout.GRID:(cx + 1) * layout.GRID]
+                for row in grid[cz * layout.GRID:(cz + 1) * layout.GRID]]
+        model_bytes, tiles, corners = kits.compose(kit, part, f"gen_{this_land:04d}")
+        bdhc = bdhc_gen.bdhc_from_corners(corners)
+        land = {"backgroundSound": "", "tiles": tiles, "buildings": [], "bdhc": bdhc}
+        codecs.encode_land(land, model_bytes)  # every game limit is checked here
+        outputs.append((this_land, land, model_bytes))
+        lands.append(this_land)
+        sizes.append(len(model_bytes))
+    for this_land, land, model_bytes in outputs:  # write only after every chunk passed
+        target = overrides / "land" / f"{this_land:04d}"
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "land.json").write_text(json.dumps(land, indent=1) + "\n")
+        (target / "model.nsbmd").write_bytes(model_bytes)
+    report.update(written=[str(overrides / "land" / f"{n:04d}") for n in lands], lands=lands,
+                  chunks=[chunk_w, len(grid) // layout.GRID], modelBytes=sizes)
     return report
 
 
-def new_map(map_id: int, template: int, land_id: int, start: tuple[int, int], overrides: Path) -> dict:
-    """1x1 matrix + events with one warp tile + header, all appended/overridden."""
+def new_map(map_id: int, template: int, land_id: int, start: tuple[int, int], overrides: Path,
+            size: tuple[int, int] = (1, 1)) -> dict:
+    """W x H matrix (consecutive land ids from land_id) + events with one warp tile + header."""
     base = world.apply_overrides(_base(), overrides)
     matrix_id, events_id = len(base.raw["matrix"]), len(base.raw["events"])
-    matrix = {"width": 1, "height": 1, "name": f"gen{map_id}", "headers": [[map_id]],
-              "altitudes": None, "landData": [[land_id]]}
+    width, height = size
+    matrix = {"width": width, "height": height, "name": f"gen{map_id}",
+              "headers": [[map_id] * width for _ in range(height)], "altitudes": None,
+              "landData": [[land_id + z * width + x for x in range(width)] for z in range(height)]}
     events = {"bgs": [], "objects": [], "coords": [],
               # A warp tile so lint seeds reachability; it leads to the template map's first warp.
               "warps": [{"x": start[0], "z": start[1], "header": template, "anchor": 0, "y": 0}]}
@@ -140,6 +156,7 @@ def main(argv=None) -> int:
     new.add_argument("--template", type=int, required=True)
     new.add_argument("--land", type=int, required=True)
     new.add_argument("--start", type=int, nargs=2, required=True, metavar=("X", "Z"))
+    new.add_argument("--chunks", type=int, nargs=2, default=(1, 1), metavar=("W", "H"))
     args = parser.parse_args(argv)
     if args.command == "examples":
         print("\n".join(examples(args.map, args.count)))
@@ -148,9 +165,10 @@ def main(argv=None) -> int:
         report = generate(args.layout.read_text(), args.map, args.land, args.overrides, args.seeds, args.relax)
         REPORT_DIR.mkdir(parents=True, exist_ok=True)
         (REPORT_DIR / f"report-{args.land:04d}.json").write_text(json.dumps(report, indent=1) + "\n")
-        print(json.dumps({k: v for k, v in report.items() if k != "realizedLayout"}, indent=1))
+        print(json.dumps({k: v for k, v in report.items() if k not in ("realizedLayout", "written")}, indent=1))
         return 0 if report.get("written") else 1
-    print(json.dumps(new_map(args.map, args.template, args.land, tuple(args.start), args.overrides)))
+    print(json.dumps(new_map(args.map, args.template, args.land, tuple(args.start), args.overrides,
+                             tuple(args.chunks))))
     return 0
 
 

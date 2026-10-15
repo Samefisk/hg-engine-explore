@@ -1,0 +1,241 @@
+{
+ "bgs": [
+  {
+   "scriptId": 6,
+   "type": 1,
+   "x": 556,
+   "z": 401,
+   "y": 0,
+   "dir": 4,
+   "dirPadding": 0
+  },
+  {
+   "scriptId": 7,
+   "type": 1,
+   "x": 554,
+   "z": 396,
+   "y": 0,
+   "dir": 4,
+   "dirPadding": 0
+  },
+  {
+   "scriptId": 8001,
+   "type": 2,
+   "x": 572,
+   "z": 390,
+   "y": 0,
+   "dir": 4,
+   "dirPadding": 0
+  },
+  {
+   "scriptId": 8225,
+   "type": 2,
+   "x": 522,
+   "z": 388,
+   "y": 0,
+   "dir": 4,
+   "dirPadding": 0
+  }
+ ],
+ "objects": [
+  {
+   "id": 0,
+   "spriteId": 330,
+   "movement": 15,
+   "type": 0,
+   "eventFlag": 408,
+   "scriptId": 1,
+   "facingDirection": 1,
+   "param0": 0,
+   "param1": 0,
+   "param2": 0,
+   "xRange": 0,
+   "yRange": 0,
+   "x": 566,
+   "z": 396,
+   "y": 0
+  },
+  {
+   "id": 1,
+   "spriteId": 146,
+   "movement": 3,
+   "type": 0,
+   "eventFlag": 0,
+   "scriptId": 8,
+   "facingDirection": 2,
+   "param0": 0,
+   "param1": 0,
+   "param2": 0,
+   "xRange": 0,
+   "yRange": 1,
+   "x": 554,
+   "z": 399,
+   "y": 0
+  },
+  {
+   "id": 2,
+   "spriteId": 325,
+   "movement": 5,
+   "type": 0,
+   "eventFlag": 0,
+   "scriptId": 9,
+   "facingDirection": 3,
+   "param0": 0,
+   "param1": 0,
+   "param2": 0,
+   "xRange": 1,
+   "yRange": 0,
+   "x": 561,
+   "z": 407,
+   "y": 0
+  },
+  {
+   "id": 3,
+   "spriteId": 332,
+   "movement": 17,
+   "type": 0,
+   "eventFlag": 0,
+   "scriptId": 5,
+   "facingDirection": 3,
+   "param0": 0,
+   "param1": 0,
+   "param2": 0,
+   "xRange": 0,
+   "yRange": 0,
+   "x": 530,
+   "z": 406,
+   "y": 0
+  },
+  {
+   "id": 4,
+   "spriteId": 148,
+   "movement": 0,
+   "type": 0,
+   "eventFlag": 412,
+   "scriptId": 0,
+   "facingDirection": 1,
+   "param0": 0,
+   "param1": 0,
+   "param2": 0,
+   "xRange": 0,
+   "yRange": 0,
+   "x": 575,
+   "z": 384,
+   "y": 0
+  },
+  {
+   "id": 5,
+   "spriteId": 328,
+   "movement": 14,
+   "type": 0,
+   "eventFlag": 638,
+   "scriptId": 10,
+   "facingDirection": 0,
+   "param0": 0,
+   "param1": 0,
+   "param2": 0,
+   "xRange": 0,
+   "yRange": 0,
+   "x": 562,
+   "z": 402,
+   "y": 0
+  }
+ ],
+ "warps": [
+  {
+   "x": 564,
+   "z": 391,
+   "header": 69,
+   "anchor": 0,
+   "y": 0
+  },
+  {
+   "x": 555,
+   "z": 391,
+   "header": 68,
+   "anchor": 0,
+   "y": 0
+  },
+  {
+   "x": 547,
+   "z": 399,
+   "header": 70,
+   "anchor": 0,
+   "y": 0
+  },
+  {
+   "x": 558,
+   "z": 401,
+   "header": 71,
+   "anchor": 0,
+   "y": 0
+  },
+  {
+   "x": 567,
+   "z": 405,
+   "header": 72,
+   "anchor": 0,
+   "y": 0
+  },
+  {
+   "x": 559,
+   "z": 394,
+   "header": 541,
+   "anchor": 0,
+   "y": 0
+  },
+  {
+   "x": 561,
+   "z": 394,
+   "header": 542,
+   "anchor": 0,
+   "y": 0
+  },
+  {
+   "x": 563,
+   "z": 394,
+   "header": 543,
+   "anchor": 0,
+   "y": 0
+  },
+  {
+   "x": 561,
+   "z": 393,
+   "header": 541,
+   "anchor": 0,
+   "y": 0
+  }
+ ],
+ "coords": [
+  {
+   "scriptId": 2,
+   "x": 566,
+   "z": 397,
+   "w": 1,
+   "h": 4,
+   "y": 0,
+   "val": 0,
+   "var": 16499
+  },
+  {
+   "scriptId": 4,
+   "x": 575,
+   "z": 398,
+   "w": 1,
+   "h": 4,
+   "y": 0,
+   "val": 3,
+   "var": 16499
+  },
+  {
+   "scriptId": 3,
+   "x": 547,
+   "z": 385,
+   "w": 4,
+   "h": 1,
+   "y": 0,
+   "val": 1,
+   "var": 16499
+  }
+ ]
+}

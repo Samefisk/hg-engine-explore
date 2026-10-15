@@ -102,6 +102,12 @@ class SolverTests(unittest.TestCase):
             grid[16][x] = 2 if x % 2 == 0 else 3
         self.assertEqual(score.walkable_components(kit, grid), 2)
 
+    def test_floorless_walkable_cells_are_never_paths(self):
+        self.assertEqual(layout.cell_char({"cls": ".", "corners": None}), "?")
+        self.assertEqual(layout.cell_char({"cls": ".", "corners": [0, 0, None, 0]}), "?")
+        self.assertEqual(layout.cell_char({"cls": "T", "corners": None}), "T")
+        self.assertEqual(layout.cell_char({"cls": ".", "corners": [0, 0, 0, 0]}), ".")
+
     def test_layout_parse_rejects_bad_input(self):
         with self.assertRaises(layout.LayoutError):
             layout.parse("abc")

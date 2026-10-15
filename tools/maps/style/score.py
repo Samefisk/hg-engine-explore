@@ -43,9 +43,10 @@ def vanilla_class_mix(kit: dict) -> Counter:
 
 def walkable_components(kit: dict, grid: list[list[int]]) -> int:
     open_ = [[not kit["cells"][c]["collision"] for c in row] for row in grid]
+    height, width = len(grid), len(grid[0])
     seen, components = set(), 0
-    for z in range(GRID):
-        for x in range(GRID):
+    for z in range(height):
+        for x in range(width):
             if open_[z][x] and (x, z) not in seen:
                 components += 1
                 queue = deque([(x, z)])
@@ -54,7 +55,7 @@ def walkable_components(kit: dict, grid: list[list[int]]) -> int:
                     cx, cz = queue.popleft()
                     for dx, dz in ((1, 0), (-1, 0), (0, 1), (0, -1)):
                         nx, nz = cx + dx, cz + dz
-                        if 0 <= nx < GRID and 0 <= nz < GRID and open_[nz][nx] and (nx, nz) not in seen:
+                        if 0 <= nx < width and 0 <= nz < height and open_[nz][nx] and (nx, nz) not in seen:
                             seen.add((nx, nz))
                             queue.append((nx, nz))
     return components
@@ -64,20 +65,21 @@ def score(kit: dict, grid: list[list[int]], rows: list[str] | None = None,
           model: Model | None = None, windows: set | None = None) -> dict:
     model = model or learn(kit)
     windows = windows if windows is not None else vanilla_windows(kit)
+    height, width = len(grid), len(grid[0])
     pairs = seen_pairs = edge_ok = 0
-    for z in range(GRID):
-        for x in range(GRID):
+    for z in range(height):
+        for x in range(width):
             a = grid[z][x]
-            for b, allowed, seen in ((grid[z][x + 1] if x + 1 < GRID else None, model.right, model.seen_right),
-                                     (grid[z + 1][x] if z + 1 < GRID else None, model.down, model.seen_down)):
+            for b, allowed, seen in ((grid[z][x + 1] if x + 1 < width else None, model.right, model.seen_right),
+                                     (grid[z + 1][x] if z + 1 < height else None, model.down, model.seen_down)):
                 if b is None:
                     continue
                 pairs += 1
                 edge_ok += bool(allowed[a] >> b & 1)
                 seen_pairs += bool(seen[a] >> b & 1)
-    window_total = (GRID - 1) ** 2
+    window_total = (height - 1) * (width - 1)
     window_seen = sum((grid[z][x], grid[z][x + 1], grid[z + 1][x], grid[z + 1][x + 1]) in windows
-                      for z in range(GRID - 1) for x in range(GRID - 1))
+                      for z in range(height - 1) for x in range(width - 1))
     mix = class_mix(kit, grid)
     result = {
         "edgeRate": round(edge_ok / pairs, 4),
@@ -89,8 +91,8 @@ def score(kit: dict, grid: list[list[int]], rows: list[str] | None = None,
     }
     if rows is not None:
         match = sum(rows[z][x] == "*" or cell_char(kit["cells"][grid[z][x]]) == rows[z][x]
-                    for z in range(GRID) for x in range(GRID))
-        result["layoutMatch"] = round(match / (GRID * GRID), 4)
+                    for z in range(height) for x in range(width))
+        result["layoutMatch"] = round(match / (height * width), 4)
         from .quilt import critical_mismatches
         result["criticalMismatches"] = len(critical_mismatches(kit, grid, rows))
     return result

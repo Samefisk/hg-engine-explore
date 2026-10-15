@@ -111,6 +111,13 @@ Run these after changing anything in `tools/maps/`.
 
 ## Known gaps
 
+- The overworld roof/canopy catalog (`data/overworld_wild_roof_catalog_manifest.json`)
+  covers only the 288 vanilla matrices. New maps from `data/maps/` stay
+  outside it, because its counts are compiled into packaged overworld code
+  whose verifiers pin exact addresses: including a new map shifts that code.
+  Adding a new map to the overworld system is a separate, deliberate change
+  that needs the overworld proofs re-run.
+
 - Message indices used inside scripts are not checked; only text banks are.
 - Reachability ignores height layers, so bridges over-approximate it.
 - Generated models are checked structurally and for loading, not for how

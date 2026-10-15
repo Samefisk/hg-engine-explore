@@ -24,7 +24,7 @@ import random
 
 import numpy as np
 
-from .layout import CLASSES, GRID, cell_char
+from .layout import CLASSES, GRID, cell_char  # noqa: F401  (GRID: window source size)
 
 PATCH = 8
 LAYOUT_WEIGHT = 4.0
@@ -109,10 +109,11 @@ class Quilter:
     def place(self, rows: list[str], seed: int) -> np.ndarray:
         rng = random.Random(seed)
         codes = self._layout_codes(rows)
-        grid = np.full((GRID, GRID), -1, dtype=np.int64)
+        height, width = codes.shape
+        grid = np.full((height, width), -1, dtype=np.int64)
         p = self.patch
-        for z0 in range(0, GRID, p):
-            for x0 in range(0, GRID, p):
+        for z0 in range(0, height, p):
+            for x0 in range(0, width, p):
                 want = codes[z0:z0 + p, x0:x0 + p]
                 h, w = want.shape
                 got = self.window_chars[:, :h, :w]
@@ -134,21 +135,23 @@ class Quilter:
 
     def compatible(self, grid: np.ndarray, x: int, z: int, cell: int) -> bool:
         lab = self.labels
+        height, width = grid.shape
         if x and lab["east"][grid[z, x - 1]] != lab["west"][cell]:
             return False
-        if x + 1 < GRID and lab["east"][cell] != lab["west"][grid[z, x + 1]]:
+        if x + 1 < width and lab["east"][cell] != lab["west"][grid[z, x + 1]]:
             return False
         if z and lab["south"][grid[z - 1, x]] != lab["north"][cell]:
             return False
-        if z + 1 < GRID and lab["south"][cell] != lab["north"][grid[z + 1, x]]:
+        if z + 1 < height and lab["south"][cell] != lab["north"][grid[z + 1, x]]:
             return False
         return True
 
     def bad_tiles(self, grid: np.ndarray, codes: np.ndarray) -> list[tuple[int, int]]:
         any_code = CHAR_CODES["*"]
         out = []
-        for z in range(GRID):
-            for x in range(GRID):
+        height, width = grid.shape
+        for z in range(height):
+            for x in range(width):
                 wrong_class = codes[z, x] != any_code and self.char[grid[z, x]] != codes[z, x]
                 if wrong_class or not self.compatible(grid, x, z, grid[z, x]):
                     out.append((x, z))
@@ -178,8 +181,8 @@ class Quilter:
 
 def critical_mismatches(kit: dict, grid: list[list[int]], rows: list[str]) -> list[tuple[int, int, str, str]]:
     out = []
-    for z in range(GRID):
-        for x in range(GRID):
+    for z in range(len(grid)):
+        for x in range(len(grid[0])):
             got = cell_char(kit["cells"][grid[z][x]])
             if critical(rows[z][x], got):
                 out.append((x, z, rows[z][x], got))
@@ -199,7 +202,8 @@ def solve(kit: dict, rows: list[str], seed: int = 0, sizes=(8, 6, 4)) -> list[li
         quilter = _QUILTERS[key]
         grid = quilter.solve(rows, seed)
         array = np.array(grid)
-        seams = sum(not quilter.compatible(array, x, z, array[z, x]) for z in range(GRID) for x in range(GRID))
+        seams = sum(not quilter.compatible(array, x, z, array[z, x])
+                    for z in range(array.shape[0]) for x in range(array.shape[1]))
         rank = (len(critical_mismatches(kit, grid, rows)), seams)
         if best is None or rank < best[0]:
             best = (rank, grid)
