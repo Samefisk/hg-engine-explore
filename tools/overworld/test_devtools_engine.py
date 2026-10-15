@@ -27,6 +27,62 @@ def fresh_engine():
     return module
 
 
+class LoadedEventsDigestTests(unittest.TestCase):
+    FIELD, EVENTS = 0x02200000, 0x02210000
+
+    def fixture(self, event_file):
+        engine = fresh_engine()
+        memory = {}
+
+        def put(address, data):
+            for index, value in enumerate(data):
+                memory[address + index] = value
+
+        put(engine.G_FIELD_SYS_PTR, struct.pack("<I", self.FIELD))
+        put(self.FIELD + engine.FIELD_MAP_EVENTS_OFFSET, struct.pack("<I", self.EVENTS))
+        put(self.EVENTS + engine.MAP_EVENTS_DATA_OFFSET, event_file)
+        offset, counts, pointers = 0, [], []
+        for size in engine.MAP_EVENT_RECORD_SIZES:
+            (count,) = struct.unpack_from("<I", event_file, offset)
+            counts.append(count)
+            pointers.append(self.EVENTS + engine.MAP_EVENTS_DATA_OFFSET + offset + 4 if count else 0)
+            offset += 4 + count * size
+        put(self.EVENTS, struct.pack("<4I", *counts))
+        put(self.EVENTS + 0x10, struct.pack("<4I", *pointers))
+
+        class Values:
+            def __getitem__(self, key):
+                if key.start == key.stop:  # unsigned[address:address:size]
+                    raw = bytes(memory.get(key.start + i, 0) for i in range(key.step))
+                    return int.from_bytes(raw, "little")
+                return [memory.get(index, 0) for index in range(key.start, key.stop)]
+
+        return engine, SimpleNamespace(memory=SimpleNamespace(unsigned=Values())), put
+
+    def event_file(self):
+        bg = struct.pack("<HHiiiHH", 5, 2, 600, 390, 0, 4, 0)
+        warp = struct.pack("<HHHHI", 626, 389, 134, 0, 0)
+        return (struct.pack("<I", 1) + bg + struct.pack("<I", 0)
+                + struct.pack("<I", 1) + warp + struct.pack("<I", 0))
+
+    def test_digest_equals_loaded_file_hash(self):
+        import hashlib
+        data = self.event_file()
+        engine, emu, _put = self.fixture(data)
+        value = engine.loaded_events_digest(emu)
+        self.assertTrue(value["known"], value)
+        self.assertEqual(value["size"], len(data))
+        self.assertEqual(value["counts"], [1, 0, 1, 0])  # empty arrays use NULL pointers
+        self.assertEqual(value["sha256"], hashlib.sha256(data).hexdigest())
+
+    def test_layout_mismatch_and_missing_events_are_unknown(self):
+        engine, emu, put = self.fixture(self.event_file())
+        put(self.EVENTS + 0x18, struct.pack("<I", 0x02000000))  # warp pointer elsewhere
+        self.assertEqual(engine.loaded_events_digest(emu)["reason"], "pointer-layout-mismatch")
+        put(self.FIELD + engine.FIELD_MAP_EVENTS_OFFSET, struct.pack("<I", 0))
+        self.assertEqual(engine.loaded_events_digest(emu)["reason"], "no-map-events")
+
+
 class WildStagedMotionTests(unittest.TestCase):
     def fixture(self):
         engine = fresh_engine()

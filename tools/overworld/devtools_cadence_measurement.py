@@ -118,7 +118,7 @@ class UnmountedCadenceMeasurement:
                 point = spec[endpoint]
                 if not isinstance(point, dict) or set(point) != {"map", "x", "z"}:
                     raise ValueError("setup transition endpoint needs map/x/z")
-                _integer(point["map"], endpoint + " map", 0, 539)
+                _integer(point["map"], endpoint + " map", 0, 599)
                 for axis in ("x", "z"): _integer(point[axis], endpoint + axis, 0, 32767)
             if spec["departure"]["map"] == spec["arrival"]["map"]:
                 raise ValueError("setup transition must change map")
@@ -250,7 +250,7 @@ class UnmountedCadenceMeasurement:
         _pose(snapshot["player"])
         _tile(snapshot["player"])
         _integer(snapshot.get("nativeCycle"), "native cycle")
-        _integer(snapshot.get("context", {}).get("mapId"), "current map", 0, 539)
+        _integer(snapshot.get("context", {}).get("mapId"), "current map", 0, 599)
         return mon, getters
 
     def _setup_transition(self, snapshot, phase, action, admissions):

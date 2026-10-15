@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from . import reach
 from .world import World
 
 DYNAMIC_WARP_HEADER = 0xFFF  # vanilla "return to the previous map" warps
@@ -38,17 +39,19 @@ def findings(world: World) -> dict[tuple, tuple[str, str]]:
         for field, kind in (("matrixId", "matrix"), ("areaDataBank", "area"), ("eventsBank", "events")):
             if entry[field] >= counts[kind]:
                 out[("header-ref", map_id, field)] = (ERROR, f"map {map_id} {field}={entry[field]} past {kind} ({counts[kind]})")
-        # hg-engine adds script/text banks after this step runs, so these only warn.
+        # Counts include the banks the hg-engine build adds (world.apply_repo_banks).
         for field, kind in (("scriptsBank", "scripts"), ("scriptHeaderBank", "scripts"), ("msgBank", "text")):
             if kind in world.archive_counts and entry[field] >= world.archive_counts[kind]:
-                out[("header-ref", map_id, field)] = (WARNING, f"map {map_id} {field}={entry[field]} past vanilla "
-                                                               f"{kind} ({world.archive_counts[kind]})")
+                out[("header-ref", map_id, field)] = (ERROR, f"map {map_id} {field}={entry[field]} past "
+                                                             f"{kind} ({world.archive_counts[kind]})")
 
     for index, data in enumerate(world.raw["matrix"]):
         land = world.member("matrix", index)["landData"]
         bad = sorted({land_id for row in land for land_id in row if land_id != 0xFFFF and land_id >= counts["land"]})
         if bad:
             out[("matrix-land", index)] = (ERROR, f"matrix {index} uses land {bad} past land ({counts['land']})")
+
+    reachable = reach.reachable_by_matrix(world)
 
     for entry in world.headers:
         map_id = entry["id"]
@@ -71,6 +74,34 @@ def findings(world: World) -> dict[tuple, tuple[str, str]]:
             for corner in ((item["x"], item["z"]), (item["x"] + item["w"] - 1, item["z"] + item["h"] - 1)):
                 if world.tile(map_id, *corner) is None:
                     out[("outside-land", map_id, "coords", item["x"], item["z"])] = (ERROR, f"{where('coords', item)} reaches outside loaded land")
+
+        if entry["matrixId"] in reachable:
+            grid, seen = reachable[entry["matrixId"]]
+            for kind in ("objects", "bgs", "warps", "coords"):
+                for item in events[kind]:
+                    if kind == "coords":
+                        tiles = [(item["x"] + dx, item["z"] + dz)
+                                 for dz in range(max(item["h"], 1)) for dx in range(max(item["w"], 1))]
+                    else:
+                        tiles = [(item["x"], item["z"])]
+                    if world.tile(map_id, *tiles[0]) is None:
+                        continue  # already reported as outside-land
+                    if not any(reach.near_reachable(grid, seen, x, z) for x, z in tiles):
+                        out[("unreachable", map_id, kind, item["x"], item["z"])] = (
+                            ERROR, f"{where(kind, item)} cannot be reached on foot or by Surf from any warp")
+
+        local_limit = world.script_ranges[-1][0] if world.script_ranges else None
+        bank = entry["scriptsBank"]
+        known = bank < len(world.script_entries) and world.script_entries[bank] is not None
+        if local_limit is not None and known:
+            available = world.script_entries[bank]
+            for kind in ("objects", "bgs", "coords"):
+                for item in events[kind]:
+                    script = item["scriptId"]
+                    if 1 <= script < local_limit and script - 1 >= available:
+                        out[("script-ref", map_id, kind, item["x"], item["z"], script)] = (
+                            ERROR, f"{where(kind, item)} runs local script {script}, but scr_seq {bank} "
+                                   f"has {available} scripts")
 
         object_ids = [item["id"] for item in events["objects"]]
         for duplicate in sorted({i for i in object_ids if object_ids.count(i) > 1}):

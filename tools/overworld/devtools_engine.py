@@ -289,6 +289,86 @@ def loaded_warp_events(emu):
     ]
 
 
+MAP_EVENTS_DATA_OFFSET = 0x20
+MAP_EVENTS_DATA_SIZE = 0x800
+MAP_EVENT_RECORD_SIZES = (20, 32, WARP_EVENT_SIZE, 16)  # bg, object, warp, coord
+
+
+def loaded_events_digest(emu):
+    """Hash the zone-event file the game loaded into MapEvents.event_data.
+
+    Field_InitMapEvents reads the whole a/0/3/2 member into event_data, then
+    points the four arrays into it. The pointer check proves that layout
+    before hashing, so the digest equals the file's SHA-256 right after a map
+    load. Scripts that move objects later rewrite their records in place.
+    """
+    field_system = unsigned(emu, G_FIELD_SYS_PTR)
+    events = unsigned(emu, field_system + FIELD_MAP_EVENTS_OFFSET)
+    if events == 0:
+        return {"known": False, "reason": "no-map-events"}
+    counts = [unsigned(emu, events + 4 * index) for index in range(4)]
+    pointers = [unsigned(emu, events + 0x10 + 4 * index) for index in range(4)]
+    data = events + MAP_EVENTS_DATA_OFFSET
+    offset, expected = 0, []
+    for count, size in zip(counts, MAP_EVENT_RECORD_SIZES):
+        if count > MAP_EVENTS_DATA_SIZE // size or offset + 4 > MAP_EVENTS_DATA_SIZE:
+            return {"known": False, "reason": "count-out-of-range", "counts": counts}
+        if unsigned(emu, data + offset) != count:
+            return {"known": False, "reason": "embedded-count-mismatch", "counts": counts}
+        # MapEvents_ComputeRamHeader stores NULL for an empty array.
+        expected.append(data + offset + 4 if count else 0)
+        offset += 4 + count * size
+    if offset >= MAP_EVENTS_DATA_SIZE:
+        return {"known": False, "reason": "size-out-of-range", "counts": counts}
+    if pointers != expected:
+        return {"known": False, "reason": "pointer-layout-mismatch", "counts": counts}
+    raw = actor_memory_read(emu, data, offset)
+    return {"known": True, "size": offset, "counts": counts,
+            "sha256": hashlib.sha256(raw).hexdigest()}
+
+
+LAND_CHUNK_SIZE = 0xA74
+LAND_CHUNK_SCAN_START = TERRAIN_BLOCK_TILE_COUNT * 2  # after the 0x800 attributes
+MODEL_HEAD_BYTES = 0x80
+
+
+def loaded_land_models(emu):
+    """Report the NSBMD each loaded land chunk points at (read-only).
+
+    The rolling land manager keeps four chunk records (0xA74 bytes; matrix
+    index at +0x860, model-loaded flag at +0x864). The model file pointer is
+    found by scanning the record after its attributes for a main-RAM pointer
+    whose target starts with BMD0. Only the head bytes are returned: the game
+    binds textures in place, so a whole-file hash would not equal the file.
+    """
+    field_system = unsigned(emu, G_FIELD_SYS_PTR)
+    if not 0x02000000 <= field_system < 0x02400000:
+        return {"known": False, "reason": "no-field-system"}
+    manager = unsigned(emu, field_system + FIELD_LAND_MANAGER_OFFSET)
+    if not 0x02000000 <= manager < 0x02400000:
+        return {"known": False, "reason": "no-land-manager"}
+    chunks = []
+    for slot in range(4):
+        chunk = unsigned(emu, manager + LAND_MANAGER_CHUNK_POINTERS_OFFSET + slot * 4)
+        if chunk % 4 or not 0x02000000 <= chunk < 0x02400000 - LAND_CHUNK_SIZE:
+            chunks.append({"slot": slot, "known": False})
+            continue
+        models = []
+        for offset in range(LAND_CHUNK_SCAN_START, LAND_CHUNK_SIZE, 4):
+            pointer = unsigned(emu, chunk + offset)
+            if pointer % 4 or not 0x02000000 <= pointer < 0x02400000 - MODEL_HEAD_BYTES:
+                continue
+            if actor_memory_read(emu, pointer, 4) == b"BMD0":
+                head = actor_memory_read(emu, pointer, MODEL_HEAD_BYTES)
+                models.append({"recordOffset": offset, "pointer": pointer,
+                               "fileSize": struct.unpack_from("<I", head, 8)[0], "headHex": head.hex()})
+        chunks.append({"slot": slot, "known": True, "chunkPointer": chunk,
+                       "matrixIndex": unsigned(emu, chunk + LAND_CHUNK_MATRIX_INDEX_OFFSET),
+                       "modelLoaded": unsigned(emu, chunk + LAND_CHUNK_MODEL_LOADED_OFFSET),
+                       "models": models})
+    return {"known": True, "chunks": chunks}
+
+
 def loaded_terrain_cell(emu, x, y):
     """Read one verified loaded metatile, or None when its store is unknown.
 

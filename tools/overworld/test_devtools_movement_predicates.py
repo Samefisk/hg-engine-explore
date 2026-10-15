@@ -153,7 +153,7 @@ class MovementPredicateTests(unittest.TestCase):
         current = snapshot(); current["observationBoundary"] = "paused-native-cycle-end"
         with self.assertRaises(ValueError): check(self.target, current)
         for predicate in (
-            {**self.target, "map": 540}, {**self.target, "x": True}, {**self.target, "z": -1},
+            {**self.target, "map": 600}, {**self.target, "x": True}, {**self.target, "z": -1},
             {**self.target, "private": "ram"}, {"kind": []},
             {"kind": "party-field", "slot": 6, "path": "hp", "operator": "eq", "value": 0},
             {"kind": "party-field", "slot": 0, "path": "isEgg", "operator": "gte", "value": False},

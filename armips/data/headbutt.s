@@ -3767,3 +3767,185 @@ headbuttheader 538,   0,   0   // Mystery Zone
 
 headbuttheader 539,   0,   0   // Pokémon League Pokémon Centre (Lower)
 .close
+
+// Map IDs 540-599: expanded map header table (armips/asm/map_header_expansion.s).
+
+headbuttheader 540,   0,   0   // expansion map 540
+.close
+
+headbuttheader 541,   0,   0   // expansion map 541
+.close
+
+headbuttheader 542,   0,   0   // expansion map 542
+.close
+
+headbuttheader 543,   0,   0   // expansion map 543
+.close
+
+headbuttheader 544,   0,   0   // expansion map 544
+.close
+
+headbuttheader 545,   0,   0   // expansion map 545
+.close
+
+headbuttheader 546,   0,   0   // expansion map 546
+.close
+
+headbuttheader 547,   0,   0   // expansion map 547
+.close
+
+headbuttheader 548,   0,   0   // expansion map 548
+.close
+
+headbuttheader 549,   0,   0   // expansion map 549
+.close
+
+headbuttheader 550,   0,   0   // expansion map 550
+.close
+
+headbuttheader 551,   0,   0   // expansion map 551
+.close
+
+headbuttheader 552,   0,   0   // expansion map 552
+.close
+
+headbuttheader 553,   0,   0   // expansion map 553
+.close
+
+headbuttheader 554,   0,   0   // expansion map 554
+.close
+
+headbuttheader 555,   0,   0   // expansion map 555
+.close
+
+headbuttheader 556,   0,   0   // expansion map 556
+.close
+
+headbuttheader 557,   0,   0   // expansion map 557
+.close
+
+headbuttheader 558,   0,   0   // expansion map 558
+.close
+
+headbuttheader 559,   0,   0   // expansion map 559
+.close
+
+headbuttheader 560,   0,   0   // expansion map 560
+.close
+
+headbuttheader 561,   0,   0   // expansion map 561
+.close
+
+headbuttheader 562,   0,   0   // expansion map 562
+.close
+
+headbuttheader 563,   0,   0   // expansion map 563
+.close
+
+headbuttheader 564,   0,   0   // expansion map 564
+.close
+
+headbuttheader 565,   0,   0   // expansion map 565
+.close
+
+headbuttheader 566,   0,   0   // expansion map 566
+.close
+
+headbuttheader 567,   0,   0   // expansion map 567
+.close
+
+headbuttheader 568,   0,   0   // expansion map 568
+.close
+
+headbuttheader 569,   0,   0   // expansion map 569
+.close
+
+headbuttheader 570,   0,   0   // expansion map 570
+.close
+
+headbuttheader 571,   0,   0   // expansion map 571
+.close
+
+headbuttheader 572,   0,   0   // expansion map 572
+.close
+
+headbuttheader 573,   0,   0   // expansion map 573
+.close
+
+headbuttheader 574,   0,   0   // expansion map 574
+.close
+
+headbuttheader 575,   0,   0   // expansion map 575
+.close
+
+headbuttheader 576,   0,   0   // expansion map 576
+.close
+
+headbuttheader 577,   0,   0   // expansion map 577
+.close
+
+headbuttheader 578,   0,   0   // expansion map 578
+.close
+
+headbuttheader 579,   0,   0   // expansion map 579
+.close
+
+headbuttheader 580,   0,   0   // expansion map 580
+.close
+
+headbuttheader 581,   0,   0   // expansion map 581
+.close
+
+headbuttheader 582,   0,   0   // expansion map 582
+.close
+
+headbuttheader 583,   0,   0   // expansion map 583
+.close
+
+headbuttheader 584,   0,   0   // expansion map 584
+.close
+
+headbuttheader 585,   0,   0   // expansion map 585
+.close
+
+headbuttheader 586,   0,   0   // expansion map 586
+.close
+
+headbuttheader 587,   0,   0   // expansion map 587
+.close
+
+headbuttheader 588,   0,   0   // expansion map 588
+.close
+
+headbuttheader 589,   0,   0   // expansion map 589
+.close
+
+headbuttheader 590,   0,   0   // expansion map 590
+.close
+
+headbuttheader 591,   0,   0   // expansion map 591
+.close
+
+headbuttheader 592,   0,   0   // expansion map 592
+.close
+
+headbuttheader 593,   0,   0   // expansion map 593
+.close
+
+headbuttheader 594,   0,   0   // expansion map 594
+.close
+
+headbuttheader 595,   0,   0   // expansion map 595
+.close
+
+headbuttheader 596,   0,   0   // expansion map 596
+.close
+
+headbuttheader 597,   0,   0   // expansion map 597
+.close
+
+headbuttheader 598,   0,   0   // expansion map 598
+.close
+
+headbuttheader 599,   0,   0   // expansion map 599
+.close

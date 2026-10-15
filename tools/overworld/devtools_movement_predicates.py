@@ -94,7 +94,7 @@ def validate_movement_predicate(value):
             raise ValueError("unsupported dialogue state")
     elif kind == "player-settled-at":
         _shape(value, {"kind", "map", "x", "z"})
-        _int(value["map"], "map", 0, 539)
+        _int(value["map"], "map", 0, 599)
         for axis in ("x", "z"):
             _int(value[axis], axis, 0, 32767)
     else:
@@ -150,7 +150,7 @@ def player_settled_at(snapshot, map_id, x, z):
                 for key in ("x", "y", "x_prev", "y_prev", "pos_x", "pos_z", "unk88_y")}
     flags = _int(_path(player, "flags"), "player.flags")
     command = _int(_path(player, "movement_cmd"), "player.movement_cmd", 0, 255)
-    current_map = _int(_path(snapshot, "context.mapId"), "current map", 0, 539)
+    current_map = _int(_path(snapshot, "context.mapId"), "current map", 0, 599)
     task = _int(_path(snapshot, "fieldControl.taskPointer"), "field task")
     # MapObject_AreBitsSetForMovementScriptInit, stock0x02062108.
     ready = bool(flags & 1) and not flags & 2 and (not flags & 0x10 or bool(flags & 0x20))

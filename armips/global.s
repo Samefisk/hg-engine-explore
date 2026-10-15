@@ -33,6 +33,7 @@
 .include "armips/asm/overworlds.s" // code for overworlds, specifically repointing gOWTagToFileNum and making dimorphism a byte instead of a halfword.
 .include "armips/asm/overworld_field_capsule.s" // shared field code in the retired stock graphics table
 .include "armips/asm/swarms.s" // modify swarms
+.include "armips/asm/map_header_expansion.s" // map IDs 540+; after pokedex.s (shares its retired-table block)
 
 .include "armips/data/starters.s" // data definitions for which species to use for the starter Pokemon
 .include "armips/asm/tm_palettes.s" // allows editing of pallete table for TMs

@@ -14,12 +14,13 @@ A member index may also append to an archive (index == current count).
 from __future__ import annotations
 
 import json
+import struct
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import ndspy.rom
 
-from . import codecs, narc
+from . import codecs, header_table, narc
 
 ARCHIVE_PATHS = {"matrix": "a/0/4/1", "area": "a/0/4/2", "events": "a/0/3/2", "land": "a/0/6/5"}
 NAMES_PATH = "fielddata/maptable/mapname.bin"
@@ -76,6 +77,8 @@ class World:
     raw: dict[str, list[bytes]]          # encoded members per archive kind
     headers: list[dict]
     archive_counts: dict[str, int] = field(default_factory=dict)  # scripts/text
+    script_entries: list = field(default_factory=list)  # per scr_seq bank; None = unknown
+    script_ranges: list = field(default_factory=list)   # [(first script id, bank)], descending
     overridden: dict[str, set[int]] = field(default_factory=dict)
     _cache: dict = field(default_factory=dict)
 
@@ -105,14 +108,70 @@ class World:
         return blocked, behavior
 
 
-def load_base(source, header_offset: int = codecs.HEADER_TABLE_OFFSET_USA) -> World:
+# sScriptBankMapping (pokeheartgold src/fieldmap.c): 30 x {u16 firstId, scriptBank,
+# msgBank}, descending. Found by its {10300, 734, 444} entry, the sixth.
+SCRIPT_RANGE_COUNT = 30
+_SCRIPT_RANGE_PROBE = struct.pack("<HHH", 10300, 734, 444)
+SCRIPT_END_MARKER = 0xFD13
+
+
+def script_count(data: bytes) -> int:
+    """Entries in a scr_seq file: u32 offsets until the 0xFD13 end marker."""
+    count = 0
+    while 4 * count + 2 <= len(data) and struct.unpack_from("<H", data, 4 * count)[0] != SCRIPT_END_MARKER:
+        count += 1
+    return count
+
+
+def script_ranges(arm9: bytes) -> list:
+    at = arm9.find(_SCRIPT_RANGE_PROBE)
+    if at < 0 or arm9.count(_SCRIPT_RANGE_PROBE) != 1:
+        return []
+    start = at - 5 * 6
+    ranges = [struct.unpack_from("<HHH", arm9, start + 6 * k)[:2] for k in range(SCRIPT_RANGE_COUNT)]
+    firsts = [first for first, _ in ranges]
+    return ranges if firsts == sorted(firsts, reverse=True) else []
+
+
+def apply_repo_banks(world: "World", repo: Path) -> None:
+    """Account for banks the hg-engine build adds or replaces later.
+
+    data/text/NNN.txt replaces or appends text banks; armips/scr_seq/
+    scr_seq_NNNNN_*.s replaces script banks (their entry counts are unknown
+    until assembled, so they are not checked).
+    """
+    text_ids = [int(p.stem) for p in (repo / "data/text").glob("*.txt") if p.stem.isdigit()]
+    if text_ids and "text" in world.archive_counts:
+        world.archive_counts["text"] = max(world.archive_counts["text"], max(text_ids) + 1)
+    for path in (repo / "armips/scr_seq").glob("scr_seq_*.s"):
+        bank = int(path.name.split("_")[2])
+        while len(world.script_entries) <= bank:
+            world.script_entries.append(None)
+        world.script_entries[bank] = None
+        world.archive_counts["scripts"] = max(world.archive_counts.get("scripts", 0), bank + 1)
+
+
+def load_base(source, header_offset: int = codecs.HEADER_TABLE_OFFSET_USA, repo: Path | None = None) -> World:
     raw = {kind: narc.members(source.read(rel)) for kind, rel in ARCHIVE_PATHS.items()}
-    headers = codecs.decode_header_table(source.arm9(), source.read(NAMES_PATH), header_offset)
-    counts = {}
-    for kind, rel in (("scripts", SCRIPT_ARCHIVE), ("text", TEXT_ARCHIVE)):
-        if source.exists(rel):
-            counts[kind] = len(narc.members(source.read(rel)))
-    return World(raw=raw, headers=headers, archive_counts=counts)
+    arm9 = source.arm9()
+    if header_offset == codecs.HEADER_TABLE_OFFSET_USA:
+        # IDs 540+ come from the expansion patch; unpatched ROMs show them as
+        # MAP_NOTHING aliases ("alias": 1) up to the configured count.
+        headers = header_table.logical_headers(arm9, source.read(NAMES_PATH))
+    else:
+        headers = codecs.decode_header_table(arm9, source.read(NAMES_PATH), header_offset)
+    counts, entries = {}, []
+    if source.exists(SCRIPT_ARCHIVE):
+        scripts = narc.members(source.read(SCRIPT_ARCHIVE))
+        counts["scripts"] = len(scripts)
+        entries = [script_count(data) for data in scripts]
+    if source.exists(TEXT_ARCHIVE):
+        counts["text"] = len(narc.members(source.read(TEXT_ARCHIVE)))
+    world = World(raw=raw, headers=headers, archive_counts=counts,
+                  script_entries=entries, script_ranges=script_ranges(arm9))
+    if repo is not None:
+        apply_repo_banks(world, repo)
+    return world
 
 
 def _index(path: Path) -> int:
@@ -128,7 +187,9 @@ def apply_overrides(base: World, overrides: Path) -> World:
     headers = [dict(entry) for entry in base.headers]
     overridden: dict[str, set[int]] = {kind: set() for kind in (*ARCHIVE_PATHS, "headers")}
     if not overrides.exists():
-        return World(raw=raw, headers=headers, archive_counts=dict(base.archive_counts), overridden=overridden)
+        return World(raw=raw, headers=headers, archive_counts=dict(base.archive_counts),
+                     script_entries=list(base.script_entries), script_ranges=list(base.script_ranges),
+                     overridden=overridden)
 
     for kind in ARCHIVE_PATHS:
         folder = overrides / kind
@@ -170,8 +231,12 @@ def apply_overrides(base: World, overrides: Path) -> World:
             except ValueError as error:
                 raise codecs.FormatError(f"headers/{path.name}: {error}") from None
             if index >= len(headers):
-                raise codecs.FormatError(f"headers/{path.name}: the table holds {len(headers)} maps; "
-                                         "reuse an unused map ID")
+                raise codecs.FormatError(f"headers/{path.name}: map IDs end at {len(headers) - 1} "
+                                         "(MAP_HEADER_COUNT in armips/asm/map_header_expansion.s)")
+            if index >= header_table.VANILLA_COUNT + header_table.MAX_DEFINED:
+                raise codecs.FormatError(f"headers/{path.name}: only IDs below "
+                                         f"{header_table.VANILLA_COUNT + header_table.MAX_DEFINED} can be stored")
+            entry.pop("alias", None)
             entry["id"] = index
             try:
                 codecs.encode_header(entry)
@@ -182,4 +247,6 @@ def apply_overrides(base: World, overrides: Path) -> World:
                 raise codecs.FormatError(f"headers/{path.name}: {error}") from None
             headers[index] = entry
             overridden["headers"].add(index)
-    return World(raw=raw, headers=headers, archive_counts=dict(base.archive_counts), overridden=overridden)
+    return World(raw=raw, headers=headers, archive_counts=dict(base.archive_counts),
+                     script_entries=list(base.script_entries), script_ranges=list(base.script_ranges),
+                     overridden=overridden)

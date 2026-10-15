@@ -93,7 +93,7 @@ def _measurements(m, *, include_host_cpu=True):
             and len(cells) == number(m["streamingCells"]), "geometry counts differ")
     maps = m["maps"]
     require(isinstance(maps,list) and len(maps) >= 2 and maps == sorted(set(maps)), "map floor")
-    for map_id in maps: number(map_id, 0, 539)
+    for map_id in maps: number(map_id, 0, 599)
     player_motions = number(m["playerMotions"], 4, observed)
     follower_motions = number(m["followerMotions"], 16, observed)
     for field in ("heldMultiTileSegments", "heldCellCrossings", "heldMapCrossings"):

@@ -3106,6 +3106,8 @@ class DevtoolsSession:
                               "loaded": cell is not None, **(cell or {}), "surface": surface})
         address = rt.ACTOR_DESCRIPTOR["state"]["address"]
         return {"terrain": {"cells": cells, "warps": rt.loaded_warp_events(emu),
+                            "events": rt.loaded_events_digest(emu),
+                            "landModels": rt.loaded_land_models(emu),
                             "observation": {"boundary": "paused-native-cycle-end",
                                             "nativeCycle": rt.EXECUTED_FRAME_COUNT,
                                             "lastCompletedGameFrame": self.completed_frames,
@@ -3642,7 +3644,7 @@ class DevtoolsSession:
         return ScriptWarpHeapFreeObserver(self, constructor)
 
     def teleport(self, args):
-        map_id = integer(args.get("mapId", args.get("map")), "mapId", 0, 539)
+        map_id = integer(args.get("mapId", args.get("map")), "mapId", 0, 599)
         x = integer(args.get("x"), "x", 0, 32767)
         z = integer(args.get("z", args.get("y")), "z", 0, 32767)
         facing = integer(args.get("facing", 0), "facing", 0, 3)

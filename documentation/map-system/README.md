@@ -40,12 +40,21 @@ passes `--root base/root --arm9 base/arm9.bin`.
    ```
 
    It reports only problems that vanilla does not already have.
-   **Errors** block the build: events outside loaded land, NPCs on blocked
-   tiles, duplicate object IDs, bad warp targets or anchors, matrix cells or
-   header fields pointing past their archives. **Warnings** do not: warps
-   that do not lead back (vanilla shares return doors on purpose) and
-   script/text banks past vanilla counts (hg-engine adds banks later in the
-   build). Header 4095 is the game's "return to previous map" warp and is
+   **Errors** block the build:
+   - events outside loaded land, NPCs on blocked tiles, duplicate object IDs;
+   - events that cannot be reached: a flood fill from every warp of the
+     matrix, with ledges one-way and water, Rock Climb, Whirlpool, Waterfall
+     and behavior 128 passable (see `tools/maps/reach.py`). Height layers
+     are ignored; vanilla still has 86 such events (gym puzzles, special
+     dungeons), which is why only new ones count;
+   - bad warp targets or anchors;
+   - local script IDs (1–1999) past the map's `scr_seq` entry count, and
+     script/text banks or matrix cells past their archives. Bank counts
+     include what the build adds from `data/text/` and `armips/scr_seq/`;
+     banks replaced from `armips/scr_seq/` are not entry-checked.
+
+   **Warnings** do not block: warps that do not lead back (vanilla shares
+   return doors on purpose). Header 4095 is the game's "return to previous map" warp and is
    always valid. To accept an intended error, add its `[key]` with a reason
    to `data/maps/lint_waivers.json`:
 
@@ -62,7 +71,11 @@ passes `--root base/root --arm9 base/arm9.bin`.
 5. **Prove it in game** through the shared melonDS tools (`scripts/owctl`):
    teleport next to the change, press a direction, and read the player's map
    and tile position. `owctl dev terrain --x X --z Z --radius 0` reads the
-   loaded collision bit and warp table. Screenshots are never evidence.
+   loaded collision bit, the warp table, and `events`: the SHA-256 of the
+   zone-event file the game loaded (layout-checked against the game's own
+   array pointers). Right after a map load it equals the SHA-256 of the
+   encoded events member; scripts that move NPCs later change it.
+   Screenshots are never evidence.
 
 Rerunnable end-to-end proof (test-only edit on Route 29; remove it and
 rebuild afterwards):
@@ -73,22 +86,35 @@ python3 -B -m tools.maps.proof_route29 probe    # passed:true on the edited ROM
 python3 -B -m tools.maps.proof_route29 remove   # then build again
 ```
 
+New 3D geometry: `python3 -B -m tools.maps.nsbmd generate --area ID --spec
+grid.json --out model.nsbmd` builds a chunk model from a tile grid using the
+area's texture names ([nsbmd.md](nsbmd.md)); put it beside `land.json` as
+`model.nsbmd`. Keep collision and BDHC consistent with the new floor yourself.
+`owctl dev terrain` reports `landModels`: the name and size of the model each
+loaded chunk points at. `tools.maps.proof_model` (write / probe / remove)
+proves a generated model loads in Elm's lab.
+
 ## Checks for the tool itself
 
 ```bash
 python3 -B -m tools.maps roundtrip          # every vanilla member re-encodes identically
 python3 -B -m tools.maps check-reference    # matches the pokeheartgold decomp
 python3 -B -m unittest tools.maps.test_codecs
+python3 -B -m tools.maps.nsbmd roundtrip    # all 676 chunk models re-encode identically
+python3 -B -m unittest tools.maps.test_nsbmd
 ```
 
 Run these after changing anything in `tools/maps/`.
 
 ## Known gaps
 
-- No generic memory reader yet, so an in-game check that the loaded event
-  bytes equal the override needs a new bounded devtools reader.
-- Lint has no reachability check (ledges, water and height make it a
-  path-search problem).
-- Script, text and encounter references are counted, not resolved.
-- New 3D geometry needs an NSBMD writer; see the research report.
-- The ARM9 header table cannot grow; reuse an `*_UNUSED` map ID.
+- Message indices used inside scripts are not checked; only text banks are.
+- Reachability ignores height layers, so bridges over-approximate it.
+- Generated models are checked structurally and for loading, not for how
+  they look; a person has to judge that. Animated water and translucency are
+  not generated.
+- New map IDs: 540–591 can hold their own header (52 slots, see
+  [header-expansion.md](header-expansion.md)); 592–599 are valid IDs that
+  behave like MAP_NOTHING. `checkout --map 540 --parts header` gives a
+  template; `apply` writes it to `base/map_header_ext.bin` for armips and
+  pads Rock Smash data. More than 52 needs more resident memory.

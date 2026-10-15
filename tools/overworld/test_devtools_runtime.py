@@ -1046,6 +1046,8 @@ class FreshObservationTests(unittest.TestCase):
             ACTOR_DESCRIPTOR={"state": {"address": 0x02300000}},
             player_ptr=lambda _emu: 123, object_state=lambda *_args: {"x": 12, "y": 13},
             loaded_terrain_cell=lambda *_args: None, loaded_warp_events=lambda _emu: [],
+            loaded_events_digest=lambda _emu: {"known": False, "reason": "fixture"},
+            loaded_land_models=lambda _emu: {"known": False, "reason": "fixture"},
             loaded_surface_cell=lambda *_args: None,
             field_map_id=lambda _emu: 33, unsigned=lambda _emu, _address, _size: 2)
         value = session.terrain(0)["terrain"]
@@ -1065,6 +1067,8 @@ class FreshObservationTests(unittest.TestCase):
         session.rt = SimpleNamespace(EXECUTED_FRAME_COUNT=83,
             ACTOR_DESCRIPTOR={"state": {"address": 0x02300000}},
             loaded_terrain_cell=read_cell, loaded_warp_events=lambda _emu: [],
+            loaded_events_digest=lambda _emu: {"known": False, "reason": "fixture"},
+            loaded_land_models=lambda _emu: {"known": False, "reason": "fixture"},
             loaded_surface_cell=lambda *_args: None,
             field_map_id=lambda _emu: 34, unsigned=lambda _emu, _address, _size: 2)
         value = session.terrain(0, x=558, z=373)["terrain"]

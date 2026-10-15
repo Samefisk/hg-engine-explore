@@ -15,6 +15,8 @@ and the second warps. Do not ship a ROM built with this edit.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
 import shutil
 import subprocess
@@ -84,13 +86,29 @@ def _where() -> tuple[int, int, int]:
     return result["context"]["mapId"], result["player"]["x"], result["player"]["y"]
 
 
+def expected_event_hashes() -> dict[str, str]:
+    """SHA-256 of Route 29's events member, vanilla and with the proof edit."""
+    import hashlib
+    import tempfile
+    from . import world
+    base = world.load_base(world.RomSource(cli.REPO / "rom.nds"))
+    with tempfile.TemporaryDirectory() as tmp:
+        with contextlib.redirect_stdout(io.StringIO()):
+            write(Path(tmp))
+        edited = world.apply_overrides(base, Path(tmp))
+    return {"vanilla": hashlib.sha256(base.raw["events"][EVENTS_BANK]).hexdigest(),
+            "edited": hashlib.sha256(edited.raw["events"][EVENTS_BANK]).hexdigest()}
+
+
 def probe(rom: str, save: str) -> int:
+    expected = expected_event_hashes()
     _ow("start", "--rom", rom, "--save", save)
     try:
         _ow("teleport", str(MAP_ROUTE_29), str(BLOCK_TILE[0]), str(BLOCK_TILE[1] + 1), "--facing", "0")
         terrain = _ow("terrain", "--x", str(BLOCK_TILE[0]), "--z", str(BLOCK_TILE[1]), "--radius", "0")
         terrain = terrain.get("terrain", terrain)
         blocked_cells = terrain["cellSummary"]["blocked"]
+        loaded_events = terrain.get("events") or {}
         loaded_warp = any((w["x"], w["y"], w["header"], w["anchor"]) ==
                           (NEW_WARP["x"], NEW_WARP["z"], NEW_WARP["header"], NEW_WARP["anchor"])
                           for w in terrain["warps"])
@@ -117,11 +135,13 @@ def probe(rom: str, save: str) -> int:
                              and control_after[2] < OPEN_CONTROL[1]),
         "blockTileCollisionBit": blocked_cells == 1,
         "newWarpInLoadedTable": loaded_warp,
+        "loadedEventsEqualEditedFile": loaded_events.get("sha256") == expected["edited"],
         "stepIntoBlockRefused": after_block == start,
         "panelWarpsToGate": after_panel == GATE_LANDING,
     }
     print(json.dumps({"start": start, "afterBlock": after_block, "control": [control_start, control_after],
-                      "afterPanel": after_panel,
+                      "afterPanel": after_panel, "loadedEvents": loaded_events,
+                      "loadedEventsIsVanilla": loaded_events.get("sha256") == expected["vanilla"],
                       "checks": checks, "passed": all(checks.values())}))
     return 0 if all(checks.values()) else 1
 

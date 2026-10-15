@@ -29,7 +29,7 @@ import struct
 import sys
 from pathlib import Path
 
-from . import codecs, lint, narc, world
+from . import codecs, header_table, lint, narc, world
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -247,7 +247,7 @@ def _check_reference_headers(args) -> int:
 
 
 def _load(args):
-    base = world.load_base(args.source, args.header_offset)
+    base = world.load_base(args.source, args.header_offset, repo=REPO)
     return base, world.apply_overrides(base, args.overrides)
 
 
@@ -305,15 +305,31 @@ def cmd_apply(args) -> int:
             print(f"apply: {rel} members {sorted(edited.overridden[kind])}")
     if edited.overridden["headers"]:
         arm9 = bytearray(args.source.arm9())
-        for map_id in sorted(edited.overridden["headers"]):
-            start = args.header_offset + map_id * codecs.HEADER_SIZE
-            arm9[start:start + codecs.HEADER_SIZE] = codecs.encode_header(edited.headers[map_id])
         arm9_out = args.source.arm9_path if args.in_place else args.out / "arm9.bin"
         arm9_out.parent.mkdir(parents=True, exist_ok=True)
+        extension = {map_id: codecs.encode_header(edited.headers[map_id])
+                     for map_id in edited.overridden["headers"] if map_id >= header_table.VANILLA_COUNT}
+        if extension:
+            # armips (map_header_expansion.s) places these rows after this step.
+            ext = header_table.write_extension_file(
+                arm9_out, extension, nothing=codecs.encode_header(edited.headers[header_table.MAP_NOTHING]))
+            print(f"apply: extension headers {sorted(extension)} -> {ext.name}")
+            # Rock Smash data is indexed by map ID; headbutt is padded in armips/data/headbutt.s.
+            for rel, filler in ((header_table.MAP_INDEXED_NARCS["rock smash"], b"\0" * 4),):
+                if args.source.exists(rel):
+                    padded = header_table.pad_narc(args.source.read(rel), len(edited.headers), filler)
+                    (out_root / rel).parent.mkdir(parents=True, exist_ok=True)
+                    (out_root / rel).write_bytes(padded)
+                    print(f"apply: {rel} padded to {len(edited.headers)} members")
+        for map_id in sorted(i for i in edited.overridden["headers"] if i < header_table.VANILLA_COUNT):
+            start = args.header_offset + map_id * codecs.HEADER_SIZE
+            arm9[start:start + codecs.HEADER_SIZE] = codecs.encode_header(edited.headers[map_id])
         arm9_out.write_bytes(arm9)
         names_out = out_root / world.NAMES_PATH
         names_out.parent.mkdir(parents=True, exist_ok=True)
-        names_out.write_bytes(codecs.encode_names(edited.headers))
+        # mapname.bin is tool-only (the game never reads it): one name per stored row.
+        stored = max(extension) + 1 if extension else header_table.VANILLA_COUNT
+        names_out.write_bytes(codecs.encode_names(edited.headers[:stored]))
         print(f"apply: map headers {sorted(edited.overridden['headers'])}")
     return 0
 

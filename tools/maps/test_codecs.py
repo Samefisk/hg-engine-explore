@@ -218,6 +218,65 @@ class OverrideWorkflow(unittest.TestCase):
             self.assertEqual((root / world.NAMES_PATH).read_bytes(), source.read(world.NAMES_PATH))
             self.assertEqual((root / "a/0/6/5").read_bytes(), source.read("a/0/6/5"))
 
+    def test_unreachable_and_bad_script_references_are_errors(self):
+        from . import reach
+        base = world.load_base(world.RomSource(ROM), repo=cli.REPO)
+        grid, seen = reach.reachable_by_matrix(base)[0]
+        matrix = base.matrix_for(42)
+        cells = [(x, z) for z, row in enumerate(matrix["headers"]) for x, h in enumerate(row) if h == 42]
+        sealed = next((x, z) for cx, cz in cells for z in range(cz * 32, cz * 32 + 32)
+                      for x in range(cx * 32, cx * 32 + 32)
+                      if base.tile(42, x, z) and not reach.near_reachable(grid, seen, x, z))
+        with tempfile.TemporaryDirectory() as tmp:
+            overrides = Path(tmp)
+            self.assertEqual(self.run_cli(overrides, "checkout", "--map", "42", "--parts", "events"), 0)
+            self.assertEqual(self.run_cli(overrides, "checkout", "--map", "33", "--parts", "events,header"), 0)
+            route38 = next(p for p in (overrides / "events").glob("*.json") if p.name != "0030.json")
+            events = json.loads(route38.read_text())
+            events["bgs"].append({"scriptId": 0, "type": 0, "x": sealed[0], "z": sealed[1], "y": 0, "dir": 0})
+            route38.write_text(json.dumps(events))
+            route29 = overrides / "events/0030.json"
+            events = json.loads(route29.read_text())
+            available = base.script_entries[base.headers[33]["scriptsBank"]]
+            events["objects"][0]["scriptId"] = available + 1
+            route29.write_text(json.dumps(events))
+            header = json.loads((overrides / "headers/0033.json").read_text())
+            header["msgBank"] = base.archive_counts["text"]
+            (overrides / "headers/0033.json").write_text(json.dumps(header))
+            result = lint.lint(world.apply_overrides(base, overrides), base)
+            kinds = sorted(m.rsplit("[", 1)[1].split(":")[0] for m in result[lint.ERROR])
+            self.assertEqual(kinds, ["header-ref", "script-ref", "unreachable"], result)
+
+    def test_vanilla_local_script_references_all_resolve(self):
+        base = world.load_base(world.RomSource(ROM), repo=cli.REPO)
+        self.assertEqual(base.script_ranges[-1][0], 2000)
+        found = lint.findings(base)
+        self.assertFalse([k for k in found if k[0] in ("script-ref", "header-ref", "matrix-land")])
+
+    def test_new_map_id_writes_extension_file(self):
+        from . import header_table
+        with tempfile.TemporaryDirectory() as tmp:
+            overrides, out = Path(tmp) / "ov", Path(tmp) / "out"
+            self.assertEqual(self.run_cli(overrides, "checkout", "--map", "540", "--parts", "header"), 0)
+            path = overrides / "headers/0540.json"
+            header = json.loads(path.read_text())
+            route29 = _base_world().headers[33]
+            header.update({k: v for k, v in route29.items() if k not in ("id", "name")})
+            header["name"] = "NEW540"
+            header["weather"] = 1
+            path.write_text(json.dumps(header))
+            self.assertEqual(self.run_cli(overrides, "apply", "--out", str(out)), 0)
+            blob = (out / header_table.EXT_FILE_NAME).read_bytes()
+            self.assertEqual(len(blob), codecs.HEADER_SIZE)
+            self.assertEqual(codecs.decode_header(blob)["weather"], 1)
+            self.assertEqual(codecs.decode_header(blob)["matrixId"], route29["matrixId"])
+            names = (out / "root" / world.NAMES_PATH).read_bytes()
+            self.assertEqual(names[540 * 16:541 * 16].rstrip(b"\0"), b"NEW540")
+            rock = narc.members((out / "root" / header_table.MAP_INDEXED_NARCS["rock smash"]).read_bytes())
+            self.assertEqual(len(rock), header_table.configured_count())
+            # The vanilla table rows are untouched.
+            self.assertEqual((out / "arm9.bin").read_bytes(), world.RomSource(ROM).arm9())
+
     def test_append_must_be_contiguous(self):
         with tempfile.TemporaryDirectory() as tmp:
             overrides = Path(tmp)

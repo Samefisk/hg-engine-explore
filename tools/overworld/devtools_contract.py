@@ -151,7 +151,7 @@ OPERATIONS = {
     "test.start": {"name": string(required=True)},
     "test.status": {"runId": string()}, "test.cancel": {"runId": string(required=True)},
     "test.export": {"runId": string(required=True)},
-    "teleport": {"map": integer(0, 539, required=True),
+    "teleport": {"map": integer(0, 599, required=True),  # MAP_HEADER_COUNT - 1
                  "x": integer(0, 32767, required=True), "z": integer(0, 32767, required=True),
                  "facing": integer(0, 3, 1)},
     "spawn": {"species": integer(1, 1075, required=True), "form": integer(0, 31, 0),
