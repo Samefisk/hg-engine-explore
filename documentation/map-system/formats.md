@@ -135,7 +135,6 @@ encoder refuses larger files. The largest vanilla file is 1,660 bytes.
 - `bm_field` / `bm_room` building models, `area_build`, `map_tex_set` NSBTX,
   area lights, `move_model_list`, Pokégear town-map and fly tables
   (overlay 101), spawn table `sSpawnMaps`.
-- Writing the ARM9 header table back into a build. `pack` writes
-  `map_headers.bin`; there is no build hook for it yet. `pack` requires
-  exactly 540 entries until the table can grow.
+- Growing the ARM9 header table. `apply` patches existing entries in place
+  and `pack` requires exactly 540 entries.
 - References into scripts, text, music and encounters are not range-checked.

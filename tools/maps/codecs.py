@@ -344,6 +344,10 @@ def decode_land(data: bytes) -> tuple[dict, bytes]:
     return spec, model
 
 
+def decode_land_model(data: bytes) -> bytes:
+    return decode_land(data)[1]
+
+
 def encode_land(spec: dict, model: bytes) -> bytes:
     bgs = bytes.fromhex(spec["backgroundSound"])
     if len(bgs) % 4 or len(bgs) > 0xFFFF:

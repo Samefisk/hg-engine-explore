@@ -12,8 +12,12 @@ from pathlib import Path
 import ndspy.narc
 
 
+def members(data: bytes) -> list[bytes]:
+    return list(ndspy.narc.NARC(data).files)
+
+
 def read_members(path: Path) -> list[bytes]:
-    return list(ndspy.narc.NARC(path.read_bytes()).files)
+    return members(path.read_bytes())
 
 
 def build(members: list[bytes], padding: bytes = b"\xff") -> bytes:
