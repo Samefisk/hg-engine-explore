@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 1,
+  "id": "spawn.move-entry.arrival",
+  "title": "Prepared Rattata follows its native Move entry route",
+  "status": "active",
+  "capabilities": [
+    "spawn"
+  ],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/verification.md",
+    "actor": "One newly created Wild Rattata19 level4; native PID, full current handle, Field and object membership",
+    "trigger": "Prepared Continue, checked different-map warp to Route30(565,369),60 neutral frames, normal spawn request(560,375), then240 neutral frames. No forced origin, target, profile, heading or movement.",
+    "observable": "Typed Pending/READY PREPARE then same-serial ADOPT. Every saved next-step GUIDE binds shared complete START/END. The same current actor reaches its exact native target/height with no offset; terminal GUIDE, RETIRE and successful UPDATE clear the trip.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Checked warp and public Rattata request in a disposable Continue clone. Authored profiles choose every site and motion; no guest state is patched to produce arrival."
+      }
+    ],
+    "limits": [
+      "Prepared normal Rattata19 level4 request560375 on Route30. Actual native PREPARE origin/target are not forced. Retain every Pending/READY query, same-serial full-handle ADOPT, every dense acquire/travel frame, saved GUIDEs, shared START/END and exact target height/zero offsets with native trip clear. Public spawn advances normal queue maintenance and retains all native receipts but not dense queue poses. This does not claim quiet offscreen stall retirement, every movement lane or natural population choice.",
+      "A fresh registered current-ROM run is required. The old3579 prefix must fail; copied missing/stale/false-arrival data grant no live proof."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "rattata",
+      "species": 19,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Retain current native Pending/READY and actual ADOPT"
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Complete shared guided START/END to native target and clear trip"
+    }
+  ],
+  "stop": {
+    "frameBudget": 720,
+    "condition": "All240 neutral observation frames complete and exact arrival chain passes"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED",
+      "ACTOR_REBOUND"
+    ],
+    "invariants": [
+      "Prepared normal Rattata19 level4 request560375 on Route30. Actual native PREPARE origin/target are not forced. Retain every Pending/READY query, same-serial full-handle ADOPT, every dense acquire/travel frame, saved GUIDEs, shared START/END and exact target height/zero offsets with native trip clear. Public spawn advances normal queue maintenance and retains all native receipts but not dense queue poses. This does not claim quiet offscreen stall retirement, every movement lane or natural population choice."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "spawn.move-entry.arrival",
+    "claims": [
+      "live-actor-identity",
+      "terrain-selection",
+      "logical-commit",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumFrames": 240
+  }
+}

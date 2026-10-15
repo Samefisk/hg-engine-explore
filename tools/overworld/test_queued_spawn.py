@@ -372,6 +372,139 @@ int main(int argc, char **argv) {
 '''
 
 
+STARTUP_BOUNDARIES = r'''
+static unsigned resolver_calls, startup_calls, destination_calls;
+static unsigned pending_batches;
+static BOOL startup_success;
+struct PlayerProfile { u32 id; };
+static struct PlayerProfile player_profile = {42};
+static struct PlayerProfile *Sav2_PlayerData_GetProfileAddr(void *savedata) {
+    (void)savedata; return &player_profile;
+}
+static u32 FinalizePersonality(u32 personality, u32 trainer, BOOL shiny) {
+    (void)trainer; (void)shiny; return personality;
+}
+static const struct { u32 (*finalizePersonality)(u32, u32, BOOL); }
+    capture_entry = {FinalizePersonality};
+#define OVERWORLD_WILD_CAPTURE_UTILITIES_ENTRY (&capture_entry)
+static void OverworldWildSpawns_ResolveSpawnBehaviorProfile(
+    OverworldWildPreparedSpawn *prepared, OverworldWildSpawnTerrain terrain,
+    u32 overrides) {
+    (void)terrain; (void)overrides;
+    resolver_calls++;
+    prepared->behaviorResolution.primitives.spawnLocomotion =
+        OW_WILD_BEHAVIOR_LOCOMOTION_FLY_IN;
+}
+static BOOL OverworldWildSpawns_TryApplySpawnDestination(
+    OverworldWildSpawnState *value, FieldSystem *system,
+    OverworldWildSpawnTerrain terrain, const OverworldWildBehaviorProfile *profile,
+    OverworldWildSpawnPosition *position) {
+    (void)system; (void)terrain; (void)profile; (void)position;
+    destination_calls++;
+    if (pending_batches != 0) {
+        pending_batches--;
+        OW_WILD_RUNTIME(value)->refillPositionChecksRemaining =
+            OW_WILD_PROFILE_DESTINATION_SCAN_PENDING;
+        return FALSE;
+    }
+    OW_WILD_RUNTIME(value)->refillPositionChecksRemaining = 0;
+    return TRUE;
+}
+static BOOL OverworldWildSpawns_TryPickSpawnRunStart(
+    OverworldWildSpawnState *value, FieldSystem *system,
+    OverworldWildSpawnTerrain terrain, int x, int y, int *startX, int *startY) {
+    (void)value; (void)system; (void)terrain; (void)x; (void)y;
+    (void)startX; (void)startY;
+    return FALSE;
+}
+static s32 OverworldWildSpawns_GetObjectGroundBaseYAt(
+    FieldSystem *system, LocalMapObject *object, int x, int y) {
+    (void)system; (void)object; (void)x; (void)y; return 65536;
+}
+static BOOL OverworldWildSpawns_PrepareSpawnAirborneStart(
+    FieldSystem *system, OverworldWildSpawnStartup *startup, u8 locomotion) {
+    (void)system;
+    startup_calls++;
+    if (!startup_success) return FALSE;
+    startup->locomotion = locomotion;
+    return TRUE;
+}
+'''
+
+
+STARTUP_DRIVER = r'''
+int main(void) {
+    reset_fixture();
+    field.savedata = &player_profile;
+    runtime_state.queuedSpawn = fixture;
+    runtime_state.queuedSpawnSlotPlusOne = 3;
+    runtime_state.refillPositionChecksRemaining =
+        OW_WILD_PROFILE_DESTINATION_SCAN_PENDING;
+    pending_batches = 2;
+    for (unsigned batch = 0; batch < 2; batch++) {
+        OverworldWildSpawns_CommitQueuedSpawn(&state, &field);
+        if (runtime_state.queuedSpawnSlotPlusOne != 3
+            || runtime_state.refillPositionChecksRemaining
+                != OW_WILD_PROFILE_DESTINATION_SCAN_PENDING
+            || resolver_calls != 1 || startup_calls != 0) return 3;
+    }
+    OverworldWildSpawns_CommitQueuedSpawn(&state, &field);
+    if (runtime_state.queuedSpawnSlotPlusOne != 3
+        || runtime_state.refillPositionChecksRemaining
+            != OW_WILD_SPAWN_STARTUP_PENDING
+        || resolver_calls != 1 || startup_calls != 0) return 4;
+    OverworldWildSpawns_CommitQueuedSpawn(&state, &field);
+    unsigned first_slot = runtime_state.queuedSpawnSlotPlusOne;
+    unsigned first_marker = runtime_state.refillPositionChecksRemaining;
+    unsigned first_resolvers = resolver_calls;
+    unsigned first_startups = startup_calls;
+    /* The real refill owner calls Commit only while a value remains queued. */
+    if (runtime_state.queuedSpawnSlotPlusOne != 0)
+        OverworldWildSpawns_CommitQueuedSpawn(&state, &field);
+    printf("{\"firstSlot\":%u,\"firstMarker\":%u,\"firstResolvers\":%u,"
+           "\"firstStartups\":%u,\"nextResolvers\":%u,\"nextStartups\":%u,"
+           "\"destinationCalls\":%u,\"createCalls\":%d}\n",
+        first_slot, first_marker, first_resolvers, first_startups,
+        resolver_calls, startup_calls, destination_calls, create_calls);
+    return 0;
+}
+'''
+
+
+def blocked_startup_harness():
+    source = SOURCE.read_text()
+    guard_header = GUARD_HEADER.read_text()
+    prelude = PRELUDE.replace(
+        "typedef struct { u8 value; } OverworldWildBehaviorPrimitives;",
+        "typedef struct { u8 spawnLocomotion; } OverworldWildBehaviorPrimitives;",
+    ).replace("    void *mapObjectMan;", "    void *savedata;\n    void *mapObjectMan;")
+    constants = "#define SPECIES_NONE 0\n#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER 0\n"
+    for name in ("OW_WILD_BEHAVIOR_LOCOMOTION_NONE",
+                 "OW_WILD_BEHAVIOR_LOCOMOTION_MOVE_FROM_OFF_SCREEN",
+                 "OW_WILD_BEHAVIOR_LOCOMOTION_HOP_FROM_OFF_SCREEN",
+                 "OW_WILD_BEHAVIOR_LOCOMOTION_FLY_IN",
+                 "OW_WILD_BEHAVIOR_LOCOMOTION_APPEAR_HOP",
+                 "OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_NONE"):
+        matches = re.findall(r"^#define " + name + r"\s+[^\n]+$", source, re.M)
+        if len(matches) != 1:
+            raise ValueError("expected one production constant: " + name)
+        constants += matches[0] + "\n"
+    boundaries = AFTER_GUARD.replace(
+        function(AFTER_GUARD, "OverworldWildSpawns_FinalizePreparedSpawn", "BOOL"),
+        "",
+    ).replace("static int manager_a, manager_b;", "static int manager_a;")
+    bodies = "\n".join((
+        function(GUARD_SOURCE.read_text(), "OverworldWildSpawnGuard_Read", "BOOL", exported=True),
+        function(source, "OverworldWildSpawns_PrepareSpawnStartup", "BOOL"),
+        function(source, "OverworldWildSpawns_FinalizePreparedSpawn", "BOOL"),
+        function(source, "OverworldWildSpawns_CommitQueuedSpawn", "void"),
+    ))
+    return (prelude + constants
+            + struct_typedef(guard_header, "OverworldWildQueuedSpawnGuard")
+            + function_pointer_typedef(guard_header, "OverworldWildSpawnGuardSurfaceQueryFunc")
+            + boundaries + STARTUP_BOUNDARIES + bodies + STARTUP_DRIVER)
+
+
 class QueuedSpawnTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -443,6 +576,22 @@ class QueuedSpawnTests(unittest.TestCase):
             "createCalls": 1,
             "queueAfter": 0,
             "startupAfter": 0,
+        })
+
+    def test_blocked_startup_is_retired_without_repeating_profile_preparation(self):
+        unit = Path(self.directory.name) / "blocked_startup.c"
+        binary = Path(self.directory.name) / "blocked_startup"
+        unit.write_text(blocked_startup_harness())
+        compiled = subprocess.run(
+            [*shlex.split(os.environ.get("HOST_CC", "cc")), "-std=c11", "-O2",
+             "-Wall", "-Wextra", "-Werror", "-Wno-unused-function",
+             str(unit), "-o", str(binary)], text=True, capture_output=True)
+        self.assertEqual(compiled.returncode, 0, compiled.stderr)
+        result = json.loads(subprocess.check_output([str(binary)], text=True))
+        self.assertEqual(result, {
+            "firstSlot": 0, "firstMarker": 0, "firstResolvers": 1,
+            "firstStartups": 1, "nextResolvers": 1, "nextStartups": 1,
+            "destinationCalls": 3, "createCalls": 0,
         })
 
     def test_pending_and_invalid_guard_reject_without_blocking_next_valid_queue(self):

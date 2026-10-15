@@ -59,14 +59,14 @@ SCENARIO = ROOT / "tests/overworld/scenarios/profile.condition.live-wild-control
 def source_blob():
     profile_offset = 84
     profile_count = 27
-    condition_offset = profile_offset + profile_count * 212
+    condition_offset = profile_offset + profile_count * 228
     condition_count = 11
     raw = bytearray(condition_offset + condition_count * 48)
-    struct.pack_into("<IHHI", raw, 0, 0x4F574244, 80, 84, len(raw))
-    struct.pack_into("<IHH", raw, 36, profile_offset, profile_count, 212)
+    struct.pack_into("<IHHI", raw, 0, 0x4F574244, 83, 84, len(raw))
+    struct.pack_into("<IHH", raw, 36, profile_offset, profile_count, 228)
     struct.pack_into("<IHH", raw, 52, condition_offset, condition_count, 48)
 
-    profile = profile_offset + CONDITION_APPLICATION * 212
+    profile = profile_offset + CONDITION_APPLICATION * 228
     raw[profile + 17] = 1
     raw[profile + 18] = 7
     raw[profile + 19] = 1
@@ -151,7 +151,7 @@ def observation(frame, name, data):
 
 
 def profile_hex():
-    raw = bytearray(144)
+    raw = bytearray(160)
     raw[0], raw[12], raw[13] = 3, 2, 2
     raw[20], raw[21], raw[36] = 1, 2, 6
     return raw.hex()
@@ -465,9 +465,9 @@ class ConditionControllerTests(unittest.TestCase):
         self.assertEqual(RUNTIME_SCRATCH_OFFSET, 520)
         self.assertEqual(RUNTIME_RESULT_OFFSET, 552)
         self.assertEqual(RUNTIME_RESOLUTION_OFFSET, 1136)
-        self.assertEqual(RUNTIME_ACTOR_SNAPSHOT_OFFSET, 1772)
-        self.assertEqual(RUNTIME_ACTIVE_MASKS_OFFSET, 1948)
-        self.assertEqual(RUNTIME_TARGET_VALID_OFFSET, 2068)
+        self.assertEqual(RUNTIME_ACTOR_SNAPSHOT_OFFSET, 1788)
+        self.assertEqual(RUNTIME_ACTIVE_MASKS_OFFSET, 1964)
+        self.assertEqual(RUNTIME_TARGET_VALID_OFFSET, 2084)
         self.assertEqual(target_generation_address(0x02081000, 3),
                          0x02081000 + 3 * 16 + 10)
 
@@ -526,7 +526,7 @@ class ConditionControllerTests(unittest.TestCase):
                 extra["frame"] = 103
                 events.append(extra)
             elif fault == "wrong-profile":
-                evaluate[1]["data"]["profileHex"] = "00" * 144
+                evaluate[1]["data"]["profileHex"] = "00" * 160
             elif fault == "wrong-target":
                 evaluate[1]["data"]["resolvedTarget"]["role"] = "WILD"
             elif fault == "missing-stale-write":

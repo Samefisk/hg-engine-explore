@@ -1,7 +1,20 @@
 #include "overworld_motion_model.h"
+#include "overworld_actor_hop_geometry.h"
+#ifndef OVERWORLD_MOTION_HOST
+__asm__(".global OverworldActorHopGeometry_NextCell\n.type OverworldActorHopGeometry_NextCell, %function\n.thumb\n.thumb_func\n.thumb_set OverworldActorHopGeometry_NextCell, 0x023BFFA2\n");
+#endif
 
 #ifdef OVERWORLD_MOTION_HOST
 #include <string.h>
+#else
+u32 __attribute__((noinline, used,
+    section(".overworld_motion_slam_rise_height")))
+OverworldMotion_SlamRiseUnitHeightNative(u32 progress, u32 total)
+{
+    u32 height = OverworldMotion_SlamUnitHeight(progress, total);
+
+    return 2u * height - ((height * height) >> 12);
+}
 #endif
 
 static u16 OverworldMotion_AbsDistance(s16 first, s16 second)
@@ -11,10 +24,10 @@ static u16 OverworldMotion_AbsDistance(s16 first, s16 second)
     return difference < 0 ? (u16)-difference : (u16)difference;
 }
 
-static u16 OverworldMotion_GreatestCommonDivisor(u16 first, u16 second)
+static u16 OverworldMotion_GreatestCommonDivisor(u32 first, u32 second)
 {
     while (second != 0) {
-        u16 remainder = first % second;
+        u32 remainder = first % second;
 
         first = second;
         second = remainder;
@@ -36,11 +49,11 @@ static u32 OverworldMotion_PathLengthForTiles(
         return (u32)xDistance + yDistance;
     }
     common = OverworldMotion_GreatestCommonDivisor(xDistance, yDistance);
+    /* Both normalized axes are odd exactly when both contain the GCD's
+     * least significant set bit. Keep the same rational crossing count. */
     return (u32)xDistance + yDistance
-        - (((xDistance / common) & 1) != 0
-                && ((yDistance / common) & 1) != 0
-            ? common
-            : 0);
+        - ((xDistance & yDistance & (common & (0u - common))) != 0
+            ? common : 0);
 }
 
 static u16 OverworldMotion_PathLength(const OverworldMotionPlan *plan)
@@ -65,6 +78,28 @@ static u32 OverworldMotion_DoubledRatioFloor(
     return quotient * 2 + ((remainder * 2) >= duration ? 1 : 0);
 }
 
+
+void __attribute__((noinline)) OverworldActorHopGeometry_Init(
+    OverworldActorHopGeometry *geometry, const void *coordinates)
+{
+    const u8 *bytes = coordinates;
+    s32 startX = *(const s16 *)(bytes + 0);
+    s32 startY = *(const s16 *)(bytes + 2);
+    s32 dx = *(const s16 *)(bytes + 4) - startX;
+    s32 dy = *(const s16 *)(bytes + 6) - startY;
+    u32 absDx = dx < 0 ? 0u - (u32)dx : (u32)dx;
+    u32 absDy = dy < 0 ? 0u - (u32)dy : (u32)dy;
+    geometry->tileX = startX;
+    geometry->tileY = startY;
+    geometry->stepX = dx > 0 ? 1 : -1;
+    geometry->stepY = dy > 0 ? 1 : -1;
+    geometry->absDx = absDx;
+    geometry->absDy = absDy;
+    geometry->xBoundary = 1;
+    geometry->yBoundary = 1;
+    geometry->error = (s32)absDy - absDx;
+}
+
 u8 OverworldMotion_GetPathAdvanceTile(
     const OverworldMotionPlan *plan,
     u16 advanceIndex,
@@ -72,16 +107,8 @@ u8 OverworldMotion_GetPathAdvanceTile(
     s16 *tileY)
 {
     u32 pathLength;
-    u16 xDistance;
-    u16 yDistance;
-    u32 xBoundary = 1;
-    u32 yBoundary = 1;
-    s16 x;
-    s16 y;
-    s16 xStep;
-    s16 yStep;
     u16 step;
-
+    OverworldActorHopGeometry geometry;
     if (plan == NULL || tileX == NULL || tileY == NULL) {
         return FALSE;
     }
@@ -90,51 +117,36 @@ u8 OverworldMotion_GetPathAdvanceTile(
     if (pathLength > 0xFFFFu || advanceIndex > pathLength) {
         return FALSE;
     }
-    xDistance = OverworldMotion_AbsDistance(plan->targetX, plan->startX);
-    yDistance = OverworldMotion_AbsDistance(plan->targetY, plan->startY);
-    x = plan->startX;
-    y = plan->startY;
-    xStep = plan->targetX > plan->startX ? 1 : -1;
-    yStep = plan->targetY > plan->startY ? 1 : -1;
+    OverworldActorHopGeometry_Init(&geometry, &plan->startX);
     for (step = 0; step < advanceIndex; step++) {
-        u64 xTime = xDistance == 0
-            ? ~(u64)0
-            : (u64)xBoundary * yDistance;
-        u64 yTime = yDistance == 0
-            ? ~(u64)0
-            : (u64)yBoundary * xDistance;
-
-        if (xTime <= yTime) {
-            x += xStep;
-            xBoundary += 2;
-        }
-        if (yTime <= xTime) {
-            y += yStep;
-            yBoundary += 2;
-        }
+        OverworldActorHopGeometry_NextCell(&geometry);
     }
-    *tileX = x;
-    *tileY = y;
+    *tileX = geometry.tileX;
+    *tileY = geometry.tileY;
     return TRUE;
 }
 
 static u16 OverworldMotion_PathProgress(
     const OverworldMotionPlan *plan,
-    u16 elapsed)
+    u16 elapsed,
+    u32 fullPathLength)
 {
     u16 xDistance = OverworldMotion_AbsDistance(
         plan->targetX, plan->startX);
     u16 yDistance = OverworldMotion_AbsDistance(
         plan->targetY, plan->startY);
-    u16 common = OverworldMotion_GreatestCommonDivisor(xDistance, yDistance);
+    /* Full length already subtracts the coincident crossing stride. */
+    u16 common = (u32)xDistance + yDistance - fullPathLength;
     u32 xThreshold;
     u32 yThreshold;
     u32 xCrossings;
     u32 yCrossings;
     u32 simultaneousCrossings = 0;
+    u16 travelFrames = (plan->flags & OVERWORLD_MOTION_FLAG_SLAM)
+        ? plan->arcRiseFrames : plan->duration;
 
-    if (elapsed >= plan->duration) {
-        return OverworldMotion_PathLength(plan);
+    if (elapsed >= travelFrames) {
+        return (u16)fullPathLength;
     }
     /*
      * A tile center crosses the Nth axis boundary at
@@ -142,9 +154,9 @@ static u16 OverworldMotion_PathProgress(
      * render sway and signed fixed-point rounding must not create authority.
      */
     xThreshold = OverworldMotion_DoubledRatioFloor(
-        xDistance, elapsed, plan->duration);
+        xDistance, elapsed, travelFrames);
     yThreshold = OverworldMotion_DoubledRatioFloor(
-        yDistance, elapsed, plan->duration);
+        yDistance, elapsed, travelFrames);
     xCrossings = (xThreshold + 1) / 2;
     yCrossings = (yThreshold + 1) / 2;
     if (xCrossings > xDistance) {
@@ -153,11 +165,9 @@ static u16 OverworldMotion_PathProgress(
     if (yCrossings > yDistance) {
         yCrossings = yDistance;
     }
-    if (common != 0
-        && ((xDistance / common) & 1) != 0
-        && ((yDistance / common) & 1) != 0) {
+    if (common != 0) {
         u32 simultaneousThreshold = OverworldMotion_DoubledRatioFloor(
-            common, elapsed, plan->duration);
+            common, elapsed, travelFrames);
 
         simultaneousCrossings = (simultaneousThreshold + 1) / 2;
         if (simultaneousCrossings > common) {
@@ -165,6 +175,18 @@ static u16 OverworldMotion_PathProgress(
         }
     }
     return (u16)(xCrossings + yCrossings - simultaneousCrossings);
+}
+
+static u8 OverworldMotion_SlamPhasesValid(
+    u8 kind, u16 duration, u8 peak, u8 rise, u8 hang)
+{
+#ifdef OVERWORLD_MOTION_HOST
+    return kind == OVERWORLD_MOTION_KIND_HOP && peak != 0 && rise != 0
+        && (u16)rise + hang < duration;
+#else
+    return OverworldMotion_SlamPhaseCheck(kind, peak, rise,
+        (s32)duration - hang);
+#endif
 }
 
 static OverworldMotionDecision OverworldMotion_CandidateDecision(u16 flags)
@@ -211,6 +233,9 @@ OverworldMotionDecision OverworldMotion_SelectPlan(
         || intent->kind == OVERWORLD_MOTION_KIND_NONE
         || (intent->duration == 0
             && intent->kind != OVERWORLD_MOTION_KIND_TELEPORT)
+        || ((intent->flags & OVERWORLD_MOTION_FLAG_SLAM)
+            && !OverworldMotion_SlamPhasesValid(intent->kind, intent->duration,
+                intent->arcHeightQ4, intent->arcRiseFrames, intent->arcHangFrames))
         || candidateCount == 0
         || candidateCount > OVERWORLD_MOTION_MAX_CANDIDATES) {
         return OVERWORLD_MOTION_DECISION_PROFILE;
@@ -277,6 +302,9 @@ OverworldMotionDecision OverworldMotion_Begin(
         || plan->kind == OVERWORLD_MOTION_KIND_NONE
         || (plan->duration == 0
             && plan->kind != OVERWORLD_MOTION_KIND_TELEPORT)
+        || ((plan->flags & OVERWORLD_MOTION_FLAG_SLAM)
+            && !OverworldMotion_SlamPhasesValid(plan->kind, plan->duration,
+                plan->arcHeightQ4, plan->arcRiseFrames, plan->arcHangFrames))
         || OverworldMotion_PathLengthForTiles(
             plan->startX,
             plan->startY,
@@ -313,6 +341,15 @@ static s32 OverworldMotion_Lerp(s32 start, s32 target, u16 elapsed, u16 total)
         + (remainder < 0 ? -(s32)fractional : (s32)fractional);
 }
 
+static s32 __attribute__((noinline)) OverworldMotion_SymmetricArc(
+    u32 peak, u32 elapsed, u32 duration)
+{
+    u32 curve;
+    if (peak == 0 || elapsed >= duration) { return 0; }
+    curve = (4u * elapsed * (duration - elapsed)) / duration;
+    return (s32)(peak * ((curve << 12) / duration));
+}
+
 static s32 OverworldMotion_Arc(const OverworldMotionPlan *plan, u16 elapsed)
 {
     u32 curve;
@@ -320,29 +357,35 @@ static s32 OverworldMotion_Arc(const OverworldMotionPlan *plan, u16 elapsed)
     if (plan->arcHeightQ4 == 0 || elapsed >= plan->duration) {
         return 0;
     }
-    /* Keep the deployed renderer's truncation order exactly. */
-    curve = (4u * elapsed * (plan->duration - elapsed)) / plan->duration;
-    return (s32)(plan->arcHeightQ4
-        * ((curve << 12) / plan->duration));
+    if (plan->flags & OVERWORLD_MOTION_FLAG_SLAM) {
+        if (elapsed <= plan->arcRiseFrames) {
+            curve = OverworldMotion_SlamRiseUnitHeight(elapsed, plan->arcRiseFrames);
+        } else if (elapsed <= (u16)plan->arcRiseFrames + plan->arcHangFrames) {
+            curve = 0x1000;
+        } else {
+            curve = OverworldMotion_SlamUnitHeight(plan->duration - elapsed,
+                plan->duration - plan->arcRiseFrames - plan->arcHangFrames);
+        }
+        return (s32)(plan->arcHeightQ4 * curve);
+    }
+    return OverworldMotion_SymmetricArc(plan->arcHeightQ4, elapsed,
+        plan->duration);
 }
 
 static s32 OverworldMotion_Sway(const OverworldMotionPlan *plan, u16 elapsed)
 {
-    OverworldMotionPlan swayPlan;
     u32 swayElapsed;
     s32 sway;
 
-    if (plan->swayWidth == 0 || elapsed >= plan->duration) {
+    if ((plan->flags & OVERWORLD_MOTION_FLAG_SLAM)
+        || plan->swayWidth == 0 || elapsed >= plan->duration) {
         return 0;
     }
-    swayPlan = *plan;
-    swayPlan.arcHeightQ4 = plan->swayWidth;
     swayElapsed = (u32)elapsed << 1;
-    sway = OverworldMotion_Arc(
-        &swayPlan,
+    sway = OverworldMotion_SymmetricArc(plan->swayWidth,
         (u16)(swayElapsed >= plan->duration
             ? swayElapsed - plan->duration
-            : swayElapsed));
+            : swayElapsed), plan->duration);
     return swayElapsed >= plan->duration ? -sway : sway;
 }
 
@@ -366,30 +409,34 @@ static void OverworldMotion_Sample(
     OverworldMotionSample *sample)
 {
     const OverworldMotionPlan *plan = &state->plan;
-    u16 pathLength = OverworldMotion_PathLength(plan);
+    u32 fullPathLength = OverworldMotion_PathLengthForTiles(
+        plan->startX, plan->startY, plan->targetX, plan->targetY);
+    u16 pathLength = (u16)fullPathLength;
     u16 pathAdvance;
     s32 pathX;
     s32 pathZ;
+    u16 travelFrames = (plan->flags & OVERWORLD_MOTION_FLAG_SLAM)
+        ? plan->arcRiseFrames : plan->duration;
 
     memset(sample, 0, sizeof(*sample));
     pathX = OverworldMotion_Lerp(
         (s32)plan->startX * 0x10000 + 0x8000,
         (s32)plan->targetX * 0x10000 + 0x8000,
         state->elapsed,
-        plan->duration);
+        travelFrames);
     pathZ = OverworldMotion_Lerp(
         (s32)plan->startY * 0x10000 + 0x8000,
         (s32)plan->targetY * 0x10000 + 0x8000,
         state->elapsed,
-        plan->duration);
-    pathAdvance = OverworldMotion_PathProgress(plan, state->elapsed);
+        travelFrames);
+    pathAdvance = OverworldMotion_PathProgress(plan, state->elapsed, fullPathLength);
     sample->renderX = pathX;
     sample->renderZ = pathZ;
     sample->baseY = OverworldMotion_Lerp(
         plan->startBaseY,
         plan->targetBaseY,
         state->elapsed,
-        plan->duration);
+        travelFrames);
     sample->heightOffset = OverworldMotion_Arc(plan, state->elapsed);
     sample->swayOffset = OverworldMotion_Sway(plan, state->elapsed);
     sample->renderY = sample->baseY + sample->heightOffset;
@@ -407,7 +454,7 @@ static void OverworldMotion_Sample(
     sample->facing = OverworldMotion_SpinFacing(
         plan->facing,
         state->elapsed,
-        plan->spinSpeed);
+        (plan->flags & OVERWORLD_MOTION_FLAG_SLAM) ? 0 : plan->spinSpeed);
     sample->visible = plan->visibilityPolicy
             == OVERWORLD_MOTION_VISIBILITY_HIDDEN
         ? FALSE

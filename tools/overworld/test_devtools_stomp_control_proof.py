@@ -106,7 +106,7 @@ class StompControlProofTests(unittest.TestCase):
             if fault=='positive':value['natural']['cases'][0]['feedback']['calls'][-1]['effect']=0
             elif fault=='negative':value['natural']['cases'][1]['feedback']['calls'][-1]['effect']=1
             elif fault=='clock':value['control']['restoredClock']['nativeCycle']+=1
-            elif fault=='restore':value['control']['restored']['mountStateHex']='00'*184
+            elif fault=='restore':value['control']['restored']['mountStateHex']='00'*192
             elif fault=='guard':value['calibrationReceipt']['terminalGuard']=False
             elif fault=='latch':value['cleanup']['stompFeedback']['failure']=None
             elif fault=='snapshot':value['cleanup']['snapshot']['player']['pos_x']+=1

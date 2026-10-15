@@ -29,7 +29,7 @@ def contract():
         "frame-pacing": [{"name": "select-to-mount-completed-frames", "operator": "lte",
                           "type": "integer", "validator": "meaningful-observation",
                           "expected": MAX_MOUNT_FRAMES}],
-        "control-release": [exact("mounted-hop-terminal-control")],
+        "control-release": [exact("mounted-step-terminal-control")],
     }
 
 
@@ -62,7 +62,7 @@ def _stream(rows):
         _require(row.get("phase") == "observe" and
                  row.get("action") in {"wait-saved-follower", "start-player-run",
                                        "press-select-during-run", "keep-right-until-mounted",
-                                       "start-mounted-hop", "wait-hop-terminal"} and
+                                       "start-mounted-step", "wait-step-terminal"} and
                  row.get("completedGameFrames") == len(samples) and samples,
                  "sample chunk is not a complete reviewed action")
         frames.extend((row["action"], deepcopy(sample)) for sample in samples)
@@ -101,7 +101,7 @@ def _fault(frames, events, name):
                       and first_mount is not None and event.get("frame", 0) >= first_mount
                       and event.get("data", {}).get("event") == "LOGICAL_COMMIT"
                       and event.get("data", {}).get("reason") == "OK"), None)
-        _require(event is not None, "control has no Hop commit")
+        _require(event is not None, "control has no mounted Walk commit")
         event["data"]["event"] = "CONTROL_REMOVED"
         return True
     if name == "delayed-mount":
@@ -190,35 +190,35 @@ def _measure(frames, events):
         _require(len(matches) == 1, name + " native handoff is missing or duplicated")
     last_action, last = frames[-1]
     terminal = _actor(last, "MOUNTED")
-    _require(last_action == "wait-hop-terminal" and
+    _require(last_action == "wait-step-terminal" and
              terminal.get("motionPhase") == "IDLE" and terminal.get("reservationId") == 0 and
              terminal.get("commitSequence") == mounted.get("commitSequence") + 1 and
              terminal.get("subjectIdentity") == follower.get("subjectIdentity") and
              last["player"].get("x", 0) > select["player"].get("x", 0) and
              terminal.get("inputOwnership") == 1,
-             "mounted Hop did not finish and return moving control")
+             "mounted Walk did not finish and return moving control")
     started = [event for event in native if event["frame"] >= mount["frame"] and
                event["data"].get("event") == "MOTION_STARTED" and
-               event["data"].get("reason") == "OK" and event["data"].get("valueA") == 2]
-    _require(len(started) == 1, "expected exactly one mounted Hop start")
+               event["data"].get("reason") == "OK" and event["data"].get("valueA") == 1]
+    _require(len(started) == 1, "expected exactly one mounted Walk start")
     start_frame = started[0]["frame"]
     for name, value_a, value_b in (
-            ("LOGICAL_COMMIT", terminal["commitSequence"], 2),
-            ("MOTION_FINISHED", terminal["commitSequence"], 2),
+            ("LOGICAL_COMMIT", terminal["commitSequence"], 1),
+            ("MOTION_FINISHED", terminal["commitSequence"], 1),
             ("CONTROL_RETURNED", 1, terminal["commitSequence"])):
         matches = [event for event in native if start_frame <= event["frame"] <= last["frame"]
                    and event["data"].get("event") == name and
                    event["data"].get("reason") == "OK" and
                    (event["data"].get("valueA"), event["data"].get("valueB")) == (value_a, value_b)]
-        _require(len(matches) == 1, name + " of mounted Hop is missing or duplicated")
+        _require(len(matches) == 1, name + " of mounted Walk is missing or duplicated")
     _require(not any(event["frame"] >= start_frame and
                      event["data"].get("event") == "MOTION_CANCELED" for event in native),
-             "mounted Hop was canceled")
+             "mounted Walk was canceled")
     values = {"select-native-held-right-edge": 1, "right-held-through-handoff": 1,
               "select-started-as-follower": "FOLLOWER",
               "select-mid-run-same-actor": 1,
               "select-to-mount-completed-frames": elapsed,
-              "mounted-hop-terminal-control": 1}
+              "mounted-step-terminal-control": 1}
     return {"values": values, "selectFrame": select["frame"],
             "mountFrame": mount["frame"], "terminalFrame": last["frame"],
             "subjectIdentity": follower["subjectIdentity"],

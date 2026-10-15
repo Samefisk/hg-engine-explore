@@ -4,6 +4,7 @@
 
 Use `origin/main` as the stable base; `origin` is the real repo and push target. `upstream` is a reference for a separately requested import. Preserve the dirty working tree and unrelated staged work.
 
+- Create a new Git worktree only when the user explicitly requests a new worktree. This rule applies to Git commands, app tools, task forks, and helper agents. A feature, fix, test, or need for isolation does not grant permission. Use the current checkout and preserve its existing edits.
 - Scoped edits, especially docs, notes, configuration, and instructions, stay on the current branch. Inspect only the files needed; avoid routine fetch, branch changes, or broad status checks.
 - Before new feature/fix/chore branches, authorized GitHub work, or branch cleanup, read [the Git workflow](documentation/agent-workflows/git.md). Update local main from origin, prove dependencies, and branch only from the current clean base. Keep features off main.
 - Prove finished work is reachable from main before deleting a branch. A remote merge alone does not prove that local main contains it.
@@ -14,6 +15,7 @@ Use `origin/main` as the stable base; `origin` is the real repo and push target.
 - No special wording is required. A request to implement, fix, diagnose, or verify includes the relevant local builds, host checks, and disposable game runs needed for that task. Respect an explicit request not to build or test.
 - Questions and read-only reviews do not authorize product edits. Use inspection and relevant non-mutating checks; do not start a broad game run for a wording-only change.
 - Choose the smallest useful check, then expand at a stable integration point. Use `hg-engine-delta-build` for ROM builds and the project skills below for overworld work. Preserve the saved open-after-build preference and the user's ROM/save files.
+- If a build stops before Make or an overlay does not fit, read [build diagnosis](documentation/agent-workflows/build-diagnosis.md) for the source-hash gate and exact compiler/link inputs.
 - Select tests for a current requirement or regression risk. Reuse sufficient evidence; do not add coverage or repeat a suite by default. Keep relevant regressions, and record why obsolete or duplicate tests are retired. A failure alone is not a reason to remove a test.
 - State the build/tests that actually ran, their scope, and any exact remaining proof gap. Source inspection and documentation checks do not prove game behavior.
 - Screenshot/video capture requires an explicit user request or manual Capture click. Never capture or inspect images as an agent test step. Use [memory-backed proof](documentation/overworld-system/verification.md#memory-backed-proof) for game observations.

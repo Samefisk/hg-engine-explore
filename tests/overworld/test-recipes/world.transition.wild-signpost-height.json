@@ -1,0 +1,192 @@
+{
+  "schemaVersion": 1,
+  "id": "world.transition.wild-signpost-height",
+  "title": "Retained signpost height survives a natural field handoff",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "TICKETS.md#tkt-0012 and documentation/overworld-system/architecture.md#field-transition-protocol",
+  "requirements": [
+    "current.retained-signpost-height"
+  ],
+  "budgets": {
+    "maxSeconds": 180,
+    "maxFrames": 420,
+    "noProgressFrames": 180,
+    "minObservedFrames": 4
+  },
+  "subjects": [
+    {
+      "id": "pidgey",
+      "species": 16,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "wild-signpost-rebind-height-v1",
+      "subject": "pidgey"
+    }
+  ],
+  "setup": [
+    {
+      "id": "surface-range",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 589,
+        "z": 400,
+        "facing": 2
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-surface-bird",
+      "op": "spawn",
+      "args": {
+        "species": 16,
+        "role": "wild",
+        "level": 5,
+        "x": 581,
+        "z": 397
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 80,
+        "noProgressFrames": 80
+      }
+    },
+    {
+      "id": "bind-real-bird",
+      "op": "bind",
+      "args": {
+        "subject": "pidgey"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "read-actual-target-surface",
+      "op": "terrain",
+      "args": {
+        "x": 581,
+        "z": 397,
+        "radius": 0
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "settle-on-signpost",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "wild-signpost-rebind-height-v1",
+          "stage": "settled-on-signpost",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 180,
+        "noProgressFrames": 180
+      }
+    },
+    {
+      "id": "approach-seam",
+      "op": "step",
+      "args": {
+        "frames": 96,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 13
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 96,
+        "noProgressFrames": 96
+      }
+    },
+    {
+      "id": "approach-settled",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 33,
+          "x": 576,
+          "z": 400
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "cross-one-normal-step",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 14
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "retain-surface-and-control",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-complete",
+          "measurement": "wild-signpost-rebind-height-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "wild-signpost-rebind-height-v1",
+      "when": "final"
+    }
+  ]
+}

@@ -272,6 +272,7 @@ def main() -> int:
 
     source = args.source.read_text()
     runtime = args.runtime_source.read_text()
+    input_policy = (REPO / "src/player_health_overlay/overworld_walk_input_policy.c").read_text()
     header = args.movement_header.read_text()
     timing_policy = args.timing_policy_header.read_text()
     direction_policy = args.direction_policy_header.read_text()
@@ -499,14 +500,15 @@ def main() -> int:
         "typed Walk reducer dispatch",
     )
 
-    walk_input = function_body(runtime, "OverworldActorWalkPolicy_ReduceInput")
+    walk_input = function_body(input_policy, "OverworldActorWalkPolicy_ReduceInput")
     require(
         walk_input,
         (
             "OVERWORLD_ACTOR_WALK_POLICY_FLAG_SUPPRESS_TURN_SKID",
             "OverworldWalk_IsFortyFiveDegreeTurn(",
-            "OverworldWalk_SkidTiles(state->speed)",
-            "OverworldWalk_SkidTime(state->speed)",
+            "OverworldWalk_ProfileSkidTiles(visibleSpeed, call->lane, TRUE)",
+            "OverworldWalk_ProfileSkidTiles(visibleSpeed, call->lane, FALSE)",
+            "OverworldWalk_SkidTime(visibleSpeed)",
             "OVERWORLD_ACTOR_WALK_STEP_STOP_SKID",
             "OVERWORLD_ACTOR_WALK_STEP_RESET_ACCELERATION",
             "OverworldWalk_DecelerateTime(",
@@ -547,13 +549,25 @@ def main() -> int:
         "ActorSystem_FinishMountedWalk",
     )
     require(
-        mounted_start_result + mount_source,
+        mounted_start_result,
+        ("return OverworldMountWalkProposal_Finish(state, started, crashOnBlocked, output);",),
+        "mounted START_RESULT delegates to shared Walk policy",
+    )
+    mounted_finish = function_body(input_policy, "OverworldMountWalkProposal_Finish")
+    require(
+        mounted_finish + mount_source + (REPO /
+            "src/overworld_mount_action_overlay/overworld_mount_shared_helpers.c").read_text(),
         (
             "OVERWORLD_MOUNT_WALK_NOMINAL_TIME_INDEX",
             "= call->reserved[0]",
             "output->reserved[0] = state->reservedPolicyProfile[",
         ),
         "mounted turn keeps nominal deceleration through START_RESULT",
+    )
+    require(
+        mounted_finish,
+        ("OverworldMountWalkProposal_RestoreReserved(output);",),
+        "mounted START_RESULT restores Linear speed proposal",
     )
 
     commit = function_body(runtime, "OverworldActorWalkPolicy_ReduceCommit")
@@ -986,7 +1000,8 @@ def main() -> int:
     )
     require(
         movement_command,
-        ("avoidPreviousTile = OverworldWildSpawns_ShouldAvoidPreviousTileForResolvedProfile(",),
+        ("avoidPreviousTile = !lockDirection",
+         "&& OverworldWildSpawns_ShouldAvoidPreviousTileForResolvedProfile("),
         "authored backtrack policy",
     )
     reject(
@@ -994,34 +1009,31 @@ def main() -> int:
         ("movementSpawnRunActive[slot]",),
         "move-from-off-screen direction policy exception",
     )
-    spawn_origin = function_body(
-        source,
-        "OverworldWildSpawns_TryPickSpawnRunStart",
-    )
+    spawn_origin = function_body(source, "OverworldWildSpawns_PrepareMoveEntry")
     require(
-        source + spawn_origin,
+        spawn_origin,
         (
-            "#define OW_WILD_SPAWNER_SPAWN_HOP_DISTANCE 16",
-            "#define OW_WILD_SPAWNER_OFFSCREEN_SAFE_MARGIN_TILES 4",
-            "#define OW_WILD_SPAWNER_OFFSCREEN_COMMIT_RUNWAY_TILES 1",
-            "direction = OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_UP",
-            "triedDirections",
-            "int bestVisibleTravel = state != NULL ? -0x7FFFFFFF : -1;",
-            "OverworldWildSpawns_GetSpawnHopVisibleTravelScore(",
-            "minimumCandidateDistance = state == NULL",
-            "for (candidateDistance = OW_WILD_SPAWNER_SPAWN_HOP_DISTANCE;",
-            "* candidateDistance;",
-            "entryDistance >= OW_WILD_SPAWNER_SPAWN_HOP_DISTANCE",
-            "OverworldWildSpawns_Abs(candidateX - playerX)",
-            "+ OW_WILD_SPAWNER_OFFSCREEN_SAFE_MARGIN_TILES",
-            "+ OW_WILD_SPAWNER_OFFSCREEN_COMMIT_RUNWAY_TILES",
-            "OverworldWildSpawns_Abs(candidateY - playerY)",
-            "GetMetatileBehaviorAt(fieldSystem, candidateX, candidateY) == 0xFF",
-            "terrain == OW_WILD_SPAWN_TERRAIN_LAND",
-            "OverworldWildSpawns_IsWalkableLandTile(",
-            "OverworldWildSpawns_IsNearActiveSpawn(",
+            "OverworldWildSpawns_ArmEntryQueue(",
+            "OverworldWildSpawns_QueryEntry(",
+            "&prepared->behaviorResolution.profile,OVERWORLD_ENTRY_ROUTE_PREPARE",
+            "status==OVERWORLD_PICKUP_ROUTE_PENDING",
+            "status!=OVERWORLD_PICKUP_ROUTE_REACHABLE",
+            "return FALSE;",
+            "prepared->position.startX=receipt.origin.x;",
+            "prepared->position.startY=receipt.origin.y;",
+            "prepared->startup.startX=receipt.origin.x;",
+            "prepared->startup.startY=receipt.origin.y;",
+            "prepared->startup.targetBaseY=receipt.target.baseY;",
+            "OW_WILD_SPAWN_ROUTE_READY",
         ),
-        "long bounded move-from-off-screen route",
+        "prepared shared Move entry route admission",
+    )
+    reject(
+        spawn_origin,
+        ("OverworldWildSpawns_TryPickSpawnRunStart(",
+         "OverworldWildSpawns_TryPickVisibleOffscreenOrigin(",
+         "ResolveProfile", "ResolveBehavior", "StartMovement", "SetObjectLandingTile"),
+        "Move entry must reuse preparation and leave motion to the Owner",
     )
     reject(
         source + spawn_origin,
@@ -1038,12 +1050,16 @@ def main() -> int:
     spawn_startup = function_body(source, "OverworldWildSpawns_PrepareSpawnStartup")
     require(
         spawn_startup,
-        (
-            "if (!OverworldWildSpawns_TryPickSpawnRunStart(",
-            "return FALSE;",
-            "startup->locomotion = OW_WILD_BEHAVIOR_LOCOMOTION_MOVE_FROM_OFF_SCREEN;",
-        ),
-        "Move From Off Screen must reject a spawn with no off-screen A tile",
+        ("OW_WILD_BEHAVIOR_LOCOMOTION_MOVE_FROM_OFF_SCREEN", "return FALSE;"),
+        "generic startup cannot bypass prepared Move route admission",
+    )
+    spawn_finalize = function_body(source, "OverworldWildSpawns_FinalizePreparedSpawn")
+    require(
+        spawn_finalize,
+        ("OW_WILD_BEHAVIOR_LOCOMOTION_MOVE_FROM_OFF_SCREEN",
+         "pendingStage!=OW_WILD_SPAWN_ROUTE_READY",
+         "return OverworldWildSpawns_PrepareMoveEntry("),
+        "Move entry uses its prepared queued route before actor creation",
     )
     spawn_finalize = function_body(
         source,

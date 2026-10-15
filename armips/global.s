@@ -14,10 +14,12 @@
 .include "armips/asm/moves.s" // repoints all the move table defines within the structure
 .include "armips/asm/trainer_ai.s" // repoints all the move table defines for trainer ai within the structure
 .include "armips/asm/syntheticoverlay.s" // code for loading in the synthetic overlay
+.include "armips/asm/player_health_session_reset.s" // reset transient HP state on New Game and Continue
 .include "armips/asm/pokemon_move_history_capture.s" // record committed permanent move changes
 .include "armips/asm/summary_move_relearn.s" // exact Summary state-2 BL patch
 .include "armips/asm/overworld_wild_movement.s" // custom movement descriptor for visible wild Pokemon
 .include "armips/asm/overworld_wild_shadow.s" // prevent stock callbacks from restoring policy-suppressed shadows
+.include "armips/asm/field_heap_budget.s" // move 48 KB from FIELD1 to the FIELD2 script heap
 .include "armips/asm/disable_follower_pokemon.s" // disable the vanilla walking follower presentation and gameplay
 .include "armips/asm/overworld_follower_release_overlay2.s" // reuse retired follower task for release presentation
 .include "armips/asm/overworld_follower_selector.s" // reserve physical Y from registered items
@@ -29,6 +31,7 @@
 .include "armips/asm/levelup.s" // change the level up moves to be (u16 level, u16 move) + expand learnset to MAX_LEVELUP_MOVES (from armips/include/config.s)
 .include "armips/asm/pokedex.s" // code for pokedex expansion, including expanding the save
 .include "armips/asm/overworlds.s" // code for overworlds, specifically repointing gOWTagToFileNum and making dimorphism a byte instead of a halfword.
+.include "armips/asm/overworld_field_capsule.s" // shared field code in the retired stock graphics table
 .include "armips/asm/swarms.s" // modify swarms
 
 .include "armips/data/starters.s" // data definitions for which species to use for the starter Pokemon

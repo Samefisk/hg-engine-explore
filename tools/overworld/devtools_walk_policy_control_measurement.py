@@ -54,7 +54,7 @@ class WalkPolicyControlMeasurement:
         raw = policy_bytes(clean.get("policy"), clean.get("rawHex"))
         policy_bytes(bad.get("policy"), bad.get("rawHex"))
         policy_bytes(restored.get("policy"), restored.get("rawHex"))
-        address = _integer(receipt.get("policyAddress"), "policy address", 0x02000000, 0x02400000 - 32)
+        address = _integer(receipt.get("policyAddress"), "policy address", 0x02000000, 0x02400000 - len(raw))
         expected = deepcopy(clean)
         changed = bytearray(raw)
         if changed[1] == 255:

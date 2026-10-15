@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.save-reload",
+  "title": "Injured player HP persists through stock Save and private cartridge reload",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/player-hp-implementation-plan.md",
+  "requirements": ["current.player-health-save-reload"],
+  "budgets": {"maxSeconds": 600, "maxFrames": 1600, "noProgressFrames": 120, "minObservedFrames": 681},
+  "subjects": [{"id": "onix", "species": 95, "role": "WILD", "acquire": "spawn"}],
+  "measurements": [{"kind": "player-health-save-reload-v1", "subject": "onix"}],
+  "setup": [
+    {"id": "ram-tile", "op": "teleport", "args": {"map": 33, "x": 585, "z": 407, "facing": 1}, "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "spawn-onix", "op": "spawn", "args": {"species": 95, "form": 0, "role": "wild", "level": 5, "x": 585, "z": 412}, "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "bind-onix", "op": "bind", "args": {"subject": "onix"}, "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "allow-natural-ram", "op": "step", "args": {"frames": 105, "keys": []}, "budget": {"maxSeconds": 60, "maxFrames": 105, "noProgressFrames": 105}},
+    {"id": "before-save", "op": "player-health.observe", "args": {}, "budget": {"maxSeconds": 20, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "open-menu", "op": "step", "args": {"frames": 1, "keys": ["X"]}, "budget": {"maxSeconds": 15, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "release-x", "op": "step", "args": {"frames": 15, "keys": []}, "budget": {"maxSeconds": 15, "maxFrames": 15, "noProgressFrames": 15}},
+    {"id": "select-save-down", "op": "step", "args": {"frames": 1, "keys": ["DOWN"]}, "budget": {"maxSeconds": 15, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "release-down", "op": "step", "args": {"frames": 5, "keys": []}, "budget": {"maxSeconds": 15, "maxFrames": 5, "noProgressFrames": 5}},
+    {"id": "select-save-right", "op": "step", "args": {"frames": 1, "keys": ["RIGHT"]}, "budget": {"maxSeconds": 15, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "release-right", "op": "step", "args": {"frames": 5, "keys": []}, "budget": {"maxSeconds": 15, "maxFrames": 5, "noProgressFrames": 5}},
+    {"id": "open-save", "op": "step", "args": {"frames": 1, "keys": ["A"]}, "budget": {"maxSeconds": 15, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "wait-save-menu", "op": "step", "args": {"frames": 100, "keys": []}, "budget": {"maxSeconds": 45, "maxFrames": 100, "noProgressFrames": 100}},
+    {"id": "confirm-first", "op": "step", "args": {"frames": 1, "keys": ["A"]}, "budget": {"maxSeconds": 15, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "release-first", "op": "step", "args": {"frames": 12, "keys": []}, "budget": {"maxSeconds": 15, "maxFrames": 12, "noProgressFrames": 12}},
+    {"id": "wait-overwrite", "op": "step", "args": {"frames": 220, "keys": []}, "budget": {"maxSeconds": 75, "maxFrames": 220, "noProgressFrames": 120}},
+    {"id": "confirm-overwrite", "op": "step", "args": {"frames": 1, "keys": ["A"]}, "budget": {"maxSeconds": 15, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "release-overwrite", "op": "step", "args": {"frames": 12, "keys": []}, "budget": {"maxSeconds": 15, "maxFrames": 12, "noProgressFrames": 12}},
+    {"id": "wait-flash", "op": "save.wait", "args": {"maxNativeCycles": 2000}, "budget": {"maxSeconds": 120, "maxFrames": 400, "noProgressFrames": 400}},
+    {"id": "wait-saved-text", "op": "step", "args": {"frames": 180, "keys": []}, "budget": {"maxSeconds": 75, "maxFrames": 180, "noProgressFrames": 120}},
+    {"id": "close-save", "op": "step", "args": {"frames": 1, "keys": ["B"]}, "budget": {"maxSeconds": 15, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "settle-field", "op": "step", "args": {"frames": 20, "keys": []}, "budget": {"maxSeconds": 20, "maxFrames": 20, "noProgressFrames": 20}},
+    {"id": "before-reload", "op": "player-health.observe", "args": {}, "budget": {"maxSeconds": 20, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "reload", "op": "save.reload", "args": {}, "budget": {"maxSeconds": 120, "maxFrames": 800, "noProgressFrames": 120}},
+    {"id": "after-reload", "op": "player-health.observe", "args": {}, "budget": {"maxSeconds": 20, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "assertions": [{"kind": "measurement-complete", "measurement": "player-health-save-reload-v1", "when": "final"}]
+}

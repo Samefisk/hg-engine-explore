@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.throw-cargo-competition",
+  "title": "Near Geodude picks Cargo despite a farther pursuit; HELD stays protected",
+  "status": "active",
+  "capabilities": [
+    "actor.system"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "Two current Wild Geodudes and a current Wild Cyndaquil on Route29 with passive Cyndaquil follower.",
+    "trigger": "Far Geodude uses its normal Player sight condition and first uncarried Cargo claim. Spawn the nearer Geodude only after that current pursuit; let its normal sight and authored alert run.",
+    "observable": "Prepared Route29 with passive Cyndaquil follower. Far Wild Geodude naturally captures Player Interest and claims free Cyndaquil before a near Wild Geodude is spawned. The near carrier must pick the same full Cargo despite that pursuit, preserve exactly one HELD owner through normal launch, and clear the far claim at pickup. The losing current carrier must then refind or move normally. No claim, timer, profile or control is injected. This case does not prove mixed-role competition, flight landing or natural population selection.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Checked teleport Player584402; prepare native party0 Cyndaquil155Lv20 and Follower; spawn Wild Cyndaquil155Lv20 at586403 and far Geodude74Lv20 at579402. Wait for its ordinary accepted pursuit and exact free Cargo claim, then spawn near Geodude74Lv20 at585403. No authored timing is changed."
+      }
+    ],
+    "limits": [
+      "Prepared placement does not prove natural population selection.",
+      "Both carriers are Wild; shared actual-C controls cover the same Follower owner path.",
+      "Stops after same Cargo launch and losing carrier progress; no landing or damage credit."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "far-geodude",
+      "species": 74,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "cargo",
+      "species": 155,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "near-geodude",
+      "species": 74,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Far current carrier claims free Cargo before near carrier spawn."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Near normal carrier reaches and picks same full Cargo; far pursuit clears."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "One HELD owner remains protected until normal launch and far carrier resumes."
+    }
+  ],
+  "stop": {
+    "frameBudget": 700,
+    "condition": "Same Cargo normal launch and losing carrier progress, or first failed owner/claim/field observation."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Exact full actor and native reader source identity stays current.",
+      "Far normal accepted pursuit precedes the near query while same Cargo is still uncarried.",
+      "Near carrier wins pickup without injected claims or timing.",
+      "Exactly one HELD owner; far stale pursuit is cleared at pickup.",
+      "Losing carrier refinds or moves normally; same Cargo launches normally."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "wild.throw-cargo-competition",
+    "claims": [
+      "live-actor-identity",
+      "natural-input",
+      "engine-boundary",
+      "control-release"
+    ],
+    "minimumFrames": 2
+  }
+}

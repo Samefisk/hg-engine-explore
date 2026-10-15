@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.save-reload",
+  "title": "Injured HP and bar survive stock Save and cartridge reload",
+  "status": "active",
+  "capabilities": ["player.health"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/player-hp-implementation-plan.md",
+    "actor": "One current Wild Onix (species 95) at Route 29 tile (585,412); player at (585,407).",
+    "trigger": "Onix builds Ram speed and one hit lowers HP to 67. Normal buttons save through the stock menu, then a private cartridge reload loads those written bytes.",
+    "observable": "The authenticated Save app reaches state 12 and completes. Exported and loaded private cartridge hashes match. HP and saved HP remain 67, with native bar fill 30 after reload.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {"phase": "before-observation", "target": "fixture", "change": "Checked teleport to Route 29, native Wild Onix spawn, and exact live identity bind. No HP or save data is edited."},
+      {"phase": "during-observation", "target": "fixture", "change": "No direct game-state mutation. Normal menu input writes the private cartridge; save.reload exports and reloads its bytes."}
+    ],
+    "limits": [
+      "Prepared Onix placement tests real Ram damage, not natural population spawn selection.",
+      "The Save menu path uses the observed button sequence and a bounded native wait only for the stock state-12 flash write.",
+      "Matching private cartridge hashes and HP after reload prove persistence; no user save or original fixture is changed.",
+      "Native bar submission is measured, not final LCD pixels or color appearance.",
+      "A missing stock write, changed exported bytes, wrong HP, wrong bar fill, or incomplete field boundary fails."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "onix", "species": 95, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Place and bind one current Wild Onix."},
+    {"at": 1, "kind": "lifecycle", "value": "Normal Ram damage, stock Save write, and private cartridge reload retain injured HP."}
+  ],
+  "stop": {"frameBudget": 1600, "condition": "Written and reloaded private cartridge has HP 67 and bar fill 30, or the first invalid native receipt."},
+  "expect": {"requiredEvents": [], "forbiddenEvents": [],
+    "invariants": ["One current Wild Onix causes Ram damage", "Stock Save state 12 completes", "Loaded cartridge bytes match the export", "HP and saved HP remain 67"]},
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "player-hp.save-reload",
+    "claims": ["live-actor-identity", "engine-boundary", "natural-input", "control-release"],
+    "minimumFrames": 681}
+}

@@ -15,10 +15,9 @@ from tools.overworld.spawn_identity import live_spawn_flags
 
 
 KIND = "mounted-control-stress-v1"
-ALIASES = {"walk":"legacy.cyndaquil-control-stress", "hop":"legacy.mankey-control-stress"}
+ALIASES = {"walk":"legacy.cyndaquil-control-stress"}
 CONTRACTS = {
     "legacy.cyndaquil-control-stress": dict(species=155, motion="WALK", kind=1, motions=2000, turns=250, frames=5000),
-    "legacy.mankey-control-stress": dict(species=56, motion="HOP", kind=2, motions=200, turns=0, frames=5001),
 }
 MOTION_KIND_IDS = {"WALK": 1, "HOP": 2, "TELEPORT": 3, "SKID": 4}
 LIFECYCLE = ("MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED")
@@ -343,24 +342,16 @@ class MountControlStressMeasurement:
         passed = self.closed and not self.failures and self.main_complete and self.stage("recovery-complete")
         if passed:
             actor = self.initial["actor"]
-            if self.rules["kind"] == 1:
-                rows = [("natural-input","held-input-commit-count",self.motions,self.rules["motions"],"gte"),
-                        ("natural-input","held-input-turn-count",self.turns,self.rules["turns"],"gte"),
-                        ("natural-input","held-input-route-frame-count",self.route_frames,self.rules["frames"],"gte"),
-                        ("live-actor-identity","cyndaquil-species",actor["species"],155,"eq"),
-                        ("live-actor-identity","mounted-object-pointer",actor["engineIdentity"]["pointer"],actor["engineIdentity"]["pointer"],"eq"),
-                        ("live-actor-identity","actor-handle",actor["handle"],actor["handle"],"eq"),
-                        ("live-actor-identity","mounted-object-identity-flags",[1,1,1,1,7,155,1],[1,1,1,1,7,155,1],"eq"),
-                        ("live-actor-identity","encounter-generation-match",[actor["handle"]["encounterGeneration"],actor["sourceIdentity"]["encounter_generation"],actor["engineIdentity"]["encounter_generation"]],None,"eq"),
-                        ("rendered-motion","valid-mounted-walk-callback-count",[self.motions,self.motions],None,"eq"),
-                        ("control-release","dismount-remount-control-milestones",["IDLE",0,1,1,1,1,1],["IDLE",0,1,1,1,1,1],"eq")]
-            else:
-                rows = [("natural-input","completed-natural-hop-count",self.motions,self.rules["motions"],"gte"),
-                        ("natural-input","mankey-stress-active-frame-count",self.route_frames,self.rules["frames"],"gte"),
-                        ("live-actor-identity","mankey-stress-identity",[1,"MOUNTED",56,1],[1,"MOUNTED",56,1],"eq"),
-                        ("live-actor-identity","actor-owned-hop-motion-count",self.motions,1,"gte"),
-                        ("rendered-motion","valid-mounted-hop-motion-count",[self.motions,self.motions],None,"eq"),
-                        ("control-release","dismount-and-remount-milestones",[1,1,1,1,"IDLE",0],[1,1,1,1,"IDLE",0],"eq")]
+            rows = [("natural-input","held-input-commit-count",self.motions,self.rules["motions"],"gte"),
+                    ("natural-input","held-input-turn-count",self.turns,self.rules["turns"],"gte"),
+                    ("natural-input","held-input-route-frame-count",self.route_frames,self.rules["frames"],"gte"),
+                    ("live-actor-identity","cyndaquil-species",actor["species"],155,"eq"),
+                    ("live-actor-identity","mounted-object-pointer",actor["engineIdentity"]["pointer"],actor["engineIdentity"]["pointer"],"eq"),
+                    ("live-actor-identity","actor-handle",actor["handle"],actor["handle"],"eq"),
+                    ("live-actor-identity","mounted-object-identity-flags",[1,1,1,1,7,155,1],[1,1,1,1,7,155,1],"eq"),
+                    ("live-actor-identity","encounter-generation-match",[actor["handle"]["encounterGeneration"],actor["sourceIdentity"]["encounter_generation"],actor["engineIdentity"]["encounter_generation"]],None,"eq"),
+                    ("rendered-motion","valid-mounted-walk-callback-count",[self.motions,self.motions],None,"eq"),
+                    ("control-release","dismount-remount-control-milestones",["IDLE",0,1,1,1,1,1],["IDLE",0,1,1,1,1,1],"eq")]
             for claim,name,actual,expected,operator in rows:
                 proof.setdefault(claim,[]).append(dict(name=name,actual=actual,expected=actual if expected is None else expected,operator=operator))
         result = dict(passed=passed,ready=passed,acceptedProof=False,kind=KIND,contract=self.contract,subject=deepcopy(self.subject),

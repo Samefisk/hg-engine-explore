@@ -13,7 +13,7 @@ from tools.overworld.devtools_observer import public_bytes
 
 MAX_FRAMES = 4096
 MAX_CALLBACKS = 8192
-SLOT_STRIDE, SNAPSHOT_BYTES, MOTION_BYTES, POLICY_BYTES, SAMPLE_BYTES = 172, 88, 52, 32, 36
+SLOT_STRIDE, SNAPSHOT_BYTES, MOTION_BYTES, POLICY_BYTES, SAMPLE_BYTES = 176, 88, 52, 36, 36
 ACTORS_OFFSET, ACTOR_CAPACITY = 68, 10
 PHASES = ("IDLE", "PLANNED", "MOVING", "COMMIT_PENDING", "SETTLING", "SUSPENDED", "CANCELED")
 
@@ -32,7 +32,7 @@ def decode_motion(raw):
         startBaseY=origin_height, targetBaseY=target_height, duration=duration, reservationId=reservation,
         **dict(zip(names, raw[28:38])))
     elapsed, settle, advances, commit, phase, prior, published, cancel = struct.unpack_from("<4H4B", raw, 40)
-    if phase >= len(PHASES) or prior >= len(PHASES) or kind > 5 or published not in (0, 1):
+    if phase >= len(PHASES) or prior >= len(PHASES) or kind > 6 or published not in (0, 1):
         raise ValueError("Walk matrix motion state enum is invalid")
     if phase not in (0, 6) and (version != 1 or kind == 0 or epoch == 0 or reservation == 0
                               or elapsed > duration or (kind != 3 and duration == 0)):

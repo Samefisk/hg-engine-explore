@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 import unittest
 
-from tools.overworld.devtools_acceleration_measurement import AccelerationMeasurement, POLICY_FIELDS
+from tools.overworld.devtools_acceleration_measurement import AccelerationMeasurement, POLICY_FIELDS, LINEAR_POLICY_FIELDS, policy_bytes, reset_value
 from tools.overworld.test_devtools_chain_measurement import SCHEMA, SOURCE, Stream
 
 
@@ -30,7 +30,7 @@ def fixture(role="WILD", durations=(9, 9, 5, 5, 3, 3, 2), *, initial_commit=0, b
     staged = dict(known=True, idle=True, slot=actor["handle"]["slot"],
                   objectPointer=actor["engineIdentity"]["pointer"])
     actor["stagedMovement"] = deepcopy(staged)
-    lane = bytearray(72)
+    lane = bytearray(80)
     for key, value in {"chillSpeed": base, "maxWalkSpeed": fastest, "tilesToAccelerate": tiles,
                        "walkAccelerationStep": acceleration,
                        "hopAllowNonCardinal": direction_mode}.items():
@@ -41,8 +41,8 @@ def fixture(role="WILD", durations=(9, 9, 5, 5, 3, 3, 2), *, initial_commit=0, b
     stream.lanes = [item.hex() for item in lanes]
     lane = lanes[1 if lane_state == 3 else 0]
     profile = bytearray.fromhex(stream.profile["resultHex"])
-    profile[:144] = b"".join(lanes)
-    profile[176:180] = fingerprint.to_bytes(4, "little")
+    profile[:160] = b"".join(lanes)
+    profile[192:196] = fingerprint.to_bytes(4, "little")
     stream.profile.update(resultHex=profile.hex(), lanes=stream.lanes, fingerprint=fingerprint)
     request_profile = bytearray.fromhex(stream.profile["requestHex"])
     request_profile[:2] = species.to_bytes(2, "little")
@@ -120,6 +120,30 @@ def replay(meter, role, data):
 
 
 class AccelerationMeasurementTests(unittest.TestCase):
+    def test_current_policy_append_bytes_and_retained_policy_readback(self):
+        fields = {**POLICY_FIELDS, **LINEAR_POLICY_FIELDS}
+        raw = bytes(range(36))
+        decoded = {k: raw[i] for k, i in fields.items()}
+        self.assertEqual(policy_bytes(decoded, raw.hex()), raw)
+        self.assertEqual(policy_bytes({k: raw[i] for k, i in POLICY_FIELDS.items()},
+                                      raw[:32].hex()), raw[:32])
+        for key in LINEAR_POLICY_FIELDS:
+            bad = deepcopy(decoded)
+            bad[key] ^= 1
+            with self.subTest(field=key), self.assertRaises(ValueError):
+                policy_bytes(bad, raw.hex())
+        for size in (31, 33, 35, 37):
+            with self.subTest(size=size), self.assertRaises(ValueError):
+                policy_bytes(decoded, bytes(size).hex())
+        _, reset, _ = fixture()
+        self.assertEqual(len(reset_value(reset)), 32)
+        reset["before"]["policyHex"] += bytes((9, 10, 1, 12)).hex()
+        reset["after"]["policyHex"] += bytes(4).hex()
+        self.assertEqual(reset_value(reset)[32:36], bytes(4))
+        reset["after"]["policyHex"] = reset["after"]["policyHex"][:-2] + "01"
+        with self.assertRaisesRegex(ValueError, "readback"):
+            reset_value(reset)
+
     def test_final_idle_reset_requires_all_seven_terminal_lifecycles(self):
         for fault in (None, "mid-series", "missing-finish", "missing-control", "wrong-commit", "moving",
                       "identity", "pose", "raw-response", "failed-reset", "early-reset", "short-travel"):
@@ -188,7 +212,7 @@ class AccelerationMeasurementTests(unittest.TestCase):
             elif fault == "source": profiles[0]["sourceSha256"] = "wrong"
             elif fault == "mask":
                 data = bytearray.fromhex(profiles[0]["resultHex"])
-                data[172:176] = (9).to_bytes(4, "little")
+                data[188:192] = (9).to_bytes(4, "little")
                 profiles[0].update(resultHex=data.hex(), appliedOverrides=9)
             elif fault == "oversize": profiles *= 65
             with self.subTest(fault=fault):

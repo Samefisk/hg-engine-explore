@@ -222,11 +222,11 @@ def _packaged_resolver_oracle() -> dict[str, Any] | None:
         corpus = json.loads((
             REPO / "tools/overworld/native/behavior_resolver_golden.json"
         ).read_text())
-        from tools.overworld.devtools_resolver_parity import CASE_NAMES
+        from tools.overworld.devtools_resolver_parity import CASE_NAMES, RESOLVER_BLOB_VERSION
 
         names = CASE_NAMES
         by_name = {item.get("name"): item for item in corpus["vectors"]}
-        if corpus.get("blobVersion") != 81 or any(name not in by_name for name in names):
+        if corpus.get("blobVersion") != RESOLVER_BLOB_VERSION or any(name not in by_name for name in names):
             return None
         adapter_path = REPO / "tools/overworld-viewer-v2/native_resolver.py"
         module_spec = importlib.util.spec_from_file_location(
@@ -1325,8 +1325,6 @@ _WALK_POLICY_CONTROL_REQUIREMENT = "shared.walk-policy-recorder-control-v1"
 _MOUNT_PACING_KIND = "mounted-frame-pacing-v1"
 _MOUNT_CONTROL_STRESS_KIND = "mounted-control-stress-v1"
 _MOUNT_DETACH_FOLLOWER_RESUME_KIND = "mount-detach-follower-resume-v1"
-_MOUNTED_HOP_ARC_KIND = "mounted-hop-arc-v1"
-_MOUNTED_NEAREST_DIAGONAL_KIND = "mounted-nearest-diagonal-v1"
 _APPEAR_HOP_KIND = "appear-hop-timing-v1"
 _APPEAR_HOP_REQUIREMENT = "shared.appear-hop-timing-v1"
 _MOUNT_POSE_CONTROL_KIND = "live-mount-pose-control-v1"
@@ -1342,7 +1340,6 @@ _FOLLOWER_TRANSITION_KIND = "follower-transition-rebind-v1"
 _MOUNTED_STREAMING_KIND = "mounted-streaming-path-v1"
 _MOUNTED_CARDINAL_STREAMING_KIND = "mounted-cardinal-streaming-v1"
 _MOUNTED_WALK_TRANSITION_KIND = "mounted-walk-transition-v1"
-_MOUNTED_HOP_TRANSITION_KIND = "mounted-hop-transition-v1"
 _LAND_SURF_KIND = "land-surf-separation-v1"
 _SPAWN_WORK_BUDGET_KIND = "spawn-work-budget-v1"
 _UNMOUNTED_ZERO_STUTTER_KIND = "unmounted-zero-stutter-v1"
@@ -1401,6 +1398,32 @@ _CONDITION_REQUIREMENT = "shared.packaged-condition-service-v1"
 _CONDITION_CONTROLLER_KIND = "live-condition-controller-v1"
 _CONDITION_CONTROLLER_REQUIREMENT = "current.live-condition-controller"
 _ACTOR_INSPECT_KIND = "actor-inspect-handle-v1"
+_PLAYER_HEALTH_INITIAL_KIND = "player-health-initial-state-v1"
+_PLAYER_HEALTH_INITIAL_REQUIREMENT = "current.player-health-initial-state"
+_PLAYER_HEALTH_RAM_REST_KIND = "player-health-ram-rest-v1"
+_PLAYER_HEALTH_RAM_REST_REQUIREMENT = "current.player-health-ram-rest"
+_PLAYER_HEALTH_RAM_LOW_SPEED_KIND = "player-health-ram-low-speed-v1"
+_PLAYER_HEALTH_RAM_LOW_SPEED_REQUIREMENT = "current.player-health-ram-low-speed"
+_PLAYER_HEALTH_THROW_KIND = "player-health-throw-contact-v1"
+_PLAYER_HEALTH_THROW_REQUIREMENT = "current.player-health-throw-contact"
+_PLAYER_HEALTH_HOP_KIND = "player-health-hop-contact-v1"
+_PLAYER_HEALTH_HOP_REQUIREMENT = "current.player-health-hop-contact"
+_PLAYER_HEALTH_AMBUSH_JUMP_KIND = "player-health-ambush-jump-v1"
+_PLAYER_HEALTH_AMBUSH_JUMP_REQUIREMENT = "current.player-health-ambush-jump"
+_PLAYER_HEALTH_MOUNTED_AMBUSH_HEIGHT_KIND = "player-health-mounted-ambush-height-v1"
+_PLAYER_HEALTH_MOUNTED_AMBUSH_HEIGHT_REQUIREMENT = "current.player-health-mounted-ambush-height"
+_WILD_THROW_MOVING_KIND = "wild-throw-moving-candidate-v1"
+_WILD_THROW_MOVING_REQUIREMENT = "current.wild-throw-moving-candidate"
+_PLAYER_HEALTH_MOUNTED_THROW_KIND = "player-health-mounted-throw-v1"
+_PLAYER_HEALTH_MOUNTED_THROW_REQUIREMENT = "current.player-health-mounted-throw"
+_PLAYER_HEALTH_BAR_KIND = "player-health-bar-v1"
+_PLAYER_HEALTH_BAR_REQUIREMENT = "current.player-health-bar"
+_PLAYER_HEALTH_RAM_WARNING_KIND = "player-health-ram-warning-v1"
+_PLAYER_HEALTH_RAM_WARNING_REQUIREMENT = "current.player-health-ram-warning"
+_PLAYER_HEALTH_SAVE_RELOAD_KIND = "player-health-save-reload-v1"
+_PLAYER_HEALTH_SAVE_RELOAD_REQUIREMENT = "current.player-health-save-reload"
+_PLAYER_HEALTH_ZERO_LOAD_KIND = "player-health-zero-load-v1"
+_PLAYER_HEALTH_ZERO_LOAD_REQUIREMENT = "current.player-health-zero-load"
 _ACTOR_INSPECT_REQUIREMENT = "shared.actor-inspect-handle-v1"
 _ACTOR_INSPECT_NAMES = ("packaged-inspect-entry", "bound-subject-identity",
     "current-actor-byte-parity", "stale-generation-rejection", "owned-buffer-cleanup", "native-call-boundaries")
@@ -1412,12 +1435,15 @@ _MOUNT_BEGIN_KIND = "mount-begin-current-follower-v1"
 _MOUNT_BEGIN_REQUIREMENT = "legacy.mount-begin-current-follower"
 _MOUNT_BEGIN_CLAIMS = ["natural-input", "live-actor-identity", "profile-resolution", "control-release"]
 _MOUNT_SELECT_MID_RUN_KIND = "mount-select-mid-run-v1"
+_MOUNT_SELECT_SWITCH_KIND = "mount-select-switch-v1"
 _MOUNTED_BELLSPROUT_WADDLE_KIND = "mounted-bellsprout-waddle-sway-v1"
 _MOUNTED_STANTLER_KEY_EDGE_KIND = "mounted-stantler-key-edge-v1"
+_MOUNTED_STANTLER_NEWEST_DIRECTION_KIND = "mounted-stantler-newest-held-direction-v1"
 _MOUNTED_STANTLER_TURN_SKID_KIND = "mounted-stantler-turn-skid-v1"
+_MOUNTED_STANTLER_BLOCKED_SKID_KIND = "mounted-stantler-blocked-skid-v1"
+_MOUNTED_STANTLER_SKID_OBSTACLE_KIND = "mounted-stantler-skid-obstacle-v1"
 _MOUNTED_STANTLER_SPRINT_KIND = "mounted-stantler-sprint-v1"
-_MOUNTED_STANTLER_OBSTACLE_HOP_KIND = "mounted-stantler-obstacle-hop-v1"
-_MOUNTED_STANTLER_NPC_HOP_KIND = "mounted-stantler-npc-hop-v1"
+_MOUNTED_STANTLER_RUNNING_LEDGE_KIND = "mounted-stantler-running-ledge-v1"
 _MOUNTED_STANTLER_WALL_APPROACH_KIND = "mounted-stantler-wall-approach-v1"
 _WILD_SPRINT_OBSTACLE_KIND = "wild-sprint-obstacle-approach-v1"
 _WILD_SPRINT_NPC_KIND = "wild-sprint-npc-hop-v1"
@@ -1509,7 +1535,296 @@ def _shared_test_registration(test: dict[str, Any], repo: Path) -> tuple[dict[st
         raise ValidationFailure("shared test needs an implemented exact measurement adapter")
     if registration.get("recorderControlRequirement") is not None:
         _shared_recorder_kind(registration["recorderControlRequirement"])
-    if registration.get("evaluator") == _ACTOR_INSPECT_KIND:
+    if registration.get("evaluator") == _PLAYER_HEALTH_INITIAL_KIND:
+        from tools.overworld.devtools_player_health_initial_proof import contract
+        expected = contract()
+        if (registry.get("measurementContracts", {}).get(_PLAYER_HEALTH_INITIAL_REQUIREMENT) != expected
+                or registry.get("runners", {}).get(_PLAYER_HEALTH_INITIAL_REQUIREMENT) != ["engine-boundary"]
+                or registry.get("runnerKinds", {}).get(_PLAYER_HEALTH_INITIAL_REQUIREMENT) != "normal-play"
+                or registration.get("measurementContract") != expected
+                or registration.get("proofLevel") != "S3"
+                or registration.get("claims") != ["engine-boundary"]
+                or test["requirements"] != [_PLAYER_HEALTH_INITIAL_REQUIREMENT]
+                or test["mode"] != "normal" or test["subjects"] or test["setup"]
+                or test.get("measurements") != [{"kind": _PLAYER_HEALTH_INITIAL_KIND}]
+                or [action["op"] for action in test["actions"]] != ["player-health.observe"]
+                or registration.get("recorderControlRequirement") is not None):
+            raise ValidationFailure("player HP test changed its exact initial-state contract")
+    elif registration.get("evaluator") == _PLAYER_HEALTH_RAM_REST_KIND:
+        from tools.overworld.devtools_player_health_ram_rest_proof import CLAIMS, contract
+        from tools.overworld.devtools_player_health_ram_rest_measurement import ORDER, STEPS
+        expected = contract()
+        if (registry.get("measurementContracts", {}).get(_PLAYER_HEALTH_RAM_REST_REQUIREMENT) != expected
+                or registry.get("runners", {}).get(_PLAYER_HEALTH_RAM_REST_REQUIREMENT) != list(CLAIMS)
+                or registry.get("runnerKinds", {}).get(_PLAYER_HEALTH_RAM_REST_REQUIREMENT) != "controlled-case"
+                or registration.get("measurementContract") != expected
+                or registration.get("proofLevel") != "S3"
+                or registration.get("mode") != "prepared"
+                or registration.get("claims") != list(CLAIMS)
+                or registration.get("requirements") != [_PLAYER_HEALTH_RAM_REST_REQUIREMENT]
+                or registration.get("minimumObservedFrames") != sum(STEPS.values())
+                or test["requirements"] != [_PLAYER_HEALTH_RAM_REST_REQUIREMENT]
+                or test["mode"] != "prepared"
+                or test["subjects"] != [{"id": "onix", "species": 95,
+                                         "role": "WILD", "acquire": "spawn"}]
+                or test.get("measurements") != [{"kind": _PLAYER_HEALTH_RAM_REST_KIND,
+                                                  "subject": "onix"}]
+                or [item["id"] for item in test["actions"]] != list(ORDER)
+                or registration.get("recorderControlRequirement") is not None):
+            raise ValidationFailure("player HP Ram/rest test changed its exact contract")
+    elif registration.get("evaluator") == _PLAYER_HEALTH_RAM_LOW_SPEED_KIND:
+        from tools.overworld.devtools_player_health_ram_low_speed_proof import CLAIMS, contract
+        from tools.overworld.devtools_player_health_ram_low_speed_measurement import ORDER
+        expected = contract()
+        if (registry.get("measurementContracts", {}).get(_PLAYER_HEALTH_RAM_LOW_SPEED_REQUIREMENT) != expected
+                or registry.get("runners", {}).get(_PLAYER_HEALTH_RAM_LOW_SPEED_REQUIREMENT) != list(CLAIMS)
+                or registry.get("runnerKinds", {}).get(_PLAYER_HEALTH_RAM_LOW_SPEED_REQUIREMENT) != "controlled-case"
+                or registration.get("measurementContract") != expected
+                or registration.get("proofLevel") != "S3"
+                or registration.get("mode") != "prepared"
+                or registration.get("claims") != list(CLAIMS)
+                or registration.get("requirements") != [_PLAYER_HEALTH_RAM_LOW_SPEED_REQUIREMENT]
+                or registration.get("minimumObservedFrames") != 81
+                or test["requirements"] != [_PLAYER_HEALTH_RAM_LOW_SPEED_REQUIREMENT]
+                or test["mode"] != "prepared"
+                or test["subjects"] != [{"id": "onix", "species": 95,
+                                         "role": "WILD", "acquire": "spawn"}]
+                or test.get("measurements") != [{"kind": _PLAYER_HEALTH_RAM_LOW_SPEED_KIND,
+                                                  "subject": "onix"}]
+                or [item["id"] for item in test["actions"]] != list(ORDER)
+                or registration.get("recorderControlRequirement") is not None):
+            raise ValidationFailure("player HP low-speed Ram test changed its exact contract")
+    elif registration.get("evaluator") == _PLAYER_HEALTH_THROW_KIND:
+        from tools.overworld.devtools_player_health_throw_contact_proof import CLAIMS, contract
+        from tools.overworld.devtools_player_health_throw_contact_measurement import MIN_FRAMES, ORDER
+        expected = contract()
+        if (registry.get("measurementContracts", {}).get(_PLAYER_HEALTH_THROW_REQUIREMENT) != expected
+                or registry.get("runners", {}).get(_PLAYER_HEALTH_THROW_REQUIREMENT) != list(CLAIMS)
+                or registry.get("runnerKinds", {}).get(_PLAYER_HEALTH_THROW_REQUIREMENT) != "controlled-case"
+                or registration.get("measurementContract") != expected
+                or registration.get("proofLevel") != "S3"
+                or registration.get("mode") != "prepared"
+                or registration.get("claims") != list(CLAIMS)
+                or registration.get("requirements") != [_PLAYER_HEALTH_THROW_REQUIREMENT]
+                or registration.get("minimumObservedFrames") != MIN_FRAMES
+                or test["requirements"] != [_PLAYER_HEALTH_THROW_REQUIREMENT]
+                or test["mode"] != "prepared"
+                or test["subjects"] != [
+                    {"id": "weepinbell", "species": 70, "role": "WILD", "acquire": "spawn"},
+                    {"id": "geodude", "species": 74, "role": "WILD", "acquire": "spawn"}]
+                or test.get("measurements") != [{"kind": _PLAYER_HEALTH_THROW_KIND,
+                                                  "subjects": ["weepinbell", "geodude"]}]
+                or [item["id"] for item in test["actions"]] != list(ORDER)
+                or registration.get("recorderControlRequirement") is not None):
+            raise ValidationFailure("player HP Throw test changed its exact contract")
+    elif registration.get("evaluator") == _PLAYER_HEALTH_HOP_KIND:
+        from tools.overworld.devtools_player_health_hop_contact_proof import CLAIMS, contract
+        from tools.overworld.devtools_player_health_hop_contact_measurement import MIN_FRAMES, ORDER
+        expected = contract()
+        requirement = _PLAYER_HEALTH_HOP_REQUIREMENT
+        if (registry.get("measurementContracts", {}).get(requirement) != expected
+                or registry.get("runners", {}).get(requirement) != list(CLAIMS)
+                or registry.get("runnerKinds", {}).get(requirement) != "controlled-case"
+                or registration.get("measurementContract") != expected
+                or registration.get("proofLevel") != "S3"
+                or registration.get("mode") != "prepared"
+                or registration.get("claims") != list(CLAIMS)
+                or registration.get("requirements") != [requirement]
+                or registration.get("minimumObservedFrames") != MIN_FRAMES
+                or test["requirements"] != [requirement]
+                or test["subjects"] != [{"id": "mankey", "species": 56,
+                                         "role": "WILD", "acquire": "spawn"}]
+                or test.get("measurements") != [{"kind": _PLAYER_HEALTH_HOP_KIND,
+                                                  "subject": "mankey"}]
+                or [item["id"] for item in test["actions"]] != list(ORDER)
+                or registration.get("recorderControlRequirement") is not None):
+            raise ValidationFailure("ordinary player HP Hop test changed its exact contract")
+    elif registration.get("evaluator") == _PLAYER_HEALTH_AMBUSH_JUMP_KIND:
+        from tools.overworld.devtools_player_health_ambush_jump_proof import CLAIMS, contract
+        from tools.overworld.devtools_player_health_ambush_jump_measurement import MIN_FRAMES, ORDER
+        expected = contract()
+        requirement = _PLAYER_HEALTH_AMBUSH_JUMP_REQUIREMENT
+        if (registry.get("measurementContracts", {}).get(requirement) != expected
+                or registry.get("runners", {}).get(requirement) != list(CLAIMS)
+                or registry.get("runnerKinds", {}).get(requirement) != "controlled-case"
+                or registration.get("measurementContract") != expected
+                or registration.get("proofLevel") != "S3"
+                or registration.get("mode") != "prepared"
+                or registration.get("claims") != list(CLAIMS)
+                or registration.get("requirements") != [requirement]
+                or registration.get("minimumObservedFrames") != MIN_FRAMES
+                or test["requirements"] != [requirement]
+                or test["subjects"] != [{"id": "weepinbell", "species": 70,
+                                         "role": "WILD", "acquire": "spawn"}]
+                or test.get("measurements") != [{"kind": _PLAYER_HEALTH_AMBUSH_JUMP_KIND,
+                                                  "subject": "weepinbell"}]
+                or [item["id"] for item in test["actions"]] != list(ORDER)
+                or registration.get("recorderControlRequirement") is not None):
+            raise ValidationFailure("Ambush jump test changed its exact contract")
+    elif registration.get("evaluator") == _PLAYER_HEALTH_MOUNTED_AMBUSH_HEIGHT_KIND:
+        from tools.overworld.devtools_player_health_mounted_ambush_height_proof import CLAIMS, contract
+        from tools.overworld.devtools_player_health_mounted_ambush_height_measurement import MIN_FRAMES, ORDER
+        expected = contract()
+        requirement = _PLAYER_HEALTH_MOUNTED_AMBUSH_HEIGHT_REQUIREMENT
+        if (registry.get("measurementContracts", {}).get(requirement) != expected
+                or registry.get("runners", {}).get(requirement) != list(CLAIMS)
+                or registry.get("runnerKinds", {}).get(requirement) != "controlled-case"
+                or registration.get("measurementContract") != expected
+                or registration.get("proofLevel") != "S3"
+                or registration.get("mode") != "prepared"
+                or registration.get("claims") != list(CLAIMS)
+                or registration.get("requirements") != [requirement]
+                or registration.get("minimumObservedFrames") != MIN_FRAMES
+                or test["requirements"] != [requirement]
+                or test["subjects"] != [
+                    {"id": "cyndaquil", "species": 155, "role": "MOUNTED", "acquire": "existing"},
+                    {"id": "weepinbell", "species": 70, "role": "WILD", "acquire": "spawn"}]
+                or test.get("measurements") != [{"kind": _PLAYER_HEALTH_MOUNTED_AMBUSH_HEIGHT_KIND,
+                                                  "subjects": ["cyndaquil", "weepinbell"]}]
+                or [item["id"] for item in test["actions"]] != list(ORDER)
+                or registration.get("recorderControlRequirement") is not None):
+            raise ValidationFailure("mounted Ambush height test changed its exact contract")
+    elif registration.get("evaluator") == _WILD_THROW_MOVING_KIND:
+        from tools.overworld.devtools_wild_throw_moving_candidate_proof import CLAIMS, contract
+        from tools.overworld.devtools_wild_throw_moving_candidate_measurement import ORDER
+        expected = contract()
+        requirement = _WILD_THROW_MOVING_REQUIREMENT
+        if (registry.get("measurementContracts", {}).get(requirement) != expected
+                or registry.get("runners", {}).get(requirement) != list(CLAIMS)
+                or registry.get("runnerKinds", {}).get(requirement) != "controlled-case"
+                or registration.get("measurementContract") != expected
+                or registration.get("proofLevel") != "S3"
+                or registration.get("mode") != "prepared"
+                or registration.get("claims") != list(CLAIMS)
+                or registration.get("requirements") != [requirement]
+                or registration.get("minimumObservedFrames") != 2
+                or test["requirements"] != [requirement]
+                or test["mode"] != "prepared"
+                or test["subjects"] != [
+                    {"id": "stantler", "species": 234, "role": "WILD", "acquire": "spawn"},
+                    {"id": "geodude", "species": 74, "role": "WILD", "acquire": "spawn"}]
+                or test.get("measurements") != [{"kind": _WILD_THROW_MOVING_KIND,
+                                                   "subjects": ["stantler", "geodude"]}]
+                or [item["id"] for item in test["actions"]] != list(ORDER)
+                or registration.get("recorderControlRequirement") is not None):
+            raise ValidationFailure("moving Wild Throw test changed its exact contract")
+    elif registration.get("evaluator") == _PLAYER_HEALTH_MOUNTED_THROW_KIND:
+        from tools.overworld.devtools_player_health_mounted_throw_proof import CLAIMS, contract
+        from tools.overworld.devtools_player_health_mounted_throw_measurement import MIN_FRAMES, ORDER, SETUP
+        expected = contract()
+        requirement = _PLAYER_HEALTH_MOUNTED_THROW_REQUIREMENT
+        if (registry.get("measurementContracts", {}).get(requirement) != expected
+                or registry.get("runners", {}).get(requirement) != list(CLAIMS)
+                or registry.get("runnerKinds", {}).get(requirement) != "controlled-case"
+                or registration.get("measurementContract") != expected
+                or registration.get("proofLevel") != "S3"
+                or registration.get("mode") != "prepared"
+                or registration.get("claims") != list(CLAIMS)
+                or registration.get("requirements") != [requirement]
+                or registration.get("minimumObservedFrames") != MIN_FRAMES
+                or test["requirements"] != [requirement]
+                or test["mode"] != "prepared"
+                or test["subjects"] != [
+                    {"id": "cyndaquil", "species": 155, "role": "MOUNTED", "acquire": "existing"},
+                    {"id": "bellsprout", "species": 69, "role": "WILD", "acquire": "spawn"},
+                    {"id": "geodude", "species": 74, "role": "WILD", "acquire": "spawn"}]
+                or test.get("measurements") != [{"kind": _PLAYER_HEALTH_MOUNTED_THROW_KIND,
+                                                  "subjects": ["cyndaquil", "bellsprout", "geodude"]}]
+                or [item["id"] for item in test["setup"]] != list(SETUP)
+                or [item["id"] for item in test["actions"]] != list(ORDER)
+                or registration.get("recorderControlRequirement") is not None):
+            raise ValidationFailure("mounted Throw test changed its exact contract")
+    elif registration.get("evaluator") == _PLAYER_HEALTH_RAM_WARNING_KIND:
+        from tools.overworld.devtools_player_health_ram_warning_proof import CLAIMS, contract
+        from tools.overworld.devtools_player_health_ram_warning_measurement import ORDER, SETUP
+        expected = contract()
+        if (registry.get("measurementContracts", {}).get(_PLAYER_HEALTH_RAM_WARNING_REQUIREMENT) != expected
+                or registry.get("runners", {}).get(_PLAYER_HEALTH_RAM_WARNING_REQUIREMENT) != list(CLAIMS)
+                or registry.get("runnerKinds", {}).get(_PLAYER_HEALTH_RAM_WARNING_REQUIREMENT) != "controlled-case"
+                or registration.get("measurementContract") != expected
+                or registration.get("proofLevel") != "S3"
+                or registration.get("mode") != "prepared"
+                or registration.get("claims") != list(CLAIMS)
+                or registration.get("requirements") != [_PLAYER_HEALTH_RAM_WARNING_REQUIREMENT]
+                or registration.get("minimumObservedFrames") != 2
+                or test["requirements"] != [_PLAYER_HEALTH_RAM_WARNING_REQUIREMENT]
+                or test["mode"] != "prepared"
+                or test["subjects"] != [{"id": "onix", "species": 95,
+                                         "role": "WILD", "acquire": "spawn"}]
+                or test.get("measurements") != [{"kind": _PLAYER_HEALTH_RAM_WARNING_KIND,
+                                                  "subject": "onix"}]
+                or [item["id"] for item in test["setup"]] != list(SETUP)
+                or [item["id"] for item in test["actions"]] != list(ORDER)
+                or registration.get("recorderControlRequirement") is not None):
+            raise ValidationFailure("player HP Ram warning test changed its exact contract")
+    elif registration.get("evaluator") == _PLAYER_HEALTH_BAR_KIND:
+        from tools.overworld.devtools_player_health_bar_proof import CLAIMS, contract
+        from tools.overworld.devtools_player_health_bar_measurement import OBSERVED_FRAMES, ORDER, SETUP
+        expected = contract()
+        if (registry.get("measurementContracts", {}).get(_PLAYER_HEALTH_BAR_REQUIREMENT) != expected
+                or registry.get("runners", {}).get(_PLAYER_HEALTH_BAR_REQUIREMENT) != list(CLAIMS)
+                or registry.get("runnerKinds", {}).get(_PLAYER_HEALTH_BAR_REQUIREMENT) != "controlled-case"
+                or registration.get("measurementContract") != expected
+                or registration.get("proofLevel") != "S3"
+                or registration.get("mode") != "prepared"
+                or registration.get("claims") != list(CLAIMS)
+                or registration.get("requirements") != [_PLAYER_HEALTH_BAR_REQUIREMENT]
+                or registration.get("minimumObservedFrames") != OBSERVED_FRAMES
+                or test["requirements"] != [_PLAYER_HEALTH_BAR_REQUIREMENT]
+                or test["mode"] != "prepared"
+                or test["subjects"] != [{"id": "onix", "species": 95,
+                                         "role": "WILD", "acquire": "spawn"}]
+                or test.get("measurements") != [{"kind": _PLAYER_HEALTH_BAR_KIND,
+                                                  "subject": "onix"}]
+                or [item["id"] for item in test["setup"]] != list(SETUP)
+                or [item["id"] for item in test["actions"]] != list(ORDER)
+                or registration.get("recorderControlRequirement") is not None):
+            raise ValidationFailure("player HP bar test changed its exact contract")
+    elif registration.get("evaluator") == _PLAYER_HEALTH_SAVE_RELOAD_KIND:
+        from tools.overworld.devtools_player_health_save_reload_proof import CLAIMS, contract
+        from tools.overworld.devtools_player_health_save_reload_measurement import OBSERVED_FRAMES, ORDER, SETUP
+        expected = contract()
+        if (registry.get("measurementContracts", {}).get(_PLAYER_HEALTH_SAVE_RELOAD_REQUIREMENT) != expected
+                or registry.get("runners", {}).get(_PLAYER_HEALTH_SAVE_RELOAD_REQUIREMENT) != list(CLAIMS)
+                or registry.get("runnerKinds", {}).get(_PLAYER_HEALTH_SAVE_RELOAD_REQUIREMENT) != "controlled-case"
+                or registration.get("measurementContract") != expected
+                or registration.get("proofLevel") != "S3"
+                or registration.get("mode") != "prepared"
+                or registration.get("claims") != list(CLAIMS)
+                or registration.get("requirements") != [_PLAYER_HEALTH_SAVE_RELOAD_REQUIREMENT]
+                or registration.get("minimumObservedFrames") != OBSERVED_FRAMES
+                or test["requirements"] != [_PLAYER_HEALTH_SAVE_RELOAD_REQUIREMENT]
+                or test["mode"] != "prepared"
+                or test["subjects"] != [{"id": "onix", "species": 95,
+                                         "role": "WILD", "acquire": "spawn"}]
+                or test.get("measurements") != [{"kind": _PLAYER_HEALTH_SAVE_RELOAD_KIND,
+                                                  "subject": "onix"}]
+                or [item["id"] for item in test["setup"]] != list(SETUP)
+                or [item["id"] for item in test["actions"]] != list(ORDER)
+                or registration.get("recorderControlRequirement") is not None):
+            raise ValidationFailure("player HP save/reload test changed its exact contract")
+    elif registration.get("evaluator") == _PLAYER_HEALTH_ZERO_LOAD_KIND:
+        from tools.overworld.devtools_player_health_zero_load_proof import CLAIMS, contract
+        from tools.overworld.devtools_player_health_zero_load_complete_measurement import SETUP, ORDER
+        expected = contract()
+        requirement = _PLAYER_HEALTH_ZERO_LOAD_REQUIREMENT
+        if (registry.get("measurementContracts", {}).get(requirement) != expected
+                or registry.get("runners", {}).get(requirement) != list(CLAIMS)
+                or registry.get("runnerKinds", {}).get(requirement) != "controlled-case"
+                or registration.get("measurementContract") != expected
+                or registration.get("proofLevel") != "S3"
+                or registration.get("mode") != "normal"
+                or registration.get("claims") != list(CLAIMS)
+                or registration.get("requirements") != [requirement]
+                or registration.get("minimumObservedFrames") != 53
+                or test["requirements"] != [requirement]
+                or test["mode"] != "normal" or test["subjects"]
+                or test.get("measurements") != [{"kind": _PLAYER_HEALTH_ZERO_LOAD_KIND}]
+                or [item["id"] for item in test["setup"]] != list(SETUP)
+                or [item["id"] for item in test["actions"]] != list(ORDER)
+                or registration.get("recorderControlRequirement") is not None):
+            raise ValidationFailure("zero-load player HP test changed its exact private-save contract")
+    elif registration.get("evaluator") == _ACTOR_INSPECT_KIND:
         expected = {"controlled-action": [{"name": name, "operator": "eq", "type": "integer",
             "validator": "meaningful-observation", "expected": 1} for name in _ACTOR_INSPECT_NAMES]}
         if registration.get("measurementContract") != expected \
@@ -1615,12 +1930,31 @@ def _shared_test_registration(test: dict[str, Any], repo: Path) -> tuple[dict[st
                 or [action["id"] for action in actions] != [
                     "wait-saved-follower", "start-player-run", "press-select-during-run",
                     "keep-right-until-mounted", "bind-current-mount",
-                    "start-mounted-hop", "wait-hop-terminal"] \
+                    "start-mounted-step", "wait-step-terminal"] \
                 or actions[1]["args"] != {"frames": 4, "keys": ["RIGHT"]} \
                 or actions[2]["args"] != {"frames": 1, "keys": ["RIGHT", "SELECT"]} \
                 or actions[3]["args"].get("keys") != ["RIGHT"] \
                 or actions[3]["args"].get("frames") != 8:
             raise ValidationFailure("mid-run Select differs from its exact saved-Mankey normal-input contract")
+    elif registration.get("evaluator") == _MOUNT_SELECT_SWITCH_KIND:
+        from tools.overworld.devtools_mount_select_switch_proof import ACTIONS, CLAIMS, REQUIREMENT, contract
+        actions = test["actions"]
+        if registry.get("measurementContracts", {}).get(REQUIREMENT) != contract() \
+                or registry.get("runners", {}).get(REQUIREMENT) != list(CLAIMS) \
+                or registry.get("runnerKinds", {}).get(REQUIREMENT) != "normal-play" \
+                or registration.get("proofLevel") != "S3" \
+                or registration.get("claims") != list(CLAIMS) \
+                or registration.get("requirements") != [REQUIREMENT] \
+                or test["requirements"] != [REQUIREMENT] or test["mode"] != "normal" \
+                or test["subjects"] != [{"id": "mankey", "species": 56,
+                                         "role": "MOUNTED", "acquire": "existing"}] \
+                or test.get("measurements") not in (None, []) or test["setup"] != [] \
+                or registration.get("recorderControlRequirement") != _ROLE_CONTROL_REQUIREMENT \
+                or [action["id"] for action in actions] != list(ACTIONS) \
+                or any(actions[index]["args"] != {"frames": 1, "keys": ["SELECT"]}
+                       for index in (1, 3, 10)) \
+                or actions[11]["budget"]["maxFrames"] != 120:
+            raise ValidationFailure("switch Select differs from its exact one-press normal-input contract")
     elif registration.get("evaluator") == _MOUNTED_BELLSPROUT_WADDLE_KIND:
         from tools.overworld.devtools_mounted_bellsprout_waddle_proof import (
             ACTIONS, CLAIMS, REQUIREMENT, contract,
@@ -1656,6 +1990,29 @@ def _shared_test_registration(test: dict[str, Any], repo: Path) -> tuple[dict[st
                 or [action["id"] for action in test["actions"]] != list(ACTIONS) \
                 or test["actions"][2]["args"] != {"frames": 2, "keys": ["RIGHT"]}:
             raise ValidationFailure("mounted Stantler key edge differs from its reviewed trigger")
+    elif registration.get("evaluator") == _MOUNTED_STANTLER_NEWEST_DIRECTION_KIND:
+        from tools.overworld.devtools_mounted_stantler_newest_direction_proof import (
+            ACTIONS, CLAIMS, REQUIREMENT, contract,
+        )
+        if registry.get("measurementContracts", {}).get(REQUIREMENT) != contract() \
+                or registry.get("runners", {}).get(REQUIREMENT) != list(CLAIMS) \
+                or registry.get("runnerKinds", {}).get(REQUIREMENT) != "controlled-case" \
+                or registration.get("proofLevel") != "S3" \
+                or registration.get("claims") != list(CLAIMS) \
+                or registration.get("requirements") != [REQUIREMENT] \
+                or test["requirements"] != [REQUIREMENT] or test["mode"] != "prepared" \
+                or test["subjects"] != [{"id": "stantler", "species": 234,
+                                          "role": "MOUNTED", "acquire": "existing"}] \
+                or test.get("measurements") not in (None, []) \
+                or registration.get("recorderControlRequirement") != _ROLE_CONTROL_REQUIREMENT \
+                or [action["id"] for action in test["actions"]] != [name for name, _, _ in ACTIONS] \
+                or [(action["op"], action["args"]) for action in test["actions"]] \
+                != [("step", {"frames": 32, "keys": ["LEFT"],
+                    "until": {"kind": "actor-field", "subject": "stantler",
+                              "path": "target.x", "operator": "eq",
+                              "value": 588, "when": "final"}}),
+                    ("step", {"frames": 24, "keys": ["LEFT", "UP"]})]:
+            raise ValidationFailure("mounted Stantler newest direction differs from its reviewed trigger")
     elif registration.get("evaluator") == _MOUNTED_STANTLER_TURN_SKID_KIND:
         from tools.overworld.devtools_mounted_stantler_turn_skid_proof import (
             ACTIONS, CLAIMS, REQUIREMENT, contract,
@@ -1676,6 +2033,53 @@ def _shared_test_registration(test: dict[str, Any], repo: Path) -> tuple[dict[st
                 != [("step", {"frames": count, "keys": [key]})
                     for (_, count, _), key in zip(ACTIONS, ("RIGHT", "DOWN"))]:
             raise ValidationFailure("mounted Stantler skid differs from its measured trigger")
+    elif registration.get("evaluator") == _MOUNTED_STANTLER_BLOCKED_SKID_KIND:
+        from tools.overworld.devtools_mounted_stantler_blocked_skid_proof import (
+            ACTIONS, CLAIMS, REQUIREMENT, contract,
+        )
+        if registry.get("measurementContracts", {}).get(REQUIREMENT) != contract() \
+                or registry.get("runners", {}).get(REQUIREMENT) != list(CLAIMS) \
+                or registry.get("runnerKinds", {}).get(REQUIREMENT) != "controlled-case" \
+                or registration.get("proofLevel") != "S3" \
+                or registration.get("claims") != list(CLAIMS) \
+                or registration.get("requirements") != [REQUIREMENT] \
+                or test["requirements"] != [REQUIREMENT] or test["mode"] != "prepared" \
+                or test["subjects"] != [{"id": "stantler", "species": 234,
+                                          "role": "MOUNTED", "acquire": "existing"}] \
+                or test.get("measurements") not in (None, []) \
+                or registration.get("recorderControlRequirement") != _ROLE_CONTROL_REQUIREMENT \
+                or [action["id"] for action in test["actions"]] != [name for name, _, _ in ACTIONS] \
+                or [(action["op"], action["args"]) for action in test["actions"]] \
+                != [("step", {"frames": count, "keys": keys})
+                    for (_, count, _), keys in zip(ACTIONS, (["RIGHT"], ["DOWN"]))]:
+            raise ValidationFailure("mounted blocked turn skid differs from its measured route")
+    elif registration.get("evaluator") == _MOUNTED_STANTLER_SKID_OBSTACLE_KIND:
+        from tools.overworld.devtools_mounted_stantler_skid_obstacle_proof import (
+            CASES, CLAIMS, MAX_RUN_FRAMES, actions, contract, run_until,
+        )
+        case_id = test.get("id")
+        if case_id not in CASES:
+            raise ValidationFailure("unknown mounted skid obstacle route")
+        requirement = CASES[case_id]["requirement"]
+        if registry.get("measurementContracts", {}).get(requirement) != contract(case_id) \
+                or registry.get("runners", {}).get(requirement) != list(CLAIMS) \
+                or registry.get("runnerKinds", {}).get(requirement) != "controlled-case" \
+                or registration.get("proofLevel") != "S3" \
+                or registration.get("claims") != list(CLAIMS) \
+                or registration.get("requirements") != [requirement] \
+                or test["requirements"] != [requirement] or test["mode"] != "prepared" \
+                or test["subjects"] != [{"id": "stantler", "species": 234,
+                                         "role": "MOUNTED", "acquire": "existing"}] \
+                or test.get("measurements") not in (None, []) \
+                or registration.get("recorderControlRequirement") != _ROLE_CONTROL_REQUIREMENT \
+                or [action["id"] for action in test["actions"]] \
+                    != [name for name, _, _ in actions(case_id)] \
+                or [(action["op"], action["args"]) for action in test["actions"]] \
+                    != [("step", {"frames": MAX_RUN_FRAMES, "keys": ["RIGHT"],
+                                   "until": run_until(case_id)}),
+                        ("step", {"frames": 18, "keys": list(
+                            CASES[case_id].get("turnKeys", ("DOWN",)))})]:
+            raise ValidationFailure("mounted skid obstacle differs from its measured route")
     elif registration.get("evaluator") == _MOUNTED_STANTLER_SPRINT_KIND:
         from tools.overworld.devtools_mounted_stantler_sprint_proof import (
             CLAIMS, REQUIREMENT, contract,
@@ -1696,11 +2100,10 @@ def _shared_test_registration(test: dict[str, Any], repo: Path) -> tuple[dict[st
                 or test["actions"][0]["args"] != {"frames": 160, "keys": ["RIGHT"]} \
                 or test["actions"][2]["args"] != {"frames": 40, "keys": ["UP", "RIGHT"]}:
             raise ValidationFailure("mounted Stantler Sprint differs from its exact normal-input contract")
-    elif registration.get("evaluator") == _MOUNTED_STANTLER_OBSTACLE_HOP_KIND:
-        from tools.overworld.devtools_mounted_stantler_obstacle_hop_proof import (
-            ACTIONS, CLAIMS, REQUIREMENT, contract,
+    elif registration.get("evaluator") == _MOUNTED_STANTLER_RUNNING_LEDGE_KIND:
+        from tools.overworld.devtools_mounted_stantler_running_ledge_proof import (
+            ACTION, CLAIMS, REQUIREMENT, contract,
         )
-        actions = test["actions"]
         if registry.get("measurementContracts", {}).get(REQUIREMENT) != contract() \
                 or registry.get("runners", {}).get(REQUIREMENT) != list(CLAIMS) \
                 or registry.get("runnerKinds", {}).get(REQUIREMENT) != "controlled-case" \
@@ -1712,52 +2115,13 @@ def _shared_test_registration(test: dict[str, Any], repo: Path) -> tuple[dict[st
                 or test["subjects"] != [{"id": "stantler", "species": 234,
                                           "role": "MOUNTED", "acquire": "existing"}] \
                 or test.get("measurements") not in (None, []) \
-                or [action["id"] for action in actions] != list(ACTIONS) \
-                or [action["op"] for action in actions] != ["step"] * 3 \
-                or [action["args"] for action in actions] != [
-                    {"frames": 32, "keys": ["RIGHT"], "until": {
-                        "kind": "actor-field", "subject": "stantler",
-                        "path": "motionKind", "operator": "eq", "value": "HOP",
-                        "when": "final"}},
-                    {"frames": 48, "keys": [], "until": {
-                        "kind": "actor-field", "subject": "stantler",
-                        "path": "motionPhase", "operator": "eq", "value": "IDLE",
-                        "when": "final"}},
-                    {"frames": 64, "keys": ["RIGHT"], "until": {
-                        "kind": "actor-field", "subject": "stantler",
-                        "path": "movementPolicy.speed", "operator": "eq", "value": 4,
-                        "when": "final"}},
-                ]:
-            raise ValidationFailure("mounted Stantler obstacle Hop differs from its reviewed trigger")
-    elif registration.get("evaluator") == _MOUNTED_STANTLER_NPC_HOP_KIND:
-        from tools.overworld.devtools_mounted_stantler_npc_hop_proof import (
-            ACTIONS, CLAIMS, REQUIREMENT, contract,
-        )
-        actions = test["actions"]
-        if registry.get("measurementContracts", {}).get(REQUIREMENT) != contract() \
-                or registry.get("runners", {}).get(REQUIREMENT) != list(CLAIMS) \
-                or registry.get("runnerKinds", {}).get(REQUIREMENT) != "controlled-case" \
-                or registration.get("proofLevel") != "S3" \
-                or registration.get("claims") != list(CLAIMS) \
-                or registration.get("requirements") != [REQUIREMENT] \
-                or registration.get("recorderControlRequirement") != _ROLE_CONTROL_REQUIREMENT \
-                or test["requirements"] != [REQUIREMENT] or test["mode"] != "prepared" \
-                or test["subjects"] != [{"id": "stantler", "species": 234,
-                                          "role": "MOUNTED", "acquire": "existing"}] \
-                or test.get("measurements") not in (None, []) \
-                or [action["id"] for action in actions] != list(ACTIONS) \
-                or [action["op"] for action in actions] != ["step"] * 2 \
-                or [action["args"] for action in actions] != [
-                    {"frames": 32, "keys": ["RIGHT"], "until": {
-                        "kind": "actor-field", "subject": "stantler",
-                        "path": "motionKind", "operator": "eq", "value": "HOP",
-                        "when": "final"}},
-                    {"frames": 48, "keys": [], "until": {
-                        "kind": "actor-field", "subject": "stantler",
-                        "path": "motionPhase", "operator": "eq", "value": "IDLE",
-                        "when": "final"}},
-                ]:
-            raise ValidationFailure("mounted Stantler NPC Hop differs from its reviewed trigger")
+                or [(action["id"], action["op"], action["args"])
+                    for action in test["actions"]] != [(ACTION, "step", {
+                        "frames": 96, "keys": ["DOWN"], "until": {
+                            "kind": "actor-field", "subject": "stantler",
+                            "path": "origin.y", "operator": "eq", "value": 403,
+                            "when": "final"}})]:
+            raise ValidationFailure("mounted Stantler running ledge differs from its reviewed trigger")
     elif registration.get("evaluator") == _MOUNTED_STANTLER_WALL_APPROACH_KIND:
         from tools.overworld.devtools_mounted_stantler_wall_approach_proof import (
             ACTIONS, CLAIMS, REQUIREMENT, contract,
@@ -1779,8 +2143,9 @@ def _shared_test_registration(test: dict[str, Any], repo: Path) -> tuple[dict[st
                 or [action["args"] for action in actions] != [
                     {"frames": 120, "keys": ["RIGHT"]},
                     {"frames": 64, "keys": ["UP"], "until": {
-                        "kind": "player-settled-at", "map": 33,
-                        "x": 589, "z": 405, "when": "final"}},
+                        "kind": "actor-field", "subject": "stantler",
+                        "path": "motionPhase", "operator": "eq",
+                        "value": "COMMIT_PENDING", "when": "final"}},
                     {"frames": 16, "keys": [], "until": {
                         "kind": "actor-field", "subject": "stantler",
                         "path": "motionPhase", "operator": "eq", "value": "IDLE",
@@ -1868,6 +2233,77 @@ def _shared_test_registration(test: dict[str, Any], repo: Path) -> tuple[dict[st
     elif registration.get("evaluator") == "current-actor-identity-v1":
         if registration.get("proofLevel") not in ("S3", "S5") or registration.get("claims") != ["live-actor-identity"]:
             raise ValidationFailure("shared test needs an implemented exact measurement adapter")
+    elif registration.get("evaluator") == "move-entry-arrival-v1":
+        from tools.overworld.devtools_move_entry_arrival_proof import CLAIMS, REQUIREMENT, contract, recipe_scope
+        if (registry.get("runners", {}).get(REQUIREMENT) != CLAIMS
+                or registry.get("runnerKinds", {}).get(REQUIREMENT) != "controlled-case"
+                or registry.get("measurementContracts", {}).get(REQUIREMENT) != contract()
+                or registration.get("measurementContract") != contract()
+                or registration.get("proofLevel") != "S3" or registration.get("claims") != CLAIMS
+                or registration.get("recorderControlRequirement") is not None or not recipe_scope(test)):
+            raise ValidationFailure("Move entry arrival differs from its exact prepared request contract")
+    elif registration.get("evaluator") == "route29-blocked-step-live-v1":
+        from tools.overworld.devtools_route29_blocked_step_proof import CLAIMS, REQUIREMENT, contract
+        if (registry.get("runners", {}).get(REQUIREMENT) != CLAIMS
+                or registry.get("runnerKinds", {}).get(REQUIREMENT) != "normal-play"
+                or registry.get("measurementContracts", {}).get(REQUIREMENT) != contract()
+                or registration.get("measurementContract") != contract()
+                or registration.get("proofLevel") != "S3"
+                or registration.get("claims") != CLAIMS
+                or registration.get("recorderControlRequirement") is not None
+                or test["requirements"] != [REQUIREMENT]
+                or test["mode"] != "normal"
+                or test["fixture"] != {"rom": "test.nds", "save": "test.sav"}
+                or test["subjects"] != [{"id": "mankey", "species": 56,
+                                          "role": "FOLLOWER", "acquire": "existing"}]
+                or test.get("measurements") not in (None, [])
+                or [(action["id"], action["op"], action["args"])
+                    for action in test["setup"]] != [
+                        ("saved-route29-start", "assert", {"predicate": {
+                            "kind": "player-settled-at", "map": 67, "x": 564, "z": 392,
+                            "when": "final"}}),
+                        ("bind-saved-mankey", "bind", {"subject": "mankey"})]
+                or [(action["id"], action["op"], action["args"])
+                    for action in test["actions"]] != [
+                        ("held-left-to-wall", "step", {"frames": 120, "keys": ["LEFT"]}),
+                        ("at-blocked-tile", "assert", {"predicate": {
+                            "kind": "player-field", "path": "x", "operator": "eq",
+                            "value": 538, "when": "final"}}),
+                        ("held-left-after-block", "step", {"frames": 240, "keys": ["LEFT"]})]
+                or test["budgets"]["minObservedFrames"] != 360):
+            raise ValidationFailure("Route 29 blocked-step test differs from its exact saved input")
+    elif registration.get("evaluator") == "weepinbell-blocked-step-live-v1":
+        from tools.overworld.devtools_weepinbell_blocked_step_proof import CLAIMS, REQUIREMENT, contract
+        if (registry.get("runners", {}).get(REQUIREMENT) != CLAIMS
+                or registry.get("runnerKinds", {}).get(REQUIREMENT) != "controlled-case"
+                or registry.get("measurementContracts", {}).get(REQUIREMENT) != contract()
+                or registration.get("measurementContract") != contract()
+                or registration.get("proofLevel") != "S3"
+                or registration.get("claims") != CLAIMS
+                or registration.get("recorderControlRequirement") is not None
+                or test["requirements"] != [REQUIREMENT]
+                or test["mode"] != "prepared"
+                or test["fixture"] != {"rom": "test.nds", "save": "test.sav"}
+                or test["subjects"] != [
+                    {"id": "mankey", "species": 56, "role": "FOLLOWER", "acquire": "existing"},
+                    {"id": "weepinbell", "species": 70, "role": "WILD", "acquire": "spawn"}]
+                or test.get("measurements") not in (None, [])
+                or [(action["id"], action["op"], action["args"])
+                    for action in test["setup"]] != [
+                        ("saved-route29-start", "assert", {"predicate": {
+                            "kind": "player-settled-at", "map": 67, "x": 564, "z": 392,
+                            "when": "final"}}),
+                        ("spawn-blocking-weepinbell", "spawn", {
+                            "species": 70, "form": 0, "role": "wild", "level": 5,
+                            "x": 562, "z": 392}),
+                        ("bind-blocking-weepinbell", "bind", {"subject": "weepinbell"}),
+                        ("bind-saved-mankey", "bind", {"subject": "mankey"})]
+                or [(action["id"], action["op"], action["args"])
+                    for action in test["actions"]] != [
+                        ("held-left-against-weepinbell", "step", {
+                            "frames": 180, "keys": ["LEFT"]})]
+                or test["budgets"]["minObservedFrames"] != 180):
+            raise ValidationFailure("Weepinbell blocked-step test differs from its exact spawn and input")
     elif registration.get("evaluator") == "acceleration-parity-v1":
         from tools.overworld.devtools_acceleration_acceptance import contract, CLAIMS, REQUIREMENT
         if registry.get("measurementContracts", {}).get(REQUIREMENT) != contract() \
@@ -1893,14 +2329,13 @@ def _shared_test_registration(test: dict[str, Any], repo: Path) -> tuple[dict[st
             raise ValidationFailure("mounted pacing changed its original nine-row contract")
     elif registration.get("evaluator") == _MOUNT_CONTROL_STRESS_KIND:
         from tools.overworld.devtools_mount_control_stress_proof import (
-            contract, CLAIMS, REQUIREMENTS, WALK_REQUIREMENT, HOP_REQUIREMENT,
+            contract, CLAIMS, REQUIREMENTS, WALK_REQUIREMENT,
         )
         registered_requirements = registration.get("requirements")
         requirement = registered_requirements[0] if isinstance(registered_requirements, list) \
             and len(registered_requirements) == 1 else None
         expected = {
             WALK_REQUIREMENT: ("cyndaquil", 155, "walk"),
-            HOP_REQUIREMENT: ("mankey", 56, "hop"),
         }.get(requirement)
         if requirement not in REQUIREMENTS or expected is None \
                 or registry.get("measurementContracts", {}).get(requirement) != contract(requirement) \
@@ -1914,35 +2349,6 @@ def _shared_test_registration(test: dict[str, Any], repo: Path) -> tuple[dict[st
                 or test.get("measurements") != [dict(kind=_MOUNT_CONTROL_STRESS_KIND,
                                                       subject=expected[0], contract=expected[2])]:
             raise ValidationFailure("mounted control stress changed its original species contract")
-    elif registration.get("evaluator") == _MOUNTED_HOP_ARC_KIND:
-        from tools.overworld.devtools_mounted_hop_arc_proof import contract, CLAIMS, REQUIREMENT
-        if registry.get("measurementContracts", {}).get(REQUIREMENT) != contract() \
-                or registry.get("runners", {}).get(REQUIREMENT) != list(CLAIMS) \
-                or registry.get("runnerKinds", {}).get(REQUIREMENT) != "controlled-case" \
-                or registration.get("proofLevel") != "S4" \
-                or registration.get("claims") != list(CLAIMS) \
-                or registration.get("requirements") != [REQUIREMENT] \
-                or test["requirements"] != [REQUIREMENT] or test["mode"] != "prepared" \
-                or registration.get("recorderControlRequirement") is not None \
-                or test["subjects"] != [dict(id="mankey", species=56, role="MOUNTED", acquire="existing")] \
-                or test.get("measurements") != [dict(kind=_MOUNTED_HOP_ARC_KIND,
-                                                      subject="mankey", contract=REQUIREMENT)]:
-            raise ValidationFailure("mounted Hop arc changed its exact three-case contract")
-    elif registration.get("evaluator") == _MOUNTED_NEAREST_DIAGONAL_KIND:
-        from tools.overworld.devtools_mounted_nearest_diagonal_proof import contract, CLAIMS
-        from tools.overworld.devtools_mounted_nearest_diagonal import REQUIREMENT
-        if registry.get("measurementContracts", {}).get(REQUIREMENT) != contract() \
-                or registry.get("runners", {}).get(REQUIREMENT) != list(CLAIMS) \
-                or registry.get("runnerKinds", {}).get(REQUIREMENT) != "controlled-case" \
-                or registration.get("proofLevel") != "S3" \
-                or registration.get("claims") != list(CLAIMS) \
-                or registration.get("requirements") != [REQUIREMENT] \
-                or test["requirements"] != [REQUIREMENT] or test["mode"] != "prepared" \
-                or registration.get("recorderControlRequirement") is not None \
-                or test["subjects"] != [dict(id="mankey", species=56, role="MOUNTED", acquire="existing")] \
-                or test.get("measurements") != [dict(kind=_MOUNTED_NEAREST_DIAGONAL_KIND,
-                                                      subject="mankey", contract=REQUIREMENT)]:
-            raise ValidationFailure("nearest diagonal changed its exact one-case contract")
     elif registration.get("evaluator") == _WILD_LEDGE_KIND:
         from tools.overworld.devtools_wild_ledge_proof import contract, CLAIMS, REQUIREMENTS
         if any(registry.get("measurementContracts", {}).get(requirement) != contract(requirement)
@@ -2060,22 +2466,6 @@ def _shared_test_registration(test: dict[str, Any], repo: Path) -> tuple[dict[st
                 or test.get("measurements") != [dict(
                     kind=_MOUNTED_CARDINAL_STREAMING_KIND, subject="cyndaquil")]:
             raise ValidationFailure("cardinal streaming changed its exact held-route contract")
-    elif registration.get("evaluator") == _MOUNTED_HOP_TRANSITION_KIND:
-        from tools.overworld.devtools_mounted_hop_transition_proof import contract, CLAIMS
-        from tools.overworld.devtools_mounted_hop_transition_measurement import REQUIREMENT
-        if registry.get("measurementContracts", {}).get(REQUIREMENT) != contract() \
-                or registry.get("runners", {}).get(REQUIREMENT) != list(CLAIMS) \
-                or registry.get("runnerKinds", {}).get(REQUIREMENT) != "controlled-case" \
-                or registration.get("proofLevel") != "S5" \
-                or registration.get("claims") != list(CLAIMS) \
-                or registration.get("requirements") != [REQUIREMENT] \
-                or test["requirements"] != [REQUIREMENT] or test["mode"] != "prepared" \
-                or registration.get("recorderControlRequirement") is not None \
-                or test["subjects"] != [dict(id="mankey", species=56,
-                                              role="MOUNTED", acquire="existing")] \
-                or test.get("measurements") != [dict(
-                    kind=_MOUNTED_HOP_TRANSITION_KIND, subject="mankey")]:
-            raise ValidationFailure("mounted Hop transition changed its exact rebound contract")
     elif registration.get("evaluator") == _MOUNTED_WALK_TRANSITION_KIND:
         from tools.overworld.devtools_mounted_walk_transition_proof import contract, CLAIMS
         from tools.overworld.devtools_mounted_walk_transition_measurement import REQUIREMENT
@@ -2202,6 +2592,12 @@ def _shared_test_registration(test: dict[str, Any], repo: Path) -> tuple[dict[st
                     kind=_APPEAR_HOP_KIND, subject="clefairy")]:
             raise ValidationFailure("Appear Hop changed its exact timing contract")
     elif (adapter := get_adapter(registration.get("evaluator"))) is not None:
+        expected_measurement = dict(kind=adapter.kind, subject=adapter.subjects[0][0])
+        if adapter.kind in ("distance-despawn-route29-v1", "distance-despawn-cherrygrove-v1"):
+            expected_measurement["subject"] = "unrelated"
+        if adapter.kind == "mounted-speed-slew-v1" and test["id"] in (
+                "mount.stantler-linear-variance", "mount.stantler-sprint-full-speed"):
+            expected_measurement["linearRamp"] = 12 if test["id"] == "mount.stantler-linear-variance" else 60
         current_contract = not adapter.requirement.startswith("legacy.")
         actual_contract = (registration.get("measurementContract")
             if adapter.is_control or current_contract else
@@ -2212,7 +2608,7 @@ def _shared_test_registration(test: dict[str, Any], repo: Path) -> tuple[dict[st
                 or test["mode"] != adapter.mode \
                 or registration.get("recorderControlRequirement") != adapter.recorder_control_requirement \
                 or test["subjects"] != adapter.recipe_subjects() \
-                or test.get("measurements") != [dict(kind=adapter.kind, subject=adapter.subjects[0][0])] \
+                or test.get("measurements") != [expected_measurement] \
                 or (not adapter.is_control and not current_contract
                     and registry.get("runners", {}).get(adapter.requirement) != list(adapter.claims)):
             raise ValidationFailure(adapter.kind + " changed its exact measurement or reader contract")
@@ -2418,6 +2814,28 @@ def _shared_artifact(record: Any, parent: Path) -> Path:
     return path
 
 
+def _distance_subject_retired(sample: dict[str, Any], current: Any, subject: dict[str, Any]) -> bool:
+    """Retire only an exact owner after its leaf proves native source removal."""
+    soak = current.measurements.get("wild-throw-ground-lock-soak-v1")
+    if soak is not None and not soak.failures:
+        primary_retired = getattr(soak, "primary_subject_retired", None)
+        if primary_retired is not None and primary_retired(sample, subject):
+            return True
+    if (soak is not None and not soak.failures and soak.cargo_exit is not None
+            and subject == soak.subjects.get("cargo")
+            and soak.cargo_exit["handle"] == subject["handle"]
+            and sample["frame"] >= soak.cargo_exit["frame"]):
+        return True
+    distance = next((current.measurements[kind] for kind in
+        ("distance-despawn-route29-v1", "distance-despawn-cherrygrove-v1")
+        if kind in current.measurements), None)
+    return (distance is not None and not distance.failures
+            and distance.deleted is not None
+            and subject == distance.subjects.get("unrelated")
+            and distance.deleted["handle"] == subject["handle"]
+            and sample["frame"] >= distance.deleted["frame"])
+
+
 def _replay_shared_test(test: dict[str, Any], rows: list[dict[str, Any]], *, fault: str | None = None,
                         repo: Path = REPO) -> dict[str, Any]:
     """Controller-owned replay; optional controls alter input to the same checker."""
@@ -2441,12 +2859,6 @@ def _replay_shared_test(test: dict[str, Any], rows: list[dict[str, Any]], *, fau
     elif fault is not None and _MOUNT_CONTROL_STRESS_KIND in evaluator.measurements:
         from tools.overworld.devtools_mount_control_stress_proof import MountControlStressNegative
         route_control = MountControlStressNegative(fault)
-    elif fault is not None and _MOUNTED_HOP_ARC_KIND in evaluator.measurements:
-        from tools.overworld.devtools_mounted_hop_arc_proof import MountedHopArcNegative
-        route_control = MountedHopArcNegative(fault)
-    elif fault is not None and _MOUNTED_NEAREST_DIAGONAL_KIND in evaluator.measurements:
-        from tools.overworld.devtools_mounted_nearest_diagonal_proof import MountedNearestDiagonalNegative
-        route_control = MountedNearestDiagonalNegative(fault)
     elif fault is not None and _WILD_LEDGE_KIND in evaluator.measurements:
         from tools.overworld.devtools_wild_ledge_proof import WildLedgeNegative
         route_control = WildLedgeNegative(fault)
@@ -2476,9 +2888,6 @@ def _replay_shared_test(test: dict[str, Any], rows: list[dict[str, Any]], *, fau
     elif fault is not None and _MOUNTED_CARDINAL_STREAMING_KIND in evaluator.measurements:
         from tools.overworld.devtools_mounted_cardinal_streaming_proof import MountedCardinalStreamingNegative
         route_control = MountedCardinalStreamingNegative(fault)
-    elif fault is not None and _MOUNTED_HOP_TRANSITION_KIND in evaluator.measurements:
-        from tools.overworld.devtools_mounted_hop_transition_proof import MountedHopTransitionNegative
-        route_control = MountedHopTransitionNegative(fault)
     elif fault is not None and _MOUNTED_WALK_TRANSITION_KIND in evaluator.measurements:
         from tools.overworld.devtools_mounted_walk_transition_proof import MountedWalkTransitionNegative
         route_control = MountedWalkTransitionNegative(fault)
@@ -2487,7 +2896,7 @@ def _replay_shared_test(test: dict[str, Any], rows: list[dict[str, Any]], *, fau
         route_control = LandSurfNegative(fault)
     elif fault is not None and _SPAWN_WORK_BUDGET_KIND in evaluator.measurements:
         from tools.overworld.devtools_spawn_work_budget_proof import SpawnWorkBudgetNegative
-        route_control = SpawnWorkBudgetNegative(fault)
+        route_control = SpawnWorkBudgetNegative(fault, measurement=evaluator.measurements[_SPAWN_WORK_BUDGET_KIND])
     elif fault is not None and _UNMOUNTED_ZERO_STUTTER_KIND in evaluator.measurements:
         from tools.overworld.devtools_unmounted_zero_stutter_proof import UnmountedZeroStutterNegative
         route_control = UnmountedZeroStutterNegative(fault)
@@ -2531,7 +2940,9 @@ def _replay_shared_test(test: dict[str, Any], rows: list[dict[str, Any]], *, fau
         from tools.overworld.devtools_chain_retry_measurement import ChainRetryNegative, RETRY_FAULTS
         if fault in RETRY_FAULTS:
             route_control = ChainRetryNegative(fault)
+    appearance_nurse_transition = False
     pool_control_subject = None
+    pool_control_fly = False
     pool_control_finalization = None
     for row in rows:
         if not isinstance(row, dict): raise ValidationFailure("invalid observation stream row")
@@ -2559,10 +2970,50 @@ def _replay_shared_test(test: dict[str, Any], rows: list[dict[str, Any]], *, fau
                 # never borrow a chain control or silently skip the requested fault.
                 raise ValidationFailure("cadence replay controls are not yet registered")
             def verify_cadence_frame(sample, current):
+                priority = next((current.measurements[k] for k in
+                    ("natural-refill-retry-v1", "natural-water-spawn-v1") if k in current.measurements), None)
+                if priority is not None:
+                    # The one declared map warp rebinds the same saved follower.
+                    # The meter checks the unchanged party identity and full
+                    # current handle before publishing this exact boundary.
+                    if row.get("phase") == "observe":
+                        if priority.subject is not None:
+                            _verify_shared_subject_observation(sample, priority.subject)
+                        else:
+                            # The declared second-field wait has no bound body
+                            # yet and earns no observation credit. The meter
+                            # checks every boundary, saved identity and raw event;
+                            # recheck any body present before its fresh bind.
+                            if (priority.kind != "natural-refill-retry-v1"
+                                    or row.get("action") != "route29-current-follower"
+                                    or priority.window != 1 or priority.action_index != 5
+                                    or priority.window_transition is None
+                                    or priority.observed_frames != 240):
+                                raise ValidationFailure("natural spawn replay lacks its current follower bind")
+                            for actor in sample["actors"]:
+                                if actor.get("active") is True and actor.get("role") == "FOLLOWER":
+                                    _verify_shared_subject_observation(sample, actor)
+                    return
+                if "pokemon-damage-palette-v1" in current.measurements and appearance_nurse_transition:
+                    # The declared nurse warp retired the old Wild/Mounted
+                    # engine handles. The leaf still proves native party heal.
+                    healed = current.subjects.get("healed-cyndaquil")
+                    if healed is not None:
+                        _verify_shared_subject_observation(sample, healed)
+                    return
                 if {_MOUNTED_TELEPORT_MATRIX_KIND, _WARP_GATE_KIND}.intersection(current.measurements):
                     # These meters validate the same handle, source, engine
                     # owner and generation while Teleport visibility makes the
                     # generic attachment flag false.
+                    return
+                if _PLAYER_HEALTH_RAM_REST_KIND in current.measurements \
+                        and current.measurements[_PLAYER_HEALTH_RAM_REST_KIND].after_teleport:
+                    # The Ram source is checked before the declared safe-tile
+                    # teleport. It is no longer a current actor afterward.
+                    return
+                if _PLAYER_HEALTH_SAVE_RELOAD_KIND in current.measurements \
+                        and current.measurements[_PLAYER_HEALTH_SAVE_RELOAD_KIND].reload is not None:
+                    # The prepared Onix is not part of the saved cartridge.
                     return
                 if "acceleration-parity-v1" in current.measurements and fault is None:
                     # Both motion windows are explicit prepared actions. Only
@@ -2573,18 +3024,46 @@ def _replay_shared_test(test: dict[str, Any], rows: list[dict[str, Any]], *, fau
                         _verify_shared_subject_observation(sample, current.subjects[active])
                 elif row.get("phase") == "observe" and fault is None:
                     for subject in current.subjects.values():
+                        if _distance_subject_retired(sample, current, subject):
+                            # The leaf has proved exact native source removal,
+                            # its prior owner and the cleared slot. The removed
+                            # body cannot remain in the native manager afterward.
+                            continue
                         _verify_shared_subject_observation(
                             sample,
                             subject,
                             allow_mounted_rebound=bool(
                                 {_MOUNT_CONTROL_STRESS_KIND, _MOUNT_DETACH_FOLLOWER_RESUME_KIND,
                                  _POPULATION_FAST_TRAVEL_KIND,
-                                 _MOUNTED_WALK_TRANSITION_KIND, _MOUNTED_HOP_TRANSITION_KIND}
+                                 _MOUNTED_WALK_TRANSITION_KIND}
                                 .intersection(current.measurements)
                             ),
                         )
             progress = evaluator.observe_record(row, frame_callback=verify_cadence_frame, full_report=False)
             if progress["state"] == "failed": break
+            if ("pokemon-damage-palette-v1" in evaluator.measurements
+                    and row.get("command") == "teleport" and row.get("action") == "normal-center"):
+                meter = evaluator.measurements["pokemon-damage-palette-v1"]
+                action = next((a for a in test["actions"] if a["id"] == "normal-center"), None)
+                receipt, snapshot = row.get("receipt", {}), row.get("snapshot", {})
+                native = receipt.get("snapshot", {})
+                endpoint = receipt.get("setupBoundary", {})
+                target = action["args"] if action is not None else {}
+                if (appearance_nurse_transition or row.get("phase") != "observe"
+                        or action is None or action["op"] != "teleport"
+                        or target.get("map") != 69 or not meter.stage("two-red-hits")
+                        or receipt.get("preparedOnly") is not True
+                        or any(native.get(k) != snapshot.get(k) for k in ("frame", "nativeCycle", "context"))
+                        or endpoint.get("eventsDrained") is not True
+                        or endpoint.get("frame") != snapshot.get("frame")
+                        or endpoint.get("endpointNativeCycle") != snapshot.get("nativeCycle")
+                        or snapshot.get("context", {}).get("mapId") != target["map"]
+                        or any(receipt.get("value", {}).get(k) != target[v]
+                               for k, v in (("mapId", "map"), ("x", "x"), ("z", "z"), ("facing", "facing")))):
+                    evaluator.fail("palette-nurse-transition-rejected",
+                                   "palette nurse transition lacks its declared completed native boundary")
+                    break
+                appearance_nurse_transition = True
             continue
         if row.get("command") in ("observer-control.close", "route-control.close"):
             receipt = row.get("receipt")
@@ -2633,8 +3112,16 @@ def _replay_shared_test(test: dict[str, Any], rows: list[dict[str, Any]], *, fau
                     or armed[0].get("subject") != args["subject"] or armed[0].get("kind") != args["kind"] \
                     or armed[0].get("maxFrames") != args["maxFrames"] or armed[0].get("frame") != receipt["frame"]:
                 raise ValidationFailure("retained native observer-control arm differs from the approved subject/fault/boundary")
-        if row.get("command") in ("party", "spawn") and "setupBoundary" in row.get("receipt", {}):
+        if ((row.get("command") in ("party", "spawn", "notice-hop.prepare")
+             or (row.get("command") == "teleport"
+                 and {"throw-notice-walk-commit-v1", "follower-throw-hit-abort-v1"}
+                 .intersection(evaluator.measurements)))
+                and "setupBoundary" in row.get("receipt", {})):
             if evaluator.observe_prepared_command(row)["state"] == "failed":
+                break
+            continue
+        if test.get("id") == "profile.ram.brief-notice" and row.get("command") == "terrain":
+            if evaluator.observe_brief_terrain(row)["state"] == "failed":
                 break
             continue
         boundary = row.get("boundarySnapshot")
@@ -2688,7 +3175,7 @@ def _replay_shared_test(test: dict[str, Any], rows: list[dict[str, Any]], *, fau
             if can_mutate:
                 sample = deepcopy(sample)
                 sample_events = [deepcopy(event) for event in sample_events]
-            if fault in ("pool-missing-finalization", "pool-replaced-site"):
+            if fault in ("pool-missing-finalization", "pool-replaced-site", "pool-surface-missing-refresh"):
                 for event in sample_events:
                     data = event.get("data", {})
                     if event.get("kind") != "native-observation" \
@@ -2697,7 +3184,12 @@ def _replay_shared_test(test: dict[str, Any], rows: list[dict[str, Any]], *, fau
                             or data.get("preparedEncounter", {}).get("species") != 165 \
                             or pool_control_finalization is not None:
                         continue
-                    if fault == "pool-missing-finalization":
+                    if fault == "pool-surface-missing-refresh":
+                        if data.get("startup", {}).get("locomotion") != 9:
+                            continue
+                        data.pop("startupHex", None)
+                        pool_control_finalization = deepcopy(data)
+                    elif fault == "pool-missing-finalization":
                         data["observation"] = "spawn-finalization-removed"
                         pool_control_finalization = {}
                     else:
@@ -2759,16 +3251,23 @@ def _replay_shared_test(test: dict[str, Any], rows: list[dict[str, Any]], *, fau
                             and data.get("publicSubject", {}).get("species") == 165 \
                             and data.get("publicSubject", {}).get("role") == "WILD" and pool_control_subject is None:
                         pool_control_subject = data["publicSubject"]["handle"]
-                        if fault == "pool-replaced-site" and isinstance(pool_control_finalization, dict) \
+                        pool_control_fly = data.get("startup", {}).get("locomotion") == 9
+                        if fault in ("pool-replaced-site", "pool-surface-missing-refresh") and isinstance(pool_control_finalization, dict) \
                                 and pool_control_finalization \
                                 and data.get("finalization", {}).get("receipt", {}).get("finalizationId") \
                                 == pool_control_finalization.get("finalizationId"):
                             data["finalization"]["receipt"] = deepcopy(pool_control_finalization)
-                        elif fault in _POOL_SURFACE_CONTROLS and not controlled:
+                        if fault in _POOL_SURFACE_CONTROLS and not controlled:
                             if "pool-spawn-surface-v1" not in evaluator.measurements:
                                 raise ValidationFailure("surface control requires the stronger POOL measurement")
-                            _erase_pool_surface_meaning(data, sample_events, fault)
+                            _erase_pool_surface_meaning(data, sample_events, fault, sample)
                             controlled = True
+                if pool_control_fly and fault == "pool-surface-missing-height":
+                    # Remove the actual physical terminal meaning, not the
+                    # frame-zero/first flight sample or a synthetic Hop tap.
+                    for actor in sample.get("actors", []):
+                        if actor.get("handle") == pool_control_subject and actor.get("motionPhase") == "IDLE":
+                            actor.get("engineObject", {}).pop("pos_y", None)
                 if fault.startswith("pool-missing-meaning:"):
                     name = fault.split(":", 1)[1]
                     if name not in _LEDYBA_REQUIRED_MEANINGS:
@@ -2887,9 +3386,43 @@ def _shared_ledyba_measurements(replay: dict[str, Any]) -> list[dict[str, Any]]:
     return measured
 
 
-def _erase_pool_surface_meaning(spawn: dict[str, Any], events: list[dict[str, Any]], fault: str) -> None:
+def _erase_pool_surface_meaning(spawn: dict[str, Any], events: list[dict[str, Any]], fault: str, snapshot=None) -> None:
     """Change one native meaning in every exact copy; never the retained rows."""
     from copy import deepcopy
+    if spawn.get("startup", {}).get("locomotion") == 9:
+        target = spawn["position"]
+        if not isinstance(snapshot, dict):
+            raise ValidationFailure("Fly In control needs its coherent terrain sample")
+        rows = [row for row in snapshot.get("poolFlyTerrain", [])
+                if row.get("subject", {}).get("handle") == spawn["publicSubject"]["handle"]
+                and row.get("target") == target]
+        cells = [row.get("cell") for row in rows] if "poolFlyTerrain" in snapshot else [
+            cell for cell in snapshot.get("terrain", {}).get("cells", [])
+            if [cell.get("x"), cell.get("y")] == target]
+        if fault == "pool-surface-missing-query":
+            if len(cells) != 1: raise ValidationFailure("Fly In surface control has no unique actual target")
+            cells[0].pop("surface", None)
+        elif fault == "pool-surface-missing-terrain":
+            if len(cells) != 1: raise ValidationFailure("Fly In terrain control has no unique actual target")
+            if "poolFlyTerrain" in snapshot:
+                snapshot["poolFlyTerrain"].remove(rows[0])
+            else:
+                snapshot["terrain"]["cells"].remove(cells[0])
+        elif fault == "pool-surface-missing-refresh":
+            # Historical control key; Fly In uses the finalized ground-height
+            # word rather than a later Hop refresh. Remove that exact receipt.
+            final = spawn["finalization"]["receipt"]
+            had_height_word = "startupHex" in final
+            final.pop("startupHex", None)
+            matched = [e["data"] for e in events if e.get("kind") == "native-observation"
+                and e.get("data", {}).get("observation") == "spawn-finalized"
+                and e["data"].get("finalizationId") == final["finalizationId"]]
+            if len(matched) > 1 or not matched and had_height_word:
+                raise ValidationFailure("Fly In control has no exact observed native finalizer")
+            if matched: matched[0].pop("startupHex", None)
+        elif fault != "pool-surface-missing-height":
+            raise ValidationFailure("unknown Fly In surface meaning control")
+        return
     height = spawn["jumpReceipts"][0]["landingHeight"]
     sequence = height["sequence"]
     if fault == "pool-surface-missing-query":
@@ -3160,13 +3693,14 @@ def _resolver_probe_oracle(repo):
     """Fresh Workshop results and packaged identities, never a cached game verdict."""
     from tools.overworld.devtools_runtime import _elf_code, STOCK_CALLS
     from tools.overworld.devtools_engine import linked_symbols, linked_symbol
-    from tools.overworld.devtools_resolver_parity import CASE_NAMES
+    from tools.overworld.devtools_resolver_parity import (
+        CASE_NAMES, RESOLVER_BLOB_VERSION, packaged_query_identity)
     blob_path = repo / "build/OverworldWildBehaviorData.bin"
     blob = blob_path.read_bytes()
     corpus = json.loads((repo / "tools/overworld/native/behavior_resolver_golden.json").read_text())
     by_name = {vector.get("name"): vector for vector in corpus["vectors"]}
     vectors = [by_name.get(name) for name in CASE_NAMES]
-    if corpus["blobVersion"] != 81 \
+    if corpus["blobVersion"] != RESOLVER_BLOB_VERSION \
             or not all(isinstance(vector, dict) for vector in vectors):
         raise ValidationFailure("resolver golden cases changed")
     path = repo / "tools/overworld-viewer-v2/native_resolver.py"
@@ -3178,13 +3712,15 @@ def _resolver_probe_oracle(repo):
     service = next(s for s in descriptor["privateServices"] if s["name"] == "resolver")
     elf = repo / "build/overworld_actor_system_overlay_linked.o"
     address = linked_symbol(linked_symbols(elf), "BehaviorResolver_Resolve") & ~1
-    if service["status"] != "available" or service["version"] != 2 or service["size"] != 16 \
+    if service["status"] != "available" or service["version"] != 3 or service["size"] != 16 \
             or service["callbacks"]["resolve"] != address | 1:
         raise ValidationFailure("resolver service differs from packaged linked function")
+    query_identity, _query_blob, _query_receipt = packaged_query_identity(repo, repo / "test.nds")
     return {"vectors": vectors, "hostResults": results,
         "blobIdentity": {"size": len(blob), "sha256": hashlib.sha256(blob).hexdigest()},
-        "serviceIdentity": {"magic": 0x5250574F, "version": 2, "size": 16,
-            "resolveAddress": address | 1, "entrySha256": hashlib.sha256(_elf_code(elf,address,32)).hexdigest()},
+        "serviceIdentity": {"magic": 0x5250574F, "version": 3, "size": 16,
+            "resolveAddress": address | 1, "entrySha256": hashlib.sha256(_elf_code(elf,address,32)).hexdigest(),
+            **query_identity},
         "callAddresses": {"allocate_work_memory": STOCK_CALLS["allocate_work_memory"][0],
                           "free": STOCK_CALLS["free"][0], "resolve_behavior": address}}
 
@@ -3545,6 +4081,46 @@ def _shared_mount_select_mid_run(test, rows, record, repo):
                                           for name, result in controls["controls"].items()})
 
 
+def _shared_mount_select_switch(test, rows, record, repo):
+    """Native one-press Select during a queued follower switch."""
+    from tools.overworld.devtools_mount_select_switch_proof import (
+        REQUIREMENT, contract, run, negative_controls,
+    )
+    evidence = run(rows, test)
+    if evidence.get("passed") is not True:
+        raise ValidationFailure("switch Select native replay failed: " + str(evidence.get("failures")))
+    controls = negative_controls(rows, test)
+    if controls.get("passed") is not True or not any(
+            "never mounted" in reason
+            for reason in controls["controls"]["missing-mount"]["failures"]):
+        raise ValidationFailure("switch Select copied-input controls did not reject the missing mount")
+    if record.get("sessionCleanup") != {"sessionId": record["sessionId"],
+                                        "closed": True, "errors": []}:
+        raise ValidationFailure("switch Select private session cleanup is missing or failed")
+    registry = json.loads((repo / "tools/overworld/runtime_proof_registry.json").read_text())
+    if registry["measurementContracts"].get(REQUIREMENT) != contract():
+        raise ValidationFailure("switch Select measurement contract changed")
+    values = evidence["values"]
+    if set(values) != {rule["name"] for rules in contract().values() for rule in rules}:
+        raise ValidationFailure("switch Select exact measurements are missing")
+    measurements = []
+    for claim, rules in contract().items():
+        for rule in rules:
+            value = values[rule["name"]]
+            expected = rule["expected"]
+            if type(value) is not int or (value != expected if rule["operator"] == "eq"
+                                          else value > expected) \
+                    or not _registry_validator_passes(rule, value, expected):
+                raise ValidationFailure("switch Select measurement rejected: " + rule["name"])
+            measurements.append(dict(claim=claim, name=rule["name"], value=value,
+                                     operator=rule["operator"], expected=expected, passed=True))
+    return dict(measurements=measurements, mountSelectSwitch=evidence,
+                mountSelectSwitchControls={name: dict(rejected=True,
+                                                      faultApplied=result["faultApplied"],
+                                                      failures=result["failures"])
+                                           for name, result in controls["controls"].items()})
+
+
 def _shared_mounted_stantler_sprint(test, rows, record, repo):
     """Normal mounted Sprint after prepared party and position setup."""
     from tools.overworld.devtools_mounted_stantler_sprint_proof import (
@@ -3582,82 +4158,41 @@ def _shared_mounted_stantler_sprint(test, rows, record, repo):
                     for name, result in controls["controls"].items()})
 
 
-def _shared_mounted_stantler_obstacle_hop(test, rows, record, repo):
-    """Normal mounted Sprint Hop over the reviewed static obstacle."""
-    from tools.overworld.devtools_mounted_stantler_obstacle_hop_proof import (
+
+def _shared_mounted_stantler_running_ledge(test, rows, record, repo):
+    """Normal held Down through a running South ledge Hop and recovery."""
+    from tools.overworld.devtools_mounted_stantler_running_ledge_proof import (
         REQUIREMENT, contract, run, negative_controls,
     )
     evidence = run(rows, test)
     if evidence.get("passed") is not True:
-        raise ValidationFailure("mounted Stantler obstacle Hop replay failed: "
+        raise ValidationFailure("mounted Stantler running ledge replay failed: "
                                 + str(evidence.get("failures")))
     controls = negative_controls(rows, test)
     if controls.get("passed") is not True:
-        raise ValidationFailure("mounted Stantler obstacle-Hop controls failed: "
+        raise ValidationFailure("mounted Stantler running-ledge controls failed: "
                                 + str(controls))
     if record.get("sessionCleanup") != {"sessionId": record["sessionId"],
                                         "closed": True, "errors": []}:
-        raise ValidationFailure("mounted Stantler obstacle-Hop session cleanup failed")
+        raise ValidationFailure("mounted Stantler running-ledge session cleanup failed")
     registry = json.loads((repo / "tools/overworld/runtime_proof_registry.json").read_text())
     if registry["measurementContracts"].get(REQUIREMENT) != contract():
-        raise ValidationFailure("mounted Stantler obstacle-Hop contract changed")
+        raise ValidationFailure("mounted Stantler running-ledge contract changed")
     values = evidence["values"]
-    if set(values) != {rule["name"] for rules in contract().values()
-                       for rule in rules}:
-        raise ValidationFailure("mounted Stantler obstacle-Hop measurements are missing")
+    if set(values) != {rule["name"] for rules in contract().values() for rule in rules}:
+        raise ValidationFailure("mounted Stantler running-ledge measurements are missing")
     measurements = []
     for claim, rules in contract().items():
         for rule in rules:
-            value = values[rule["name"]]
-            expected = rule["expected"]
+            value, expected = values[rule["name"]], rule["expected"]
             if type(value) is not int or value != expected \
                     or not _registry_validator_passes(rule, value, expected):
-                raise ValidationFailure("mounted Stantler obstacle-Hop measurement rejected: "
+                raise ValidationFailure("mounted Stantler running-ledge measurement rejected: "
                                         + rule["name"])
             measurements.append(dict(claim=claim, name=rule["name"], value=value,
                                      operator="eq", expected=expected, passed=True))
-    return dict(measurements=measurements, mountedStantlerObstacleHop=evidence,
-                mountedStantlerObstacleHopControls={name: dict(rejected=True,
-                    faultApplied=result["faultApplied"], failures=result["failures"])
-                    for name, result in controls["controls"].items()})
-
-
-def _shared_mounted_stantler_npc_hop(test, rows, record, repo):
-    """Normal mounted Sprint Hop over the reviewed Route 29 NPC tile."""
-    from tools.overworld.devtools_mounted_stantler_npc_hop_proof import (
-        REQUIREMENT, contract, run, negative_controls,
-    )
-    evidence = run(rows, test)
-    if evidence.get("passed") is not True:
-        raise ValidationFailure("mounted Stantler NPC Hop replay failed: "
-                                + str(evidence.get("failures")))
-    controls = negative_controls(rows, test)
-    if controls.get("passed") is not True:
-        raise ValidationFailure("mounted Stantler NPC Hop controls failed: "
-                                + str(controls))
-    if record.get("sessionCleanup") != {"sessionId": record["sessionId"],
-                                        "closed": True, "errors": []}:
-        raise ValidationFailure("mounted Stantler NPC Hop session cleanup failed")
-    registry = json.loads((repo / "tools/overworld/runtime_proof_registry.json").read_text())
-    if registry["measurementContracts"].get(REQUIREMENT) != contract():
-        raise ValidationFailure("mounted Stantler NPC Hop contract changed")
-    values = evidence["values"]
-    if set(values) != {rule["name"] for rules in contract().values()
-                       for rule in rules}:
-        raise ValidationFailure("mounted Stantler NPC Hop measurements are missing")
-    measurements = []
-    for claim, rules in contract().items():
-        for rule in rules:
-            value = values[rule["name"]]
-            expected = rule["expected"]
-            if type(value) is not int or value != expected \
-                    or not _registry_validator_passes(rule, value, expected):
-                raise ValidationFailure("mounted Stantler NPC Hop measurement rejected: "
-                                        + rule["name"])
-            measurements.append(dict(claim=claim, name=rule["name"], value=value,
-                                     operator="eq", expected=expected, passed=True))
-    return dict(measurements=measurements, mountedStantlerNpcHop=evidence,
-                mountedStantlerNpcHopControls={name: dict(rejected=True,
+    return dict(measurements=measurements, mountedStantlerRunningLedge=evidence,
+                mountedStantlerRunningLedgeControls={name: dict(rejected=True,
                     faultApplied=result["faultApplied"], failures=result["failures"])
                     for name, result in controls["controls"].items()})
 
@@ -3851,6 +4386,46 @@ def _shared_mounted_stantler_key_edge(test, rows, record, repo):
                     for name, result in controls["controls"].items()})
 
 
+def _shared_mounted_stantler_newest_direction(test, rows, record, repo):
+    """Require the fresh Up edge, completed skids, and next Up Walk."""
+    from tools.overworld.devtools_mounted_stantler_newest_direction_proof import (
+        REQUIREMENT, contract, run, negative_controls,
+    )
+    evidence = run(rows, test)
+    if evidence.get("passed") is not True:
+        raise ValidationFailure("mounted newest direction replay failed: " +
+                                str(evidence.get("failures")))
+    controls = negative_controls(rows, test)
+    if controls.get("passed") is not True:
+        raise ValidationFailure("mounted newest direction copied-data controls failed: " +
+                                str(controls))
+    if record.get("sessionCleanup") != {"sessionId": record["sessionId"],
+                                        "closed": True, "errors": []}:
+        raise ValidationFailure("mounted newest direction private session cleanup failed")
+    registry = json.loads((repo / "tools/overworld/runtime_proof_registry.json").read_text())
+    rules = contract()
+    if registry["measurementContracts"].get(REQUIREMENT) != rules:
+        raise ValidationFailure("mounted newest direction measurement contract changed")
+    values = evidence["values"]
+    if set(values) != {rule["name"] for group in rules.values() for rule in group}:
+        raise ValidationFailure("mounted newest direction measurements are missing")
+    measurements = []
+    for claim, group in rules.items():
+        for rule in group:
+            value, expected = values[rule["name"]], rule["expected"]
+            if type(value) is not int or value != expected \
+                    or not _registry_validator_passes(rule, value, expected):
+                raise ValidationFailure("mounted newest direction measurement rejected: " +
+                                        rule["name"])
+            measurements.append(dict(claim=claim, name=rule["name"], value=value,
+                                     operator=rule["operator"], expected=expected,
+                                     passed=True))
+    return dict(measurements=measurements, mountedStantlerNewestDirection=evidence,
+                mountedStantlerNewestDirectionControls={name: dict(rejected=True,
+                    faultApplied=result["faultApplied"], failures=result["failures"])
+                    for name, result in controls["controls"].items()})
+
+
 def _shared_mounted_stantler_turn_skid(test, rows, record, repo):
     """Require the measured natural Stantler turn to face into its skid."""
     from tools.overworld.devtools_mounted_stantler_turn_skid_proof import (
@@ -3886,6 +4461,87 @@ def _shared_mounted_stantler_turn_skid(test, rows, record, repo):
                                      passed=True))
     return dict(measurements=measurements, mountedStantlerTurnSkid=evidence,
                 mountedStantlerTurnSkidControls={name: dict(rejected=True,
+                    faultApplied=result["faultApplied"], failures=result["failures"])
+                    for name, result in controls["controls"].items()})
+
+
+def _shared_mounted_stantler_blocked_skid(test, rows, record, repo):
+    """Require two clear mounted skid commits before the blocked exit Crash."""
+    from tools.overworld.devtools_mounted_stantler_blocked_skid_proof import (
+        REQUIREMENT, contract, run, negative_controls,
+    )
+    evidence = run(rows, test)
+    if evidence.get("passed") is not True:
+        raise ValidationFailure("mounted blocked turn skid replay failed: " +
+                                str(evidence.get("failures")))
+    controls = negative_controls(rows, test)
+    if controls.get("passed") is not True:
+        raise ValidationFailure("mounted blocked turn skid copied-data controls failed: " +
+                                str(controls))
+    if record.get("sessionCleanup") != {"sessionId": record["sessionId"],
+                                        "closed": True, "errors": []}:
+        raise ValidationFailure("mounted blocked turn skid private session cleanup failed")
+    registry = json.loads((repo / "tools/overworld/runtime_proof_registry.json").read_text())
+    if registry["measurementContracts"].get(REQUIREMENT) != contract():
+        raise ValidationFailure("mounted blocked turn skid measurement contract changed")
+    values = evidence["values"]
+    if set(values) != {rule["name"] for rules in contract().values() for rule in rules}:
+        raise ValidationFailure("mounted blocked turn skid measurements are missing")
+    measurements = []
+    for claim, rules in contract().items():
+        for rule in rules:
+            value, expected = values[rule["name"]], rule["expected"]
+            if type(value) is not int or value != expected \
+                    or not _registry_validator_passes(rule, value, expected):
+                raise ValidationFailure("mounted blocked turn skid measurement rejected: " +
+                                        rule["name"])
+            measurements.append(dict(claim=claim, name=rule["name"], value=value,
+                                     operator=rule["operator"], expected=expected,
+                                     passed=True))
+    return dict(measurements=measurements, mountedStantlerBlockedSkid=evidence,
+                mountedStantlerBlockedSkidControls={name: dict(rejected=True,
+                    faultApplied=result["faultApplied"], failures=result["failures"])
+                    for name, result in controls["controls"].items()})
+
+
+def _shared_mounted_stantler_skid_obstacle(test, rows, record, repo):
+    """Require each clear skid, then Crash at the first blocked skid tile."""
+    from tools.overworld.devtools_mounted_stantler_skid_obstacle_proof import (
+        CASES, contract, run, negative_controls,
+    )
+    case_id = test["id"]
+    evidence = run(rows, test)
+    if evidence.get("passed") is not True:
+        raise ValidationFailure("mounted skid obstacle replay failed: " +
+                                str(evidence.get("failures")))
+    controls = negative_controls(rows, test)
+    if controls.get("passed") is not True:
+        raise ValidationFailure("mounted skid obstacle copied-data controls failed: " +
+                                str(controls))
+    if record.get("sessionCleanup") != {"sessionId": record["sessionId"],
+                                        "closed": True, "errors": []}:
+        raise ValidationFailure("mounted skid obstacle private session cleanup failed")
+    registry = json.loads((repo / "tools/overworld/runtime_proof_registry.json").read_text())
+    requirement = CASES[case_id]["requirement"]
+    rules = contract(case_id)
+    if registry["measurementContracts"].get(requirement) != rules:
+        raise ValidationFailure("mounted skid obstacle measurement contract changed")
+    values = evidence["values"]
+    if set(values) != {rule["name"] for group in rules.values() for rule in group}:
+        raise ValidationFailure("mounted skid obstacle measurements are missing")
+    measurements = []
+    for claim, group in rules.items():
+        for rule in group:
+            value, expected = values[rule["name"]], rule["expected"]
+            if type(value) is not int or value != expected \
+                    or not _registry_validator_passes(rule, value, expected):
+                raise ValidationFailure("mounted skid obstacle measurement rejected: " +
+                                        rule["name"])
+            measurements.append(dict(claim=claim, name=rule["name"], value=value,
+                                     operator=rule["operator"], expected=expected,
+                                     passed=True))
+    return dict(measurements=measurements, mountedStantlerSkidObstacle=evidence,
+                mountedStantlerSkidObstacleControls={name: dict(rejected=True,
                     faultApplied=result["faultApplied"], failures=result["failures"])
                     for name, result in controls["controls"].items()})
 
@@ -3950,6 +4606,31 @@ _ISOLATED_CAPTURE_DEPENDENCIES = {
     "tools/overworld/devtools_wild_transition_measurement.py": {
         "wild-transition-invalidation-v1", "follower-transition-rebind-v1",
     },
+    "tools/overworld/devtools_wild_throw_soak_measurement.py": {
+        "wild-throw-ground-lock-soak-v1",
+    },
+    "tools/overworld/devtools_throw_notice_walk_commit_measurement.py": {
+        "throw-notice-walk-commit-v1",
+    },
+    "tools/overworld/devtools_unmounted_zero_stutter_measurement.py": {
+        "unmounted-zero-stutter-v1",
+    },
+    "tools/overworld/devtools_population_headroom_measurement.py": {
+        "population-headroom-v1",
+    },
+}
+
+# One measured setup correction, pinned to the exact old and new file bytes.
+# Both changes move only the Wild Throw Geodude tile (582, 402) to (583, 403).
+_WILD_MOVING_FIXTURE_SHA_PAIRS = {
+    "tools/overworld/devtools_test_contract.py": (
+        "690cc0343f541505693180fe82e4f68ade32c4a86c2380c00717abd8abbe298a",
+        "da0afb046de7c94f89d01b8ca584eef8bd86196a3ced4f7a13f5d7b267914141",
+    ),
+    "tools/overworld/devtools_wild_throw_moving_candidate_measurement.py": (
+        "be4665931e7d84452cc2b7c32d43dfb3d7f32aedc6464d228c77ca31e32795da",
+        "3bab464f394df3a5b05189e632b4ae37286aaba2c64e1bb8d76531c714415474",
+    ),
 }
 
 
@@ -3978,9 +4659,16 @@ def _capture_update_is_unselected(test, record, recorded, current, repo):
     if set(retained) != paths:
         return False
     selected = {item.get("kind") for item in test.get("measurements", [])}
+    fixture_changes = set()
     for path in paths:
         digest = file_record(repo / path, repo)["sha256"]
         if digest == retained[path]:
+            continue
+        if path in _WILD_MOVING_FIXTURE_SHA_PAIRS:
+            if (_WILD_THROW_MOVING_KIND in selected
+                    or (retained[path], digest) != _WILD_MOVING_FIXTURE_SHA_PAIRS[path]):
+                return False
+            fixture_changes.add(path)
             continue
         name = Path(path).name
         if path == "tools/overworld/runtime_proof_registry.json" \
@@ -3992,7 +4680,7 @@ def _capture_update_is_unselected(test, record, recorded, current, repo):
         affected = _ISOLATED_CAPTURE_DEPENDENCIES.get(path)
         if affected is None or selected & affected:
             return False
-    return True
+    return not fixture_changes or fixture_changes == set(_WILD_MOVING_FIXTURE_SHA_PAIRS)
 
 
 def finalize_shared_test(test: dict[str, Any], record: dict[str, Any], repo: Path = REPO) -> dict[str, Any]:
@@ -4110,12 +4798,68 @@ def _finalize_shared_test_uncached(test: dict[str, Any], record: dict[str, Any],
         session_id = record.get("sessionId")
         if not isinstance(session_id, str) or not session_id.startswith("session-") \
                 or Path(session_id).name != session_id \
-                or not isinstance(identity, dict) or identity.get("sessionId") != session_id:
+                or not isinstance(identity, dict):
+            raise ValidationFailure("shared proof session identity is missing or differs")
+        zero_fixture_path = None
+        if registration["evaluator"] == _PLAYER_HEALTH_ZERO_LOAD_KIND:
+            from tools.overworld.player_health_zero_load_fixture import verify_fixture
+            run_id = record.get("runId")
+            if not isinstance(run_id, str) or not run_id.startswith("test-") \
+                    or len(run_id) != 37 or any(char not in "0123456789abcdef" for char in run_id[5:]):
+                raise ValidationFailure("zero-load run identity is invalid")
+            owned = repo / "build/overworld-devtools" / run_id / "zero-load-fixture"
+            zero_fixture_path = owned / "game.sav"
+            source_save = repo / test["fixture"]["save"]
+            manifest_path = owned / "manifest.json"
+            if (not zero_fixture_path.is_file() or zero_fixture_path.is_symlink()
+                    or not manifest_path.is_file() or manifest_path.is_symlink()):
+                raise ValidationFailure("zero-load private fixture is missing")
+            expected = verify_fixture(source_save.read_bytes(), zero_fixture_path.read_bytes())
+            expected.update(sourcePath=str(source_save.resolve()),
+                            fixturePath=str(zero_fixture_path.resolve()))
+            if (record.get("zeroLoadFixture") != expected
+                    or json.loads(manifest_path.read_text()) != expected
+                    or expected["sourceSha256"] != record.get("attemptIdentity", {}).get("files", {}).get("save", {}).get("sha256")):
+                raise ValidationFailure("zero-load private fixture bytes or manifest differ")
+        if registration["evaluator"] == _PLAYER_HEALTH_SAVE_RELOAD_KIND:
+            reloads = record.get("saveReloads")
+            reloaded = record.get("reloadIdentity")
+            original_id = identity.get("sessionId")
+            if (not isinstance(original_id, str)
+                    or not original_id.startswith("session-")
+                    or Path(original_id).name != original_id
+                    or original_id == session_id
+                    or not isinstance(reloads, list) or len(reloads) != 1
+                    or not isinstance(reloaded, dict)
+                    or reloaded.get("sessionId") != session_id):
+                raise ValidationFailure("shared save proof session chain is missing or differs")
+            link = reloads[0]
+            exported = link.get("export", {}) if isinstance(link, dict) else {}
+            loaded = link.get("loaded", {}) if isinstance(link, dict) else {}
+            export_path = Path(exported.get("path", ""))
+            owned_export = repo / "build/overworld-devtools" / original_id
+            if (link.get("state") != "loaded"
+                    or link.get("sourceSessionId") != original_id
+                    or link.get("newSessionId") != session_id
+                    or link.get("sourceRomSha256") != identity.get("rom", {}).get("sha256")
+                    or link.get("sourceSaveSha256") != identity.get("save", {}).get("sha256")
+                    or export_path.parent.resolve() != owned_export.resolve()
+                    or not export_path.is_file()
+                    or file_record(export_path, repo)["sha256"] != exported.get("sha256")
+                    or loaded.get("sha256") != exported.get("sha256")
+                    or link.get("loadedSaveSha256") != exported.get("sha256")
+                    or reloaded.get("rom", {}).get("sha256") != identity.get("rom", {}).get("sha256")
+                    or reloaded.get("save", {}).get("path") != str(export_path)
+                    or reloaded.get("save", {}).get("sha256") != exported.get("sha256")):
+                raise ValidationFailure("shared save proof export or reload identity differs")
+        elif identity.get("sessionId") != session_id:
             raise ValidationFailure("shared proof session identity is missing or differs")
         for key in ("rom", "save", "debugDescriptor"):
             item = identity.get(key)
             if not isinstance(item, dict): raise ValidationFailure("shared proof input identity is missing: " + key)
-            path = repo / test["fixture"][key] if key in ("rom", "save") else repo / "build/overworld-system.debug.json"
+            path = (zero_fixture_path if key == "save" and zero_fixture_path is not None else
+                    repo / test["fixture"][key] if key in ("rom", "save") else
+                    repo / "build/overworld-system.debug.json")
             if Path(item.get("path", "")).resolve() != path.resolve() or file_record(path, repo)["sha256"] != item.get("sha256"):
                 raise ValidationFailure("shared proof input is stale: " + key)
         if preflight["fixture"].get("rom", {}).get("sha256") != identity["rom"]["sha256"]:
@@ -4125,12 +4869,383 @@ def _finalize_shared_test_uncached(test: dict[str, Any], record: dict[str, Any],
             raise ValidationFailure("shared proof run directory is invalid")
         observations = _shared_artifact(record.get("observationsArtifact"), parent)
         rows = load_observations(observations)
+        if zero_fixture_path is not None and (not rows or rows[0].get("zeroLoadFixture") != record["zeroLoadFixture"]):
+            raise ValidationFailure("zero-load retained boot fixture differs from owned private file")
         if any(m.get("kind") == "acceleration-parity-v1" for m in test.get("measurements", [])):
             _shared_acceleration_resets(test, rows, oracle=_walk_reset_oracle(repo))
         replay = _replay_shared_test(test, rows, repo=repo)
-        if (not checker_changed and replay != record.get("evaluation")) or replay.get("passed") is not True \
+        # Compare the persisted JSON contract. Native pose tuples become lists
+        # when a manifest is saved; their values and all proof fields must match.
+        if (not checker_changed and json.loads(json.dumps(replay)) != json.loads(json.dumps(record.get("evaluation")))) or replay.get("passed") is not True \
                 or replay["observedFrames"] < registration["minimumObservedFrames"]:
             raise ValidationFailure("independent shared observation replay did not prove the declared result")
+        if registration["evaluator"] == "move-entry-arrival-v1":
+            from tools.overworld.devtools_move_entry_arrival_proof import (
+                CLAIMS, FAULTS, REQUIREMENT, contract, faulted_rows, measurements)
+            evidence = measurements(rows, replay)
+            if registration.get("measurementContract") != contract():
+                raise ValidationFailure("Move entry arrival measurement contract differs")
+            controls = {}
+            for fault in FAULTS:
+                changed = faulted_rows(rows, fault)
+                try:
+                    # The same proof checks each actual changed receipt. No
+                    # unrelated generic failure can satisfy this control.
+                    measurements(changed, replay)
+                except ValueError as error:
+                    controls[fault] = {"rejected": True, "reason": str(error)}
+                else:
+                    raise ValidationFailure("Move entry copied control did not reject: " + fault)
+            if record.get("sessionCleanup") != {"sessionId": session_id, "closed": True, "errors": []}:
+                raise ValidationFailure("Move entry arrival lacks owned-session cleanup")
+            return {"passed": True, "acceptedProof": True, "proofAcceptance": {
+                "eligible": True, "proofLevel": "S3", "mode": "prepared",
+                "claims": CLAIMS, "requirements": [REQUIREMENT], "scope": registration["scope"],
+                "source": preflight["source"], "subjects": replay["subjects"], "controls": controls, **evidence}}
+        if registration["evaluator"] == "route29-blocked-step-live-v1":
+            from tools.overworld.devtools_route29_blocked_step_proof import (
+                CLAIMS, FAULTS, REQUIREMENT, contract, faulted_rows, measurements)
+            evidence = measurements(rows, replay)
+            if registration.get("measurementContract") != contract():
+                raise ValidationFailure("Route 29 blocked-step measurement contract differs")
+            controls = {}
+            for fault in FAULTS:
+                changed = faulted_rows(rows, fault)
+                try:
+                    negative = _replay_shared_test(test, changed, repo=repo)
+                    measurements(changed, negative)
+                except (ValueError, ValidationFailure):
+                    rejected = True
+                else:
+                    rejected = False
+                controls[fault] = {"rejected": rejected}
+            if not all(item["rejected"] for item in controls.values()):
+                raise ValidationFailure("Route 29 copied-data controls did not reject bad frame or tile")
+            if record.get("sessionCleanup") != {"sessionId": session_id,
+                                                  "closed": True, "errors": []}:
+                raise ValidationFailure("Route 29 blocked-step proof lacks owned-session cleanup")
+            return {"passed": True, "acceptedProof": True, "proofAcceptance": {
+                "eligible": True, "proofLevel": "S3", "mode": "normal",
+                "claims": CLAIMS, "requirements": [REQUIREMENT],
+                "scope": registration["scope"], "source": preflight["source"],
+                "subjects": replay["subjects"], "controls": controls, **evidence}}
+        if registration["evaluator"] == "weepinbell-blocked-step-live-v1":
+            from tools.overworld.devtools_weepinbell_blocked_step_proof import (
+                CLAIMS, FAULTS, REQUIREMENT, contract, faulted_rows, measurements)
+            evidence = measurements(rows, replay)
+            if registration.get("measurementContract") != contract():
+                raise ValidationFailure("Weepinbell blocked-step measurement contract differs")
+            controls = {}
+            for fault in FAULTS:
+                changed = faulted_rows(rows, fault)
+                try:
+                    negative = _replay_shared_test(test, changed, repo=repo)
+                    measurements(changed, negative)
+                except (ValueError, ValidationFailure):
+                    rejected = True
+                else:
+                    rejected = False
+                controls[fault] = {"rejected": rejected}
+            if not all(item["rejected"] for item in controls.values()):
+                raise ValidationFailure("Weepinbell copied-data controls did not reject bad identity, frame, or tile")
+            if record.get("sessionCleanup") != {"sessionId": session_id,
+                                                  "closed": True, "errors": []}:
+                raise ValidationFailure("Weepinbell blocked-step proof lacks owned-session cleanup")
+            return {"passed": True, "acceptedProof": True, "proofAcceptance": {
+                "eligible": True, "proofLevel": "S3", "mode": "prepared",
+                "claims": CLAIMS, "requirements": [REQUIREMENT],
+                "scope": registration["scope"], "source": preflight["source"],
+                "subjects": replay["subjects"], "controls": controls, **evidence}}
+        if registration["evaluator"] == _PLAYER_HEALTH_INITIAL_KIND:
+            from tools.overworld.devtools_player_health_initial_proof import (
+                FAULTS, contract, faulted_rows, measurements)
+            evidence = measurements(rows, replay)
+            if registration.get("measurementContract") != contract():
+                raise ValidationFailure("player HP initial-state contract differs")
+            controls = {}
+            for fault in FAULTS:
+                negative = _replay_shared_test(test, faulted_rows(rows, fault), repo=repo)
+                controls[fault] = {"rejected": negative.get("passed") is False
+                                   and bool(negative.get("failures"))}
+            if not all(item["rejected"] for item in controls.values()):
+                raise ValidationFailure("player HP copied-data controls did not reject wrong state")
+            if record.get("sessionCleanup") != {"sessionId": session_id,
+                                                  "closed": True, "errors": []}:
+                raise ValidationFailure("player HP proof lacks owned-session cleanup")
+            return {"passed": True, "acceptedProof": True, "proofAcceptance": {
+                "eligible": True, "proofLevel": "S3", "mode": "normal",
+                "claims": ["engine-boundary"],
+                "requirements": [_PLAYER_HEALTH_INITIAL_REQUIREMENT],
+                "scope": registration["scope"], "source": preflight["source"],
+                "subjects": [], "controls": controls, **evidence}}
+        if registration["evaluator"] == _PLAYER_HEALTH_RAM_REST_KIND:
+            from tools.overworld.devtools_player_health_ram_rest_proof import (
+                CLAIMS, FAULTS, contract, faulted_rows, measurements)
+            evidence = measurements(rows, replay)
+            if registration.get("measurementContract") != contract():
+                raise ValidationFailure("player HP Ram/rest contract differs")
+            controls = {}
+            for fault in FAULTS:
+                negative = _replay_shared_test(test, faulted_rows(rows, fault), repo=repo)
+                controls[fault] = {"rejected": negative.get("passed") is False
+                                   and bool(negative.get("failures"))}
+            if not all(item["rejected"] for item in controls.values()):
+                raise ValidationFailure("player HP Ram/rest copied-data controls did not reject wrong state")
+            if record.get("sessionCleanup") != {"sessionId": session_id,
+                                                  "closed": True, "errors": []}:
+                raise ValidationFailure("player HP Ram/rest proof lacks owned-session cleanup")
+            return {"passed": True, "acceptedProof": True, "proofAcceptance": {
+                "eligible": True, "proofLevel": "S3", "mode": "prepared",
+                "claims": list(CLAIMS),
+                "requirements": [_PLAYER_HEALTH_RAM_REST_REQUIREMENT],
+                "scope": registration["scope"], "source": preflight["source"],
+                "subjects": evidence["subjects"], "controls": controls, **evidence}}
+        if registration["evaluator"] == _PLAYER_HEALTH_RAM_LOW_SPEED_KIND:
+            from tools.overworld.devtools_player_health_ram_low_speed_proof import (
+                CLAIMS, FAULTS, contract, faulted_rows, measurements)
+            evidence = measurements(rows, replay)
+            if registration.get("measurementContract") != contract():
+                raise ValidationFailure("player HP low-speed Ram contract differs")
+            controls = {}
+            for fault in FAULTS:
+                negative = _replay_shared_test(test, faulted_rows(rows, fault), repo=repo)
+                controls[fault] = {"rejected": negative.get("passed") is False
+                                   and bool(negative.get("failures"))}
+            if not all(item["rejected"] for item in controls.values()):
+                raise ValidationFailure("player HP low-speed Ram copied-data controls did not reject wrong state")
+            if record.get("sessionCleanup") != {"sessionId": session_id,
+                                                  "closed": True, "errors": []}:
+                raise ValidationFailure("player HP low-speed Ram proof lacks owned-session cleanup")
+            return {"passed": True, "acceptedProof": True, "proofAcceptance": {
+                "eligible": True, "proofLevel": "S3", "mode": "prepared",
+                "claims": list(CLAIMS),
+                "requirements": [_PLAYER_HEALTH_RAM_LOW_SPEED_REQUIREMENT],
+                "scope": registration["scope"], "source": preflight["source"],
+                "subjects": evidence["subjects"], "controls": controls, **evidence}}
+        if registration["evaluator"] == _PLAYER_HEALTH_THROW_KIND:
+            from tools.overworld.devtools_player_health_throw_contact_proof import (
+                CLAIMS, FAULTS, contract, faulted_rows, measurements)
+            evidence = measurements(rows, replay)
+            if registration.get("measurementContract") != contract():
+                raise ValidationFailure("player HP Throw contract differs")
+            controls = {}
+            for fault in FAULTS:
+                negative = _replay_shared_test(test, faulted_rows(rows, fault), repo=repo)
+                controls[fault] = {"rejected": negative.get("passed") is False
+                                   and bool(negative.get("failures"))}
+            if not all(item["rejected"] for item in controls.values()):
+                raise ValidationFailure("player HP Throw copied-data controls did not reject wrong state")
+            if record.get("sessionCleanup") != {"sessionId": session_id,
+                                                  "closed": True, "errors": []}:
+                raise ValidationFailure("player HP Throw proof lacks owned-session cleanup")
+            return {"passed": True, "acceptedProof": True, "proofAcceptance": {
+                "eligible": True, "proofLevel": "S3", "mode": "prepared",
+                "claims": list(CLAIMS),
+                "requirements": [_PLAYER_HEALTH_THROW_REQUIREMENT],
+                "scope": registration["scope"], "source": preflight["source"],
+                "subjects": evidence["subjects"], "controls": controls, **evidence}}
+        if registration["evaluator"] == _PLAYER_HEALTH_HOP_KIND:
+            from tools.overworld.devtools_player_health_hop_contact_proof import (
+                CLAIMS, FAULTS, contract, faulted_rows, measurements)
+            evidence = measurements(rows, replay)
+            if registration.get("measurementContract") != contract():
+                raise ValidationFailure("ordinary Hop contact contract differs")
+            controls = {}
+            for fault in FAULTS:
+                negative = _replay_shared_test(test, faulted_rows(rows, fault), repo=repo)
+                controls[fault] = {"rejected": negative.get("passed") is False
+                                   and bool(negative.get("failures"))}
+            if not all(item["rejected"] for item in controls.values()):
+                raise ValidationFailure("ordinary Hop copied-data controls did not reject wrong state")
+            if record.get("sessionCleanup") != {"sessionId": session_id,
+                                                  "closed": True, "errors": []}:
+                raise ValidationFailure("ordinary Hop proof lacks owned-session cleanup")
+            return {"passed": True, "acceptedProof": True, "proofAcceptance": {
+                "eligible": True, "proofLevel": "S3", "mode": "prepared",
+                "claims": list(CLAIMS),
+                "requirements": [_PLAYER_HEALTH_HOP_REQUIREMENT],
+                "scope": registration["scope"], "source": preflight["source"],
+                "subjects": evidence["subjects"], "controls": controls, **evidence}}
+        if registration["evaluator"] == _PLAYER_HEALTH_AMBUSH_JUMP_KIND:
+            from tools.overworld.devtools_player_health_ambush_jump_proof import (
+                CLAIMS, FAULTS, contract, faulted_rows, measurements)
+            evidence = measurements(rows, replay)
+            if registration.get("measurementContract") != contract():
+                raise ValidationFailure("Ambush jump contract differs")
+            controls = {}
+            for fault in FAULTS:
+                negative = _replay_shared_test(test, faulted_rows(rows, fault), repo=repo)
+                controls[fault] = {"rejected": negative.get("passed") is False
+                                   and bool(negative.get("failures"))}
+            if not all(item["rejected"] for item in controls.values()):
+                raise ValidationFailure("Ambush copied-data controls did not reject wrong state")
+            if record.get("sessionCleanup") != {"sessionId": session_id,
+                                                  "closed": True, "errors": []}:
+                raise ValidationFailure("Ambush proof lacks owned-session cleanup")
+            return {"passed": True, "acceptedProof": True, "proofAcceptance": {
+                "eligible": True, "proofLevel": "S3", "mode": "prepared",
+                "claims": list(CLAIMS),
+                "requirements": [_PLAYER_HEALTH_AMBUSH_JUMP_REQUIREMENT],
+                "scope": registration["scope"], "source": preflight["source"],
+                "subjects": evidence["subjects"], "controls": controls, **evidence}}
+        if registration["evaluator"] == _PLAYER_HEALTH_MOUNTED_AMBUSH_HEIGHT_KIND:
+            from tools.overworld.devtools_player_health_mounted_ambush_height_proof import (
+                CLAIMS, FAULTS, contract, faulted_rows, measurements)
+            evidence = measurements(rows, replay)
+            if registration.get("measurementContract") != contract():
+                raise ValidationFailure("mounted Ambush height contract differs")
+            controls = {}
+            for fault in FAULTS:
+                negative = _replay_shared_test(test, faulted_rows(rows, fault), repo=repo)
+                controls[fault] = {"rejected": negative.get("passed") is False
+                                   and bool(negative.get("failures"))}
+            if not all(item["rejected"] for item in controls.values()):
+                raise ValidationFailure("mounted Ambush copied-data controls did not reject wrong state")
+            if record.get("sessionCleanup") != {"sessionId": session_id,
+                                                  "closed": True, "errors": []}:
+                raise ValidationFailure("mounted Ambush proof lacks owned-session cleanup")
+            return {"passed": True, "acceptedProof": True, "proofAcceptance": {
+                "eligible": True, "proofLevel": "S3", "mode": "prepared",
+                "claims": list(CLAIMS),
+                "requirements": [_PLAYER_HEALTH_MOUNTED_AMBUSH_HEIGHT_REQUIREMENT],
+                "scope": registration["scope"], "source": preflight["source"],
+                "subjects": evidence["subjects"], "controls": controls, **evidence}}
+        if registration["evaluator"] == _WILD_THROW_MOVING_KIND:
+            from tools.overworld.devtools_wild_throw_moving_candidate_proof import (
+                CLAIMS, FAULTS, contract, faulted_rows, measurements)
+            evidence = measurements(rows, replay)
+            if registration.get("measurementContract") != contract():
+                raise ValidationFailure("moving Wild Throw contract differs")
+            controls = {}
+            for fault in FAULTS:
+                negative = _replay_shared_test(test, faulted_rows(rows, fault), repo=repo)
+                controls[fault] = {"rejected": negative.get("passed") is False
+                                   and bool(negative.get("failures"))}
+            if not all(item["rejected"] for item in controls.values()):
+                raise ValidationFailure("moving Wild Throw copied-data controls did not reject wrong state")
+            if record.get("sessionCleanup") != {"sessionId": session_id,
+                                                  "closed": True, "errors": []}:
+                raise ValidationFailure("moving Wild Throw proof lacks owned-session cleanup")
+            return {"passed": True, "acceptedProof": True, "proofAcceptance": {
+                "eligible": True, "proofLevel": "S3", "mode": "prepared",
+                "claims": list(CLAIMS),
+                "requirements": [_WILD_THROW_MOVING_REQUIREMENT],
+                "scope": registration["scope"], "source": preflight["source"],
+                "subjects": evidence["subjects"], "controls": controls, **evidence}}
+        if registration["evaluator"] == _PLAYER_HEALTH_MOUNTED_THROW_KIND:
+            from tools.overworld.devtools_player_health_mounted_throw_proof import (
+                CLAIMS, FAULTS, contract, faulted_rows, measurements)
+            evidence = measurements(rows, replay)
+            if registration.get("measurementContract") != contract():
+                raise ValidationFailure("mounted Throw contract differs")
+            controls = {}
+            for fault in FAULTS:
+                negative = _replay_shared_test(test, faulted_rows(rows, fault), repo=repo)
+                controls[fault] = {"rejected": negative.get("passed") is False
+                                   and bool(negative.get("failures"))}
+            if not all(item["rejected"] for item in controls.values()):
+                raise ValidationFailure("mounted Throw copied-data controls did not reject wrong state")
+            if record.get("sessionCleanup") != {"sessionId": session_id,
+                                                  "closed": True, "errors": []}:
+                raise ValidationFailure("mounted Throw proof lacks owned-session cleanup")
+            return {"passed": True, "acceptedProof": True, "proofAcceptance": {
+                "eligible": True, "proofLevel": "S3", "mode": "prepared",
+                "claims": list(CLAIMS),
+                "requirements": [_PLAYER_HEALTH_MOUNTED_THROW_REQUIREMENT],
+                "scope": registration["scope"], "source": preflight["source"],
+                "subjects": evidence["subjects"], "controls": controls, **evidence}}
+        if registration["evaluator"] == _PLAYER_HEALTH_RAM_WARNING_KIND:
+            from tools.overworld.devtools_player_health_ram_warning_proof import (
+                CLAIMS, FAULTS, contract, faulted_rows, measurements)
+            evidence = measurements(rows, replay)
+            if registration.get("measurementContract") != contract():
+                raise ValidationFailure("Ram warning contract differs")
+            controls = {}
+            for fault in FAULTS:
+                negative = _replay_shared_test(test, faulted_rows(rows, fault), repo=repo)
+                controls[fault] = {"rejected": negative.get("passed") is False
+                                   and bool(negative.get("failures"))}
+            if not all(item["rejected"] for item in controls.values()):
+                raise ValidationFailure("Ram warning copied-data controls did not reject wrong state")
+            if record.get("sessionCleanup") != {"sessionId": session_id,
+                                                  "closed": True, "errors": []}:
+                raise ValidationFailure("Ram warning proof lacks owned-session cleanup")
+            return {"passed": True, "acceptedProof": True, "proofAcceptance": {
+                "eligible": True, "proofLevel": "S3", "mode": "prepared",
+                "claims": list(CLAIMS),
+                "requirements": [_PLAYER_HEALTH_RAM_WARNING_REQUIREMENT],
+                "scope": registration["scope"], "source": preflight["source"],
+                "subjects": evidence["subjects"], "controls": controls, **evidence}}
+        if registration["evaluator"] == _PLAYER_HEALTH_BAR_KIND:
+            from tools.overworld.devtools_player_health_bar_proof import (
+                CLAIMS, FAULTS, contract, faulted_rows, measurements)
+            evidence = measurements(rows, replay)
+            if registration.get("measurementContract") != contract():
+                raise ValidationFailure("player HP bar contract differs")
+            controls = {}
+            for fault in FAULTS:
+                negative = _replay_shared_test(test, faulted_rows(rows, fault), repo=repo)
+                controls[fault] = {"rejected": negative.get("passed") is False
+                                   and bool(negative.get("failures"))}
+            if not all(item["rejected"] for item in controls.values()):
+                raise ValidationFailure("player HP bar copied-data controls did not reject wrong state")
+            if record.get("sessionCleanup") != {"sessionId": session_id,
+                                                  "closed": True, "errors": []}:
+                raise ValidationFailure("player HP bar proof lacks owned-session cleanup")
+            return {"passed": True, "acceptedProof": True, "proofAcceptance": {
+                "eligible": True, "proofLevel": "S3", "mode": "prepared",
+                "claims": list(CLAIMS),
+                "requirements": [_PLAYER_HEALTH_BAR_REQUIREMENT],
+                "scope": registration["scope"], "source": preflight["source"],
+                "subjects": evidence["subjects"], "controls": controls, **evidence}}
+        if registration["evaluator"] == _PLAYER_HEALTH_SAVE_RELOAD_KIND:
+            from tools.overworld.devtools_player_health_save_reload_proof import (
+                CLAIMS, FAULTS, contract, faulted_rows, measurements)
+            observed_reload = [row.get("receipt", {}).get("saveReload")
+                               for row in rows if row.get("command") == "save.reload"]
+            if observed_reload != record.get("saveReloads"):
+                raise ValidationFailure("player HP saved stream and session reload chain differ")
+            evidence = measurements(rows, replay)
+            if registration.get("measurementContract") != contract():
+                raise ValidationFailure("player HP save/reload contract differs")
+            controls = {}
+            for fault in FAULTS:
+                negative = _replay_shared_test(test, faulted_rows(rows, fault), repo=repo)
+                controls[fault] = {"rejected": negative.get("passed") is False
+                                   and bool(negative.get("failures"))}
+            if not all(item["rejected"] for item in controls.values()):
+                raise ValidationFailure("player HP save/reload copied-data controls did not reject wrong state")
+            if record.get("sessionCleanup") != {"sessionId": session_id,
+                                                  "closed": True, "errors": []}:
+                raise ValidationFailure("player HP save/reload proof lacks owned-session cleanup")
+            return {"passed": True, "acceptedProof": True, "proofAcceptance": {
+                "eligible": True, "proofLevel": "S3", "mode": "prepared",
+                "claims": list(CLAIMS),
+                "requirements": [_PLAYER_HEALTH_SAVE_RELOAD_REQUIREMENT],
+                "scope": registration["scope"], "source": preflight["source"],
+                "subjects": evidence["subjects"], "controls": controls, **evidence}}
+        if registration["evaluator"] == _PLAYER_HEALTH_ZERO_LOAD_KIND:
+            from tools.overworld.devtools_player_health_zero_load_proof import (
+                CLAIMS, FAULTS, contract, faulted_rows, measurements)
+            evidence = measurements(rows, replay)
+            if registration.get("measurementContract") != contract():
+                raise ValidationFailure("zero-load player HP contract differs")
+            controls = {}
+            for fault in FAULTS:
+                negative = _replay_shared_test(test, faulted_rows(rows, fault), repo=repo)
+                controls[fault] = {"rejected": negative.get("passed") is False
+                                   and bool(negative.get("failures"))}
+            if not all(item["rejected"] for item in controls.values()):
+                raise ValidationFailure("zero-load copied-data controls did not reject wrong state")
+            if record.get("sessionCleanup") != {"sessionId": session_id,
+                                                  "closed": True, "errors": []}:
+                raise ValidationFailure("zero-load proof lacks owned-session cleanup")
+            return {"passed": True, "acceptedProof": True, "proofAcceptance": {
+                "eligible": True, "proofLevel": "S3", "mode": "normal",
+                "claims": list(CLAIMS),
+                "requirements": [_PLAYER_HEALTH_ZERO_LOAD_REQUIREMENT],
+                "scope": registration["scope"], "source": preflight["source"],
+                "subjects": [], "controls": controls, **evidence}}
         if registration["evaluator"] == _ACTOR_INSPECT_KIND:
             from tools.overworld.devtools_actor_inspect_proof import actor_inspect_measurements, negative_controls
             oracle = _actor_inspect_probe_oracle(repo)
@@ -4239,14 +5354,14 @@ def _finalize_shared_test_uncached(test: dict[str, Any], record: dict[str, Any],
         elif registration["evaluator"] == _MOUNT_SELECT_MID_RUN_KIND:
             additional.update(_shared_mount_select_mid_run(test, rows, record, repo))
             additional["recorderControl"] = _shared_recorder_control(record, registration, repo)
+        elif registration["evaluator"] == _MOUNT_SELECT_SWITCH_KIND:
+            additional.update(_shared_mount_select_switch(test, rows, record, repo))
+            additional["recorderControl"] = _shared_recorder_control(record, registration, repo)
         elif registration["evaluator"] == _MOUNTED_STANTLER_SPRINT_KIND:
             additional.update(_shared_mounted_stantler_sprint(test, rows, record, repo))
             additional["recorderControl"] = _shared_recorder_control(record, registration, repo)
-        elif registration["evaluator"] == _MOUNTED_STANTLER_OBSTACLE_HOP_KIND:
-            additional.update(_shared_mounted_stantler_obstacle_hop(test, rows, record, repo))
-            additional["recorderControl"] = _shared_recorder_control(record, registration, repo)
-        elif registration["evaluator"] == _MOUNTED_STANTLER_NPC_HOP_KIND:
-            additional.update(_shared_mounted_stantler_npc_hop(test, rows, record, repo))
+        elif registration["evaluator"] == _MOUNTED_STANTLER_RUNNING_LEDGE_KIND:
+            additional.update(_shared_mounted_stantler_running_ledge(test, rows, record, repo))
             additional["recorderControl"] = _shared_recorder_control(record, registration, repo)
         elif registration["evaluator"] == _MOUNTED_STANTLER_WALL_APPROACH_KIND:
             additional.update(_shared_mounted_stantler_wall_approach(test, rows, record, repo))
@@ -4261,8 +5376,17 @@ def _finalize_shared_test_uncached(test: dict[str, Any], record: dict[str, Any],
         elif registration["evaluator"] == _MOUNTED_STANTLER_KEY_EDGE_KIND:
             additional.update(_shared_mounted_stantler_key_edge(test, rows, record, repo))
             additional["recorderControl"] = _shared_recorder_control(record, registration, repo)
+        elif registration["evaluator"] == _MOUNTED_STANTLER_NEWEST_DIRECTION_KIND:
+            additional.update(_shared_mounted_stantler_newest_direction(test, rows, record, repo))
+            additional["recorderControl"] = _shared_recorder_control(record, registration, repo)
         elif registration["evaluator"] == _MOUNTED_STANTLER_TURN_SKID_KIND:
             additional.update(_shared_mounted_stantler_turn_skid(test, rows, record, repo))
+            additional["recorderControl"] = _shared_recorder_control(record, registration, repo)
+        elif registration["evaluator"] == _MOUNTED_STANTLER_BLOCKED_SKID_KIND:
+            additional.update(_shared_mounted_stantler_blocked_skid(test, rows, record, repo))
+            additional["recorderControl"] = _shared_recorder_control(record, registration, repo)
+        elif registration["evaluator"] == _MOUNTED_STANTLER_SKID_OBSTACLE_KIND:
+            additional.update(_shared_mounted_stantler_skid_obstacle(test, rows, record, repo))
             additional["recorderControl"] = _shared_recorder_control(record, registration, repo)
         elif registration["evaluator"] == _MOUNTED_BELLSPROUT_WADDLE_KIND:
             additional.update(_shared_mounted_bellsprout_waddle(test, rows, record, repo))
@@ -4291,14 +5415,6 @@ def _finalize_shared_test_uncached(test: dict[str, Any], record: dict[str, Any],
                     or cleanup.get("closed") is not True or cleanup.get("errors") != []:
                 raise ValidationFailure("mounted control stress lacks successful owned-session cleanup")
             additional["sessionCleanup"] = cleanup
-            controls = list(FAULTS)
-        elif registration["evaluator"] == _MOUNTED_HOP_ARC_KIND:
-            from tools.overworld.devtools_mounted_hop_arc_proof import measurements, FAULTS
-            additional["measurements"] = measurements(replay)
-            controls = list(FAULTS)
-        elif registration["evaluator"] == _MOUNTED_NEAREST_DIAGONAL_KIND:
-            from tools.overworld.devtools_mounted_nearest_diagonal_proof import measurements, FAULTS
-            additional["measurements"] = measurements(replay)
             controls = list(FAULTS)
         elif registration["evaluator"] == _WILD_LEDGE_KIND:
             from tools.overworld.devtools_wild_ledge_proof import measurements, FAULTS
@@ -4339,10 +5455,6 @@ def _finalize_shared_test_uncached(test: dict[str, Any], record: dict[str, Any],
             controls = list(FAULTS)
         elif registration["evaluator"] == _MOUNTED_CARDINAL_STREAMING_KIND:
             from tools.overworld.devtools_mounted_cardinal_streaming_proof import measurements, FAULTS
-            additional["measurements"] = measurements(replay, record)
-            controls = list(FAULTS)
-        elif registration["evaluator"] == _MOUNTED_HOP_TRANSITION_KIND:
-            from tools.overworld.devtools_mounted_hop_transition_proof import measurements, FAULTS
             additional["measurements"] = measurements(replay, record)
             controls = list(FAULTS)
         elif registration["evaluator"] == _MOUNTED_WALK_TRANSITION_KIND:
@@ -4508,14 +5620,6 @@ def _finalize_shared_test_uncached(test: dict[str, Any], record: dict[str, Any],
             from tools.overworld.devtools_mount_control_stress_proof import validate_negative_result
             for name, result in negatives.items():
                 validate_negative_result(result, name)
-        if registration["evaluator"] == _MOUNTED_HOP_ARC_KIND:
-            from tools.overworld.devtools_mounted_hop_arc_proof import validate_negative_result
-            for name, result in negatives.items():
-                validate_negative_result(result, name)
-        if registration["evaluator"] == _MOUNTED_NEAREST_DIAGONAL_KIND:
-            from tools.overworld.devtools_mounted_nearest_diagonal_proof import validate_negative_result
-            for name, result in negatives.items():
-                validate_negative_result(result, name)
         if registration["evaluator"] == _WILD_LEDGE_KIND:
             from tools.overworld.devtools_wild_ledge_proof import validate_negative_result
             for name, result in negatives.items():
@@ -4546,10 +5650,6 @@ def _finalize_shared_test_uncached(test: dict[str, Any], record: dict[str, Any],
                 validate_negative_result(result, name)
         if registration["evaluator"] == _MOUNTED_CARDINAL_STREAMING_KIND:
             from tools.overworld.devtools_mounted_cardinal_streaming_proof import validate_negative_result
-            for name, result in negatives.items():
-                validate_negative_result(result, name)
-        if registration["evaluator"] == _MOUNTED_HOP_TRANSITION_KIND:
-            from tools.overworld.devtools_mounted_hop_transition_proof import validate_negative_result
             for name, result in negatives.items():
                 validate_negative_result(result, name)
         if registration["evaluator"] == _MOUNTED_WALK_TRANSITION_KIND:
@@ -4646,7 +5746,15 @@ def _finalize_shared_test_uncached(test: dict[str, Any], record: dict[str, Any],
             if registration["evaluator"] == "pool-spawn-surface-v1":
                 for fault in _POOL_SURFACE_CONTROLS:
                     meter = negatives[fault].get("measurements", {}).get(registration["evaluator"], {})
-                    if not any(error.get("code") == "invalid-spawn-surface" for error in meter.get("surfaceErrors", [])):
+                    fly = replay["measurements"][registration["evaluator"]].get("placement", {}).get("startupKind") == 9
+                    rejected = any(error.get("code") == "invalid-spawn-surface" for error in meter.get("surfaceErrors", []))
+                    if fly and fault == "pool-surface-missing-refresh":
+                        rejected = any(error.get("code") == "invalid-pool-receipt"
+                            and "finalized Fly In startup" in error.get("message", "") for error in meter.get("failures", []))
+                    elif fly and fault == "pool-surface-missing-height":
+                        rejected = any(error.get("code") == "invalid-observation"
+                            and error.get("message") == "'pos_y'" for error in meter.get("failures", []))
+                    if not rejected:
                         raise ValidationFailure("POOL surface control did not fail on its removed native meaning")
             additional["recorderControl"] = _shared_recorder_control(record, registration, repo)
             if registration["evaluator"] == "pool-spawn-surface-v1":
@@ -5776,7 +6884,7 @@ def _scenario_recorded_status(args: argparse.Namespace) -> int:
     scenarios = load_scenarios(SCENARIO_DIRECTORY)
     if args.scenario_id not in scenarios:
         raise ValidationFailure("unknown scenario: " + args.scenario_id)
-    result = summarize(REPO, scenarios, source_record(REPO))
+    result = summarize(REPO, {args.scenario_id: scenarios[args.scenario_id]}, source_record(REPO))
     row = next(item for item in result["scenarios"] if item["id"] == args.scenario_id)
     response = {**row, "acceptance": result["acceptance"], "note": result["note"],
                 "invalidReceipts": result["invalidReceipts"]}
@@ -6644,6 +7752,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     doctor = commands.add_parser("doctor", help="Check host-control readiness")
     doctor.add_argument("--json", action="store_true")
+    doctor.add_argument("--url", default=os.environ.get("OW_DEVTOOLS_URL", "http://127.0.0.1:8766"),
+                        help="Workshop URL; this host check is local and makes no service request")
     doctor.set_defaults(handler=_doctor)
 
     scenario = commands.add_parser("scenario", help="List, validate, or run scenarios")
@@ -6659,6 +7769,8 @@ def build_parser() -> argparse.ArgumentParser:
     scenario_validate = scenario_commands.add_parser("validate")
     scenario_validate.add_argument("scenario_ids", nargs="*")
     scenario_validate.add_argument("--json", action="store_true")
+    scenario_validate.add_argument("--url", default=os.environ.get("OW_DEVTOOLS_URL", "http://127.0.0.1:8766"),
+                                   help="Workshop URL; catalog validation is local and makes no service request")
     scenario_validate.set_defaults(handler=_scenario_validate)
     scenario_recheck = scenario_commands.add_parser("recheck", help="Recheck one saved run; no emulator or artifact rewrite")
     scenario_recheck.add_argument("run_id")
@@ -6670,7 +7782,8 @@ def build_parser() -> argparse.ArgumentParser:
     scenario_run.add_argument("--evidence", type=Path)
     scenario_run.add_argument("--json", action="store_true")
     scenario_run.add_argument("--manifest-output", type=Path)
-    scenario_run.add_argument("--url", default="http://127.0.0.1:8766", help="Shared Workshop service URL")
+    scenario_run.add_argument("--url", default=os.environ.get("OW_DEVTOOLS_URL", "http://127.0.0.1:8766"),
+                              help="Workshop URL (default: OW_DEVTOOLS_URL or localhost:8766)")
     scenario_run.set_defaults(handler=_scenario_run)
 
     trace = commands.add_parser("trace", help="Decode a semantic trace")

@@ -1,4 +1,8 @@
-"""Wild Walk can approach a wall; actual skids keep their path checks."""
+"""Check each actual Walk/skid tile.
+
+Full corridor tests were retired: the user replaced that contract with clear
+travel followed by a crash at the first blocked tile.
+"""
 
 from pathlib import Path
 import importlib.util
@@ -32,8 +36,6 @@ typedef uint16_t u16;
 typedef int BOOL;
 #define TRUE 1
 #define FALSE 0
-#define OW_WILD_WALK_DIRECTION_NONE 0xFF
-#define OW_WILD_WALK_DIRECTION_OBSTACLE_APPROACH 0xFE
 #define OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT 3
 #define OVERWORLD_ACTOR_WALK_STEP_VALIDATE 0x01
 #define OVERWORLD_ACTOR_WALK_STEP_SKID 0x02
@@ -47,17 +49,11 @@ typedef int BOOL;
 #define OVERWORLD_MOTION_DECISION_ACCEPTED 1
 #define MAPOBJECTFLAG_UNK7 0x80
 #define OW_WILD_BEHAVIOR_BOOL_YES 1
-#define OW_WILD_DIRECTION_STEP_BUSY 0
-#define OW_WILD_DIRECTION_STEP_STARTED 2
-#define OW_WILD_DIRECTION_STEP_OBSTACLE_HOP_STARTED 3
 typedef struct LocalMapObject { int xCurr, yCurr; } LocalMapObject;
 typedef struct OverworldWildSpawnState {
     u8 movementPreviousTileLocked[10];
     u8 movementSpotStates[10];
 } OverworldWildSpawnState;
-typedef struct OverworldWildBehaviorProfileData {
-    u8 hopMinDistance, hopMaxDistance, hopAllowVerticalObstacles;
-} OverworldWildBehaviorProfileData;
 typedef struct OverworldWildDirectionStepContext {
     OverworldWildSpawnState *state;
     void *fieldSystem;
@@ -72,16 +68,12 @@ typedef struct OverworldActorWalkPolicyCall {
 } OverworldActorWalkPolicyCall;
 static u8 blocked[24][24];
 static u8 occupied[24][24];
-static OverworldWildBehaviorProfileData lane;
 static int startCalls;
-static BOOL IsMetatileBlockedAt(void *fieldSystem, int x, int y)
-{ (void)fieldSystem; return x < 0 || x >= 24 || y < 0 || y >= 24 || blocked[y][x]; }
-static BOOL OverworldWildSpawns_IsTileOccupiedByObject(void *fieldSystem, int x, int y)
-{ (void)fieldSystem; return x < 0 || x >= 24 || y < 0 || y >= 24 || occupied[y][x]; }
-static int OverworldWildSpawns_ObjectCurrentX(LocalMapObject *object)
-{ return object->xCurr; }
-static int OverworldWildSpawns_ObjectCurrentY(LocalMapObject *object)
-{ return object->yCurr; }
+static int facingCalls;
+static LocalMapObject *validationObject;
+static BOOL TileOpen(int x, int y)
+{ return x >= 0 && x < 24 && y >= 0 && y < 24
+    && !blocked[y][x] && !occupied[y][x]; }
 static int OverworldWalk_DeltaX(u8 direction)
 { return direction == 2 || direction == 4 || direction == 6 ? -1
     : direction == 3 || direction == 5 || direction == 7; }
@@ -92,38 +84,23 @@ static BOOL OverworldWildSpawns_IsBehaviorAllowedHopLandingTile(
     OverworldWildSpawnState *state, int slot, void *fieldSystem,
     u16 allowedTile, int x, int y, int finalTargetX, int finalTargetY)
 {
-    (void)state; (void)slot; (void)fieldSystem; (void)allowedTile;
+    int dx = x - validationObject->xCurr;
+    int dy = y - validationObject->yCurr;
+    (void)state; (void)slot; (void)fieldSystem;
     (void)finalTargetX; (void)finalTargetY;
-    return x >= 0 && x < 24 && y >= 0 && y < 24
-        && !blocked[y][x] && !occupied[y][x];
+    if ((allowedTile & OW_WILD_SPAWNER_WALK_STRICT_DIAGONAL_MARKER)
+        && dx && dy
+        && (!TileOpen(x, validationObject->yCurr)
+            || !TileOpen(validationObject->xCurr, y))) {
+        return FALSE;
+    }
+    return TileOpen(x, y);
 }
 static int OverworldWalk_DiagonalFacing(LocalMapObject *object, u8 direction, int key)
 { (void)object; (void)key; return direction; }
 static int OverworldWalk_DirectionKey(u8 direction) { return direction; }
-static int OverworldWildSpawns_TryStartLedgeJumpCommand(
-    const OverworldWildDirectionStepContext *stepContext, u8 direction,
-    BOOL obstacleHopAllowed, BOOL probeOnly)
-{
-    int dx = OverworldWalk_DeltaX(direction);
-    int dy = OverworldWalk_DeltaY(direction);
-    int frontX = stepContext->object->xCurr + 2 * dx;
-    int frontY = stepContext->object->yCurr + 2 * dy;
-    int landingX = frontX + dx;
-    int landingY = frontY + dy;
-    if (!probeOnly || !obstacleHopAllowed || lane.hopMinDistance != 2
-        || lane.hopAllowVerticalObstacles != OW_WILD_BEHAVIOR_BOOL_YES
-        || (!IsMetatileBlockedAt(stepContext->fieldSystem, frontX, frontY)
-            && !OverworldWildSpawns_IsTileOccupiedByObject(
-                stepContext->fieldSystem, frontX, frontY))
-        || IsMetatileBlockedAt(stepContext->fieldSystem, landingX, landingY)
-        || OverworldWildSpawns_IsTileOccupiedByObject(
-            stepContext->fieldSystem, landingX, landingY)) {
-        return OW_WILD_DIRECTION_STEP_BUSY;
-    }
-    return OW_WILD_DIRECTION_STEP_OBSTACLE_HOP_STARTED;
-}
 static void OverworldWildSpawns_SetObjectFacing(LocalMapObject *object, u8 direction)
-{ (void)object; (void)direction; }
+{ (void)object; (void)direction; facingCalls++; }
 static void OverworldWildSpawns_SetObjectFlags(LocalMapObject *object, int flags)
 { (void)object; (void)flags; }
 static int OverworldWildSpawns_StartPreparedCustomJumpCommandTimed(
@@ -136,13 +113,6 @@ static int OverworldWildSpawns_StartPreparedCustomJumpCommandTimed(
     (void)travelTime; startCalls++; return OVERWORLD_MOTION_DECISION_ACCEPTED;
 }
 """ + (
-        "static BOOL OverworldWildSpawns_IsStopSkidTileOpen("
-        "const OverworldWildDirectionStepContext *stepContext, int x, int y) {"
-        + bodies["OverworldWildSpawns_IsStopSkidTileOpen"] + "}\n"
-        "static BOOL OverworldWildSpawns_IsStopSkidCorridorOpen("
-        "const OverworldWildDirectionStepContext *stepContext, u8 direction, "
-        "u8 distance, u8 turnDirection) {"
-        + bodies["OverworldWildSpawns_IsStopSkidCorridorOpen"] + "}\n"
         "static BOOL OverworldWildSpawns_StartMomentumWalkStep("
         "const OverworldWildDirectionStepContext *stepContext, "
         "const OverworldActorWalkPolicyCall *call) {"
@@ -158,29 +128,12 @@ int main(void)
     OverworldActorWalkPolicyCall call = {3, 3, 4,
         OVERWORLD_ACTOR_WALK_STEP_VALIDATE, {0, 0, 0, 0}};
 
-    Check(OverworldWildSpawns_IsStopSkidCorridorOpen(&context, 3, 2, 0),
-        "open two-tile skid and north turn was rejected");
-    blocked[10][11] = 1;
-    Check(!OverworldWildSpawns_IsStopSkidCorridorOpen(&context, 3, 2, 0),
-        "blocked skid tile was accepted");
-    memset(blocked, 0, sizeof(blocked));
-    blocked[9][12] = 1;
-    Check(!OverworldWildSpawns_IsStopSkidCorridorOpen(&context, 3, 2, 0),
-        "blocked post-skid turn tile was accepted");
-    memset(blocked, 0, sizeof(blocked));
-    blocked[8][12] = 1;
-    Check(OverworldWildSpawns_IsStopSkidCorridorOpen(&context, 3, 2, 0),
-        "path planner checked beyond the first post-skid step");
-
-    memset(blocked, 0, sizeof(blocked));
+    validationObject = &object;
     blocked[10][12] = 1;
     blocked[10][13] = 1;
     Check(OverworldWildSpawns_StartMomentumWalkStep(&context, &call)
             && startCalls == 1,
         "clear ordinary Walk step could not approach a long wall");
-    lane.hopMinDistance = 2;
-    lane.hopMaxDistance = 2;
-    lane.hopAllowVerticalObstacles = OW_WILD_BEHAVIOR_BOOL_YES;
     Check(OverworldWildSpawns_StartMomentumWalkStep(&context, &call)
             && startCalls == 2,
         "Sprint still required a Hop landing for an ordinary Walk step");
@@ -206,27 +159,44 @@ int main(void)
             | OVERWORLD_ACTOR_WALK_STEP_PLANNED_SKID_PATH,
         {0, 1, 0, 0}};
     turn.reserved[OVERWORLD_ACTOR_WALK_POLICY_SKID_PATH_TILES_INDEX] = 2;
-    Check(!OverworldWildSpawns_StartMomentumWalkStep(&context, &turn)
-            && startCalls == 2,
-        "turn skid crossed a blocked second skid tile");
-    turn.reserved[OVERWORLD_ACTOR_WALK_POLICY_SKID_PATH_TILES_INDEX] = 1;
-    blocked[9][11] = 1;
-    Check(!OverworldWildSpawns_StartMomentumWalkStep(&context, &turn)
-            && startCalls == 2,
-        "turn skid entered a blocked turn exit");
-    blocked[9][11] = 0;
     Check(OverworldWildSpawns_StartMomentumWalkStep(&context, &turn)
             && startCalls == 3,
+        "a blocked second tile prevented the first skid tile");
+    object.xCurr = 11;
+    Check(!OverworldWildSpawns_StartMomentumWalkStep(&context, &turn)
+            && startCalls == 3,
+        "skid crossed its immediate blocker");
+    object.xCurr = 10;
+    turn.reserved[OVERWORLD_ACTOR_WALK_POLICY_SKID_PATH_TILES_INDEX] = 1;
+    blocked[9][11] = 1;
+    Check(OverworldWildSpawns_StartMomentumWalkStep(&context, &turn)
+            && startCalls == 4,
+        "a blocked recovery tile prevented the skid");
+    blocked[9][11] = 0;
+    Check(OverworldWildSpawns_StartMomentumWalkStep(&context, &turn)
+            && startCalls == 5,
         "clear actual turn skid was rejected");
+    stopSkid.reserved[OVERWORLD_ACTOR_WALK_POLICY_SKID_PATH_TILES_INDEX] = 2;
+    Check(OverworldWildSpawns_StartMomentumWalkStep(&context, &stopSkid)
+            && startCalls == 6,
+        "a blocked later tile prevented the stop skid");
 
     memset(blocked, 0, sizeof(blocked));
+    turn.stepDirection = 7;
     blocked[10][11] = 1;
-    Check(!OverworldWildSpawns_IsStopSkidCorridorOpen(&context, 7, 1, 0),
-        "blocked diagonal skid side tile was accepted");
-    memset(blocked, 0, sizeof(blocked));
-    blocked[9][11] = 1;
-    Check(!OverworldWildSpawns_IsStopSkidCorridorOpen(&context, 3, 1, 4),
-        "blocked diagonal turn side tile was accepted");
+    Check(!OverworldWildSpawns_StartMomentumWalkStep(&context, &turn)
+            && startCalls == 6 && facingCalls == 4,
+        "diagonal skid crossed a blocked side or changed facing before validation");
+    blocked[10][11] = 0;
+    occupied[11][10] = 1;
+    Check(!OverworldWildSpawns_StartMomentumWalkStep(&context, &turn)
+            && startCalls == 6,
+        "diagonal skid crossed an occupied side");
+    occupied[11][10] = 0;
+    blocked[11][12] = 1;
+    Check(OverworldWildSpawns_StartMomentumWalkStep(&context, &turn)
+            && startCalls == 7,
+        "a later diagonal side blocker canceled the clear first tile");
     puts("Wild clear approach and actual skid safety passed");
     return 0;
 }
@@ -256,14 +226,16 @@ class TurnSkidPathPlanningTests(unittest.TestCase):
         ))
         start = bodies["OverworldWildSpawns_StartMomentumWalkStep"]
         self.assertLess(
-            start.index("OverworldWildSpawns_IsStopSkidCorridorOpen"),
+            start.index("OverworldWildSpawns_IsBehaviorAllowedHopLandingTile"),
             start.index("OverworldWildSpawns_SetObjectFacing"),
         )
         single = bodies["OverworldWildSpawns_TryStartSingleDirectionMovementStep"]
         non_wander = single.index("locomotion != OW_WILD_BEHAVIOR_LOCOMOTION_WANDER")
         allowed_tile = single.index("OverworldWildSpawns_IsBehaviorAllowedMovementTile")
         canopy = single.index("OverworldWildSpawns_TryStartCanopyEntryHop")
-        wander = single.index("locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_WANDER")
+        wander = single.index(
+            "locomotion == OW_WILD_BEHAVIOR_LOCOMOTION_WANDER", canopy
+        )
         self.assertLess(non_wander, allowed_tile)
         self.assertLess(allowed_tile, canopy)
         self.assertLess(canopy, wander)

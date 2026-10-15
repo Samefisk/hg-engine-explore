@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.stantler-two-key-turn-skid-blocked-second",
+  "title": "Mounted Stantler keeps a skid through a two-key turn, then crashes at the blocked tile",
+  "status": "active",
+  "capabilities": [
+    "walk.skid",
+    "mount.presentation"
+  ],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld_walk_frame_timing_spec.md",
+    "actor": "One current mounted Stantler (species 234, party slot 0) on map 33",
+    "trigger": "From map 33 (583,406), hold Right until the current mounted Stantler first targets (588,406) in a completed frame (at most 32 frames). Then hold Down and Left together for 18 frames. The pending Right Walk must commit before the due skid request.",
+    "observable": "One complete West-facing east skid moves from (588,406) to clear (589,406) and commits once. Blocked (590,406) then causes Crash and clears momentum at (589,406). After that exact idle boundary, the still-held chord starts one native-admitted ordinary West Walk toward (588,406). No skid crosses the wall or is canceled.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Copy test.nds and test.sav. Teleport to map 33 (583,406), prepare party slot 0 level-10 Stantler, mount, settle 16 neutral frames, and bind its live actor. Do not edit profile, policy, motion, facing, input, or terrain during observation."
+      }
+    ],
+    "limits": [
+      "Prepared placement does not prove natural travel or acquisition. Right, Down, and Left use normal keys and unchanged Sprint timing.",
+      "This case measures one clear skid before the blocked next tile during a two-key turn. It does not prove every terrain obstacle.",
+      "Registration alone is not runtime acceptance; the checked test must pass on the current ROM."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "stantler",
+      "species": 234,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Prepare and bind one mounted Stantler at map 33 (583,406)."
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Hold Right until the current Stantler first targets (588,406), within 32 completed frames; leave that Walk in flight."
+    },
+    {
+      "at": 2,
+      "kind": "input",
+      "value": "Hold Down and Left together for 18 completed frames through one West-facing east skid and the blocked next-tile Crash."
+    }
+  ],
+  "stop": {
+    "frameBudget": 240,
+    "condition": "One clear West-facing east skid commit, then blocked next-tile Crash with idle control at (589,406), then one native-admitted ordinary West Walk from still-held input."
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED",
+      "WORLD_EFFECT"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED",
+      "CONTEXT_CHANGED",
+      "ACTOR_REBOUND",
+      "CONTROL_REBOUND"
+    ],
+    "invariants": [
+      "The bound mounted Stantler and rider stay at or before the last clear tile (589,406) in every completed frame.",
+      "The due east skid starts with West facing from the two held directions, despite the blocked Down tile.",
+      "No skid motion starts toward blocked (590,406).",
+      "Only the clear skid tile commits before Crash.",
+      "No motion is canceled while the due skid resolves.",
+      "Crash first returns idle mounted input ownership with zero speed and pending motion at (589,406). Only afterward can the held chord start one ordinary West Walk away from the wall."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "mount.stantler-two-key-turn-skid-blocked-second",
+    "claims": [
+      "natural-input",
+      "live-actor-identity",
+      "collision-decision",
+      "logical-commit",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumFrames": 37
+  }
+}

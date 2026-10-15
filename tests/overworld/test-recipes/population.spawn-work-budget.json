@@ -13,7 +13,7 @@
   ],
   "budgets": {
     "maxSeconds": 180,
-    "maxFrames": 360,
+    "maxFrames": 720,
     "noProgressFrames": 320,
     "minObservedFrames": 120
   },
@@ -26,6 +26,188 @@
     }
   ],
   "setup": [
+    {
+      "id": "warmup-city-start",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 564,
+          "z": 392
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "warmup-east",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "RIGHT",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 1
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "warmup-east-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 565,
+          "z": 392
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "warmup-south",
+      "op": "step",
+      "args": {
+        "frames": 40,
+        "keys": [
+          "DOWN",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 7
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 40,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "warmup-south-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 565,
+          "z": 398
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "warmup-east-seam",
+      "op": "step",
+      "args": {
+        "frames": 96,
+        "keys": [
+          "RIGHT",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 27
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 96,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "warmup-east-seam-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 33,
+          "x": 585,
+          "z": 398
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "warmup-south-start",
+      "op": "step",
+      "args": {
+        "frames": 48,
+        "keys": [
+          "DOWN",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 35
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 48,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "warmup-south-start-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 33,
+          "x": 585,
+          "z": 406
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "warmup-release",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
     {
       "id": "current-follower",
       "op": "wait",
@@ -60,38 +242,219 @@
       "op": "step",
       "args": {
         "frames": 64,
-        "keys": ["UP"],
+        "keys": [
+          "UP"
+        ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 8
+          "value": 398
         }
       },
-      "budget": {"maxSeconds": 30, "maxFrames": 64, "noProgressFrames": 32}
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 64,
+        "noProgressFrames": 32
+      }
     },
     {
-      "id": "route-left-city", "op": "step",
-      "args": {"frames": 128, "keys": ["LEFT"], "until": {
-        "kind": "player-step-count", "operator": "eq", "value": 28}},
-      "budget": {"maxSeconds": 50, "maxFrames": 128, "noProgressFrames": 32}
+      "id": "route-up-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 33,
+          "x": 585,
+          "z": 398
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
     },
     {
-      "id": "route-up-city", "op": "step",
-      "args": {"frames": 64, "keys": ["UP"], "until": {
-        "kind": "player-step-count", "operator": "eq", "value": 33}},
-      "budget": {"maxSeconds": 30, "maxFrames": 64, "noProgressFrames": 32}
+      "id": "route-up-scan-idle",
+      "op": "step",
+      "args": {
+        "frames": 36,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 36,
+        "noProgressFrames": 36
+      }
     },
     {
-      "id": "route-left-window", "op": "step",
-      "args": {"frames": 128, "keys": ["LEFT"], "until": {
-        "kind": "player-step-count", "operator": "eq", "value": 55}},
-      "budget": {"maxSeconds": 50, "maxFrames": 128, "noProgressFrames": 32}
+      "id": "route-left-city",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "x",
+          "operator": "eq",
+          "value": 565
+        }
+      },
+      "budget": {
+        "maxSeconds": 50,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
     },
     {
-      "id": "route-down-window", "op": "step",
-      "args": {"frames": 64, "keys": ["DOWN"], "until": {
-        "kind": "player-step-count", "operator": "eq", "value": 64}},
-      "budget": {"maxSeconds": 30, "maxFrames": 64, "noProgressFrames": 32}
+      "id": "route-left-city-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 565,
+          "z": 398
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-up-city",
+      "op": "step",
+      "args": {
+        "frames": 64,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 64,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-up-city-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 565,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-left-window",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "x",
+          "operator": "eq",
+          "value": 543
+        }
+      },
+      "budget": {
+        "maxSeconds": 50,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-left-window-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 393
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-down-window",
+      "op": "step",
+      "args": {
+        "frames": 64,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 64,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-down-window-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 543,
+          "z": 402
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "finish-natural-entry",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "spawn-work-budget-v1",
+          "stage": "complete"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 256,
+        "noProgressFrames": 32
+      }
     }
   ],
   "assertions": [

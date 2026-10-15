@@ -11,13 +11,13 @@
     "expectationSource": "documentation/overworld-system/architecture.md#field-transition-protocol",
     "actor": "One prepared FOLLOWER Cyndaquil with a verified live handle and attached presentation",
     "trigger": "Use normal player input to complete one follower Walk, cross from Route29 into Cherrygrove, and take one recovery step",
-    "observable": "The actor owner advances field epoch and map generation once, emits CONTEXT_CHANGED then ACTOR_REBOUND, preserves the follower lifetime and current engine identity, and returns normal player control",
+    "observable": "The owner advances epoch and map generation once, retains the same Follower lifetime, restores signed native X/Y ranges to -1, and completes a fresh native Follower Walk and player recovery",
     "setupAudit": "complete",
     "setupMutations": [
       {
         "phase": "before-observation",
         "target": "fixture",
-        "change": "Restore the saved slot-1 Cyndaquil and select it through the shared follower setup. This gives no motion, route, transition, or recovery credit."
+        "change": "Prepare Route29/map33 at player585406 facing North before restoring the saved slot-1 Cyndaquil and selecting it through the shared follower setup. This gives no motion, transition, range-restoration, or recovery credit."
       }
     ],
     "limits": [
@@ -43,14 +43,14 @@
     }
   ],
   "events": [
-    {"at": 0, "kind": "setup", "value": "Prepare and bind the saved slot-1 Cyndaquil follower"},
+    {"at": 0, "kind": "setup", "value": "Prepare the exact Route29 start, then bind the saved slot-1 Cyndaquil follower"},
     {"at": 1, "kind": "input", "value": "Walk the short normal route and observe one complete follower Walk"},
     {"at": 2, "kind": "input", "value": "Cross the Cherrygrove field boundary and complete one recovery step"},
-    {"at": 3, "kind": "lifecycle", "value": "Observe the same follower lifetime with a current field handle and engine object"}
+    {"at": 3, "kind": "lifecycle", "value": "Observe current rebound identity, native signed -1/-1 ranges, and one fresh complete Follower Walk"}
   ],
   "stop": {
     "frameBudget": 840,
-    "condition": "One map change, the follower has a current rebound handle, and the player settles one tile inside Cherrygrove"
+    "condition": "One map change, current same-lifetime Follower with native signed -1/-1 and a fresh completed Walk, plus player settled one tile inside Cherrygrove"
   },
   "expect": {
     "requiredEvents": [
@@ -67,7 +67,9 @@
       "The field epoch and map generation each advance exactly once",
       "The rebound follower retains its actor lifetime and subject identity",
       "The rebound engine object belongs to the current map and manager",
-      "Normal player control completes one recovery step"
+      "Normal player control completes one recovery step",
+      "Native X/Y ranges remain signed -1 before and after field rebind",
+      "The current rebound full handle completes a new legal Walk, logical commit and native control return"
     ]
   },
   "capture": "none",

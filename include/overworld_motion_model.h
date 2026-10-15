@@ -27,6 +27,8 @@ typedef int64_t s64;
 
 #define OVERWORLD_MOTION_MODEL_VERSION 1
 #define OVERWORLD_MOTION_MAX_CANDIDATES 8
+#define OVERWORLD_MOTION_FLAG_FORCED (1u << 0)
+#define OVERWORLD_MOTION_FLAG_SLAM (1u << 1)
 
 typedef enum OverworldMotionKind {
     OVERWORLD_MOTION_KIND_NONE = 0,
@@ -98,8 +100,9 @@ typedef struct OverworldMotionIntent {
     u16 behaviorFingerprint;
     u16 duration;
     u8 arcHeightQ4;
-    u8 spinSpeed;
-    u8 swayWidth;
+    /* Slam owns these phase bytes; other motion keeps its spin and sway. */
+    __extension__ union { u8 spinSpeed; u8 arcRiseFrames; };
+    __extension__ union { u8 swayWidth; u8 arcHangFrames; };
     u8 visibilityPolicy;
     u8 pauseFrames;
     u8 pathAdvancePolicy;
@@ -117,6 +120,29 @@ static inline u8 OverworldMotion_ApplyWalkPauseVariance(
 
     return variedPause > 255 ? 255 : (u8)variedPause;
 }
+
+/* Unit rise/drop height in fx32. Both callers pass a positive denominator.
+ * Clearance passes exact crossed-cell fractions; Motion passes frame time. */
+#ifdef OVERWORLD_MOTION_HOST
+static inline u32 OverworldMotion_SlamUnitHeight(u32 progress, u32 total)
+{
+    return progress >= total ? 0x1000u : (progress << 12) / total;
+}
+static inline u32 OverworldMotion_SlamRiseUnitHeight(u32 progress, u32 total)
+{
+    u32 height = OverworldMotion_SlamUnitHeight(progress, total);
+
+    return 2u * height - ((height * height) >> 12);
+}
+#else
+extern u32 OverworldMotion_SlamUnitHeight(u32 progress, u32 total);
+__asm__(".global OverworldMotion_SlamUnitHeight\n.type OverworldMotion_SlamUnitHeight, %function\n.thumb\n.thumb_func\n.thumb_set OverworldMotion_SlamUnitHeight, 0x01FFA4EC\n");
+extern u32 OverworldMotion_SlamRiseUnitHeight(u32 progress, u32 total);
+__asm__(".global OverworldMotion_SlamRiseUnitHeight\n.type OverworldMotion_SlamRiseUnitHeight, %function\n.thumb\n.thumb_func\n.thumb_set OverworldMotion_SlamRiseUnitHeight, 0x023B8601\n");
+extern u32 OverworldMotion_SlamPhaseCheck(u32 kind, u32 peak, u32 rise,
+    s32 durationMinusHang);
+__asm__(".global OverworldMotion_SlamPhaseCheck\n.type OverworldMotion_SlamPhaseCheck, %function\n.thumb\n.thumb_func\n.thumb_set OverworldMotion_SlamPhaseCheck, 0x023BD4D9\n");
+#endif
 
 typedef struct OverworldMotionCandidate {
     s16 targetX;
@@ -145,8 +171,9 @@ typedef struct OverworldMotionPlan {
     u8 direction;
     u8 distance;
     u8 arcHeightQ4;
-    u8 spinSpeed;
-    u8 swayWidth;
+    /* Slam owns these phase bytes; other motion keeps its spin and sway. */
+    __extension__ union { u8 spinSpeed; u8 arcRiseFrames; };
+    __extension__ union { u8 swayWidth; u8 arcHangFrames; };
     u8 visibilityPolicy;
     u8 pauseFrames;
     u8 pathAdvancePolicy;

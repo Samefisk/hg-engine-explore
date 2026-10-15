@@ -173,12 +173,26 @@ def main() -> int:
     if not compiler:
         raise SystemExit("CC must name a C compiler")
     with tempfile.TemporaryDirectory(prefix="overworld-motion-") as directory:
+        # Use the real crossed-cell body without its ARM-only section attribute.
+        geometry_source = ROOT / "src/pokemon_move_history_overlay/overworld_hop_geometry.c"
+        geometry_body = function_body(geometry_source.read_text(), "OverworldActorHopGeometry_NextCell")
+        if not geometry_body.strip():
+            raise SystemExit("shared Motion geometry body is missing")
+        host_geometry = Path(directory) / "overworld-hop-geometry.c"
+        host_geometry.write_text('#include "overworld_actor_hop_geometry.h"\n'
+            'void OverworldActorHopGeometry_NextCell(OverworldActorHopGeometry *geometry)\n{'
+            + geometry_body + '}\n')
         common = compiler + [
             "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic",
+            "-Wno-unknown-attributes",
+            "-Wno-unused-function",
             "-DOVERWORLD_MOTION_HOST=1",
             "-I", str(ROOT / "include"),
+            "-I", str(ROOT / "src/pokemon_move_history_task6_overlay"),
             "-I", str(ROOT / "tools"),
+            "-include", "overworld_motion_model.h",
             str(ROOT / "lib/overworld/overworld_motion_model.c"),
+            str(host_geometry),
         ]
         proofs = (
             (

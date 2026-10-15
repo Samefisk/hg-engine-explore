@@ -2,7 +2,9 @@
 .align 2
 .thumb
 
-/* The stock dry-ground dust effect can fail to allocate a 3D model when
+/* The stock dry-ground and step dirt effects share the same init tail:
+ * r4 work, model at+0x20, local stack0xC, saved r4/r5/pc. Both can fail
+ * to allocate a 3D model when
  * many Pokémon walk at once. Reject only that optional effect before its
  * update dereferences the missing model. The failed init owns no handle, so
  * the field-effect manager destroys its task without calling its destructor.

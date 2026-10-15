@@ -16,10 +16,10 @@ from tools.overworld import devtools_cli
 
 class DevtoolsCliTests(unittest.TestCase):
     def test_job_summary_omits_repeated_measurement_history_not_failures(self):
-        history = [{"laneHex": "ab" * 72, "samples": list(range(100))}] * 100
+        history = [{"laneHex": "ab" * 80, "samples": list(range(100))}] * 100
         measure = {"ready": False, "completeMotions": 55, "eligibleMoves": 54,
             "intervals": history, "actions": history, "interruptedIntervals": history,
-            "selectedProfileReceipt": {"resultHex": "cd" * 200},
+            "selectedProfileReceipt": {"resultHex": "cd" * 216},
             "failures": [{"code": "stalled", "details": {"lastCommit": 55}}],
             "measurementErrors": [{"reason": "chain-boundary-overdue", "actual": 15}]}
         response = {"ok": True, "result": {"execution": "shared-devtools", "runId": "test-example",
@@ -111,6 +111,39 @@ class DevtoolsCliTests(unittest.TestCase):
                 expected = {"test": test, **({"name": "ledyba"} if operation == "save" else {})}
                 self.assertEqual(call.args[1], {"op": "test." + operation, "args": expected})
 
+    def test_closed_session_summary_keeps_ownership_and_omits_cached_game_data(self):
+        response = {"ok": True, "session": {"id": "closed", "state": "stopped"},
+                    "result": {"playing": False, "recording": False, "frame": 42,
+                               "nativeObservation": {"log": "x" * 200000}, "actors": [1] * 100,
+                               "lastError": {"code": "stopped", "message": "closed"}}}
+        compact = devtools_cli.summarize_response(response)
+        self.assertEqual(compact["session"]["id"], "closed")
+        self.assertEqual(compact["session"]["state"], "stopped")
+        self.assertFalse(compact["result"]["playing"])
+        self.assertEqual(compact["result"]["lastError"]["code"], "stopped")
+        self.assertNotIn("nativeObservation", compact["result"])
+        self.assertLess(len(json.dumps(compact)), 2000)
+        self.assertIn("nativeObservation", response["result"])
+
+    def test_offline_validation_uses_local_contract_and_never_sends(self):
+        root = Path(__file__).resolve().parents[2]
+        recipe = root / "tests/overworld/test-recipes/world.unmounted.spawn-zero-stutter.json"
+        args = self.parser().parse_args(["dev", "test", "validate", "--file", str(recipe), "--offline", "--json"])
+        output = io.StringIO()
+        with mock.patch.object(devtools_cli, "request") as send, contextlib.redirect_stdout(output):
+            self.assertEqual(args.handler(args), 0)
+        send.assert_not_called()
+        result = json.loads(output.getvalue())["result"]
+        self.assertTrue(result["valid"])
+        self.assertFalse(result["acceptedProof"])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "invalid.json"
+            path.write_text('{"schemaVersion":99}')
+            args.test_file = str(path)
+            with mock.patch.object(devtools_cli, "request") as send, contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(args.handler(args), 2)
+            send.assert_not_called()
+
     def test_invalid_test_files_never_send_and_report_argument_error(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "test.json"
@@ -186,8 +219,8 @@ class DevtoolsCliTests(unittest.TestCase):
             "resolved": True,
             "appliedOverrides": index,
             "sourceSha256": format(index + 1, "064x"),
-            "lanes": [(f"{index + 10:02x}" * 72)] * 2,
-            "resultHex": f"{index + 20:02x}" * 200,
+            "lanes": [(f"{index + 10:02x}" * 80)] * 2,
+            "resultHex": f"{index + 20:02x}" * 216,
             "requestHex": f"{index + 30:02x}" * 44,
         } for index in range(6)]
         response = {"ok": True, "session": {"id": "session-profiles", "state": "ready"},

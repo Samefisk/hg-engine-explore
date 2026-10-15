@@ -209,6 +209,59 @@ def _is_proof_input(path: Path) -> bool:
     )
 
 
+def _stat_fingerprint(value: os.stat_result) -> tuple[int, ...]:
+    # Reading can change access time, but cannot change these input facts.
+    return (value.st_dev, value.st_ino, value.st_mode, value.st_size,
+            value.st_mtime_ns, value.st_ctime_ns)
+
+
+def _directory_alias_paths(repo: Path, paths: set[Path], prefix: Path) -> set[Path]:
+    """Bind aliases once, and inventory their files by confined canonical path."""
+    root = repo.resolve()
+    visited: set[Path] = set()
+    inspected = 0
+
+    def visit(target: Path, ancestors: tuple[Path, ...]) -> None:
+        nonlocal inspected
+        before = target.lstat()
+        resolved = target.resolve(strict=True)
+        if not resolved.is_relative_to(root):
+            raise ValidationFailure(f"proof input symlink leaves repository: {target}")
+        if resolved in ancestors or len(ancestors) >= 64:
+            raise ValidationFailure(f"proof input directory alias cycle: {target}")
+        if resolved in visited:
+            return
+        visited.add(resolved)
+        directory_before = resolved.stat()
+        for child in sorted(resolved.iterdir()):
+            inspected += 1
+            if inspected > 65536:
+                raise ValidationFailure("proof input directory alias inventory exceeds its bound")
+            relative = prefix / child.relative_to(root)
+            if not _is_proof_input(relative):
+                continue
+            if child.is_symlink() or not child.is_dir():
+                paths.add(relative)
+            if child.is_dir():
+                visit(child, (*ancestors, resolved))
+        if (_stat_fingerprint(before) != _stat_fingerprint(target.lstat())
+                or _stat_fingerprint(directory_before) != _stat_fingerprint(resolved.stat())):
+            raise ValidationFailure(f"proof input changed during scan: {target}")
+
+    try:
+        for relative in sorted(paths):
+            target = root / relative.relative_to(prefix)
+            if target.is_symlink():
+                resolved = target.resolve(strict=True)
+                if not resolved.is_relative_to(root):
+                    raise ValidationFailure(f"proof input symlink leaves repository: {relative}")
+                if resolved.is_dir():
+                    visit(target, ())
+    except (OSError, RuntimeError) as error:
+        raise ValidationFailure(f"proof input directory alias could not be read: {error}") from error
+    return paths
+
+
 def _input_paths(repo: Path, prefix: Path = Path()) -> list[Path]:
     """Read the working content, not index blobs or submodule commit IDs."""
     paths: set[Path] = set()
@@ -247,7 +300,7 @@ def _input_paths(repo: Path, prefix: Path = Path()) -> list[Path]:
         prefix / Path(os.fsdecode(raw_path))
         for raw_path in deleted.split(b"\0") if raw_path
     )
-    return sorted(paths)
+    return sorted(_directory_alias_paths(repo, paths, prefix))
 
 
 def _input_record(repo: Path, relative: Path) -> dict[str, Any]:
@@ -259,20 +312,24 @@ def _input_record(repo: Path, relative: Path) -> dict[str, Any]:
             resolved = target.resolve(strict=True)
             if not resolved.is_relative_to(repo.resolve()):
                 raise ValidationFailure(f"proof input symlink leaves repository: {relative}")
-        if not target.is_file():
+        directory_alias = link is not None and resolved.is_dir()
+        if not directory_alias and not target.is_file():
             raise ValidationFailure(f"proof input is not a regular file: {relative}")
         content_before = target.stat()
-        record = file_record(relative, repo)
+        if directory_alias:
+            canonical = resolved.relative_to(repo.resolve()).as_posix()
+            record = {"present": True, "size": len(os.fsencode(link)),
+                      "sha256": digest_value({"symlink": link, "target": canonical}),
+                      "kind": "directory-alias", "target": canonical}
+        else:
+            record = file_record(relative, repo)
         content_after = target.stat()
         after = target.lstat()
-    except OSError as error:
+    except (OSError, RuntimeError) as error:
         raise ValidationFailure(f"proof input could not be read: {relative}: {error}") from error
-    def fingerprint(value: os.stat_result) -> tuple[int, ...]:
-        # Reading can change access time. It cannot change these input facts.
-        return (value.st_dev, value.st_ino, value.st_mode, value.st_size,
-                value.st_mtime_ns, value.st_ctime_ns)
 
-    if fingerprint(before) != fingerprint(after) or fingerprint(content_before) != fingerprint(content_after):
+    if (_stat_fingerprint(before) != _stat_fingerprint(after)
+            or _stat_fingerprint(content_before) != _stat_fingerprint(content_after)):
         raise ValidationFailure(f"proof input changed during scan: {relative}")
     return {
         **record, "path": relative.as_posix(),

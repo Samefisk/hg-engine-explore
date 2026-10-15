@@ -1,0 +1,313 @@
+{
+  "schemaVersion": 1,
+  "id": "diagnostic.spawn-positive-grass-cost3576",
+  "title": "Current normal-save positive Grass scan cost split",
+  "mode": "normal",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/verification.md#spawn-work-budget-and-proof-freshness",
+  "requirements": [],
+  "budgets": {
+    "maxSeconds": 180,
+    "maxFrames": 256,
+    "noProgressFrames": 256,
+    "minObservedFrames": 32
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    }
+  ],
+  "setup": [
+    {
+      "id": "warmup-city-start",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 564,
+          "z": 392,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "warmup-east",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "RIGHT",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 1,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "warmup-east-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 565,
+          "z": 392,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "warmup-south",
+      "op": "step",
+      "args": {
+        "frames": 40,
+        "keys": [
+          "DOWN",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 7,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 40,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "warmup-south-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 565,
+          "z": 398,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "warmup-east-seam",
+      "op": "step",
+      "args": {
+        "frames": 96,
+        "keys": [
+          "RIGHT",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 27,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 96,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "warmup-east-seam-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 33,
+          "x": 585,
+          "z": 398,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "warmup-south-start",
+      "op": "step",
+      "args": {
+        "frames": 48,
+        "keys": [
+          "DOWN",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 35,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 48,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "warmup-south-start-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 33,
+          "x": 585,
+          "z": 406,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "warmup-release",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "current-follower",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "actor-present",
+          "subject": "mankey",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "bind-current-field",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "route-up",
+      "op": "step",
+      "args": {
+        "frames": 64,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 398,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 64,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route-up-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 33,
+          "x": 585,
+          "z": 398,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route-left-city",
+      "op": "step",
+      "args": {
+        "frames": 48,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 48,
+        "noProgressFrames": 48
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "actor-present",
+      "subject": "mankey",
+      "when": "final"
+    }
+  ],
+  "measurements": [],
+  "spawnObserverCost": "baseline"
+}

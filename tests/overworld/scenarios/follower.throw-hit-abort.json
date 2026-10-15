@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "id": "follower.throw-hit-abort",
+  "title": "Ram hit retires a pre-Cargo Follower Throw capture",
+  "status": "active",
+  "capabilities": [
+    "profile.composition",
+    "collision.attack"
+  ],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "Mankey Follower between a Wild Onix and Player on Route 29.",
+    "trigger": "Natural Onix Ram hits Mankey during WhileTrue Sight Notice12365's Wild-actor Trigger capture, before Cargo or HELD.",
+    "observable": "Current native party HP loses one capped Ram hit. At the next legal combat intent, the Trigger binding and Notice ACTIVE clear. Sight Notice then binds the same current Onix again for eight clean frames.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Checked Route 29 teleport, Mankey party and follower, settled Follower, and bound Wild Onix."
+      },
+      {
+        "phase": "during-observation",
+        "target": "observation",
+        "change": "Only neutral input; no actor, profile, timer, or HP writes."
+      }
+    ],
+    "limits": [
+      "Prepared Onix placement is not natural population-spawn proof.",
+      "The measured first hit is Mankey party HP 48 to 24: authored Ram damage 33 is capped at half of maximum HP.",
+      "This native case reaches Trigger capture before Cargo selection. The real-C abort regression separately proves a full pre-HELD Trigger and Cargo claim."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "onix",
+      "species": 95,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Place and settle Mankey in the Ram lane, then bind Onix west of it."
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Use neutral input while Mankey captures Onix as Trigger and Onix charges."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Observe one real pre-Cargo hit, capture retirement, and same-target rebind."
+    }
+  ],
+  "stop": {
+    "frameBudget": 500,
+    "condition": "Eight clean frames after same-target rebind, or the first identity, hit, state, or frame failure."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "The hit lands on current Mankey party HP while the Sight Trigger is current and Cargo is unbound.",
+      "The native Trigger and Cargo bindings, claim, and Sight Notice ACTIVE are clear after the hit.",
+      "Sight Notice binds the same current Onix again for eight clean frames, with no stale claim."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "follower.throw-hit-abort",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "engine-boundary",
+      "control-release"
+    ],
+    "minimumFrames": 32
+  }
+}

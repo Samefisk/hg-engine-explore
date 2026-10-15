@@ -1,19 +1,32 @@
 #include "../../include/overworld_behavior_condition_adapter.h"
+#include "../../include/overworld_condition_moving_notice_native.h"
+#include "../../include/overworld_condition_subject_native.h"
+#include "../../include/overworld_condition_publication_native.h"
 
 #include "../../include/map_events_internal.h"
 #include "../../include/overworld_actor_system_internal.h"
 #include "../../include/overworld_follower_selector.h"
 #include "../../include/overworld_wild_spawns_internal.h"
+#include "../../include/overworld_query_code_addon_service.h"
+#if !defined(OVERWORLD_BEHAVIOR_HOST) && !defined(OVERWORLD_ACTOR_SYSTEM_HOST)
+#include "../../include/overworld_wild_runtime_state_internal.h"
+#endif
 
 #if defined(OVERWORLD_BEHAVIOR_HOST) \
     || defined(OVERWORLD_ACTOR_SYSTEM_HOST)
 #include <stdlib.h>
 #endif
 
+#if !defined(OVERWORLD_BEHAVIOR_HOST) && !defined(OVERWORLD_ACTOR_SYSTEM_HOST)
+__asm__(".thumb\n.thumb_func\n.thumb_set OverworldConditionPublication_ChangedMask, 0x023C2FCC\n");
+#endif
+
 typedef u16 OverworldBehaviorConditionVisionWord
     __attribute__((may_alias));
 typedef u16 OverworldBehaviorConditionHandleHalfword
     __attribute__((may_alias));
+_Static_assert((offsetof(OverworldBehaviorConditionWorldView, reserved) + 1) % 2 == 0,
+    "reachable Cargo mask must have halfword alignment");
 
 static void OverworldBehaviorConditionAdapter_Free(void *memory)
 {
@@ -39,6 +52,8 @@ OverworldBehaviorConditionAdapter_GetService(void)
 #endif
 }
 
+#if defined(OVERWORLD_BEHAVIOR_HOST) \
+    || defined(OVERWORLD_ACTOR_SYSTEM_HOST)
 static void OverworldBehaviorConditionAdapter_ClearResolution(
     OverworldWildBehaviorConditionRuntime *runtime,
     u8 slot)
@@ -50,7 +65,21 @@ static void OverworldBehaviorConditionAdapter_ClearResolution(
     runtime->targetValidMask &= (u16)~(1u << slot);
     runtime->frame.valid = FALSE;
 }
+#else
+/* Boot-loaded overlay 161 has the same body at a fixed Thumb entry. The
+ * actor adapter calls it directly, within the Thumb BL range. */
+extern void OverworldBehaviorConditionAdapter_ClearResolution(
+    OverworldWildBehaviorConditionRuntime *runtime,
+    u8 slot);
+__asm__(
+    ".global OverworldBehaviorConditionAdapter_ClearResolution\n"
+    ".thumb_func\n"
+    ".thumb_set OverworldBehaviorConditionAdapter_ClearResolution, "
+    "0x01FFBD01\n");
+#endif
 
+#if defined(OVERWORLD_BEHAVIOR_HOST) \
+    || defined(OVERWORLD_ACTOR_SYSTEM_HOST)
 static void OverworldBehaviorConditionAdapter_ClearActor(
     OverworldWildBehaviorConditionRuntime *runtime,
     u8 slot)
@@ -62,10 +91,23 @@ static void OverworldBehaviorConditionAdapter_ClearActor(
         OverworldBehaviorConditionAdapter_Free(prepared->states);
     }
     memset(prepared, 0, sizeof(*prepared));
+    memset(&runtime->bindings[slot], 0, sizeof(runtime->bindings[slot]));
     runtime->currentVisions[slot].range = 0;
     runtime->currentVisions[slot].options = 0;
     OverworldBehaviorConditionAdapter_ClearResolution(runtime, slot);
 }
+
+#else
+__asm__(
+    ".global OverworldConditionSubject_ClearActor\n"
+    ".thumb_func\n"
+    ".thumb_set OverworldConditionSubject_ClearActor, 0x022082C0\n");
+static void OverworldBehaviorConditionAdapter_ClearActor(
+    OverworldWildBehaviorConditionRuntime *runtime, u8 slot)
+{
+    OverworldConditionSubject_ClearActor(runtime, slot);
+}
+#endif
 
 _Static_assert(OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS == 10,
     "condition adapter clear loop must match the actor slot count");
@@ -140,9 +182,19 @@ OverworldBehaviorConditionAdapter_PrepareActor(
         OverworldBehaviorConditionAdapter_ClearActor(runtime, slot);
         return status;
     }
+    runtime->bindings[slot].subject = *subject;
+    for (u8 name = 0; name < OVERWORLD_TARGET_BINDING_COUNT; name++) {
+        runtime->bindings[slot].bindings[name].sourceConditionId =
+            OVERWORLD_BEHAVIOR_CONDITION_NO_ENTRY;
+        runtime->bindings[slot].bindings[name].sourceApplication =
+            OVERWORLD_BEHAVIOR_CONDITION_NO_APPLICATION;
+        runtime->bindings[slot].bindings[name].reason = OVERWORLD_TARGET_BINDING_EMPTY;
+    }
     return OVERWORLD_BEHAVIOR_CONDITION_OK;
 }
 
+#if defined(OVERWORLD_BEHAVIOR_HOST) \
+    || defined(OVERWORLD_ACTOR_SYSTEM_HOST)
 static BOOL __attribute__((noinline, optimize("Os")))
 OverworldBehaviorConditionAdapter_HandleEquals(
     const OverworldActorHandle *left,
@@ -164,6 +216,17 @@ OverworldBehaviorConditionAdapter_HandleEquals(
     return TRUE;
 }
 
+#else
+__asm__(
+    ".global OverworldConditionSubject_HandleEquals\n"
+    ".thumb_func\n"
+    ".thumb_set OverworldConditionSubject_HandleEquals, 0x02208320\n");
+#define OverworldBehaviorConditionAdapter_HandleEquals \
+    OverworldConditionSubject_HandleEquals
+#endif
+
+#if defined(OVERWORLD_BEHAVIOR_HOST) \
+    || defined(OVERWORLD_ACTOR_SYSTEM_HOST)
 static inline void __attribute__((always_inline))
 OverworldBehaviorConditionAdapter_PopulateSubject(
     OverworldWildBehaviorConditionRuntime *runtime,
@@ -185,9 +248,29 @@ OverworldBehaviorConditionAdapter_PopulateSubject(
     world->subjectMovementSpeed = subjectMovementSpeed;
     world->subjectVisionRange = runtime->currentVisions[slot].range;
     world->subjectVisionOptions = runtime->currentVisions[slot].options;
+    world->bindings = &runtime->bindings[slot];
+    world->subjectRoleMask = 0;
+    world->reservedBinding = 0;
+    for (u8 index = 0; index < world->actorCount; index++) {
+        if (world->actors[index].actor.slot == slot) {
+            world->subjectRoleMask = runtime->frame.candidates[index].roleMask;
+            break;
+        }
+    }
 }
 
-static BOOL __attribute__((noinline, optimize("Os")))
+#else
+/* Private Field leaf is resident. The explicit Thumb symbol avoids an ARM
+ * veneer while keeping the original synchronous PopulateSubject call. */
+__asm__(
+    ".global OverworldConditionSubject_Populate\n"
+    ".thumb_func\n"
+    ".thumb_set OverworldConditionSubject_Populate, 0x02208200\n");
+#define OverworldBehaviorConditionAdapter_PopulateSubject \
+    OverworldConditionSubject_Populate
+#endif
+
+BOOL __attribute__((noinline, optimize("Os")))
 OverworldBehaviorConditionAdapter_BuildFrame(
     OverworldWildSpawnState *state,
     FieldSystem *fieldSystem,
@@ -244,17 +327,20 @@ OverworldBehaviorConditionAdapter_BuildFrame(
         observation->visionRange = runtime->currentVisions[slot].range;
         observation->visionOptions = runtime->currentVisions[slot].options;
         candidate = &frame->candidates[index];
-        buildContext(
-            &candidate->context,
-            spawn,
-            0,
-            0,
-            OW_WILD_SPAWN_TERRAIN_LAND,
-            FALSE);
-        candidate->context.behaviorClass =
-            state->movementBehaviorClasses[slot];
-        candidate->roleMask =
-            OW_WILD_BEHAVIOR_CONDITION_TARGET_ROLE_WILD;
+        candidate->reserved[0] = OVERWORLD_BEHAVIOR_CONDITION_CANDIDATE_INACCESSIBLE;
+        if (buildContext != NULL) {
+            buildContext(
+                &candidate->context,
+                spawn,
+                0,
+                0,
+                OW_WILD_SPAWN_TERRAIN_LAND,
+                FALSE);
+            candidate->context.behaviorClass =
+                state->movementBehaviorClasses[slot];
+            candidate->roleMask =
+                OW_WILD_BEHAVIOR_CONDITION_TARGET_ROLE_WILD;
+        }
         if (slot == OW_WILD_FOLLOWER_SLOT) {
             query.kind = OVERWORLD_ACTOR_INSPECT_ACTOR_INDEX;
             query.index = (u8)slot;
@@ -267,15 +353,19 @@ OverworldBehaviorConditionAdapter_BuildFrame(
                 continue;
             }
             actorRole = systemSnapshot->actor.role;
-            candidate->roleMask =
-                actorRole == OVERWORLD_ACTOR_ROLE_MOUNTED
-                    ? OVERWORLD_BEHAVIOR_CONDITION_TARGET_ROLE_MOUNTED
-                    : OW_WILD_BEHAVIOR_CONDITION_TARGET_ROLE_FOLLOWER;
+            if (buildContext != NULL) {
+                candidate->roleMask =
+                    actorRole == OVERWORLD_ACTOR_ROLE_MOUNTED
+                        ? OVERWORLD_BEHAVIOR_CONDITION_TARGET_ROLE_MOUNTED
+                        : OW_WILD_BEHAVIOR_CONDITION_TARGET_ROLE_FOLLOWER;
+            }
         }
         frame->actorSlotMask |= 1u << slot;
         frame->world.actorCount++;
     }
-    frame->valid = TRUE;
+    /* A binding read needs current positions, without resolving profiles.
+     * The next condition evaluation must still populate candidate contexts. */
+    frame->valid = buildContext != NULL;
     return TRUE;
 }
 
@@ -339,6 +429,8 @@ OverworldBehaviorConditionAdapter_EvaluateActor(
     u32 blobSize,
     u8 slot,
     u8 subjectMovementSpeed,
+    const OverworldWildBehaviorProfile *observedProfile,
+    OverworldBehaviorConditionObserveFunc observe,
     int forcedOverrideProfileIndex,
     OverworldBehaviorConditionBuildContextFunc buildContext,
     OverworldBehaviorConditionIsCurrentSpawnFunc isCurrentSpawn,
@@ -347,16 +439,19 @@ OverworldBehaviorConditionAdapter_EvaluateActor(
     OverworldBehaviorConditionAdapterOutcome *outcome)
 {
     const OverworldBehaviorConditionServiceEntry *service;
+    const OverworldQueryCodeAddonEntry *addon;
+    OverworldQueryCodeAddonOwner addonOwner;
+    OverworldConditionNativeCall nativeCall;
     OverworldBehaviorConditionPreparedActor *prepared;
     OverworldWildSpawn *spawn;
     LocalMapObject *object;
     OverworldBehaviorConditionStatus status;
+    u32 interactionObservation;
     u32 timedWinningApplicationMask = 0;
     u32 timedWinningApplicationMaskBefore;
     u32 endedTimedApplicationMask;
     u16 winningTraceState = 0;
     u8 winningEntryIndex = OVERWORLD_BEHAVIOR_CONDITION_NO_APPLICATION;
-    u8 index;
 
     if (runtime == NULL || state == NULL || fieldSystem == NULL
         || blobBytes == NULL || buildContext == NULL
@@ -380,6 +475,23 @@ OverworldBehaviorConditionAdapter_EvaluateActor(
         return OVERWORLD_BEHAVIOR_CONDITION_STALE_TARGET;
     }
 
+    /* The public gate proves this compiled private table's lifetime. Acquire
+     * then checks the exact Field, epoch, map and loaded package before use. */
+    addonOwner = (OverworldQueryCodeAddonOwner){(u32)(uintptr_t)fieldSystem,
+        runtime->actors[slot].subject.fieldEpoch, runtime->actors[slot].subject.mapGeneration};
+    addon = ((const OverworldQueryCodeAddonServiceEntry *)OVERWORLD_QUERY_CODE_ADDON_SERVICE_ADDR)->acquire(&addonOwner);
+    if (addon == NULL) return OVERWORLD_BEHAVIOR_CONDITION_INVALID_DEFINITION;
+    nativeCall=(OverworldConditionNativeCall){
+        .runtime=runtime,.state=state,.field=fieldSystem,.blob=blobBytes,.blobSize=blobSize,
+        .observedProfile=observedProfile,.observe=observe,.buildContext=buildContext,.terrainAt=terrainAt,
+        .forcedProfileIndex=forcedOverrideProfileIndex,.version=OVERWORLD_CONDITION_NATIVE_CALL_VERSION,
+        .size=sizeof(nativeCall),.slot=slot,.movementSpeed=subjectMovementSpeed,
+    };
+    if (forcedOverrideProfileIndex == OVERWORLD_BEHAVIOR_CONDITION_SAMPLE_MOVING_NOTICE) {
+        nativeCall.operation=OVERWORLD_CONDITION_NATIVE_MOVING;
+        status=addon->conditionNative(&nativeCall);
+        if (status!=OVERWORLD_BEHAVIOR_CONDITION_OK || !nativeCall.reservedOutput) return status;
+    } else {
     buildContext(
         &runtime->context,
         spawn,
@@ -397,6 +509,23 @@ OverworldBehaviorConditionAdapter_EvaluateActor(
         subjectMovementSpeed,
         terrainAt);
     populateVisibility(fieldSystem, &runtime->frame.world);
+    addon->playerDamageRead(runtime, state, fieldSystem, slot, NULL);
+    /* Observation borrows the validated current Frame. Warm Cargo route
+     * work retains accepted motion and its authored pause; restore this same
+     * synchronous mode before evaluating prepared entries. */
+    if (forcedOverrideProfileIndex == OVERWORLD_BEHAVIOR_CONDITION_WARM_CARGO) {
+        runtime->frame.world.reservedBinding =
+            OVERWORLD_BEHAVIOR_CONDITION_EVALUATE_WARM_CARGO;
+    }
+    interactionObservation = observe != NULL
+        ? observe(state, slot, observedProfile, blobBytes, runtime) : 0;
+    runtime->frame.world.reserved[0] = (u8)interactionObservation;
+    *(OverworldBehaviorConditionVisionWord *)&runtime->frame.world.reserved[1] =
+        (u16)(interactionObservation >> 8);
+    runtime->frame.world.incomingClaimMask = (u16)(interactionObservation >> 18);
+    if (forcedOverrideProfileIndex == OVERWORLD_BEHAVIOR_CONDITION_WARM_CARGO) {
+        runtime->frame.world.reservedBinding = 1;
+    }
     status = service->evaluatePrepared(
         blobBytes,
         blobSize,
@@ -407,34 +536,22 @@ OverworldBehaviorConditionAdapter_EvaluateActor(
         runtime->frame.world.frame,
         &runtime->scratch,
         &runtime->result);
+    if (runtime->frame.world.reservedBinding) {
+        runtime->frame.world.reservedBinding = 0;
+        return status;
+    }
     if (status != OVERWORLD_BEHAVIOR_CONDITION_OK) {
         OverworldBehaviorConditionAdapter_ClearResolution(runtime, slot);
         return status;
     }
+    }
 
-    if (runtime->result.activeApplicationMask
-            != runtime->activeApplicationMasks[slot]) {
-        runtime->request.context = runtime->context;
-        runtime->request.forcedOverrideMask =
-            forcedOverrideProfileIndex >= 0
-                ? 1u << forcedOverrideProfileIndex
-                : 0;
-        runtime->request.behaviorClass = runtime->context.behaviorClass;
-        runtime->request.requestVersion = BEHAVIOR_RESOLVE_REQUEST_VERSION;
-        runtime->request.activeConditionalMask =
-            runtime->result.activeApplicationMask;
-        runtime->request.winningConditionId = runtime->result.winningConditionId;
-        runtime->request.targetSourceApplication =
-            runtime->result.resolvedTargetSourceApplication;
-        runtime->request.resolvedTargetConditionId =
-            runtime->result.resolvedTargetConditionId;
-        runtime->request.reserved = 0;
-        runtime->request.reserved2[0] = 0;
-        runtime->request.reserved2[1] = 0;
-        memcpy(
-            &runtime->request.resolvedTarget,
-            &runtime->result.resolvedTarget,
-            sizeof(runtime->request.resolvedTarget));
+    status=addon->conditionNative(&nativeCall);
+    if(status!=OVERWORLD_BEHAVIOR_CONDITION_OK) {
+        OverworldBehaviorConditionAdapter_ClearResolution(runtime,slot);
+        return status;
+    }
+    if (OverworldConditionPublication_ChangedMask(runtime, slot)) {
         if (OVERWORLD_ACTOR_SYSTEM_RESOLVER_ENTRY->resolve(
                 blobBytes,
                 blobSize,
@@ -446,60 +563,21 @@ OverworldBehaviorConditionAdapter_EvaluateActor(
         }
         outcome->flags =
             OVERWORLD_BEHAVIOR_CONDITION_OUTCOME_PROFILE_CHANGED;
-        if (runtime->result.triggeredApplicationMask != 0) {
-            outcome->flags |=
-                OVERWORLD_BEHAVIOR_CONDITION_OUTCOME_TRIGGERED;
-        }
     }
+    if (runtime->result.triggeredApplicationMask != 0)
+        outcome->flags |= OVERWORLD_BEHAVIOR_CONDITION_OUTCOME_TRIGGERED;
+    outcome->flags |= ((nativeCall.reservedOutput & 2) << 3)
+        | ((nativeCall.reservedOutput & 4) >> 1);
 
-    for (index = 0; index < prepared->count; index++) {
-        const OverworldWildBehaviorConditionEntry *entry;
-        u8 entryFlags = runtime->scratch.entryFlags[index];
-
-        if (prepared->catalogEntryIndexes[index]
-                >= ((const OverworldWildBehaviorDataBlob *)blobBytes)
-                    ->header.conditionEntryCount) {
-            OverworldBehaviorConditionAdapter_ClearResolution(runtime, slot);
-            return OVERWORLD_BEHAVIOR_CONDITION_INVALID_DEFINITION;
-        }
-        entry = &((const OverworldWildBehaviorDataBlob *)blobBytes)
-            ->conditionEntries[prepared->catalogEntryIndexes[index]];
-
-        if ((entryFlags & OVERWORLD_BEHAVIOR_CONDITION_SCRATCH_ACTIVE) != 0
-            && runtime->result.winningConditionIds[
-                    entry->applicationIndex]
-                == entry->conditionId) {
-            if (entry->activationMode
-                    == OVERWORLD_BEHAVIOR_CONDITION_TIMED) {
-                timedWinningApplicationMask |=
-                    1u << entry->applicationIndex;
-            }
-            if (entry->applicationIndex
-                    == runtime->result.winningConditionSourceApplication) {
-                winningEntryIndex = index;
-                if (runtime->frame.traceArmed) {
-                    winningTraceState =
-                        ((entryFlags
-                            & OVERWORLD_BEHAVIOR_CONDITION_SCRATCH_TRIGGERED)
-                                != 0
-                            ? 1u << 12
-                            : 0)
-                        | ((entryFlags
-                            & OVERWORLD_BEHAVIOR_CONDITION_SCRATCH_TRUE)
-                                != 0
-                            ? 1u << 13
-                            : 0)
-                        | (1u << 14)
-                        | ((u16)entry->activationMode << 15);
-                }
-            }
-        }
-    }
+    addon->playerDamageRead(runtime, state, fieldSystem, slot, blobBytes);
     if (!OverworldBehaviorConditionAdapter_ResolveTarget(
             runtime, slot, outcome)) {
         OverworldBehaviorConditionAdapter_ClearResolution(runtime, slot);
         return OVERWORLD_BEHAVIOR_CONDITION_STALE_TARGET;
     }
+    timedWinningApplicationMask=nativeCall.timedWinningApplicationMask;
+    winningEntryIndex=nativeCall.winningEntryIndex;
+    winningTraceState=nativeCall.winningTraceState;
 
     timedWinningApplicationMaskBefore =
         runtime->timedWinningApplicationMasks[slot];
@@ -522,6 +600,8 @@ OverworldBehaviorConditionAdapter_EvaluateActor(
             &prepared->states[winningEntryIndex],
             winningTraceState);
     }
+    if (forcedOverrideProfileIndex == OVERWORLD_BEHAVIOR_CONDITION_SAMPLE_MOVING_NOTICE)
+        outcome->flags |= OVERWORLD_BEHAVIOR_CONDITION_OUTCOME_MOVING_EVALUATED;
     return OVERWORLD_BEHAVIOR_CONDITION_OK;
 }
 

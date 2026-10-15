@@ -1707,6 +1707,7 @@ void LONG_CALL CreateBoxMonData(struct BoxPokemon *boxmon, int species, int leve
     BOOL flag;
 #ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
     BOOL overworldShiny;
+    BOOL overworldEncounter;
 #endif
 
     u32 title, language;
@@ -1720,7 +1721,9 @@ void LONG_CALL CreateBoxMonData(struct BoxPokemon *boxmon, int species, int leve
 #ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
     overworldShiny = FALSE;
 
-    if (OverworldWildSpawns_ConsumeBattlePersonalityOverride(&rnd, &overworldShiny)) {
+    overworldEncounter = OverworldWildSpawns_ConsumeBattlePersonalityOverride(
+        &rnd, &overworldShiny);
+    if (overworldEncounter) {
         rndflag = TRUE;
     }
 #endif
@@ -1783,6 +1786,15 @@ void LONG_CALL CreateBoxMonData(struct BoxPokemon *boxmon, int species, int leve
         j = (i & (0x001f << 10)) >> 10;
         SetBoxMonData(boxmon, MON_DATA_SPDEF_IV, (u8 *)&j);
     }
+
+#ifdef IMPLEMENT_OVERWORLD_WILD_SPAWNS
+    if (overworldEncounter) {
+        /* Match the encounter's HP IV before native stat calculation.
+         * Other native stat IVs keep their normal construction rolls. */
+        j = rnd & MAX_IVS;
+        SetBoxMonData(boxmon, MON_DATA_HP_IV, &j);
+    }
+#endif
 
     i = PokePersonalParaGet(species, PERSONAL_ABILITY_1);
     j = PokePersonalParaGet(species, PERSONAL_ABILITY_2);

@@ -1,0 +1,321 @@
+{
+  "schemaVersion": 1,
+  "id": "follower.target-access-ground",
+  "title": "Mankey still captures an accessible ground Pok\u00e9mon",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.follower-target-access-ground"
+  ],
+  "budgets": {
+    "maxSeconds": 360,
+    "maxFrames": 650,
+    "noProgressFrames": 160,
+    "minObservedFrames": 8
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    },
+    {
+      "id": "target",
+      "species": 143,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "follower-target-access-ground-v1",
+      "subject": "mankey"
+    }
+  ],
+  "setup": [
+    {
+      "id": "route29",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 402,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-passive",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "create-passive",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "walk-west",
+      "op": "step",
+      "args": {
+        "frames": 80,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "x",
+          "operator": "eq",
+          "value": 580,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 80,
+        "noProgressFrames": 80
+      }
+    },
+    {
+      "id": "settle-west",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [],
+        "until": {
+          "kind": "player-settled-at",
+          "map": 33,
+          "x": 580,
+          "z": 402,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "walk-north",
+      "op": "step",
+      "args": {
+        "frames": 64,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 398,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "settle-north",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [],
+        "until": {
+          "kind": "player-settled-at",
+          "map": 33,
+          "x": 580,
+          "z": 398,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "settle-passive",
+      "op": "step",
+      "args": {
+        "frames": 64,
+        "keys": [],
+        "until": {
+          "kind": "follower-settled",
+          "species": 155,
+          "partySlot": 0,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "prepare-mankey",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 56,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "create-mankey",
+      "op": "spawn",
+      "args": {
+        "species": 56,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-mankey",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-target",
+      "op": "spawn",
+      "args": {
+        "species": 143,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 581,
+        "z": 398
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-target",
+      "op": "bind",
+      "args": {
+        "subject": "target"
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "settle-target",
+      "op": "step",
+      "args": {
+        "frames": 160,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "follower-target-access-ground-v1",
+          "stage": "target-settled",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 160,
+        "noProgressFrames": 160
+      }
+    },
+    {
+      "id": "read-target-terrain",
+      "op": "terrain",
+      "args": {
+        "x": 581,
+        "z": 398,
+        "radius": 2
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "notice-ground",
+      "op": "step",
+      "args": {
+        "frames": 64,
+        "keys": [],
+        "until": {
+          "kind": "measurement-complete",
+          "measurement": "follower-target-access-ground-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "follower-target-access-ground-v1",
+      "when": "final"
+    }
+  ]
+}

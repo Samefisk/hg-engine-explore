@@ -46,13 +46,13 @@ class WarpGateMeasurement(MountedTeleportMatrixMeasurement):
         actor=self._actor(snapshot)
         require(before['readiness'].get('subject')==self.subject and all(before['readiness'].get('actor',{}).get(k)==actor.get(k) for k in ('handle','subjectIdentity','species','role','authorityGeneration','engineAnchorGeneration','presentationGeneration')), 'warp restore actor differs')
         a,b=bytes.fromhex(before['mountStateHex']),bytes.fromhex(after['mountStateHex'])
-        require(len(a)==len(b)==184 and a[8:80]==self.last_profile
-                and bytes.fromhex(before['profileHex'])==a[8:80]
+        require(len(a)==len(b)==192 and a[8:88]==self.last_profile
+                and bytes.fromhex(before['profileHex'])==a[8:88]
                 and bytes.fromhex(after['profileHex'])==self.original_profile
-                and b==a[:8]+self.original_profile+a[80:], 'warp restore changed unrelated state')
+                and b==a[:8]+self.original_profile+a[88:], 'warp restore changed unrelated state')
         require(value.get('completed') is True and value.get('guestAdvanced') is False
                 and value.get('subject')==self.subject and value.get('changedOffsets')==[12,23,24]
-                and before['bindingHex']==after['bindingHex']==a[80:96].hex()
+                and before['bindingHex']==after['bindingHex']==a[88:104].hex()
                 and before['clock']==after['clock'] and before['readiness']==after['readiness']
                 and before['sessionGeneration']==after['sessionGeneration']>0
                 and snapshot['frame']==self.last['frame'] and snapshot['nativeCycle']==self.last['nativeCycle'],

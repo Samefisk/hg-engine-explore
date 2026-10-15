@@ -1,14 +1,17 @@
 """Read-only stock field lifecycle context, never transition acceptance.
 
 Sources: field_system.h/c, overlay_manager.h/c, overlay_01_021E5900.s
-and ov01_021F62CC in overlay_01_021F4704.s. authenticate(address, size)
+and ov01_021F50F0/ov01_021F62CC in overlay_01_021F4704.s. authenticate(address, size)
 must verify the current loaded code against the current package; it returns
 None/True on success or raises/returns False on failure. No cached pointers.
 """
 import struct
 
 MAX_READ_BYTES = 512
-FIELD_TEMPLATE = (0x021E5925, 0x021E5BE5, 0x021E5C25, 0xFFFFFFFF)
+# Current Field1 retains stock Init/Exec and admits Exit through the exact
+# appearance drain wrapper. The unchanged stock Exit remains its callee.
+FIELD_TEMPLATE = (0x021E5925, 0x021E5BE5, 0x02208701, 0xFFFFFFFF)
+FIELD_EXIT_WRAPPER = (0x02208700, 56)
 
 
 def observe_field_lifecycle(read, authenticate, field, frame, native_cycle):
@@ -75,6 +78,7 @@ def observe_field_lifecycle(read, authenticate, field, frame, native_cycle):
         require(exec_state in (0, 1, 2, 3), "invalid-manager-state")
         code(0x021E5924, 0x2C0)
         code(0x021E5BE4, 0x40)
+        code(*FIELD_EXIT_WRAPPER)
         code(0x021E5C24, 0x294)
         if exec_state in (0, 1):
             require(proc_state <= 3, "invalid-field-init-state")
@@ -92,6 +96,30 @@ def observe_field_lifecycle(read, authenticate, field, frame, native_cycle):
         result["terrain"] = {"pointer": terrain, "readyWord": terrain_ready,
                              "busyByte": busy,
                              "exitPredicate": terrain_ready == 1 and busy == 0}
+        # Stock streaming watches a live position against its saved vector.
+        # This is diagnostic data only; it cannot grant a stream receipt.
+        code(0x021F50F0, 0x3BC)
+        pointer(terrain, 0xF4)
+        watch = raw(terrain + 0xD0, 36)
+        watcher, high, low, active, enabled = struct.unpack_from("<4I", watch, 12) + (
+            struct.unpack_from("<I", watch, 32)[0],)
+        terrain_result = result["terrain"]
+        terrain_result.update(
+            sampledPosition=dict(zip(("x", "y", "z"), struct.unpack_from("<3i", watch))),
+            watcherPointer=watcher, watcherPosition=None,
+            axisHighPointer=high, axisLowPointer=low,
+            axisHighValue=None, axisLowValue=None, axisDelta=None,
+            axisActive=active, axisDirection=watch[28], watcherEnabled=enabled,
+            watchStateHex=watch.hex())
+        if watcher:
+            terrain_result["watcherPosition"] = dict(zip(("x", "y", "z"),
+                struct.unpack("<3i", raw(pointer(watcher, 12), 12))))
+        for name, address in (("axisHighValue", high), ("axisLowValue", low)):
+            if address:
+                terrain_result[name] = struct.unpack("<i", raw(pointer(address, 4), 4))[0]
+        if high and low:
+            terrain_result["axisDelta"] = (
+                terrain_result["axisHighValue"] - terrain_result["axisLowValue"])
         if exec_state == 2:
             return done("field-ready-retained" if ready else "field-exit-pending",
                         "exec-continues-while-ready" if ready else "next-exec-enters-exit")

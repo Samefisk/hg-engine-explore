@@ -115,10 +115,10 @@ struct SAVE_MISC_DATA
     /* 0x2A0 */ MAIL_MESSAGE battleGreetingEC;
     /* 0x2A8 */ u32 unk_02A8[2][5];
     /* 0x2D0 */ u8 unk_02D0[5];
-    /* 0x2D5 */ u8 dummy_02D5[3];
+    /* 0x2D5 */ u8 playerHealthSignature[3]; // magic bytes, then version
     /* 0x2D8 */ u32 togepiEggPersonality;
     /* 0x2DC */ u8 togepiEggGender;
-    /* 0x2DD */ u8 dummy_02DD[3];
+    /* 0x2DD */ u8 playerHealthState[3]; // HP, then little-endian healing spawn
 
 #ifdef ALLOW_SAVE_CHANGES
 
@@ -129,6 +129,13 @@ struct SAVE_MISC_DATA
 #endif
 
 };
+
+typedef char PlayerHealthSaveSignatureOffsetAssert[
+    __builtin_offsetof(struct SAVE_MISC_DATA, playerHealthSignature) == 0x2D5
+        ? 1 : -1];
+typedef char PlayerHealthSaveStateOffsetAssert[
+    __builtin_offsetof(struct SAVE_MISC_DATA, playerHealthState) == 0x2DD
+        ? 1 : -1];
 
 // vars
 typedef struct ScriptState {
@@ -414,6 +421,10 @@ void *LONG_CALL PROC_GetWork(void *proc);
 u32 LONG_CALL Sav2_Misc_sizeof(void);
 void LONG_CALL InitStoredMons(struct SAVE_MISC_DATA *saveMiscData);
 void LONG_CALL Sav2_Misc_init_new_fields(struct SAVE_MISC_DATA *saveMiscData);
+u8 LONG_CALL PlayerHealthSave_GetHP(SaveData *saveData);
+void LONG_CALL PlayerHealthSave_SetHP(SaveData *saveData, u8 hp);
+u16 LONG_CALL PlayerHealthSave_GetHealingSpawn(SaveData *saveData);
+void LONG_CALL PlayerHealthSave_SetHealingSpawn(SaveData *saveData, u16 spawn);
 static inline u8 SaveMisc_GetCustomFollowerPartySlot(
     struct SAVE_MISC_DATA *saveMiscData)
 {

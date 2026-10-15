@@ -16,7 +16,7 @@ from tools.overworld import test_devtools_mounted_crash_measurement as retained_
 class MountedCrashControlTests(unittest.TestCase):
     def test_actual_arm_header_proves_mode_offset_and_full_state_size(self):
         native_fixture.MountedCrashObserverTests().test_header_offsets_are_current_arm_layout()
-        self.assertEqual((MODE_OFFSET,STATE_BYTES),(102,184))
+        self.assertEqual((MODE_OFFSET,STATE_BYTES),(111,192))
 
     def fixture(self):
         r,s,actor,regs,put=native_fixture.MountedCrashObserverTests().fixture()
@@ -26,9 +26,9 @@ class MountedCrashControlTests(unittest.TestCase):
             arm7Timestamp=50,frameSequence=30,scope='nds-scheduler-ticks-not-cpu-or-instructions')
         actor.update(logical=dict(x=1,y=2),reservationId=0)
         r.arm()
-        put(r.mount_state+102,b'\x03');put(r.mount_state+144,struct.pack('<HH',32,32))
+        put(r.mount_state+111,b'\x03');put(r.mount_state+144,struct.pack('<HH',32,32))
         value=r._entry('update')
-        put(r.mount_state+102,b'\0');put(r.mount_state+144,b'\0'*4)
+        put(r.mount_state+111,b'\0');put(r.mount_state+144,b'\0'*4)
         r._returned(value,dict(returnValue=1,returned=r.observer._clock()))
         r.counts.update(EXPECTED_COUNTS)
         actor['commitSequence']+=1;actor['logical']['x']+=1
@@ -42,20 +42,20 @@ class MountedCrashControlTests(unittest.TestCase):
         r.completed_boundary()
         writes=[];aborts=[]
         def write(address,data):
-            self.assertEqual(address,r.mount_state+102);self.assertEqual(len(data),1)
+            self.assertEqual(address,r.mount_state+111);self.assertEqual(len(data),1)
             writes.append(bytes(data));put(address,data)
         s.write=write;s.abort_native_control=lambda error:aborts.append(str(error))
         return r,s,actor,regs,put,writes,aborts
 
     def test_same_sample_rejects_mode_restores_everything_and_keeps_latch(self):
-        r,s,a,regs,put,writes,aborts=self.fixture();original=s.read(r.mount_state,184)
+        r,s,a,regs,put,writes,aborts=self.fixture();original=s.read(r.mount_state,192)
         result=calibrate_mounted_crash(r)
         self.assertEqual(result['state'],'complete')
         self.assertEqual(result['bad']['failure'],BAD_MODE)
         self.assertEqual(result['clean'],result['restored'])
         self.assertEqual(result['clock'],result['restoredClock'])
         self.assertEqual(result['registers'],result['restoredRegisters'])
-        self.assertEqual(s.read(r.mount_state,184),original)
+        self.assertEqual(s.read(r.mount_state,192),original)
         self.assertEqual(writes,[b'\xff',b'\0'])
         self.assertEqual(result['guestMemoryWrites'],2)
         self.assertEqual(result['guestInstructionAdvance'],0)
@@ -111,7 +111,7 @@ class MountedCrashControlTests(unittest.TestCase):
         for fault in ('error','accept'):
             r,s,a,regs,put,writes,aborts=self.fixture();original=r._sample;clean=original()
             def sample():
-                if s.read(r.mount_state+102,1)==b'\xff':
+                if s.read(r.mount_state+111,1)==b'\xff':
                     if fault=='error':raise RuntimeError('unexpected sample failure')
                     return deepcopy(clean)
                 return original()
@@ -139,7 +139,7 @@ class MountedCrashControlTests(unittest.TestCase):
             with self.subTest(fault=fault),self.assertRaises(Exception):calibrate_mounted_crash(r)
             self.assertEqual(len(aborts),1)
             self.assertTrue(r.calibration['cleanupPending']);self.assertTrue(r.closed)
-            if fault!='restore':self.assertEqual(s.read(r.mount_state+102,1),b'\0')
+            if fault!='restore':self.assertEqual(s.read(r.mount_state+111,1),b'\0')
             if fault!='byte':self.assertIsNotNone(r.failure,fault)
 
     def test_hook_cleanup_failure_is_not_hidden_by_expected_reader_latch(self):

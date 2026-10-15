@@ -35,6 +35,30 @@ SELECTOR_FIELDS = {
 FRAME_BOUNDARY = "main-task-queue-completion"
 
 
+def normal_input_at_edge(sample, previous, expected, *, first, events=()):
+    """Allow one physical key edge before the stock held-key publication.
+
+    A new press earns no native movement credit. Callers still require the
+    real admission. A release is only an input fact; terminal pose checks
+    remain with the movement measurement.
+    """
+    held = sample.get("selector", {}).get("rawHeld")
+    if held == expected:
+        return True
+    prior = previous.get("selector", {}).get("rawHeld")
+    if not first or (held, expected) not in ((0, 66), (66, 0), (0, 16), (16, 0)) \
+            or held != prior or sample.get("selector", {}).get("physicalPressed") != expected:
+        return False
+    if expected:
+        keys = ("x", "y", "pos_x", "pos_z", "movement_cmd", "movement_animation")
+        a, b = sample.get("player", {}), previous.get("player", {})
+        if any(key not in a or key not in b or a[key] != b[key] for key in keys) \
+                or any(e.get("kind") == "native-observation" and
+                       e.get("data", {}).get("observation") == "player-step-admitted" for e in events):
+            return False
+    return True
+
+
 def _int(value, label, low=0, high=0xFFFFFFFF):
     if type(value) is not int or not low <= value <= high:
         raise ValueError(f"{label} must be an integer in {low}..{high}")

@@ -152,7 +152,8 @@ class MelonDS:
         self.memory=Memory(self)
         self.input=SimpleNamespace(keypad_update=self.set_keys,
                                    touch_set_pos=self.touch, touch_release=self.release_touch)
-        self.backup=SimpleNamespace(import_file=self.import_save, export_file=self.export_save)
+        self.backup=SimpleNamespace(import_file=self.import_save, export_file=self.export_save,
+                                    read_bytes=self.read_save)
     def require_open(self):
         if not self.handle:raise RuntimeError("melonDS core is closed")
     def call(self,name,*args):
@@ -172,13 +173,15 @@ class MelonDS:
     def set_keys(self,mask):self.call("md_set_keys",bounded(mask,0xfff))
     def touch(self,x,y):self.call("md_touch",bounded(x,255),bounded(y,191))
     def release_touch(self):self.call("md_release_touch")
-    def export_save(self,path):
+    def read_save(self):
         self.require_open()
         size=bounded(self.lib.md_save_size(self.handle),0x1000000)
         if size==0:raise RuntimeError("melonDS cartridge has no save data")
         data=C.create_string_buffer(size)
         self.call("md_read_save",data,size)
-        Path(path).write_bytes(data.raw)
+        return data.raw
+    def export_save(self,path):
+        Path(path).write_bytes(self.read_save())
         return True
     def volume_set(self,value):
         if value!=0:raise ValueError("shared melonDS core has no audio output")

@@ -29,11 +29,11 @@ class RuntimeHealthMonitor:
     def _counter(value):
         return type(value) is int and value >= 0
 
-    def observe(self, native_cycle, completed_frame, cpsr):
+    def observe(self, native_cycle, completed_frame, cpsr, *, stall_limit=120):
         details = self._validate(native_cycle, completed_frame, cpsr)
         if self._native_call_start is not None:
             self._fail("invalid-sample", {**details, "reason": "native call still active"})
-        self._advance(native_cycle, completed_frame, details)
+        self._advance(native_cycle, completed_frame, details, stall_limit)
 
     def begin_native_call(self, native_cycle, completed_frame, cpsr):
         """Mark the endpoint immediately before the owned bridge advances."""
@@ -67,12 +67,13 @@ class RuntimeHealthMonitor:
             self._fail("arm9-abort" if details["mode"] == 0x17 else "arm9-undefined", details)
         return details
 
-    def _advance(self, native_cycle, completed_frame, details):
+    def _advance(self, native_cycle, completed_frame, details, stall_limit):
         details["lastProgressNativeCycle"] = self._progress_cycle
         details["nativeCyclesWithoutProgress"] = native_cycle - self._progress_cycle
         if completed_frame > self._frame:
             self._progress_cycle = native_cycle
-        elif native_cycle - self._progress_cycle >= 120:
+        elif native_cycle - self._progress_cycle >= stall_limit:
+            details["stallLimit"] = stall_limit
             self._fail("main-queue-stalled", details)
         self._frame, self._cycle = completed_frame, native_cycle
 

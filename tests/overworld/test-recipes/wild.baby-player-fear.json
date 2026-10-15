@@ -1,0 +1,185 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.baby-player-fear",
+  "title": "Wild baby keeps its Player fear",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.baby-player-fear"
+  ],
+  "budgets": {
+    "maxSeconds": 300,
+    "maxFrames": 600,
+    "noProgressFrames": 240,
+    "minObservedFrames": 2
+  },
+  "subjects": [
+    {
+      "id": "baby",
+      "species": 173,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "passive",
+      "species": 155,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "baby-wild-player-fear-v1",
+      "subject": "baby"
+    }
+  ],
+  "setup": [
+    {
+      "id": "fear-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 407,
+        "facing": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-passive-party",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "create-passive-follower",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-passive",
+      "op": "bind",
+      "args": {
+        "subject": "passive"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-baby",
+      "op": "spawn",
+      "args": {
+        "species": 173,
+        "role": "wild",
+        "level": 5,
+        "x": 585,
+        "z": 402,
+        "form": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-baby",
+      "op": "bind",
+      "args": {
+        "subject": "baby"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "pass-passive-follower",
+      "op": "step",
+      "args": {
+        "frames": 4,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 4,
+        "noProgressFrames": 4
+      }
+    },
+    {
+      "id": "enter-baby-vision",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "observe-player-fear",
+      "op": "step",
+      "args": {
+        "frames": 180,
+        "keys": [],
+        "until": {
+          "kind": "measurement-complete",
+          "measurement": "baby-wild-player-fear-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 180,
+        "noProgressFrames": 180
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "baby-wild-player-fear-v1",
+      "when": "final"
+    }
+  ]
+}

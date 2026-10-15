@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "id": "pokemon-appearance.ambush-cooldown-palette",
+  "title": "Healthy Weepinbell uses blue during its own real Ambush cooldown",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.pokemon-ambush-cooldown-palette"
+  ],
+  "budgets": {
+    "maxSeconds": 420,
+    "maxFrames": 1400,
+    "noProgressFrames": 1000,
+    "minObservedFrames": 90
+  },
+  "subjects": [
+    {
+      "id": "weepinbell",
+      "species": 70,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "pokemon-ambush-cooldown-palette-v1",
+      "subject": "weepinbell"
+    }
+  ],
+  "setup": [
+    {
+      "id": "ambush-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 403,
+        "facing": 0
+      },
+      "budget": {
+        "maxFrames": 120,
+        "noProgressFrames": 120,
+        "maxSeconds": 30
+      }
+    },
+    {
+      "id": "prepare-passive-follower",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "create-passive-follower",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-weepinbell",
+      "op": "spawn",
+      "args": {
+        "species": 70,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 585,
+        "z": 402
+      },
+      "budget": {
+        "maxFrames": 120,
+        "noProgressFrames": 120,
+        "maxSeconds": 30
+      }
+    },
+    {
+      "id": "bind-weepinbell",
+      "op": "bind",
+      "args": {
+        "subject": "weepinbell"
+      },
+      "budget": {
+        "maxFrames": 1,
+        "noProgressFrames": 1,
+        "maxSeconds": 5
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "first-natural-attack",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "pokemon-ambush-cooldown-palette-v1",
+          "stage": "attack-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxFrames": 120,
+        "noProgressFrames": 120,
+        "maxSeconds": 30
+      }
+    },
+    {
+      "id": "first-natural-expiry",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "pokemon-ambush-cooldown-palette-v1",
+          "stage": "attack-ended",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxFrames": 120,
+        "noProgressFrames": 120,
+        "maxSeconds": 30
+      }
+    },
+    {
+      "id": "blue-and-natural-expiry",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-complete",
+          "measurement": "pokemon-ambush-cooldown-palette-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 180,
+        "noProgressFrames": 180
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "pokemon-ambush-cooldown-palette-v1",
+      "when": "final"
+    }
+  ]
+}

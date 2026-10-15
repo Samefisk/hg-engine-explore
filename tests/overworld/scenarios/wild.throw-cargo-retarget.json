@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.throw-cargo-retarget",
+  "title": "Wild Geodude switches to nearer reachable Cargo without canceling its Walk",
+  "status": "active",
+  "capabilities": [
+    "actor.system"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "One current Wild Geodude, a Wild Cyndaquil, and a Wild Weepinbell on Route29 with a passive Cyndaquil follower.",
+    "trigger": "Geodude captures normal Player Interest and claims first Cargo during an accepted northward Walk. A nearer passive Cargo then spawns without altering any claim, timer, profile or motion.",
+    "observable": "The same full Geodude switches its Cargo binding to the nearer current reachable Weepinbell, releases the first claim, and keeps Player Interest. Its accepted Walk finishes normally. It then physically picks the nearer Cargo, keeps one HELD owner, and launches it with a normal Hop. The passive follower is present but never a substitute for either named Cargo.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Checked teleport Player584402; native party0 Cyndaquil155Lv20 and Follower; Wild first Cargo155Lv20 at585402 and Geodude74Lv20 at589402. Wait for exact first claim with pickup-standing score3 and accepted northward Walk from589403 to589402, then spawn near Cargo Weepinbell70Lv20 at588403 off the accepted endpoint and outside the normal3-tile Player Vision range. Its normal Lurk profile stays in place while the incumbent proof runs. The farther first Cargo leaves room for the authored12-frame target check plus bounded native ranking before pickup. No claim, motion, profile or control is written."
+      }
+    ],
+    "limits": [
+      "Prepared placement does not prove natural population choice.",
+      "Route ranking details and profile controls have separate actual-C checks.",
+      "Stops at normal near-Cargo launch; landing and damage are outside this claim."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "geodude",
+      "species": 74,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "first-cargo",
+      "species": 155,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "near-cargo",
+      "species": 70,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "First current Cargo claim and accepted northward Walk from589403 to589402 precede near Cargo spawn at588403."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Current native route admits nearer Cargo; old claim clears with unchanged Player Interest and Walk."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Near Cargo becomes HELD by the same Geodude and launches normally."
+    }
+  ],
+  "stop": {
+    "frameBudget": 760,
+    "condition": "Same current Geodude launches nearer Cargo after switch, or first failed owner, motion, claim or field observation."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Exact full actors and sealed native query owner stay current.",
+      "First Cargo is claimed during normal accepted Walk before near Cargo exists.",
+      "Near Cargo is selected only after a reachable native query and a better Chebyshev pickup-standing distance; Player Interest remains unchanged and old claim clears.",
+      "The accepted Walk finishes without cancellation or rebound.",
+      "One HELD owner keeps near Cargo until normal launch."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "wild.throw-cargo-retarget",
+    "claims": [
+      "live-actor-identity",
+      "natural-input",
+      "engine-boundary",
+      "control-release"
+    ],
+    "minimumFrames": 2
+  }
+}

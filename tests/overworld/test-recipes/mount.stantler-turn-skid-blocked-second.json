@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.stantler-turn-skid-blocked-second",
+  "title": "Mounted Stantler crashes on blocked second turn-skid tile",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld_walk_frame_timing_spec.md",
+  "requirements": [
+    "current.mounted-stantler-turn-skid-blocked-second"
+  ],
+  "budgets": {
+    "maxSeconds": 120,
+    "maxFrames": 240,
+    "noProgressFrames": 64,
+    "minObservedFrames": 37
+  },
+  "subjects": [
+    {
+      "id": "stantler",
+      "species": 234,
+      "role": "MOUNTED",
+      "acquire": "existing"
+    }
+  ],
+  "setup": [
+    {
+      "id": "blocked-skid-lane",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 583,
+        "z": 406,
+        "facing": 3
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "own-stantler",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 234,
+        "level": 10,
+        "hp": 1,
+        "status": 0
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "mount-stantler",
+      "op": "spawn",
+      "args": {
+        "species": 234,
+        "role": "mounted",
+        "slot": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 180,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-mount",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "bind-stantler",
+      "op": "bind",
+      "args": {
+        "subject": "stantler"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "run-right",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "actor-field",
+          "subject": "stantler",
+          "path": "target.x",
+          "operator": "eq",
+          "value": 588,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "turn-down",
+      "op": "step",
+      "args": {
+        "frames": 18,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 18,
+        "noProgressFrames": 18
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "actor-field",
+      "subject": "stantler",
+      "path": "identityVerified",
+      "operator": "eq",
+      "value": true,
+      "when": "always"
+    },
+    {
+      "kind": "actor-field",
+      "subject": "stantler",
+      "path": "presentationAttached",
+      "operator": "eq",
+      "value": true,
+      "when": "always"
+    },
+    {
+      "kind": "frame-count",
+      "operator": "gte",
+      "value": 37,
+      "when": "final"
+    }
+  ]
+}

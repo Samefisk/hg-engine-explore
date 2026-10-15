@@ -91,5 +91,22 @@ class PlayerCollisionObserverTests(unittest.TestCase):
         with self.assertRaises(NativeObservationError):
             f.observer._install_player_collision_identity(bytes(32))
 
+    def test_fixed_health_caller_uses_owned_package_when_base_changes(self):
+        f = self.fixture()
+        base, data = f.code_regions[0]
+        packaged = bytearray(data)
+        packaged[0x5D4C2:0x5D4CA] = bytes.fromhex("9ef74dfe041c301c")
+        f.code_regions[0] = (base, bytes(packaged))
+        stock = bytearray((f.rt.REPO / "base/arm9.bin").read_bytes())
+        stock[0x5D4C2:0x5D4CA] = bytes(8)
+        f.observer._install_player_collision_identity(bytes(stock))
+        self.assertEqual(f.observer.player_collision_identity[1][1],
+                         bytes.fromhex("9ef74dfe041c301c"))
+        f.put(0x0205D4C2, bytes.fromhex("9ef74dfe041c301c"))
+        f.observer._check_player_collision_identity()
+        f.put(0x0205D4C2, bytes(8))
+        with self.assertRaisesRegex(NativeObservationError, "live identity"):
+            f.observer._check_player_collision_identity()
+
 
 if __name__ == "__main__": unittest.main()

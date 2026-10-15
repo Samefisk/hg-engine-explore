@@ -537,5 +537,27 @@ class BootTests(unittest.TestCase):
             self.assertEqual([call[1] for call in calls if call[0] == "tap"], ["A"])
 
 
+
+
+class NativeObjectMovementRangeTests(unittest.TestCase):
+    def test_current_object_range_offsets_are_signed_native_words(self):
+        engine = fresh_engine()
+        obj = 0x02320000
+        for x_range, y_range in ((-1, -1), (0, 255), (232, 32)):
+            values = {obj + 0x44: x_range, obj + 0x48: y_range}
+            calls = []
+            def signed(emu, address, size=4):
+                calls.append((address, size)); return values.get(address, 0)
+            engine.signed = signed
+            engine.unsigned = lambda emu, address, size=4: 0
+            result = engine.object_state(None, obj)
+            self.assertEqual((result["x_range"], result["y_range"]), (x_range, y_range))
+            self.assertIn((obj + 0x44, 4), calls)
+            self.assertIn((obj + 0x48, 4), calls)
+        header = (ROOT / "include/map_events_internal.h").read_text()
+        self.assertIn("/*0x044*/ int xrange;", header)
+        self.assertIn("/*0x048*/ int yrange;", header)
+
+
 if __name__ == "__main__":
     unittest.main()

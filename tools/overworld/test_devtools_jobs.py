@@ -6,11 +6,11 @@ import tempfile
 import threading
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from tools.overworld.devtools import Service
 from tools.overworld.devtools_evidence_stream import load_observations
-from tools.overworld.devtools_jobs import _command_snapshot, _valid_completed_frame_batch
+from tools.overworld.devtools_jobs import _command_snapshot, _valid_completed_frame_batch, _uncredited_dense_wait
 from tools.overworld.test_devtools_test_contract import recipe, snapshot
 
 
@@ -126,7 +126,10 @@ class JobsTests(unittest.TestCase):
     def test_job_uses_the_evaluator_raw_boundary_set(self):
         from tools.overworld.devtools_jobs import RAW_BOUNDARY_READERS
         from tools.overworld.devtools_test_contract import ACCELERATION, RAW_BOUNDARY_MEASUREMENTS
-        self.assertEqual(RAW_BOUNDARY_READERS, RAW_BOUNDARY_MEASUREMENTS | {ACCELERATION})
+        self.assertEqual(RAW_BOUNDARY_READERS, RAW_BOUNDARY_MEASUREMENTS | {
+            ACCELERATION, "follower-throw-approach-cargo-v1",
+            "follower-throw-query-priority-v1", "wild-throw-ground-lock-soak-v1",
+            "route30-sentret-throw-pacing-v1", "emote-three-slots-v1", "population-headroom-v1"})
 
     def test_extra_completed_frames_require_a_loading_transition(self):
         loading = [{"frame": 8, "fieldAvailable": False},
@@ -168,6 +171,95 @@ class JobsTests(unittest.TestCase):
         self.assertTrue(exported.startswith(b"\x1f\x8b"))
         self.assertIsNone(self.service.worker)
 
+    def test_step_rows_keep_exact_worker_input_arguments(self):
+        from tools.overworld.devtools_test_contract import TestEvaluator
+        assertions, received = self, []
+        class RawInputGate(TestEvaluator):
+            uses_raw_records = True
+            def observe_record(self, record, *, frame_callback=None, full_report=True):
+                if "initialSnapshot" in record:
+                    self._raw_frame = record["initialSnapshot"]["frame"]
+                    return self.observe(record["initialSnapshot"], count_frame=False)
+                if "samples" in record:
+                    sent = next(args for op, args in reversed(FrameWorker.instances[-1].calls) if op == "step")
+                    assertions.assertEqual(record["requestedInput"], sent)
+                    assertions.assertIsNot(record["requestedInput"], sent)
+                    assertions.assertIsNot(record["requestedInput"]["keys"], sent["keys"])
+                    received.append(deepcopy(record))
+                for sample in record.get("samples", []):
+                    self._raw_frame = sample["frame"]
+                    self.observe(sample, count_frame=record["phase"] == "observe")
+                    if frame_callback:
+                        frame_callback(sample, self)
+                return self.result()
+        for keys in ([], ["RIGHT"]):
+            with self.subTest(keys=keys):
+                received.clear()
+                value = recipe()
+                value["id"] += ".input-" + ("right" if keys else "neutral")
+                value["actions"][0]["args"]["keys"] = keys
+                with patch("tools.overworld.devtools_jobs.TestEvaluator", RawInputGate):
+                    self.assertTrue(self.launch(value)["ok"])
+                    done = self.finish()
+                self.assertTrue(done["evaluation"]["passed"], done["evaluation"])
+                self.assertFalse(done["acceptedProof"])
+                rows = load_observations(Path(done["observationsArtifact"]["path"]))
+                chunk = next(row for row in rows if row.get("samples"))
+                self.assertEqual(chunk["requestedInput"], dict(frames=2, keys=keys,
+                    releaseAtEnd=False, diagnosticDetails=False))
+                self.assertIn(chunk, received)
+
+    def test_dense_retry_follower_wait_is_limited_to_its_uncredited_typed_action(self):
+        action = dict(id="route29-current-follower",op="wait",args=dict(predicate=dict(
+            kind="follower-settled",species=56,partySlot=2,when="final")))
+        evaluator = SimpleNamespace(uses_raw_records=True,test=dict(id="population.failed-series-retry"),
+                                   measurements={"natural-refill-retry-v1":object()})
+        samples = [dict(fieldAvailable=True)]*3
+        for fault in (None,"phase","step","other-id","other-test","water","predicate","keys","nonraw"):
+            a,e,phase = deepcopy(action),deepcopy(evaluator),"observe"
+            if fault == "phase": phase = "assert"
+            elif fault == "step": a["op"] = "step"
+            elif fault == "other-id": a["id"] = "route29-1"
+            elif fault == "other-test": e.test["id"] = "population.spawn-work-budget"
+            elif fault == "water": e.measurements = {"natural-water-spawn-v1":object()}
+            elif fault == "predicate": a["args"]["predicate"]["partySlot"] = 1
+            elif fault == "keys": a["args"]["keys"] = ["RIGHT"]
+            elif fault == "nonraw": e.uses_raw_records = False
+            allowed = _uncredited_dense_wait(phase,a,e)
+            self.assertEqual(allowed,fault is None)
+            self.assertEqual(_valid_completed_frame_batch(1,3,samples,allowed),fault is None)
+        self.assertFalse(_valid_completed_frame_batch(1,3,samples[:2],True))
+
+    def test_natural_meter_rejects_missing_or_changed_step_input(self):
+        from tools.overworld.devtools_spawn_priority_measurement import RETRY, WATER, CASES, SpawnPriorityMeasurement
+        from tools.overworld.test_devtools_spawn_priority import natural_recipe, warmup_fixture
+        for kind in (RETRY, WATER):
+            for fault in (None, "missing", "changed"):
+                with self.subTest(kind=kind, fault=fault):
+                    value = natural_recipe(kind)
+                    meter = SpawnPriorityMeasurement(value, dict(contractVersion=1))
+                    map_id, x, y = CASES[kind]["start"]
+                    previous = warmup_fixture(map_id, x, y, 35)
+                    meter.latest, meter.setup_index = previous, len(value["setup"])
+                    meter.subject = deepcopy(previous["actors"][0])
+                    meter.follower_identity = meter.subject["subjectIdentity"]
+                    sample = deepcopy(previous)
+                    sample.update(frame=previous["frame"]+1, nativeCycle=previous["nativeCycle"]+1)
+                    sample["partyObservation"]["frame"] = sample["frame"]
+                    row = dict(phase="observe", action=value["actions"][0]["id"], samples=[sample], events=[],
+                        requestedInput=dict(frames=1, keys=[], releaseAtEnd=False, diagnosticDetails=False),
+                        completedGameFrames=1, observedFieldFrames=1, nativeCycles=1,
+                        cycleIntervals=[dict(cpuNs=1, wallNs=1, completedGameFrame=sample["frame"])])
+                    if fault == "missing": row.pop("requestedInput")
+                    elif fault == "changed": row["requestedInput"]["keys"] = ["RIGHT"]
+                    result = meter.observe_record(row)
+                    self.assertEqual(bool(result["failures"]), fault is not None, result)
+                    if fault is None:
+                        self.assertEqual(meter.observed_frames, 1)
+                    else:
+                        self.assertEqual(result["failures"], ["natural spawn action changed neutral input"])
+                        self.assertEqual(meter.observed_frames, 0)
+
     def test_chain_arm_retains_exact_native_snapshot_not_cached_terrain(self):
         native = snapshot(12)
         cached = {**deepcopy(native), "terrain": {"observation": {"lastCompletedGameFrame": 1}}}
@@ -182,6 +274,49 @@ class JobsTests(unittest.TestCase):
         self.assertEqual(native["frame"], 12)
         with self.assertRaises(KeyError):
             _command_snapshot("chain-retry", {}, cached)
+
+    def test_below_bind_refreshes_only_its_exact_completed_support_boundary(self):
+        from tools.overworld.devtools_jobs import _bind_snapshot
+        from tools.overworld.test_devtools_cross_height_throw_measurement import snapshot as height_snapshot, below_fixture, SOURCE, KINDS
+        from tools.overworld.devtools_cross_height_throw_measurement import CrossHeightThrowMeasurement
+        fresh=height_snapshot(KINDS[1],0);meter=CrossHeightThrowMeasurement(SOURCE,KINDS[1]);below_fixture(meter,fresh)
+        current=deepcopy(fresh);current["terrain"]["observation"]["lastCompletedGameFrame"]=-1
+        current["terrain"]["observation"]["nativeCycle"]-=1
+        service=SimpleNamespace(lock=threading.RLock(),worker=SimpleNamespace(call=Mock(return_value=deepcopy(fresh))),_observe=Mock())
+        evaluator=SimpleNamespace(measurements={KINDS[1]:object()});action=dict(id="bind-mankey")
+        result=_bind_snapshot(service,evaluator,action,"setup",current)
+        self.assertEqual(result,fresh);self.assertEqual(current["terrain"]["observation"]["lastCompletedGameFrame"],-1)
+        service.worker.call.assert_called_once_with("snapshot",{"radius":7});service._observe.assert_called_once_with(fresh)
+        result["actors"][0]["subjectIdentity"]+=1;self.assertEqual(service.worker.call.return_value,fresh)
+        service.worker.call.reset_mock();service._observe.reset_mock()
+        for owner,step,phase in ((SimpleNamespace(measurements={KINDS[0]:object()}),action,"setup"),
+                (evaluator,dict(id="bind-trigger"),"setup"),(evaluator,action,"observe")):
+            self.assertIs(_bind_snapshot(service,owner,step,phase,current),current)
+        service.worker.call.assert_not_called();service._observe.assert_not_called()
+
+    def test_below_bind_rejects_stale_clock_context_and_full_owner(self):
+        from tools.overworld.devtools_jobs import _bind_snapshot
+        from tools.overworld.test_devtools_cross_height_throw_measurement import snapshot as height_snapshot, below_fixture, SOURCE, KINDS
+        from tools.overworld.devtools_cross_height_throw_measurement import CrossHeightThrowMeasurement
+        fresh=height_snapshot(KINDS[1],0);meter=CrossHeightThrowMeasurement(SOURCE,KINDS[1]);below_fixture(meter,fresh)
+        faults=("frame","nativeCycle","actorFrame","missing-clock","context","pid","handle","engine","pose","height","role","terrain-clock","terrain-context")
+        for fault in faults:
+            wrong=deepcopy(fresh)
+            if fault in ("frame","nativeCycle","actorFrame"):wrong[fault]+=1
+            elif fault=="missing-clock":wrong.pop("actorFrame")
+            elif fault=="context":wrong["context"]["fieldEpoch"]+=1
+            elif fault=="pid":wrong["actors"][0]["subjectIdentity"]+=1
+            elif fault=="handle":wrong["actors"][0]["handle"]["generation"]+=1
+            elif fault=="engine":wrong["actors"][0]["engineIdentity"]["pointer"]+=4
+            elif fault=="pose":wrong["actors"][0]["logical"]["x"]+=1
+            elif fault=="height":wrong["actors"][0]["engineObject"]["pos_y"]+=1
+            elif fault=="role":wrong["actors"][0]["role"]="MOUNTED"
+            elif fault=="terrain-clock":wrong["terrain"]["observation"]["lastCompletedGameFrame"]-=1
+            elif fault=="terrain-context":wrong["terrain"]["observation"]["context"]["mapGeneration"]+=1
+            service=SimpleNamespace(lock=threading.RLock(),worker=SimpleNamespace(call=Mock(return_value=wrong)),_observe=Mock())
+            with self.subTest(fault=fault),self.assertRaisesRegex(ValueError,"signed-height Below bind snapshot"):
+                _bind_snapshot(service,SimpleNamespace(measurements={KINDS[1]:object()}),dict(id="bind-mankey"),"setup",fresh)
+            service._observe.assert_not_called()
 
     def test_low_disk_rejects_before_creating_job_or_worker(self):
         with patch("tools.overworld.devtools_jobs.shutil.disk_usage",
@@ -298,6 +433,93 @@ class JobsTests(unittest.TestCase):
                     self.assertEqual(done["evaluation"]["failures"][0]["code"], "action-frame-budget")
                 self.assertIsNone(self.service.worker)
 
+    def test_skid_hit_job_publishes_exact_completed_endpoint_profile_cache(self):
+        from tools.overworld.devtools_test_contract import TestEvaluator
+        received=[]
+        profiles=[dict(fingerprint=7,sourceSha256='c'*64,resultHex='0102')]
+        class RawGate(TestEvaluator):
+            uses_raw_records=True
+            def observe_record(self,record,*,frame_callback=None,full_report=True):
+                received.append(deepcopy(record))
+                if 'initialSnapshot' in record:
+                    self._raw_frame=record['initialSnapshot']['frame']
+                    return self.observe(record['initialSnapshot'],count_frame=False)
+                for sample in record.get('samples',[]):
+                    self._raw_frame=sample['frame']
+                    self.observe(sample,count_frame=record['phase']=='observe')
+                    if frame_callback: frame_callback(sample,self)
+                return self.result()
+        class ProfileWorker(FrameWorker):
+            def call(self,op,args=None):
+                result=super().call(op,args)
+                if op=='step':
+                    result['snapshot']['nativeCycle']=result['snapshot']['frame']*2
+                    result['snapshot']['nativeObservation']=dict(resolvedProfiles=deepcopy(profiles))
+                return result
+        self.service.worker_factory=ProfileWorker
+        for test_id in ('pokemon-hp.skid-hit-crash-knockback','profile.basic-attack',
+                        'profile.playful.in-place-hop'):
+            with self.subTest(test_id=test_id):
+                received.clear()
+                value=recipe();value['id']=test_id
+                with patch('tools.overworld.devtools_jobs.TestEvaluator',RawGate):
+                    self.assertTrue(self.launch(value)['ok']);done=self.finish()
+                self.assertTrue(done['passed'],done)
+                rows=load_observations(Path(done['observationsArtifact']['path']))
+                chunk=next(r for r in rows if r.get('phase')=='observe' and r.get('samples'))
+                self.assertEqual(chunk['profileCache'],dict(frame=3,nativeCycle=6,resolvedProfiles=profiles))
+                self.assertIn(chunk,received)
+                self.assertNotIn('snapshot',chunk)
+
+    def test_mounted_throw_uses_existing_interaction_window_from_setup(self):
+        from tools.overworld.devtools_test_contract import TestEvaluator
+        # Test the real shared dispatch; gameplay stays with the mounted meter.
+        class RawGate(TestEvaluator):
+            uses_raw_records = True
+            def __init__(self, test):
+                super().__init__(recipe())
+            def observe_record(self, record, *, frame_callback=None, full_report=True):
+                if "initialSnapshot" in record:
+                    self._raw_frame = record["initialSnapshot"]["frame"]
+                    return self.observe(record["initialSnapshot"], count_frame=False)
+                for sample in record.get("samples", []):
+                    self._raw_frame = sample["frame"]
+                    self.observe(sample, count_frame=record["phase"] == "observe")
+                    if frame_callback:
+                        frame_callback(sample, self)
+                return self.result()
+        # Zero-stutter's actual constructor/COMMIT anchor needs this observer,
+        # including its admission constructorSequence before any measured step.
+        cases = (("unmounted-zero-stutter-v1", True),
+                 ("player-health-mounted-throw-v1", True),
+                 ("follower-throw-moving-cargo-v1", True),
+                 ("wild-throw-moving-candidate-v1", True),
+                 ("throw-notice-walk-commit-v1", True),
+                 ("player-health-throw-contact-v1", True), (None, False))
+        for kind, expected in cases:
+            with self.subTest(kind=kind):
+                value = recipe(); value["mode"] = "normal" if kind == "unmounted-zero-stutter-v1" else "prepared"
+                value["id"] += "." + (kind or "plain")
+                if kind is not None:
+                    value["measurements"] = [{"kind": kind}]
+                with patch("tools.overworld.devtools_jobs.validate_test", side_effect=deepcopy), \
+                        patch("tools.overworld.devtools_jobs.TestEvaluator", RawGate), \
+                        patch("tools.overworld.devtools_test_inputs.measurement_inputs", return_value={}), \
+                        patch("tools.overworld.control.prepare_shared_test", return_value={"passed": True}):
+                    self.assertTrue(self.launch(value)["ok"])
+                    done = self.finish()
+                self.assertTrue(done["evaluation"]["passed"], done["evaluation"])
+                self.assertFalse(done["acceptedProof"])
+                calls = FrameWorker.instances[-1].calls
+                record = [args for op, args in calls if op == "record.start"]
+                self.assertEqual(record, [{"maxFrames": value["budgets"]["maxFrames"],
+                    **({"throwInteractions": True} if expected else {})}])
+                self.assertLess(next(i for i, (op, _) in enumerate(calls) if op == "record.start"),
+                                next(i for i, (op, _) in enumerate(calls) if op == "step"))
+                self.assertEqual([(args["frames"], args["keys"]) for op, args in calls if op == "step"],
+                                 [(2, [])])
+                self.assertEqual(done["observedFrames"], 2)
+
     def test_prepared_command_reaches_raw_checker_before_observation(self):
         from tools.overworld.devtools_test_contract import TestEvaluator
         received = []
@@ -345,6 +567,80 @@ class JobsTests(unittest.TestCase):
         self.assertEqual(sum(op == "record.start" for op, _ in calls), 1)
         self.assertLess(next(i for i, (op, _) in enumerate(calls) if op == "record.start"),
                         next(i for i, (op, _) in enumerate(calls) if op == "party"))
+
+    def test_raw_health_read_retains_exact_boundary_without_snapshot_or_step(self):
+        from tools.overworld.devtools_test_contract import TestEvaluator
+        from tools.overworld.devtools_wild_throw_soak_measurement import KIND, WildThrowSoakMeasurement
+        source = dict(romSha256="a" * 64, overlaySha256="b" * 64)
+        received = []; cached = []; service = self.service
+        class RawGate(TestEvaluator):
+            uses_raw_records = True
+            def __init__(self, test):
+                super().__init__(recipe())
+                self.measurements[KIND] = SimpleNamespace(finish=lambda: {"passed": True, "failures": []})
+            def observe_record(self, record, *, frame_callback=None, full_report=True):
+                if "initialSnapshot" in record:
+                    self._raw_frame = record["initialSnapshot"]["frame"]
+                    return self.observe(record["initialSnapshot"], count_frame=False)
+                if record.get("command") == "player-health.observe":
+                    received.append(deepcopy(record))
+                    meter = SimpleNamespace(latest=self.latest, source=source, _boundary=lambda value: None)
+                    try:
+                        WildThrowSoakMeasurement._health(meter, record)
+                    except (ValueError, KeyError) as error:
+                        self.fail("health-boundary-invalid", str(error))
+                    return self.result()
+                for sample in record.get("samples", []):
+                    self._raw_frame = sample["frame"]
+                    self.observe(sample, count_frame=record["phase"] == "observe")
+                    if frame_callback: frame_callback(sample, self)
+                return self.result()
+        class HealthWorker(FrameWorker):
+            wrong_cycle = False
+            def call(self, op, args=None):
+                if op == "player-health.observe":
+                    self.calls.append((op, args))
+                    cached.append(deepcopy(service.snapshot))
+                    return dict(frame=self.frame, nativeCycle=self.frame * 2 + self.wrong_cycle,
+                        identity=source, hp=100, savedHp=100, maxHp=100, recoveryPending=False)
+                result = super().call(op, args)
+                if op == "step":
+                    for value in [*result["samples"], result["snapshot"]]:
+                        value.update(nativeCycle=value["frame"] * 2, pokemonCombat={})
+                elif "frame" in result:
+                    result.update(nativeCycle=result["frame"] * 2, pokemonCombat={})
+                    if op == "record.start":
+                        result["terrain"] = dict(observation=dict(lastCompletedGameFrame=0))
+                return result
+        self.service.worker_factory = HealthWorker
+        for wrong_cycle in (False, True):
+            with self.subTest(wrong_cycle=wrong_cycle):
+                HealthWorker.wrong_cycle = wrong_cycle
+                received.clear(); cached.clear()
+                value = recipe(); value["id"] += ".health-" + str(wrong_cycle).lower()
+                value["actions"].append(dict(id="health", op="player-health.observe", args={},
+                    budget=dict(maxSeconds=10, maxFrames=1, noProgressFrames=1)))
+                with patch("tools.overworld.devtools_jobs.validate_test", side_effect=deepcopy), \
+                        patch("tools.overworld.devtools_jobs.TestEvaluator", RawGate), \
+                        patch("tools.overworld.control.prepare_shared_test", return_value={"passed": True}), \
+                        patch("tools.overworld.control.finalize_shared_test", return_value={}):
+                    self.assertTrue(self.launch(value)["ok"])
+                    done = self.finish()
+                self.assertEqual(done["passed"], not wrong_cycle, done)
+                self.assertEqual(done["totalGameFrames"], 2)
+                self.assertEqual(done["observedFrames"], 2)
+                row, = received
+                self.assertNotIn("snapshot", row["receipt"])
+                self.assertIn("artifact", row["receipt"])
+                self.assertEqual((row["snapshot"]["frame"], row["snapshot"]["nativeCycle"]), (3, 6))
+                self.assertNotIn("terrain", row["snapshot"])
+                self.assertEqual(cached[0]["terrain"]["observation"]["lastCompletedGameFrame"], 0)
+                calls = FrameWorker.instances[-1].calls
+                self.assertEqual([(args["frames"], args["keys"]) for op, args in calls if op == "step"], [(2, [])])
+                self.assertFalse(any(op == "snapshot" for op, _ in calls))
+                self.assertEqual(sum(op == "player-health.observe" for op, _ in calls), 1)
+                if wrong_cycle:
+                    self.assertEqual(done["evaluation"]["failures"][0]["code"], "health-boundary-invalid")
 
     def test_step_rows_omit_only_endpoint_and_keep_setup_boundaries(self):
         for mode in ("normal", "prepared"):
@@ -943,6 +1239,99 @@ class MeasurementProgressTests(unittest.TestCase):
             self.assertEqual(self.key(), settled)
         self.actor["motionPhase"] = "IDLE"
         self.assertNotEqual(self.key(), settled)
+
+
+class SpawnEntryProgressTests(unittest.TestCase):
+    def setUp(self):
+        self.handle = dict(value=196608,slot=0,generation=3,fieldEpoch=4,mapGeneration=4,encounterGeneration=3)
+        self.target = dict(handle=deepcopy(self.handle),subjectIdentity=1197525756,species=16,role="WILD",
+            active=True,identityVerified=True,presentationAttached=True,authorityGeneration=1,
+            engineAnchorGeneration=1,presentationGeneration=1,engineIdentity=dict(pointer=0x022B4000),
+            commitSequence=0,motionKind="FLY_IN",motionPhase="MOVING",motionElapsed=88,motionDuration=144,
+            reservationId=43,engineObject=dict(pos_x=35880960,pos_y=267648,pos_z=26458200,facing=0,flags=1))
+        self.follower = dict(handle=dict(value=65543,slot=7,generation=1,fieldEpoch=4,mapGeneration=4,encounterGeneration=1),
+            subjectIdentity=2920357538,species=56,role="FOLLOWER",motionPhase="IDLE",motionElapsed=7,
+            commitSequence=16,engineObject=dict(pos_x=35553280,pos_y=65536,pos_z=26378240))
+        self.snapshot = dict(frame=1283,context=dict(mapId=67,fieldEpoch=4,mapGeneration=4),
+            actors=[self.target,self.follower],nativeObservation=dict(sequence=1586))
+        self.result = dict(subject={k:deepcopy(self.follower[k]) for k in
+            ("handle","subjectIdentity","species","role")},entry={k:deepcopy(self.target[k]) for k in
+            ("handle","subjectIdentity","species")})
+        self.evaluator = SimpleNamespace(measurements={"spawn-work-budget-v1":
+            SimpleNamespace(result=lambda:deepcopy(self.result))})
+        self.action = dict(op="wait",args=dict(predicate=dict(kind="measurement-stage",
+            measurement="spawn-work-budget-v1",stage="complete")))
+
+    def key(self):
+        from tools.overworld.devtools_jobs import TestJobs
+        return deepcopy(TestJobs._progress_key(self.action,self.snapshot,self.evaluator))
+
+    def test_exact_entry_travel_and_commit_extend_wait_with_idle_follower(self):
+        previous=self.key()
+        for elapsed in range(89,145):
+            self.target["motionElapsed"]=elapsed
+            self.assertNotEqual(self.key(),previous)
+            previous=self.key()
+        self.target.update(commitSequence=1,motionPhase="IDLE")
+        self.assertNotEqual(self.key(),previous)
+        self.assertEqual(self.follower["motionElapsed"],7)
+
+    def test_inactive_old_copy_before_live_entry_never_supplies_progress(self):
+        before=self.key()
+        old=deepcopy(self.target)
+        old.update(active=False,identityVerified=False,motionElapsed=140)
+        old["engineObject"]["pos_z"]+=65536
+        self.snapshot["actors"].insert(0,old)
+        self.assertEqual(self.key(),before)
+        old["motionElapsed"]+=1
+        self.assertEqual(self.key(),before)
+        self.target["motionElapsed"]+=1
+        self.assertNotEqual(self.key(),before)
+
+    def test_stationary_entry_still_uses32frame_liveness_guard(self):
+        before=self.key()
+        for offset in range(1,33):
+            self.snapshot["frame"]+=1
+            self.snapshot["nativeObservation"]["sequence"]+=1
+            self.follower["motionElapsed"]+=1
+            self.follower["engineObject"]["pos_z"]+=8192
+            self.target["engineObject"].update(facing=offset%4,flags=offset)
+            self.result["frames"]=offset
+            self.assertEqual(self.key(),before)
+        self.assertEqual(self.snapshot["frame"]-1283,32)
+
+    def test_stale_or_other_entry_cannot_borrow_follower_progress(self):
+        faults=("handle","personality","species","role","inactive","unverified","detached",
+            "stale-field","stale-map","duplicate","missing","malformed")
+        for fault in faults:
+            self.setUp()
+            if fault=="handle":self.result["entry"]["handle"]["generation"]+=1
+            elif fault=="personality":self.result["entry"]["subjectIdentity"]+=1
+            elif fault=="species":self.result["entry"]["species"]+=1
+            elif fault=="role":self.target["role"]="FOLLOWER"
+            elif fault=="inactive":self.target["active"]=False
+            elif fault=="unverified":self.target["identityVerified"]=False
+            elif fault=="detached":self.target["presentationAttached"]=False
+            elif fault=="stale-field":self.snapshot["context"]["fieldEpoch"]+=1
+            elif fault=="stale-map":self.snapshot["context"]["mapGeneration"]+=1
+            elif fault=="duplicate":self.snapshot["actors"].append(deepcopy(self.target))
+            elif fault=="missing":self.snapshot["actors"].remove(self.target)
+            else:self.result["entry"]="wrong"
+            with self.subTest(fault=fault):
+                self.assertEqual(self.key(),("spawn-work-entry-invalid",))
+                self.snapshot["frame"]+=32
+                self.follower["motionElapsed"]+=32
+                self.assertEqual(self.key(),("spawn-work-entry-invalid",))
+
+    def test_only_final_entry_stage_changes_its_progress_subject(self):
+        self.result["entry"]=None
+        before=self.key();self.target["motionElapsed"]+=1
+        self.assertEqual(self.key(),before)
+        self.follower["motionElapsed"]+=1
+        self.assertNotEqual(self.key(),before)
+        self.setUp();self.action["args"]["predicate"]["stage"]="other"
+        before=self.key();self.target["motionElapsed"]+=1
+        self.assertEqual(self.key(),before)
 
 
 class LeanReplayTests(unittest.TestCase):

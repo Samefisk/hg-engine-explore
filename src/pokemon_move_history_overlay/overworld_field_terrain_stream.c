@@ -9,7 +9,8 @@
 #if defined(__arm__)
 __asm__(
     ".thumb\n"
-    ".global memset\n.thumb_func\n.thumb_set memset, 0x023DEEA2\n");
+    ".global memset\n.thumb_func\n.thumb_set memset, 0x023DEEA2\n"
+    ".thumb_func\n.thumb_set OverworldFieldTerrainStream_RetireEmptyAxis, 0x01FFD510\n");
 #endif
 
 #define FIELD_STREAM_CODE \
@@ -148,6 +149,8 @@ OverworldFieldTerrainStream_Apply(
             return OVERWORLD_FIELD_TERRAIN_STREAM_RETRY_BUSY;
         }
         player = fieldSystem->playerAvatar->mapObject;
+        OverworldFieldTerrainStream_RetireEmptyAxis(
+            manager, (const s32 *)player->posVec);
         runtime->watchedAnchor =
             *(VecFx32 *)player->posVec;
         runtime->fieldSystem = fieldSystem;

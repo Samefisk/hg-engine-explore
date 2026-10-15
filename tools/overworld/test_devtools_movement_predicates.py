@@ -4,6 +4,7 @@ import unittest
 
 from tools.overworld.devtools_movement_predicates import (
     check_movement_predicate as check, validate_movement_predicate as validate,
+    normal_input_at_edge,
 )
 
 
@@ -21,6 +22,26 @@ def snapshot():
 
 
 class MovementPredicateTests(unittest.TestCase):
+    def test_normal_input_edge_is_one_frame_and_never_a_movement_admission(self):
+        previous = snapshot(); previous["player"]["movement_animation"] = 0
+        for prior, expected in ((0,66),(66,0),(0,16),(16,0)):
+            previous["selector"]["rawHeld"] = prior
+            current = deepcopy(previous); current["selector"]["physicalPressed"] = expected
+            self.assertTrue(normal_input_at_edge(current,previous,expected,first=True))
+            self.assertFalse(normal_input_at_edge(current,previous,expected,first=False))
+            for fault in ("missing-physical","wrong-physical","wrong-prior"):
+                bad = deepcopy(current); old = deepcopy(previous)
+                if fault == "missing-physical": del bad["selector"]["physicalPressed"]
+                elif fault == "wrong-physical": bad["selector"]["physicalPressed"] = 32
+                else: old["selector"]["rawHeld"] = 32
+                with self.subTest(prior=prior,expected=expected,fault=fault):
+                    self.assertFalse(normal_input_at_edge(bad,old,expected,first=True))
+            if expected:
+                bad = deepcopy(current); bad["player"]["pos_x"] += 1
+                self.assertFalse(normal_input_at_edge(bad,previous,expected,first=True))
+                event = dict(kind="native-observation",data=dict(observation="player-step-admitted"))
+                self.assertFalse(normal_input_at_edge(current,previous,expected,first=True,events=[event]))
+
     def follower(self):
         from tools.overworld.test_devtools_binding_measurement import actor_fixture
         value = snapshot(); actor = actor_fixture()

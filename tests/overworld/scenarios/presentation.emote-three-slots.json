@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "id": "presentation.emote-three-slots",
+  "title": "Three independent quiet native emotes and drained cleanup",
+  "status": "active",
+  "capabilities": [
+    "presentation.emote-slots"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "TICKETS.md#tkt-0066",
+    "actor": "Four prepared ordinary Wild Cyndaquil155, each with a distinct current full handle and map object.",
+    "trigger": "Existing FieldReturnBridge invokes six fixed native quiet requests: A0,A1,B1,C2,D3,C3. No emote data, asset or owner writes.",
+    "observable": "Actual Admit returns yes/no/yes/yes/no/no. Three native effects use three models and distinct texture/palette keys and frame destinations. Native update/draw occurs during ordinary completed frames. Quiet StopSE pairs all six calls. After the three owned native effects retire and queued transfers drain, each borrowed model is cleared and its exact private source/key resources are freed once. Other actors may use the same slots later; whole-field model and VRAM totals are diagnostics.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Private ROM/save copies; normal Continue. Existing prepared teleport and four native spawn calls bind each fresh Wild actor. No owner, effect, model, frame, key, counter, RNG or timer writes."
+      },
+      {
+        "phase": "during-observation",
+        "target": "control-result",
+        "change": "One fixed six-call prepared quiet burst through the existing native Bridge; passive callbacks and memory reads only. Bridge work has no ordinary frame credit; then240 standard neutral completed game updates."
+      }
+    ],
+    "limits": [
+      "S3 capacity/resource/draw/quiet caller proof; no natural trigger selection or screenshot claim.",
+      "Unknown native owner/code/field/handle, active unrelated bubble, failed allocation, missing callback or cleanup fails.",
+      "No VRAM-capacity dry-run receives feature credit. Three actual bound models and native transfer destinations are required."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "a",
+      "species": 155,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": false,
+      "requirePresentation": true
+    },
+    {
+      "id": "b",
+      "species": 155,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": false,
+      "requirePresentation": true
+    },
+    {
+      "id": "c",
+      "species": 155,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": false,
+      "requirePresentation": true
+    },
+    {
+      "id": "d",
+      "species": 155,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": false,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Prepare and bind four ordinary Wild Cyndaquil."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Six fixed quiet requests then ordinary native lifetime and drained cleanup."
+    }
+  ],
+  "stop": {
+    "frameBudget": 900,
+    "condition": "Three native lifetimes clean up within240 normal updates, or first failure."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "One emote per object; at most three live slots",
+      "Per-model private keys and frames",
+      "Quiet admissions and once-only drained cleanup"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "presentation.emote-three-slots",
+    "claims": [
+      "live-actor-identity",
+      "feedback-effect",
+      "controlled-action"
+    ],
+    "minimumFrames": 1
+  }
+}

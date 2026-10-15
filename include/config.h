@@ -88,6 +88,28 @@
 #define OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT 2074
 #define OVERWORLD_WILD_SPAWNS_RAM_CRASH_FEEDBACK_SCRIPT 2075
 
+// Overworld Pokemon on deep water sink their sprite into it so they look like
+// they are swimming. Profiles with the Water surface terrain stay on top
+// (Suicune, Surskit), and the body rises out while airborne. Set this to 0 to
+// draw every Pokemon on top of the water. The depth is how many sprite pixels
+// are cropped off the bottom of the body at the waterline.
+#ifndef OVERWORLD_WATER_SUBMERGE
+#define OVERWORLD_WATER_SUBMERGE 1
+#endif
+#ifndef OVERWORLD_WATER_SUBMERGE_DEPTH
+#define OVERWORLD_WATER_SUBMERGE_DEPTH 7
+#endif
+// How many pixels the splash ring of a submerged Pokemon is drawn below the
+// stock shore-splash position. The player's splash is not affected.
+#ifndef OVERWORLD_WATER_SUBMERGE_SPLASH_DROP
+#define OVERWORLD_WATER_SUBMERGE_SPLASH_DROP 3
+#endif
+// How many pixels the reflection of a submerged Pokemon is moved up from the
+// waterline (negative moves it down). 0 starts it exactly at the cut line.
+#ifndef OVERWORLD_WATER_SUBMERGE_REFLECTION_RAISE
+#define OVERWORLD_WATER_SUBMERGE_REFLECTION_RAISE 0
+#endif
+
 // DISABLE_FOLLOWER_POKEMON keeps the lead party Pokemon hidden and inactive as
 // a walking follower. Its compatibility object and shared rendering helpers
 // remain available, and the separate trainer-companion system is unaffected.

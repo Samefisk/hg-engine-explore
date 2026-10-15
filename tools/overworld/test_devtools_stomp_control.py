@@ -12,7 +12,7 @@ class StompControlTests(unittest.TestCase):
     def test_real_arm_profile_header_anchors_threshold_byte(self):
         root=Path(__file__).resolve().parents[2]
         source='#include "include/overworld_mount.h"\n'
-        source+='_Static_assert(sizeof(OverworldWildBehaviorProfileData)==72,"profile size");\n'
+        source+='_Static_assert(sizeof(OverworldWildBehaviorProfileData)==80,"profile size");\n'
         source+='_Static_assert(__builtin_offsetof(OverworldWildBehaviorProfileData,walkStompTime)==70,"threshold");\n'
         source+='_Static_assert(__builtin_offsetof(OverworldMountSnapshot,profile)==0,"owner profile");\n'
         run=subprocess.run(['clang','-target','armv5te-none-eabi','-fsyntax-only','-Wno-unknown-attributes',
@@ -87,7 +87,7 @@ class StompControlTests(unittest.TestCase):
             def read(current):
                 if s.read(r.mount_state+78,1)==b'\xff':
                     if fault=='error':raise RuntimeError('unexpected profile read error')
-                    return dict(profileHex=s.read(r.mount_state+8,72).hex(),stompTime=255)
+                    return dict(profileHex=s.read(r.mount_state+8,80).hex(),stompTime=255)
                 return original(current)
             r._read_profile=read
             with self.subTest(fault=fault),self.assertRaises(Exception):calibrate_stomp_policy(r)

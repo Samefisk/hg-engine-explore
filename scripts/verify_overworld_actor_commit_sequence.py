@@ -32,6 +32,8 @@ def harness_source():
         (movement, "enum", "OverworldActorWalkPolicyOperation"),
         (movement, "enum", "OverworldActorWalkPolicyDecision"),
         (movement, "struct", "OverworldActorPolicyView"),
+        (movement, "struct", "OverworldActorPolicyProfileBinding"),
+        (movement, "struct", "OverworldActorPolicyProfileTransaction"),
         (movement, "struct", "OverworldActorWalkPolicyCall"),
     ):
         matches = re.findall(r"typedef " + kind + " " + name + r"\s*\{[\s\S]*?\}\s*" + name + ";", header)
@@ -50,7 +52,8 @@ def harness_source():
         raise ValueError("production declaration differs: OverworldActorRuntimeSlot")
     declarations.append(runtime_slots[0])
     definitions = dict((name, line) for line, name in re.findall(
-        r"^(#define\s+([A-Za-z_]\w*)[^\n]*)$", (internal + "\n" + movement).replace("\\\n", " "), re.M))
+        r"^(#define\s+([A-Za-z_]\w*)[^\n]*)$", (internal + "\n" + movement + "\n"
+        + (ROOT / "include/overworld_wild_behavior_data.h").read_text()).replace("\\\n", " "), re.M))
     needed = set()
     def constant(name):
         if name in needed:
@@ -62,7 +65,7 @@ def harness_source():
             constant(token)
     for name in ("OVERWORLD_ACTOR_BOUNDARY_REQUIRED_ACKS", "OVERWORLD_ACTOR_WALK_POLICY_VERSION",
                  "OVERWORLD_ACTOR_WALK_PENDING_NONE", "OVERWORLD_ACTOR_WALK_PENDING_CHAIN",
-                 "OVERWORLD_ACTOR_WALK_STEP_SKID"):
+                 "OVERWORLD_ACTOR_WALK_STEP_SKID", "OW_WILD_BEHAVIOR_WALK_OPTION_LOCK_DIRECTION"):
         constant(name)
     source = FIXTURE.read_text()
     # Use the real INSPECT switch arm; other reducer operations are outside
@@ -74,10 +77,19 @@ def harness_source():
     if len(inspect_arms) != 1:
         raise ValueError("production policy INSPECT arm differs")
     inspect_inline = re.sub(r"\bstatic inline BOOL\b", "static BOOL", internal)
+    # Adapt only the public declaration for the existing static-body extractor.
+    sound_source = ACTOR.read_text().replace(
+        'void __attribute__((noinline, used,\n        section(".overworld_actor_stomp_sound")))',
+        "static void", 1)
+    geometry_source = (ROOT / "src/pokemon_move_history_overlay/overworld_hop_geometry.c").read_text().replace(
+        'void __attribute__((section(".overworld_hop_next_cell"), noinline, used,\n    optimize("Os")))',
+        "static void", 1)
     replacements = {
         "/* @DECLARATIONS@ */": "\n".join(declarations),
         "/* @CONSTANTS@ */": "\n".join(definitions[name] for name in sorted(needed)),
         "/* @ACKNOWLEDGE@ */": helper.production_function(ACTOR.read_text(), "ActorSystem_TryAcknowledgeMotionCommit", "OverworldMotionDecision"),
+        "/* @STOMP_SOUND@ */": helper.production_function(sound_source, "OverworldActor_PlayStompSound", "void"),
+        "/* @HOP_GEOMETRY@ */": helper.production_function(geometry_source, "OverworldActorHopGeometry_NextCell", "void").replace("static void", "void", 1),
         "/* @RELEASE_TARGET@ */": helper.production_function(ACTOR.read_text(), "ActorSystem_ReleaseTarget", "inline void").replace("static inline void", "static void", 1),
         "/* @INSPECT_ARM@ */": inspect_arms[0],
         "/* @INSPECT@ */": helper.production_function(inspect_inline, "OverworldActorPolicy_Inspect", "BOOL"),
@@ -96,9 +108,11 @@ def execute(source):
         unit, binary = temporary / "commit.c", temporary / "commit"
         unit.write_text(source)
         command = [*shlex.split(os.environ.get("HOST_CC", "cc")), "-std=c11", "-O2",
-                   "-Wall", "-Wextra", "-Werror", "-DOVERWORLD_ACTOR_SYSTEM_HOST",
+                   "-Wall", "-Wextra", "-Werror", "-Wno-unused-function", "-DOVERWORLD_ACTOR_SYSTEM_HOST",
                    "-DOVERWORLD_MOTION_HOST", "-I", str(ROOT / "include"), str(unit),
-                   str(ROOT / "lib/overworld/overworld_motion_model.c"), "-o", str(binary)]
+                   "-I", str(ROOT / "src/pokemon_move_history_task6_overlay"),
+                   str(ROOT / "lib/overworld/overworld_motion_model.c"),
+                   "-o", str(binary)]
         compiled = subprocess.run(command, capture_output=True, text=True)
         if compiled.returncode:
             raise RuntimeError("actor commit host compile failed:\n" + compiled.stderr)

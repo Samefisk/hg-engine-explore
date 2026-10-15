@@ -1,0 +1,186 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.mounted-ambush-height",
+  "title": "Mounted Ambush hit moves one shared anchor and restores seat height",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "data/overworld_behavior_profiles.json#ambush",
+  "requirements": [
+    "current.player-health-mounted-ambush-height"
+  ],
+  "budgets": {
+    "maxSeconds": 260,
+    "maxFrames": 500,
+    "noProgressFrames": 300,
+    "minObservedFrames": 150
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquire": "existing"
+    },
+    {
+      "id": "weepinbell",
+      "species": 70,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "player-health-mounted-ambush-height-v1",
+      "subjects": [
+        "cyndaquil",
+        "weepinbell"
+      ]
+    }
+  ],
+  "setup": [
+    {
+      "id": "ambush-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 407,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-cyndaquil",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "mount-cyndaquil",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "mounted",
+        "slot": 0,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-mount",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "bind-cyndaquil",
+      "op": "bind",
+      "args": {
+        "subject": "cyndaquil"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-weepinbell",
+      "op": "spawn",
+      "args": {
+        "species": 70,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 585,
+        "z": 404
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-weepinbell",
+      "op": "bind",
+      "args": {
+        "subject": "weepinbell"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "before-contact",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "observe-ambush",
+      "op": "step",
+      "args": {
+        "frames": 150,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 150,
+        "noProgressFrames": 150
+      }
+    },
+    {
+      "id": "after-ambush",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "player-health-mounted-ambush-height-v1",
+      "when": "final"
+    }
+  ]
+}

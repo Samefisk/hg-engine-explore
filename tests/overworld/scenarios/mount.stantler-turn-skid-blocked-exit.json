@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.stantler-turn-skid-blocked-exit",
+  "title": "Mounted Stantler skids through clear tiles before a blocked turn exit",
+  "status": "active",
+  "capabilities": ["walk.skid", "mount.presentation"],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md#5-motion-module-policy and documentation/overworld_walk_frame_timing_spec.md",
+    "actor": "One current mounted Stantler (species 234, party slot 0) on map 33",
+    "trigger": "From map 33 (584,404), hold Right 47 completed frames, then turn directly Down for 18 frames",
+    "observable": "Two Down-facing east-travel skid tiles cross the clear (601,404) and (602,404) tiles, each with one complete motion and commit. The blocked (602,405) recovery step emits one Crash effect after both skid commits. Rider and Stantler remain at (602,404) and return control.",
+    "setupAudit": "complete",
+    "setupMutations": [{"phase": "before-observation", "target": "fixture",
+      "change": "Copy test.nds and test.sav. Teleport to map 33 (584,404), prepare party slot 0 level-10 Stantler, mount, settle 16 neutral frames and bind its live actor. Do not edit Sprint profile, policy, motion, facing, input or terrain during observation."}],
+    "limits": [
+      "Prepared placement does not prove natural travel or acquisition. The Right and Down windows use normal keys and unchanged Sprint timing.",
+      "A blocked turn exit is distinct from a blocked skid tile. This case proves the two clear skid tiles and the later blocked recovery, not a partial skid into an obstacle.",
+      "Registration alone is not runtime acceptance; the checked test must pass on the current ROM."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "stantler", "species": 234, "role": "MOUNTED", "acquisition": "mount",
+    "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Prepare and bind one mounted Stantler at map 33 (584,404)"},
+    {"at": 1, "kind": "input", "value": "Hold Right for 47 completed frames"},
+    {"at": 2, "kind": "input", "value": "Hold Down for 18 completed frames through both east-travel skid tiles and the blocked Crash"}
+  ],
+  "stop": {"frameBudget": 240, "condition": "Two east skid commits, one later blocked recovery Crash, and idle control at (602,404)"},
+  "expect": {
+    "requiredEvents": ["MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED", "WORLD_EFFECT"],
+    "forbiddenEvents": ["MOTION_CANCELED", "CONTEXT_CHANGED", "ACTOR_REBOUND", "CONTROL_REBOUND"],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "mount.stantler-turn-skid-blocked-exit",
+    "claims": ["natural-input", "live-actor-identity", "collision-decision", "logical-commit", "rendered-motion", "frame-pacing", "control-release"],
+    "minimumFrames": 65}
+}

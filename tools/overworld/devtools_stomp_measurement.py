@@ -42,13 +42,13 @@ class StompMeasurement:
             and q.get('changedOffsets')==[7,19,50,51,70],'fixture contract differs')
         before,after=q['before'],q['after']
         raw=bytes.fromhex(before['mountStateHex']);actual=bytes.fromhex(after['mountStateHex'])
-        require(len(raw)==len(actual)==184,'fixture native bytes missing')
+        require(len(raw)==len(actual)==192,'fixture native bytes missing')
         expected=bytearray(raw)
         for k,v in ((7,case['duration']),(19,0),(50,0),(51,case['duration']),(70,2)):expected[8+k]=v
         require(actual==bytes(expected) and actual.hex()==q['expectedStateHex']
-            and before['profileHex']==raw[8:80].hex() and after['profileHex']==actual[8:80].hex()
+            and before['profileHex']==raw[8:88].hex() and after['profileHex']==actual[8:88].hex()
             and before['readiness']==after['readiness'] and before['clock']==after['clock']
-            and before['bindingHex']==after['bindingHex']==actual[80:96].hex()
+            and before['bindingHex']==after['bindingHex']==actual[88:104].hex()
             and before['sessionGeneration']==after['sessionGeneration'] and actual[20]==1,
             'fixture changed unrelated native state')
         select_current_actor(snapshot,q['subject'])

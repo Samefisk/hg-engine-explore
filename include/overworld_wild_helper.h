@@ -10,7 +10,7 @@
 #define OVERWORLD_WILD_HELPER_OVERLAY_VALIDATE_ADDR 0x023C4069
 #define OVERWORLD_WILD_HELPER_OVERLAY_LIFECYCLE_ADDR 0x023C4101
 #define OVERWORLD_WILD_HELPER_OVERLAY_MAGIC 0x4F574831
-#define OVERWORLD_WILD_HELPER_OVERLAY_VERSION 35
+#define OVERWORLD_WILD_HELPER_OVERLAY_VERSION 38
 #define OVERWORLD_WILD_HELPER_VALIDATE_ONLY 0
 #define OVERWORLD_WILD_HELPER_ENSURE_BEHAVIOR 1
 #define OVERWORLD_WILD_HELPER_REQUIRE_BEHAVIOR 2
@@ -42,7 +42,6 @@
     ((u8)(OW_WILD_HELPER_THROW_TARGET_CARRIED_FLAG | OW_WILD_HELPER_THROW_TARGET_ENCODE(slot)))
 #define OW_WILD_HELPER_THROW_TARGET_DECODE(value) \
     ((u8)(((value) & OW_WILD_HELPER_THROW_TARGET_SLOT_MASK) - 1))
-#define OW_WILD_HELPER_THROW_RESERVATION_DECISIONS 120
 
 typedef enum OverworldWildHelperPresentationOperation {
     OW_WILD_HELPER_PRESENTATION_NORMALIZE_SLOT = 0,
@@ -67,7 +66,8 @@ typedef char OverworldWildHelperPresentationCallSizeMustRemain8Bytes[
 typedef enum OverworldWildHelperPickupThrowQuery {
     OW_WILD_HELPER_PICKUP_THROW_QUERY_VALID,
     OW_WILD_HELPER_PICKUP_THROW_QUERY_STABLE,
-    OW_WILD_HELPER_PICKUP_THROW_QUERY_RESERVED_NEAR,
+    OW_WILD_HELPER_PICKUP_THROW_QUERY_RESERVED_PAUSE,
+    OW_WILD_HELPER_PICKUP_THROW_QUERY_ELIGIBLE,
 } OverworldWildHelperPickupThrowQuery;
 
 typedef struct OverworldWildRolledEncounter {
@@ -121,7 +121,7 @@ typedef BOOL (*OverworldWildHelperTryGetSpawnTerrainFunc)(
     void *context,
     int x,
     int y,
-    OverworldWildSpawnTerrain *terrain);
+    u32 *terrain);
 typedef BOOL (*OverworldWildHelperTilePredicateFunc)(
     void *context,
     int x,
@@ -171,7 +171,7 @@ typedef enum OverworldWildHelperPrepareResult {
 } OverworldWildHelperPrepareResult;
 
 #define OW_WILD_HELPER_SPAWN_POSITION_ATTEMPT_CHECKS 16
-#define OW_WILD_HELPER_SPAWN_POSITION_CHECKS_PER_UPDATE 16
+#define OW_WILD_HELPER_SPAWN_POSITION_CHECKS_PER_UPDATE 32
 #define OW_WILD_HELPER_SPAWN_POSITION_ATTEMPT_UPDATES \
     ((OW_WILD_HELPER_SPAWN_POSITION_ATTEMPT_CHECKS \
         + OW_WILD_HELPER_SPAWN_POSITION_CHECKS_PER_UPDATE - 1) \
@@ -363,20 +363,24 @@ typedef u16 (*OverworldWildHelperClearPickupThrowStateFunc)(
     OverworldWildSpawnState *state,
     OverworldWildThrowState *throwState,
     OverworldWildPresentationState *presentation,
-    int slot);
+    int slot,
+    BOOL clearIncoming);
 typedef BOOL (*OverworldWildHelperQueryPickupThrowTargetFunc)(
     OverworldWildSpawnState *state,
     OverworldWildThrowState *throwState,
     int carrierSlot,
     int targetSlot,
     u8 query,
-    u16 unstableMask);
+    /* Low half: unstable targets; high half: owner Walks that may finish. */
+    u32 motionMasks);
 typedef BOOL (*OverworldWildHelperTryStartPickupThrowActionFunc)(
     OverworldWildSpawnState *state,
     OverworldWildThrowState *throwState,
     OverworldWildPresentationState *presentation,
     int slot,
-    u16 unstableMask);
+    int targetSlot,
+    u16 unstableMask,
+    u16 reservableWalkMask);
 typedef BOOL (*OverworldWildHelperStartCarriedThrowTargetFunc)(
     OverworldWildSpawnState *state,
     OverworldWildThrowState *throwState,

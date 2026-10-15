@@ -21,10 +21,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def source_blob():
     raw = bytearray(4096)
-    struct.pack_into("<IHHI", raw, 0, 0x4F574244, 80, 84, len(raw))
-    struct.pack_into("<IHH", raw, 36, 84, 4, 212)
-    struct.pack_into("<IHH", raw, 44, 932, 1, 2)
-    struct.pack_into("<IHH", raw, 52, 936, 4, 48)
+    struct.pack_into("<IHHI", raw, 0, 0x4F574244, 83, 84, len(raw))
+    struct.pack_into("<IHH", raw, 36, 84, 4, 228)
+    struct.pack_into("<IHH", raw, 44, 996, 1, 2)
+    struct.pack_into("<IHH", raw, 52, 1000, 4, 48)
     return bytes(raw)
 
 
@@ -184,11 +184,11 @@ class ConditionProbeTests(unittest.TestCase):
         plan = fixture_patch_plan(source, copied)
         self.assertEqual(len(copied), len(source))
         self.assertEqual(struct.unpack_from("<H", copied, 56)[0], 4)
-        self.assertEqual(copied[936 + 32:936 + 34], struct.pack("<H", 500))
-        self.assertEqual(copied[936 + 48 + 32:936 + 48 + 34],
+        self.assertEqual(copied[1000 + 32:1000 + 34], struct.pack("<H", 500))
+        self.assertEqual(copied[1000 + 48 + 32:1000 + 48 + 34],
                          struct.pack("<H", 501))
         self.assertEqual(plan["rangeCount"], 3)
-        self.assertEqual(plan["rangeBytes"], 2 + 4 * 212 + 4 * 48)
+        self.assertEqual(plan["rangeBytes"], 2 + 4 * 228 + 4 * 48)
         self.assertEqual([item["name"] for item in plan["ranges"]],
                          ["condition-count", "profiles-0-3",
                           "conditions-0-3"])

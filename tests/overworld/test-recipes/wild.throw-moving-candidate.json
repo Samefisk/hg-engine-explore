@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.throw-moving-candidate",
+  "title": "Geodude picks up a moving Stantler, cancels its exact Walk, and throws it",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.wild-throw-moving-candidate"
+  ],
+  "budgets": {
+    "maxSeconds": 240,
+    "maxFrames": 700,
+    "noProgressFrames": 350,
+    "minObservedFrames": 2
+  },
+  "subjects": [
+    {
+      "id": "stantler",
+      "species": 234,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "geodude",
+      "species": 74,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "wild-throw-moving-candidate-v1",
+      "subjects": [
+        "stantler",
+        "geodude"
+      ]
+    }
+  ],
+  "setup": [
+    {
+      "id": "throw-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 407,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-passive-follower",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "create-passive-follower",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-stantler",
+      "op": "spawn",
+      "args": {
+        "species": 234,
+        "role": "wild",
+        "level": 5,
+        "x": 585,
+        "z": 403
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-stantler",
+      "op": "bind",
+      "args": {
+        "subject": "stantler"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-geodude",
+      "op": "spawn",
+      "args": {
+        "species": 74,
+        "role": "wild",
+        "level": 5,
+        "x": 583,
+        "z": 404
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-geodude",
+      "op": "bind",
+      "args": {
+        "subject": "geodude"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "walk-stantler-before-notice",
+      "op": "step",
+      "args": {
+        "frames": 300,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "stantler",
+          "path": "motionKind",
+          "operator": "eq",
+          "value": "WALK"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 300,
+        "noProgressFrames": 300
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "natural-moving-pickup-and-launch",
+      "op": "step",
+      "args": {
+        "frames": 500,
+        "keys": [],
+        "until": {
+          "kind": "measurement-complete",
+          "measurement": "wild-throw-moving-candidate-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 500,
+        "noProgressFrames": 350
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "wild-throw-moving-candidate-v1",
+      "when": "final"
+    }
+  ]
+}

@@ -133,6 +133,31 @@ class MountGaitModelTests(unittest.TestCase):
             self.assert_rest(state.pose)
             self.assertEqual(state.pose.phase, 0)
 
+    def test_hit_ground_reset_clears_interrupted_walk_at_the_same_boundary(self):
+        state = State()
+        self.step(state)
+        for frame in range(1, 9):
+            self.step(state, x=frame * 8192, stamp=frame)
+        self.assertGreater(state.pose.bodyY, 0)
+        self.assertGreater(state.pose.riderY, 0)
+        interrupted = State.from_buffer_copy(state)
+        # An idle rollback keeps the interrupted Walk's bounce and lean.
+        self.step(interrupted, x=0, stamp=8, mode=0)
+        self.assertNotEqual((interrupted.pose.bodyY, interrupted.pose.riderY,
+                             interrupted.pose.leanX, interrupted.pose.leanZ), (0, 0, 0, 0))
+        owner, session_id = state.owner, state.session
+        state.initialized = 0
+        self.step(state, x=0, stamp=8, mode=0, owner=owner, session=session_id)
+        self.assert_rest(state.pose)
+        self.assertEqual((state.pose.x, state.pose.z, state.pose.velocityX,
+                          state.pose.velocityZ, state.pose.phase, state.pose.walking),
+                         (0, 0, 0, 0, 0, 0))
+        self.assertEqual((state.owner, state.session, state.stamp), (owner, session_id, 8))
+        for frame in range(9, 13):
+            self.step(state, x=0, stamp=frame, mode=0, owner=owner, session=session_id)
+            self.assert_rest(state.pose)
+            self.assertEqual((state.pose.phase, state.pose.walking), (0, 0))
+
 
 if __name__ == "__main__":
     unittest.main()

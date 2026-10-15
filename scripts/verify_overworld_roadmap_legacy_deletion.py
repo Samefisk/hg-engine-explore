@@ -30,7 +30,7 @@ OVERLAY_ROW_SIZE = 0x20
 PACKAGED_TYPES = frozenset("TtDdRrVvWw")
 DEFINED_TYPES = frozenset("TtBbDdRrSsVvWw")
 
-ACTOR_LOAD_BASE = 0x023B65A0
+ACTOR_LOAD_BASE = 0x023B65C0
 ACTOR_BASE = 0x023B6B00
 ACTOR_END = 0x023BAB00
 ACTOR_FACADE_ENTRY = ACTOR_BASE
@@ -79,7 +79,7 @@ MODULES = (
     ModuleSpec("follower_selector", "build/overworld_follower_selector_overlay_linked.o", "build/output_overworld_follower_selector_overlay.bin", 152, 0x023C0400),
     ModuleSpec("field", "build/field_linked.o", "build/output_field.bin", 131, 0x023C8000),
     ModuleSpec("follower_selector_icons", "build/overworld_follower_selector_icons_overlay2_linked.o", "build/output_overworld_follower_selector_icons_overlay2.bin", 2, 0x0224EF98, 0x02245B80),
-    ModuleSpec("follower_release", "build/overworld_follower_release_overlay2_linked.o", "build/output_overworld_follower_release_overlay2.bin", 2, 0x02250114, 0x02245B80),
+    ModuleSpec("follower_release", "build/overworld_follower_release_overlay2_linked.o", "build/output_overworld_follower_release_overlay2.bin", 2, 0x0224F8FC, 0x02245B80),
 )
 
 CLIENT_MODULES = tuple(spec.key for spec in MODULES if spec.key != "actor_system")
@@ -901,6 +901,17 @@ def audit_structure(
 
     for retired in RETIRED_ENTRIES:
         raw = _read_at(linked_images, specs, retired.module, retired.address, retired.size)
+        # The old Hop service is gone. This exact pure validation leaf uses
+        # its former slot; package proof also authenticates its Thumb owner.
+        if (retired.module == "role_controller" and retired.address == 0x023BD4D8
+                and retired.size == 24
+                and raw == bytes.fromhex("022805d1002903d0002a01d09a4201db0020704701207047")
+                and [symbol for symbol in inventory
+                     if symbol.module == retired.module
+                     and symbol.name == "OverworldSlam_PhaseCheckNative"]
+                == [Symbol("role_controller", 0x023BD4D8, 24, "T", "OverworldSlam_PhaseCheckNative")]):
+            checked.add((retired.module, "OverworldSlam_PhaseCheckNative"))
+            continue
         pointers: list[int] = []
         if raw is not None:
             sentinel_fill = (

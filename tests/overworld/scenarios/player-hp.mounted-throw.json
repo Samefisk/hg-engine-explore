@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.mounted-throw",
+  "title": "A north-facing mounted rider is not hit by a Throw crossing the mount anchor",
+  "status": "active",
+  "capabilities": [
+    "player.health"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/player-hp-implementation-plan.md",
+    "actor": "Current mounted Cyndaquil (155), Wild Geodude (74), and Wild Bellsprout (69) at Route 29 map 33; rider anchor (585,407) faces north.",
+    "trigger": "Capture Geodude\u2019s real Player Trigger first, then create the current Bellsprout Cargo. Let its normal Throw cross the stationary player tile.",
+    "observable": "Bellsprout completes its airborne Hop through the mount body box without reaching the visible north-facing rider. One real mount hit uses the existing shared one-tile knockback; the rider returns to its exact seat and height. Player HP and saved HP stay100 with zero accepted hits.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use a checked teleport, a party Cyndaquil and native mount, then two native Wild spawns. Bind all three current actors. Do not change Throw timing, player HP, or collision."
+      }
+    ],
+    "limits": [
+      "Prepared placement proves the subsequent natural Throw and collision result, not population spawn selection.",
+      "A missing mount offset, stale actor, absent airborne old-box crossing, battle task, or changed post-flight HP fails.",
+      "Mount movement is permitted only by one authenticated real-party contact and its exact shared forced plan. Missing motion commit or an incorrect final seat fails."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "bellsprout",
+      "species": 69,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "geodude",
+      "species": 74,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Place the north-facing player and native mount. Bind Geodude and wait for its real Player Trigger; then spawn and bind Bellsprout."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Wait for Geodude\u2019s normal pickup and Bellsprout\u2019s launched Hop."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Observe the airborne old-box crossing and unchanged mounted rider HP."
+    }
+  ],
+  "stop": {
+    "frameBudget": 900,
+    "condition": "One launched flight, 64 following completed game frames, checked HP 100 with zero hits, or first failed identity, pose, motion, field, or HP observation."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "All three current actors retain their exact identities",
+      "The north-facing rider starts stationary at (585,407); after one real mount hit its shared forced knockback ends seated at (585,408) with the same height and offset",
+      "Bellsprout flies from Geodude into the old anchor box without reaching the rider box",
+      "HP and saved HP remain 100 with zero accepted hits",
+      "No battle starts",
+      "The shared mount knockback has one current reservation and a completed commit; normal player movement and other motion owners are not accepted"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "player-hp.mounted-throw",
+    "claims": [
+      "live-actor-identity",
+      "engine-boundary",
+      "natural-input",
+      "control-release"
+    ],
+    "minimumFrames": 65
+  }
+}

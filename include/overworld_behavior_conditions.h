@@ -13,6 +13,28 @@
 #define OVERWORLD_BEHAVIOR_CONDITION_TERRAIN_MASK_MAX 0x03FF
 #define OVERWORLD_BEHAVIOR_CONDITION_STATE_ACTIVE (1u << 0)
 #define OVERWORLD_BEHAVIOR_CONDITION_STATE_HAS_TRIGGERED (1u << 1)
+#define OVERWORLD_BEHAVIOR_CONDITION_STATE_CRASH_PENDING (1u << 2)
+#define OVERWORLD_BEHAVIOR_CONDITION_STATE_UNTIL_CRASH (1u << 3)
+#define OVERWORLD_BEHAVIOR_CONDITION_STATE_REARM (1u << 4)
+/* Conditions apply during motion. Presentation waits for the next legal
+ * intent boundary and expires with the condition that owns it. */
+#define OVERWORLD_BEHAVIOR_CONDITION_STATE_PRESENTATION_PENDING (1u << 5)
+#define OVERWORLD_BEHAVIOR_CONDITION_STATE_TIMED_END_PENDING (1u << 6)
+#define OVERWORLD_BEHAVIOR_CONDITION_INPUT_MOVING 1u
+#define OVERWORLD_BEHAVIOR_CONDITION_INPUT_GEOMETRY 2u
+/* Compatibility names for the private observation caller and retained proof. */
+#define OVERWORLD_BEHAVIOR_CONDITION_STATE_NOTICE_PENDING OVERWORLD_BEHAVIOR_CONDITION_STATE_PRESENTATION_PENDING
+#define OVERWORLD_BEHAVIOR_CONDITION_INPUT_MOVING_NOTICE OVERWORLD_BEHAVIOR_CONDITION_INPUT_MOVING
+#define OVERWORLD_BEHAVIOR_CONDITION_INPUT_NOTICE_GEOMETRY OVERWORLD_BEHAVIOR_CONDITION_INPUT_GEOMETRY
+
+/* Authored zero means all roles. Current roles use Wild/Follower/Mounted
+ * bits 1/2/4, as published by the condition adapter. */
+static inline u8 OverworldBehaviorCondition_RoleApplies(
+    u8 authoredRoleMask, u8 currentRoleMask)
+{
+    return authoredRoleMask == 0
+        || (authoredRoleMask & currentRoleMask) != 0;
+}
 
 typedef enum OverworldBehaviorConditionStatus {
     OVERWORLD_BEHAVIOR_CONDITION_OK = 0,
@@ -27,11 +49,27 @@ typedef enum OverworldBehaviorConditionKind {
     OVERWORLD_BEHAVIOR_CONDITION_POKEMON_NOTICED = 1,
     OVERWORLD_BEHAVIOR_CONDITION_TERRAIN_SPEED = 2,
     OVERWORLD_BEHAVIOR_CONDITION_TARGET_CANNOT_SEE_SUBJECT = 3,
+    OVERWORLD_BEHAVIOR_CONDITION_ACTOR_FACTS = 4,
+    OVERWORLD_BEHAVIOR_CONDITION_PLAYER_DAMAGED = 5,
+    OVERWORLD_BEHAVIOR_CONDITION_SUBJECT_DAMAGED = 6,
 } OverworldBehaviorConditionKind;
+
+/* Radius range options in Definition.reserved; Vision keeps its own options. */
+#define OVERWORLD_BEHAVIOR_CONDITION_RADIUS_SAME_TILE 1u
+
+/* Facts about the subject's current actor interaction. */
+#define OVERWORLD_BEHAVIOR_ACTOR_FACT_RESERVED    (1u << 0)
+#define OVERWORLD_BEHAVIOR_ACTOR_FACT_HELD        (1u << 1)
+#define OVERWORLD_BEHAVIOR_ACTOR_FACT_THROW_LINE  (1u << 2)
+#define OVERWORLD_BEHAVIOR_ACTOR_FACT_RECOVERING  (1u << 3)
+#define OVERWORLD_BEHAVIOR_ACTOR_FACT_TRIGGER_VALID (1u << 4)
+#define OVERWORLD_BEHAVIOR_ACTOR_FACT_TARGETED_FOR_PICKUP (1u << 5)
+#define OVERWORLD_BEHAVIOR_ACTOR_FACT_MASK 0x3F
 
 typedef enum OverworldBehaviorConditionActivationMode {
     OVERWORLD_BEHAVIOR_CONDITION_WHILE_TRUE = 0,
     OVERWORLD_BEHAVIOR_CONDITION_TIMED = 1,
+    OVERWORLD_BEHAVIOR_CONDITION_UNTIL_CRASH = 2,
 } OverworldBehaviorConditionActivationMode;
 
 typedef enum OverworldBehaviorConditionTargetKind {
@@ -54,6 +92,10 @@ typedef enum OverworldBehaviorConditionRangeKind {
     (1u << 2)
 #define OVERWORLD_BEHAVIOR_CONDITION_OBSERVATION_OCCLUDED_TO_SUBJECT \
     (1u << 3)
+#define OVERWORLD_BEHAVIOR_CONDITION_OBSERVATION_PLAYER_DAMAGE_SOURCE \
+    (1u << 4)
+/* Subject-only mark in playerFacingAndOcclusion; never an actor source mark. */
+#define OVERWORLD_BEHAVIOR_CONDITION_OBSERVATION_SUBJECT_DAMAGED (1u << 4)
 
 typedef enum OverworldBehaviorConditionTargetReferenceKind {
     OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE = 0,
@@ -97,6 +139,12 @@ typedef struct OverworldBehaviorConditionWorldView {
     u8 reserved[3];
     OverworldBehaviorConditionActorObservation
         actors[OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS];
+    /* Borrowed only for this synchronous intent boundary. The Field owner
+     * clears these values before it releases the shared query code. */
+    struct OverworldTargetBindingsState *bindings;
+    u16 incomingClaimMask;
+    u8 subjectRoleMask;
+    u8 reservedBinding;
 } OverworldBehaviorConditionWorldView;
 
 typedef struct OverworldBehaviorConditionDefinition {

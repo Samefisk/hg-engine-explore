@@ -59,6 +59,7 @@ def _sources(
         header_template,
         root / "scripts/generate_overworld_behavior_catalog.py",
         root / "scripts/overworld_behavior_profile_viewer.py",
+        root / "scripts/overworld_application_bank_compiler.py",
         root / "scripts/build_overworld_wild_spawn_metadata.py",
         root / "tools/overworld/behavior_schema.json",
         root / "data/generated/overworld_wild_roof_catalog.inc",
@@ -69,6 +70,16 @@ def _sources(
         root / "include/io_reg.h",
         root / "include/types.h",
         root / "include/overworld_behavior_resolver.h",
+        root / "include/overworld_application_bank.h",
+        root / "include/overworld_behavior_packed_options.h",
+        root / "include/overworld_behavior_conditions.h",
+        root / "include/overworld_behavior_condition_runtime.h",
+        root / "include/overworld_target_bindings.h",
+        root / "lib/overworld/overworld_behavior_condition_runtime.c",
+        root / "lib/overworld/overworld_target_bindings.c",
+        root / "include/overworld_condition_publication_native.h",
+        root / "lib/overworld/overworld_condition_publication_native.c",
+        root / "lib/overworld/overworld_pickup_route.c",
         root
         / "include/constants/generated/overworld_wild_roof_catalog_counts.h",
         Path(__file__).resolve(),
@@ -155,13 +166,15 @@ def build(
                 if generated.returncode != 0:
                     detail = generated.stderr.strip() or generated.stdout.strip()
                     raise RuntimeError(f"could not generate resolver input: {detail}")
-                staged_resolver, staged_main, _staged_header = _stage_native_sources(
+                staged_resolver, staged_main, _staged_header, _packed_header, _bank_header = _stage_native_sources(
                     root,
                     generated_root,
                     (
                         "lib/overworld/overworld_behavior_resolver.c",
                         "tools/overworld-viewer-v2/native/overworld_behavior_resolver_main.c",
                         "include/overworld_behavior_resolver.h",
+                        "include/overworld_behavior_packed_options.h",
+                        "include/overworld_application_bank.h",
                     ),
                 )
                 command = compiler + [
@@ -266,6 +279,13 @@ def build_condition_preview(
                 _staged_runtime_header,
                 _staged_resolver_header,
                 _staged_vision_header,
+                staged_bindings,
+                _staged_bindings_header,
+                _staged_packed_header,
+                _staged_bank_header,
+                _staged_publication_header,
+                _staged_publication_source,
+                staged_route,
             ) = _stage_native_sources(
                 root,
                 generated_root,
@@ -280,6 +300,13 @@ def build_condition_preview(
                     "include/overworld_behavior_condition_runtime.h",
                     "include/overworld_behavior_resolver.h",
                     "include/overworld_vision.h",
+                    "lib/overworld/overworld_target_bindings.c",
+                    "include/overworld_target_bindings.h",
+                    "include/overworld_behavior_packed_options.h",
+                    "include/overworld_application_bank.h",
+                    "include/overworld_condition_publication_native.h",
+                    "lib/overworld/overworld_condition_publication_native.c",
+                    "lib/overworld/overworld_pickup_route.c",
                 ),
             )
             command = compiler + [
@@ -291,6 +318,8 @@ def build_condition_preview(
                 "-I", str(root / "data"),
                 str(staged_conditions),
                 str(staged_runtime),
+                str(staged_bindings),
+                str(staged_route),
                 str(staged_resolver),
                 str(staged_vision),
                 str(staged_main),
@@ -329,6 +358,8 @@ def preview_conditions(
     subject_handle = subject["handle"]
     candidates = request.get("candidates", [])
     states = request.get("conditionState", [])
+    bindings = request.get("bindings", [])
+    binding_owner = request.get("bindingOwner", subject_handle)
     player = observation["player"]
     header = (
         subject["species"], subject["level"], subject["terrain"], subject["shiny"],
@@ -339,6 +370,9 @@ def preview_conditions(
         player["x"], player["y"], player["valid"], observation["facing"],
         observation["movementSpeed"], request.get("chanceSeed", observation["frame"]),
         player["facingAndOcclusion"], len(candidates), len(states),
+        subject.get("roleMask", 1), observation.get("actorFacts", 0),
+        observation.get("pickupEligibleMask", 0), observation.get("incomingClaimMask", 0), len(bindings),
+        *(binding_owner[key] for key in ("slot", "generation", "fieldEpoch", "mapGeneration", "encounterGeneration")),
     )
     lines = [" ".join(str(int(value)) for value in header)]
     for candidate in candidates:
@@ -356,6 +390,16 @@ def preview_conditions(
             state["conditionId"], state["active"], state["hasTriggered"],
             state["activeUntil"], state["cooldownUntil"],
             state["targetKind"], state.get("targetCandidateIndex", -1),
+        )))
+    for binding in bindings:
+        target = binding["target"]
+        handle = target.get("handle", {})
+        lines.append(" ".join(str(int(value)) for value in (
+            binding["name"], target["kind"], handle.get("slot", 0),
+            handle.get("generation", 0), handle.get("fieldEpoch", 0),
+            handle.get("mapGeneration", 0), handle.get("encounterGeneration", 0),
+            binding["sourceConditionId"], binding["sourceApplication"],
+            binding["lifetime"], binding["expiresAt"], binding["bound"], binding.get("reason", 0),
         )))
     completed = subprocess.run(
         [str(executable)],

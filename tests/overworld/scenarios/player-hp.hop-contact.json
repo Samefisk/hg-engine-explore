@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.hop-contact",
+  "title": "Ordinary Wild Mankey Hop can damage the player",
+  "status": "active",
+  "capabilities": ["player.health", "collision.attack", "hop"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "data/overworld_behavior_profiles.json#long-hop+throw",
+    "actor": "One current WILD Mankey (species 56) on Route 29. Its normal Long Hop and timed Throw notice condition compose in the resolved Owner lane.",
+    "trigger": "From checked prepared placement, let Mankey notice the stationary player and make its own normal Hop. Accept only an airborne Hop body segment that intersects the player while the Owner lane grants attacking=1, minImpactSpeed=16, and collisionDamage=20.",
+    "observable": "The same bound Mankey has an active Long Hop plus Throw-condition profile, makes an ordinary Hop rather than becoming a thrown target, and one crossing frame changes player and saved HP from 100 to 80 with one accepted hit and no battle.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {"phase": "before-observation", "target": "fixture", "change": "Copy unchanged test.nds and test.sav into a disposable session, teleport to map 33 at (585,407), spawn one Wild Mankey at (586,406), and bind its current native identity. Leave profile, condition clock, motion, player HP, and RNG unchanged."}
+    ],
+    "limits": [
+      "The Throw condition supplies attack authority, but Mankey's measured Hop is its own ordinary Long Hop. This does not prove a profile with no Throw condition can attack.",
+      "The declared seed is proof provenance, not a game RNG override. The 500-frame wait fails if normal movement does not cross the player; it does not force a Hop or relax the collision check.",
+      "Prepared placement proves subsequent normal profile resolution and motion, not natural Wild population selection. Native pose and HP reads are used; no image or video is used."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "mankey", "species": 56, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Bind the one prepared current Wild Mankey and read 100 HP before its measured Hop."},
+    {"at": 1, "kind": "lifecycle", "value": "Observe the timed Throw notice condition and Long Hop together in one current resolved Owner profile."},
+    {"at": 2, "kind": "lifecycle", "value": "Observe one ordinary airborne Mankey Hop segment crossing the stationary player, then read exactly one 20-HP hit at that same completed frame."}
+  ],
+  "stop": {"frameBudget": 700, "condition": "The first qualifying ordinary airborne Hop crossing and immediate checked HP read, or the first missing identity, profile, pose, HP, or field-control proof."},
+  "expect": {
+    "requiredEvents": ["MOTION_STARTED"],
+    "forbiddenEvents": ["ACTOR_REBOUND", "CONTEXT_CHANGED", "MOTION_CANCELED"],
+    "invariants": [
+      "The bound Mankey keeps its current identity, resolved Hop Owner lane, and active attack fields 1/16/20",
+      "Its own airborne body segment intersects the stationary player; any naturally spawned Wild actor must have zero damage fields in both lanes and no Hop flight",
+      "Player and saved HP change from 100 to 80 on the crossing boundary, with one accepted hit and no battle or recovery"
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "player-hp.hop-contact",
+    "claims": ["live-actor-identity", "profile-resolution", "engine-boundary", "natural-input", "control-release"],
+    "minimumFrames": 1}
+}

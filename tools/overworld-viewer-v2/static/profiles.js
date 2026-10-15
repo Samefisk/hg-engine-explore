@@ -24,15 +24,33 @@ const WALK_TIME_FIELDS = Object.freeze(new Set([
   "chainRepositionSpeed",
   "walkStompTime",
 ]));
+const LINEAR_SPEED_ACCELERATION = "34";
+const DIVIDE_OVERRIDE_DIVISOR_MAX = 127;
+
+export function walkAccelerationMode(raw, inheritedCandidates = []) {
+  const candidates = raw ? [String(raw)] : inheritedCandidates.map(String);
+  if (candidates.includes(LINEAR_SPEED_ACCELERATION)
+      && candidates.some((value) => value !== LINEAR_SPEED_ACCELERATION)) return "mixed";
+  return candidates.length && candidates.every((value) => value === LINEAR_SPEED_ACCELERATION)
+    ? "linear" : "legacy";
+}
+export function walkAccelerationInputMaximum(fieldKey, mode, maximum) {
+  if (fieldKey === "walkAccelerationStep") return Math.min(maximum, 33);
+  if (fieldKey === "tilesToAccelerate" && mode === "legacy") return Math.min(maximum, 32);
+  return maximum;
+}
 const CONDITIONS_LIFECYCLE_SECTION_ID = "alert";
 const APPLICATION_DRAFT_PREFIX = "@application:";
 const PROFILE_CLASSIFICATIONS = Object.freeze([
   Object.freeze({ value: "", label: "No classification" }),
+  Object.freeze({ value: "mood", label: "Moods" }),
   Object.freeze({ value: "routine", label: "Routine" }),
-  Object.freeze({ value: "placement", label: "Placement" }),
-  Object.freeze({ value: "capability", label: "Capability" }),
-  Object.freeze({ value: "attitude", label: "Attitude" }),
   Object.freeze({ value: "style", label: "Style" }),
+  Object.freeze({ value: "placement", label: "Placement" }),
+  Object.freeze({ value: "follower", label: "Follower" }),
+  Object.freeze({ value: "capability", label: "Capability" }),
+  Object.freeze({ value: "attack", label: "Attacks" }),
+  Object.freeze({ value: "attitude", label: "Attitude" }),
   Object.freeze({ value: "follower-mount", label: "Follower/Mount" }),
   Object.freeze({ value: "modifier", label: "Modifier" }),
 ]);
@@ -56,11 +74,14 @@ function profileTagIcon(value) {
     unclassified: '<circle cx="12" cy="12" r="7"/><path d="M8 12h8"/>',
     conditional: '<path d="M6 5v4c0 1.7 1.3 3 3 3h6c1.7 0 3 1.3 3 3v4M6 19v-4c0-1.7 1.3-3 3-3M3.5 5H8.5M15.5 19h5"/>',
     system: '<path d="M12 3 5 6v5c0 4.5 2.8 8 7 10 4.2-2 7-5.5 7-10V6l-7-3Z"/><path d="m9.5 12 1.7 1.7 3.6-4"/>',
+    mood: '<circle cx="12" cy="12" r="8"/><path d="M8 10h.1M16 10h.1M8 15c2 2 6 2 8 0"/>',
+    attack: '<path d="m5 3 14 14-2 2L3 5V3h2ZM14 14l-3 3M16 12l-3 3M6 18l-3 3"/>',
     routine: '<circle cx="12" cy="12" r="7"/><path d="m12 7 2 5-2 5-2-5 2-5Z"/>',
     placement: '<path d="M12 21s6-5.2 6-11a6 6 0 1 0-12 0c0 5.8 6 11 6 11Z"/><circle cx="12" cy="10" r="2"/>',
     capability: '<path d="m13 2-7 12h6l-1 8 7-12h-6l1-8Z"/>',
     attitude: '<path d="M12 20S4 15.2 4 9.5A4.5 4.5 0 0 1 12 6.7a4.5 4.5 0 0 1 8 2.8C20 15.2 12 20 12 20Z"/>',
     style: '<path d="M4 19c4-1 5-4 5-7l7-7 3 3-7 7c-3 0-6 1-7 5l-1-1Z"/><path d="m14 7 3 3"/>',
+    follower: '<path d="M8.5 8.5 6 11a3.5 3.5 0 0 0 5 5l2.5-2.5M15.5 15.5 18 13a3.5 3.5 0 0 0-5-5l-2.5 2.5"/>',
     "follower-mount": '<path d="M8.5 8.5 6 11a3.5 3.5 0 0 0 5 5l2.5-2.5M15.5 15.5 18 13a3.5 3.5 0 0 0-5-5l-2.5 2.5"/>',
     modifier: '<path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h8M16 18h4"/><circle cx="16" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="14" cy="18" r="2"/>',
   };
@@ -71,6 +92,7 @@ const VISION_CURRENT_RANGE = "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CURRENT";
 const VISION_CUSTOM_RANGE = "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CUSTOM";
 const VISION_DEFAULT_OPTIONS = 5;
 const VISION_ADJACENT_BIT = 4;
+const VISION_SAME_TILE_BIT = 8;
 
 const TARGET_KINDS = Object.freeze([
   ["pokemon", "Pokémon"],
@@ -112,7 +134,7 @@ const TERRAIN_POLICY_CONFIGS = Object.freeze({
     valueField: "chillAllowedTerrainMask",
     explicitField: "chillAllowedTerrainOverrideMask",
     label: "Allowed terrains",
-    note: "Set each terrain independently",
+    note: "Set each terrain independently. Object of interest tile lets a directed Hop land on its current target.",
     ariaLabel: "Allowed terrain policy",
   }),
   spawn: Object.freeze({
@@ -131,6 +153,82 @@ const HIDDEN_PROFILE_EDITOR_FIELDS = Object.freeze([
   "alertTime",
   "alertSpecialAction",
 ]);
+const ACTOR_FACTS = Object.freeze([
+  Object.freeze({ key: "reserved", label: "Pickup target reserved" }),
+  Object.freeze({ key: "held", label: "Holding another Pokémon" }),
+  Object.freeze({ key: "throw-line-valid", label: "Object of interest lined up for a throw" }),
+  Object.freeze({ key: "recovering", label: "Recovering from a throw" }),
+  Object.freeze({ key: "trigger-valid", label: "Object of interest binding is valid" }),
+  Object.freeze({ key: "targeted-for-pickup", label: "Targeted for pickup" }),
+]);
+const ACTOR_FACT_KEYS = new Set(ACTOR_FACTS.map((fact) => fact.key));
+
+// These values belong to one condition. They do not inherit from its profile.
+export function setAdvancedConditionField(condition, path, raw) {
+  const integer = (minimum, maximum) => {
+    const value = Number(raw);
+    if (String(raw).trim() === "" || !Number.isInteger(value) || value < minimum || value > maximum) throw new TypeError(`Use a whole number from ${minimum} to ${maximum}.`);
+    return value;
+  };
+  const boolean = () => {
+    if (typeof raw !== "boolean") throw new TypeError("Use a checked or unchecked value.");
+    return raw;
+  };
+  if (path === "binding.name") {
+    if (!raw) delete condition.binding;
+    else {
+      if (!["trigger", "cargo"].includes(raw)) throw new TypeError("Choose Object of interest or Cargo.");
+      condition.binding = { lifetime: "until-clear", contributeProfile: true, ...condition.binding, name: raw };
+    }
+  } else if (path === "binding.lifetime") {
+    if (!condition.binding || !["until-clear", "frames"].includes(raw)) throw new TypeError("Choose a binding first.");
+    condition.binding.lifetime = raw;
+    if (raw === "frames") condition.binding.durationFrames ??= 600;
+    else delete condition.binding.durationFrames;
+  } else if (path === "binding.durationFrames") {
+    if (condition.binding?.lifetime !== "frames") throw new TypeError("Choose a timed binding first.");
+    condition.binding.durationFrames = integer(1, 65535);
+  } else if (path === "binding.contributeProfile") {
+    if (!condition.binding) throw new TypeError("Choose a binding first.");
+    condition.binding.contributeProfile = boolean();
+  } else if (path === "usesBinding") {
+    if (!raw) delete condition.usesBinding;
+    else {
+      if (!["trigger", "cargo", "object-of-interest-itself"].includes(raw)) throw new TypeError("Choose Object of interest, Cargo, or Object of interest itself.");
+      if (raw === "object-of-interest-itself" && (condition.binding?.name !== "cargo" || condition.target?.kind !== "actor")) throw new TypeError("Save a Pokémon as Cargo first.");
+      condition.usesBinding = raw;
+    }
+  } else if (path === "target.mustBeReachableForPickup") {
+    if (condition.target?.kind !== "actor") throw new TypeError("Choose a Pokémon target first.");
+    if (boolean()) {
+      condition.target.mustBeReachableForPickup = true;
+      condition.target.pickupReach ??= { tiles: 1, heightUnits: 16 };
+    } else delete condition.target.mustBeReachableForPickup;
+  } else if (path.startsWith("target.pickupReach.")) {
+    if (condition.target?.kind !== "actor") throw new TypeError("Choose a Pokémon target first.");
+    condition.target.pickupReach ??= { tiles: 1, heightUnits: 16 };
+    const field = path.slice("target.pickupReach.".length);
+    if (!["tiles", "heightUnits"].includes(field)) throw new TypeError("Unknown pickup field.");
+    condition.target.pickupReach[field] = field === "tiles" ? integer(1, 8) : integer(0, 64);
+  } else if (path === "failure.response") {
+    if (!raw) delete condition.failure;
+    else {
+      if (raw !== "drop-and-clear") throw new TypeError("Choose Drop safely and clear.");
+      condition.failure = { retryFrames: 32, ...condition.failure, response: raw };
+    }
+  } else if (path === "failure.retryFrames") {
+    if (!condition.failure) throw new TypeError("Choose a failure response first.");
+    condition.failure.retryFrames = integer(0, 255);
+  } else return false;
+  return true;
+}
+
+
+export function renderConditionBindingSummary(bindings) {
+  if (!bindings) return "";
+  const reasons = { 0: "valid", 1: "empty", 5: "subject lost", 6: "target lost", 7: "expired", 8: "conflict" };
+  return `<section><h3>Saved target bindings</h3><dl>${Object.entries(bindings).map(([name, binding]) => `<div><dt>${escapeHtml(name === "trigger" ? "Object of interest" : "Cargo")}</dt><dd>${binding.bound ? `${escapeHtml(binding.target?.kind || "none")}${binding.target?.candidateId ? `: ${escapeHtml(binding.target.candidateId)}` : ""} · ${escapeHtml(reasons[binding.reason] || `reason ${binding.reason}`)}${binding.source ? ` · ${escapeHtml(binding.source.conditionId)}` : ""}` : "Empty"}</dd></div>`).join("")}</dl></section>`;
+}
 
 const PROFILE_FIELD_RANGE_BY_MIN = new Map(PROFILE_FIELD_RANGES.map((range) => [range.min, range]));
 
@@ -145,6 +243,10 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
       Object.freeze({ key: "chainPauseVariance", label: "Pause variance", unit: "frames", note: "Adds a random 0 through this value to passive and Look around pauses, or to the total Reposition jumps duration; ignored by Reposition steps, Reposition skids, and successful Hop in place actions" }),
       Object.freeze({ key: "chainPauseAction", label: "Pause actions", unit: "", note: "When several actions are on, one is picked at random. No selected action skips the pause" }),
       Object.freeze({ key: "chainPauseActionChance", label: "Action chance", unit: "%", note: "Overall chance to run one selected action. A failed roll starts a new movement chain" }),
+      Object.freeze({ key: "chainHopInPlaceExtraHops", label: "Extra hops", unit: "hops", note: "Extra hops after Hop in place is admitted. Zero keeps one hop" }),
+      Object.freeze({ key: "chainHopInPlaceExtraChance", label: "Extra chance", unit: "%", note: "Separate chance to add the extra hops after the pause action is admitted" }),
+      Object.freeze({ key: "chainHopInPlaceHeartChance", label: "Heart chance", unit: "", note: "Separate chance to show hearts during this hop sequence" }),
+      Object.freeze({ key: "chainHopInPlaceCryChance", label: "Cry chance", unit: "", note: "Separate chance to play this Pokémon’s cry during this hop sequence" }),
       Object.freeze({ key: "chainRepositionJumpCount", label: "Reposition moves", unit: "moves", note: "Number of fixed-facing random jumps, steps, or skids. Steps and skids finish the pause after the final move" }),
       Object.freeze({ key: "chainRepositionSpeed", label: "Reposition Walk time", unit: "frames", note: "Travel time for Reposition steps and skids; jumps use Hop timing" }),
       Object.freeze({ key: "chainRepositionDistance", label: "Skid distance", unit: "tiles", note: "Tiles travelled by each Reposition skid" }),
@@ -193,6 +295,10 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
         unit: "%",
         note: "Overall chance to run one selected action. A failed roll skips the pause and starts a new movement chain",
       }),
+      Object.freeze({ key: "chainHopInPlaceExtraHops", label: "Extra hops", unit: "hops", note: "Extra hops after Hop in place is admitted. Zero keeps one hop" }),
+      Object.freeze({ key: "chainHopInPlaceExtraChance", label: "Extra chance", unit: "%", note: "Separate chance to add the extra hops after the pause action is admitted" }),
+      Object.freeze({ key: "chainHopInPlaceHeartChance", label: "Heart chance", unit: "", note: "Separate chance to show hearts during this hop sequence" }),
+      Object.freeze({ key: "chainHopInPlaceCryChance", label: "Cry chance", unit: "", note: "Separate chance to play this Pokémon’s cry during this hop sequence" }),
       Object.freeze({
         key: "chainRepositionJumpCount",
         label: "Reposition moves",
@@ -217,7 +323,7 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
     range: Object.freeze({ min: "hopMinDistance", max: "hopMaxDistance", label: "Hop distance", unit: "tiles" }),
     fields: Object.freeze([
       Object.freeze({ key: "hopAllowNonCardinal", label: "Directions", unit: "", note: "Allowed cardinal and diagonal movement groups" }),
-      Object.freeze({ key: "hopAllowVerticalObstacles", label: "Cross vertical obstacles", unit: "", note: "Off rejects intersecting arcs. On raises the arc enough to clear catalogued vertical obstacles" }),
+      Object.freeze({ key: "hopAllowVerticalObstacles", label: "Jump", unit: "", note: "Jump ability. Mounted: B jumps 2-4 tiles by Walk speed. Wild/Follower: jumps a blocked step only when the arc clears. Exact-distance Jumps raise the arc to a capped height over walls, objects and wrong-way ledges" }),
       Object.freeze({ key: "hopMinDistance", label: "Min distance", unit: "tiles" }),
       Object.freeze({ key: "hopMaxDistance", label: "Max distance", unit: "tiles" }),
     ]),
@@ -228,7 +334,7 @@ const PROFILE_FIELD_COMPOSITES = Object.freeze({
     range: Object.freeze({ min: "tiredHopMinDistance", max: "tiredHopMaxDistance", label: "Hop distance", unit: "tiles" }),
     fields: Object.freeze([
       Object.freeze({ key: "tiredHopAllowNonCardinal", label: "Directions", unit: "", note: "Allowed cardinal and diagonal movement groups" }),
-      Object.freeze({ key: "hopAllowVerticalObstacles", label: "Cross vertical obstacles", unit: "", note: "Shared policy from the linked profile. On raises intersecting arcs to clear catalogued obstacles" }),
+      Object.freeze({ key: "hopAllowVerticalObstacles", label: "Jump", unit: "", note: "Shared policy from the linked profile: the Jump ability" }),
       Object.freeze({ key: "tiredHopMinDistance", label: "Min distance", unit: "tiles" }),
       Object.freeze({ key: "tiredHopMaxDistance", label: "Max distance", unit: "tiles" }),
     ]),
@@ -293,19 +399,23 @@ const FIELD_SECTIONS = Object.freeze([
   {
     id: "behavior",
     title: "Behavior",
-    hint: "Choose what the Pokémon does and what it reacts to.",
+    hint: "Choose what the Pokémon does and what it reacts to. A hit during a skid causes a crash. Knockback starts after the crash, if it is on.",
     fields: [
       "chillState", "chillTarget", "chillAllowedTerrainMask", "chillAllowedTerrainOverrideMask",
       "battleTrigger", "chaseBoostDistance", "chaseBoostSpeed",
       "circleRadius", "continueWhenArrived", "avoidPreviousTile", "playerAdjacentDirectionMasks",
+      "onReachAction", "throwMaxRange", "throwWindupFrames", "throwRecoveryFrames",
+      "cargoTargetCheckInterval", "cargoTargetSwitchAdvantage",
+      "attacking", "minImpactSpeed", "collisionDamage", "damageRecipients", "knockbackType", "knockbackDistance",
     ],
     nodes: [
       { kind: "branch", field: "chillState", branch: "chill-behavior" },
       {
         kind: "fields",
         fields: [
-          "battleTrigger", "chaseBoostDistance", "chaseBoostSpeed",
-          "circleRadius", "continueWhenArrived", "avoidPreviousTile",
+          "onReachAction", "attacking", "minImpactSpeed", "collisionDamage", "damageRecipients", "knockbackType", "knockbackDistance",
+          "battleTrigger", "chaseBoostDistance", "chaseBoostSpeed", "circleRadius",
+          "continueWhenArrived", "avoidPreviousTile",
         ],
       },
     ],
@@ -319,15 +429,18 @@ const FIELD_SECTIONS = Object.freeze([
       "chillAction", "chillSpeed", "hopAllowNonCardinal", "hopMinDistance",
       "hopAllowVerticalObstacles", "hopMaxDistance", "hopTime", "hopElevationTimeScale", "hopElevationArcScale", "hopSpinSpeed", "hopSwayWidth", "hopPause", "teleportTime",
       "teleportPause", "ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction", "chainPauseActionChance",
+      "chainHopInPlaceExtraHops", "chainHopInPlaceExtraChance", "chainHopInPlaceHeartChance", "chainHopInPlaceCryChance",
       "chainRepositionJumpCount",
       "chainRepositionSpeed",
       "chainRepositionDistance", "chainRepositionDust",
       "chainRepositionAllowCardinal", "chainRepositionAllowDiagonal",
-      "tilesToAccelerate", "walkAccelerationStep", "walkTimeVariance", "maxWalkSpeed", "walkOptions", "walkStompTime", "wanderStraightChance", "walkPause", "walkPauseVariance", "tilesBeforeTurnSkid", "planTurnSkidPath", "stopSkid",
+      "tilesToAccelerate", "walkAccelerationStep", "walkTimeVariance", "maxWalkSpeed", "walkOptions", "walkStompTime", "wanderStraightChance", "walkPause", "walkPauseVariance", "tilesBeforeTurnSkid", "planTurnSkidPath", "stopSkid", "turnSkidOneTime", "turnSkidTwoTime", "stopSkidTime",
       "mountBounce", "mountStride", "mountSettle", "mountLean",
+      "returnAfterMove",
     ],
     nodes: [
       { kind: "branch", field: "chillAction", branch: "movement", scope: "chill" },
+      { kind: "fields", fields: ["returnAfterMove"] },
     ],
   },
   {
@@ -392,6 +505,7 @@ const TARGETABLE_BEHAVIORS = Object.freeze(new Set([
   "OW_WILD_BEHAVIOR_KIND_RAM",
   "OW_WILD_BEHAVIOR_KIND_HEADBUTT_TREE_HOP",
 ]));
+const THROW_HELD_ACTOR_BEHAVIOR = "OW_WILD_BEHAVIOR_KIND_THROW_HELD_ACTOR";
 
 const TILE_BEHAVIORS = Object.freeze(new Set([
   "OW_WILD_BEHAVIOR_KIND_WANDER",
@@ -501,6 +615,8 @@ export function encodeChainPauseActionSelection(selectedRaws) {
 }
 
 const RAW_LABEL_OVERRIDES = Object.freeze({
+  OW_WILD_SPAWNER_BUBBLE_ID_SAD: "Sad face",
+  OW_WILD_SPAWNER_BUBBLE_ID_ANGUISH: "Anguish",
   [LOCOMOTION.wander]: "Walk",
   [LOCOMOTION.teleport]: "Teleport",
   [LOCOMOTION.teleportNoFlicker]: "Teleport",
@@ -533,9 +649,12 @@ const MOVEMENT_FIELDS = Object.freeze({
     tilesBeforeTurnSkid: "tilesBeforeTurnSkid",
     planTurnSkidPath: "planTurnSkidPath",
     stopSkid: "stopSkid",
+    turnSkidOneTime: "turnSkidOneTime",
+    turnSkidTwoTime: "turnSkidTwoTime",
+    stopSkidTime: "stopSkidTime",
     hopPath: Object.freeze({ composite: "hop-path-chill", fields: Object.freeze(["hopAllowNonCardinal", "hopAllowVerticalObstacles", "hopMinDistance", "hopMaxDistance"]) }),
     hopTiming: Object.freeze({ composite: "hop-timing-chill", fields: Object.freeze(["hopTime", "hopElevationTimeScale", "hopElevationArcScale", "hopPause", "hopSpinSpeed", "hopSwayWidth"]) }),
-    chain: ["ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction", "chainPauseActionChance", "chainRepositionJumpCount", "chainRepositionSpeed", "chainRepositionDistance", "chainRepositionDust", "chainRepositionAllowCardinal", "chainRepositionAllowDiagonal"],
+    chain: ["ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction", "chainPauseActionChance", "chainHopInPlaceExtraHops", "chainHopInPlaceExtraChance", "chainHopInPlaceHeartChance", "chainHopInPlaceCryChance", "chainRepositionJumpCount", "chainRepositionSpeed", "chainRepositionDistance", "chainRepositionDust", "chainRepositionAllowCardinal", "chainRepositionAllowDiagonal"],
     teleportTiming: Object.freeze({ composite: "teleport-timing-chill", fields: Object.freeze(["teleportTime", "teleportPause"]) }),
   }),
   tired: Object.freeze({
@@ -553,9 +672,12 @@ const MOVEMENT_FIELDS = Object.freeze({
     tilesBeforeTurnSkid: "tilesBeforeTurnSkid",
     planTurnSkidPath: "planTurnSkidPath",
     stopSkid: "stopSkid",
+    turnSkidOneTime: "turnSkidOneTime",
+    turnSkidTwoTime: "turnSkidTwoTime",
+    stopSkidTime: "stopSkidTime",
     hopPath: Object.freeze({ composite: "hop-path-tired", fields: Object.freeze(["tiredHopAllowNonCardinal", "hopAllowVerticalObstacles", "tiredHopMinDistance", "tiredHopMaxDistance"]) }),
     hopTiming: Object.freeze({ composite: "hop-timing-tired", fields: Object.freeze(["hopTime", "hopElevationTimeScale", "hopElevationArcScale", "tiredHopPause", "hopSpinSpeed", "hopSwayWidth"]) }),
-    chain: ["ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction", "chainPauseActionChance", "chainRepositionJumpCount", "chainRepositionSpeed", "chainRepositionDistance", "chainRepositionDust", "chainRepositionAllowCardinal", "chainRepositionAllowDiagonal"],
+    chain: ["ramAccelerationSteps", "chainMovementVariance", "ramMaxSpeed", "chainPauseVariance", "chainPauseAction", "chainPauseActionChance", "chainHopInPlaceExtraHops", "chainHopInPlaceExtraChance", "chainHopInPlaceHeartChance", "chainHopInPlaceCryChance", "chainRepositionJumpCount", "chainRepositionSpeed", "chainRepositionDistance", "chainRepositionDust", "chainRepositionAllowCardinal", "chainRepositionAllowDiagonal"],
     teleportTiming: Object.freeze({ composite: "teleport-timing-tired", fields: Object.freeze(["tiredTeleportTime", "tiredTeleportPause"]) }),
   }),
 });
@@ -566,15 +688,15 @@ export function movementEditorGroups(nodes, scope = "chill") {
   const f = MOVEMENT_FIELDS[scope];
   if (!f) return [{ id: "other", label: "Movement settings", groups: [{ label: "", nodes }] }];
   const definitions = [
-    { id: "direction", label: "Direction", note: "Choose the directions the Pokémon can move in.", groups: [
+    { id: "direction", label: "Direction", note: "Choose the directions the Pokémon can move in. When mounted, the last direction button you press takes control while it is held.", groups: [
       { label: "", fields: [f.hopPath.fields[0], f.wanderStraightChance] },
     ] },
     { id: "walk", label: "Walk", note: "Set the pace, turns and feel of each step.", groups: [
       { label: "Pace", note: "Lower time means faster movement.", fields: [f.speed, f.walkTimeVariance] },
-      { label: "Acceleration", fields: [f.maxWalkSpeed, f.walkAcceleration, f.walkAccelerationStep] },
+      { label: "Acceleration", fields: [f.walkAccelerationStep, f.maxWalkSpeed, f.walkAcceleration] },
       { label: "Walk rules and appearance", fields: [f.walkOptions, f.walkStompTime] },
       { label: "Mounted riding rhythm", note: "Body motion while riding. The camera, ground position, and movement speed stay unchanged.", fields: f.mountGait },
-      { label: "Turn and stop skids", fields: [f.tilesBeforeTurnSkid, f.planTurnSkidPath, f.stopSkid] },
+      { label: "Turn and stop skids", note: "A skid always starts. It moves as far as it can, then crashes at the first blocked tile. If the next tile is blocked, it crashes in place.", fields: [f.tilesBeforeTurnSkid, f.turnSkidOneTime, f.turnSkidTwoTime, f.stopSkid, f.stopSkidTime] },
       { label: "Pause after each step", note: "Use zero for continuous walking. Use a movement chain below for pauses after several moves.", fields: [f.walkPause, f.walkPauseVariance] },
     ] },
     { id: "hop", label: "Hop", note: "Set the path first, then the timing and motion.", groups: [
@@ -586,6 +708,9 @@ export function movementEditorGroups(nodes, scope = "chill") {
     { id: "teleport", label: "Teleport", note: "Choose how travel time is measured, then set the duration.", groups: [
       { label: "", virtual: "teleport-options", fields: f.teleportTiming.fields },
     ] },
+    { id: "turn-around", label: "Turn Around", note: "Change facing while staying on the same tile.", groups: [
+      { label: "", movementSection: "turn-around", fields: ["ramMaxSpeed"] },
+    ] },
     { id: "chain", label: "Movement chain", note: "Repeat a set of moves, then choose what happens at the pause.", groups: [
       { label: "", fields: f.chain },
     ] },
@@ -596,7 +721,11 @@ export function movementEditorGroups(nodes, scope = "chill") {
     groups: section.groups.map((group) => {
       const selected = [
         ...nodes.filter((node) => group.virtual && node.virtual === group.virtual),
-        ...group.fields.flatMap((field) => nodes.filter((node) => node.field === field && node.virtual !== "teleport-options")),
+        ...group.fields.flatMap((field) => nodes.filter((node) => (
+          node.field === field
+          && node.virtual !== "teleport-options"
+          && (!group.movementSection || node.movementSection === group.movementSection)
+        ))),
       ].filter((node) => remaining.delete(node));
       return { ...group, nodes: selected };
     }).filter((group) => group.nodes.length),
@@ -744,6 +873,28 @@ function newDraftStore() {
 
 function cloneDraftJson(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function hopArcValidationError(arc) {
+  if (!arc || typeof arc !== "object" || Array.isArray(arc)) return "Hop arc needs a shape";
+  if (arc.shape === "none") {
+    return Object.keys(arc).length === 1 ? "" : "Normal arc cannot have Slam settings";
+  }
+  if (arc.shape !== "slam") return "Hop arc shape must be Normal or Slam";
+  const keys = ["shape", "riseFrames", "hangFrames", "dropFrames", "peakQ4"];
+  if (Object.keys(arc).length !== keys.length || Object.keys(arc).some((key) => !keys.includes(key))) {
+    return "Slam needs exactly rise, hang, drop, and peak settings";
+  }
+  for (const key of keys.slice(1)) {
+    const min = key === "hangFrames" ? 0 : 1;
+    if (!Number.isInteger(arc[key]) || arc[key] < min || arc[key] > 255) {
+      return `${key} must be a whole number from ${min} to 255`;
+    }
+  }
+  if (arc.riseFrames + arc.hangFrames + arc.dropFrames > 255) {
+    return "Rise, hang, and drop must total at most 255 frames";
+  }
+  return "";
 }
 
 function sameDraftJson(left, right) {
@@ -906,11 +1057,33 @@ export function systemOwnershipForApplication(catalog, applicationId) {
   return "";
 }
 
+function applicationEnableLock(catalog, applicationId) {
+  const system = systemOwnershipForApplication(catalog, applicationId);
+  if (system) return `System · ${system}`;
+  if (catalog.runtimeBindings?.defaultTiredApplication === applicationId
+    || (catalog.profiles || []).some((profile) => profile.fields?.tiredProfile?.operator === "replace"
+      && profile.fields.tiredProfile.value === applicationId)) return "Tired reference";
+  return "";
+}
+
+export function setProfileApplicationEnabled(catalog, applicationId, enabled) {
+  if (typeof enabled !== "boolean") throw new TypeError("Application Enabled must be a boolean.");
+  const next = cloneDraftJson(catalog);
+  const { application } = canonicalProfileAndApplication(next, applicationId);
+  if (!enabled && applicationEnableLock(next, applicationId)) {
+    throw new TypeError("Runtime-bound or Tired-referenced applications cannot be disabled.");
+  }
+  application.enabled = enabled;
+  return next;
+}
+
 function visionCondition(condition) {
-  return ["notice-target", "target-cannot-see-subject"].includes(condition?.when?.kind);
+  return ["notice-target", "notice-player", "target-cannot-see-subject"].includes(condition?.when?.kind);
 }
 
 function defaultConditionWhen(kind, catalogVersion) {
+  if (kind === "bound-target-distance") return { kind, minTiles: 0, maxTiles: 1 };
+  if (["player-damaged", "subject-damaged"].includes(kind)) return { kind };
   if (catalogVersion === 5) {
     return { kind, vision: { mode: "current" }, chancePercent: 100 };
   }
@@ -937,6 +1110,28 @@ function conditionVisionHasAdjacentAwareness(condition, catalogVersion) {
     : (Number(condition?.when?.visionOptions) & VISION_ADJACENT_BIT) !== 0;
 }
 
+function conditionVisionHasSameTileAwareness(condition, catalogVersion) {
+  return catalogVersion === 5
+    ? condition?.when?.vision?.sameTileAwareness === true
+    : (Number(condition?.when?.visionOptions) & VISION_SAME_TILE_BIT) !== 0;
+}
+
+function setConditionVisionAwareness(condition, key, enabled, catalogVersion) {
+  if (!["adjacentAwareness", "sameTileAwareness"].includes(key) || typeof enabled !== "boolean") {
+    throw new TypeError("Vision awareness must be true or false.");
+  }
+  if (conditionVisionMode(condition, catalogVersion) !== "custom") {
+    throw new TypeError("Custom Vision is not active.");
+  }
+  if (catalogVersion === 5) {
+    condition.when.vision[key] = enabled;
+  } else {
+    const bit = key === "sameTileAwareness" ? VISION_SAME_TILE_BIT : VISION_ADJACENT_BIT;
+    const options = Number(condition.when.visionOptions) || 1;
+    condition.when.visionOptions = enabled ? (options | bit) : (options & ~bit);
+  }
+}
+
 function setConditionVisionSelection(condition, mode, catalogVersion) {
   if (!visionCondition(condition)) throw new TypeError("The selected condition does not use Vision.");
   if (!["current", "custom"].includes(mode)) throw new TypeError("Vision mode must be current or custom.");
@@ -946,10 +1141,13 @@ function setConditionVisionSelection(condition, mode, catalogVersion) {
       ? {
         mode: "custom",
         range: Math.max(1, Number(condition.when.vision?.range) || 3),
-        cone: "forward-90",
+        cone: ["forward-90", "forward-line", "cardinal-lines"].includes(condition.when.vision?.cone) ? condition.when.vision.cone : "forward-90",
         adjacentAwareness: condition.when.vision?.mode === "custom"
           ? condition.when.vision.adjacentAwareness === true
           : true,
+        ...(Object.hasOwn(condition.when.vision || {}, "sameTileAwareness")
+          ? { sameTileAwareness: condition.when.vision.sameTileAwareness === true }
+          : {}),
       }
       : { mode: "current" };
     delete condition.when.rangeKind;
@@ -1102,7 +1300,18 @@ export function setConditionalProfileKind(catalog, applicationId, kind) {
   }
   profile.kind = "normal";
   delete profile.conditions;
+  delete profile.showRestTintDuringCooldown;
+  delete profile.hopArc;
   application.target = targets[0];
+  return next;
+}
+
+export function setConditionalProfileRestTint(catalog, applicationId, enabled) {
+  if (typeof enabled !== "boolean") throw new TypeError("Cooldown rest tint must be a boolean.");
+  const next = cloneDraftJson(catalog);
+  const { profile } = canonicalProfileAndApplication(next, applicationId);
+  if (profile.kind !== "conditional") throw new TypeError("Only conditional profiles can show cooldown rest tint.");
+  profile.showRestTintDuringCooldown = enabled;
   return next;
 }
 
@@ -1159,12 +1368,14 @@ function canonicalExpressionNumber(raw) {
     OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY: 4,
     OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_GRASS: 8,
     OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER: 16,
+    OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_OBJECT_OF_INTEREST: 16,
     OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER_FRONT: 32,
     OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP: 64,
     OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST: 128,
     OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX: 256,
     OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_FLOWERBED: 512,
-    OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL: 1023,
+    OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER_SURFACE: 1024,
+    OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL: 2047,
   };
   const parts = String(raw || "").split("|").map((part) => part.trim()).filter(Boolean);
   if (parts.length && parts.every((part) => Object.hasOwn(terrainBits, part))) {
@@ -1174,7 +1385,7 @@ function canonicalExpressionNumber(raw) {
 }
 
 function canonicalTerrainExpressionValid(raw) {
-  if (Number.isInteger(raw)) return raw >= 0 && raw <= 1023;
+  if (Number.isInteger(raw)) return raw >= 0 && raw <= 2047;
   const text = String(raw || "").trim();
   if (text === "0") return true;
   const known = new Set([
@@ -1188,6 +1399,7 @@ function canonicalTerrainExpressionValid(raw) {
     "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST",
     "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX",
     "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_FLOWERBED",
+    "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER_SURFACE",
     "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL",
   ]);
   const tokens = text.split("|").map((token) => token.trim()).filter(Boolean);
@@ -1206,6 +1418,7 @@ function canonicalAuthoredRaw(authored, fieldKey, applicationIndex) {
   const value = Number(authored.value);
   const adjust = `${value >= 0 ? "+" : ""}${value}`;
   if (authored.operator === "relative") return adjust;
+  if (authored.operator === "divide") return `/${value}`;
   if (authored.operator === "atLeast") return `/<${value}`;
   if (authored.operator === "atMost") return `/>${value}`;
   if (authored.operator === "relativeThenAtLeast") return `${adjust}, /<${Number(authored.threshold)}`;
@@ -1233,18 +1446,26 @@ function canonicalAuthoredFromEditorRaw(raw, fieldKey, catalog, input) {
     threshold: Number(compound[3]),
   };
   if (/^[+-]\d+$/.test(value)) return { operator: "relative", value: Number(value) };
+  const divide = value.match(/^\/(\d+)$/);
+  if (divide) return { operator: "divide", value: Number(divide[1]) };
   const bound = value.match(/^\/([<>])(\d+)$/);
   if (bound) return { operator: bound[1] === "<" ? "atLeast" : "atMost", value: Number(bound[2]) };
   return { operator: "replace", value };
 }
 
-function canonicalApplyAuthored(before, authored) {
+function canonicalApplyAuthored(before, authored, fieldKey = "", input = {}) {
   if (!authored) return before;
   if (authored.operator === "replace") return authored.value;
   const base = Number(before);
   const value = Number(authored.value);
   if (!Number.isFinite(base) || !Number.isFinite(value)) return authored.value;
   if (authored.operator === "relative") return base + value;
+  if (authored.operator === "divide") {
+    if (!Number.isInteger(value) || value < 1 || value > DIVIDE_OVERRIDE_DIVISOR_MAX) return authored.value;
+    const minimum = Number(input.numericOverrideOperandMinimums?.[fieldKey] ?? 0);
+    const maximum = Number(input.numericOverrideOperandMaximums?.[fieldKey] ?? 255);
+    return Math.min(maximum, Math.max(minimum, Math.floor(base / value)));
+  }
   if (authored.operator === "atLeast") return Math.max(base, value);
   if (authored.operator === "atMost") return Math.min(base, value);
   if (authored.operator === "relativeThenAtLeast") return Math.max(base + value, Number(authored.threshold));
@@ -1298,7 +1519,7 @@ function projectCanonicalProfileDeck(input, catalogOverride = null) {
     const result = {};
     for (const profile of chain) {
       for (const [fieldKey, authored] of Object.entries(profile.fields || {})) {
-        result[fieldKey] = canonicalApplyAuthored(result[fieldKey], authored);
+        result[fieldKey] = canonicalApplyAuthored(result[fieldKey], authored, fieldKey, source);
       }
     }
     effectiveCache.set(profileId, result);
@@ -1390,6 +1611,8 @@ function projectCanonicalProfileDeck(input, catalogOverride = null) {
       catalogKind: item?.kind || "normal",
       catalogClassification: item?.classification || "",
       catalogConditions: cloneDraftJson(item?.conditions || []),
+      catalogShowRestTintDuringCooldown: item?.showRestTintDuringCooldown === true,
+      catalogHopArc: cloneDraftValue(item?.hopArc),
       index,
       symbol: binding.symbol,
       name: item?.name || humanizeRaw(binding.symbol),
@@ -1419,15 +1642,20 @@ function projectCanonicalProfileDeck(input, catalogOverride = null) {
     const target = resolvedTarget || { mode: "disabled", match: DEFAULT_MATCH, members: [] };
     const members = [...new Set(target.members || [])].map((symbol) => assignmentSpeciesBySymbol.get(symbol)).filter(Boolean);
     const relativeFields = Object.entries(item?.fields || {}).filter(([, value]) => ["relative", "relativeThenAtLeast", "relativeThenAtMost"].includes(value.operator)).map(([key]) => key);
-    const atLeastFields = Object.entries(item?.fields || {}).filter(([, value]) => ["atLeast", "relativeThenAtLeast"].includes(value.operator)).map(([key]) => key);
-    const atMostFields = Object.entries(item?.fields || {}).filter(([, value]) => ["atMost", "relativeThenAtMost"].includes(value.operator)).map(([key]) => key);
+    const atLeastFields = Object.entries(item?.fields || {}).filter(([, value]) => ["atLeast", "relativeThenAtLeast", "divide"].includes(value.operator)).map(([key]) => key);
+    const atMostFields = Object.entries(item?.fields || {}).filter(([, value]) => ["atMost", "relativeThenAtMost", "divide"].includes(value.operator)).map(([key]) => key);
+    const divideFields = Object.entries(item?.fields || {}).filter(([, value]) => value.operator === "divide").map(([key]) => key);
     classes.push({
       catalogKey: `application:${application.id}`,
       catalogProfileId: application.profile,
       catalogApplicationId: application.id,
+      catalogEnabled: application.enabled !== false,
+      catalogEnableLock: applicationEnableLock(catalog, application.id),
       catalogKind: item?.kind || "normal",
       catalogClassification: item?.classification || "",
       catalogConditions: cloneDraftJson(item?.conditions || []),
+      catalogShowRestTintDuringCooldown: item?.showRestTintDuringCooldown === true,
+      catalogHopArc: cloneDraftValue(item?.hopArc),
       catalogTarget: cloneDraftJson(application.target || null),
       catalogSystem: systemOwnershipForApplication(catalog, application.id),
       index: `override:${index + 1}`,
@@ -1447,6 +1675,7 @@ function projectCanonicalProfileDeck(input, catalogOverride = null) {
         relativeMask: emptyMask(), relativeMask2: emptyMask(), relativeMask3: emptyMask(), relativeFields,
         atLeastMask: emptyMask(), atLeastMask2: emptyMask(), atLeastMask3: emptyMask(), atLeastFields,
         atMostMask: emptyMask(), atMostMask2: emptyMask(), atMostMask3: emptyMask(), atMostFields,
+        divideFields,
         compoundBoundProfile: {},
       },
       profile: viewFields(localRaws),
@@ -1502,9 +1731,16 @@ export function canonicalCatalogStructuralErrors(catalog, input = {}) {
   duplicateIds(catalog.applications, "Application");
   const profiles = new Map((catalog.profiles || []).map((profile) => [profile.id, profile]));
   const applicationList = catalog.applications || [];
+  if (applicationList.length > 65534) errors.push("The catalog supports at most 65534 applications");
   const applications = new Set(applicationList.map((application) => application.id));
   const applicationsByProfile = new Map();
   for (const application of applicationList) {
+    if (Object.hasOwn(application, "enabled") && typeof application.enabled !== "boolean") {
+      errors.push(`Application ${application.id} Enabled must be a boolean`);
+    }
+    if (application.enabled === false && applicationEnableLock(catalog, application.id)) {
+      errors.push(`Application ${application.id} is runtime-bound or Tired-referenced and cannot be disabled`);
+    }
     if (!applicationsByProfile.has(application.profile)) applicationsByProfile.set(application.profile, []);
     applicationsByProfile.get(application.profile).push(application);
   }
@@ -1540,17 +1776,42 @@ export function canonicalCatalogStructuralErrors(catalog, input = {}) {
     for (const [fieldKey, authored] of Object.entries(profile.fields || {})) {
       if (!knownFields.has(fieldKey)) errors.push(`${profile.name || profile.id} has unknown field ${fieldKey}`);
       const operator = authored?.operator;
-      if (!['replace', 'relative', 'atLeast', 'atMost', 'relativeThenAtLeast', 'relativeThenAtMost'].includes(operator)) {
+      if (!['replace', 'relative', 'divide', 'atLeast', 'atMost', 'relativeThenAtLeast', 'relativeThenAtMost'].includes(operator)) {
         errors.push(`${profile.name || profile.id} has an invalid operator for ${fieldKey}`);
+      } else if (operator !== "replace" && profile.id === catalog.rootProfile) {
+        errors.push(`The root profile must use replace for ${fieldKey}`);
       } else if (operator !== "replace" && !relativeFields.has(fieldKey)) {
         errors.push(`${profile.name || profile.id} cannot use a numeric operator for ${fieldKey}`);
       } else if (["atLeast", "atMost", "relativeThenAtLeast", "relativeThenAtMost"].includes(operator) && !boundedFields.has(fieldKey)) {
         errors.push(`${profile.name || profile.id} cannot use a bound operator for ${fieldKey}`);
       }
+      if (operator === "divide" && (!Number.isInteger(authored.value)
+          || authored.value < 1 || authored.value > DIVIDE_OVERRIDE_DIVISOR_MAX)) {
+        errors.push(`${profile.name || profile.id} ${fieldKey} divisor must be between 1 and ${DIVIDE_OVERRIDE_DIVISOR_MAX}`);
+      }
+      if (["cargoTargetCheckInterval", "cargoTargetSwitchAdvantage"].includes(fieldKey)) {
+        const min = fieldKey === "cargoTargetCheckInterval" ? 1 : 0;
+        const max = fieldKey === "cargoTargetCheckInterval" ? 15 : 3;
+        if (operator !== "replace" || !["number", "string"].includes(typeof authored?.value)
+            || !/^\d+$/.test(String(authored.value)) || !Number.isInteger(Number(authored.value))
+            || Number(authored.value) < min || Number(authored.value) > max) {
+          errors.push(`${profile.name || profile.id} ${fieldKey} must be ${min}..${max}`);
+        }
+      }
+      if (fieldKey === "returnAfterMove" && ![0, 1, "0", "1", "OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"].includes(authored?.value)) {
+        errors.push(`${profile.name || profile.id} ${fieldKey} must be 0 or 1`);
+      }
     }
     if (profile.kind === "normal") {
+      if (Object.hasOwn(profile, "hopArc")) errors.push(`${profile.name || profile.id} is normal and cannot own a Hop arc`);
       if (Object.hasOwn(profile, "conditions")) errors.push(`${profile.name || profile.id} is normal and cannot own conditions`);
+      if (Object.hasOwn(profile, "showRestTintDuringCooldown")) errors.push(`${profile.name || profile.id} is normal and cannot own cooldown rest tint`);
     } else if (profile.kind === "conditional") {
+      if (Object.hasOwn(profile, "hopArc")) {
+        const arcError = hopArcValidationError(profile.hopArc);
+        if (arcError) errors.push(`${profile.name || profile.id}: ${arcError}`);
+      }
+      if (Object.hasOwn(profile, "showRestTintDuringCooldown") && typeof profile.showRestTintDuringCooldown !== "boolean") errors.push(`${profile.name || profile.id} needs a boolean cooldown rest tint setting`);
       if (profile.id === catalog.rootProfile) errors.push("The root profile cannot be conditional");
       if (!profiles.has(profile.parent) || profiles.get(profile.parent)?.kind !== "normal") errors.push(`${profile.name || profile.id} must inherit from a normal profile`);
       const ownedApplications = applicationsByProfile.get(profile.id) || [];
@@ -1558,7 +1819,7 @@ export function canonicalCatalogStructuralErrors(catalog, input = {}) {
       else if (catalog.catalogVersion === 5 && Object.hasOwn(ownedApplications[0], "target")) errors.push(`${profile.name || profile.id} must use condition subject pools, not an application target`);
       else if (catalog.catalogVersion === 4 && ownedApplications[0].target?.mode !== "disabled") errors.push(`${profile.name || profile.id} must use condition subject pools, not an application target`);
       if (!Array.isArray(profile.conditions) || !profile.conditions.length) errors.push(`${profile.name || profile.id} needs at least one condition`);
-      if ((profile.conditions || []).length > 32) errors.push(`${profile.name || profile.id} supports at most 32 conditions`);
+      if ((profile.conditions || []).length > 65535) errors.push(`${profile.name || profile.id} supports at most 65535 conditions`);
       totalConditionCount += (profile.conditions || []).length;
       const conditionIds = new Set();
       for (const condition of profile.conditions || []) {
@@ -1578,7 +1839,39 @@ export function canonicalCatalogStructuralErrors(catalog, input = {}) {
           errors.push(`${condition?.id || "A condition"} needs at least one subject member`);
         }
         const whenKind = condition?.when?.kind;
-        if (!["terrain-motion", "notice-target", "target-cannot-see-subject"].includes(whenKind)) errors.push(`${condition?.id || "A condition"} has an unsupported condition kind`);
+        if (!["terrain-motion", "notice-target", "notice-player", "target-cannot-see-subject", "actor-facts", "player-damaged", "subject-damaged", "bound-target-distance"].includes(whenKind)) errors.push(`${condition?.id || "A condition"} has an unsupported condition kind`);
+        if (["notice-player", "notice-target", "actor-facts", "player-damaged", "subject-damaged"].includes(whenKind) && (whenKind === "actor-facts" || Object.hasOwn(condition.when, "facts"))) {
+          const facts = condition.when.facts;
+          const all = facts?.all;
+          const none = facts?.none;
+          if (!Array.isArray(all) || !Array.isArray(none)
+              || ![...all, ...none].every((fact) => ACTOR_FACT_KEYS.has(fact))
+              || new Set(all).size !== all.length || new Set(none).size !== none.length
+              || (!all.length && !none.length)
+              || all.some((fact) => none.includes(fact))) {
+            errors.push(`${condition?.id || "A condition"} has invalid actor facts`);
+          }
+        }
+        if (whenKind === "player-damaged" && (Object.keys(condition.when).some(key => !["kind", "facts"].includes(key)) || condition.target?.kind !== "actor" || condition.activation?.mode !== "while-true")) errors.push(`${condition?.id || "A condition"} needs a player-damaged actor event with while-true activation and no Vision fields`);
+        if (whenKind === "subject-damaged" && (Object.keys(condition.when).some(key => !["kind", "facts"].includes(key)) || !["player", "none"].includes(condition.target?.kind))) errors.push(`${condition?.id || "A condition"} needs a subject-damaged event with a player or no target and no Vision fields`);
+        if (condition.requiresAppliedProfile) {
+          const required = applicationsByProfile.get(condition.requiresAppliedProfile) || [];
+          if (profiles.get(condition.requiresAppliedProfile)?.kind !== "conditional"
+              || required.length !== 1 || required[0].enabled === false
+              || applicationList.indexOf(required[0]) >= applicationList.indexOf(ownedApplications[0])) {
+            errors.push(`${condition.id} needs an enabled earlier conditional profile`);
+          }
+        }
+        if (whenKind === "bound-target-distance") {
+          const { minTiles, maxTiles } = condition.when;
+          if (!Number.isInteger(minTiles) || !Number.isInteger(maxTiles)
+              || minTiles < 0 || minTiles > maxTiles || maxTiles < 1 || maxTiles > 32
+              || Object.keys(condition.when).some(key => !["kind", "minTiles", "maxTiles"].includes(key))
+              || condition.usesBinding !== "trigger" || !["actor", "player"].includes(condition.target?.kind)
+              || condition.activation?.mode !== "while-true") {
+            errors.push(`${condition.id} needs a valid Object of interest distance and while-true activation`);
+          }
+        }
         if (whenKind === "terrain-motion") {
           const terrainMask = canonicalExpressionNumber(condition.when.terrainMask);
           const terrainOverrideMask = canonicalExpressionNumber(condition.when.terrainOverrideMask);
@@ -1598,7 +1891,7 @@ export function canonicalCatalogStructuralErrors(catalog, input = {}) {
           }
           if (!terrainOverrideMask && !minimum && !maximum) errors.push(`${condition?.id || "A condition"} needs a terrain or Walk-time condition`);
         }
-        if (["notice-target", "target-cannot-see-subject"].includes(whenKind)) {
+        if (["notice-target", "notice-player", "target-cannot-see-subject"].includes(whenKind)) {
           const chance = Number(condition.when.chancePercent);
           if (!Number.isInteger(chance) || chance < 0 || chance > 100) errors.push(`${condition?.id || "A condition"} has an invalid notice chance`);
           if (catalog.catalogVersion === 5) {
@@ -1611,10 +1904,11 @@ export function canonicalCatalogStructuralErrors(catalog, input = {}) {
               if (Object.keys(vision).some((key) => key !== "mode")) errors.push(`${condition?.id || "A condition"} current Vision must not store custom values`);
             } else {
               const range = vision.range;
-              const allowedKeys = new Set(["mode", "range", "cone", "adjacentAwareness"]);
+              const allowedKeys = new Set(["mode", "range", "cone", "adjacentAwareness", "sameTileAwareness"]);
               if (!Number.isInteger(range) || range < 1 || range > 32
-                  || vision.cone !== "forward-90"
+                  || !["forward-90", "forward-line", "cardinal-lines"].includes(vision.cone)
                   || typeof vision.adjacentAwareness !== "boolean"
+                  || (Object.hasOwn(vision, "sameTileAwareness") && typeof vision.sameTileAwareness !== "boolean")
                   || Object.keys(vision).some((key) => !allowedKeys.has(key))) {
                 errors.push(`${condition?.id || "A condition"} has invalid custom Vision`);
               }
@@ -1633,11 +1927,11 @@ export function canonicalCatalogStructuralErrors(catalog, input = {}) {
             const visionOptions = Number(condition.when.visionOptions || 0);
             if (!allowedRanges.has(condition.when.rangeKind)) errors.push(`${condition?.id || "A condition"} has an invalid notice shape`);
             if (!Number.isInteger(rangeLength) || rangeLength < 0 || rangeLength > 255) errors.push(`${condition?.id || "A condition"} has an invalid notice range`);
-            if (!Number.isInteger(visionOptions) || visionOptions < 0 || visionOptions > 7) errors.push(`${condition?.id || "A condition"} has invalid custom Vision options`);
+            if (!Number.isInteger(visionOptions) || visionOptions < 0 || visionOptions > 15) errors.push(`${condition?.id || "A condition"} has invalid custom Vision options`);
             const currentVision = [5, VISION_CURRENT_RANGE].includes(condition.when.rangeKind);
             const customVision = [6, VISION_CUSTOM_RANGE].includes(condition.when.rangeKind);
             if (currentVision && (rangeLength !== 0 || visionOptions !== 0)) errors.push(`${condition?.id || "A condition"} current Vision must not store custom values`);
-            if (customVision && (!(rangeLength >= 1 && rangeLength <= 32) || (visionOptions & 3) !== 1)) errors.push(`${condition?.id || "A condition"} has invalid custom Vision`);
+            if (customVision && (!(rangeLength >= 1 && rangeLength <= 32) || ![1, 2, 3].includes(visionOptions & 3))) errors.push(`${condition?.id || "A condition"} has invalid custom Vision`);
           }
         }
         if (condition?.activation?.mode === "timed") {
@@ -1645,11 +1939,15 @@ export function canonicalCatalogStructuralErrors(catalog, input = {}) {
           const cooldown = Number(condition.activation.cooldownFrames);
           if (!Number.isInteger(duration) || duration < 1 || duration > 65535) errors.push(`${condition?.id || "A condition"} has an invalid duration`);
           if (!Number.isInteger(cooldown) || cooldown < 0 || cooldown > 65535) errors.push(`${condition?.id || "A condition"} has an invalid cooldown`);
+        } else if (condition?.activation?.mode === "until-crash") {
+          const cooldown = Number(condition.activation.cooldownFrames);
+          if (!Number.isInteger(cooldown) || cooldown < 0 || cooldown > 65535 || Object.hasOwn(condition.activation, "durationFrames")) errors.push(`${condition?.id || "A condition"} has invalid Until Crash timing`);
         } else if (condition?.activation?.mode !== "while-true") {
           errors.push(`${condition?.id || "A condition"} has an unsupported activation mode`);
         }
-        if (["notice-target", "target-cannot-see-subject"].includes(whenKind) && !["player", "actor"].includes(condition?.target?.kind)) errors.push(`${condition?.id || "A condition"} needs a player or actor target`);
-        if (whenKind === "terrain-motion" && condition?.target?.kind !== "none") errors.push(`${condition?.id || "A condition"} terrain checks must be targetless`);
+        if (["notice-target", "notice-player", "target-cannot-see-subject"].includes(whenKind) && !["player", "actor"].includes(condition?.target?.kind)) errors.push(`${condition?.id || "A condition"} needs a player or actor target`);
+        if (whenKind === "terrain-motion" && condition?.target?.kind !== "none") errors.push(`${condition?.id || "A condition"} must be targetless`);
+        if (whenKind === "actor-facts" && !["none", "actor"].includes(condition?.target?.kind)) errors.push(`${condition?.id || "A condition"} needs a Pokémon target or no target`);
         if (condition?.target?.kind === "actor") {
           const roles = condition.target.roles || [];
           if (!roles.length || roles.some((role) => !["wild", "follower"].includes(role)) || new Set(roles).size !== roles.length) errors.push(`${condition?.id || "A condition"} has invalid actor roles`);
@@ -1661,12 +1959,30 @@ export function canonicalCatalogStructuralErrors(catalog, input = {}) {
             if (!Array.isArray(condition.target.members) || new Set(condition.target.members || []).size !== (condition.target.members || []).length) errors.push(`${condition?.id || "A condition"} has invalid actor members`);
           }
         }
+        const label = condition?.id || "A condition";
+        const subjectRoles = condition.subjectRoles ?? [];
+        if (!Array.isArray(subjectRoles) || subjectRoles.some((role) => !["wild", "follower", "mounted"].includes(role)) || new Set(subjectRoles).size !== subjectRoles.length) errors.push(`${label} has invalid subject roles`);
+        const binding = condition.binding;
+        if (binding) {
+          if (!["trigger", "cargo"].includes(binding.name) || !["until-clear", "frames"].includes(binding.lifetime) || typeof binding.contributeProfile !== "boolean") errors.push(`${label} has invalid binding settings`);
+          if (condition.target?.kind === "none" || (binding.name === "cargo" && condition.target?.kind !== "actor")) errors.push(`${label} needs an identity target for its binding`);
+          if (binding.lifetime === "frames" ? (!Number.isInteger(binding.durationFrames) || binding.durationFrames < 1 || binding.durationFrames > 65535) : Object.hasOwn(binding, "durationFrames")) errors.push(`${label} has invalid binding lifetime`);
+        }
+        if (Object.hasOwn(condition, "usesBinding") && !["trigger", "cargo", "object-of-interest-itself"].includes(condition.usesBinding)) errors.push(`${label} has invalid required binding`);
+        if (condition.usesBinding === "object-of-interest-itself" && (binding?.name !== "cargo" || condition.target?.kind !== "actor")) errors.push(`${label} Object of interest itself must capture Cargo`);
+        const reachable = condition.target?.mustBeReachableForPickup;
+        if (reachable !== undefined && typeof reachable !== "boolean") errors.push(`${label} pickup reachability must be a boolean`);
+        const reach = condition.target?.pickupReach;
+        if (reachable && (condition.target?.kind !== "actor" || !reach)) errors.push(`${label} needs a Pokémon and explicit pickup reach`);
+        if (reach && (!Number.isInteger(reach.tiles) || reach.tiles < 1 || reach.tiles > 8 || !Number.isInteger(reach.heightUnits) || reach.heightUnits < 0 || reach.heightUnits > 64)) errors.push(`${label} has invalid pickup reach`);
+        const failure = condition.failure;
+        if (failure && (failure.response !== "drop-and-clear" || !Number.isInteger(failure.retryFrames) || failure.retryFrames < 0 || failure.retryFrames > 255)) errors.push(`${label} has invalid failure settings`);
       }
     } else {
       errors.push(`${profile.name || profile.id} must be normal or conditional`);
     }
   }
-  if (totalConditionCount > 32) errors.push("The catalog supports at most 32 condition entries");
+  if (totalConditionCount > 65535) errors.push("The catalog supports at most 65535 condition entries");
   for (const selector of catalog.selectors || []) {
     if (!profiles.has(selector.profile)) errors.push(`Selector ${selector.id} has a missing profile`);
     else if (profiles.get(selector.profile)?.kind !== "normal") errors.push(`Selector ${selector.id} must select a normal profile`);
@@ -1719,6 +2035,9 @@ export function createProfilesController({
   let data = projectCanonicalProfileDeck(rawDeckData, structuralCatalogDraft || sourceCatalog);
   const drafts = state.profileDrafts?.version === 2 ? state.profileDrafts : newDraftStore();
   state.profileDrafts = drafts;
+  const accelerationModeValues = state.profileAccelerationModeValues instanceof Map
+    ? state.profileAccelerationModeValues : new Map();
+  state.profileAccelerationModeValues = accelerationModeValues;
   const invalidNumericOperatorInputs = new Set();
   let formulaRefreshTimer = null;
   let contextControlsLoaded = false;
@@ -1764,7 +2083,7 @@ export function createProfilesController({
       terrainMask: "1", movementSpeed: "0",
       playerX: "12", playerY: "10", playerValid: true,
       activeUntil: "0", cooldownUntil: "0", candidates: "",
-      nextState: [],
+      nextState: [], nextBindings: {}, nextBindingOwner: null, role: "wild", actorFacts: "", pickupEligible: "", incomingClaimants: "",
       ...(state.profileConditionPreview || {}),
     },
     contextResult: null,
@@ -1879,6 +2198,8 @@ export function createProfilesController({
       catalogKind: draft.catalogKind || "normal",
       catalogClassification: draft.catalogClassification || "",
       catalogConditions: cloneDraftJson(draft.conditions || []),
+      catalogShowRestTintDuringCooldown: draft.showRestTintDuringCooldown === true,
+      catalogHopArc: cloneDraftValue(draft.hopArc),
       profile: Object.fromEntries(Object.entries(draft.fields).map(([field, raw]) => [field, { raw }])),
       editProfile: Object.fromEntries(Object.entries(draft.fields).map(([field, raw]) => [field, { raw }])),
       target: cloneTarget(draft.target),
@@ -1983,7 +2304,11 @@ export function createProfilesController({
       const kind = draft.catalogKind === "conditional" ? "conditional" : "normal";
       const profile = { id: profileId, name: draft.name, parent: next.rootProfile, kind, fields };
       if (draft.catalogClassification) profile.classification = draft.catalogClassification;
-      if (kind === "conditional") profile.conditions = cloneDraftJson(draft.conditions || []);
+      if (kind === "conditional") {
+        profile.conditions = cloneDraftJson(draft.conditions || []);
+        if (Object.hasOwn(draft, "hopArc")) profile.hopArc = cloneDraftJson(draft.hopArc);
+        if (Object.hasOwn(draft, "showRestTintDuringCooldown")) profile.showRestTintDuringCooldown = draft.showRestTintDuringCooldown;
+      }
       next.profiles.push(profile);
       next.applications.push({
         id: applicationId,
@@ -2043,6 +2368,8 @@ export function createProfilesController({
     structuralCatalogDraft = sortProfileApplicationsByClassification(nextCatalog);
     state.profileCatalogDraft = structuralCatalogDraft;
     ui.conditionPreview.nextState = [];
+    ui.conditionPreview.nextBindings = {};
+    ui.conditionPreview.nextBindingOwner = null;
     clearLegacyDrafts();
     data = projectCanonicalProfileDeck(rawDeckData, structuralCatalogDraft);
     invalidateDerivedIndexes();
@@ -2122,6 +2449,7 @@ export function createProfilesController({
 
   function setCanonicalConditionField(profile, conditionId, path, raw) {
     mutateCanonicalCondition(profile, conditionId, (condition, owner, catalog) => {
+      if (setAdvancedConditionField(condition, path, raw)) return;
       const branchKey = (branch, value) => `${profileKey(profile)}:${conditionId}:${branch}:${value}`;
       if (path === "id") {
         const id = String(raw || "").trim();
@@ -2171,15 +2499,38 @@ export function createProfilesController({
         if (saved) {
           condition.when = cloneDraftJson(saved.when);
           condition.target = cloneDraftJson(saved.target);
+          if (["actor-facts", "player-damaged", "bound-target-distance"].includes(raw)) condition.activation = { mode: "while-true" };
+          if (raw === "bound-target-distance") condition.usesBinding = "trigger";
           return;
         }
         if (raw === "terrain-motion") {
           condition.when = { kind: "terrain-motion", terrainMask: 1, terrainOverrideMask: 1, minMovementSpeed: 0, maxMovementSpeed: 0 };
           condition.target = { kind: "none" };
+        } else if (raw === "player-damaged") {
+          condition.when = { kind: "player-damaged" };
+          condition.target = { kind: "actor", roles: ["wild", "follower"], selection: "nearest", groupMask: "OW_WILD_BEHAVIOR_GROUP_NONE", members: [] };
+          condition.activation = { mode: "while-true" };
+        } else if (raw === "subject-damaged") {
+          condition.when = { kind: "subject-damaged" };
+          condition.target = { kind: "player" };
+        } else if (raw === "bound-target-distance") {
+          condition.when = defaultConditionWhen(raw, catalog.catalogVersion);
+          condition.target = { kind: "player" };
+          condition.usesBinding = "trigger";
+          condition.activation = { mode: "while-true" };
+        } else if (raw === "actor-facts") {
+          condition.when = { kind: "actor-facts", facts: { all: ["held"], none: [] } };
+          condition.target = { kind: "none" };
+          condition.activation = { mode: "while-true" };
         } else {
           condition.when = defaultConditionWhen(raw, catalog.catalogVersion);
           condition.target = { kind: "player" };
         }
+        return;
+      }
+      if (path === "requiresAppliedProfile") {
+        if (raw) condition.requiresAppliedProfile = String(raw);
+        else delete condition.requiresAppliedProfile;
         return;
       }
       if (path === "when.visionMode") {
@@ -2187,6 +2538,7 @@ export function createProfilesController({
         return;
       }
       if (path === "activation.mode") {
+        if (["player-damaged", "bound-target-distance"].includes(condition.when.kind) && raw !== "while-true") throw new TypeError("This trigger uses Only while the trigger is true.");
         conditionBranchDrafts.set(branchKey("activation", condition.activation.mode), cloneDraftJson(condition.activation));
         const saved = conditionBranchDrafts.get(branchKey("activation", raw));
         if (saved) {
@@ -2195,23 +2547,27 @@ export function createProfilesController({
         }
         condition.activation = raw === "timed"
           ? { mode: "timed", durationFrames: 60, cooldownFrames: 0 }
-          : { mode: "while-true" };
+          : raw === "until-crash"
+            ? { mode: "until-crash", cooldownFrames: 0 }
+            : { mode: "while-true" };
         return;
       }
       if (path === "target.kind") {
+        if (condition.when.kind === "player-damaged" && raw !== "actor") throw new TypeError("Player damage captures the Pokémon that hit the player.");
+        if (condition.when.kind === "subject-damaged" && !["player", "none"].includes(raw)) throw new TypeError("Subject damage can capture the player or no target.");
         if (condition.when.kind === "terrain-motion") condition.target = { kind: "none" };
         else {
           conditionBranchDrafts.set(branchKey("target", condition.target.kind), cloneDraftJson(condition.target));
           const saved = conditionBranchDrafts.get(branchKey("target", raw));
           if (saved) condition.target = cloneDraftJson(saved);
           else if (raw === "actor") condition.target = { kind: "actor", roles: ["wild"], selection: "nearest", groupMask: "OW_WILD_BEHAVIOR_GROUP_NONE", members: [] };
-          else condition.target = { kind: "player" };
+          else condition.target = { kind: raw === "none" ? "none" : "player" };
         }
         return;
       }
       const numericPaths = new Set([
         "when.terrainMask", "when.terrainOverrideMask", "when.minMovementSpeed", "when.maxMovementSpeed",
-        "when.rangeLength", "when.chancePercent", "when.visionOptions", "when.vision.range",
+        "when.rangeLength", "when.chancePercent", "when.visionOptions", "when.vision.range", "when.minTiles", "when.maxTiles",
         "activation.durationFrames", "activation.cooldownFrames",
       ]);
       if (catalog.catalogVersion === 5 && ["when.rangeLength", "when.visionOptions"].includes(path)) {
@@ -2321,6 +2677,9 @@ export function createProfilesController({
     }
     if (profile.catalogSystem) {
       tags.push(`<span class="pv2-profile-tag is-system" data-profile-tag="system" role="img" aria-label="System profile: ${escapeHtml(profile.catalogSystem)}" title="System profile · ${escapeHtml(profile.catalogSystem)}">${profileTagIcon("system")}${labels ? `<span>System · ${escapeHtml(profile.catalogSystem)}</span>` : ""}</span>`);
+    }
+    if (profile.catalogEnabled === false) {
+      tags.push('<span class="pv2-profile-tag" data-profile-tag="disabled">Disabled</span>');
     }
     return tags.length ? `<span class="pv2-profile-tags" aria-label="Profile tags">${tags.join("")}</span>` : "";
   }
@@ -2832,9 +3191,15 @@ export function createProfilesController({
   function fieldOptions(fieldKey, currentRaw = "", profile = null, context = {}) {
     let options = [...(data.editOptions?.[fieldKey] || [])];
     if (fieldKey === "walkAccelerationStep") {
+      options = options.filter((option) => valueRaw(option) !== LINEAR_SPEED_ACCELERATION);
       options = options.map((option) => valueRaw(option) === "0"
         ? { ...option, label: "0 — None" }
         : (valueRaw(option) === "33" ? { ...option, label: "/2 — Old rule" } : option));
+    }
+    if (fieldKey === "tilesToAccelerate" && profile
+        && walkAccelerationMode(fieldRaw(profile, "walkAccelerationStep"),
+          effectiveFieldCandidates(profile, "walkAccelerationStep")) !== "linear") {
+      options = options.filter((option) => Number(valueRaw(option)) <= 32);
     }
     if (fieldKey === "chillAction"
         && TELEPORT_LOCOMOTIONS.has(String(currentRaw))) {
@@ -2884,6 +3249,11 @@ export function createProfilesController({
       const operation = { kind: "adjust", operand: Number(value) };
       return { ...operation, operations: [operation] };
     }
+    const divide = value.match(/^\/(\d+)$/);
+    if (divide) {
+      const operation = { kind: "divide", operand: Number(divide[1]) };
+      return { ...operation, operations: [operation] };
+    }
     const bound = value.match(/^\/([<>])(\d+)$/);
     if (!bound) return null;
     const operation = { kind: bound[1] === "<" ? "atLeast" : "atMost", operand: Number(bound[2]) };
@@ -2898,6 +3268,9 @@ export function createProfilesController({
     const operator = parseNumericOverrideRaw(raw);
     if (!operator) return "";
     const walkTime = WALK_TIME_FIELDS.has(fieldKey);
+    if (operator.kind === "divide") {
+      return `${changed ? "Edited division" : "Divides the earlier stored value"} by ${operator.operand}; round down, then clamp to this field's valid range`;
+    }
     if (operator.kind === "compound") {
       const direction = walkTime
         ? (operator.bound.kind === "atLeast" ? "no faster than" : "no slower than")
@@ -2926,6 +3299,7 @@ export function createProfilesController({
     const operator = parseNumericOverrideRaw(raw);
     if (!operator) return "";
     const walkTime = WALK_TIME_FIELDS.has(fieldKey);
+    if (operator.kind === "divide") return `divide by ${operator.operand} (/${operator.operand}); round down, then clamp`;
     if (operator.kind === "compound") {
       const bound = walkTime
         ? (operator.bound.kind === "atLeast"
@@ -2979,7 +3353,7 @@ export function createProfilesController({
 
   function numericOverrideAllowed(profile, fieldKey, kind = null, permissions = null) {
     const resolvedPermissions = permissions || numericOverridePermissions(profile, fieldKey);
-    if (kind === "adjust") return resolvedPermissions.adjust;
+    if (kind === "adjust" || kind === "divide") return resolvedPermissions.adjust;
     if (kind === "atLeast" || kind === "atMost") return resolvedPermissions.bounds;
     if (kind === "compound") return resolvedPermissions.adjust && resolvedPermissions.bounds;
     return resolvedPermissions.adjust || resolvedPermissions.bounds;
@@ -3015,6 +3389,7 @@ export function createProfilesController({
 
   function numericOverrideOperandBounds(fieldKey, options, kind) {
     if (kind === "adjust") return relativeFieldDeltaBounds();
+    if (kind === "divide") return { min: 1, max: DIVIDE_OVERRIDE_DIVISOR_MAX };
     const optionMaximum = Math.max(0, ...options.map((option) => Number(valueRaw(option))).filter(Number.isFinite));
     const fieldMaximum = Number(data.numericOverrideOperandMaximums?.[fieldKey] ?? optionMaximum ?? 64);
     const minimum = Number(data.numericOverrideOperandMinimums?.[fieldKey] ?? 0);
@@ -3044,6 +3419,7 @@ export function createProfilesController({
     const walkTime = WALK_TIME_FIELDS.has(fieldKey);
     const syntax = [
       permissions.adjust ? (walkTime ? "+2 (slower) or -1 (faster)" : "+2 or -1") : "",
+      permissions.adjust ? `/2 (divide by 1..${DIVIDE_OVERRIDE_DIVISOR_MAX}, round down and clamp)` : "",
       permissions.bounds ? (walkTime ? "/<2 (no faster) or />2 (no slower)" : "/<2 or />2") : "",
       permissions.adjust && permissions.bounds ? "+1, /<2" : "",
     ].filter(Boolean).join(", ");
@@ -3271,6 +3647,23 @@ export function createProfilesController({
       });
       if (node) nodes.push(node);
     });
+    for (const field of ["throwMaxRange", "throwWindupFrames", "throwRecoveryFrames"]) {
+      const node = explicitInactiveNode(profile, field, inherited || raw === THROW_HELD_ACTOR_BEHAVIOR);
+      if (node) nodes.push(node);
+    }
+    if (definition.target === "chillTarget") {
+      const targetRaw = fieldRaw(profile, definition.target);
+      const targets = isOverrideProfile(profile) && !targetRaw
+        ? effectiveFieldCandidates(profile, definition.target) : [targetRaw];
+      const findsCargo = targets.includes("OW_WILD_BEHAVIOR_TARGET_CARGO");
+      for (const [field, note] of [
+        ["cargoTargetCheckInterval", "Frames between better Cargo checks during Wild pursuit. Held Cargo is kept."],
+        ["cargoTargetSwitchAdvantage", "A reachable Cargo must save this many route tiles before switching. Invalid Cargo can be replaced without this margin. Wild only."],
+      ]) {
+        const node = explicitInactiveNode(profile, field, findsCargo || inherited, { note });
+        if (node) nodes.push(node);
+      }
+    }
     const onlyInactive = nodes.length && nodes.every((node) => node.inactive);
     return {
       nodes,
@@ -3301,6 +3694,12 @@ export function createProfilesController({
     const usesTeleport = inherited
       ? inheritedMovementCandidates.some((candidate) => TELEPORT_LOCOMOTIONS.has(String(candidate)))
       : TELEPORT_LOCOMOTIONS.has(String(raw));
+    const usesTurnAround = inherited
+      ? inheritedMovementCandidates.includes(LOCOMOTION.turnAround)
+      : raw === LOCOMOTION.turnAround;
+    const accelerationRaw = fieldRaw(profile, "walkAccelerationStep");
+    const accelerationMode = walkAccelerationMode(accelerationRaw,
+      effectiveFieldCandidates(profile, "walkAccelerationStep"));
     const nodes = new Map();
     const ambiguous = inherited || !raw || raw === LOCOMOTION.none;
     const append = (fieldKeys, active, extra = {}) => {
@@ -3329,13 +3728,21 @@ export function createProfilesController({
         unit: "frames",
       });
     }
-    if (fields.walkAcceleration) {
-      append([fields.walkAcceleration], usesWalkAcceleration, {
-        label: "Tiles to accelerate",
-        unit: "tiles",
+    if (usesWalkAcceleration || inherited || accelerationRaw) {
+      nodes.set("acceleration-mode", {
+        field: "walkAccelerationStep", virtual: "acceleration-mode",
+        parentField, inactive: !usesWalkAcceleration,
       });
     }
-    if (fields.walkAccelerationStep) {
+    if (fields.walkAcceleration) {
+      append([fields.walkAcceleration], usesWalkAcceleration, {
+        label: accelerationMode === "linear" ? "Time to full speed"
+          : accelerationMode === "mixed" ? "Acceleration interval (mixed modes)" : "Tiles to accelerate",
+        unit: accelerationMode === "linear" ? "moving frames"
+          : accelerationMode === "mixed" ? "tiles / moving frames" : "tiles",
+      });
+    }
+    if (fields.walkAccelerationStep && accelerationMode === "legacy") {
       append([fields.walkAccelerationStep], usesWalkAcceleration, {
         label: "Acceleration amount",
         unit: "frames",
@@ -3401,11 +3808,14 @@ export function createProfilesController({
         unit: "steps",
       });
     }
-    if (fields.planTurnSkidPath) {
-      append([fields.planTurnSkidPath], usesWalkAcceleration, {
-        label: "Plan turn-skid path",
-        unit: "",
-        note: "Check the full skid path and the first step after the turn before starting the skid",
+    for (const [field, label] of [
+      [fields.turnSkidOneTime, "One turn skid at time"],
+      [fields.turnSkidTwoTime, "Two turn skids at time"],
+      [fields.stopSkidTime, "Stop skid at time"],
+    ]) {
+      if (field) append([field], usesWalkAcceleration, {
+        label, unit: "frames per tile",
+        note: "0 is Off. A lower time is faster. Skid at this time or faster. A two-tile or stop skid keeps the old four tiles at time 1.",
       });
     }
     if (fields.stopSkid) {
@@ -3430,6 +3840,12 @@ export function createProfilesController({
     } else {
       append(fields.chain, CHAIN_LOCOMOTIONS.has(raw), { composite: "movement-chain" });
     }
+    append(["ramMaxSpeed"], usesTurnAround, {
+      movementSection: "turn-around",
+      label: "Pause between turns",
+      unit: "frames",
+      note: "Time between facing choices. Zero allows a turn every frame.",
+    });
     if (usesTeleport || inherited) {
       nodes.set(`teleport-options-${scope}`, {
         field: parentField,
@@ -3557,6 +3973,9 @@ export function createProfilesController({
   }
 
   function renderFieldControl(profile, fieldKey, presentation = {}) {
+    if (fieldKey === "returnAfterMove") {
+      return renderReturnAfterMoveControl(profile, presentation);
+    }
     if (fieldKey === "chainPauseAction") {
       return renderChainPauseActions(profile, presentation);
     }
@@ -3577,6 +3996,23 @@ export function createProfilesController({
     if (raw === null || raw === undefined || raw === "") return NaN;
     const option = (data.editOptions?.[fieldKey] || []).find((candidate) => valueRaw(candidate) === String(raw));
     return Number(option?.value ?? raw);
+  }
+
+  function renderReturnAfterMoveControl(profile, presentation = {}) {
+    const fieldKey = "returnAfterMove";
+    const raw = fieldRaw(profile, fieldKey);
+    const original = originalFieldRaw(profile, fieldKey);
+    const inherited = isOverrideProfile(profile) && !raw;
+    const values = inherited ? effectiveFieldCandidates(profile, fieldKey) : [raw];
+    const enabled = values.length > 0 && values.every(value => fieldNumericValue(fieldKey, value) === 1);
+    const mixed = values.some(value => fieldNumericValue(fieldKey, value) === 1) && !enabled;
+    const changed = profile.draftId ? Boolean(raw) : raw !== original;
+    const state = changed ? "changed" : inherited ? "inherited" : isOverrideProfile(profile) ? "override" : "saved";
+    const key = escapeHtml(profileKey(profile));
+    return `<div class="field-row profile-field pv2-field${changed ? " is-changed" : ""}${inherited ? " is-inherited" : ""}" data-profile-key="${key}" data-field-row="${fieldKey}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
+      <label class="pv2-condition-toggle"><input type="checkbox" data-return-after-move data-profile-key="${key}" ${enabled ? "checked" : ""} ${mixed ? 'data-return-mixed aria-label="Return after each move, mixed inherited value"' : ""}><span><strong>Return after each move</strong><small>Return to the start with the same movement style. Pause after the return.${inherited ? " · Inherited" : ""}${mixed ? " · Mixed" : ""}</small></span></label>
+      ${isOverrideProfile(profile) ? `<button type="button" data-action="inherit-return-after-move" data-profile-key="${key}" ${inherited ? "disabled" : ""}>Inherit</button>` : ""}
+    </div>`;
   }
 
   function profileFieldRangeError(profile, range) {
@@ -3797,7 +4233,8 @@ export function createProfilesController({
     const chainGroups = [
       { id: "move", label: "Move", note: "Complete these moves before a pause.", fields: ["ramAccelerationSteps", "chainMovementVariance"] },
       { id: "pause", label: "Pause", note: "One selected action is picked at random. If the chance fails, movement continues.", fields: ["chainPauseAction", "chainPauseActionChance", "ramMaxSpeed", "chainPauseVariance"] },
-      { id: "reposition", label: "Reposition", note: "Settings for Reposition jumps, steps and skids.", groups: [
+      { id: "hop-in-place", label: "Hop in place", note: "After the pause action is admitted, this separate chance adds the chosen extra hops.", fields: ["chainHopInPlaceExtraHops", "chainHopInPlaceExtraChance", "chainHopInPlaceHeartChance", "chainHopInPlaceCryChance"] },
+      { id: "reposition", label: "Reposition", note: "Settings for Reposition jumps, steps and skids. A skid always starts, moves as far as it can, then crashes at the first blocked tile.", groups: [
         { label: "Movement", fields: ["chainRepositionJumpCount", "chainRepositionSpeed"] },
         { label: "Directions", fields: ["chainRepositionAllowCardinal", "chainRepositionAllowDiagonal"] },
         { label: "Skids", fields: ["chainRepositionDistance", "chainRepositionDust"] },
@@ -3911,12 +4348,13 @@ export function createProfilesController({
       { key: "water", label: "Water", raw: "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER", bit: 2 },
       { key: "canopy", label: "Canopy", raw: "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY", bit: 4 },
       { key: "grass", label: "Grass", raw: "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_GRASS", bit: 8 },
-      { key: "player", label: "Player tile", raw: "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER", bit: 16 },
+      { key: "object-of-interest", label: "Object of interest tile", raw: "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_OBJECT_OF_INTEREST", bit: 16 },
       { key: "player-front", label: "Player front", raw: "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER_FRONT", bit: 32 },
       { key: "rooftop", label: "Rooftop", raw: "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP", bit: 64 },
       { key: "signpost", label: "Signpost", raw: "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST", bit: 128 },
       { key: "mailbox", label: "Mailbox", raw: "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX", bit: 256 },
       { key: "flowerbed", label: "Flowerbed", raw: "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_FLOWERBED", bit: 512 },
+      { key: "water-surface", label: "Water surface", raw: "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER_SURFACE", bit: 1024 },
     ];
   }
 
@@ -4009,7 +4447,7 @@ export function createProfilesController({
       <div class="field-row profile-field pv2-field pv2-terrain-policy-field${changed ? " is-changed" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.inactive ? " is-inactive" : ""}" data-profile-key="${escapeHtml(profileKey(profile))}" data-field-row="${policy.valueField}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
         <span class="field-copy pv2-field-copy"><strong>${escapeHtml(policy.label)}</strong><small class="pv2-field-meta"><span class="pv2-field-note">${escapeHtml(policy.note)}</span>${presentation.inactive ? `<span class="pv2-field-note">inactive</span>` : ""}</small></span>
         <span class="pv2-terrain-policy" role="group" aria-label="${escapeHtml(policy.ariaLabel)}">
-          ${allowedTerrainCatalog().map((terrain) => {
+          ${allowedTerrainCatalog().filter((terrain) => policyId !== "spawn" || terrain.key !== "water-surface").map((terrain) => {
             const bit = Number(terrain.bit);
             const terrainState = terrainPolicyState(valueMask, explicitMask, bit);
             const nextState = nextTerrainPolicyState(terrainState);
@@ -4250,6 +4688,24 @@ export function createProfilesController({
     const fieldKey = node.field;
     const raw = fieldRaw(profile, fieldKey);
     const original = originalFieldRaw(profile, fieldKey);
+    if (node.virtual === "acceleration-mode") {
+      const mode = walkAccelerationMode(raw, effectiveFieldCandidates(profile, fieldKey));
+      const inherited = isOverrideProfile(profile) && !raw;
+      const changed = raw !== original;
+      const note = mode === "mixed"
+        ? "Covered Pokémon inherit different modes. Choose one mode before tuning the interval."
+        : mode === "linear"
+        ? "Adds speed evenly over moving time. Turns lose the gain from the last Walk tile. Stops reset speed."
+        : "Keeps the existing frame reduction and /2 rules.";
+      return `<div class="field-row profile-field pv2-field${changed ? " is-changed" : ""}${inherited ? " is-inherited" : ""}${node.inactive ? " is-inactive" : ""}" data-profile-key="${escapeHtml(profileKey(profile))}" data-field-row="acceleration-mode">
+        <span class="field-copy pv2-field-copy"><strong>Acceleration mode</strong><small class="pv2-field-meta">${escapeHtml(note)}${inherited ? ` Inherited: ${mode === "mixed" ? "Mixed" : mode === "linear" ? "Linear speed" : "Frame reduction"}.` : ""}</small></span>
+        <span class="pv2-value-control"><select class="field-control" data-acceleration-mode data-profile-key="${escapeHtml(profileKey(profile))}" aria-label="Acceleration mode">
+          ${isOverrideProfile(profile) ? `<option value="" ${inherited ? "selected" : ""}>Inherit</option>` : ""}
+          <option value="legacy" ${!inherited && mode === "legacy" ? "selected" : ""}>Frame reduction</option>
+          <option value="linear" ${!inherited && mode === "linear" ? "selected" : ""}>Linear speed</option>
+        </select></span>
+      </div>`;
+    }
     if (node.virtual === "player-adjacent-directions") {
       return renderPlayerAdjacentDirections(profile, node, presentation);
     }
@@ -4686,12 +5142,33 @@ export function createProfilesController({
       if (members.length === 1) return humanizeRaw(members[0]);
       return members.length ? `${members.length} Pokémon` : "No Pokémon selected";
     };
+    const actorStateSummary = (facts) => {
+      const required = new Set(facts?.all || []);
+      const excluded = new Set(facts?.none || []);
+      const phrases = [
+        ["reserved", "has reserved another Pokémon to pick up", "has no reserved pickup target"],
+        ["held", "is holding another Pokémon", "is not holding another Pokémon"],
+        ["throw-line-valid", "has Object of interest lined up for a throw", "does not have Object of interest lined up for a throw"],
+        ["trigger-valid", "has a valid Object of interest binding", "has no valid Object of interest binding"],
+        ["targeted-for-pickup", "is targeted for pickup", "is not targeted for pickup"],
+        ["recovering", "is recovering from a throw", "is not recovering from a throw"],
+      ].flatMap(([key, yes, no]) => required.has(key) ? [yes] : (excluded.has(key) ? [no] : []));
+      if (!phrases.length) return "This Pokémon's state";
+      const detail = phrases.length < 3 ? phrases.join(" and ") : `${phrases.slice(0, -1).join(", ")}, and ${phrases[phrases.length - 1]}`;
+      return `This Pokémon ${detail}`;
+    };
     const triggerSummary = (condition) => {
+      if (condition.when?.kind === "bound-target-distance") return `Object of interest is ${condition.when.minTiles}..${condition.when.maxTiles} tiles away${condition.requiresAppliedProfile ? ` AND ${catalog.profiles.find(p => p.id === condition.requiresAppliedProfile)?.name || condition.requiresAppliedProfile} is active` : ""}`;
       if (condition.when?.kind === "terrain-motion") return "Terrain or movement matches";
+      if (condition.when?.kind === "actor-facts") return actorStateSummary(condition.when.facts);
+      if (condition.when?.kind === "notice-player") return "Notices the player";
+      if (condition.when?.kind === "player-damaged") return "The player takes damage from this Pokémon";
+      if (condition.when?.kind === "subject-damaged") return "This Pokémon takes damage";
       if (condition.when?.kind === "target-cannot-see-subject") return "Target cannot see this Pokémon";
       return condition.target?.kind === "actor" ? "Notices another Pokémon" : "Notices the player";
     };
     const timingNote = (activation) => {
+      if (activation.mode === "until-crash") return "The profile stays on until this Pokémon crashes. After the cooldown, the trigger must become false and then true before it starts again.";
       if (activation.mode !== "timed") return "The profile stops as soon as the trigger is no longer true.";
       const duration = Number(activation.durationFrames || 0);
       const cooldown = Number(activation.cooldownFrames || 0);
@@ -4716,6 +5193,11 @@ export function createProfilesController({
       const activation = condition.activation || { mode: "while-true" };
       const target = condition.target || { kind: "none" };
       const terrain = when.kind === "terrain-motion";
+      const actorFacts = when.kind === "actor-facts";
+      const playerDamaged = when.kind === "player-damaged";
+      const subjectDamaged = when.kind === "subject-damaged";
+      const boundDistance = when.kind === "bound-target-distance";
+      const targetless = terrain || target.kind === "none";
       const usesVision = visionCondition(condition);
       const visionMode = conditionVisionMode(condition, catalog?.catalogVersion);
       const actorTarget = target.kind === "actor";
@@ -4728,7 +5210,7 @@ export function createProfilesController({
       const technicalSectionId = `condition-technical:${profileKey(profile)}:${condition.id}`;
       const expanded = ui.openSections.has(sectionId);
       return `<li class="pv2-conditional-state-card" data-condition-card="${escapeHtml(condition.id)}"><details data-section-id="${escapeHtml(sectionId)}" ${expanded ? "open" : ""}>
-        <summary><span class="pv2-condition-priority">${displayIndex + 1}</span><span><strong>${escapeHtml(`${subjectSummary(condition)} · ${triggerSummary(condition)}`)}</strong><small>${displayIndex === 0 ? "Highest priority" : `Priority ${displayIndex + 1}`} · ${activation.mode === "timed" ? `Active for ${activation.durationFrames ?? 60} frames` : "Active while true"}</small></span><span class="pv2-condition-expand" aria-hidden="true">⌄</span></summary>
+        <summary><span class="pv2-condition-priority">${displayIndex + 1}</span><span><strong>${escapeHtml(`${subjectSummary(condition)} · ${triggerSummary(condition)}`)}</strong><small>${displayIndex === 0 ? "Highest priority" : `Priority ${displayIndex + 1}`} · ${activation.mode === "timed" ? `Active for ${activation.durationFrames ?? 60} frames` : activation.mode === "until-crash" ? "Active until Crash" : "Active while true"}</small></span><span class="pv2-condition-expand" aria-hidden="true">⌄</span></summary>
         <div class="pv2-condition-card-body"><span class="pv2-condition-actions">
           <button type="button" data-action="raise-condition-priority" data-condition-id="${escapeHtml(condition.id)}" aria-label="Move ${escapeHtml(subjectSummary(condition))} to a higher priority" ${sourceIndex + 1 < conditions.length ? "" : "disabled"}>Higher</button>
           <button type="button" data-action="lower-condition-priority" data-condition-id="${escapeHtml(condition.id)}" aria-label="Move ${escapeHtml(subjectSummary(condition))} to a lower priority" ${sourceIndex > 0 ? "" : "disabled"}>Lower</button>
@@ -4746,10 +5228,11 @@ export function createProfilesController({
             ${subjectMode === "pool" ? "" : `<details class="pv2-condition-subdetails pv2-condition-wide" data-section-id="${escapeHtml(filterSectionId)}" ${ui.openSections.has(filterSectionId) ? "open" : ""}><summary>Optional Pokémon filters</summary>${matchInputs(condition, subjects.match)}</details>`}`}
         </div></section>
         <section class="pv2-condition-group"><header><span><strong>Trigger</strong><small>What must happen before this profile becomes active.</small></span></header><div class="pv2-condition-grid">
-          <label><span>Starts when</span><select class="field-control" data-condition-field="when.kind" data-condition-id="${escapeHtml(condition.id)}"><option value="notice-target" ${when.kind === "notice-target" ? "selected" : ""}>This Pokémon sees a target</option><option value="target-cannot-see-subject" ${when.kind === "target-cannot-see-subject" ? "selected" : ""}>The target cannot see this Pokémon</option><option value="terrain-motion" ${terrain ? "selected" : ""}>Terrain or movement matches</option></select></label>
+          <label><span>Starts when</span><select class="field-control" data-condition-field="when.kind" data-condition-id="${escapeHtml(condition.id)}"><option value="notice-target" ${when.kind === "notice-target" ? "selected" : ""}>This Pokémon sees a target</option><option value="notice-player" ${when.kind === "notice-player" ? "selected" : ""}>This Pokémon sees the player</option><option value="target-cannot-see-subject" ${when.kind === "target-cannot-see-subject" ? "selected" : ""}>The target cannot see this Pokémon</option><option value="actor-facts" ${actorFacts ? "selected" : ""}>${escapeHtml(actorFacts ? actorStateSummary(when.facts) : "This Pokémon's state")}</option><option value="player-damaged" ${playerDamaged ? "selected" : ""}>The player takes damage</option><option value="subject-damaged" ${subjectDamaged ? "selected" : ""}>This Pokémon takes damage</option><option value="bound-target-distance" ${boundDistance ? "selected" : ""}>Object of interest is within a distance</option><option value="terrain-motion" ${terrain ? "selected" : ""}>Terrain or movement matches</option></select></label>
+          ${boundDistance ? `<label><span>Minimum distance</span><input class="field-control" type="number" min="0" max="32" data-condition-field="when.minTiles" data-condition-id="${escapeHtml(condition.id)}" value="${when.minTiles}"><small>tiles</small></label><label><span>Maximum distance</span><input class="field-control" type="number" min="1" max="32" data-condition-field="when.maxTiles" data-condition-id="${escapeHtml(condition.id)}" value="${when.maxTiles}"><small>tiles; 1 includes the same tile and all eight neighbors</small></label>` : ""}
           ${terrain ? `
             <label class="pv2-condition-toggle pv2-condition-wide"><input type="checkbox" data-condition-toggle="terrain" data-condition-id="${escapeHtml(condition.id)}" ${terrainEnabled ? "checked" : ""}><span><strong>Limit by terrain</strong><small>Choose which terrain types pass or fail this rule.</small></span></label>
-            ${terrainEnabled ? `<div class="pv2-condition-wide"><span class="pv2-terrain-policy" role="group" aria-label="Rule terrain checks">${allowedTerrainCatalog().map((terrainItem) => {
+            ${terrainEnabled ? `<div class="pv2-condition-wide"><span class="pv2-terrain-policy" role="group" aria-label="Rule terrain checks">${allowedTerrainCatalog().filter((terrainItem) => terrainItem.key !== "water-surface").map((terrainItem) => {
               const bit = Number(terrainItem.bit);
               const terrainState = terrainPolicyState(terrainValueMask, terrainExplicitMask, bit);
               const nextState = nextTerrainPolicyState(terrainState);
@@ -4759,26 +5242,53 @@ export function createProfilesController({
             }).join("")}</span><p class="pv2-condition-key"><span><i class="is-on"></i>Passes</span><span><i class="is-off"></i>Blocked</span><span><i class="is-inherit"></i>Not checked</span></p></div>` : ""}
             ${terrainEnabled && speedEnabled ? `<p class="pv2-condition-and pv2-condition-wide">AND</p>` : ""}
             <label class="pv2-condition-toggle pv2-condition-wide"><input type="checkbox" data-condition-toggle="speed" data-condition-id="${escapeHtml(condition.id)}" ${speedEnabled ? "checked" : ""}><span><strong>Limit by movement speed</strong><small>Use Walk time: fewer frames means faster movement.</small></span></label>
-            ${speedEnabled ? `<label><span>Fastest allowed Walk time</span><input class="field-control" type="number" min="0" max="32" data-condition-field="when.minMovementSpeed" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(when.minMovementSpeed ?? 0))}"></label><label><span>Slowest allowed Walk time</span><input class="field-control" type="number" min="0" max="32" data-condition-field="when.maxMovementSpeed" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(when.maxMovementSpeed ?? 0))}"></label>` : ""}` : `<label><span>Trigger chance</span><input class="field-control" type="number" min="0" max="100" data-condition-field="when.chancePercent" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(when.chancePercent ?? 100))}"><small>percent</small></label>`}
+            ${speedEnabled ? `<label><span>Fastest allowed Walk time</span><input class="field-control" type="number" min="0" max="32" data-condition-field="when.minMovementSpeed" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(when.minMovementSpeed ?? 0))}"></label><label><span>Slowest allowed Walk time</span><input class="field-control" type="number" min="0" max="32" data-condition-field="when.maxMovementSpeed" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(when.maxMovementSpeed ?? 0))}"></label>` : ""}` : usesVision ? `<label><span>Trigger chance</span><input class="field-control" type="number" min="0" max="100" data-condition-field="when.chancePercent" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(when.chancePercent ?? 100))}"><small>percent</small></label>` : ""}
         </div></section>
+        ${["notice-target", "notice-player", "actor-facts", "player-damaged", "subject-damaged"].includes(when.kind) ? `<section class="pv2-condition-group"><header><span><strong>This Pokémon's state</strong><small>Choose which states must be true or false.</small></span></header><div class="pv2-condition-grid">${ACTOR_FACTS.map((fact) => {
+          const value = (when.facts?.all || []).includes(fact.key) ? "all" : ((when.facts?.none || []).includes(fact.key) ? "none" : "off");
+          return `<label><span>${escapeHtml(fact.label)}</span><select class="field-control" data-condition-fact="${escapeHtml(fact.key)}" data-condition-id="${escapeHtml(condition.id)}"><option value="off" ${value === "off" ? "selected" : ""}>Not checked</option><option value="all" ${value === "all" ? "selected" : ""}>Required</option><option value="none" ${value === "none" ? "selected" : ""}>Excluded</option></select></label>`;
+        }).join("")}</div></section>` : ""}
         ${usesVision ? `<section class="pv2-condition-group pv2-condition-vision"><header><span><strong>Vision</strong><small>Use this Pokémon's current Vision or a custom value for this rule.</small></span></header><div class="pv2-condition-grid">
           <label><span>Vision source</span><select class="field-control" data-condition-field="when.visionMode" data-condition-id="${escapeHtml(condition.id)}"><option value="current" ${visionMode === "current" ? "selected" : ""}>Use current Vision</option><option value="custom" ${visionMode === "custom" ? "selected" : ""}>Use custom Vision</option></select></label>
-          ${visionMode === "custom" ? `<label><span>Range</span><input class="field-control" type="number" min="1" max="32" data-condition-field="${catalog?.catalogVersion === 5 ? "when.vision.range" : "when.rangeLength"}" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(conditionVisionRange(condition, catalog?.catalogVersion) ?? 3))}"><small>tiles</small></label><label><span>Cone</span><input class="field-control" value="90° forward cone" disabled></label><label class="pv2-condition-toggle"><input type="checkbox" data-condition-vision-adjacent data-condition-id="${escapeHtml(condition.id)}" ${conditionVisionHasAdjacentAwareness(condition, catalog?.catalogVersion) ? "checked" : ""}><span><strong>Adjacent awareness</strong><small>Always notice a target on a neighboring tile.</small></span></label>` : `<p class="pv2-condition-wide pv2-condition-timing-note">The rule reads the Vision resolved by the Pokémon's normal profiles.</p>`}
+          ${visionMode === "custom" ? `<label><span>Range</span><input class="field-control" type="number" min="1" max="32" data-condition-field="${catalog?.catalogVersion === 5 ? "when.vision.range" : "when.rangeLength"}" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(conditionVisionRange(condition, catalog?.catalogVersion) ?? 3))}"><small>tiles</small></label><label><span>Sight shape</span><select class="field-control" data-condition-field="when.vision.cone" data-condition-id="${escapeHtml(condition.id)}"><option value="forward-90" ${(when.vision?.cone ?? "forward-90") === "forward-90" ? "selected" : ""}>Forward cone</option><option value="forward-line" ${when.vision?.cone === "forward-line" ? "selected" : ""}>Straight line ahead</option><option value="cardinal-lines" ${when.vision?.cone === "cardinal-lines" ? "selected" : ""}>Four straight lines</option></select></label><label class="pv2-condition-toggle"><input type="checkbox" data-condition-vision-adjacent data-condition-id="${escapeHtml(condition.id)}" ${conditionVisionHasAdjacentAwareness(condition, catalog?.catalogVersion) ? "checked" : ""}><span><strong>Adjacent awareness</strong><small>Always notice a target on a neighboring tile.</small></span></label><label class="pv2-condition-toggle"><input type="checkbox" data-condition-vision-same-tile data-condition-id="${escapeHtml(condition.id)}" ${conditionVisionHasSameTileAwareness(condition, catalog?.catalogVersion) ? "checked" : ""}><span><strong>Same tile awareness</strong><small>Always notice a target on the same tile.</small></span></label>` : `<p class="pv2-condition-wide pv2-condition-timing-note">The rule reads the Vision resolved by the Pokémon's normal profiles.</p>`}
         </div></section>` : ""}
         <section class="pv2-condition-group"><header><span><strong>Activation</strong><small>What happens after the trigger starts this rule.</small></span></header><div class="pv2-condition-grid">
-          <label><span>Stay active</span><select class="field-control" data-condition-field="activation.mode" data-condition-id="${escapeHtml(condition.id)}"><option value="while-true" ${activation.mode === "while-true" ? "selected" : ""}>Only while the trigger is true</option><option value="timed" ${activation.mode === "timed" ? "selected" : ""}>For a set time</option></select></label>
+          <label><span>Stay active</span><select class="field-control" data-condition-field="activation.mode" data-condition-id="${escapeHtml(condition.id)}"><option value="while-true" ${activation.mode === "while-true" ? "selected" : ""}>Only while the trigger is true</option><option value="timed" ${activation.mode === "timed" ? "selected" : ""}>For a set time</option><option value="until-crash" ${activation.mode === "until-crash" ? "selected" : ""}>Until this Pokémon crashes</option></select></label>
           ${activation.mode === "timed" ? `<label><span>Active for</span><input class="field-control" type="number" min="1" max="65535" data-condition-field="activation.durationFrames" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(activation.durationFrames ?? 60))}"><small>${escapeHtml(frameHelp(activation.durationFrames ?? 60))}</small></label><label><span>Can trigger again after</span><input class="field-control" type="number" min="0" max="65535" data-condition-field="activation.cooldownFrames" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(activation.cooldownFrames ?? 0))}"><small>${escapeHtml(frameHelp(activation.cooldownFrames ?? 0))}</small></label>` : ""}
+          ${activation.mode === "until-crash" ? `<label><span>Cooldown after Crash</span><input class="field-control" type="number" min="0" max="65535" data-condition-field="activation.cooldownFrames" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(activation.cooldownFrames ?? 0))}"><small>${escapeHtml(frameHelp(activation.cooldownFrames ?? 0))}</small></label>` : ""}
           <p class="pv2-condition-timing-note pv2-condition-wide">${escapeHtml(timingNote(activation))}</p>
         </div></section>
         <section class="pv2-condition-group"><header><span><strong>Target</strong><small>The one actor captured when this rule triggers.</small></span></header><div class="pv2-condition-grid">
-          ${terrain ? `<p class="pv2-condition-wide">This trigger does not capture a target.</p>` : `<label><span>Capture</span><select class="field-control" data-condition-field="target.kind" data-condition-id="${escapeHtml(condition.id)}"><option value="player" ${target.kind === "player" ? "selected" : ""}>The player</option><option value="actor" ${target.kind === "actor" ? "selected" : ""}>One compatible Pokémon</option></select></label>${actorTarget ? `<fieldset class="pv2-condition-wide"><legend>Compatible actor</legend><label><input type="checkbox" data-condition-role="wild" data-condition-id="${escapeHtml(condition.id)}" ${(target.roles || []).includes("wild") ? "checked" : ""}> Wild Pokémon</label><label><input type="checkbox" data-condition-role="follower" data-condition-id="${escapeHtml(condition.id)}" ${(target.roles || []).includes("follower") ? "checked" : ""}> Follower</label>${renderPoolControl(target.pool ? { pool: target.pool } : null, "target", condition.id)}${target.pool ? "" : `<label><span>Group filter</span><input class="field-control" data-condition-field="target.groupMask" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(target.groupMask ?? "OW_WILD_BEHAVIOR_GROUP_NONE"))}"></label>${pokemonPicker(condition, "target", target.members)}`}</fieldset>` : ""}`}
+          ${terrain ? `<p class="pv2-condition-wide">This trigger does not capture a target.</p>` : `<label><span>Capture</span><select class="field-control" data-condition-field="target.kind" data-condition-id="${escapeHtml(condition.id)}">${subjectDamaged ? `<option value="none" ${target.kind === "none" ? "selected" : ""}>No target</option><option value="player" ${target.kind === "player" ? "selected" : ""}>The player</option>` : `${playerDamaged ? "" : actorFacts ? `<option value="none" ${target.kind === "none" ? "selected" : ""}>No target</option>` : `<option value="player" ${target.kind === "player" ? "selected" : ""}>The player</option>`}<option value="actor" ${target.kind === "actor" ? "selected" : ""}>${playerDamaged ? "The Pokémon that hit the player" : "One compatible Pokémon"}</option>`}</select></label>${actorTarget ? `<fieldset class="pv2-condition-wide"><legend>Compatible actor</legend><label><input type="checkbox" data-condition-role="wild" data-condition-id="${escapeHtml(condition.id)}" ${(target.roles || []).includes("wild") ? "checked" : ""}> Wild Pokémon</label><label><input type="checkbox" data-condition-role="follower" data-condition-id="${escapeHtml(condition.id)}" ${(target.roles || []).includes("follower") ? "checked" : ""}> Follower</label>${renderPoolControl(target.pool ? { pool: target.pool } : null, "target", condition.id)}${target.pool ? "" : `<label><span>Group filter</span><input class="field-control" data-condition-field="target.groupMask" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(target.groupMask ?? "OW_WILD_BEHAVIOR_GROUP_NONE"))}"></label>${pokemonPicker(condition, "target", target.members)}`}</fieldset>` : ""}`}
         </div></section>
+        <section class="pv2-condition-group"><header><span><strong>Subject roles</strong><small>No checked role means all roles. Each checked role can use this rule.</small></span></header><div class="pv2-condition-grid">${["wild", "follower", "mounted"].map((role) => `<label><input type="checkbox" data-condition-subject-role="${role}" data-condition-id="${escapeHtml(condition.id)}" ${(condition.subjectRoles || []).includes(role) ? "checked" : ""}> ${escapeHtml(role === "wild" ? "Wild Pokémon" : role === "follower" ? "Follower" : "Mounted Pokémon")}</label>`).join("")}</div></section>
+        <section class="pv2-condition-group"><header><span><strong>Target bindings</strong><small>Save the identity from this rule. Later steps can use its current position.</small></span></header><div class="pv2-condition-grid">
+          <label><span>Save target as</span><select class="field-control" data-condition-field="binding.name" data-condition-id="${escapeHtml(condition.id)}"><option value="" ${!condition.binding ? "selected" : ""}>Do not save</option><option value="trigger" ${condition.binding?.name === "trigger" ? "selected" : ""}>Object of interest</option><option value="cargo" ${condition.binding?.name === "cargo" ? "selected" : ""}>Cargo</option></select></label>
+          ${condition.binding ? `<label><span>Keep binding</span><select class="field-control" data-condition-field="binding.lifetime" data-condition-id="${escapeHtml(condition.id)}"><option value="until-clear" ${condition.binding.lifetime === "until-clear" ? "selected" : ""}>Until clear</option><option value="frames" ${condition.binding.lifetime === "frames" ? "selected" : ""}>For a set time</option></select></label>${condition.binding.lifetime === "frames" ? `<label><span>Binding life</span><input class="field-control" type="number" min="1" max="65535" data-condition-field="binding.durationFrames" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(condition.binding.durationFrames))}"><small>frames</small></label>` : ""}<label class="pv2-condition-toggle"><input type="checkbox" data-condition-advanced="binding.contributeProfile" data-condition-id="${escapeHtml(condition.id)}" ${condition.binding.contributeProfile ? "checked" : ""}><span><strong>Also apply this profile</strong><small>Unchecked saves the binding only.</small></span></label>` : ""}
+          <label><span>Requires applied profile</span><select class="field-control" data-condition-field="requiresAppliedProfile" data-condition-id="${escapeHtml(condition.id)}"><option value="" ${!condition.requiresAppliedProfile ? "selected" : ""}>No profile needed</option>${catalog.applications.slice(0, catalog.applications.findIndex(a => a.id === profile.catalogApplicationId)).filter(a => a.enabled !== false && catalog.profiles.find(p => p.id === a.profile)?.kind === "conditional").map(a => `<option value="${escapeHtml(a.profile)}" ${condition.requiresAppliedProfile === a.profile ? "selected" : ""}>${escapeHtml(catalog.profiles.find(p => p.id === a.profile)?.name || a.profile)}</option>`).join("")}</select><small>AND: this earlier profile must be active in the same update.</small></label>
+          <label><span>Requires binding</span><select class="field-control" data-condition-field="usesBinding" data-condition-id="${escapeHtml(condition.id)}"><option value="" ${!condition.usesBinding ? "selected" : ""}>No binding needed</option><option value="trigger" ${condition.usesBinding === "trigger" ? "selected" : ""}>Valid Object of interest</option><option value="cargo" ${condition.usesBinding === "cargo" ? "selected" : ""}>Valid Cargo</option><option value="object-of-interest-itself" ${condition.usesBinding === "object-of-interest-itself" ? "selected" : ""}>Object of interest itself</option></select><small>Valid Object of interest is a prerequisite. Object of interest itself picks up that exact Pokémon. Cargo uses its saved actor.</small></label>
+        </div></section>
+        ${actorTarget ? `<section class="pv2-condition-group"><header><span><strong>Pickup reach</strong><small>Search range and physical pickup reach are separate.</small></span></header><div class="pv2-condition-grid"><label class="pv2-condition-toggle"><input type="checkbox" data-condition-advanced="target.mustBeReachableForPickup" data-condition-id="${escapeHtml(condition.id)}" ${target.mustBeReachableForPickup ? "checked" : ""}><span><strong>Must be reachable for pickup</strong><small>Require a legal pickup point and route.</small></span></label>${target.pickupReach ? `<label><span>Pickup distance</span><input class="field-control" type="number" min="1" max="8" data-condition-field="target.pickupReach.tiles" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(target.pickupReach.tiles))}"><small>tiles</small></label><label><span>Pickup height</span><input class="field-control" type="number" min="0" max="64" data-condition-field="target.pickupReach.heightUnits" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(target.pickupReach.heightUnits))}"><small>world units; one tile is 16 units</small></label>` : ""}</div></section>` : ""}
+        <section class="pv2-condition-group"><header><span><strong>Target loss or failed action</strong><small>Use the current shared drop and cleanup action.</small></span></header><div class="pv2-condition-grid"><label><span>Response</span><select class="field-control" data-condition-field="failure.response" data-condition-id="${escapeHtml(condition.id)}"><option value="" ${!condition.failure ? "selected" : ""}>No response set</option><option value="drop-and-clear" ${condition.failure?.response === "drop-and-clear" ? "selected" : ""}>Drop safely and clear bindings</option></select></label>${condition.failure ? `<label><span>Retry after</span><input class="field-control" type="number" min="0" max="255" data-condition-field="failure.retryFrames" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(String(condition.failure.retryFrames))}"><small>frames</small></label>` : ""}</div></section>
         <details class="pv2-condition-technical" data-section-id="${escapeHtml(technicalSectionId)}" ${ui.openSections.has(technicalSectionId) ? "open" : ""}><summary>Technical values</summary><label><span>Rule ID</span><input class="field-control" data-condition-field="id" data-condition-id="${escapeHtml(condition.id)}" value="${escapeHtml(condition.id)}" pattern="[a-z][a-z0-9]*(?:-[a-z0-9]+)*"><small>Used by generated data. Lowercase words joined with hyphens.</small></label></details>
-        <p class="pv2-condition-result-note"><strong>Result:</strong> When this rule is active, <strong>${escapeHtml(nameFor(profile))}</strong> applies to ${escapeHtml(subjectSummary(condition).toLowerCase())}${terrain ? "." : ` and uses ${target.kind === "actor" ? "the noticed Pokémon" : "the player"} as its target.`}</p>
+        <p class="pv2-condition-result-note"><strong>Result:</strong> When this rule is active, <strong>${escapeHtml(nameFor(profile))}</strong> applies to ${escapeHtml(subjectSummary(condition).toLowerCase())}${targetless ? "." : ` and uses ${target.kind === "actor" ? "the selected Pokémon" : "the player"} as its target.`}</p>
         </div></details></li>`;
     }).join("");
     return `<div class="pv2-state-profile-link pv2-condition-profile-link" data-profile-key="${escapeHtml(profileKey(profile))}">
       ${activationChoice}
+      ${conditional ? `<label class="pv2-condition-toggle"><input type="checkbox" data-profile-cooldown-rest-tint ${profile.catalogShowRestTintDuringCooldown ? "checked" : ""}><span><strong>Show rest tint during cooldown</strong><small>Use the rest color while this profile waits to trigger again.</small></span></label>` : ""}
+      <section class="pv2-condition-group"><header><span><strong>Hop arc</strong><small>Set the shape for this conditional profile. Inherit keeps the last active conditional arc.</small></span></header><div class="pv2-condition-grid">
+        <label><span>Shape</span><select class="field-control" data-profile-hop-arc-shape><option value="inherit" ${!profile.catalogHopArc ? "selected" : ""}>Inherit</option><option value="none" ${profile.catalogHopArc?.shape === "none" ? "selected" : ""}>Normal arc</option><option value="slam" ${profile.catalogHopArc?.shape === "slam" ? "selected" : ""}>Slam</option></select></label>
+        ${profile.catalogHopArc?.shape === "slam" ? [
+          ["riseFrames", "Rise frames", 1], ["hangFrames", "Hang frames", 0],
+          ["dropFrames", "Drop frames", 1], ["peakQ4", "Peak height (Q4)", 1],
+        ].map(([key, label, min]) => `<label><span>${escapeHtml(label)}</span><input class="field-control" type="number" min="${min}" max="255" step="1" data-profile-hop-arc-part="${key}" value="${escapeHtml(String(profile.catalogHopArc[key] ?? ""))}"></label>`).join("") : ""}
+        ${profile.catalogHopArc && hopArcValidationError(profile.catalogHopArc) ? `<p class="pv2-condition-wide" role="alert">${escapeHtml(hopArcValidationError(profile.catalogHopArc))}</p>` : ""}
+      </div></section>
+      <section class="pv2-condition-group"><header><span><strong>On activation</strong><small>Show this emote when the profile starts.</small></span></header><div class="pv2-condition-grid">
+        ${renderFieldControl(profile, "alertEmote", { instance: "conditions:activation:emote", label: "Emote" })}
+        ${renderFieldControl(profile, "alertTime", { instance: "conditions:activation:time", label: "Emote time" })}
+      </div></section>
       <section class="pv2-condition-rules"><header><span><strong>Activation rules</strong><small>Rules are independent. They do not stack. If more than one rule is active, the highest rule wins.</small></span><button type="button" data-action="add-condition">Add rule</button></header>
         <p class="pv2-condition-priority-note"><strong>Higher rules win.</strong> Use Higher and Lower inside a rule to change its priority.</p>
         <ol class="pv2-condition-list">${cards}</ol>
@@ -5031,7 +5541,7 @@ export function createProfilesController({
           }
           const bounds = numericOverrideOperandBounds(fieldKey, options, operation.kind);
           if (!Number.isInteger(operation.operand) || operation.operand < bounds.min || operation.operand > bounds.max) {
-            errors.push(`${nameFor(profile)} — ${fieldLabelForProfile(profile, fieldKey)} ${operation.kind === "adjust" ? "adjustment" : "bound"} must be between ${bounds.min} and ${bounds.max}`);
+            errors.push(`${nameFor(profile)} — ${fieldLabelForProfile(profile, fieldKey)} ${operation.kind === "adjust" ? "adjustment" : (operation.kind === "divide" ? "divisor" : "bound")} must be between ${bounds.min} and ${bounds.max}`);
             break;
           }
         }
@@ -5044,7 +5554,6 @@ export function createProfilesController({
     const seenNames = new Map();
     const activeOverrides = overrideProfiles().filter((profile) => !drafts.removedOverrides.has(profileKey(profile)));
     if (!activeOverrides.length) errors.push("Create a replacement before removing the last override profile");
-    if (activeOverrides.length > 32) errors.push("The runtime supports at most 32 ordered override profiles");
     activeOverrides.forEach((profile) => {
       const name = nameFor(profile).trim().toLowerCase();
       const profileIdentity = profile.catalogProfileId || profileKey(profile);
@@ -5303,6 +5812,12 @@ export function createProfilesController({
     return `<label class="pv2-profile-classification-control"><span>Classification</span><select class="field-control" data-profile-classification aria-label="Profile classification">${PROFILE_CLASSIFICATIONS.map((item) => `<option value="${escapeHtml(item.value)}" ${item.value === value ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("")}</select><small>Sets its order group</small></label>`;
   }
 
+  function renderApplicationEnabledControl(profile) {
+    if (!isOverrideProfile(profile) || !profile.catalogApplicationId) return "";
+    const lock = profile.catalogEnableLock || "";
+    return `<label class="pv2-profile-classification-control"><span>Enabled</span><input type="checkbox" data-profile-application-enabled aria-label="Application Enabled" ${profile.catalogEnabled === false ? "" : "checked"} ${lock ? "disabled" : ""}><small>${escapeHtml(lock || "Keeps settings when off")}</small></label>`;
+  }
+
   function renderEditor() {
     // Any editor rerender discards transient, invalid number text. Valid values
     // have already been copied into the draft by the input handler.
@@ -5333,7 +5848,7 @@ export function createProfilesController({
           <div class="pv2-editor-title-copy"><p class="eyebrow">${override ? "Ordered override" : "Base profile"}</p><h2>${escapeHtml(nameFor(profile))}</h2><p>${escapeHtml(profile.symbol || "New unsaved override")}</p></div>
           ${headerIcons}
         </div>
-        <div class="inspector-actions pv2-editor-actions">${renderProfileClassificationControl(profile)}${override ? `<span class="pv2-profile-activation-summary">${profile.catalogKind === "conditional" ? `${(profile.catalogConditions || []).length} activation rule${(profile.catalogConditions || []).length === 1 ? "" : "s"}` : "Always applies"}</span>` : ""}${actions}</div>
+        <div class="inspector-actions pv2-editor-actions">${renderApplicationEnabledControl(profile)}${renderProfileClassificationControl(profile)}${override ? `<span class="pv2-profile-activation-summary">${profile.catalogEnabled === false ? "Disabled" : profile.catalogKind === "conditional" ? `${(profile.catalogConditions || []).length} activation rule${(profile.catalogConditions || []).length === 1 ? "" : "s"}` : "Always applies"}</span>` : ""}${actions}</div>
       </header>
       ${renderResolvedContextIndicator()}
       ${removed ? `<div class="removal-note pv2-removal-note"><strong>Marked for removal.</strong><span>This profile remains visible until the transaction commits.</span></div>` : ""}
@@ -5341,7 +5856,7 @@ export function createProfilesController({
         <header><div><p class="eyebrow pv2-eyebrow">Focused field editor</p><h3 id="pv2-fields-title">${override ? "Overridden values" : "Profile values"}</h3></div><span>${data.fields.length} available fields</span></header>
         ${renderFieldSections(profile)}
       </section>`;
-    editorElement.querySelectorAll("[data-direction-mixed]").forEach((input) => {
+    editorElement.querySelectorAll("[data-direction-mixed], [data-return-mixed]").forEach((input) => {
       input.indeterminate = true;
     });
   }
@@ -5385,6 +5900,7 @@ export function createProfilesController({
       <div class="resolution-result">
         <header class="resolution-summary"><div><small>Resolved subject</small><strong>${escapeHtml(result.context?.species?.name || ui.context.species)} · Lv ${escapeHtml(result.context?.level || ui.context.level)}</strong></div><span class="result-chip">${matchedOverrideIndexes.length} matched</span></header>
         ${evaluation ? `<section><h3>Condition evaluation</h3><div class="pv2-condition-result"><p><strong>${activeEntries.length} active</strong><small>Entries are independent. The last active entry inside one profile wins.</small></p><dl><div><dt>Final winning condition</dt><dd>${escapeHtml(winner ? `${winner.profileId} / ${winner.applicationId} / ${winner.conditionId}` : "None")}</dd></div><div><dt>Target source</dt><dd>${escapeHtml(targetSource ? `${targetSource.profileId} / ${targetSource.applicationId} / ${targetSource.conditionId} · ${targetSource.target?.kind || "none"}${targetSource.target?.candidateId ? `:${targetSource.target.candidateId}` : ""}` : "None")}</dd></div></dl><ol>${(evaluation.entries || []).map((entry) => `<li class="${entry.active ? "is-active" : ""}"><span>${escapeHtml(`${entry.applicationId} · ${entry.conditionId}`)}</span><small>${entry.subjectMatched ? (entry.conditionTrue ? "true" : "false") : "subject skipped"}</small><em>${entry.winsProfile ? "profile winner" : (entry.active ? "active" : "inactive")}</em></li>`).join("") || `<li>No conditional entries.</li>`}</ol></div></section>` : ""}
+        ${renderConditionBindingSummary(evaluation?.bindings)}
         <section><h3>Applied layer order</h3><ol class="resolution-layers">${appliedLayers.map(renderLayer).join("")}</ol>
           ${skippedLayers.length ? `<details class="pv2-skipped-layers"><summary>Skipped layers <small>${skippedLayers.length}</small></summary><ol class="resolution-layers">${skippedLayers.map(renderLayer).join("")}</ol></details>` : ""}
         </section>
@@ -5433,6 +5949,12 @@ export function createProfilesController({
     elements.profileContextActiveUntil.value = preview.activeUntil;
     elements.profileContextCooldownUntil.value = preview.cooldownUntil;
     elements.profileContextCandidates.value = preview.candidates;
+    let advanced = root.querySelector("[data-condition-preview-advanced]");
+    if (!advanced) {
+      elements.profileContextCandidates.parentElement.insertAdjacentHTML("afterend", `<div class="pv2-condition-grid" data-condition-preview-advanced><label><span>Subject role</span><select class="field-control" data-condition-preview-value="role"><option value="wild">Wild Pokémon</option><option value="follower">Follower</option><option value="mounted">Mounted Pokémon</option></select></label><label><span>Actor facts</span><input class="field-control" data-condition-preview-value="actorFacts" placeholder="held, trigger-valid"><small>Comma-separated state names.</small></label><label><span>Reachable pickup actors</span><input class="field-control" data-condition-preview-value="pickupEligible" placeholder="candidate-1"><small>Candidate IDs which pass pickup reach.</small></label><label><span>Incoming pickup claimants</span><input class="field-control" data-condition-preview-value="incomingClaimants" placeholder="candidate-2"><small>Candidate IDs with a claim on this subject.</small></label></div>`);
+      advanced = root.querySelector("[data-condition-preview-advanced]");
+    }
+    advanced?.querySelectorAll("[data-condition-preview-value]").forEach((control) => { control.value = preview[control.dataset.conditionPreviewValue] || ""; });
     elements.resolveContext.disabled = ui.contextBusy || !ui.context.species || !ui.context.terrain;
   }
 
@@ -5736,6 +6258,7 @@ export function createProfilesController({
           catalogKind: source?.catalogKind === "conditional" ? "conditional" : "normal",
           catalogClassification: classification,
           conditions: cloneDraftJson(source?.catalogConditions || []),
+          ...(source?.catalogKind === "conditional" ? { showRestTintDuringCooldown: source.catalogShowRestTintDuringCooldown === true, ...(source.catalogHopArc ? { hopArc: cloneDraftJson(source.catalogHopArc) } : {}) } : {}),
           fields: source ? Object.fromEntries(data.fields.map((field) => [
             field.key,
             storedFieldDraftRaw(fieldRaw(source, field.key), field.key),
@@ -5879,8 +6402,8 @@ export function createProfilesController({
       const candidates = String(preview.candidates || "").split("\n").map((line, index) => {
         const parts = line.split(",").map((part) => part.trim());
         if (parts.length === 1 && !parts[0]) return null;
-        if (parts.length < 5 || !["wild", "follower"].includes(parts[2])) {
-          throw new TypeError(`Candidate line ${index + 1} must be: ID, species, wild or follower, X, Y.`);
+        if (parts.length < 5 || !["wild", "follower", "mounted"].includes(parts[2])) {
+          throw new TypeError(`Candidate line ${index + 1} must be: ID, species, wild, follower or mounted, X, Y.`);
         }
         return { id: parts[0], species: parts[1], role: parts[2], x: Number(parts[3]), y: Number(parts[4]), valid: true };
       }).filter(Boolean);
@@ -5903,7 +6426,7 @@ export function createProfilesController({
           terrain: ui.context.terrain,
           level: Number(ui.context.level),
           shiny: ui.context.shiny,
-          behaviorClass: "auto",
+          behaviorClass: "auto", role: preview.role,
         },
         observation: {
           frame,
@@ -5912,10 +6435,15 @@ export function createProfilesController({
           facing: Number(preview.facing),
           terrainMask: Number(preview.terrainMask),
           movementSpeed: Number(preview.movementSpeed),
+          actorFacts: conditionMemberList(preview.actorFacts),
+          pickupEligible: conditionMemberList(preview.pickupEligible),
+          incomingClaimants: conditionMemberList(preview.incomingClaimants),
           player: { valid: preview.playerValid, x: Number(preview.playerX), y: Number(preview.playerY) },
         },
         candidates,
         conditionState: preview.nextState.length ? preview.nextState : seedState,
+        bindings: preview.nextBindings,
+        ...(preview.nextBindingOwner ? { bindingOwner: preview.nextBindingOwner } : {}),
         chanceSeed: frame,
       };
       ui.contextResult = typeof api.resolveConditions === "function"
@@ -5923,6 +6451,8 @@ export function createProfilesController({
         : await apiPost("/api/v2/resolve", payload, { cache: "no-store", signal: requestController.signal });
       if (contextAbortController !== requestController) return;
       ui.conditionPreview.nextState = cloneDraftJson(ui.contextResult.conditionEvaluation?.nextState || []);
+      ui.conditionPreview.nextBindings = cloneDraftJson(ui.contextResult.conditionEvaluation?.bindings || {});
+      ui.conditionPreview.nextBindingOwner = cloneDraftJson(ui.contextResult.conditionEvaluation?.bindingOwner || null);
       state.profileConditionPreview = cloneDraftJson(ui.conditionPreview);
       ui.contextError = "";
       renderEditor();
@@ -6062,6 +6592,11 @@ export function createProfilesController({
       renderEditor(); renderList(); signalDirty();
       announce("Walk options will inherit after saving.");
     }
+    else if (action === "inherit-return-after-move" && profile) {
+      setField(profile, "returnAfterMove", "");
+      renderEditor(); renderList(); signalDirty();
+      announce("Return after each move will inherit after saving.");
+    }
     else if (action === "set-terrain-policy" && profile) {
       const policyId = target.dataset.terrainPolicy;
       const bit = Number(target.dataset.terrainBit);
@@ -6186,12 +6721,12 @@ export function createProfilesController({
       for (const operation of operator.operations) {
         if (!numericOverrideAllowed(profile, fieldKey, operation.kind, permissions)) {
           return fail(permissions.adjust
-            ? "Use +N or -N for this field; bound formulas are unavailable."
+            ? "Use +N, -N or /N for this field; bound formulas are unavailable."
             : "Formulas are not available for this value.");
         }
         const bounds = numericOverrideOperandBounds(fieldKey, exactOptions, operation.kind);
         if (!Number.isInteger(operation.operand) || operation.operand < bounds.min || operation.operand > bounds.max) {
-          return fail(`${operation.kind === "adjust" ? "Adjustment" : "Bound"} must be between ${bounds.min} and ${bounds.max}.`);
+          return fail(`${operation.kind === "adjust" ? "Adjustment" : (operation.kind === "divide" ? "Divisor" : "Bound")} must be between ${bounds.min} and ${bounds.max}.`);
         }
       }
       if (operator.kind === "compound") {
@@ -6201,7 +6736,7 @@ export function createProfilesController({
       } else {
         canonical = operator.kind === "adjust"
           ? (operator.operand === 0 ? "" : (operator.operand > 0 ? `+${operator.operand}` : String(operator.operand)))
-          : (operator.kind === "atLeast" ? `/<${operator.operand}` : `/>${operator.operand}`);
+          : (operator.kind === "divide" ? `/${operator.operand}` : (operator.kind === "atLeast" ? `/<${operator.operand}` : `/>${operator.operand}`));
       }
     } else {
       const exact = Number(raw);
@@ -6209,9 +6744,12 @@ export function createProfilesController({
       const optionMinimum = exactNumbers.length ? Math.min(...exactNumbers) : 0;
       const optionMaximum = exactNumbers.length ? Math.max(...exactNumbers) : 64;
       const minimum = Number(data.numericOverrideOperandMinimums?.[fieldKey] ?? optionMinimum);
-      const maximum = Number(data.numericOverrideOperandMaximums?.[fieldKey] ?? optionMaximum);
+      const maximum = walkAccelerationInputMaximum(fieldKey,
+        walkAccelerationMode(fieldRaw(profile, "walkAccelerationStep"),
+          effectiveFieldCandidates(profile, "walkAccelerationStep")),
+        Number(data.numericOverrideOperandMaximums?.[fieldKey] ?? optionMaximum));
       if (!Number.isInteger(exact) || exact < minimum || exact > maximum) {
-        const formulaExamples = [permissions.adjust ? "+2 or -1" : "", permissions.bounds ? "/<2 or />2" : "", permissions.adjust && permissions.bounds ? "+1, /<2" : ""]
+        const formulaExamples = [permissions.adjust ? "+2, -1 or /2" : "", permissions.bounds ? "/<2 or />2" : "", permissions.adjust && permissions.bounds ? "+1, /<2" : ""]
           .filter(Boolean)
           .join(", ");
         return fail(`Value must be a whole number between ${minimum} and ${maximum}${formulaExamples ? `, or a formula such as ${formulaExamples}` : ""}.`);
@@ -6252,9 +6790,12 @@ export function createProfilesController({
     else if (target === elements.profileContextActiveUntil) { ui.conditionPreview.activeUntil = target.value; resetConditionState = true; }
     else if (target === elements.profileContextCooldownUntil) { ui.conditionPreview.cooldownUntil = target.value; resetConditionState = true; }
     else if (target === elements.profileContextCandidates) ui.conditionPreview.candidates = target.value;
-    else return false;
+    else if (target.matches("[data-condition-preview-value]")) {
+      ui.conditionPreview[target.dataset.conditionPreviewValue] = target.value;
+      resetConditionState = target.dataset.conditionPreviewValue === "role";
+    } else return false;
     contextAbortController?.abort();
-    if (resetConditionState) ui.conditionPreview.nextState = [];
+    if (resetConditionState) { ui.conditionPreview.nextState = []; ui.conditionPreview.nextBindings = {}; ui.conditionPreview.nextBindingOwner = null; }
     state.profileConditionPreview = cloneDraftJson(ui.conditionPreview);
     return true;
   }
@@ -6309,9 +6850,47 @@ export function createProfilesController({
 
   function onChange(event) {
     const profile = findProfile();
+    if (event.target.matches("[data-acceleration-mode]")) {
+      const owner = controlProfile(event.target, profile);
+      if (!owner) return;
+      const choice = event.target.value;
+      const current = fieldRaw(owner, "walkAccelerationStep");
+      const key = profileKey(owner);
+      const previousMode = walkAccelerationMode(current, effectiveFieldCandidates(owner, "walkAccelerationStep"));
+      const saved = accelerationModeValues.get(key) || {};
+      if (current && previousMode !== "mixed") saved[previousMode] = {
+        amount: current, interval: fieldRaw(owner, "tilesToAccelerate"),
+      };
+      accelerationModeValues.set(key, saved);
+      if (choice === "linear") {
+        setField(owner, "walkAccelerationStep", LINEAR_SPEED_ACCELERATION);
+        if (previousMode !== "linear") setField(owner, "tilesToAccelerate", saved.linear?.interval || "120");
+      } else if (choice === "legacy") {
+        if (!current || current === LINEAR_SPEED_ACCELERATION) {
+          setField(owner, "walkAccelerationStep", saved.legacy?.amount || "1");
+          setField(owner, "tilesToAccelerate", saved.legacy?.interval || "1");
+        }
+      } else {
+        setField(owner, "walkAccelerationStep", "");
+        setField(owner, "tilesToAccelerate", "");
+      }
+      renderEditor(); renderList(); signalDirty();
+      editorElement.querySelector(`[data-acceleration-mode][data-profile-key="${CSS.escape(profileKey(owner))}"]`)?.focus({ preventScroll: true });
+      return;
+    }
     if (event.target === elements.profileKindFilter) {
       ui.kind = event.target.value;
       renderList();
+      return;
+    }
+    if (event.target.matches("[data-profile-application-enabled]") && profile) {
+      try {
+        mutateCanonicalOverride(profile, (next, application) =>
+          setProfileApplicationEnabled(next, application.id, event.target.checked));
+        renderAll(); signalDirty();
+      } catch (error) {
+        status(error.message, "warning"); renderEditor();
+      }
       return;
     }
     if (event.target.matches("[data-profile-classification]") && profile) {
@@ -6348,6 +6927,41 @@ export function createProfilesController({
       } catch (error) {
         status(error.message, "warning");
         renderEditor();
+      }
+      return;
+    }
+    if (event.target.matches("[data-profile-hop-arc-shape], [data-profile-hop-arc-part]") && profile) {
+      try {
+        mutateCanonicalOverride(profile, (next, application) => {
+          const item = next.profiles.find((candidate) => candidate.id === application.profile);
+          if (item?.kind !== "conditional") throw new TypeError("Only conditional profiles can set a Hop arc.");
+          if (event.target.matches("[data-profile-hop-arc-shape]")) {
+            const shape = event.target.value;
+            if (shape === "inherit") delete item.hopArc;
+            else if (shape === "none") item.hopArc = { shape: "none" };
+            else if (shape === "slam") item.hopArc = { shape: "slam", riseFrames: 12, hangFrames: 4, dropFrames: 4, peakQ4: 24 };
+            else throw new TypeError("Hop arc shape is not supported.");
+          } else {
+            const key = event.target.dataset.profileHopArcPart;
+            if (!["riseFrames", "hangFrames", "dropFrames", "peakQ4"].includes(key) || item.hopArc?.shape !== "slam") {
+              throw new TypeError("Slam Hop arc is not active.");
+            }
+            item.hopArc[key] = event.target.value === "" ? null : Number(event.target.value);
+          }
+        });
+        renderAll(); signalDirty();
+      } catch (error) {
+        status(error.message, "warning"); renderEditor();
+      }
+      return;
+    }
+    if (event.target.matches("[data-profile-cooldown-rest-tint]") && profile) {
+      try {
+        mutateCanonicalOverride(profile, (next, application) =>
+          setConditionalProfileRestTint(next, application.id, event.target.checked));
+        renderAll(); signalDirty();
+      } catch (error) {
+        status(error.message, "warning"); renderEditor();
       }
       return;
     }
@@ -6391,18 +7005,13 @@ export function createProfilesController({
       }
       return;
     }
-    if (event.target.matches("[data-condition-vision-adjacent]") && profile) {
+    if (event.target.matches("[data-condition-vision-adjacent], [data-condition-vision-same-tile]") && profile) {
       try {
         const conditionId = event.target.dataset.conditionId;
+        const key = event.target.matches("[data-condition-vision-same-tile]")
+          ? "sameTileAwareness" : "adjacentAwareness";
         mutateCanonicalCondition(profile, conditionId, (condition, owner, catalog) => {
-          if (catalog.catalogVersion === 5) {
-            if (condition.when?.vision?.mode !== "custom") throw new TypeError("Custom Vision is not active.");
-            condition.when.vision.adjacentAwareness = event.target.checked;
-          } else {
-            let options = Number(condition.when.visionOptions) || 1;
-            options = event.target.checked ? (options | VISION_ADJACENT_BIT) : (options & ~VISION_ADJACENT_BIT);
-            condition.when.visionOptions = options;
-          }
+          setConditionVisionAwareness(condition, key, event.target.checked, catalog.catalogVersion);
         });
         renderAll(); signalDirty();
       } catch (error) {
@@ -6454,6 +7063,35 @@ export function createProfilesController({
       }
       return;
     }
+    if (event.target.matches("[data-condition-fact]") && profile) {
+      try {
+        const conditionId = event.target.dataset.conditionId;
+        const fact = event.target.dataset.conditionFact;
+        if (!ACTOR_FACT_KEYS.has(fact)) throw new TypeError("The actor fact is unavailable.");
+        mutateCanonicalCondition(profile, conditionId, (condition) => {
+          if (!["notice-player", "notice-target", "actor-facts", "player-damaged", "subject-damaged"].includes(condition.when?.kind)) {
+            throw new TypeError("This condition does not use actor facts.");
+          }
+          const all = new Set(condition.when.facts?.all || []);
+          const none = new Set(condition.when.facts?.none || []);
+          all.delete(fact);
+          none.delete(fact);
+          if (event.target.value === "all") all.add(fact);
+          else if (event.target.value === "none") none.add(fact);
+          if (["notice-player", "notice-target", "player-damaged", "subject-damaged"].includes(condition.when.kind) && !all.size && !none.size) {
+            delete condition.when.facts;
+          } else {
+            condition.when.facts = { all: [...all], none: [...none] };
+          }
+        });
+        renderAll(); signalDirty();
+        editorElement.querySelector(`[data-condition-fact="${CSS.escape(fact)}"][data-condition-id="${CSS.escape(conditionId)}"]`)?.focus({ preventScroll: true });
+      } catch (error) {
+        status(error.message, "warning");
+        renderEditor();
+      }
+      return;
+    }
     if (event.target.matches("[data-condition-field]") && profile) {
       try {
         const oldId = event.target.dataset.conditionId;
@@ -6466,6 +7104,21 @@ export function createProfilesController({
         status(error.message, "warning");
         renderEditor();
       }
+      return;
+    }
+    if (event.target.matches("[data-condition-advanced], [data-condition-subject-role]") && profile) {
+      try {
+        mutateCanonicalCondition(profile, event.target.dataset.conditionId, (condition) => {
+          if (event.target.dataset.conditionAdvanced) setAdvancedConditionField(condition, event.target.dataset.conditionAdvanced, event.target.checked);
+          else {
+            const roles = new Set(condition.subjectRoles || []);
+            const role = event.target.dataset.conditionSubjectRole;
+            if (event.target.checked) roles.add(role); else roles.delete(role);
+            if (roles.size) condition.subjectRoles = [...roles]; else delete condition.subjectRoles;
+          }
+        });
+        renderAll(); signalDirty();
+      } catch (error) { status(error.message, "warning"); renderEditor(); }
       return;
     }
     if (event.target.matches("[data-condition-role]") && profile) {
@@ -6543,6 +7196,13 @@ export function createProfilesController({
       setField(owner, fieldKey, movementDirectionRaw(fieldKey, next));
       renderEditor(); renderList(); signalDirty();
       editorElement.querySelector(`[data-movement-direction][data-profile-key="${CSS.escape(profileKey(owner))}"][data-field-key="${CSS.escape(fieldKey)}"][data-movement-direction-kind="${CSS.escape(event.target.dataset.movementDirectionKind)}"]`)?.focus({ preventScroll: true });
+      return;
+    }
+    if (event.target.matches("[data-return-after-move]")) {
+      const owner = controlProfile(event.target, profile);
+      if (!owner) return;
+      setField(owner, "returnAfterMove", event.target.checked ? "1" : "0");
+      renderEditor(); renderList(); signalDirty();
       return;
     }
     if (event.target.matches("[data-walk-option-part]")) {

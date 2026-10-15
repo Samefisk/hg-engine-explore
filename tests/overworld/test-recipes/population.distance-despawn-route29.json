@@ -1,0 +1,504 @@
+{
+  "schemaVersion": 1,
+  "id": "population.distance-despawn-route29",
+  "title": "Unrelated Wild distance removal during a current Cargo claim in Route29",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.population.distance-despawn-route29"
+  ],
+  "budgets": {
+    "maxSeconds": 240,
+    "maxFrames": 800,
+    "noProgressFrames": 240,
+    "minObservedFrames": 2
+  },
+  "subjects": [
+    {
+      "id": "cargo",
+      "species": 179,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "carrier",
+      "species": 74,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "unrelated",
+      "species": 143,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "distance-despawn-route29-v1",
+      "subject": "unrelated"
+    }
+  ],
+  "setup": [
+    {
+      "id": "distance-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 409,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-passive-follower",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 10
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "create-passive-follower",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 10
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "terrain-corridor-406",
+      "op": "terrain",
+      "args": {
+        "radius": 0,
+        "x": 585,
+        "z": 406
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "terrain-corridor-407",
+      "op": "terrain",
+      "args": {
+        "radius": 0,
+        "x": 585,
+        "z": 407
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "terrain-corridor-408",
+      "op": "terrain",
+      "args": {
+        "radius": 0,
+        "x": 585,
+        "z": 408
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "terrain-corridor-409",
+      "op": "terrain",
+      "args": {
+        "radius": 0,
+        "x": 585,
+        "z": 409
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "terrain-corridor-410",
+      "op": "terrain",
+      "args": {
+        "radius": 0,
+        "x": 585,
+        "z": 410
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "terrain-corridor-411",
+      "op": "terrain",
+      "args": {
+        "radius": 0,
+        "x": 585,
+        "z": 411
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "terrain-corridor-412",
+      "op": "terrain",
+      "args": {
+        "radius": 0,
+        "x": 585,
+        "z": 412
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-cargo",
+      "op": "spawn",
+      "args": {
+        "species": 179,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 585,
+        "z": 412
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-cargo",
+      "op": "bind",
+      "args": {
+        "subject": "cargo"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "walk-cargo-before-carrier",
+      "op": "step",
+      "args": {
+        "frames": 300,
+        "keys": [],
+        "until": {
+          "kind": "actor-field",
+          "subject": "cargo",
+          "path": "motionKind",
+          "operator": "eq",
+          "value": "WALK",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 300,
+        "noProgressFrames": 300
+      }
+    },
+    {
+      "id": "terrain-carrier",
+      "op": "terrain",
+      "args": {
+        "radius": 0,
+        "x": 585,
+        "z": 406
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-carrier",
+      "op": "spawn",
+      "args": {
+        "species": 74,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 585,
+        "z": 406
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-carrier",
+      "op": "bind",
+      "args": {
+        "subject": "carrier"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "natural-cargo-claim",
+      "op": "step",
+      "args": {
+        "frames": 240,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "distance-despawn-route29-v1",
+          "stage": "claim-bound",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "terrain-unrelated",
+      "op": "terrain",
+      "args": {
+        "radius": 0,
+        "x": 590,
+        "z": 392
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "terrain-first-step",
+      "op": "terrain",
+      "args": {
+        "radius": 0,
+        "x": 585,
+        "z": 410
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "terrain-second-step",
+      "op": "terrain",
+      "args": {
+        "radius": 0,
+        "x": 585,
+        "z": 411
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-unrelated",
+      "op": "spawn",
+      "args": {
+        "species": 143,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 590,
+        "z": 392
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-unrelated",
+      "op": "bind",
+      "args": {
+        "subject": "unrelated"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "walk-first-tile",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 410,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "walk-first-tile-settle",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [],
+        "until": {
+          "kind": "player-settled-at",
+          "map": 33,
+          "x": 585,
+          "z": 410,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "first-scheduled-far-sample",
+      "op": "step",
+      "args": {
+        "frames": 240,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "distance-despawn-route29-v1",
+          "stage": "first-far-sample",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "request-second-sample",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 411,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "request-second-sample-settle",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [],
+        "until": {
+          "kind": "player-settled-at",
+          "map": 33,
+          "x": 585,
+          "z": 411,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "scheduled-distance-removal",
+      "op": "step",
+      "args": {
+        "frames": 240,
+        "keys": [],
+        "until": {
+          "kind": "measurement-complete",
+          "measurement": "distance-despawn-route29-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "distance-despawn-route29-v1",
+      "when": "final"
+    }
+  ]
+}

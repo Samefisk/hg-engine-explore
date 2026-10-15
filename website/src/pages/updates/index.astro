@@ -1,0 +1,23 @@
+---
+import Base from '../../layouts/Base.astro';
+import { getCollection } from 'astro:content';
+
+const posts = (await getCollection('updates')).sort((a, b) => +b.data.date - +a.data.date);
+const fmt = (d: Date) => d.toLocaleDateString('en-GB', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+---
+<Base title="Updates" description="Changelog and news for Wild at Heart testers.">
+  <div class="wrap narrow">
+    <h1>Updates</h1>
+    <p>News and what changed in each tester build, newest first.</p>
+    <div style="display:grid;gap:1rem;margin-top:1.5rem">
+      {posts.map((p) => (
+        <a class="card post" href={`/updates/${p.id}`}>
+          <p class="meta" style="margin:0">{fmt(p.data.date)}{p.data.build ? ` · ${p.data.build}` : ''}</p>
+          <h3>{p.data.title}</h3>
+          <p>{p.data.summary}</p>
+        </a>
+      ))}
+    </div>
+    <div style="height:3rem"></div>
+  </div>
+</Base>

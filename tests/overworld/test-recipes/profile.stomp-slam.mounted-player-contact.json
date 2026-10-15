@@ -1,0 +1,205 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.stomp-slam.mounted-player-contact",
+  "title": "Wild Snorlax Slams the mount and knocks the attached pair back",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "TICKETS.md",
+  "requirements": [
+    "current.stomp-slam-mounted-player-contact"
+  ],
+  "budgets": {
+    "maxSeconds": 300,
+    "maxFrames": 600,
+    "noProgressFrames": 300,
+    "minObservedFrames": 22
+  },
+  "subjects": [
+    {
+      "id": "snorlax",
+      "species": 143,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "passive",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquire": "existing"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "stomp-slam-mounted-player-contact-v1",
+      "subject": "snorlax"
+    }
+  ],
+  "setup": [
+    {
+      "id": "slam-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 407,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-passive-party",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "create-passive-mount",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "mounted",
+        "slot": 0,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-passive",
+      "op": "bind",
+      "args": {
+        "subject": "passive"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-snorlax",
+      "op": "spawn",
+      "args": {
+        "species": 143,
+        "form": 0,
+        "role": "wild",
+        "level": 50,
+        "x": 585,
+        "z": 401
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-snorlax",
+      "op": "bind",
+      "args": {
+        "subject": "snorlax"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "before-contact",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "wait-slam-contact",
+      "op": "step",
+      "args": {
+        "frames": 300,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "stomp-slam-mounted-player-contact-v1",
+          "stage": "contact",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 300,
+        "noProgressFrames": 300
+      }
+    },
+    {
+      "id": "at-contact",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "finish-slam-and-player-jump",
+      "op": "step",
+      "args": {
+        "frames": 60,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "stomp-slam-mounted-player-contact-v1",
+          "stage": "finished",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 60,
+        "noProgressFrames": 60
+      }
+    },
+    {
+      "id": "after-landing",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "stomp-slam-mounted-player-contact-v1",
+      "when": "final"
+    }
+  ]
+}

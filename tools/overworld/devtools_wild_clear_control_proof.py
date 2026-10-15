@@ -3,7 +3,7 @@ from copy import deepcopy
 from tools.overworld.devtools_wild_clear_control_measurement import KIND, validate_control
 from tools.overworld.devtools_records import select_current_actor
 from tools.overworld.normal_play_observer import complete_travel
-from tools.overworld.devtools_wild_walk_proof import validate_idle_noop_clears
+from tools.overworld.devtools_wild_walk_proof import validate_idle_noop_clears, validate_prelude, clear_count
 
 REQUIREMENT="shared.wild-clear-recorder-control-v1"
 RULES=(("live-actor-identity","bound-wild-clear-subject"),
@@ -40,19 +40,20 @@ def measurements(replay,record):
     for name in ("MOTION_STARTED","LOGICAL_COMMIT","MOTION_FINISHED","CONTROL_RETURNED"):
         if sum(e.get("data",{}).get("event")==name for e in natural.get("traces",[]))!=1:
             raise ValueError("Wild clear calibration missing native "+name)
+    validate_prelude(natural)
     noops=natural.get("idleNoopClears",[])
     if not isinstance(noops,list) or len(noops)>63:
         raise ValueError("Wild clear calibration invalid idle no-op list")
     actual=natural["clearReceipts"][0]["data"]
     start=next(e for e in natural["traces"] if e["data"]["event"]=="MOTION_STARTED")
-    sequences=validate_idle_noop_clears(noops,subject,natural["initial"],natural["motion"],start)
+    sequences=validate_idle_noop_clears(noops,subject,natural.get("cycleInitial",natural["initial"]),natural["motion"],start)
     if any(sequence>=actual["sequence"] for sequence in sequences):
         raise ValueError("Wild clear calibration idle no-op follows actual clear")
     validate_control(meter["control"],natural["clearReceipts"][0],meter["terminal"])
     cleanup=meter.get("cleanup",{});reader=cleanup.get("wildWalk",{})
     if cleanup.get("closed") is not True or cleanup.get("advancedFrames")!=0 or cleanup.get("acceptedProof") is not False \
             or reader.get("closed") is not True or reader.get("failure") is not None or reader.get("subject")!=subject \
-            or reader.get("counts")!={"clear":len(natural["clearReceipts"])+len(natural.get("idleNoopClears",[]))} \
+            or reader.get("counts")!={"clear":clear_count(natural)} \
             or reader.get("guestMemoryWrites")!=2 \
             or reader.get("clearCalibration")!=meter["control"]:
         raise ValueError("Wild clear calibration cleanup differs")

@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.baby-player-fear",
+  "title": "Wild baby keeps its Player fear",
+  "status": "active",
+  "capabilities": [
+    "condition.evaluation",
+    "chase"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "One current baby Cleffa and its exact current fear source.",
+    "trigger": "Prepared public placement, then only normal key or neutral frames. No condition or motion state is written.",
+    "observable": "The exact timed condition and resolved full source bind one completed native fear/safety motion with logical commit and control return.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Checked Route29 teleport, party slot 0 Cyndaquil and public follower spawn replace the saved Mankey; only ordinary Wild spawns and current identity binds follow."
+      }
+    ],
+    "limits": [
+      "No claim from requested placement or a stale actor.",
+      "One complete motion proves response; it does not prove the full timed expiration."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "baby",
+      "species": 173,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "passive",
+      "species": 155,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": false,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Use only the typed prepared fixture and bind current actor identities."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Observe a real timed fear condition, resolved target and complete normal response."
+    }
+  ],
+  "stop": {
+    "frameBudget": 600,
+    "condition": "One full matched fear or safety response, or first stale boundary."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Exact full-current subject and fear source",
+      "Exact timed condition and resolved profile source",
+      "Completed native response with intent, commit and control return"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "wild.baby-player-fear",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumFrames": 2
+  }
+}

@@ -1,0 +1,459 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.throw-cargo-flee",
+  "status": "obsolete",
+  "retiredAt": "2026-10-10",
+  "ticket": "TKT-0059",
+  "reason": "The user changed the product contract: selection or a pickup claim must not alter the target profile, conditions, actions or movement. This test required a Skittish flee response solely because the actor was targeted, which now violates that contract. It is not replacement proof or a dismissed runtime failure.",
+  "currentContract": "Claims identify candidates only. The target retains its own profile and AUTO movement until the actual shared HELD pickup.",
+  "acceptanceScenarios": [
+    "wild.throw-moving-candidate",
+    "follower.throw-moving-cargo"
+  ],
+  "retainedFailure": {
+    "runId": "test-abc39a86d71e4985a31497ee7598c76b",
+    "manifest": "build/overworld-devtools/test-abc39a86d71e4985a31497ee7598c76b/manifest.json",
+    "acceptedProof": false
+  },
+  "scenarioSha256": "15f526d1be7ee33478c6f4e82a076ef929e0ee3f8a35ec897a6840801bd79228",
+  "recipeSha256": "40f0af0fc14aea867bc05351824c8d5b849152b55a3326f6e0453a5e724f5b13",
+  "scenario": {
+    "schemaVersion": 1,
+    "id": "wild.throw-cargo-flee",
+    "title": "A selected baby Cargo flees from the current Pok\u00e9mon that pursues it",
+    "status": "active",
+    "capabilities": [
+      "condition.evaluation",
+      "chase"
+    ],
+    "proofLevel": "S3",
+    "costTier": 3,
+    "verification": {
+      "kind": "controlled-case",
+      "expectationSource": "documentation/overworld-system/architecture.md",
+      "actor": "Current WILD Cleffa173 Cargo and WILD Geodude74 claimant, bound from their actual native returned identities.",
+      "trigger": "Only prepare placement. Normal neutral frames must let Geodude notice the player and select Cleffa. The existing baby targeted-for-pickup condition must choose that actual Pok\u00e9mon claimant.",
+      "observable": "The raw free-Cargo claim, while-true condition and resolver full ACTOR target agree on the same current Geodude. Cleffa completes one native Walk or Hop that increases its distance from the Geodude position sampled at that motion start, with exact commit and control-return events.",
+      "setupAudit": "complete",
+      "setupMutations": [
+        {
+          "phase": "before-observation",
+          "target": "fixture",
+          "change": "Checked Route29 teleport, two ordinary native Wild spawns and full-current identity binds. No profiles, claims, motion, cooldowns or RNG are forced."
+        }
+      ],
+      "limits": [
+        "The first live fixture must authenticate actual returned coordinates; requested placement earns no behavioral credit.",
+        "This single witness proves a baby targeted-for-pickup response. The four other Throw cases own pickup, positioning, launch, recipients and follower return.",
+        "Player-notice Skittish movement, held Cargo, another claimant and incomplete or wrong-direction movement cannot pass."
+      ]
+    },
+    "fixture": {
+      "rom": "test.nds",
+      "save": {
+        "path": "test.sav",
+        "kind": "sav"
+      },
+      "seed": 0
+    },
+    "subjects": [
+      {
+        "id": "cargo",
+        "species": 173,
+        "role": "WILD",
+        "acquisition": "spawn",
+        "minimum": 1,
+        "maximum": 1,
+        "motionActor": true,
+        "requirePresentation": true
+      },
+      {
+        "id": "geodude",
+        "species": 74,
+        "role": "WILD",
+        "acquisition": "spawn",
+        "minimum": 1,
+        "maximum": 1,
+        "motionActor": true,
+        "requirePresentation": true
+      }
+    ],
+    "events": [
+      {
+        "at": 0,
+        "kind": "setup",
+        "value": "Prepare player585407 South, native Cleffa587402 and Geodude585404; bind their actual returned current identities."
+      },
+      {
+        "at": 1,
+        "kind": "lifecycle",
+        "value": "Observe normal free-Cargo claim, targeted-for-pickup Skittish condition, and one completed movement away from its real claimant."
+      }
+    ],
+    "stop": {
+      "frameBudget": 600,
+      "condition": "One fully observed claim-backed Flee movement away from its actual pursuer, or first invalid identity, claim, target, motion or field-control receipt."
+    },
+    "expect": {
+      "requiredEvents": [],
+      "forbiddenEvents": [],
+      "invariants": [
+        "Full-current Cargo and pursuer identities",
+        "Actual normal Throw claim with Cargo not held",
+        "Targeted-for-pickup while-true Skittish condition",
+        "Full ACTOR target names same claimant, never Player",
+        "Completed native movement goes away from claimant at motion start",
+        "Exact intent, commit and control return without battle"
+      ]
+    },
+    "capture": "none",
+    "adapter": {
+      "kind": "devtools-test",
+      "test": "wild.throw-cargo-flee",
+      "claims": [
+        "live-actor-identity",
+        "profile-resolution",
+        "natural-input",
+        "rendered-motion",
+        "control-release"
+      ],
+      "minimumFrames": 2
+    }
+  },
+  "recipe": {
+    "schemaVersion": 1,
+    "id": "wild.throw-cargo-flee",
+    "title": "A selected baby Cargo flees from the current Pok\u00e9mon that pursues it",
+    "mode": "prepared",
+    "fixture": {
+      "rom": "test.nds",
+      "save": "test.sav"
+    },
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "requirements": [
+      "current.throw-cargo-flees-actual-pursuer"
+    ],
+    "budgets": {
+      "maxSeconds": 240,
+      "maxFrames": 600,
+      "noProgressFrames": 240,
+      "minObservedFrames": 2
+    },
+    "subjects": [
+      {
+        "id": "cargo",
+        "species": 173,
+        "role": "WILD",
+        "acquire": "spawn"
+      },
+      {
+        "id": "geodude",
+        "species": 74,
+        "role": "WILD",
+        "acquire": "spawn"
+      }
+    ],
+    "measurements": [
+      {
+        "kind": "throw-cargo-flee-v1",
+        "subject": "cargo"
+      }
+    ],
+    "setup": [
+      {
+        "id": "throw-tile",
+        "op": "teleport",
+        "args": {
+          "map": 33,
+          "x": 585,
+          "z": 407,
+          "facing": 1
+        },
+        "budget": {
+          "maxSeconds": 30,
+          "maxFrames": 120,
+          "noProgressFrames": 120
+        }
+      },
+      {
+        "id": "spawn-cargo",
+        "op": "spawn",
+        "args": {
+          "species": 173,
+          "role": "wild",
+          "level": 5,
+          "x": 587,
+          "z": 402,
+          "form": 0
+        },
+        "budget": {
+          "maxSeconds": 30,
+          "maxFrames": 120,
+          "noProgressFrames": 120
+        }
+      },
+      {
+        "id": "bind-cargo",
+        "op": "bind",
+        "args": {
+          "subject": "cargo"
+        },
+        "budget": {
+          "maxSeconds": 5,
+          "maxFrames": 1,
+          "noProgressFrames": 1
+        }
+      },
+      {
+        "id": "spawn-geodude",
+        "op": "spawn",
+        "args": {
+          "species": 74,
+          "role": "wild",
+          "level": 5,
+          "x": 584,
+          "z": 404,
+          "form": 0
+        },
+        "budget": {
+          "maxSeconds": 30,
+          "maxFrames": 120,
+          "noProgressFrames": 120
+        }
+      },
+      {
+        "id": "bind-geodude",
+        "op": "bind",
+        "args": {
+          "subject": "geodude"
+        },
+        "budget": {
+          "maxSeconds": 5,
+          "maxFrames": 1,
+          "noProgressFrames": 1
+        }
+      }
+    ],
+    "actions": [
+      {
+        "id": "natural-claim-and-flee",
+        "op": "step",
+        "args": {
+          "frames": 240,
+          "keys": [],
+          "until": {
+            "kind": "measurement-complete",
+            "measurement": "throw-cargo-flee-v1",
+            "when": "final"
+          }
+        },
+        "budget": {
+          "maxSeconds": 120,
+          "maxFrames": 240,
+          "noProgressFrames": 240
+        }
+      }
+    ],
+    "assertions": [
+      {
+        "kind": "measurement-complete",
+        "measurement": "throw-cargo-flee-v1",
+        "when": "final"
+      }
+    ]
+  },
+  "registration": {
+    "evaluator": "throw-cargo-flee-v1",
+    "proofLevel": "S3",
+    "mode": "prepared",
+    "recipeSha256": "40f0af0fc14aea867bc05351824c8d5b849152b55a3326f6e0453a5e724f5b13",
+    "requirements": [
+      "current.throw-cargo-flees-actual-pursuer"
+    ],
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "natural-input",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumObservedFrames": 2,
+    "measurementContract": {
+      "live-actor-identity": [
+        {
+          "name": "same-current-baby-cargo-and-pursuing-thrower",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "targeted-for-pickup-while-true-targets-actual-pursuer",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "natural-input": [
+        {
+          "name": "normal-thrower-claim-leaves-cargo-free",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "completed-native-flee-moves-away-from-actual-pursuer",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "control-release": [
+        {
+          "name": "flee-commits-and-returns-control-without-battle",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ]
+    },
+    "scope": "One baby Cargo completes its authored targeted-for-pickup Flee away from its actual current Pok\u00e9mon claimant. Existing authenticated bindings, resolver, semantic events and exact native travel; no Player Notice or held-Cargo credit."
+  },
+  "requirement": {
+    "id": "current.throw-cargo-flees-actual-pursuer",
+    "verificationKind": "controlled-case",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "natural-input",
+      "rendered-motion",
+      "control-release"
+    ],
+    "measurementContract": {
+      "live-actor-identity": [
+        {
+          "name": "same-current-baby-cargo-and-pursuing-thrower",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "targeted-for-pickup-while-true-targets-actual-pursuer",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "natural-input": [
+        {
+          "name": "normal-thrower-claim-leaves-cargo-free",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "completed-native-flee-moves-away-from-actual-pursuer",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "control-release": [
+        {
+          "name": "flee-commits-and-returns-control-without-battle",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ]
+    }
+  },
+  "featureChecks": [
+    {
+      "id": "runtime.throw-cargo-flee",
+      "title": "Check baby Cargo Flee away from actual pickup claimant",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "wild.throw-cargo-flee"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/overworld_target_bindings.h",
+        "include/overworld_behavior_resolver.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/player_health_overlay/player_health_throw_observation.c",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_throw_cargo_flee*.py",
+        "tools/overworld/test_devtools_throw_cargo_flee_measurement.py",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/wild.throw-cargo-flee.json",
+        "tests/overworld/scenarios/wild.throw-cargo-flee.json"
+      ]
+    },
+    {
+      "id": "host.throw-cargo-flee-proof",
+      "title": "Check exact Cargo Flee memory claims and copied controls",
+      "proofLevel": "S0",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_devtools_throw_cargo_flee_measurement.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_target_bindings.h",
+        "include/overworld_behavior_resolver.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/player_health_overlay/player_health_throw_observation.c",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_throw_cargo_flee*.py",
+        "tools/overworld/test_devtools_throw_cargo_flee_measurement.py",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/wild.throw-cargo-flee.json",
+        "tests/overworld/scenarios/wild.throw-cargo-flee.json"
+      ]
+    }
+  ]
+}

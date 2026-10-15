@@ -140,6 +140,7 @@ MOVE_HISTORY_CAPTURE_MANIFEST_TMP = $(MOVE_HISTORY_CAPTURE_MANIFEST).tmp
 INCLUDE_SRCS := $(wildcard $(INCLUDE_SUBDIR)/*.h)
 
 C_SRCS := $(wildcard $(C_SUBDIR)/*.c)
+C_SRCS := $(filter-out $(C_SUBDIR)/player_health%.c,$(C_SRCS))
 ALL_C_SRCS += $(C_SRCS)
 C_OBJS := $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(C_SRCS))
 
@@ -331,8 +332,10 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS) | venv
 	@echo "$(ROMNAME) Decompression successful!!"
 	$(NARCHIVE) extract $(FILESYS)/a/0/2/8 -o $(BUILD)/a028/ -nf
 	$(PYTHON) scripts/make.py $(CFLAGS)
+	$(PYTHON) -B -m tools.maps --root $(FILESYS) --arm9 $(BASE)/arm9.bin --overrides data/maps apply --in-place
 	$(MAKE) move_narc
 	$(ARMIPS) armips/global.s $(ARMIPS_FLAGS)
+	$(PYTHON_NO_VENV) scripts/pack_overworld_emote_slots.py --seal-final-package
 	$(NARCHIVE) create $(FILESYS)/a/0/2/8 $(BUILD)/a028/ -nf
 	$(PYTHON_NO_VENV) scripts/verify_pc_storage_any_box.py \
 		--package-only \
@@ -357,6 +360,7 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS) | venv
 	$(NDSTOOL) -c $(BUILDROM).tmp -9 $(BASE)/arm9.bin -7 $(BASE)/arm7.bin -y9 $(BASE)/overarm9.bin -y7 $(BASE)/overarm7.bin -d $(FILESYS) -y $(BASE)/overlay -t $(BASE)/banner.bin -h $(BASE)/header.bin
 	$(PYTHON_NO_VENV) scripts/verify_overworld_spawn_identity.py --package-only --rom $(BUILDROM).tmp
 	$(PYTHON_NO_VENV) scripts/verify_overworld_wild_occupancy.py --package-only --rom $(BUILDROM).tmp
+	$(PYTHON_NO_VENV) scripts/verify_overworld_field_capsule.py --package-only --rom $(BUILDROM).tmp
 	$(VENV)/bin/python3 -I -S -B -X pycache_prefix=/dev/null \
 		scripts/pokemon_move_history_build_manifest.py \
 		--seal $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) --rom $(BUILDROM).tmp \
@@ -413,7 +417,12 @@ clean_tools:
 
 ALL_CODE_OBJS := $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.o,$(ALL_C_SRCS)) \
  $(patsubst $(ASM_SUBDIR)/%.s,$(BUILD)/%.o,$(ALL_ASM_SRCS)) \
- $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.d,$(ALL_C_SRCS))
+ $(patsubst $(C_SUBDIR)/%.c,$(BUILD)/%.d,$(ALL_C_SRCS)) \
+ $(OVERWORLD_FIELD_CAPSULE_OBJS) $(OVERWORLD_FIELD_CAPSULE_OBJS:.o=.d) \
+ $(OVERWORLD_QUERY_CODE_ADDON_OBJS) $(OVERWORLD_QUERY_CODE_ADDON_OBJS:.o=.d) \
+ $(OVERWORLD_QUERY_CODE_ADDON_BIN) $(OVERWORLD_QUERY_CODE_ADDON_RECEIPT) $(OVERWORLD_QUERY_CODE_ADDON_HEADER) \
+ $(OVERWORLD_FOLLOWER_SELECTOR_PORTABLE_OBJS) $(OVERWORLD_FOLLOWER_SELECTOR_PORTABLE_OBJS:.o=.d) \
+ $(BUILD)/overworld_field_condition.o $(BUILD)/overworld_field_condition.bin
 
 clean_code:
 	rm -f $(ALL_CODE_OBJS) $(LINKED_OUTPUTS) $(OUTPUT) $(OVERLAY_OUTPUTS) rom_gen.ld rom_gen_battle.ld
@@ -441,6 +450,9 @@ move_narc: $(NARC_FILES)
 
 	@echo "opening demo files:"
 	cp $(OPENDEMO_NARC) $(OPENDEMO_TARGET)
+
+	@echo "title screen files:"
+	cp $(TITLESCREEN_NARC) $(TITLESCREEN_TARGET)
 
 	@echo "mon data properties:"
 	cp $(MONDATA_NARC) $(MONDATA_TARGET)
@@ -565,6 +577,9 @@ move_narc: $(NARC_FILES)
 		rm -rf build/a028/8_7 build/a028/8_8 build/a028/8_9; \
 	fi
 	@rm -rf $(CODE_ADDON_ARTIFACTS)
+
+	@echo "shared overworld query code:"
+	cp $(OVERWORLD_QUERY_CODE_ADDON_BIN) $(OVERWORLD_QUERY_CODE_ADDON_TARGET)
 
 	@echo "hidden ability table:"
 	cp $(HIDDEN_ABILITY_TABLE_BIN) $(HIDDEN_ABILITY_TABLE_TARGET)

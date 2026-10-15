@@ -19,9 +19,11 @@ from .devtools_test_contract import (
     TestEvaluator, validate_test, ROUTE_CONTROL, CHAIN_RETRY, ACCELERATION,
     RAW_BOUNDARY_MEASUREMENTS, TURN_SKID, SPAWN_WORK_BUDGET,
     UNMOUNTED_ZERO_STUTTER,
+    PLAYER_HEALTH_ZERO_LOAD, DISTANCE_KINDS,
+    RAM_BRIEF_NOTICE,
 )
 
-RAW_BOUNDARY_READERS = RAW_BOUNDARY_MEASUREMENTS | {ACCELERATION}
+RAW_BOUNDARY_READERS = RAW_BOUNDARY_MEASUREMENTS | {"route30-sentret-throw-pacing-v1", "population-headroom-v1", "emote-three-slots-v1", ACCELERATION, "follower-throw-approach-cargo-v1", "follower-throw-query-priority-v1", "wild-throw-ground-lock-soak-v1"}
 
 
 def _valid_completed_frame_batch(requested, completed, samples, allow_extra=False):
@@ -30,6 +32,16 @@ def _valid_completed_frame_batch(requested, completed, samples, allow_extra=Fals
     return completed == requested or allow_extra or (
         all(isinstance(sample, dict) for sample in samples)
         and any(sample.get("fieldAvailable") is False for sample in samples))
+
+
+def _uncredited_dense_wait(phase, action, evaluator):
+    if phase == "setup":
+        return action["op"] == "wait" and evaluator.uses_raw_records
+    return (phase == "observe" and action["id"] == "route29-current-follower"
+        and action["op"] == "wait" and evaluator.uses_raw_records
+        and evaluator.test["id"] == "population.failed-series-retry"
+        and "natural-refill-retry-v1" in evaluator.measurements
+        and action["args"] == dict(predicate=dict(kind="follower-settled", species=56, partySlot=2, when="final")))
 
 
 def _walk_matrix_args(evaluator, subject, snapshot):
@@ -72,7 +84,30 @@ def _command_snapshot(op, receipt, current):
     # The control receipt is one native observation. The UI cache can also
     # hold older optional terrain diagnostics; these are not part of that
     # exact boundary and cannot be substituted into its proof record.
-    return deepcopy(receipt["snapshot"] if op in ("chain-retry", "acceleration.begin") else current)
+    return deepcopy(receipt["snapshot"] if op in ("chain-retry", "acceleration.begin", "notice-hop.prepare", "appearance-line.prepare", "held-throw-pocket.prepare", "held-throw-line.prepare") else current)
+
+
+def _bind_snapshot(service, evaluator, action, phase, current):
+    # Only this high-before-capture fixture needs a fresh terrain witness after
+    # neutral setup frames. The ordinary bind remains a cached completed read.
+    if (phase != "setup" or action["id"] != "bind-mankey"
+            or "follower-throw-target-below-v1" not in evaluator.measurements):
+        return current
+    with service.lock:
+        fresh = service.worker.call("snapshot", {"radius": 7})
+        keys = ("frame", "nativeCycle", "actorFrame", "context", "fieldControl",
+                "actors", "player", "pokemonCombat", "fieldAvailable",
+                "observationBoundary", "romSha256")
+        if (any(type(fresh.get(k)) is not int for k in ("frame", "nativeCycle", "actorFrame"))
+                or any(k not in current or k not in fresh or current[k] != fresh[k] for k in keys)):
+            raise ValueError("signed-height Below bind snapshot changed its completed owner boundary")
+        terrain = fresh.get("terrain", {}).get("observation", {})
+        if (terrain.get("nativeCycle") != fresh["nativeCycle"]
+                or terrain.get("lastCompletedGameFrame") != fresh["frame"]
+                or terrain.get("context") != fresh["context"]):
+            raise ValueError("signed-height Below bind snapshot lacks fresh native support")
+        service._observe(fresh)
+    return deepcopy(fresh)
 
 
 def _guard_manifest_size(record, mode):
@@ -253,6 +288,68 @@ class TestJobs:
         with self.service.lock:
             return self.service._dispatch(op, args, retain_worker_receipt=op in PREPARED_OPS)
 
+    def _spawn_after_busy_queue(self, op, args, phase, action, test, started, action_start, stream, evaluator):
+        """One prepared spawn; a busy native queue gets retained neutral frames and a repeat.
+
+        The refused request changed no game state, but native cycles ran. Its
+        events and a fresh completed boundary are retained so the next raw chunk
+        continues exactly. Any other failure ends the job as before.
+        """
+        from .devtools_population_headroom_measurement import (
+            FULL_CODE, FULL_MESSAGE, SPAWN_RETRY_FRAMES, STARTUP_CODE, STARTUP_MESSAGE,
+            refusal_of, spawn_with_neutral_retry)
+
+        def busy_refusal(error):
+            self._limit(test, started, action, action_start)
+            with self.service.lock:
+                fresh = self.service.worker.call("snapshot", {})
+                self.service._observe(fresh)
+            refused = {"phase": phase, "action": action["id"], "command": "spawn-refused",
+                       "receipt": {"code": refusal_of(error)[0], "message": refusal_of(error)[1],
+                                   "events": deepcopy((getattr(error, "details", None) or {})
+                                                      .get("preparedRetainedEvents", []))},
+                       "snapshot": deepcopy(fresh)}
+            stream.write(_manifest_json(refused)); stream.flush()
+            if evaluator.observe_record(refused)["state"] == "failed":
+                raise RuntimeError("spawn-refusal-observation-failed")
+
+        def neutral_retry_frames():
+            self._limit(test, started, action, action_start)
+            step_args = {"frames": SPAWN_RETRY_FRAMES, "keys": [],
+                         "releaseAtEnd": False, "diagnosticDetails": False}
+            with self.service.lock:
+                result = self.service.worker.call("step", step_args)
+                self.service._observe(result)
+            raw = {key: value for key, value in result.items() if key != "snapshot"}
+            row = dict(raw, phase=phase, action=action["id"], requestedInput=deepcopy(step_args))
+            stream.write(_manifest_json(row)); stream.flush()
+            if not _valid_completed_frame_batch(
+                    SPAWN_RETRY_FRAMES, result.get("completedGameFrames"), result.get("samples", [])):
+                raise RuntimeError("incomplete-frame-evidence")
+            if evaluator.observe_record(row)["state"] == "failed":
+                raise RuntimeError("spawn-retry-observation-failed")
+            self._limit(test, started, action, action_start)
+
+        def population_full(error):
+            # Refused before any native work: the six regular slots are occupied.
+            self._limit(test, started, action, action_start)
+            with self.service.lock:
+                fresh = self.service.worker.call("snapshot", {})
+                self.service._observe(fresh)
+            return {"populationFull": True, "code": FULL_CODE, "message": FULL_MESSAGE,
+                    "events": deepcopy((getattr(error, "details", None) or {})
+                                       .get("preparedRetainedEvents", [])),
+                    "snapshot": deepcopy(fresh)}
+
+        def startup_skipped(error):
+            # The native finalize found no startup for this tile in bounded tries.
+            full = population_full(error)
+            return {"startupSkipped": True, "code": STARTUP_CODE, "message": STARTUP_MESSAGE,
+                    "events": full["events"], "snapshot": full["snapshot"]}
+
+        return spawn_with_neutral_retry(lambda: self._command(op, args), busy_refusal,
+                                        neutral_retry_frames, population_full, startup_skipped)
+
     def _failure_bundle(self, directory, error):
         details = {"captureErrors": [], "commandError": {"code": getattr(error, "code", type(error).__name__),
                    "message": str(error), "details": deepcopy(getattr(error, "details", None))}}
@@ -273,6 +370,7 @@ class TestJobs:
         owned_session = None
         result, failure = None, None
         fixture_proof = None
+        zero_fixture = None
         stream_path = directory / "observations.jsonl.gz"
         frame_count, native_count = 0, 0
         timing = {"observedNativeCycles": 0, "cpuNs": 0, "maximumCycleCpuNs": 0,
@@ -282,6 +380,7 @@ class TestJobs:
         chain_retry_cleanup = None
         session_cleanup = None
         observation_setup = None
+        save_reloads = []
         height_control = any(m["kind"] == "live-spawn-height-control-v1" for m in test.get("measurements", []))
         route_control = any(m["kind"] == ROUTE_CONTROL for m in test.get("measurements", []))
         chain_retry = any(m["kind"] == CHAIN_RETRY for m in test.get("measurements", []))
@@ -319,6 +418,10 @@ class TestJobs:
                            ("debugDescriptor", Path("build/overworld-system.debug.json")))}}
             self._publish(directory, phase="preflight", attemptIdentity=attempt, testSourceSha256=source_hash)
             _write(directory / "manifest.json", self.status())
+            if PLAYER_HEALTH_ZERO_LOAD in {item["kind"] for item in test.get("measurements", [])}:
+                from .player_health_zero_load_fixture import create_fixture
+                zero_fixture = create_fixture(self.service.root / test["fixture"]["save"],
+                                              directory / "zero-load-fixture")
             from .devtools_test_inputs import measurement_inputs
             evaluator.install_measurements(measurement_inputs(test, self.service.root))
             self._limit(test, started)
@@ -329,25 +432,45 @@ class TestJobs:
                 raise RuntimeError("fixture-preflight-failed")
             self._limit(test, started)
             normal_baseline = test["mode"] in ("normal", "observer-control") or chain_retry
-            record_from_setup = normal_baseline or evaluator.uses_raw_records
+            record_from_setup = (normal_baseline or evaluator.uses_raw_records
+                                 or test["id"] == "spawn.move-entry.arrival"
+                                 or bool({"blocked-notice-hop-v1", "throw-notice-walk-commit-v1",
+                                          "follower-throw-hit-abort-v1"}.intersection(evaluator.measurements)))
             initial_events = []
             initial_event_start_frame = None
-            self._command("start", {**test["fixture"],
+            boot_fixture = {**test["fixture"]}
+            if zero_fixture is not None:
+                boot_fixture["save"] = str(Path(zero_fixture["fixturePath"]).relative_to(self.service.root))
+            self._command("start", {**boot_fixture,
                 "mode": "normal" if normal_baseline else "prepared",
                 "_spawnHeightControl": height_control})
             owned_session = self.service.session["id"]
             identity = deepcopy(self.service.session["identity"])
-            if record_from_setup:
+            if record_from_setup and zero_fixture is None:
+                # Zero-HP Continue is paused in the stock blackout message.
+                # The semantic recorder needs a complete field frame, which
+                # cannot exist until normal A input resumes this task. Its
+                # native task history is already in bootRecovery/preBootFrames
+                # and every following step sample, so no recorder is needed.
                 with self.service.lock:
                     initial_event_start_frame = self.service.snapshot["frame"]
                     record_args = {"maxFrames": test["budgets"]["maxFrames"]}
+                    if any(item["kind"] in ("pokemon-damage-palette-v1", "pokemon-cooldown-palette-v1", "pokemon-ambush-cooldown-palette-v1", "follower-throw-hit-abort-v1")
+                           for item in test.get("measurements", [])):
+                        record_args["appearancePalette"] = True
                     if any(item["kind"] == "actor-binding-context-v1" for item in test.get("measurements", [])):
                         record_args["bindingContext"] = True
+                    if any(item["kind"] in ("route30-sentret-throw-pacing-v1", UNMOUNTED_ZERO_STUTTER, "natural-refill-retry-v1", "natural-water-spawn-v1", "held-throw-search-v1", "follower-throw-moving-cargo-v1", "follower-throw-away-non45-v1", "follower-throw-approach-cargo-v1", "follower-throw-player-damage-v1", "follower-throw-query-priority-v1", "wild-throw-ground-lock-soak-v1", "throw-cargo-competition-v1", "throw-cargo-retarget-v1", "throw-mutual-pickup-v1", "follower-ram-pokemon-v1", "basic-attack-v1", "wild-throw-moving-candidate-v1", "throw-notice-walk-commit-v1", "follower-throw-hit-abort-v1", "player-health-throw-contact-v1", "throw-cargo-flee-v1", "follower-throw-target-above-v1", "follower-throw-target-below-v1", "follower-target-access-signpost-v1", "follower-target-access-ground-v1", "player-health-mounted-throw-v1", *DISTANCE_KINDS) for item in test.get("measurements", [])):
+                        record_args["throwInteractions"] = True
+                    if test["id"] == "spawn.move-entry.arrival":
+                        record_args["throwInteractions"] = True
                     record_started = self.service.worker.call("record.start", record_args)
                     self.service._observe(record_started)
                     initial_events = record_started.get("events", [])
             if evaluator.uses_raw_records:
                 initial_record = {"phase": "setup", "initialSnapshot": deepcopy(self.service.snapshot)}
+                if zero_fixture is not None:
+                    initial_record["zeroLoadFixture"] = deepcopy(zero_fixture)
                 if RAW_BOUNDARY_READERS.intersection(evaluator.measurements):
                     initial_record.update(initialEvents=initial_events, initialEventStartFrame=initial_event_start_frame)
                 evaluator.observe_record(initial_record)
@@ -362,6 +485,8 @@ class TestJobs:
             # worker cannot erase prior progress or turn missing frames green.
             with open_observations(stream_path, "xt") as stream:
                 initial_row = {"phase": "setup", "initialSnapshot": self.service.snapshot}
+                if zero_fixture is not None:
+                    initial_row["zeroLoadFixture"] = deepcopy(zero_fixture)
                 if ({"actor-binding-context-v1", "live-spawn-height-control-v1"}
                         | RAW_BOUNDARY_READERS).intersection(evaluator.measurements):
                     initial_row.update(initialEvents=initial_events, initialEventStartFrame=initial_event_start_frame)
@@ -373,7 +498,14 @@ class TestJobs:
                         with self.service.lock:
                             if not self.service.session or self.service.session["id"] != owned_session:
                                 raise RuntimeError("observation-prepare-session-ownership")
-                            observation_setup = self.service.worker.call("observation.prepare", {})
+                            observation_args = {}
+                            if "pokemon-cooldown-palette-v1" in evaluator.measurements:
+                                observation_args["appearanceSubject"] = evaluator.subjects["onix"]
+                            if "pokemon-ambush-cooldown-palette-v1" in evaluator.measurements:
+                                observation_args["appearanceSubject"] = evaluator.subjects["weepinbell"]
+                            if "follower-throw-hit-abort-v1" in evaluator.measurements:
+                                observation_args["appearanceSubject"] = evaluator.subjects["mankey"]
+                            observation_setup = self.service.worker.call("observation.prepare", observation_args)
                             if {SPAWN_WORK_BUDGET, UNMOUNTED_ZERO_STUTTER}.intersection(
                                     evaluator.measurements):
                                 observation_setup["mainLoopPacing"] = self.service.worker.call(
@@ -387,8 +519,13 @@ class TestJobs:
                             record_args = {"maxFrames": test["budgets"]["maxFrames"]}
                             if test["id"] == "mount.begin-current-follower":
                                 record_args["roleProfile"] = True
+                            if {"ram-until-crash-v1", "ram-behind-entry-v1", "ram-ledge-continuity-v1", "ram-brief-notice-v1"}.intersection(evaluator.measurements):
+                                record_args["appearancePalette"] = True
                             started_record = self.service.worker.call("record.start", record_args)
                             self.service._observe(started_record)
+                            if {"ram-until-crash-v1", "ram-behind-entry-v1", "ram-ledge-continuity-v1", "ram-brief-notice-v1"}.intersection(evaluator.measurements):
+                                self.service.worker.call("observation.prepare", {
+                                    "appearanceSubject": evaluator.subjects["onix"]})
                         boundary = deepcopy(self.service.snapshot)
                         boundary_row = {"phase": phase, "boundarySnapshot": boundary}
                         if test["id"] == "mount.begin-current-follower":
@@ -442,6 +579,7 @@ class TestJobs:
                             op, args = action["op"], action["args"]
                             snapshot = deepcopy(evaluator.latest if RAW_BOUNDARY_READERS.intersection(evaluator.measurements) else self.service.snapshot)
                             if op == "bind":
+                                snapshot = _bind_snapshot(self.service, evaluator, action, phase, snapshot)
                                 receipt = evaluator.bind(args["subject"], snapshot)
                                 bound_record = {"phase": phase, "action": action["id"], "command": "bind", "receipt": receipt, "snapshot": snapshot}
                                 stream.write(_manifest_json(bound_record))
@@ -456,7 +594,23 @@ class TestJobs:
                             if op == "assert":
                                 raise RuntimeError("assertion-failed: " + action["id"])
                             if op not in ("step", "wait"):
-                                if op == "crash.arm":
+                                if op == "save.reload":
+                                    receipt = self._command(op, args)
+                                    owned_session = self.service.session["id"]
+                                    loaded_frame = receipt["snapshot"]["frame"]
+                                    with self.service.lock:
+                                        restarted_record = self.service.worker.call("record.start", {
+                                            "maxFrames": test["budgets"]["maxFrames"]})
+                                        self.service._observe(restarted_record)
+                                    receipt["recordingRestart"] = {"frame": self.service.snapshot["frame"],
+                                        "nativeCycle": self.service.snapshot["nativeCycle"],
+                                        "advancedGameFrames": self.service.snapshot["frame"] - loaded_frame,
+                                        "eventCount": len(restarted_record.get("events", []))}
+                                    receipt["snapshot"] = deepcopy(self.service.snapshot)
+                                    save_reloads.append(deepcopy(receipt["saveReload"]))
+                                    self._publish(directory, sessionId=owned_session,
+                                                  reloadIdentity=deepcopy(self.service.session["identity"]))
+                                elif op == "crash.arm":
                                     receipt = self._command(op, evaluator.crash_args(args["subject"], snapshot))
                                 elif op == "walk-matrix.arm":
                                     receipt = self._command(op, _walk_matrix_args(
@@ -465,8 +619,6 @@ class TestJobs:
                                     receipt = self._command(op, evaluator.stomp_args(args["subject"], snapshot))
                                 elif op in ("walk-corner.arm", "walk-corner.probe"):
                                     receipt = self._command(op, evaluator.corner_args(args["subject"], snapshot, probe=op.endswith("probe")))
-                                elif op == "hop-candidate.probe":
-                                    receipt = self._command(op, evaluator.hop_candidate_args(args["subject"], snapshot))
                                 elif op == "walk-corner.recovery":
                                     receipt = {"snapshot": deepcopy(snapshot), "advancedFrames": 0, "acceptedProof": False}
                                 elif op == "wild-walk.arm":
@@ -479,8 +631,6 @@ class TestJobs:
                                             args["subject"], snapshot))
                                 elif op == "mount-pacing.arm":
                                     receipt = self._command(op, evaluator.mount_pacing_args(args["subject"], snapshot))
-                                elif op == "hop-arc.arm":
-                                    receipt = self._command(op, evaluator.hop_arc_args(args["subject"], snapshot))
                                 elif op == "mount-pacing.recovery":
                                     # This marks a measurement window only. No guest command or clock advance.
                                     receipt = {"snapshot": deepcopy(snapshot), "advancedFrames": 0, "acceptedProof": False}
@@ -488,11 +638,63 @@ class TestJobs:
                                     receipt = self._command(op, evaluator.walk_policy_control_args(args["subject"], snapshot))
                                 elif op == "walk-policy-control.close":
                                     receipt = self._command(op, args)
+                                elif op == "appearance-line.prepare":
+                                    from tools.overworld.devtools_appearance_measurement import COOLDOWN, AMBUSH_COOLDOWN, prepare_current_line
+                                    def line_command(command, command_args):
+                                        if command != "step":
+                                            return self._command(command, command_args)
+                                        self._limit(test, started, action, action_start)
+                                        with self.service.lock:
+                                            result = self.service.worker.call("step", command_args)
+                                            self.service._observe(result)
+                                        raw = {key:value for key,value in result.items() if key != "snapshot"}
+                                        row = dict(raw, phase="observe", action=action["id"],
+                                                   requestedInput=deepcopy(command_args))
+                                        stream.write(_manifest_json(row)); stream.flush()
+                                        if evaluator.observe_record(row)["state"] == "failed":
+                                            raise RuntimeError("current-line-normal-input-observation-failed")
+                                        self._limit(test, started, action, action_start)
+                                        return result
+                                    receipt = prepare_current_line(line_command, snapshot,
+                                        evaluator.subjects[args["subject"]], evaluator.measurements[AMBUSH_COOLDOWN if args["subject"] == "weepinbell" else COOLDOWN])
+                                elif op in ("held-throw-pocket.prepare", "held-throw-line.prepare"):
+                                    from tools.overworld.devtools_held_throw_search_measurement import KIND, prepare_pocket, prepare_line
+                                    def held_command(command, command_args):
+                                        self._limit(test, started, action, action_start)
+                                        if command != "step":
+                                            return self._command(command, command_args)
+                                        with self.service.lock:
+                                            result = self.service.worker.call("step", command_args)
+                                            self.service._observe(result)
+                                        raw = {key:value for key,value in result.items() if key != "snapshot"}
+                                        row = dict(raw, phase=phase, action=action["id"], requestedInput=deepcopy(command_args))
+                                        stream.write(_manifest_json(row)); stream.flush()
+                                        if evaluator.observe_record(row)["state"] == "failed":
+                                            raise RuntimeError("held-throw-normal-input-observation-failed")
+                                        self._limit(test, started, action, action_start)
+                                        return result
+                                    prepare = prepare_pocket if op == "held-throw-pocket.prepare" else prepare_line
+                                    receipt = prepare(held_command, snapshot, evaluator.measurements[KIND])
+                                elif op == "notice-hop.prepare":
+                                    from tools.overworld.devtools_blocked_notice_hop_measurement import KIND, prepare_neighbor
+                                    def notice_command(command, command_args):
+                                        if command != "step":
+                                            return self._command(command, command_args)
+                                        with self.service.lock:
+                                            result = self.service.worker.call("step", command_args)
+                                            self.service._observe(result)
+                                            return result
+                                    receipt = prepare_neighbor(notice_command, snapshot,
+                                        evaluator.subjects[args["subject"]], evaluator.measurements[KIND],
+                                        trace_sequences=evaluator.last_sequence)
                                 elif op == "acceleration.begin":
                                     reset_args = evaluator.acceleration_begin_args(args["subject"], snapshot)
                                     receipt = self._command("walk-policy.reset", reset_args)
                                 elif op == "acceleration.end":
                                     receipt = evaluator.acceleration_end_receipt(args["subject"], snapshot)
+                                elif op == "spawn" and "population-headroom-v1" in evaluator.measurements:
+                                    receipt = self._spawn_after_busy_queue(
+                                        op, args, phase, action, test, started, action_start, stream, evaluator)
                                 elif op == "walk-intent.arm":
                                     receipt = self._command(op, evaluator.walk_intent_args(args, snapshot))
                                 elif op == "walk-intent.close":
@@ -515,7 +717,9 @@ class TestJobs:
                                         receipt = self.service.worker.call(control_operation + ".arm", control_args)
                                         self.service._observe(receipt)
                                 else:
-                                    if op == "actor-inspect.probe":
+                                    if op == "emote-three.arm":
+                                        args = {name: evaluator.subjects[name]["handle"]["value"] for name in "abcd"}
+                                    elif op == "actor-inspect.probe":
                                         args = evaluator.actor_inspect_args(args["subject"], snapshot)
                                     elif op == "walk-policy.reset":
                                         args = evaluator.walk_reset_args(args["subject"], snapshot)
@@ -526,7 +730,9 @@ class TestJobs:
                                     elif op == "mount-teleport.restore":
                                         args = evaluator.mount_teleport_restore_args(args, snapshot)
                                     receipt = self._command(op, args)
-                                endpoint = (deepcopy(snapshot) if op in ("acceleration.end", "walk-intent.close", "obstacle-intent.close", "walk-policy-control.close", "mount-pacing.close", "hop-arc.close", "wild-walk.close", "wild-ledge.close", "condition-controller.close", "walk-corner.close", "walk-matrix.close", "stomp.close") else
+                                # The read-only HP receipt has no snapshot and
+                                # does not advance this exact completed boundary.
+                                endpoint = (deepcopy(snapshot) if op in ("player-health.observe", "acceleration.end", "walk-intent.close", "obstacle-intent.close", "walk-policy-control.close", "mount-pacing.close", "wild-walk.close", "wild-ledge.close", "condition-controller.close", "walk-corner.close", "walk-matrix.close", "stomp.close", "main-loop-pacing.arm", "cpu-work.start", "cpu-work.read") else
                                             deepcopy(receipt["snapshot"]) if RAW_BOUNDARY_READERS.intersection(evaluator.measurements) else
                                             _command_snapshot(op, receipt, self.service.snapshot))
                                 command_record = {"phase": phase, "action": action["id"], "command": op,
@@ -536,19 +742,32 @@ class TestJobs:
                                 if op == "chain-retry":
                                     if evaluator.measurements[CHAIN_RETRY].observe_control(receipt, endpoint)["state"] == "failed":
                                         raise RuntimeError("chain-retry-arm-observation-failed")
-                                action_frames = endpoint["frame"] - before["frame"]
+                                action_frames = (endpoint["frame"] if op == "save.reload"
+                                                 else endpoint["frame"] - before["frame"])
                                 frame_count += action_frames
                                 if action_frames < 0 or action_frames > action["budget"]["maxFrames"]:
                                     raise RuntimeError("action-frame-budget: " + action["id"])
                                 if frame_count > test["budgets"]["maxFrames"]:
                                     raise RuntimeError("test-frame-budget")
                                 self._limit(test, started, action, action_start)
-                                if evaluator.uses_raw_records:
+                                if op == "save.reload":
+                                    observed = (evaluator.observe_record(command_record)
+                                                if evaluator.uses_raw_records else
+                                                evaluator.observe_save_reload(receipt))
+                                    if observed["state"] == "failed":
+                                        raise RuntimeError("save-reload-observation-failed")
+                                elif evaluator.uses_raw_records:
                                     if evaluator.observe_record(command_record)["state"] == "failed":
                                         raise RuntimeError("prepared-setup-observation-failed")
-                                elif op in ("party", "spawn") and "setupBoundary" in receipt:
+                                elif ((op in ("party", "spawn", "notice-hop.prepare")
+                                       or (op == "teleport" and {"throw-notice-walk-commit-v1",
+                                            "follower-throw-hit-abort-v1"}.intersection(evaluator.measurements)))
+                                      and "setupBoundary" in receipt):
                                     if evaluator.observe_prepared_command(command_record)["state"] == "failed":
                                         raise RuntimeError("prepared-setup-observation-failed")
+                                elif op == "terrain" and RAM_BRIEF_NOTICE in evaluator.measurements:
+                                    if evaluator.observe_brief_terrain(command_record)["state"] == "failed":
+                                        raise RuntimeError("brief-ram-terrain-observation-failed")
                                 elif endpoint["frame"] > evaluator.latest["frame"]:
                                     evaluator.observe(endpoint, count_frame=False)
                                 break
@@ -569,23 +788,39 @@ class TestJobs:
                             count = min(count, max(1, last_progress + progress_budget - snapshot["frame"]))
                             # The shared step owns exact key-release and coherent
                             # frame sampling; this layer contains no emulator API.
+                            command_args = {"frames": count, "keys": args.get("keys", []),
+                                "releaseAtEnd": False, "diagnosticDetails": False}
                             with self.service.lock:
-                                chunk = self.service.worker.call("step", {"frames": count, "keys": args.get("keys", []),
-                                    "releaseAtEnd": False, "diagnosticDetails": False})
+                                chunk = self.service.worker.call("step", command_args)
                                 self.service._observe(chunk)
                             samples = chunk.get("samples", [])
                             completed = chunk.get("completedGameFrames", 0)
                             # Preserve even a rejected native chunk. An endpoint
                             # alone cannot explain missing/extra frame evidence.
                             retained_chunk = {key: value for key, value in chunk.items() if key != "snapshot"}
-                            raw_record = {"phase": phase, "action": action["id"], **retained_chunk}
+                            raw_record = {"phase": phase, "action": action["id"], **retained_chunk,
+                                "requestedInput": deepcopy(command_args)}
+                            if ((test["id"] == "player-hp.hop-contact" and action["id"] == "wait-crossing-hop")
+                                    or (test["id"] == "player-hp.ambush-jump"
+                                        and action["id"] == "wait-ambush-contact")
+                                    or (test["id"] == "player-hp.running-hit"
+                                        and action["id"] == "run-to-contact")
+                                    or (test["id"] in ("player-hp.moving-heal-on-foot", "player-hp.moving-heal-mounted")
+                                        and action["id"] == "wait-contact")
+                                    or (test["id"] in ("pokemon-hp.collision-knockback",
+                                                       "pokemon-hp.skid-hit-crash-knockback", "follower.ram-pokemon", "profile.basic-attack", "pokemon-appearance.damage-palette", "wild.throw-cargo-flee", "wild.baby-player-fear", "wild.igglybuff-player-fear-cry", "wild.baby-pokemon-fear", "follower.baby-seek-safety", "profile.playful.in-place-hop", "follower.baby-damage-seek-safety", "wild.damage-flee", "profile.stomp-slam.player-contact", "profile.stomp-slam.mounted-player-contact", "mount.rattata-walking-ledge")
+                                        and phase == "observe")):
+                                endpoint = chunk["snapshot"]
+                                raw_record["profileCache"] = {
+                                    "frame": endpoint["frame"], "nativeCycle": endpoint["nativeCycle"],
+                                    "resolvedProfiles": endpoint["nativeObservation"]["resolvedProfiles"]}
                             stream.write(json.dumps(raw_record, separators=(",", ":"), allow_nan=False) + "\n")
                             stream.flush()
                             # A neutral setup wait may cross several complete
                             # queues in its final native cycle. Raw meters check
                             # every dense sample and its real cycle ownership.
                             # Input and observation durations remain exact.
-                            neutral_setup = phase == "setup" and op == "wait" and evaluator.uses_raw_records
+                            neutral_setup = _uncredited_dense_wait(phase, action, evaluator)
                             if not _valid_completed_frame_batch(
                                     count, completed, samples, neutral_setup):
                                 raise RuntimeError("incomplete-frame-evidence")
@@ -685,10 +920,12 @@ class TestJobs:
                       "evaluation": result, "failureArtifact": failure, "visualArtifact": None,
                       "visualArtifactPolicy": "No automatic screenshots; screenshots are not test proof.",
                       "fixtureProof": fixture_proof,
+                      **({"zeroLoadFixture": zero_fixture} if zero_fixture is not None else {}),
                       "timing": timing,
                       "sessionCleanup": session_cleanup,
                       **({"chainRetryCleanup": chain_retry_cleanup} if chain_retry else {}),
                       "observationSetup": observation_setup,
+                      "saveReloads": save_reloads,
                       **({"observerControlCleanup": control_cleanup} if late_control else {}),
                       "testSourceSha256": source_hash, "totalGameFrames": frame_count,
                       "nextAction": "Review the saved result and exact failure before another run."}
@@ -767,7 +1004,29 @@ class TestJobs:
             result = (measurement.progress_result() if predicate["measurement"] in ("unmounted-cadence-v1", "unmounted-game-cadence-v1", ROUTE_CONTROL)
                       else measurement.result()) if measurement else {}
             subject = result.get("subject") or {}
-            actor = next((item for item in snapshot.get("actors", []) if item.get("handle") == subject.get("handle")), {})
+            actor = None
+            if (predicate["measurement"] == SPAWN_WORK_BUDGET
+                    and predicate.get("kind") == "measurement-stage"
+                    and predicate.get("stage") == "complete"
+                    and result.get("entry") is not None):
+                # This wait follows the created Wild actor. Its saved Follower
+                # can be idle while the exact accepted Fly In keeps moving.
+                from .devtools_records import select_current_actor
+                entry = result["entry"]
+                if not isinstance(entry, dict):
+                    return ("spawn-work-entry-invalid",)
+                subject = {key: entry.get(key) for key in ("handle", "subjectIdentity", "species")}
+                subject["role"] = "WILD"
+                try:
+                    select_current_actor(snapshot, subject)
+                except (ValueError, TypeError, KeyError):
+                    # Other actors or a changing clock cannot renew this wait.
+                    return ("spawn-work-entry-invalid",)
+                actor = next(item for item in snapshot["actors"]
+                    if item.get("active") is True and item.get("identityVerified") is True
+                    and item.get("handle") == subject["handle"])
+            if actor is None:
+                actor = next((item for item in snapshot.get("actors", []) if item.get("handle") == subject.get("handle")), {})
             engine = actor.get("engineObject") or {}
             # Looking, flags and native command bookkeeping are not motion
             # progress. A stationary pause must still fit the recipe's declared

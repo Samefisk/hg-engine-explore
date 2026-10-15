@@ -1,0 +1,945 @@
+{
+  "schemaVersion": 1,
+  "id": "population.route30.saturated-headroom",
+  "title": "Route30 pond bank with a saturated population keeps loop headroom while walking",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "tests/overworld/scenarios/population.route30.saturated-headroom.json",
+  "requirements": [
+    "current.route30-saturated-headroom"
+  ],
+  "budgets": {
+    "maxFrames": 9000,
+    "maxSeconds": 1800,
+    "noProgressFrames": 600,
+    "minObservedFrames": 600
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    }
+  ],
+  "setup": [
+    {
+      "id": "route30-pond",
+      "op": "teleport",
+      "args": {
+        "map": 34,
+        "x": 557,
+        "z": 361,
+        "facing": 0
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "pond-settle16",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "spawn-pidgey-a",
+      "op": "spawn",
+      "args": {
+        "species": 16,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 559,
+        "z": 364
+      },
+      "budget": {
+        "maxSeconds": 600,
+        "maxFrames": 1200,
+        "noProgressFrames": 1200
+      }
+    },
+    {
+      "id": "spawn-pidgey-b",
+      "op": "spawn",
+      "args": {
+        "species": 16,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 560,
+        "z": 366
+      },
+      "budget": {
+        "maxSeconds": 600,
+        "maxFrames": 1200,
+        "noProgressFrames": 1200
+      }
+    },
+    {
+      "id": "spawn-poliwag-a",
+      "op": "spawn",
+      "args": {
+        "species": 60,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 558,
+        "z": 365
+      },
+      "budget": {
+        "maxSeconds": 600,
+        "maxFrames": 1200,
+        "noProgressFrames": 1200
+      }
+    },
+    {
+      "id": "spawn-poliwag-b",
+      "op": "spawn",
+      "args": {
+        "species": 60,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 561,
+        "z": 363
+      },
+      "budget": {
+        "maxSeconds": 600,
+        "maxFrames": 1200,
+        "noProgressFrames": 1200
+      }
+    },
+    {
+      "id": "spawn-hoothoot",
+      "op": "spawn",
+      "args": {
+        "species": 163,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 559,
+        "z": 367
+      },
+      "budget": {
+        "maxSeconds": 600,
+        "maxFrames": 1200,
+        "noProgressFrames": 1200
+      }
+    },
+    {
+      "id": "spawn-spinarak",
+      "op": "spawn",
+      "args": {
+        "species": 167,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 560,
+        "z": 362
+      },
+      "budget": {
+        "maxSeconds": 600,
+        "maxFrames": 1200,
+        "noProgressFrames": 1200
+      }
+    },
+    {
+      "id": "population-settle16",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "bind-mankey",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "arm-window",
+      "op": "main-loop-pacing.arm",
+      "args": {
+        "maxFrames": 768
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "up16-01",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-01",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-02",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-02",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-03",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-03",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-04",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-04",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-05",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-05",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-06",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-06",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-07",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-07",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-08",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-08",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-09",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-09",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-10",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-10",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-11",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-11",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-12",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-12",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-13",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-13",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-14",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-14",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-15",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-15",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-16",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-16",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-17",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-17",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-18",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-18",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-19",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-19",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-20",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-20",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-21",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-21",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-22",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-22",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-23",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-23",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "up16-24",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "down16-24",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "settle16",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "population-headroom-v1",
+      "subject": "mankey"
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "population-headroom-v1",
+      "when": "final"
+    }
+  ]
+}

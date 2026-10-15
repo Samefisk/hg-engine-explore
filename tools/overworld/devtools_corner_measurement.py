@@ -177,9 +177,9 @@ class CornerMeasurement:
                     'corner raw rejection kind or flags differ')
         raw = bytes.fromhex(self.query["before"]["mountStateHex"])
         binding = data["mountBinding"]
-        require(data["profileHex"] == raw[8:80].hex() and data["profile19"] == raw[27]
-                and binding["bindingHex"] == raw[80:96].hex()
-                and binding["sessionGeneration"] == struct.unpack_from("<I", raw, 96)[0]
+        require(data["profileHex"] == raw[8:88].hex() and data["profile19"] == raw[27]
+                and binding["bindingHex"] == raw[88:104].hex()
+                and binding["sessionGeneration"] == struct.unpack_from("<I", raw, 104)[0]
                 and binding["fieldPointer"] == struct.unpack_from("<I", raw)[0]
                 and binding["surfacePointer"] == struct.unpack_from("<I", raw, 4)[0]
                 and data["avatarPointer"] == self.query["before"]["avatar"]

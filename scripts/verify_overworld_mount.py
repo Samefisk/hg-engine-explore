@@ -4,15 +4,16 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import struct
 import subprocess
 from pathlib import Path
 
 if __package__:
-    from .verify_pokemon_move_history_capture import elf_bytes_at, elf_section_layout, layout_symbols, current_field_overlay_metadata
+    from .verify_pokemon_move_history_capture import elf_bytes_at, elf_section_layout, elf_helper_bindings, layout_symbols, current_field_overlay_metadata
 else:
-    from verify_pokemon_move_history_capture import elf_bytes_at, elf_section_layout, layout_symbols, current_field_overlay_metadata
+    from verify_pokemon_move_history_capture import elf_bytes_at, elf_section_layout, elf_helper_bindings, layout_symbols, current_field_overlay_metadata
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -27,7 +28,7 @@ ENTRY_VERSION = 11
 ENTRY_SIZE = 32
 PLAYER_CONTROL_WRAPPER = OVERLAY_ENTRY + 0x20
 PLAYER_STEP_WRAPPER = OVERLAY_ENTRY + 0xA0
-PLAYER_STEP_RESIDENT_HANDLER = 0x023D9B69
+PLAYER_STEP_RESIDENT_HANDLER = 0x023D9B0D
 PLAYER_STEP_RESIDENT_LITERAL = PLAYER_STEP_WRAPPER + 0x20
 FIELD_INPUT_WRAPPER = OVERLAY_ENTRY + 0xE0
 CRASH_SOUND_WRAPPER = OVERLAY_ENTRY + 0x140
@@ -42,7 +43,20 @@ MOUNT_FACING_CALL_SITE = 0x021F8E68
 MOUNT_FACING_WRAPPER = 0x023BD3EC
 RUNTIME_ACK_TARGET = 0x023BD351
 RUNTIME_ACK_WRAPPER_NAME = "OverworldMount_CallActorMotionBoundary"
+MOUNT_DIAGONAL_TAIL = 0x023BF780
+MOUNT_NEWEST_INPUT = 0x023BF790
+MOUNT_DIAGONAL_BODY = 0x01FFA000
+MOUNT_DIAGONAL_BODY_THUMB = MOUNT_DIAGONAL_BODY | 1
+MOUNT_CAPSULE_BASE = 0x01FFF580
+MOUNT_BEGIN_ADDRESS = 0x01FFF980
+MOUNT_CAPSULE_END = 0x01FFFB80
+MOUNT_CONDITIONAL_ADMISSION_CODE = bytes.fromhex(
+    "00281cd0002a1cd094460f4a8358002b15d00e4a801802699a4212d1c26863469a420ed102680b68"
+    "9a420ad142684b689a4206d182688b689a4202d170470020704701207047c04638090000ac050000"
+)
+MOUNT_PREVIEW_NAME = "OverworldMount_DeferRawDiagonalGeometry"
 FIXED_DIRECT_IMPORTS = {
+    "OverworldMount_ClearPlayerPresentation": 0x0205E420,
     "memcpy": 0x023DEEBE,
     "memset": 0x023DEEA2,
     "OverworldActorPolicy_MountCommand": 0x023BA0E0,
@@ -52,10 +66,11 @@ FIXED_DIRECT_IMPORTS = {
     "OverworldMount_ClearFollowerDecisionCooldown": 0x01FF97D0,
     "OverworldMount_GetOrdinaryDirection": 0x01FF9780,
     "OverworldMount_FinalizeIsPending": 0x01FF97C0,
-    "OverworldMount_IsLandingTileAllowed": 0x01FF9620,
     "OverworldMount_ApplyWalkPolicyOutput": 0x01FF96C0,
     "OverworldMount_FinishOneFrameWalk": 0x023BA0BC,
     "OverworldWalkMount_RebaseMotionTarget": 0x023BFFEA,
+    "OverworldWalk_DirectionFromKeys": 0x023BF534,
+    "OverworldWalk_SelectNewestMountedInput": MOUNT_NEWEST_INPUT,
     "OverworldWalk_DirectionFromDelta": 0x023BF68C,
 }
 
@@ -67,14 +82,17 @@ def require(condition: bool, message: str) -> None:
 
 def function_body(source: str, name: str) -> str:
     """Return a C function body while skipping prototypes and attributes."""
-    start = -1
-    while True:
-        start = source.find(name, start + 1)
-        require(start >= 0, f"function is missing: {name}")
+    identifier = name.rstrip().removesuffix("(").rstrip()
+    matches = re.finditer(r"(?<![A-Za-z0-9_])" + re.escape(identifier) + r"\s*\(", source)
+    opening = -1
+    for match in matches:
+        start = match.start()
         opening = source.find("{", start)
         declaration = source.find(";", start)
         if opening >= 0 and (declaration < 0 or opening < declaration):
             break
+    else:
+        require(False, f"function is missing: {name}")
     depth = 0
     for index in range(opening, len(source)):
         if source[index] == "{":
@@ -116,6 +134,75 @@ def fixed_import_call_contract(
             f"fixed import at 0x{address:08X} does not directly BL to 0x{target:08X}")
 
 
+def conditional_admission_contract(source: str, header: str, body: bytes) -> None:
+    require(body == MOUNT_CONDITIONAL_ADMISSION_CODE,
+            "mounted conditional admission changed its local-mask/context guards")
+    require(
+        "request) == 0x5AC" in source
+        and "sizeof(u32) == 0x938" in source
+        and "4: .word 0x00000938" in source
+        and "5: .word 0x000005AC" in source
+        and re.search(r"OverworldMount_ValidateConditionalAdmission\(\s*"
+                      r"const OverworldWildBehaviorConditionRuntime \*conditions,\s*"
+                      r"const OverworldWildBehaviorContext \*context,\s*"
+                      r"u32 mountedMask\)", source) is not None
+        and "Authenticated subject-bank one-bit Mounted mask" in header
+        and "u32 mountedMask);" in header,
+        "mounted conditional admission lost its typed authenticated-bank mask")
+
+
+def conditional_admission_fixtures(source: str, header: str) -> None:
+    conditional_admission_contract(source, header, MOUNT_CONDITIONAL_ADMISSION_CODE)
+    for offset, replacement in (
+        (4, bytes.fromhex("c046")),       # Missing local-mask zero guard.
+        (0x1A, bytes.fromhex("c046")),    # Missing exact active-mask check.
+        (0x22, bytes.fromhex("c046")),    # Missing exact forced local-mask check.
+        (0x3A, bytes.fromhex("c046")),    # Missing final current-context word check.
+        (0x48, (0x7D0).to_bytes(4, "little")),
+        (0x4C, (0x444).to_bytes(4, "little")),
+    ):
+        mutant = bytearray(MOUNT_CONDITIONAL_ADMISSION_CODE)
+        mutant[offset:offset + len(replacement)] = replacement
+        try:
+            conditional_admission_contract(source, header, bytes(mutant))
+        except SystemExit:
+            pass
+        else:
+            require(False, "mounted conditional admission negative control passed")
+
+
+def stock_player_presentation_cleanup_contract(arm9: bytes, load_address: int) -> None:
+    """Authenticate the stock clear-renderer seam used before Field retires heap4."""
+    address, size = 0x0205E420, 0x74
+    offset = address - load_address
+    reference = (REPO / "build/arm9.bin").read_bytes()
+    reference_offset = address - 0x02000000
+    require(0 <= offset <= len(arm9) - size
+            and arm9[offset:offset + size]
+                == reference[reference_offset:reference_offset + size],
+            "stock player presentation cleanup differs from current ARM9 bytes")
+    # Vanilla sub_0205E420 destroys the old graphics callback while its sprite
+    # key is intact, clears flag14, then saves INVALID and no-op callbacks.
+    for call, target in (
+        (0x0205E424, 0x0205F35C),  # MapObject_GetManager
+        (0x0205E428, 0x0205F5D4),  # manager graphics active
+        (0x0205E436, 0x0205F220),  # object flag14
+        (0x0205E440, 0x0205F498),  # current renderer destructor
+        (0x0205E44A, 0x0205F214),  # clear flag14
+        (0x0205E452, 0x0205F258),  # save INVALID sprite key
+        (0x0205E45A, 0x0205F468),
+        (0x0205E462, 0x0205F47C),
+        (0x0205E46A, 0x0205F490),
+        (0x0205E472, 0x0205F4A4),
+        (0x0205E47A, 0x0205F4B8),
+    ):
+        require(decode_thumb_bl(arm9, load_address, call) == target,
+                "stock player presentation cleanup changed its native call order")
+    require(struct.unpack_from("<5I", arm9, 0x0205E480 - load_address)
+            == (0xFFFF, 0x0205FCC5, 0x0205FCC9, 0x0205FCCD, 0x0205FCD1),
+            "stock player presentation cleanup changed its INVALID/no-op keys")
+
+
 def fixed_import_source_fixtures(source: str) -> None:
     fixed_import_source_contract(source)
     for mutant in (
@@ -145,6 +232,23 @@ def fixed_import_source_fixtures(source: str) -> None:
             pass
         else:
             require(False, "wrong relocation, target, mode, or package passed its negative control")
+
+
+def action_switch_import_contract(source: str, imported: tuple | None,
+                                  linked: dict, calls: list) -> None:
+    # The shared START/TICK arm fits the native switch in an unsigned-byte
+    # table. Keep its one call direct and typed; an untyped alias adds a veneer.
+    name, target = "__gnu_thumb1_case_uqi", 0x023DEE54
+    alias = linked.get(name)
+    require(f".thumb_func\\n.thumb_set {name}, 0x{target:08X}\\n" in source
+            and imported == (target, 0, "*ABS*", "F")
+            and alias is not None and alias[2] == "*ABS*"
+            and alias[0] & ~1 == target
+            and not any(symbol.startswith(f"__{name}_from_") for symbol in linked),
+            "mounted Action switch lost its direct Thumb case helper")
+    require(len(calls) == 1, "mounted Action switch lacks its one direct case-helper caller")
+    for kind, linked_code, packaged_code, address in calls:
+        fixed_import_call_contract(kind, linked_code, packaged_code, address, target)
 
 
 def verify_mount_surface_helper_abi() -> None:
@@ -256,7 +360,7 @@ def verify_mount_action_helper_abi() -> None:
         ["arm-none-eabi-objdump", "-r", str(object_path)], text=True)
     helpers = (
         ("OverworldMount_IsLandingTileAllowed", 0x01FF9620,
-         ".overworld_mount_landing_allowed", 0x40, 1),
+         ".overworld_mount_landing_allowed", 0x40, 0),
         ("OverworldMount_ClassifyTeleportCandidate", 0x01FF9660,
          ".overworld_mount_teleport_classify", 0x60, 0),
         ("OverworldMount_ApplyWalkPolicyOutput", 0x01FF96C0,
@@ -281,6 +385,24 @@ def verify_mount_action_helper_abi() -> None:
     action_imports = layout_symbols(action_object, "arm-none-eabi-objdump")
     action_relocations = subprocess.check_output(
         ["arm-none-eabi-objdump", "-r", str(action_object)], text=True)
+    dispatch = resident.get("OverworldMountActionAdapter_Dispatch")
+    original_dispatch = action_imports.get("OverworldMountActionAdapter_Dispatch")
+    require(dispatch is not None and original_dispatch is not None
+            and dispatch[0] == 0x01FF8800 and dispatch[3] == original_dispatch[3] == "F"
+            and original_dispatch[2] == ".overworld_mount_action_entry",
+            "mounted Action switch dispatcher layout differs")
+    switch_calls = []
+    for offset, kind in re.findall(
+            r"([0-9a-fA-F]+)\s+(R_ARM_\w+)\s+\*ABS\*0x23dee54\b",
+            action_relocations, re.IGNORECASE):
+        call_at = dispatch[0] + int(offset, 16) - original_dispatch[0]
+        require(dispatch[0] <= call_at <= dispatch[0] + dispatch[1] - 4,
+                "mounted Action case-helper caller lies outside its dispatcher")
+        packaged_offset = call_at - action_base
+        switch_calls.append((kind, elf_bytes_at(linked_path, call_at, 4),
+                             packaged[packaged_offset:packaged_offset + 4], call_at))
+    action_switch_import_contract(admission_source,
+        action_imports.get("__gnu_thumb1_case_uqi"), resident, switch_calls)
     require(
         ".thumb_set memset, 0x023DEEA2" in admission_source
         and action_imports.get("memset") == (0x023DEEA2, 0, "*ABS*", "F")
@@ -304,8 +426,8 @@ def verify_mount_action_helper_abi() -> None:
         matches = re.findall(
             rf"([0-9a-fA-F]+)\s+(R_ARM_THM_CALL)\s+\*ABS\*0x{target:x}\b",
             action_relocations, re.IGNORECASE)
-        require(len(matches) == 2,
-                f"mounted Walk {name} lacks two direct Thumb callers")
+        require(len(matches) == 1,
+                f"mounted Walk {name} lacks its direct Thumb caller")
         for offset, kind in matches:
             call_at = walk_corridor[0] + int(offset, 16) - object_corridor[0]
             packaged_offset = call_at - action_base
@@ -327,6 +449,9 @@ def verify_mount_action_helper_abi() -> None:
             and "SIZEOF(.overworld_mount_conditional_admission) <= 0x50" in linker
             and "OVERWORLD_MOUNT_CONDITIONAL_ADMISSION_ENTRY_ADDR 0x01FF95D1" in admission_header,
             "mounted conditional-admission helper lost its fixed action ABI")
+    conditional_admission_contract(admission_source, admission_header,
+        elf_bytes_at(linked_path, admission_address, admission[1]))
+    conditional_admission_fixtures(admission_source, admission_header)
     for name, address, section, capacity, calls in helpers:
         symbol = resident.get(name)
         require(symbol is not None and symbol[0] == address
@@ -386,11 +511,121 @@ def verify_mount_action_helper_abi() -> None:
             packaged[offset:offset + 4], call_at, address)
 
 
-def verify_fixed_direct_imports(packaged: bytes) -> None:
+def preview_capsule_contract(original: dict, linked: dict, source: str,
+                             linker: str, linked_body: bytes,
+                             packaged_body: bytes) -> tuple[int, int]:
+    """Bind the private preview's object section to its resident code bytes."""
+    begin = linked.get("OverworldMount_Begin")
+    original_preview = original.get(MOUNT_PREVIEW_NAME)
+    preview = linked.get(MOUNT_PREVIEW_NAME)
+    require(begin is not None and begin[0] == MOUNT_BEGIN_ADDRESS
+            and 0 < begin[1] <= 0x200,
+            "resident Begin entry moved or exceeded its capsule")
+    require(original_preview is not None
+            and original_preview[0] == 0
+            and original_preview[1] > 0
+            and original_preview[2:] == (".overworld_mount_preview", "F")
+            and preview is not None
+            and preview[1] == original_preview[1]
+            and preview[2:] == (".overworld_mount_combat", "F"),
+            "preview helper changed object section, body, or linked section")
+    address, size = preview[:2]
+    require(begin[0] + begin[1] <= address
+            and address + size <= MOUNT_CAPSULE_END,
+            "preview helper lies outside the resident capsule after Begin")
+    require("KEEP(*(.overworld_mount_preview))" in linker
+            and re.search(r"section\(\"\.overworld_mount_preview\"\)\)\)\s*"
+                          + MOUNT_PREVIEW_NAME + r"\s*\(", source) is not None,
+            "preview helper lost its resident section binding")
+    body = function_body(source, MOUNT_PREVIEW_NAME)
+    require("OVERWORLD_ACTOR_WALK_POLICY_PREVIEW_INPUT" in body
+            and "reduceWalk(&call)" in body,
+            "preview helper lost its policy preview body")
+    require(len(linked_body) == size and linked_body == packaged_body,
+            "preview helper differs from resident capsule bytes")
+    return address, size
+
+
+def carrier_hit_capsule_contract(symbol, linked_body: bytes, packaged_body: bytes,
+                                 caller: str, resident_tail: bytes = b"") -> None:
+    require(symbol is not None and symbol[0] == 0x01FFF800
+            and 0 < symbol[1] <= 0x180
+            and symbol[2:] == (".overworld_wild_carrier_hit", "F")
+            and len(linked_body) == symbol[1]
+            and symbol[1] + len(resident_tail) <= 0x180
+            and packaged_body == linked_body + resident_tail
+                + bytes(0x180 - symbol[1] - len(resident_tail))
+            and re.search(r"\bbl\s+1fff800\s+<OverworldWildSpawns_PrepareCarrierHit>", caller),
+            "private carrier hit leaf has wrong address, extent, bytes or Thumb call")
+
+
+def retained_mask_capsule_contract(symbol, linked_body: bytes, packaged_body: bytes,
+                                   caller: str) -> None:
+    require(symbol == (0x01FFF930, 28, ".overworld_wild_carrier_hit", "F")
+            and len(linked_body) == 28
+            and hashlib.sha256(linked_body).hexdigest()
+                == "1edbd1908da0b08504c7de4f948799ab0d1940b3ebc83333bb2e0e8394c280b0"
+            and packaged_body[0x130:0x14C] == linked_body
+            and re.search(r"\b23d47ec:\s+[0-9a-f]+\s+[0-9a-f]+\s+bl\s+1fff930\s+"
+                          r"<OverworldWildSpawns_RetainedMaskNamesActiveSpawns>", caller),
+            "private retained mask leaf has wrong address, extent, bytes or Thumb call")
+
+
+def retained_mask_call_owner_contract(symbol, binding, linked_body: bytes,
+                                      packaged_body: bytes) -> None:
+    """The reviewed T65 caller moved; its private leaf and target did not."""
+    require(symbol == (0x023D4658, 1072, ".text", "F")
+            and binding is not None and binding[:3] == (0x023D4659, 1072, "FUNC")
+            and binding[3].isdigit() and int(binding[3]) > 0
+            and len(linked_body) == 1072 and packaged_body == linked_body
+            and hashlib.sha256(linked_body).hexdigest()
+                == "52e9bb21680c42cea57add6b23976334dfebb99d76e80f2165900b8f306fcc81"
+            and decode_thumb_bl(linked_body, 0x023D4658, 0x023D47EC) == 0x01FFF930,
+            "private retained mask caller lost its exact Thumb owner, body, package or target")
+
+
+def verify_fixed_direct_imports(packaged: bytes, capsules: bytes,
+                                inspect_packaged: bytes) -> None:
     linked_path = REPO / "build/overworld_mount_overlay_linked.o"
     object_path = REPO / "build/overworld_mount_overlay/overworld_mount_overlay.o"
     linked = layout_symbols(linked_path, "arm-none-eabi-objdump")
     original = layout_symbols(object_path, "arm-none-eabi-objdump")
+    inspect = linked.get("OverworldMount_InspectPolicy")
+    require(inspect == (0x01FFA4E0, 12, ".overworld_mount_private_inspect", "F")
+            and original.get("OverworldMount_InspectPolicy")
+                == (0, 12, ".overworld_mount_private_inspect", "F")
+            and inspect_packaged == elf_bytes_at(linked_path, 0x01FFA4E0, 12),
+            "private policy inspect has wrong owner, extent or packaged bytes")
+    source = (REPO / "src/overworld_mount_overlay/overworld_mount_overlay.c").read_text()
+    linker = (REPO / "src/overworld_mount_overlay/linker.ld").read_text()
+    preview = linked.get(MOUNT_PREVIEW_NAME)
+    require(preview is not None, "resident preview helper is missing")
+    preview_bytes = elf_bytes_at(linked_path, preview[0], preview[1])
+    preview_packaged = capsules[
+        preview[0] - MOUNT_CAPSULE_BASE:
+        preview[0] - MOUNT_CAPSULE_BASE + preview[1]]
+    preview_capsule_contract(original, linked, source, linker,
+                             preview_bytes, preview_packaged)
+    for mutant_original, mutant_linked, mutant_source, mutant_bytes in (
+        ({**original, MOUNT_PREVIEW_NAME:
+            (0, preview[1], ".text", "F")}, linked, source, preview_packaged),
+        (original, {**linked, MOUNT_PREVIEW_NAME:
+            (MOUNT_CAPSULE_END - preview[1] + 1, preview[1],
+             ".overworld_mount_combat", "F")}, source, preview_packaged),
+        (original, linked, source.replace(
+            "OVERWORLD_ACTOR_WALK_POLICY_PREVIEW_INPUT",
+            "OVERWORLD_ACTOR_WALK_POLICY_INPUT"), preview_packaged),
+        (original, linked, source,
+         bytes([preview_packaged[0] ^ 1]) + preview_packaged[1:]),
+    ):
+        try:
+            preview_capsule_contract(mutant_original, mutant_linked,
+                                     mutant_source, linker, preview_bytes,
+                                     mutant_bytes)
+        except SystemExit:
+            pass
+        else:
+            require(False, "wrong preview section, body, range, or bytes passed")
     for name, target in FIXED_DIRECT_IMPORTS.items():
         imported = linked.get(name)
         require(original.get(name) == (target, 0, "*ABS*", "F")
@@ -399,6 +634,21 @@ def verify_fixed_direct_imports(packaged: bytes) -> None:
                 f"{name} changed its direct import or gained a local body")
         require(not any(symbol.startswith(f"__{name}_from_") for symbol in linked),
                 f"{name} gained a redundant interworking veneer")
+    restore_names = [name for name in linked
+                     if name.startswith("OverworldMount_RestorePlayerSprite")]
+    require(len(restore_names) == 1, "Mount sprite cleanup has no unique private body")
+    restore_name = restore_names[0]
+    restore = linked[restore_name]
+    ground = linked["OverworldMount_GroundHitCrash"]
+    require(ground[0] == 0x01FFF700
+            and restore[2:] == (".overworld_mount_combat_tail", "F")
+            and ground[0] + ground[1] <= restore[0]
+            and 0 < restore[1] <= 0x01FFF800 - restore[0]
+            and struct.pack("<I", 0x0205F259) in elf_bytes_at(
+                linked_path, restore[0], restore[1])
+            and struct.pack("<I", 0x021FA931) in elf_bytes_at(
+                linked_path, restore[0], restore[1]),
+            "Mount sprite cleanup moved Ground or changed its typed stock restore targets")
     origins = {}
     for name, symbol in original.items():
         if symbol[3] == "F" and symbol[1] > 0 and name in linked:
@@ -420,9 +670,31 @@ def verify_fixed_direct_imports(packaged: bytes) -> None:
         require(len(origins.get(section, ())) == 1,
                 f"cannot bind {section} call offsets to linked Mount code")
         address = next(iter(origins[section])) + int(call.group(1), 16)
-        offset = address - OVERLAY_BASE
+        if section in (".overworld_mount_combat", ".overworld_mount_preview",
+                       ".overworld_mount_combat_tail"):
+            body_name = {
+                ".overworld_mount_combat": "OverworldMount_Begin",
+                ".overworld_mount_preview": MOUNT_PREVIEW_NAME,
+                ".overworld_mount_combat_tail": "OverworldMount_GroundHitCrash",
+            }[section]
+            if (section == ".overworld_mount_combat_tail"
+                    and target == FIXED_DIRECT_IMPORTS["OverworldMount_ClearPlayerPresentation"]):
+                body_name = restore_name
+            body_start, body_size = linked[body_name][:2]
+            require(body_start <= address <= body_start + body_size - 4,
+                    "fixed import caller lies outside its resident body")
+            offset = address - MOUNT_CAPSULE_BASE
+            packaged_call = capsules[offset:offset + 4]
+        elif section == ".overworld_mount_private_inspect":
+            require(0x01FFA4E0 <= address <= 0x01FFA4EC - 4,
+                    "fixed import caller lies outside its private policy inspect body")
+            offset = address - 0x01FFA4E0
+            packaged_call = inspect_packaged[offset:offset + 4]
+        else:
+            offset = address - OVERLAY_BASE
+            packaged_call = packaged[offset:offset + 4]
         fixed_import_call_contract(call.group(2), elf_bytes_at(linked_path, address, 4),
-                                   packaged[offset:offset + 4], address, target)
+                                   packaged_call, address, target)
         counts[target] += 1
     require(all(counts.values()), "a fixed direct import has no verified compiled caller")
 
@@ -433,6 +705,9 @@ def verify_chain_mount_imports() -> None:
                            "arm-none-eabi-objdump")
     chain = layout_symbols(REPO / "build/overworld_mount_chain_overlay_linked.o",
                            "arm-none-eabi-objdump")
+    typed_motion = elf_helper_bindings(
+        REPO / "build/overworld_mount_chain_overlay_linked.o",
+        ("OverworldMount_TryStartCustomMotion",))
     source = (REPO / "src/overworld_mount_chain_overlay/overworld_mount_chain_overlay.c").read_text()
     linker = (REPO / "src/overworld_mount_chain_overlay/linker.ld").read_text()
     for imported, implementation in (
@@ -442,14 +717,190 @@ def verify_chain_mount_imports() -> None:
     ):
         actual = mount.get(implementation)
         alias = chain.get(imported)
+        matches = (alias is not None and alias[0] == actual[0] | 1
+                   and alias[2] == "*ABS*") if actual is not None else False
+        if imported == "OverworldMount_TryStartCustomMotion" and actual is not None:
+            # Objdump clears a FUNC symbol's Thumb bit in its display. Read
+            # st_value for this unique typed import instead.
+            matches = typed_motion.get(imported) == (actual[0] | 1, 0, "FUNC", "ABS")
         require(actual is not None and alias is not None
                 and actual[3] == "F" and actual[1] > 0
-                and alias[0] == actual[0] | 1 and alias[2] == "*ABS*",
+                and matches,
                 f"mounted chain import {imported} misses its current mount body")
         address = f"0x{actual[0]:08X}"
         require(f".thumb_set {imported}, {address}" in source
                 and f"{imported} = {address} | 1;" in linker,
                 f"mounted chain import {imported} source/linker differs")
+
+
+def mounted_diagonal_tail_contract(stub: tuple | None, body: tuple | None,
+                                   linked_stub: bytes, packaged_stub: bytes,
+                                   linked_body: bytes, packaged_body: bytes) -> None:
+    """The public four-argument tail must preserve r3 on its Thumb jump."""
+    require(stub == (MOUNT_DIAGONAL_TAIL, 16, ".walk_helpers", "F"),
+            "mounted diagonal tail moved, changed mode, or lost its 16-byte body")
+    require(body is not None and body[0] == MOUNT_DIAGONAL_BODY
+            and 0 < body[1] <= 0xF0
+            and body[2:] == (".overworld_mount_gait", "F"),
+            "mounted diagonal resolver body moved or changed type")
+    expected = bytes((0x08, 0xB4, 0x02, 0x4B, 0x9C, 0x46,
+                      0x08, 0xBC, 0x60, 0x47, 0xC0, 0x46)) \
+        + MOUNT_DIAGONAL_BODY_THUMB.to_bytes(4, "little")
+    require(linked_stub == expected and packaged_stub == linked_stub,
+            "mounted diagonal tail lost r3 or differs from packaged Thumb code")
+    require(len(linked_body) == body[1] and packaged_body == linked_body,
+            "mounted diagonal resolver body differs from packaged code")
+
+
+def newest_mounted_input_contract(original: tuple | None,
+                                  linked: tuple | None, linked_code: bytes,
+                                  packaged_code: bytes) -> None:
+    require(original is not None and original[0] == 0
+            and 0 < original[1] <= 0xB0
+            and original[2:] == (".overworld_walk_newest_mounted_input", "F")
+            and linked is not None
+            and linked[0] == MOUNT_NEWEST_INPUT
+            and linked[1] == original[1]
+            and linked[2:] == (".walk_helpers", "F"),
+            "newest mounted input helper lost its fixed Thumb code slot")
+    require(len(linked_code) == linked[1] and linked_code == packaged_code,
+            "newest mounted input helper differs from packaged code")
+
+
+def verify_mounted_diagonal_tail(rom: bytes, fat_offset: int,
+                                 y9_offset: int) -> None:
+    walk_elf = REPO / "build/pokemon_move_history_overlay_linked.o"
+    chain_elf = REPO / "build/overworld_mount_chain_overlay_linked.o"
+    stub = layout_symbols(walk_elf, "arm-none-eabi-objdump").get(
+        "OverworldWalk_ResolveMountedDiagonal")
+    body = layout_symbols(chain_elf, "arm-none-eabi-objdump").get(
+        "OverworldMount_ResolveMountedDiagonalBody")
+    require(stub is not None and body is not None,
+            "mounted diagonal tail or private resolver body is missing")
+
+    def package(overlay_id: int, load: int, address: int,
+                size: int) -> bytes:
+        row = struct.unpack_from("<8I", rom, y9_offset + overlay_id * 0x20)
+        start, end = struct.unpack_from("<2I", rom,
+                                      fat_offset + row[6] * 8)
+        offset = address - load
+        require(row[0] == overlay_id and row[1] == load
+                and end - start == row[2]
+                and 0 <= offset <= row[2] - size,
+                "mounted diagonal code is outside its packaged overlay")
+        return rom[start + offset:start + offset + size]
+
+    linked_stub = elf_bytes_at(walk_elf, MOUNT_DIAGONAL_TAIL, 16)
+    linked_body = elf_bytes_at(chain_elf, MOUNT_DIAGONAL_BODY, body[1])
+    packaged_stub = package(153, 0x023BE400, MOUNT_DIAGONAL_TAIL, 16)
+    packaged_body = package(159, 0x01FF9800, MOUNT_DIAGONAL_BODY, body[1])
+    mounted_diagonal_tail_contract(stub, body, linked_stub, packaged_stub,
+                                   linked_body, packaged_body)
+    old_stub = bytes((0x00, 0x4B, 0x18, 0x47)) \
+        + MOUNT_DIAGONAL_BODY_THUMB.to_bytes(4, "little")
+    for bad_stub, bad_body, bad_linked, bad_packaged, bad_body_bytes in (
+        ((MOUNT_DIAGONAL_TAIL, 8, ".walk_helpers", "F"), body,
+         old_stub, old_stub, packaged_body),
+        (stub, body, old_stub + linked_stub[8:],
+         old_stub + linked_stub[8:], packaged_body),
+        (stub, body, linked_stub[:-4] + (MOUNT_DIAGONAL_BODY_THUMB + 2).to_bytes(4, "little"),
+         packaged_stub, packaged_body),
+        (stub, body, linked_stub, bytes([packaged_stub[0] ^ 1]) + packaged_stub[1:],
+         packaged_body),
+        (stub, (MOUNT_DIAGONAL_BODY + 2, body[1], body[2], body[3]),
+         linked_stub, packaged_stub, packaged_body),
+        (stub, body, linked_stub, packaged_stub,
+         bytes([packaged_body[0] ^ 1]) + packaged_body[1:]),
+    ):
+        try:
+            mounted_diagonal_tail_contract(bad_stub, bad_body, bad_linked,
+                                           bad_packaged, linked_body,
+                                           bad_body_bytes)
+        except SystemExit:
+            pass
+        else:
+            require(False, "bad mounted diagonal tail passed its negative control")
+
+    helper_name = "OverworldWalk_SelectNewestMountedInput"
+    walk_object = REPO / "build/pokemon_move_history_overlay/overworld_walk_module.o"
+    walk_source = (REPO / "src/pokemon_move_history_overlay/overworld_walk_module.c").read_text()
+    walk_linker = (REPO / "src/pokemon_move_history_overlay/linker.ld").read_text()
+    walk_original = layout_symbols(walk_object, "arm-none-eabi-objdump")
+    walk_linked = layout_symbols(walk_elf, "arm-none-eabi-objdump")
+    original_helper = walk_original.get(helper_name)
+    helper = walk_linked.get(helper_name)
+    require(helper is not None, "newest mounted input helper is missing")
+    helper_bytes = elf_bytes_at(walk_elf, MOUNT_NEWEST_INPUT, helper[1])
+    helper_package = package(153, 0x023BE400, MOUNT_NEWEST_INPUT, helper[1])
+    newest_mounted_input_contract(original_helper, helper,
+                                  helper_bytes, helper_package)
+    require('section(".overworld_walk_newest_mounted_input")' in walk_source
+            and "KEEP(*(.overworld_walk_newest_mounted_input))" in walk_linker
+            and "== ORIGIN(rom) + 0x1390" in walk_linker,
+            "newest mounted input lost its fixed source/linker binding")
+    for bad_original, bad_linked, bad_package in (
+        ((0, helper[1], ".text", "F"), helper, helper_package),
+        (original_helper,
+         (MOUNT_NEWEST_INPUT + 2, helper[1], ".walk_helpers", "F"),
+         helper_package),
+        (original_helper, helper,
+         bytes([helper_package[0] ^ 1]) + helper_package[1:]),
+    ):
+        try:
+            newest_mounted_input_contract(bad_original, bad_linked,
+                                          helper_bytes, bad_package)
+        except SystemExit:
+            pass
+        else:
+            require(False, "bad newest mounted input helper passed its control")
+
+    chain_object = REPO / "build/overworld_mount_chain_overlay/overworld_mount_chain_overlay.o"
+    chain_original = layout_symbols(chain_object, "arm-none-eabi-objdump")
+    chain_linked = layout_symbols(chain_elf, "arm-none-eabi-objdump")
+    chain_source = (REPO / "src/overworld_mount_chain_overlay/overworld_mount_chain_overlay.c").read_text()
+    chain_entry = chain_linked.get("OverworldMount_ChainControl")
+    original_entry = chain_original.get("OverworldMount_ChainControl")
+    mount_source = (REPO / "src/overworld_mount_overlay/overworld_mount_overlay.c").read_text()
+    require(chain_original.get(helper_name) == (MOUNT_NEWEST_INPUT, 0, "*ABS*", "F")
+            and chain_linked.get(helper_name) is not None
+            and chain_linked[helper_name][0] & ~1 == MOUNT_NEWEST_INPUT
+            and chain_linked[helper_name][2:] == ("*ABS*", "F")
+            and f".thumb_func\\n.thumb_set {helper_name}, 0x{MOUNT_NEWEST_INPUT:08X}\\n"
+                in chain_source
+            and not any(name.startswith(f"__{helper_name}_from_")
+                        for name in chain_linked)
+            and chain_entry is not None and original_entry is not None
+            and original_entry[2:] == (".overworld_mount_chain_entry", "F")
+            and chain_entry[2:] == (".text", "F")
+            and f"{helper_name}(state, &newKeys, &heldKeys);" in
+                function_body(chain_source, "OverworldMount_ChainControl")
+            and f"{helper_name}(" in
+                function_body(mount_source, "OverworldMount_Tick"),
+            "mounted Chain lost its direct newest-input Thumb import")
+    relocations = subprocess.check_output(
+        ["arm-none-eabi-objdump", "-r", str(chain_object)], text=True)
+    section = None
+    calls = []
+    for line in relocations.splitlines():
+        heading = re.match(r"RELOCATION RECORDS FOR \[(.+)\]:", line)
+        if heading:
+            section = heading.group(1)
+            continue
+        call = re.match(
+            rf"([0-9a-fA-F]+)\s+(R_ARM_\w+)\s+\*ABS\*0x{MOUNT_NEWEST_INPUT:x}\b",
+            line, re.IGNORECASE)
+        if call:
+            require(section == ".overworld_mount_chain_entry",
+                    "newest input call moved outside mounted Chain entry")
+            calls.append((int(call.group(1), 16), call.group(2)))
+    require(len(calls) == 1,
+            "mounted Chain lacks one direct newest-input caller")
+    call_at = chain_entry[0] + calls[0][0] - original_entry[0]
+    require(chain_entry[0] <= call_at <= chain_entry[0] + chain_entry[1] - 4,
+            "newest input call lies outside mounted Chain body")
+    fixed_import_call_contract(
+        calls[0][1], elf_bytes_at(chain_elf, call_at, 4),
+        package(159, 0x01FF9800, call_at, 4), call_at, MOUNT_NEWEST_INPUT)
 
 
 def custom_motion_source_contract(
@@ -468,6 +919,7 @@ def custom_motion_source_contract(
     start = compact(function_body(mount, "OverworldMount_TryStartCustomMotion"))
     hop_bridge = compact(function_body(mount, "OverworldMount_PlanHopTrajectory"))
     hop = compact(function_body(action, "OverworldMountAction_PlanHopTrajectory"))
+    hop_request = compact(function_body(action, "OverworldMountAction_RequestHopPlan"))
     dispatch = compact(function_body(action, "OverworldMountActionAdapter_Dispatch"))
     teleport = compact(function_body(mount, "OverworldMount_RequestTeleportPlan"))
     service = compact(function_body(actor, "ActorSystem_RequestMotion"))
@@ -483,7 +935,7 @@ def custom_motion_source_contract(
         (hop_bridge, "return OVERWORLD_MOUNT_ACTION_ADAPTER_DISPATCH(&call);"),
         (dispatch, "call->result = OverworldMountAction_PlanHopTrajectory(call);"),
         (start, "if (!OverworldMount_RequestTeleportPlan(lane, player, direction, &teleportPlan)) { return FALSE; } actorMotionStarted = TRUE;"),
-        (start, "frames = sOverworldMountState.walkEndState == OVERWORLD_MOUNT_WALK_END_CHAIN_HOP ? (u32)lane->hopTime << 1 : trajectory & 0xFFFF;"),
+        (start, "frames = sOverworldMountState.walkEndState == OVERWORLD_MOUNT_WALK_END_CHAIN_HOP ? (u32)lane->hopTime * distance : trajectory & 0xFFFF;"),
         (start, "sOverworldMountState.motionArcHeightQ4 = (u8)(trajectory >> 16);"),
         (start, "frames = teleportPlan.duration;"),
         (start, "sOverworldMountState.motionTargetBaseY = teleportPlan.targetBaseY;"),
@@ -496,8 +948,9 @@ def custom_motion_source_contract(
         (hop, "hopPlan.lane = &call->state->snapshot.profile;"),
         (hop, "hopPlan.object = call->avatar->mapObject;"),
         (hop, "hopPlan.distance = call->action;"),
-        (hop, "request.operation = OVERWORLD_ACTOR_MOTION_SERVICE_PLAN_HOP;"),
-        (hop, "request.hopPlan = &hopPlan;"),
+        (hop, "if (OverworldMountAction_RequestHopPlan(&hopPlan) != OVERWORLD_MOTION_DECISION_ACCEPTED) { return FALSE; }"),
+        (hop_request, "request.operation = OVERWORLD_ACTOR_MOTION_SERVICE_PLAN_HOP;"),
+        (hop_request, "request.hopPlan = hopPlan;"),
         (hop, "*call->trajectory = hopPlan.trajectory;"),
         (teleport, "planCall.lane = lane;"),
         (teleport, "planCall.directions = &direction;"),
@@ -516,13 +969,18 @@ def custom_motion_source_contract(
     ):
         require(compact(expected) in code,
                 f"mounted custom motion lost its owner-profile route: {expected}")
-    for code in (hop, teleport):
+    for code in (hop_request, teleport):
         for expected in (
             "request.version = OVERWORLD_ACTOR_MOTION_CALL_VERSION;",
             "request.size = sizeof(request);",
-            "if (OVERWORLD_ACTOR_SYSTEM_MOTION_ENTRY->request(&request) != OVERWORLD_ACTOR_RESULT_OK || request.decision != OVERWORLD_MOTION_DECISION_ACCEPTED) { return FALSE; }",
         ):
             require(compact(expected) in code, "mounted planner does not validate the Actor Motion ABI result")
+    require(compact("result = OVERWORLD_ACTOR_SYSTEM_MOTION_ENTRY->request(&request);") in hop_request
+            and compact("if (result != OVERWORLD_ACTOR_RESULT_OK) { return result == OVERWORLD_ACTOR_RESULT_RETRY ? OVERWORLD_MOTION_DECISION_RETRY_WORLD_BUSY : OVERWORLD_MOTION_DECISION_PROFILE; }") in hop_request
+            and compact("return request.decision;") in hop_request,
+            "mounted Hop request lost its checked Actor Motion result")
+    require(compact("if (OVERWORLD_ACTOR_SYSTEM_MOTION_ENTRY->request(&request) != OVERWORLD_ACTOR_RESULT_OK || request.decision != OVERWORLD_MOTION_DECISION_ACCEPTED) { return FALSE; }") in teleport,
+            "mounted Teleport planner does not validate the Actor Motion ABI result")
     require("OVERWORLD_WILD_HOP_TRAJECTORY_ENTRY" not in mount,
             "mounted Hop restored the retired callback entry")
     if chain is None:
@@ -543,7 +1001,7 @@ def custom_motion_source_fixtures(mount: str, actor: str) -> None:
         ("mount", "planCall.lane = lane;", "planCall.lane = NULL;"),
         ("action", "request.operation = OVERWORLD_ACTOR_MOTION_SERVICE_PLAN_HOP;", "request.operation = OVERWORLD_ACTOR_MOTION_SERVICE_REQUEST;"),
         ("mount", "request.operation = OVERWORLD_ACTOR_MOTION_SERVICE_PLAN_TELEPORT;", "request.operation = OVERWORLD_ACTOR_MOTION_SERVICE_REQUEST;"),
-        ("action", "|| request.decision != OVERWORLD_MOTION_DECISION_ACCEPTED", "|| FALSE"),
+        ("action", "OverworldMountAction_RequestHopPlan(&hopPlan)\n            != OVERWORLD_MOTION_DECISION_ACCEPTED", "FALSE"),
         ("mount", "frames = teleportPlan.duration;", "frames = 1;"),
         ("mount", "motionArcHeightQ4 = teleportPlan.pauseFrames;", "motionArcHeightQ4 = 0;"),
         ("mount", "== OVERWORLD_MOTION_VISIBILITY_FLICKER) << 4", "!= OVERWORLD_MOTION_VISIBILITY_FLICKER) << 4"),
@@ -568,6 +1026,50 @@ def custom_motion_source_fixtures(mount: str, actor: str) -> None:
             require(False, f"mounted custom-motion negative control passed: {old}")
 
 
+def mounted_finish_body(actor: str, runtime: str) -> str:
+    """Follow the facade wrapper to its boot-resident Walk implementation."""
+    wrapper = function_body(actor, "ActorSystem_FinishMountedWalk")
+    require(
+        "returnOverworldMountWalkProposal_Finish(state,started,crashOnBlocked,output);"
+        in re.sub(r"\s+", "", wrapper),
+        "mounted Walk facade does not call the shared completion implementation",
+    )
+    return function_body(runtime, "OverworldMountWalkProposal_Finish")
+
+
+def mounted_proposal_transport_contract(actor: str, walk: str, runtime: str,
+                                        helpers: str) -> None:
+    """All mounted proposal paths preserve nominal time and Linear state."""
+    finish = mounted_finish_body(actor, runtime)
+    filtered = function_body(walk, "OverworldWalk_FilterMountedInput")
+    save_proposal = function_body(runtime, "Walk_MountSaveProposal")
+    apply_output = function_body(helpers, "OverworldMount_ApplyWalkPolicyOutput")
+    save = function_body(runtime, "OverworldMountWalkProposal_SaveReserved")
+    restore = function_body(runtime, "OverworldMountWalkProposal_RestoreReserved")
+    compact_finish = re.sub(r"\s+", "", finish)
+    compact_save = re.sub(r"\s+", "", save)
+    compact_restore = re.sub(r"\s+", "", restore)
+    require(
+        "OVERWORLD_MOUNT_WALK_NOMINAL_TIME_INDEX" in filtered
+        and "call.reserved[0]" in filtered
+        and "state->reservedPolicyProfile[OVERWORLD_MOUNT_WALK_NOMINAL_TIME_INDEX]"
+            "=call->reserved[0];" in re.sub(r"\s+", "", apply_output)
+        and "output->reserved[0]=state->reservedPolicyProfile["
+            "OVERWORLD_MOUNT_WALK_NOMINAL_TIME_INDEX];" in compact_finish,
+        "mounted Walk does not preserve nominal policy time through START_RESULT",
+    )
+    require(
+        "OverworldMountWalkProposal_SaveReserved(policyCall);" in save_proposal
+        and "OverworldMountWalkProposal_SaveReserved(call);" in apply_output
+        and "OverworldMountWalkProposal_RestoreReserved(output);" in finish
+        and "OVERWORLD_MOUNT_WALK_PROPOSAL_RESERVED[0]=call->reserved[1];" in compact_save
+        and "OVERWORLD_MOUNT_WALK_PROPOSAL_RESERVED[1]=call->reserved[2];" in compact_save
+        and "call->reserved[1]=OVERWORLD_MOUNT_WALK_PROPOSAL_RESERVED[0];" in compact_restore
+        and "call->reserved[2]=OVERWORLD_MOUNT_WALK_PROPOSAL_RESERVED[1];" in compact_restore,
+        "mounted Walk does not preserve Linear carry and turn elapsed through START_RESULT",
+    )
+
+
 def mounted_chain_source_contract(mount: str, actor: str, walk: str, runtime: str) -> None:
     """Mounted Walk commits the same chain receipt as Wild Walk."""
     commit = function_body(actor, "ActorSystem_TryAcknowledgeMotionCommit")
@@ -579,12 +1081,33 @@ def mounted_chain_source_contract(mount: str, actor: str, walk: str, runtime: st
         r"policy->pendingStep = OVERWORLD_ACTOR_WALK_PENDING_CHAIN;\s*\}",
         commit) is not None,
         "mounted logical commit does not enqueue a chain action")
-    mounted_finish = function_body(actor, "ActorSystem_FinishMountedWalk")
-    require("OverworldWalk_SkidTiles(policy->lastWalkTime)" in mounted_finish,
-            "mounted skid distance ignores the last displayed Walk time")
+    mounted_finish = mounted_finish_body(actor, runtime)
+    walk_input = re.sub(r"\s+", "", function_body(
+        runtime, "OverworldActorWalkPolicy_ReduceInput"))
+    skid_picker = re.sub(r"\s+", "", function_body(
+        runtime, "OverworldWalk_ProfileSkidTiles"))
+    save = re.sub(r"\s+", "", function_body(
+        runtime, "OverworldMountWalkProposal_SaveReserved"))
+    require(
+        "visibleSpeed=policy->lastWalkTime!=0?policy->lastWalkTime:state->speed;"
+            in walk_input
+        and "OverworldWalk_ProfileSkidTiles(visibleSpeed,call->lane,TRUE)"
+            in walk_input
+        and "OverworldWalk_ProfileSkidTiles(visibleSpeed,call->lane,FALSE)"
+            in walk_input
+        and "OverworldWalkTimingPolicy_ProfileSkidTiles(time,"
+            "OW_WILD_BEHAVIOR_TURN_SKID_ONE_TIME(lane),"
+            "OW_WILD_BEHAVIOR_TURN_SKID_TWO_TIME(lane),"
+            "OW_WILD_BEHAVIOR_STOP_SKID_TIME(lane),stop);" in skid_picker
+        and "OVERWORLD_MOUNT_WALK_PROPOSAL_RESERVED[2]=call->distance;" in save
+        and "output->distance=OVERWORLD_MOUNT_WALK_PROPOSAL_RESERVED[2];"
+            in re.sub(r"\s+", "", mounted_finish)
+        and "OverworldWalk_SkidTiles(" not in mounted_finish,
+        "mounted skid distance does not retain the profile INPUT proposal "
+        "from the last displayed Walk time")
     mounted_input = function_body(walk, "OverworldWalk_FilterMountedInput")
     mounted_commit = function_body(mount, "OverworldMount_CommitWalkBoundary")
-    require("ActorSystem_Zero(output, sizeof(*output));" in mounted_finish
+    require("OverworldWalkPolicy_Memset(output, 0, sizeof(*output));" in mounted_finish
             and "PokemonMoveHistory_OverlayMemset(&call, 0, sizeof(call));" in mounted_input
             and "memset(&output, 0, sizeof(output));" in mounted_commit
             and "output.flags = OVERWORLD_ACTOR_WALK_POLICY_FLAG_WALK_ACCEPTED" in mounted_commit
@@ -613,9 +1136,17 @@ def mounted_chain_source_fixtures(mount: str, actor: str, walk: str, runtime: st
          "policy->pendingStep = OVERWORLD_ACTOR_WALK_PENDING_NONE;"),
         (0, "| OVERWORLD_ACTOR_WALK_POLICY_FLAG_CHAIN_ENABLED;",
          ";"),
-        (1, "ActorSystem_Zero(output, sizeof(*output));", "/* missing initialization */"),
+        (3, "OverworldWalkPolicy_Memset(output, 0, sizeof(*output));", "/* missing initialization */"),
         (3, "if ((call->flags & OVERWORLD_ACTOR_WALK_POLICY_FLAG_CHAIN_ENABLED) == 0",
          "if ((call->flags & OVERWORLD_ACTOR_WALK_POLICY_FLAG_CHAIN_ENABLED) != 0"),
+        (3, "OVERWORLD_MOUNT_WALK_PROPOSAL_RESERVED[2] = call->distance;",
+         "OVERWORLD_MOUNT_WALK_PROPOSAL_RESERVED[2] = call->travelTime;"),
+        (3, "output->distance = OVERWORLD_MOUNT_WALK_PROPOSAL_RESERVED[2];",
+         "output->distance = OVERWORLD_MOUNT_WALK_PROPOSAL_RESERVED[1];"),
+        (3, "output->distance = OVERWORLD_MOUNT_WALK_PROPOSAL_RESERVED[2];",
+         "output->distance = OverworldWalk_SkidTiles(policy->lastWalkTime);"),
+        (3, "? policy->lastWalkTime : state->speed;",
+         "? state->speed : state->speed;"),
     ):
         require(old in sources[index], f"mounted chain negative control no longer applies: {old}")
         mutant = list(sources)
@@ -639,6 +1170,7 @@ def mounted_diagonal_admission_contract(source: str) -> None:
         "&OW_WILD_BEHAVIOR_WALK_OPTION_LOCK_DIRECTION)==0"
         "||!OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL("
         "sOverworldMountState.snapshot.profile.hopAllowNonCardinal))"
+        "&&!OverworldMount_DeferRawDiagonalGeometry(*newKeys|*heldKeys)"
         "&&OverworldWalk_ResolveMountedDiagonal("
         "&sOverworldMountState,avatar,newKeys,heldKeys)!=0){returnTRUE;}"
     )
@@ -648,8 +1180,8 @@ def mounted_diagonal_admission_contract(source: str) -> None:
         "avatar,*newKeys,*heldKeys,advanceFirstFrame);"
     )
     require(compact == guard + tail,
-            "mounted diagonal admission must consume rejected unlocked input before policy, "
-            "preserve locked direction, and retain cardinal-only normalization")
+            "mounted diagonal admission must defer due skids before raw geometry, "
+            "preserve ordinary rejection and locked direction, and retain cardinal normalization")
 
 
 def mounted_diagonal_admission_fixtures(source: str) -> None:
@@ -666,6 +1198,10 @@ def mounted_diagonal_admission_fixtures(source: str) -> None:
         body.replace("return TRUE;", "return FALSE;", 1),
         body.replace("!OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(",
                      "OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(", 1),
+        body.replace("&& !OverworldMount_DeferRawDiagonalGeometry(*newKeys | *heldKeys)",
+                     "", 1),
+        body.replace("&& !OverworldMount_DeferRawDiagonalGeometry(*newKeys | *heldKeys)",
+                     "&& OverworldMount_DeferRawDiagonalGeometry(*newKeys | *heldKeys)", 1),
     )
     for mutant in mutants:
         require(mutant != body, "mounted admission negative control no longer applies")
@@ -695,6 +1231,122 @@ def field_boundary_source_fixtures(source: str) -> None:
             pass
         else:
             require(False, "field boundary negative control passed")
+
+
+def mounted_profile_source_contract(spawns: str, mount_begin: str) -> None:
+    mounted_profile_snapshot = (
+        re.search(
+            r"GetBehaviorProfileAndPrimitivesForSlot\(\s*state,\s*"
+            r"OW_WILD_FOLLOWER_SLOT,\s*&resolution\.profile,\s*"
+            r"&resolution\.primitives\s*\);.*?"
+            r"EvaluateConditionsForSlot\(\s*state,\s*fieldSystem,\s*"
+            r"OW_WILD_FOLLOWER_SLOT,\s*&resolution\.profile,\s*"
+            r"&resolution\.primitives,\s*-1\).*?"
+            r"OW_WILD_CONDITION_RESULT_FAIL_CLOSED\).*?"
+            r"ResolveBehaviorProfileForContext\(\s*"
+            r"&conditions->request\.context,\s*"
+            r"OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_MOUNTED,\s*"
+            r"NULL,\s*&resolution\s*\)",
+            mount_begin,
+            re.DOTALL,
+        )
+        is not None
+        and re.search(
+            r"if \(spawn != NULL && spawn->active\).*?"
+            r"terrain = spawn->terrain;",
+            spawns,
+            re.DOTALL,
+        )
+        is not None
+        and re.search(
+            r"policyTransaction\.next\.behaviorFingerprint\s*=\s*"
+            r"resolution\.fingerprint;.*?"
+            r"policyTransaction\.next\.matchedLayerMask\s*=\s*"
+            r"resolution\.matchedClassRuleMask\s*"
+            r"\| resolution\.appliedOverrideMask;.*?"
+            r"OVERWORLD_MOUNT_OVERLAY_ENTRY->begin\(\s*"
+            r"fieldSystem,\s*&binding,\s*&resolution\.profile,\s*"
+            r"\(const OverworldWildSurfaceCatalog \*\)"
+            r"behaviorData->surfaceModels,\s*"
+            r"&policyTransaction\)\)\s*\{\s*"
+            r"return FALSE;\s*\}.*?"
+            r"OverworldWildSpawns_ResetSlotMovementCommand\(\s*"
+            r"state,\s*OW_WILD_FOLLOWER_SLOT,\s*TRUE\s*\);",
+            mount_begin,
+            re.DOTALL,
+        )
+        is not None
+        and "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_MOUNTED" in spawns
+        and re.search(
+            r"slot == OW_WILD_FOLLOWER_SLOT\s*"
+            r"&& OverworldWildSpawns_MountIsActive\(\)\) \{\s*return 0;",
+            spawns,
+        )
+        is not None
+    )
+    require(
+        mounted_profile_snapshot,
+        "mount does not resolve, consume, and bind the Mounted override",
+    )
+
+
+def mounted_profile_source_fixtures(spawns: str, mount_begin: str) -> None:
+    mounted_profile_source_contract(spawns, mount_begin)
+    for old, new in (
+        ("ResolveBehaviorProfileForContext(", "LostMountedResolve("),
+        ("&conditions->request.context,", "&wrongContext,"),
+        ("OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_MOUNTED,",
+         "1u << OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_MOUNTED,"),
+        ("OVERWORLD_MOUNT_OVERLAY_ENTRY->begin(", "LostMountedBind("),
+        ("NULL,", "&conditions->request,"),
+    ):
+        require(old in mount_begin, f"Mounted context negative control no longer applies: {old}")
+        try:
+            mounted_profile_source_contract(spawns, mount_begin.replace(old, new))
+        except SystemExit:
+            pass
+        else:
+            require(False, f"Mounted context negative control passed: {old}")
+
+
+def ground_probe_source_contract(runtime: str) -> None:
+    ground = function_body(runtime, "OverworldWildRuntime_GetGroundBaseY")
+    resolver = function_body(runtime, "OverworldWildRuntime_ResolveBaseYAt")
+    compact_ground = re.sub(r"\s+", "", ground)
+    compact_resolver = re.sub(r"\s+", "", resolver)
+    require(
+        "s32baseY=(s32)object->posVec[1];" in compact_ground
+        and "OverworldWildRuntime_QuerySurface(fieldSystem,catalog,x,y,&hit)" in compact_ground
+        and "knownSurface=&hit;" in compact_ground
+        and "OverworldWildRuntime_ResolveBaseYAt(fieldSystem,knownSurface,"
+            "baseY,object->flags,x,y,&baseY);returnbaseY;" in compact_ground
+        and "VecFx32position;" in compact_resolver
+        and "position.y=originBaseY;" in compact_resolver
+        and "if(!OW_WILD_RUNTIME_QUERY_NATIVE_HEIGHT(fieldSystem,&position,"
+            "(objectFlags&MAPOBJECTFLAG_UNK29)!=0))returnFALSE;" in compact_resolver
+        and "*output=position.y+(knownSurface!=NULL?knownSurface->height:0);" in compact_resolver
+        and re.search(r"object->posVec\[\d+\](?:=|\+=|-=|\+\+|--)", compact_ground) is None
+        and "posVec" not in resolver,
+        "mounted ground-height probe mutates the live render object or loses its shared owner",
+    )
+
+
+def ground_probe_source_fixtures(runtime: str) -> None:
+    ground_probe_source_contract(runtime)
+    for old, new in (
+        ("baseY,object->flags,x,y,&baseY", "baseY,object->flags,x,y,NULL"),
+        ("OW_WILD_RUNTIME_QUERY_NATIVE_HEIGHT(fieldSystem, &position,", "LostNativeHeight(fieldSystem, &position,"),
+        ("return baseY;", "object->posVec[0] = 0; return baseY;"),
+        ("return baseY;", "object->posVec[1] = 0; return baseY;"),
+        ("return baseY;", "object->posVec[2] = 0; return baseY;"),
+    ):
+        require(old in runtime, f"ground-height negative control no longer applies: {old}")
+        try:
+            ground_probe_source_contract(runtime.replace(old, new))
+        except SystemExit:
+            pass
+        else:
+            require(False, f"ground-height negative control passed: {old}")
 
 
 def main() -> None:
@@ -786,10 +1438,134 @@ def main() -> None:
     )
     built = (REPO / "build/output_overworld_mount_overlay.bin").read_bytes()
     require(packaged == built, "packaged overlay differs from linked output")
-    verify_fixed_direct_imports(packaged)
+    health_row = struct.unpack_from("<8I", rom, y9_offset + 161 * 0x20)
+    health_start, health_end = struct.unpack_from(
+        "<2I", rom, fat_offset + health_row[6] * 8)
+    capsules = (REPO / "build/overworld_combat_capsules.bin").read_bytes()
+    require(
+        health_row[1] == 0x01FFA580 and len(capsules) == 0x600
+        and health_start + 0x5600 <= health_end
+        and rom[health_start + 0x5000:health_start + 0x5600] == capsules,
+        "resident actor capsules differ from their linked package",
+    )
+    wild_elf = REPO / "build/overworld_wild_spawns_overlay_linked.o"
+    hit_adapter = layout_symbols(wild_elf, "arm-none-eabi-objdump").get(
+        "OverworldWildSpawns_ApplyQueuedCombat")
+    require(
+        hit_adapter is not None and hit_adapter[0] == 0x01FFFB80
+        and 0 < hit_adapter[1] <= 0x3A0
+        and hit_adapter[2:] == (".overworld_wild_combat_tail", "F")
+        and health_row[2] == 0x5A80
+        and health_start + 0x5A80 == health_end
+        and rom[health_start + 0x5600:health_start + 0x5600 + hit_adapter[1]]
+            == elf_bytes_at(wild_elf, hit_adapter[0], hit_adapter[1]),
+        "resident Wild hit adapter differs from its linked package",
+    )
+    carrier = layout_symbols(wild_elf, "arm-none-eabi-objdump").get(
+        "OverworldWildSpawns_PrepareCarrierHit")
+    require(carrier is not None, "private carrier hit leaf missing")
+    carrier_body = elf_bytes_at(wild_elf, carrier[0], carrier[1])
+    carrier_package = capsules[0x280:0x400]
+    hit_calls = subprocess.check_output([
+        "arm-none-eabi-objdump", "-d",
+        "--disassemble=OverworldWildSpawns_ApplyQueuedCombat", str(wild_elf)], text=True)
+    wild_symbols = layout_symbols(wild_elf, "arm-none-eabi-objdump")
+    for name, address, size in (
+        ("OverworldWildSpawns_PublishWalkCrash", 0x01FFF898, 60),
+        ("OverworldWildSpawns_ClearWalkMovementState.constprop.0", 0x01FFF8D4, 54),
+        ("OverworldWildSpawns_SetPreviousTile", 0x01FFF90A, 38),
+        ("OverworldWildSpawns_RetainedMaskNamesActiveSpawns", 0x01FFF930, 28),
+        ("OverworldWildSpawns_IsPreviousTileLockedAt", 0x01FFF94C, 52),
+    ):
+        require(wild_symbols.get(name) == (address, size, ".overworld_wild_carrier_hit", "F"),
+                "resident Wild Walk tail has wrong owner, address, extent or mode")
+    resident_tail = elf_bytes_at(wild_elf, 0x01FFF898, 232)
+    carrier_hit_capsule_contract(carrier, carrier_body, carrier_package, hit_calls, resident_tail)
+    retained_symbol = wild_symbols["OverworldWildSpawns_RetainedMaskNamesActiveSpawns"]
+    retained_body = elf_bytes_at(wild_elf, retained_symbol[0], retained_symbol[1])
+    transition_calls = subprocess.check_output([
+        "arm-none-eabi-objdump", "-d",
+        "--disassemble=OverworldWildSpawns_ApplyTransitionWork", str(wild_elf)], text=True)
+    retained_mask_capsule_contract(retained_symbol, retained_body, carrier_package,
+                                   transition_calls)
+    transition_name = "OverworldWildSpawns_ApplyTransitionWork"
+    transition_symbol = wild_symbols.get(transition_name)
+    transition_binding = elf_helper_bindings(wild_elf, {transition_name}).get(transition_name)
+    require(transition_symbol is not None, "private retained mask caller is missing")
+    transition_body = elf_bytes_at(wild_elf, transition_symbol[0], transition_symbol[1])
+    wild_row = struct.unpack_from("<8I", rom, y9_offset + 149 * 0x20)
+    wild_start, wild_end = struct.unpack_from("<2I", rom, fat_offset + wild_row[6] * 8)
+    require(wild_row == (149, 0x023CCFD8, 0xB000, 0x24, 0, 0, 149, 0)
+            and 0 <= wild_start < wild_end <= len(rom)
+            and wild_end - wild_start == wild_row[2],
+            "private retained mask caller ROM owner metadata differs")
+    transition_package = rom[wild_start + transition_symbol[0] - wild_row[1]:
+                             wild_start + transition_symbol[0] - wild_row[1] + transition_symbol[1]]
+    retained_mask_call_owner_contract(transition_symbol, transition_binding,
+                                      transition_body, transition_package)
+    for mutant_symbol, mutant_body, mutant_package, mutant_calls in (
+        ((retained_symbol[0] + 2, *retained_symbol[1:]), retained_body, carrier_package, transition_calls),
+        ((retained_symbol[0], 30, *retained_symbol[2:]), retained_body, carrier_package, transition_calls),
+        ((retained_symbol[0], retained_symbol[1], ".text", "F"), retained_body, carrier_package, transition_calls),
+        (retained_symbol, bytes([retained_body[0] ^ 1]) + retained_body[1:], carrier_package, transition_calls),
+        (retained_symbol, retained_body, carrier_package[:0x130] + bytes([carrier_package[0x130] ^ 1]) + carrier_package[0x131:], transition_calls),
+        (retained_symbol, retained_body, carrier_package, transition_calls.replace("23d47ec:", "23d47ce:")),
+        (retained_symbol, retained_body, carrier_package, transition_calls.replace("bl\t1fff930", "blx\t1fff930")),
+        (retained_symbol, retained_body, carrier_package, transition_calls.replace("1fff930", "1fff932")),
+    ):
+        try:
+            retained_mask_capsule_contract(mutant_symbol, mutant_body, mutant_package, mutant_calls)
+        except SystemExit:
+            pass
+        else:
+            require(False, "wrong retained mask leaf body, owner, package or direct target passed")
+    for mutant_symbol, mutant_binding, mutant_body, mutant_package in (
+        ((transition_symbol[0] + 2, *transition_symbol[1:]), transition_binding, transition_body, transition_package),
+        ((transition_symbol[0], 1070, *transition_symbol[2:]), transition_binding, transition_body, transition_package),
+        (transition_symbol, (transition_binding[0] & ~1, *transition_binding[1:]), transition_body, transition_package),
+        (transition_symbol, (*transition_binding[:2], "NOTYPE", transition_binding[3]), transition_body, transition_package),
+        (transition_symbol, transition_binding, bytes([transition_body[0] ^ 1]) + transition_body[1:], transition_package),
+        (transition_symbol, transition_binding, transition_body, transition_package[:-1]),
+        (transition_symbol, transition_binding, transition_body[:0x196] + bytes([transition_body[0x196] ^ 1]) + transition_body[0x197:], transition_package),
+    ):
+        try:
+            retained_mask_call_owner_contract(mutant_symbol, mutant_binding, mutant_body, mutant_package)
+        except SystemExit:
+            pass
+        else:
+            require(False, "wrong retained mask caller owner, extent, bytes, package or Thumb target passed")
+    require(rom[health_start + 0x5280:health_start + 0x5400] == carrier_package,
+            "ROM carrier hit leaf differs from its linked package")
+    for mutant, payload, calls in (
+        ((carrier[0] + 2, *carrier[1:]), carrier_package, hit_calls),
+        ((carrier[0], 0x182, *carrier[2:]), carrier_package, hit_calls),
+        ((carrier[0], carrier[1], ".text", "F"), carrier_package, hit_calls),
+        (carrier, bytes([carrier_package[0] ^ 1]) + carrier_package[1:], hit_calls),
+        (carrier, carrier_package, hit_calls.replace("1fff800", "1fff802")),
+    ):
+        try:
+            carrier_hit_capsule_contract(mutant, carrier_body, payload, calls, resident_tail)
+        except SystemExit:
+            pass
+        else:
+            require(False, "wrong carrier hit address, extent, section, bytes or call passed")
+    chain_row = struct.unpack_from("<8I", rom, y9_offset + 159 * 0x20)
+    chain_start, chain_end = struct.unpack_from(
+        "<2I", rom, fat_offset + chain_row[6] * 8)
+    chain_packaged = rom[chain_start:chain_end]
+    require(chain_row == (159, 0x01FF9800, 0xD48, 0, 0, 0, 159, 0)
+            and 0 <= chain_start < chain_end <= len(rom)
+            and chain_end - chain_start == 0xD48
+            and chain_packaged == (REPO /
+                "build/output_overworld_mount_chain_overlay.bin").read_bytes(),
+            "private policy inspect host metadata or packaged Chain bytes differ")
+    inspect_offset = 0x01FFA4E0 - 0x01FF9800
+    verify_fixed_direct_imports(packaged, capsules,
+                               chain_packaged[inspect_offset:inspect_offset + 12])
     verify_mount_surface_helper_abi()
     verify_mount_action_helper_abi()
     verify_chain_mount_imports()
+    verify_mounted_diagonal_tail(rom, fat_offset, y9_offset)
     require(
         struct.pack("<I", 0x023BF400) not in built,
         "mounted input still embeds the retired Walk table base",
@@ -827,6 +1603,15 @@ def main() -> None:
         "runtime acknowledgement wrapper does not preserve r3 and tail-call "
         "the Thumb entry",
     )
+    resident_step = layout_symbols(
+        REPO / "build/linked.o", "arm-none-eabi-objdump"
+    ).get("OverworldWildSpawns_OnPlayerStep")
+    require(
+        resident_step is not None
+        and (resident_step[0] | 1) == PLAYER_STEP_RESIDENT_HANDLER
+        and resident_step[3] == "F",
+        "player-step bridge target differs from linked resident handler",
+    )
     require(
         struct.unpack_from(
             "<I",
@@ -849,7 +1634,7 @@ def main() -> None:
         decode_thumb_bl(
             player_step_overlay,
             player_step_load,
-            0x023DD548,
+            0x023DD484,
         ) == PLAYER_STEP_WRAPPER,
         "canonical player-step call does not target the mount bridge",
     )
@@ -882,9 +1667,20 @@ def main() -> None:
         "entry contains a non-Thumb callback",
     )
     require(
-        all(OVERLAY_BASE <= (callback & ~1) < OVERLAY_BASE + file_size
-            for callback in callbacks),
+        callbacks[0] == 0x01FFF981
+        and all(OVERLAY_BASE <= (callback & ~1) < OVERLAY_BASE + file_size
+            for callback in callbacks[1:]),
         "entry callback lies outside the mount overlay",
+    )
+    mount_elf = REPO / "build/overworld_mount_overlay_linked.o"
+    begin = layout_symbols(mount_elf, "arm-none-eabi-objdump").get(
+        "OverworldMount_Begin")
+    require(
+        begin is not None and begin[0] == 0x01FFF980
+        and 0 < begin[1] <= 0x200
+        and capsules[0x400:0x400 + begin[1]] == elf_bytes_at(
+            mount_elf, begin[0], begin[1]),
+        "mounted Begin callback differs from resident code",
     )
     require(
         callbacks[-1] & ~1 != PLAYER_CONTROL_WRAPPER
@@ -893,23 +1689,17 @@ def main() -> None:
     )
     toggle_wrapper = packaged[
         TOGGLE_LATCH_WRAPPER - OVERLAY_BASE:
-        TOGGLE_LATCH_WRAPPER - OVERLAY_BASE + 0x1C
+        TOGGLE_LATCH_WRAPPER - OVERLAY_BASE + 8
     ]
     require(
         callbacks[-1] == TOGGLE_LATCH_WRAPPER + 1
-        and toggle_wrapper[:0x14]
-            == bytes.fromhex(
-                "01 b4 04 4b 18 78 80 00 02 43 c0 46 c0 46 01 bc "
-                "01 4b 18 47"
-            )
-        and struct.unpack_from("<I", toggle_wrapper, 0x14)[0]
-            == TOGGLE_LATCH_ADDR
+        and toggle_wrapper[:4] == bytes.fromhex("00 4b 18 47")
         and (
             OVERLAY_BASE
-            <= (struct.unpack_from("<I", toggle_wrapper, 0x18)[0] & ~1)
+            <= (struct.unpack_from("<I", toggle_wrapper, 4)[0] & ~1)
             < OVERLAY_BASE + file_size
         ),
-        "missed Select edges do not route through the resident mount latch",
+        "Select frame callback does not forward to the mounted tick",
     )
 
     arm9_offset, arm9_entry, arm9_load, arm9_size = struct.unpack_from(
@@ -918,6 +1708,7 @@ def main() -> None:
     del arm9_entry
     arm9 = rom[arm9_offset:arm9_offset + arm9_size]
     require(len(arm9) == arm9_size, "ARM9 image is truncated")
+    stock_player_presentation_cleanup_contract(arm9, arm9_load)
     for site in MOVE_CONTROL_CALL_SITES:
         require(
             decode_thumb_bl(arm9, arm9_load, site) == PLAYER_CONTROL_WRAPPER,
@@ -954,8 +1745,8 @@ def main() -> None:
     startup = (REPO / "armips/asm/syntheticoverlay.s").read_text()
     require(
         "ResidentOverlayIds:" in startup
-        and ".byte 158, 157, 159, 160, 155, 153, 156" in startup
-        and "mov r5, #7" in startup
+        and ".byte 158, 157, 159, 160, 155, 153, 156, 161" in startup
+        and "mov r5, #8" in startup
         and "bl LoadResidentOverlay" in startup,
         "actor, mount, and action overlays are not boot-loaded before runtime use",
     )
@@ -969,12 +1760,15 @@ def main() -> None:
         / "src/overworld_follower_selector_overlay/follower_selector_input.c"
     ).read_text()
     require(
-        "OverworldFollowerSelector_IsYReleasePending()" not in selector_source
-        and "OverworldFollowerSelector_IsYPressPending() || mountSelection"
+        "OverworldFollowerSelector_IsYReleasePending() || mountSelection"
             in selector_source
+        and "OverworldFollowerSelector_IsYPressPending() || mountSelection"
+            not in selector_source
         and "OVERWORLD_FOLLOWER_SELECTION_REQUEST_PENDING"
-            in selector_source,
-        "follower selection is not confirmed by a distinct second Y press",
+            in selector_source
+        and "| OVERWORLD_FOLLOWER_SELECTOR_Y_RELEASE_PENDING_FLAG;"
+            in field_service,
+        "follower selection is not confirmed by releasing the held Y",
     )
     require(
         "OVERWORLD_FOLLOWER_TRANSITION_QUEUE->reserved ="
@@ -1006,6 +1800,8 @@ def main() -> None:
     runtime_source = (
         REPO
         / "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c"
+    ).read_text() + "\n" + (
+        REPO / "src/player_health_overlay/overworld_walk_input_policy.c"
     ).read_text()
     field_mount_source = (REPO / "src/field/map_teleport.c").read_text() + (
         REPO / "src/overworld_mount_chain_overlay/overworld_mount_presentation.c"
@@ -1047,58 +1843,7 @@ def main() -> None:
     mount_begin = spawns[
         spawns.rfind("OverworldWildSpawns_BeginMountSelectedFollower("):
         spawns.find("static u8 OverworldWildSpawns_GetBehaviorHopSpinSpeed(")]
-    mounted_profile_snapshot = (
-        re.search(
-            r"conditionalAdmission = OVERWORLD_MOUNT_CONDITIONAL_ADMISSION\(\s*"
-            r"conditions,\s*&role\.context\s*\);.*?"
-            r"conditionalAdmission\s*==\s*"
-            r"OVERWORLD_MOUNT_CONDITIONAL_ADMISSION_INVALID.*?"
-            r"ResolveBehaviorProfileForContext\(\s*&role\.context,\s*"
-            r"1u << OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_MOUNTED,\s*"
-            r"conditionalAdmission,\s*&resolution\s*\)",
-            mount_begin,
-            re.DOTALL,
-        )
-        is not None
-        and "GetBehaviorProfileAndPrimitivesForSlot" not in mount_begin
-        and "1u << OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER" not in mount_begin
-        and re.search(
-            r"if \(spawn != NULL && spawn->active\).*?"
-            r"terrain = spawn->terrain;",
-            spawns,
-            re.DOTALL,
-        )
-        is not None
-        and re.search(
-            r"role\.policyTransaction\.next\.behaviorFingerprint\s*=\s*"
-            r"resolution\.fingerprint;.*?"
-            r"role\.policyTransaction\.next\.matchedLayerMask\s*=\s*"
-            r"resolution\.matchedClassRuleMask\s*"
-            r"\| resolution\.appliedOverrideMask;.*?"
-            r"OVERWORLD_MOUNT_OVERLAY_ENTRY->begin\(\s*"
-            r"fieldSystem,\s*&binding,\s*&resolution\.profile,\s*"
-            r"\(const OverworldWildSurfaceCatalog \*\)"
-            r"behaviorData->surfaceModels,\s*"
-            r"&role\.policyTransaction\)\)\s*\{\s*"
-            r"return FALSE;\s*\}.*?"
-            r"OverworldWildSpawns_ResetSlotMovementCommand\(\s*"
-            r"state,\s*OW_WILD_FOLLOWER_SLOT,\s*TRUE\s*\);",
-            mount_begin,
-            re.DOTALL,
-        )
-        is not None
-        and "OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_MOUNTED" in spawns
-        and re.search(
-            r"slot == OW_WILD_FOLLOWER_SLOT\s*"
-            r"&& OverworldWildSpawns_MountIsActive\(\)\) \{\s*return 0;",
-            spawns,
-        )
-        is not None
-    )
-    require(
-        mounted_profile_snapshot,
-        "mount does not resolve, consume, and bind the Mounted override",
-    )
+    mounted_profile_source_fixtures(spawns, mount_begin)
     mount_source = (
         REPO
         / "src/overworld_mount_overlay/overworld_mount_overlay.c"
@@ -1163,10 +1908,7 @@ def main() -> None:
         walk_module_source,
         "OverworldWalk_FilterMountedInput",
     )
-    finish_mounted_walk = function_body(
-        actor_source,
-        "ActorSystem_FinishMountedWalk",
-    )
+    finish_mounted_walk = mounted_finish_body(actor_source, runtime_source)
     require(
         apply_walk_policy is not None
         and "->finishMountedWalk(" in apply_walk_policy.group(0)
@@ -1224,12 +1966,9 @@ def main() -> None:
         ) is not None,
         "mounted input can force a movement without an accepted Walk proposal",
     )
-    require(
-        "OVERWORLD_MOUNT_WALK_NOMINAL_TIME_INDEX" in filter_mounted_input
-        and "call.reserved[0]" in filter_mounted_input
-        and "OVERWORLD_MOUNT_WALK_NOMINAL_TIME_INDEX" in finish_mounted_walk
-        and "output->reserved[0]" in finish_mounted_walk,
-        "mounted Walk does not preserve nominal policy time through START_RESULT",
+    mounted_proposal_transport_contract(
+        actor_source, walk_module_source, runtime_source,
+        (REPO / "src/overworld_mount_action_overlay/overworld_mount_shared_helpers.c").read_text(),
     )
     require(
         '"OverworldWildSpawns_MountIsActive:\\n"' in spawns
@@ -1265,20 +2004,7 @@ def main() -> None:
         and "bl 0x023BD3EC" in overworld_patch,
         "mounted facing-vector ownership is incomplete",
     )
-    ground_probe = re.search(
-        r"OverworldWildRuntime_GetGroundBaseY\([^;]*?\)\s*"
-        r"\{.*?^\}",
-        runtime_source,
-        re.DOTALL | re.MULTILINE,
-    )
-    require(
-        ground_probe is not None
-        and "VecFx32 targetPosition;" in ground_probe.group(0)
-        and "OW_WILD_RUNTIME_QUERY_NATIVE_HEIGHT(" in ground_probe.group(0)
-        and "object->posVec[0] =" not in ground_probe.group(0)
-        and "object->posVec[2] =" not in ground_probe.group(0),
-        "mounted ground-height probe mutates the live render object",
-    )
+    ground_probe_source_fixtures(runtime_source)
     custom_motion_source_fixtures(mount_source, actor_source)
     field_input_source = (REPO / "src/field/overworld_mount_field_input.c").read_text()
     require(
@@ -1288,26 +2014,20 @@ def main() -> None:
         and "== OW_WILD_BEHAVIOR_LOCOMOTION_HOP" in mount_source,
         "mounted Hop does not suppress synthetic warp/step transitions",
     )
+    # Mounted Hop locomotion is retired: the rider jumps with B. Only the
+    # chain-hop path (ledge Hop and B Jump) starts a mounted Hop, and a
+    # cardinal one streams terrain live like cardinal Walk.
     require(
-        "OverworldMount_TryNextHopLandingCandidate" in mount_source
-        and "OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_CARDINAL(" in mount_source
-        and "OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(" in mount_source
-        and "lateralMagnitude != search->distance" not in mount_source
-        and "forwardX * search->distance - forwardY * lateral" in mount_source
-        and "forwardY * search->distance + forwardX * lateral" in mount_source
-        and "lateralMagnitude = search->lateral == maxDistance" in mount_source
-        and "lateralMagnitude >= search->distance" in mount_source
-        and "sideCount = lateralMagnitude == 0 ? 1 : 2" in mount_source
+        "OverworldMount_TryNextHopLandingCandidate" not in mount_source
         and re.search(
-            r"hopSearch\.lateral = 0;\s*"
-            r"hopSearch\.distance = maxDistance;\s*"
-            r"hopSearch\.side = 0;\s*"
-            r"while \(OverworldMount_TryNextHopLandingCandidate\(.*?"
-            r"OverworldMount_PlanHopTrajectory\(",
-            mount_source,
-            re.DOTALL,
-        ) is not None,
-        "mounted Hop does not widen landing candidates from cardinal to diagonal",
+            r"snapshot\.profile\.chillAction\s*== OW_WILD_BEHAVIOR_LOCOMOTION_HOP\)\s*\{\s*"
+            r"sOverworldMountState\.snapshot\.profile\.chillAction =\s*"
+            r"OW_WILD_BEHAVIOR_LOCOMOTION_WALK;",
+            mount_source) is not None
+        and "/* Only the ledge Hop and B Jump start a mounted Hop. */\n        return FALSE;" in mount_source
+        and "if (!liveStream && !OverworldMount_BeginTerrainStream())" in mount_source
+        and "(!liveStream && !OverworldMount_TerrainStreamIsIdle())" in mount_source,
+        "mounted Hop locomotion or the live cardinal chain-hop stream differs",
     )
     require(
         "motionStreamPreparing" in mount_runtime_source
@@ -1466,10 +2186,16 @@ def main() -> None:
         and "OW_WILD_BEHAVIOR_TILES_BEFORE_TURN_SKID(" in runtime_source
         and re.search(
             r"requestedDirection < 4.*?requestedDirection >= 4.*?"
-            r"OverworldActorWalkPolicy_ResetState\(.*?"
+            r"OverworldWalkInput_RefreshTuning\(policy, call, baseSpeed, linear\);.*?"
             r"policy->bufferedDirection != OW_WILD_WALK_DIRECTION_NONE",
             runtime_source,
             re.DOTALL,
+        ) is not None
+        and re.search(
+            r"if \(state->speed == 0 \|\| state->spotState != call->laneState\) \{\s*"
+            r"OverworldActorWalkPolicy_ResetState\(\s*"
+            r"policy, TRUE, baseSpeed, call->laneState\);",
+            function_body(runtime_source, "OverworldWalkInput_RefreshTuning"),
         ) is not None
         and diagonal_walk is not None
         and re.search(
@@ -1507,7 +2233,7 @@ def main() -> None:
     )
     update_motion = re.search(
         r"OverworldMount_UpdateCustomMotion\(void\)\s*\{(?P<body>.*?)"
-        r"typedef struct OverworldMountHopSearch",
+        r"OverworldMount_TryStartCustomMotion\(",
         mount_source,
         re.DOTALL,
     )
@@ -1591,14 +2317,23 @@ def main() -> None:
         re.DOTALL,
     )
     detach_mount = mount_source.split(
-        "static void OverworldMount_DetachPresentation(void)", 1
+        "static void OverworldMount_DetachPresentation(u8 reason)", 1
     )[1].split("static void OverworldMount_Cancel", 1)[0]
     require(
         cancel_mount is not None
         and "OverworldWalkMount_RebaseMotionTarget(&sOverworldMountState);"
             in cancel_mount.group("body")
-        and "OverworldMount_DetachPresentation();"
+        and "OverworldMount_DetachPresentation(reason);"
             in cancel_mount.group("body")
+        and "OverworldMount_RestorePlayerSprite(player, reason);" in detach_mount
+        and re.search(
+            r"if \(reason == OVERWORLD_MOUNT_CANCEL_OVERLAY_CLEANUP\) \{\s*"
+            r"/\*.*?\*/\s*OverworldMount_ClearPlayerPresentation\(player\);\s*"
+            r"MapObject_SetGfxID\(player, sOverworldMountState.savedPlayerGfxId\);\s*"
+            r"\} else \{\s*ChangeMapObjSprite\(player, sOverworldMountState.savedPlayerGfxId\);",
+            function_body(mount_source, "OverworldMount_RestorePlayerSprite"),
+            re.DOTALL,
+        ) is not None
         and "OverworldMount_ClearObjectCommand(player);" in detach_mount
         and "OverworldMount_ResetAvatarAfterCancel(avatar);" in detach_mount
         and "OverworldMount_ClearFollowerDecisionCooldown();" in detach_mount
@@ -1619,6 +2354,13 @@ def main() -> None:
         and '"lsl r1, r1, #8\\n"' in function_body(
             mount_source, "OverworldMount_EndSession"
         )
+        and '"add r3, #108\\n"' in function_body(
+            mount_source, "OverworldMount_EndSession"
+        )
+        and '"strh r2, [r3, #18]\\n"' in function_body(
+            mount_source, "OverworldMount_EndSession"
+        )
+        and "OverworldMountEndSessionOffsetsMustMatchAssembly" in mount_internal
         and "&& sOverworldMountState.snapshot.reserved != 0"
             in function_body(mount_source, "OverworldMount_Tick")
         and "sOverworldMountState.snapshot.reserved--;"
@@ -1700,11 +2442,11 @@ def main() -> None:
         "/* Custom locomotion owns the player for its complete idle/move/pause"
             in mount_source
         and "Overlay 1 asks the stock avatar collision helper" in mount_source
+        and "#define OVERWORLD_MOUNT_PLAYER_MOVE_STATE_NONE 0" in mount_source
         and re.search(
-            r"if \(avatar->unk10 != OVERWORLD_MOUNT_PLAYER_MOVE_STATE_NONE"
-            r".*?OverworldMount_ResetAvatarAfterCancel\(avatar\);",
+            r"if \(avatar->unk10 \| avatar->unk14\) \{"
+            r"\s*OverworldMount_ResetAvatarAfterCancel\(avatar\);",
             mount_source,
-            re.DOTALL,
         ) is not None
         and re.search(
             r"OW_WILD_BEHAVIOR_LOCOMOTION_IS_TELEPORT\(rawLocomotion\)\) \{"
@@ -1738,14 +2480,24 @@ def main() -> None:
         and "u8 bufferedToggleDown;" in mount_internal
         and "bufferedTogglePending) == 0x96" in mount_internal
         and capture_toggle is not None
-        and "reg_PAD_KEYINPUT & PAD_BUTTON_SELECT"
+        and "(*(vu32 *)0x021D1144 >> 2) & 1"
             in capture_toggle.group(0)
-        and "fieldSystem->taskman == NULL" in capture_toggle.group(0)
+        and "(*(vu32 *)0x021D1148 >> 2) & 1"
+            in capture_toggle.group(0)
+        and "fieldSystem->taskman == NULL" not in capture_toggle.group(0)
         and "!OverworldFollowerSelector_IsActiveFlagSet()"
             in capture_toggle.group(0)
-        and "OVERWORLD_MOUNT_TOGGLE_PENDING = TRUE;"
+        and "if (state->mapId == fieldSystem->location->mapId) {\n"
+            "        OVERWORLD_MOUNT_TOGGLE_PENDING = 0;"
+            in function_body(spawns, "OverworldWildSpawns_OverlayOnFieldBusy")
+        and "OVERWORLD_MOUNT_TOGGLE_RETRY_FRAMES" in mount_header
+        and "OVERWORLD_MOUNT_TOGGLE_RETRY_FRAMES;"
             in capture_toggle.group(0)
-        and "u8 togglePressed = sOverworldMountState.bufferedTogglePending;"
+        and "togglePressed = sOverworldMountState.bufferedTogglePending;"
+            in mount_source
+        and "--sOverworldMountState.bufferedTogglePending;"
+            in mount_source
+        and "OVERWORLD_FOLLOWER_TRANSITION_QUEUE->count == 0"
             in mount_source
         and "sOverworldMountState.bufferedTogglePending = FALSE;"
             in mount_source
@@ -1897,6 +2649,11 @@ def main() -> None:
         spawns,
         re.DOTALL,
     )
+    entry_source = (REPO / "lib/overworld/overworld_entry_route.c").read_text()
+    entry_header = (REPO / "include/overworld_entry_route.h").read_text()
+    native_refill_delay = function_body(entry_source, "NativeRefillDelay")
+    native_ordinary_refill = function_body(entry_source, "NativeOrdinaryRefill")
+    refill_delay = function_body(spawns, "OverworldWildSpawns_ApplyRefillDelay")
     runtime_refill_timer = function_body(
         actor_source,
         "OverworldActorSystem_PopulationFrameImpl",
@@ -1925,8 +2682,20 @@ def main() -> None:
         "#define OW_WILD_REFILL_BASE_INTERVAL_FRAMES 60" in spawns
         and refill_function is not None
         and "spawnCooldown--" not in refill_function.group(0)
-        and "OW_WILD_REFILL_BASE_INTERVAL_FRAMES * sharedSpawnCount"
+        and "#define OVERWORLD_ENTRY_REFILL_BASE_FRAMES 60" in entry_header
+        and "return OVERWORLD_ENTRY_REFILL_BASE_FRAMES*(count?count:1);"
+            in native_refill_delay
+        and "count+=state->spawns[slot].active;" in native_refill_delay
+        and "slot<OW_WILD_LAND_SURF_MAX_SPAWNS" in native_refill_delay
+        and "spawnCooldown--" not in native_ordinary_refill
+        and "OVERWORLD_ENTRY_NATIVE_SPAWN" in refill_function.group(0)
+        and "OVERWORLD_ENTRY_SPAWN_ORDINARY_REFILL" in refill_function.group(0)
+        and "OverworldWildSpawns_EntryControl(state,fieldSystem,0,NULL,&c)"
             in refill_function.group(0)
+        and "OverworldWildSpawns_ApplyRefillDelay(OVERWORLD_ENTRY_COMMIT_REFILL_DELAY(value));"
+            in refill_function.group(0)
+        and "OVERWORLD_ACTOR_POPULATION_CONTROL_SCHEDULE_REFILL,delay-1"
+            in refill_delay
         and runtime_refill_timer
         and "OVERWORLD_POPULATION_INPUT_FRAME" in runtime_refill_timer
         and "OVERWORLD_POPULATION_INPUT_TIMER_ELIGIBLE"
@@ -1946,7 +2715,8 @@ def main() -> None:
         and "OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY->populationControl("
             not in actor_source
         and "OverworldWildRuntime_PopulationControl" not in runtime_source
-        and "entry->reservedPopulationControl == 0" in runtime_source
+        and "entry->resolveBaseYAt != NULL" in runtime_source
+        and "reservedPopulationControl" not in runtime_source
         and "OVERWORLD_ACTOR_POPULATION_CONTROL_SCHEDULE_REFILL"
             in actor_source
         and "OVERWORLD_ACTOR_POPULATION_CONTROL_ADVANCE_MAINTENANCE"
@@ -1967,14 +2737,27 @@ def main() -> None:
         ) == 1,
         "wild refill cadence is still coupled to player-step calls",
     )
+    refill_body = refill_function.group(0)
     require(
-        refill_function.group(0).find(
-            "OVERWORLD_ACTOR_POPULATION_CONTROL_SCHEDULE_REFILL"
-        )
-            < refill_function.group(0).find(
-                "OverworldWildSpawns_ReconcileFollowerSelection("
-            ),
-        "an early follower refill exit can leave the runtime timer locked",
+        refill_body.find("OverworldWildSpawns_ReconcileFollowerSelection(")
+            < refill_body.find("if (runtime->refillPositionChecksRemaining == 0")
+            < refill_body.find("OVERWORLD_ACTOR_POPULATION_CONTROL_HAS_REFILL_WAIT")
+            < refill_body.find("OVERWORLD_ACTOR_POPULATION_CONTROL_SCHEDULE_REFILL")
+        and re.search(
+            r"if \(runtime->refillPositionChecksRemaining == 0\s*"
+            r"&& runtime->refillTerrainMask == 0\) \{.*?"
+            r"if \(OverworldWildSpawns_PopulationControl\(\s*"
+            r"OVERWORLD_ACTOR_POPULATION_CONTROL_HAS_REFILL_WAIT, 0\)\) \{\s*"
+            r"return TRUE;\s*\}",
+            refill_body, re.DOTALL,
+        ) is not None
+        and refill_body.find("OVERWORLD_ACTOR_POPULATION_CONTROL_SCHEDULE_REFILL")
+            < refill_body.find("OVERWORLD_ENTRY_SPAWN_ORDINARY_REFILL")
+        and native_ordinary_refill.find("if (runtime->refillPositionChecksRemaining != 0)")
+            < native_ordinary_refill.find("while (runtime->refillTerrainMask != 0)")
+        and "return gOverworldActorSystemState.population.refillArmed;"
+            in population_control,
+        "new ordinary refill bypasses its wait or blocks follower/started work",
     )
     require(
         "OVERWORLD_POPULATION_INPUT_FIELD_EVENT" in population_field_event
@@ -2155,8 +2938,23 @@ def main() -> None:
         "OverworldMount_AcknowledgeSharedMotion(", walk_commit_start
     )
     walk_commit = mount_source[walk_commit_start:walk_commit_end]
+    # The unchanged Wild terminal adapter is now physically hosted in Query.
+    # Its typed callback table and packaged implementation are checked by the
+    # Query package gate. Keep the terminal ACK-before-clear check here.
+    return_move_source = (
+        REPO / "lib/overworld/overworld_return_move_wild.c"
+    ).read_text()
     wild_walk_commit = function_body(
-        spawns, "OverworldWildSpawns_HandleFinishedWalkMovement"
+        return_move_source, "OverworldReturnMoveWild_FinishWalk"
+    )
+    wild_walk_dispatch = function_body(
+        spawns, "OverworldWildSpawns_FinishReturnMove"
+    )
+    wild_command_finish = function_body(
+        spawns, "OverworldWildSpawns_HandleFinishedMovementCommand"
+    )
+    return_finish = function_body(
+        return_move_source, "OverworldReturnMoveWild_Finish"
     )
     sync_start = mount_source.find("static void OverworldMount_SyncPresentation")
     sync_end = mount_source.find(
@@ -2261,8 +3059,15 @@ def main() -> None:
         and player_control.find(
             "if (((newKeys | heldKeys) & PAD_PLUS_KEY_MASK) == 0)"
         ) < player_control.find("OverworldMount_TryStartWalkFromInput(")
-        and "sOverworldMountState.directionInputHeld" in mount_tick
-        and "physicalKeys & PAD_PLUS_KEY_MASK" in mount_tick
+        and re.search(
+            r"u32 noNewKeys = 0;\s*u32 heldKeys = physicalKeys;.*?"
+            r"OverworldWalk_SelectNewestMountedInput\(\s*"
+            r"&sOverworldMountState, &noNewKeys, &heldKeys\);\s*"
+            r"physicalKeys = \(u16\)heldKeys;",
+            mount_tick,
+            re.DOTALL,
+        ) is not None
+        and "sOverworldMountState.directionInputHeld =" not in mount_tick
         and re.search(
             r"walkEndState = OVERWORLD_MOUNT_WALK_END_NONE;.*?"
             r"OverworldMount_TryStartWalkFromInput\(.*?FALSE\).*?"
@@ -2278,11 +3083,20 @@ def main() -> None:
         "mounted Walk continuation is not a one-shot normal-control receipt",
     )
     require(
-        "->terminalWalk(" in wild_walk_commit
-        and wild_walk_commit.find("->terminalWalk(")
+        "entry->returnFinish(&context, profile, primitives, flags)"
+            in wild_walk_dispatch
+        and "OverworldWildSpawns_FinishReturnMove(" in wild_command_finish
+        and "OVERWORLD_RETURN_MOVE_WALK_TERMINAL" in wild_command_finish
+        and re.search(
+            r"if \(flags & OVERWORLD_RETURN_MOVE_WALK_TERMINAL\)\s*"
+            r"return OverworldReturnMoveWild_FinishWalk\(",
+            return_finish,
+        ) is not None
+        and "->terminalWalk(" in wild_walk_commit
+        and 0 <= wild_walk_commit.find("->terminalWalk(")
             < wild_walk_commit.find("OVERWORLD_MOTION_PHASE_SETTLING")
             < wild_walk_commit.find(
-                "OverworldWildSpawns_ClearCustomJumpLocal(state, slot);"
+                "input->ops->clearCustomJump(state, slot);"
             ),
         "wild Walk clears shared ownership before the terminal actor commit",
     )

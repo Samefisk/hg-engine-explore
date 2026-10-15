@@ -18,10 +18,22 @@ POLICY_FIELDS = dict(zip(
     (*range(8), *range(16, 25))))
 
 
+LINEAR_POLICY_FIELDS = dict(zip(
+    ("linearElapsed", "linearCarry", "linearMode", "linearCapFrames"), range(32, 36)))
+
+
+def _policy_raw(raw, label):
+    # Pure replay also reads retained pre-linear receipts. Live observers and
+    # RESET authenticate the current 36-byte descriptor before collecting data.
+    if not isinstance(raw, str) or len(raw) not in (64, 72):
+        raise ValueError(label + " policy byte size differs")
+    return _bytes(raw, len(raw) // 2, label)
+
+
 def policy_bytes(value, raw):
-    raw = _bytes(raw, 32, "policy")
+    raw = _policy_raw(raw, "policy")
     if not isinstance(value, dict) or any(type(value.get(k)) is not int or value[k] != raw[i]
-                                          for k, i in POLICY_FIELDS.items()):
+                                          for k, i in {**POLICY_FIELDS, **(LINEAR_POLICY_FIELDS if len(raw) == 36 else {})}.items()):
         raise ValueError("policy bytes and decoded fields differ")
     return raw
 
@@ -51,11 +63,13 @@ def reset_value(receipt):
     expected_request = b"\x01\x00\x1c\x00" + bytes(4) + bytes((receipt["subject"]["handle"]["slot"], 0)) + bytes(18)
     if request != expected_request or receipt.get("responseHex") != request.hex():
         raise ValueError("RESET request or response differs")
-    prior = _bytes(before.get("policyHex"), 32, "RESET before")
+    prior = _policy_raw(before.get("policyHex"), "RESET before")
     expected = bytearray(prior)
     expected[:8] = bytes((255, 0, 0, 0, 255, 0, 0, 0))
     expected[16:19] = bytes(3)
     expected[20:24] = bytes((255, 0, 0, 0))
+    if len(expected) == 36:
+        expected[32:36] = bytes(4)
     if after.get("policyHex") != expected.hex() or before.get("actor") != after.get("actor") \
             or before["snapshot"].get("player") != after["snapshot"].get("player") \
             or before.get("inputs") != after.get("inputs"):
@@ -219,7 +233,7 @@ class AccelerationMeasurement:
         binding = state["fingerprint"].to_bytes(4, "little") + state["mask"].to_bytes(4, "little")
         if before[8:16] != binding or after[8:16] != binding:
             raise ValueError("raw policy profile binding differs")
-        lane = _bytes(data.get("laneHex"), 72, "COMMIT lane")
+        lane = _bytes(data.get("laneHex"), 80, "COMMIT lane")
         # GetBehaviorStateLane maps TIRED3 to lane index 1. CHILL0, EMOTING1,
         # and the reserved value 2 use Owner. Mount CommitWalkBoundary always Owner.
         if request[13] not in (0, 1, 2, 3) or (self.active == "MOUNTED" and request[13] != 0):

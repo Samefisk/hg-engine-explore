@@ -102,7 +102,7 @@ class WalkPolicyReset:
                     (base, size, stride, offset, policy_member, policy_size, capacity))
                 and base % 4 == 0 and 0x02000000 <= base <= 0x02400000 - size
                 and 48 <= size <= 65535 and 1 <= capacity <= 10 and stride >= 88 and stride % 4 == 0
-                and offset >= 48 and offset % 4 == 0 and policy_size == 32
+                and offset >= 48 and offset % 4 == 0 and policy_size == 36
                 and 88 <= policy_member <= stride - policy_size
                 and offset + capacity * stride <= size,
                 "RESET actor/policy layout differs")
@@ -114,7 +114,7 @@ class WalkPolicyReset:
                     "<IHH", 0x5353574F,
                     s.rt.ACTOR_DESCRIPTOR["facade"]["version"], size),
                 "RESET actor state is not initialized")
-        policy = raw[policy_offset:policy_offset + 32]
+        policy = raw[policy_offset:policy_offset + policy_size]
         require(policy[5] == 0 and policy[22] == 0 and policy[23] == 0,
                 "RESET has pending Walk work")
         stable_actor = {k: deepcopy(v) for k, v in actor.items()
@@ -152,9 +152,10 @@ class WalkPolicyReset:
             expected[:8] = bytes((255, 0, 0, 0, 255, 0, 0, 0))
             expected[16:19] = bytes(3)
             expected[20:24] = bytes((255, 0, 0, 0))
+            expected[32:36] = bytes(4)
             require(after["policyHex"] == expected.hex(), "RESET policy readback differs")
             offset = before["policyOffset"]
-            expected_state = before["state"][:offset] + expected + before["state"][offset + 32:]
+            expected_state = before["state"][:offset] + expected + before["state"][offset + len(expected):]
             require(after["state"] == expected_state and before["actor"] == after["actor"]
                     and before["snapshot"]["player"] == after["snapshot"]["player"]
                     and before["inputs"] == after["inputs"], "RESET changed pose, profile, anchor or actor state")

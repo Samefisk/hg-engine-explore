@@ -135,19 +135,19 @@ def source():
         if len(matches) != 1:
             raise ValueError(f"missing production constant {name}")
         constants.extend(matches)
-    matches = re.findall(
-        r"^#define OW_WILD_BEHAVIOR_LOCOMOTION_HOP_FROM_OFF_SCREEN\s+[^\n]+$",
-        product,
-        re.M,
-    )
-    if len(matches) != 1:
-        raise ValueError("missing production off-screen Hop locomotion constant")
-    constants.extend(matches)
+    for name in ("OW_WILD_BEHAVIOR_LOCOMOTION_HOP_FROM_OFF_SCREEN",
+                 "OW_WILD_BEHAVIOR_LOCOMOTION_FLY_IN"):
+        matches = re.findall(r"^#define " + name + r"\s+[^\n]+$", product, re.M)
+        if len(matches) != 1:
+            raise ValueError("missing production startup locomotion constant: " + name)
+        constants.extend(matches)
     text = FIXTURE.read_text()
     for marker, body in {
         "/* @CONSTANTS@ */": "\n".join(constants),
         "/* @APPLY_SETUP@ */": function(product, "OverworldWildSpawns_ApplySpawnObjectSetup", "void"),
-        "/* @PREPARE_IDENTITY@ */": function(SERVICE.read_text(), "OverworldWildSpawnIdentity_PrepareSlot", "int"),
+        "/* @PREPARE_IDENTITY@ */": (
+            function(SERVICE.read_text(), "OverworldWildSpawnIdentity_DeleteOrphans", "int")
+            + "\n" + function(SERVICE.read_text(), "OverworldWildSpawnIdentity_PrepareSlot", "int")),
         "/* @SPAWN@ */": function(product, "OverworldWildSpawns_SpawnPreparedEncounter", "BOOL"),
     }.items():
         if text.count(marker) != 1:

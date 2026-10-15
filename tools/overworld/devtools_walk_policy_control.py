@@ -38,7 +38,7 @@ class NativeWalkPolicyReadControl:
     def _receipt(value):
         raw, policy = value
         data = bytes.fromhex(raw)
-        if len(data) != 32 or type(policy.get("counter")) is not int or policy["counter"] != data[1]:
+        if len(data) != 36 or type(policy.get("counter")) is not int or policy["counter"] != data[1]:
             raise WalkPolicyControlError("Walk policy reader counter or byte size differs")
         return dict(rawHex=raw, policy=deepcopy(policy))
 
@@ -54,7 +54,7 @@ class NativeWalkPolicyReadControl:
             if original[1] == 255:
                 raise WalkPolicyControlError("Walk policy counter cannot be incremented without overflow")
             address = observer._commit_policy_address(slot)
-            if self.session.read(address, 32) != original:
+            if self.session.read(address, 36) != original:
                 raise WalkPolicyControlError("Walk policy native bytes differ from clean read")
             self.receipt = dict(clean=clean, bad=None, restored=None, clock=observer._clock(),
                                 policyAddress=address, changedOffset=1, guestInstructionAdvance=0)
@@ -80,7 +80,7 @@ class NativeWalkPolicyReadControl:
                     # Restore our exact original allocation even on owner error;
                     # such an error remains fatal and cannot resume gameplay.
                     self.session.write(address + 1, original[1:2])
-                    if self.session.read(address, 32) != original:
+                    if self.session.read(address, 36) != original:
                         raise WalkPolicyControlError("Walk policy native restore readback differs")
                     restored = self._receipt(read_fn())
                     self.receipt["restored"] = restored

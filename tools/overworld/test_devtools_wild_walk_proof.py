@@ -4,7 +4,7 @@ from pathlib import Path
 import json
 import unittest
 
-from tools.overworld.test_devtools_wild_walk_measurement import wild_fixture, replay
+from tools.overworld.test_devtools_wild_walk_measurement import wild_fixture, multi_walk_fixture, replay
 from tools.overworld.devtools_wild_walk_proof import (KIND, REQUIREMENT, FAULTS,
     WildWalkNegative, contract, measurements, validate_negative_result)
 
@@ -19,6 +19,42 @@ def good_result():
 
 
 class WildWalkProofTests(unittest.TestCase):
+    def prelude_result(self, *, successor=False):
+        data=multi_walk_fixture((5,4),successor=successor);meter=replay(data)
+        terminal=data[3][-1][0]
+        meter.close(dict(closed=True,advancedFrames=0,acceptedProof=False,snapshot=deepcopy(terminal),
+            wildWalk=dict(data[2],closed=True,counts={"clear":2})),terminal)
+        return dict(passed=True,failures=[],measurements={KIND:meter.result()}),dict(
+            sessionId="private",sessionCleanup=dict(sessionId="private",closed=True,errors=[]))
+
+    def test_prelude_is_checked_but_only_four_frame_rows_earn_credit(self):
+        result,record=self.prelude_result()
+        actual={r["name"]:r["value"] for r in measurements(result,record)}
+        self.assertEqual(actual["wild-walk-render-sample-counts"],dict(durations=[4],sampleCounts=[4]))
+        self.assertEqual(actual["wild-walk-clear-count"],1)
+        self.assertEqual(result["measurements"][KIND]["cleanup"]["wildWalk"]["counts"],{"clear":2})
+        for fault in ("render","clear","start","commit","boundary","omit"):
+            result,record=self.prelude_result();meter=result["measurements"][KIND];pre=meter["prelude"][0]
+            if fault=="render":pre["motion"]["samples"][1]["render"][0]+=1
+            elif fault=="clear":pre["clearReceipts"][0]["data"]["after"]["active"]=1
+            elif fault=="start":pre["traces"][0]["data"]["valueB"]=4
+            elif fault=="commit":pre["motion"]["commitAfter"]+=1
+            elif fault=="boundary":meter["cycleInitial"]["frame"]+=1
+            else:meter["prelude"]=[]
+            with self.subTest(fault=fault),self.assertRaises(ValueError):measurements(result,record)
+
+    def test_zero_pause_prelude_requires_exact_successor_start_and_origin(self):
+        result,record=self.prelude_result(successor=True)
+        self.assertEqual(len(measurements(result,record)),7)
+        for fault in ("start","origin","elapsed","reservation"):
+            result,record=self.prelude_result(successor=True);pre=result["measurements"][KIND]["prelude"][0]
+            actor=pre["terminal"]["actors"][0]
+            if fault=="start":pre["successorStart"]["data"]["sequence"]=0
+            elif fault=="origin":actor["origin"]["x"]+=1
+            elif fault=="elapsed":actor["motionElapsed"]=1
+            else:actor["reservationId"]=0
+            with self.subTest(fault=fault),self.assertRaises(ValueError):measurements(result,record)
+
     def test_command_profile_cache_is_not_a_native_boundary_change(self):
         result,record=good_result()
         result['measurements'][KIND]['cleanup']['snapshot']['nativeObservation']['resolvedProfiles']=[{'cached':True}]

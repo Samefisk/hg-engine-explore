@@ -29,6 +29,11 @@ MAX_IDENTITY_BYTES = 1024 * 1024
 MAX_SNAPSHOT_BYTES_TOTAL = 1800 * 65536
 
 
+def stock_bubble_admitted(value: Any) -> bool:
+    """ov01_02203A48 returns an effect pointer, or NULL if already busy."""
+    return type(value) is int and 0x02000000 <= value < 0x02400000 and value % 4 == 0
+
+
 def _integer(value: Any, name: str, low: int, high: int) -> int:
     if type(value) is not int or not low <= value <= high:
         raise ValueError(f"{name} must be an integer in {low}..{high}")
@@ -131,7 +136,7 @@ def select_current_actor(snapshot: dict[str, Any], subject: dict[str, Any]) -> d
             "identityVerified": True, "engineIdentity": _copy_json(actor.get("engineIdentity"))}
 
 
-FIELD_OWNED_KEYS = frozenset({"actors", "player", "party", "partyObservation", "terrain", "context",
+FIELD_OWNED_KEYS = frozenset({"actors", "player", "party", "partyObservation", "pokemonCombat", "terrain", "context",
     "actorFrame", "selector", "dialogue", "fieldControl", "observerControl", "resolvedProfiles", "streaming"})
 
 

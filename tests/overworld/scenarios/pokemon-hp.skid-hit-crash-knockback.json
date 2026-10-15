@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "id": "pokemon-hp.skid-hit-crash-knockback",
+  "title": "A natural Ambush hit stops mounted skid with Crash before shared Jump1",
+  "status": "active",
+  "capabilities": [
+    "player.health",
+    "collision.attack",
+    "walk.skid",
+    "mount.presentation"
+  ],
+  "proofLevel": "S4",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "Current mounted level50 party Stantler and ordinary level10 Wild Weepinbell on Route29.",
+    "trigger": "After declared preparation, use Up8, Right24 and neutral32. The ordinary Ambush Hop must cause a real HP hit during active native SKID. No HP, motion, timer, RNG or attacking writes supply the trigger.",
+    "observable": "One native20HP party hit and the same saved rider hit immediately publish one Crash. The old SKID is suspended and ground settled without END/COMMIT/CANCEL. Existing role Crash holds control, then one forced13-frame Jump1 rises, lands one tile and restores the mounted seat/control for ten clean frames.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Private Continue copies; teleport33 at586,407 Up; prepare level50 party Stantler and mount; neutral16; configure initial mount travelTime4/timeVariance0/free/wall-hit; spawn level10 fillers69/43/44/45/182 at583,401..405 and Weepinbell70 at586,402 Down; neutral50 plus one ordinary boundary frame; bind current identities. No observed motion or damage is forced."
+      }
+    ],
+    "limits": [
+      "Prepared placement and initial travel-time/variance setup do not prove natural acquisition or profile defaults.",
+      "This bounded witness requires active SKID and Jump1. Due-idle skid, Wild Crash, and None/Slide knockback use separate production checks.",
+      "Native completed queue, real party HP, per-target receipt, private plan and rendered poses supply proof. No screenshot or video."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "stantler",
+      "species": 234,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "weepinbell",
+      "species": 70,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Bind current Stantler and idle Down-facing Weepinbell with natural cooldown9."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Up8 then Right24 causes an ordinary Ambush hit during active skid; one immediate Crash must stop it."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Ground restoration and Crash completion precede shared Jump1 and ten clean restored mounted frames."
+    }
+  ],
+  "stop": {
+    "frameBudget": 900,
+    "condition": "Complete exactly64 natural input frames; one accepted mounted skid hit must Crash immediately, ground settle without old END/COMMIT/CANCEL, then finish the same Jump1 and restore seat/control."
+  },
+  "expect": {
+    "requiredEvents": [
+      "WORLD_EFFECT",
+      "MOTION_STARTED",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "ACTOR_REBOUND",
+      "CONTEXT_CHANGED"
+    ],
+    "invariants": [
+      "One natural Ambush hit interrupts the exact current native SKID immediately",
+      "Exactly one Crash precedes role ground restoration and forced Jump1; no old SKID commit/finish/cancel",
+      "The same shared mounted anchor returns to ground plus normal seat, with control held through Crash and Jump"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "pokemon-hp.skid-hit-crash-knockback",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "engine-boundary",
+      "rendered-motion",
+      "natural-input",
+      "control-release"
+    ],
+    "minimumFrames": 64
+  }
+}

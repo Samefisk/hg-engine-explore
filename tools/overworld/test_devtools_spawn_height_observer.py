@@ -23,9 +23,10 @@ class SpawnHeightFixture(RepositionFixture):
         self.resolve = self.symbols["OverworldWildSpawns_ResolveObjectLandingHeight"]
         self.apply = self.symbols["OverworldWildSpawns_ApplySurfaceHeight"]
         self.spawn_prepared = self.symbols["OverworldWildSpawns_SpawnPreparedEncounter"]
+        self.jump_driver = self.symbols["OverworldWildSpawns_StartPreparedCustomJumpCommandWithArc"]
         regions = []
         for address, data in self.code_regions:
-            if address in (self.resolve, self.apply, self.spawn_prepared):
+            if address in (self.resolve, self.apply, self.spawn_prepared, self.jump_driver):
                 data = bytearray(data)
                 data[8:12] = struct.pack("<HH", 0xF000, 0xF800)
                 data = bytes(data)
@@ -47,7 +48,7 @@ class SpawnHeightFixture(RepositionFixture):
         self.enter("spawn-prepared", r0=self.rt.WILD_STATE, r1=0x02231000, r2=0, r3=0)
 
     def height(self, *, point=None, object_pointer=None, caller=None):
-        self.height_caller = caller or self.timed
+        self.height_caller = caller or self.jump_driver
         self.enter("spawn-landing-height", sp=0x027E3700, lr=self.height_caller + 13,
                    r0=0x02231000, r1=object_pointer or self.source["object"], r2=(point or self.target)[0],
                    r3=(point or self.target)[1])
@@ -142,6 +143,10 @@ class SpawnHeightObserverTests(unittest.TestCase):
 
     def test_wrong_caller_is_rejected(self):
         f = self.f; f.start(); f.height(caller=f.apply)
+        self.assertIn("wrong native caller", f.hooks.error)
+
+    def test_timed_wrapper_cannot_supply_the_driver_height_receipt(self):
+        f = self.f; f.start(); f.height(caller=f.timed)
         self.assertIn("wrong native caller", f.hooks.error)
 
     def test_intermediate_point_does_not_masquerade_as_target(self):

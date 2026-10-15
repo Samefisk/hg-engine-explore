@@ -4,6 +4,7 @@
 OverworldMount_PlayerMoveControl equ 0x023BB620
 OverworldMount_FieldInputProcess equ 0x023BB6E0
 OverworldMount_PlayCrashSound equ 0x023BB740
+PlayerHealthContact_StockCollisionEntry equ 0x01FFC160
 
 /*
  * Each retail site contains exactly one Thumb BL and retains its original
@@ -43,6 +44,13 @@ OverworldMount_PlayCrashSound equ 0x023BB740
 .org 0x0205D5C2
 .area 4
     bl OverworldMount_PlayCrashSound
+.endarea
+
+/* Replace only the real stock Walk collision call. Other callers of
+ * sub_0205DA34 include forced movement and mounted planning probes. */
+.org 0x0205D4C2
+.area 4
+    bl PlayerHealthContact_StockCollisionEntry
 .endarea
 
 .close

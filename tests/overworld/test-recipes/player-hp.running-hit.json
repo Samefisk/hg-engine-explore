@@ -1,0 +1,173 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.running-hit",
+  "title": "A real Weepinbell hit returns the running player to idle after knockback",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "data/overworld_behavior_profiles.json#ambush",
+  "requirements": [
+    "current.player-health-running-hit"
+  ],
+  "budgets": {
+    "maxSeconds": 210,
+    "maxFrames": 450,
+    "noProgressFrames": 300,
+    "minObservedFrames": 18
+  },
+  "subjects": [
+    {
+      "id": "weepinbell",
+      "species": 70,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "player-health-running-hit-v1",
+      "subject": "weepinbell"
+    }
+  ],
+  "setup": [
+    {
+      "id": "ambush-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 407,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-weepinbell",
+      "op": "spawn",
+      "args": {
+        "species": 70,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 585,
+        "z": 404
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-weepinbell",
+      "op": "bind",
+      "args": {
+        "subject": "weepinbell"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "before-contact",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "run-to-contact",
+      "op": "step",
+      "args": {
+        "frames": 300,
+        "keys": [
+          "UP",
+          "B"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "player-health-running-hit-v1",
+          "stage": "running-contact",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 300,
+        "noProgressFrames": 300
+      }
+    },
+    {
+      "id": "at-contact",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "finish-knockback",
+      "op": "step",
+      "args": {
+        "frames": 40,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "player-health-running-hit-v1",
+          "stage": "knockback-returned",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "neutral-after-knockback",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "after-knockback",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "player-health-running-hit-v1",
+      "when": "final"
+    }
+  ]
+}

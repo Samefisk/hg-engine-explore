@@ -15,8 +15,8 @@
     "kind": "normal-play",
     "expectationSource": "documentation/overworld-system/verification.md#spawn-work-budget-and-proof-freshness",
     "actor": "The unmounted player and the existing FOLLOWER Mankey from test.sav.",
-    "trigger": "Use the sealed 673-step Route 30 and Cherrygrove route that previously produced the spawn-linked hitch.",
-    "observable": "After the fixed Cherrygrove anchor, read every stock main-loop return. Fail if one update uses more than two native cycles, advances more than two scheduler frames, exceeds the bounded two-cycle clock margin, or holds the player render position during active travel. Bind the current Mankey profile and require one explicit destination scan within 21 frames.",
+    "trigger": "From the unchanged Cherrygrove save, reach map 33 at (585,406) with the measured 35-step normal-key warm-up, then use the unchanged 673-step measured route into Cherrygrove.",
+    "observable": "After the fixed Cherrygrove anchor, read every stock main-loop return. Fail if one update uses more than two native cycles, advances more than two scheduler frames, exceeds the bounded two-cycle clock margin, or holds the player render position during active travel. Bind the current Mankey profile and require one explicit destination scan within 61 frames. Also require at least one actual ordinary constructor bound to native COMMIT SUCCESS, followed by a distinct attempt in the same Field after the full decoded density delay and at least60 Actor frames. READY alone is not creation.",
     "setupAudit": "complete",
     "setupMutations": [],
     "limits": [
@@ -24,10 +24,13 @@
       "The strict window contains at least 2600 continuous frames and 1800 moving frames.",
       "At least one normal destination search and finalizer must join on attempt, finalization, slot, and map identity. A no-spawn-work route cannot pass.",
       "The saved Mankey's source-bound base profile must supply hopPause 5 and hopMaxDistance 6. Terrain can select a conditional profile during the route; Movement scenarios own separate Hop and chain timing checks.",
-      "One explicit destination attempt must finish in at most 21 frames. Population-count behavior remains in the separate D5 population scenarios.",
+      "One explicit destination attempt must finish in at most 61 frames. Population-count behavior remains in the separate D5 population scenarios.",
       "The result uses melonDS scheduler and native-cycle memory data. Screenshots, video, host CPU time, and human judgement are not proof.",
       "Any missing pacing sample fails. One extra game frame fails. There is no allowed hitch count.",
-      "Prepared setup does not earn movement or pacing credit. The source save is not changed."
+      "Prepared setup does not earn movement or pacing credit. The source save is not changed.",
+      "The uncredited warm-up uses RIGHT+B for 1 tile, DOWN+B for 6 tiles, RIGHT+B for 20 tiles and DOWN+B for 8 tiles, with exact native admissions and settled endpoints. It retains the saved Mankey, changes no source save or game setup, and arms at absolute native step 35. Measured step thresholds add 35 without changing the measured route or its frame limits.",
+      "The saved Mankey can already be moving when bound. Its source identity and real Hop profile remain required. The player must be centered and ready at (585,406) before binding.",
+      "The refill interval starts at the actual constructor bound to authenticated native COMMIT SUCCESS. Only the first distinct ordinary attempt after it is checked, after the full decoded density delay and at least60 Actor frames. READY alone is not creation. Later terrain groups in that admitted batch are not separate refill intervals. The exact Field pointers, epoch/map generation, attempt ID, queued serial, constructor sequence, full actor handle and native entry/return clocks are required. The delay comes from native return receipts, not timer words."
     ]
   },
   "fixture": {
@@ -54,7 +57,7 @@
     {
       "at": 0,
       "kind": "setup",
-      "value": "Load the save without changes and bind its existing Mankey follower at the fixed Route 30 start."
+      "value": "Load the unchanged Cherrygrove save, use the measured 35-step normal-key warm-up to map 33 at (585,406), then wait for and bind the same saved Mankey. Warm-up earns no measured proof."
     },
     {
       "at": 1,
@@ -64,7 +67,7 @@
     {
       "at": 2,
       "kind": "lifecycle",
-      "value": "Require continuous two-cycle main-loop pacing, the current Mankey profile binding, and normal 21-frame destination work after the Cherrygrove anchor."
+      "value": "Require continuous two-cycle main-loop pacing, the current Mankey profile binding, and normal 31-frame destination work after the Cherrygrove anchor."
     }
   ],
   "stop": {
@@ -80,7 +83,8 @@
       "The source-bound base profile remains verified for the same Mankey follower while terrain can select conditional profile fingerprints",
       "Every strict pacing interval uses at most two native cycles",
       "Joined normal spawn search/finalizer work occurs during the strict window",
-      "An explicit destination scan completes within 21 frames"
+      "An explicit destination scan completes within 61 frames",
+      "At least one actual constructor/COMMIT SUCCESS is followed by a distinct ordinary attempt after the full decoded density delay and at least60 Actor frames with the exact current Field owner"
     ]
   },
   "capture": "none",

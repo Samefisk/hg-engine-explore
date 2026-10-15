@@ -2,16 +2,29 @@
 #define OVERWORLD_BEHAVIOR_CONDITION_ADAPTER_H
 
 #include "overworld_behavior_condition_runtime.h"
+#include "overworld_target_bindings.h"
 
 #define OVERWORLD_BEHAVIOR_CONDITION_ADAPTER_MAGIC 0x4143574F /* OWCA */
-#define OVERWORLD_BEHAVIOR_CONDITION_ADAPTER_VERSION 11
+#define OVERWORLD_BEHAVIOR_CONDITION_ADAPTER_VERSION 12
 #define OVERWORLD_BEHAVIOR_CONDITION_TRACE_RECORD_ADDR 0x023BF408
 
 #define OVERWORLD_BEHAVIOR_CONDITION_TARGET_ROLE_MOUNTED (1u << 2)
 
+/* Private evaluateActor operation: current reachable Cargo capture only.
+ * Resolver, published masks and motion stay with the later idle boundary. */
+#define OVERWORLD_BEHAVIOR_CONDITION_WARM_CARGO (-2)
+/* Evaluate all conditions and publish metadata during an ordinary move.
+ * The accepted move keeps control; presentation waits for legal intent.
+ * The owner calls once per actor frame and clears pending state at teardown. */
+#define OVERWORLD_BEHAVIOR_CONDITION_EVALUATE_DURING_MOVEMENT (-3)
+#define OVERWORLD_BEHAVIOR_CONDITION_SAMPLE_MOVING_NOTICE OVERWORLD_BEHAVIOR_CONDITION_EVALUATE_DURING_MOVEMENT
+
 typedef struct FieldSystem FieldSystem;
 typedef struct OverworldWildSpawn OverworldWildSpawn;
 typedef struct OverworldWildSpawnState OverworldWildSpawnState;
+
+/* Private event tag for the existing authenticated damage publisher. */
+#define OVERWORLD_BEHAVIOR_CONDITION_PUBLISH_SUBJECT_DAMAGE 0x80u
 
 typedef struct OverworldWildBehaviorConditionFrame {
     OverworldBehaviorConditionWorldView world;
@@ -21,6 +34,18 @@ typedef struct OverworldWildBehaviorConditionFrame {
     u8 traceArmed;
     u8 valid;
 } OverworldWildBehaviorConditionFrame;
+
+/* One accepted player hit. Pending bits belong to the prepared generations
+ * present at that hit; consumption is per subject, independent of actor role.
+ * A later accepted hit replaces this value. Field cleanup clears it. */
+typedef struct OverworldPlayerDamageSource {
+    FieldSystem *fieldSystem;
+    u32 frame;
+    OverworldActorHandle source;
+    u16 recipientGenerations[OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS];
+    u16 pendingMask;
+    u16 reserved;
+} OverworldPlayerDamageSource;
 
 typedef struct OverworldWildBehaviorConditionRuntime {
     OverworldBehaviorConditionPreparedActor
@@ -47,37 +72,43 @@ typedef struct OverworldWildBehaviorConditionRuntime {
     s16 targetX[OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS];
     s16 targetY[OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS];
     u16 targetValidMask;
+    OverworldTargetBindingsState bindings[OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS];
+    OverworldPlayerDamageSource playerDamage;
 } OverworldWildBehaviorConditionRuntime;
 
 #if !defined(OVERWORLD_BEHAVIOR_HOST) \
     && !defined(OVERWORLD_ACTOR_SYSTEM_HOST)
-typedef char OverworldWildBehaviorConditionRuntimeBudgetMustRemain2072Bytes[
-    sizeof(OverworldWildBehaviorConditionRuntime) == 2072 ? 1 : -1];
-typedef char OverworldWildBehaviorConditionScratchOffsetMustRemain520[
-    offsetof(OverworldWildBehaviorConditionRuntime, scratch) == 520 ? 1 : -1];
-typedef char OverworldWildBehaviorConditionResultOffsetMustRemain552[
-    offsetof(OverworldWildBehaviorConditionRuntime, result) == 552 ? 1 : -1];
-typedef char OverworldWildBehaviorConditionResolutionOffsetMustRemain1136[
-    offsetof(OverworldWildBehaviorConditionRuntime, resolution) == 1136
+typedef char OverworldPlayerDamageSourceMustRemain44Bytes[
+    sizeof(OverworldPlayerDamageSource) == 44 ? 1 : -1];
+typedef char OverworldPlayerDamageSourceOffsetMustRemain3056[
+    offsetof(OverworldWildBehaviorConditionRuntime, playerDamage) == 3056 ? 1 : -1];
+typedef char OverworldWildBehaviorConditionRuntimeBudgetMustRemain3100Bytes[
+    sizeof(OverworldWildBehaviorConditionRuntime) == 3100 ? 1 : -1];
+typedef char OverworldWildBehaviorConditionScratchOffsetMustRemain880[
+    offsetof(OverworldWildBehaviorConditionRuntime, scratch) == 880 ? 1 : -1];
+typedef char OverworldWildBehaviorConditionResultOffsetMustRemain912[
+    offsetof(OverworldWildBehaviorConditionRuntime, result) == 912 ? 1 : -1];
+typedef char OverworldWildBehaviorConditionResolutionOffsetMustRemain1496[
+    offsetof(OverworldWildBehaviorConditionRuntime, resolution) == 1496
         ? 1
         : -1];
-typedef char OverworldWildBehaviorConditionActorSnapshotOffsetMustRemain1772[
-    offsetof(OverworldWildBehaviorConditionRuntime, actorSnapshot) == 1772
+typedef char OverworldWildBehaviorConditionActorSnapshotOffsetMustRemain2156[
+    offsetof(OverworldWildBehaviorConditionRuntime, actorSnapshot) == 2156
         ? 1
         : -1];
-typedef char OverworldWildBehaviorConditionActiveMasksOffsetMustRemain1948[
+typedef char OverworldWildBehaviorConditionActiveMasksOffsetMustRemain2332[
     offsetof(OverworldWildBehaviorConditionRuntime, activeApplicationMasks)
-            == 1948
+            == 2332
         ? 1
         : -1];
-typedef char OverworldWildBehaviorConditionTimedMasksOffsetMustRemain1988[
+typedef char OverworldWildBehaviorConditionTimedMasksOffsetMustRemain2372[
     offsetof(
         OverworldWildBehaviorConditionRuntime,
-        timedWinningApplicationMasks) == 1988
+        timedWinningApplicationMasks) == 2372
         ? 1
         : -1];
-typedef char OverworldWildBehaviorConditionTargetValidOffsetMustRemain2068[
-    offsetof(OverworldWildBehaviorConditionRuntime, targetValidMask) == 2068
+typedef char OverworldWildBehaviorConditionTargetValidOffsetMustRemain2452[
+    offsetof(OverworldWildBehaviorConditionRuntime, targetValidMask) == 2452
         ? 1
         : -1];
 #endif
@@ -85,6 +116,10 @@ typedef char OverworldWildBehaviorConditionTargetValidOffsetMustRemain2068[
 #define OVERWORLD_BEHAVIOR_CONDITION_OUTCOME_TRIGGERED   (1u << 0)
 #define OVERWORLD_BEHAVIOR_CONDITION_OUTCOME_TIMED_ENDED (1u << 1)
 #define OVERWORLD_BEHAVIOR_CONDITION_OUTCOME_PROFILE_CHANGED (1u << 2)
+/* Full Moving evaluation, including publication and current target resolve.
+ * A skipped or failed Moving call leaves this bit clear for Warm fallback. */
+#define OVERWORLD_BEHAVIOR_CONDITION_OUTCOME_MOVING_EVALUATED (1u << 3)
+#define OVERWORLD_BEHAVIOR_CONDITION_OUTCOME_TARGET_ENTERED (1u << 4)
 
 typedef struct OverworldBehaviorConditionAdapterOutcome {
     u8 flags;
@@ -100,11 +135,12 @@ typedef struct OverworldBehaviorConditionAdapterOutcome {
 /* CONDITIONAL_RESOLVED traces remain bound to the full subject handle.
  * reason: winning application [0:4], target source [5:9], target kind
  * [10:11], triggered [12], truth [13], active [14], timed [15].
- * valueA: winning condition [0:15], actor-target slot [16:31].
+ * valueA: winning condition [0:15], actor-target slot [16:30], Until Crash [31].
  * valueB: activeUntil [0:15], cooldownUntil [16:31].
  * The fixed trace event has no room for a second complete 12-byte handle;
  * target generation fields are therefore recovered from the current actor
- * snapshot selected by the recorded slot. */
+ * snapshot selected by the recorded slot. Runtime Crash delivery is independent
+ * of whether trace capture is armed. */
 
 typedef void (*OverworldBehaviorConditionBuildContextFunc)(
     OverworldWildBehaviorContext *context,
@@ -149,6 +185,10 @@ typedef void (*OverworldBehaviorConditionClearResolutionAdapterFunc)(
     OverworldWildBehaviorConditionRuntime *runtime,
     u8 slot);
 
+typedef u32 (*OverworldBehaviorConditionObserveFunc)(
+    OverworldWildSpawnState *, int, const OverworldWildBehaviorProfile *,
+    const OverworldWildBehaviorDataBlob *, OverworldWildBehaviorConditionRuntime *);
+
 typedef OverworldBehaviorConditionStatus
 (*OverworldBehaviorConditionEvaluateActorAdapterFunc)(
     OverworldWildBehaviorConditionRuntime *runtime,
@@ -158,6 +198,9 @@ typedef OverworldBehaviorConditionStatus
     u32 blobSize,
     u8 slot,
     u8 subjectMovementSpeed,
+    /* Observe only after the current frame and full subject are populated. */
+    const OverworldWildBehaviorProfile *observedProfile,
+    OverworldBehaviorConditionObserveFunc observe,
     int forcedOverrideProfileIndex,
     OverworldBehaviorConditionBuildContextFunc buildContext,
     OverworldBehaviorConditionIsCurrentSpawnFunc isCurrentSpawn,

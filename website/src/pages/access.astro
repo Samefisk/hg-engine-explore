@@ -1,0 +1,33 @@
+---
+import Base from '../layouts/Base.astro';
+import { contact } from '../data/site';
+---
+<Base title="Get access" description="How to become a tester.">
+  <div class="wrap narrow">
+    <h1>Get access</h1>
+    <p>Wild at Heart is in closed testing. This site has no downloads and links to none. The patch is shared only person to person.</p>
+
+    <h2>How it works</h2>
+    <ol class="steps">
+      <li><strong>Ask for the patch.</strong> Contact {contact.name}, or someone who already tests the game and can pass it on.</li>
+      <li><strong>Have a legal HeartGold ROM.</strong> The patch only works on a clean copy of Pokémon HeartGold (USA) that you own. It does not include the game.</li>
+      <li><strong>Apply the patch.</strong> You will get instructions with it. Keep your original ROM untouched.</li>
+      <li><strong>Play and report.</strong> Check <a href="/testing">what's being tested</a> and send feedback using the <a href="/report">bug report guide</a>.</li>
+    </ol>
+
+    <div class="notice">
+      Please do not post or re-upload the patch or share it publicly. Pass it only to people who will test and report.
+    </div>
+
+    {(contact.discord || contact.email) && (
+      <>
+        <h2>Contact</h2>
+        <ul class="tick">
+          {contact.discord && <li>Discord: {contact.discord}</li>}
+          {contact.email && <li>Email: <a href={`mailto:${contact.email}`}>{contact.email}</a></li>}
+        </ul>
+      </>
+    )}
+    <div style="height:3rem"></div>
+  </div>
+</Base>

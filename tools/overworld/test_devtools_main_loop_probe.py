@@ -2,7 +2,7 @@
 from types import SimpleNamespace
 import unittest
 
-from tools.overworld.devtools_main_loop_probe import MainLoopProbe, RETURN_SITE, SYSTEM
+from tools.overworld.devtools_main_loop_probe import ENTRY_SITE, MainLoopProbe, RETURN_SITE, SYSTEM
 from tools.overworld import test_devtools_wait_probe
 
 
@@ -60,6 +60,65 @@ class MainLoopProbeTests(unittest.TestCase):
                 self.assertIn("missing or duplicate", probe.result()["failure"])
                 self.assertFalse(callbacks)
                 probe.close()
+
+    def wait_probe(self):
+        callbacks, state, session, clock = self.fixture()
+        hooks = SimpleNamespace(
+            add=lambda address, callback: callbacks.__setitem__(address, callback) or address,
+            remove=lambda token: callbacks.pop(token, None))
+        probe = MainLoopProbe(session, hooks, clock, lambda: dict(actorFrame=1, nativeCycle=1))
+        return probe, callbacks, session
+
+    def test_entry_and_return_add_the_loop_wait_envelope(self):
+        # The fixture clock advances 10 ticks per read, so entry and return
+        # one read apart carry a 10-tick wait; an unpaired old-style row has none.
+        probe, callbacks, session = self.wait_probe()
+        self.assertEqual(ENTRY_SITE, 0x02000E1E)
+        self.assertEqual(RETURN_SITE, 0x02000E22)
+        probe.completed_frame(770)
+        callbacks[ENTRY_SITE]()
+        callbacks[RETURN_SITE]()
+        rows = probe.completed_frame(771)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["waitArm9Ticks"], 10)
+        self.assertEqual(rows[0]["waitEntrySite"], ENTRY_SITE)
+        self.assertEqual(rows[0]["waitEntryArm9Timestamp"] + 10,
+                         rows[0]["guestClock"]["arm9Timestamp"])
+        callbacks[RETURN_SITE]()
+        old = probe.completed_frame(772)[0]
+        self.assertNotIn("waitArm9Ticks", old)
+        self.assertNotIn("waitEntryArm9Timestamp", old)
+        self.assertEqual(probe.result()["guestMemoryWrites"], 0)
+        self.assertEqual(probe.result()["entrySite"], ENTRY_SITE)
+        probe.close()
+        self.assertFalse(callbacks)
+
+    def test_entry_without_return_or_with_duplicate_entry_fails_closed(self):
+        for order, reason in (((ENTRY_SITE,), "no matching return"),
+                              ((ENTRY_SITE, ENTRY_SITE, RETURN_SITE), "duplicate or out-of-order"),
+                              ((RETURN_SITE, ENTRY_SITE), "duplicate or out-of-order")):
+            with self.subTest(order=order):
+                probe, callbacks, session = self.wait_probe()
+                probe.completed_frame(770)
+                with self.assertRaisesRegex(ValueError, reason):
+                    for site in order:
+                        callbacks[site]()
+                    probe.completed_frame(771)
+                self.assertIn(reason, probe.result()["failure"])
+                probe.close()
+                self.assertFalse(callbacks)
+
+    def test_entry_requires_system_owner_and_wait_arguments(self):
+        for register, value in (("r4", 0), ("r0", 2), ("r1", 0)):
+            with self.subTest(register=register):
+                probe, callbacks, session = self.wait_probe()
+                probe.completed_frame(770)
+                setattr(session.emu.memory.register_arm9, register, value)
+                with self.assertRaises(ValueError):
+                    callbacks[ENTRY_SITE]()
+                self.assertTrue(probe.result()["failure"])
+                probe.close()
+                self.assertFalse(callbacks)
 
     def test_nonbaseline_and_bad_identity_are_rejected_before_sampling(self):
         callbacks, state, session, clock = self.fixture()

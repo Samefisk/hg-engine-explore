@@ -2,14 +2,14 @@
 from copy import deepcopy
 import unittest
 from tools.overworld.devtools_wild_clear_control_measurement import WildClearControlMeasurement, KIND
-from tools.overworld.test_devtools_wild_walk_measurement import wild_fixture
+from tools.overworld.test_devtools_wild_walk_measurement import wild_fixture, multi_walk_fixture
 
 
-def fixture(*,startup_noop=False):
-    initial,subject,reader,rows=wild_fixture(startup_noop=True) if startup_noop else wild_fixture()
+def fixture(*,startup_noop=False,prelude=False):
+    initial,subject,reader,rows=multi_walk_fixture() if prelude else wild_fixture(startup_noop=startup_noop)
     terminal=deepcopy(rows[-1][0])
-    clear=next(e for _,events in rows for e in events if e.get("data",{}).get("observation")=="wild-walk-clear"
-               and e["data"]["before"]["active"]==1)
+    clear=[e for _,events in rows for e in events if e.get("data",{}).get("observation")=="wild-walk-clear"
+               and e["data"]["before"]["active"]==1][-1]
     clean=deepcopy(clear["data"]["after"])
     clean["current"]["publicSubject"]=deepcopy(terminal["actors"][0])
     bad=deepcopy(clean);bad["active"]=1
@@ -28,9 +28,9 @@ def fixture(*,startup_noop=False):
     return initial,subject,reader,rows,calibration,close
 
 
-def replay(fault=None,*,startup_noop=False):
+def replay(fault=None,*,startup_noop=False,prelude=False):
     from tools.overworld.devtools_wild_clear_control_proof import WildClearControlNegative
-    initial,subject,reader,rows,calibration,close=fixture(startup_noop=startup_noop)
+    initial,subject,reader,rows,calibration,close=fixture(startup_noop=startup_noop,prelude=prelude)
     meter=WildClearControlMeasurement(1200);meter.arm(subject,initial,reader)
     negative=WildClearControlNegative(fault) if fault else None
     try:
@@ -49,6 +49,13 @@ def replay(fault=None,*,startup_noop=False):
 
 
 class WildClearControlMeasurementTests(unittest.TestCase):
+    def test_checked_five_frame_prelude_keeps_same_clear_calibration(self):
+        result=replay(prelude=True);meter=result["measurements"][KIND]
+        self.assertTrue(result["passed"],meter["failures"])
+        self.assertEqual(meter["natural"]["prelude"][0]["motion"]["duration"],5)
+        self.assertEqual(meter["natural"]["motion"]["duration"],4)
+        self.assertEqual(meter["cleanup"]["wildWalk"]["counts"],{"clear":2})
+
     def test_startup_noop_does_not_replace_real_clear(self):
         result=replay(startup_noop=True);meter=result["measurements"][KIND]
         self.assertTrue(result["passed"],meter["failures"])

@@ -168,6 +168,8 @@ _0216:
     wait_movement
     get_party_lead_alive VAR_SPECIAL_x8008
     heal_party
+    // Consumed by PlayerHealthRecovery_ServiceHealing after nurse completion.
+    setvar VAR_TEMP_x401F, 1
     return
 
 _023A:

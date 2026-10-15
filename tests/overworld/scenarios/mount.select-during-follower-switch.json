@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.select-during-follower-switch",
+  "title": "Select mounts after a Stantler mount and dismount cycle",
+  "status": "active",
+  "capabilities": ["actor.system", "mount.lifecycle"],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "normal-play",
+    "expectationSource": "documentation/overworld-system/README.md#system-contracts",
+    "actor": "Saved Stantler Follower in party slot 0, then chosen Mankey in slot 2 as Follower and Mounted",
+    "trigger": "Press Select to mount saved Stantler, release it, press Select again to dismount, then use Y/R/Y to choose Mankey and press Select once while the follower-change queue is active",
+    "observable": "Stantler mounts and returns to Follower as the same actor. The final native Select edge is retained through the queued follower change; the same newly created Mankey mounts within 120 completed game frames without another Select press",
+    "setupAudit": "complete",
+    "setupMutations": [],
+    "limits": [
+      "The unchanged test.sav supplies Stantler and Mankey. No party, follower, profile, map or timer state is prepared.",
+      "This is one normal Stantler mount/dismount cycle, one follower switch, and one final Select edge. It does not prove long-run input reliability or mounted movement.",
+      "The 120-frame limit counts completed main-task-queue updates, not video cycles or host time."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "mankey", "species": 56, "role": "MOUNTED", "acquisition": "mount", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Read the unchanged saved Stantler follower"},
+    {"at": 1, "kind": "input", "value": "Press and release Select to mount Stantler, then press and release Select to dismount it"},
+    {"at": 2, "kind": "input", "value": "Y opens the selector, R highlights slot 2 Mankey, and Y confirms the follower change"},
+    {"at": 3, "kind": "input", "value": "After one release frame, press Select once while the follower-change queue is active"},
+    {"at": 4, "kind": "lifecycle", "value": "Wait up to 120 completed frames with no further Select input for the chosen Mankey to mount"}
+  ],
+  "stop": {"frameBudget": 300, "condition": "Stantler mounts and dismounts, then Mankey mounts within 120 completed frames of the final Select edge, or the first invalid observation"},
+  "expect": {
+    "requiredEvents": ["ACTOR_REBOUND", "CONTROL_REBOUND"],
+    "forbiddenEvents": ["MOTION_CANCELED"],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "mount.select-during-follower-switch", "claims": ["natural-input", "live-actor-identity", "frame-pacing", "control-release"], "minimumFrames": 1}
+}

@@ -14,6 +14,7 @@ path or require running every scenario they list.
 - [Profiles and follower selection](profiles-and-selection.md)
 - [Movement primitives](movement-primitives.md)
 - [Named live actor behavior](named-actor-behavior.md)
+- [Pokémon palette tint](pokemon-appearance.md)
 - [Mounted movement](mounted-movement.md)
 - [World and population](world-and-population.md)
 - [Runtime proof gate](runtime-proof-gate.md)

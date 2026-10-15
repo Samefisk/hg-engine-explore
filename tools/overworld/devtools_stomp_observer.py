@@ -31,8 +31,10 @@ class NativeStompObserver(NativeMountedPacingObserver):
         from tools.overworld.devtools_runtime import _elf_function_extent
         s,rt=self.session,self.session.rt
         path=rt.REPO/'build/overworld_mount_overlay_linked.o'
-        address,size=_elf_function_extent(path,'OverworldMount_ApplyWalkPolicyOutput')
-        expected=self.observer.elf_code(path,address,size)
+        # The mounted feedback owner moved to the resident mount action overlay.
+        action=rt.REPO/'build/overworld_mount_action_overlay_linked.o'
+        address,size=_elf_function_extent(action,'OverworldMount_ApplyWalkPolicyOutput')
+        expected=self.observer.elf_code(action,address,size)
         self._require(len(expected)==size and s.packaged_code(address,size)==expected,'full mounted feedback code differs')
         self.code['policy']=(address,expected)
         address,size=_elf_function_extent(path,'OverworldMount_PlayerStepBridge')
@@ -102,7 +104,7 @@ class NativeStompObserver(NativeMountedPacingObserver):
     def _read_profile(self,current):
         """Shared native/paused-control read; no guest mutation or clock advance."""
         NativeCornerObserver._mount_binding(self,current)
-        raw=public_bytes(self.session,self.mount_state+8,72)
+        raw=public_bytes(self.session,self.mount_state+8,80)
         self._require(raw[70]<=32,'stomp threshold byte invalid')
         return dict(profileHex=raw.hex(),stompTime=raw[70])
 

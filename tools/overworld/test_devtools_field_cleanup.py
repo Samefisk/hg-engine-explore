@@ -22,6 +22,7 @@ def elf_fixture(file, base, fault=None):
     for i, (key, owner, name, section, size) in enumerate(d.DATA):
         if owner != file:
             continue
+        size = 2448 if size is None else size
         address = base + (0x300 if section == ".bss" else 0x100) + i * 24
         if key == "actorState":
             address = d.ACTOR_STATE_ADDRESS
@@ -178,7 +179,9 @@ class CleanupReaderTests(unittest.TestCase):
             address, size, expected = d.symbol(images[file], name, 2)
             code[address] = expected
         s = DevtoolsSession.__new__(DevtoolsSession)
-        s.rt = SimpleNamespace(REPO=Path("fixture"), EXECUTED_FRAME_COUNT=60)
+        s.rt = SimpleNamespace(REPO=Path("fixture"), EXECUTED_FRAME_COUNT=60,
+            ACTOR_DESCRIPTOR={"state": {"address": d.ACTOR_STATE_ADDRESS,
+                                        "size": 2448, "capacity": 2448}})
         s.completed_frames = 30
         s._authenticate_field_reader_code = lambda *args: True
         memory[0x0200713C] = struct.pack("<I", 0x02100000)
@@ -187,6 +190,11 @@ class CleanupReaderTests(unittest.TestCase):
         s.packaged_code = lambda address, size: code[address]
         with patch("pathlib.Path.read_bytes", lambda path: images[path.name]):
             self.assertTrue(s._field_cleanup_diagnostics()["known"])
+            s.rt.ACTOR_DESCRIPTOR["state"]["size"] -= 4
+            mismatch = s._field_cleanup_diagnostics()
+            self.assertFalse(mismatch["known"])
+            self.assertIn("descriptor-layout", mismatch["reason"])
+            s.rt.ACTOR_DESCRIPTOR["state"]["size"] += 4
             first = next(iter(code))
             good_read = s.read
             s.read = lambda address, size: bytes([255]) * size if address == first else good_read(address, size)

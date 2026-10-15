@@ -320,7 +320,7 @@
       "originRunner": "scripts/verify_overworld_walk_runtime.py::live_route_observer_controls"
     },
     "legacy.mankey-control-stress": {
-      "status": "ported",
+      "status": "obsolete",
       "verificationKind": "controlled-case",
       "claims": [
         "natural-input",
@@ -332,12 +332,26 @@
       "scenarios": [
         "hop.mounted-single-motion"
       ],
-      "tests": ["hop.mounted-single-motion"],
-      "reason": "The exact legacy Hop stress, identity, motion and detach/remount rows now use the shared mounted-control-stress test. A current accepted execution is still required; source integration is not gameplay proof.",
-      "originRunner": "scripts/verify_overworld_walk_runtime.py::mankey_control_stress"
+      "tests": [],
+      "reason": "Retired 2026-10-13: the mounted Hop walking style was removed. Ordinary mounted input now starts Walks, so a 200-Hop mounted Mankey stress has no current product behavior to measure. Walk stress, detach and remount stay covered by mount.detach-restores-control.",
+      "originRunner": "scripts/verify_overworld_walk_runtime.py::mankey_control_stress",
+      "review": {
+        "reviewer": "claude",
+        "reviewedAt": "2026-10-13",
+        "reason": "The user removed the mounted Hop walking style. Mounted Mankey now Walks on ordinary input, so the required 200 input-driven mounted Hops cannot occur. The shared mounted-control-stress evaluator remains for its Walk contract, and the remaining mounted Hop is the ledge Hop proved by the accepted Stantler running-ledge run.",
+        "removedAssumption": "Ordinary directional input on a mounted Hop-locomotion Pokemon such as Mankey starts a mounted Hop, so held or alternating input produces a stream of input-driven mounted Hops.",
+        "currentContract": "A mounted Pokemon Walks on ordinary directional input. OverworldMount_Begin turns a Hop chill action into Walk, and OverworldMount_TryStartCustomMotion starts a mounted Hop only for an automatic ledge jump or the B-press Jump.",
+        "evidence": [
+          "src/overworld_mount_overlay/overworld_mount_overlay.c::OverworldMount_Begin::hop-chill-action-becomes-walk",
+          "src/overworld_mount_overlay/overworld_mount_overlay.c::OverworldMount_TryStartCustomMotion::only-ledge-hop-and-b-jump-start-mounted-hop",
+          "build/overworld-devtools/test-e5fd4f6fa1be4ffd8c47884b0fb636ab/manifest.json::accepted-mount.stantler-running-ledge-mounted-hop",
+          "build/overworld-devtools/test-c59f13e15618470ea0f3fe9ad732504f/manifest.json::accepted-recorder-control",
+          "tests/overworld/test-recipes/mount.detach-restores-control.json::registered-mounted-walk-stress-and-remount"
+        ]
+      }
     },
     "legacy.mankey-hops": {
-      "status": "ported",
+      "status": "obsolete",
       "verificationKind": "controlled-case",
       "claims": [
         "natural-input",
@@ -350,12 +364,25 @@
         "hop.cardinal-and-diagonal",
         "hop.mankey-visual-arc"
       ],
-      "tests": ["hop.mankey-visual-arc"],
-      "reason": "The exact three cardinal Mankey Hop arcs now use one registered shared-devtools test. It retains the native elapsed-zero boundary, every rendered arc height, full motion lifecycle, live identity and idle control return. A current accepted execution is still required; source integration is not gameplay proof.",
-      "originRunner": "scripts/verify_overworld_walk_runtime.py::mankey_hops"
+      "tests": [],
+      "reason": "Retired 2026-10-13: the mounted Hop walking style was removed. A natural DOWN, RIGHT or LEFT input on mounted Mankey now starts a Walk, so the three cardinal input-driven mounted Hop arcs no longer exist. The ledge Hop arc remains covered by mount.stantler-running-ledge.",
+      "originRunner": "scripts/verify_overworld_walk_runtime.py::mankey_hops",
+      "review": {
+        "reviewer": "claude",
+        "reviewedAt": "2026-10-13",
+        "reason": "The user removed the mounted Hop walking style. The three natural cardinal mounted Mankey Hop arcs required by this contract now start Walks instead. The only mounted Hops left are the ledge Hop and the B Jump; the ledge Hop has accepted proof on the current ROM.",
+        "removedAssumption": "Ordinary directional input on a mounted Hop-locomotion Pokemon such as Mankey starts a mounted Hop, so held or alternating input produces a stream of input-driven mounted Hops.",
+        "currentContract": "A mounted Pokemon Walks on ordinary directional input. OverworldMount_Begin turns a Hop chill action into Walk, and OverworldMount_TryStartCustomMotion starts a mounted Hop only for an automatic ledge jump or the B-press Jump.",
+        "evidence": [
+          "src/overworld_mount_overlay/overworld_mount_overlay.c::OverworldMount_Begin::hop-chill-action-becomes-walk",
+          "src/overworld_mount_overlay/overworld_mount_overlay.c::OverworldMount_TryStartCustomMotion::only-ledge-hop-and-b-jump-start-mounted-hop",
+          "build/overworld-devtools/test-e5fd4f6fa1be4ffd8c47884b0fb636ab/manifest.json::accepted-mount.stantler-running-ledge-mounted-hop",
+          "build/overworld-devtools/test-c59f13e15618470ea0f3fe9ad732504f/manifest.json::accepted-recorder-control"
+        ]
+      }
     },
     "legacy.mankey-nearest-diagonal": {
-      "status": "ported",
+      "status": "obsolete",
       "verificationKind": "controlled-case",
       "claims": [
         "natural-input",
@@ -367,9 +394,22 @@
       "scenarios": [
         "hop.cardinal-and-diagonal"
       ],
-      "tests": ["hop.cardinal-and-diagonal"],
-      "reason": "The nearest-diagonal contract now uses one registered shared-devtools test. Authenticated read-only queries retain the actual profile order and allowed landing results; one normal UP Hop then proves the chosen near target, exact arc, lifecycle and control return. A current accepted execution is still required; source integration is not gameplay proof.",
-      "originRunner": "scripts/verify_overworld_walk_runtime.py::mankey_nearest_diagonal"
+      "tests": [],
+      "reason": "Retired 2026-10-13: the mounted Hop walking style and its lane-hop landing search were removed. A natural UP input on mounted Mankey now starts a Walk, so no nearest straight or diagonal Hop landing is chosen.",
+      "originRunner": "scripts/verify_overworld_walk_runtime.py::mankey_nearest_diagonal",
+      "review": {
+        "reviewer": "claude",
+        "reviewedAt": "2026-10-13",
+        "reason": "The user removed the mounted Hop walking style. The lane-hop landing search that chose a nearest straight or diagonal landing for an input-driven mounted Hop was replaced by an early return, so this one-case landing contract describes code that no longer runs.",
+        "removedAssumption": "Ordinary directional input on a mounted Hop-locomotion Pokemon such as Mankey starts a mounted Hop, so held or alternating input produces a stream of input-driven mounted Hops.",
+        "currentContract": "A mounted Pokemon Walks on ordinary directional input. OverworldMount_Begin turns a Hop chill action into Walk, and OverworldMount_TryStartCustomMotion starts a mounted Hop only for an automatic ledge jump or the B-press Jump.",
+        "evidence": [
+          "src/overworld_mount_overlay/overworld_mount_overlay.c::OverworldMount_Begin::hop-chill-action-becomes-walk",
+          "src/overworld_mount_overlay/overworld_mount_overlay.c::OverworldMount_TryStartCustomMotion::only-ledge-hop-and-b-jump-start-mounted-hop",
+          "build/overworld-devtools/test-e5fd4f6fa1be4ffd8c47884b0fb636ab/manifest.json::accepted-mount.stantler-running-ledge-mounted-hop",
+          "build/overworld-devtools/test-c59f13e15618470ea0f3fe9ad732504f/manifest.json::accepted-recorder-control"
+        ]
+      }
     },
     "legacy.mount-begin-current-follower": {
       "status": "ported",
@@ -478,7 +518,7 @@
       "originRunner": "scripts/verify_overworld_walk_runtime.py::mounted_streaming_path"
     },
     "legacy.mounted-transition": {
-      "status": "ported",
+      "status": "obsolete",
       "verificationKind": "controlled-case",
       "claims": [
         "natural-input",
@@ -491,11 +531,23 @@
       "scenarios": [
         "mount.transition-mid-motion"
       ],
-      "tests": [
-        "mount.transition-mid-motion"
-      ],
-      "reason": "Exact in-flight Hop rebind, paired motion, recovery and 5000 post-transition input frames use a registered shared-devtools candidate route. Current accepted execution is still required; the map60 alternating lane is not yet runtime-verified.",
-      "originRunner": "scripts/verify_overworld_walk_runtime.py::mounted_transition"
+      "tests": [],
+      "reason": "Retired 2026-10-13: the mounted Hop walking style was removed, so natural input can no longer carry an in-flight mounted Hop across the map33/map60 boundary. The mounted Walk equivalent stays registered as mount.walk-transition-mid-motion.",
+      "originRunner": "scripts/verify_overworld_walk_runtime.py::mounted_transition",
+      "review": {
+        "reviewer": "claude",
+        "reviewedAt": "2026-10-13",
+        "reason": "The user removed the mounted Hop walking style. Natural Right input on mounted Mankey now starts a Walk, so an in-flight input-driven Hop cannot cross the map boundary. The same boundary rebind for a mounted Walk remains under mount.walk-transition-mid-motion.",
+        "removedAssumption": "Ordinary directional input on a mounted Hop-locomotion Pokemon such as Mankey starts a mounted Hop, so held or alternating input produces a stream of input-driven mounted Hops.",
+        "currentContract": "A mounted Pokemon Walks on ordinary directional input. OverworldMount_Begin turns a Hop chill action into Walk, and OverworldMount_TryStartCustomMotion starts a mounted Hop only for an automatic ledge jump or the B-press Jump.",
+        "evidence": [
+          "src/overworld_mount_overlay/overworld_mount_overlay.c::OverworldMount_Begin::hop-chill-action-becomes-walk",
+          "src/overworld_mount_overlay/overworld_mount_overlay.c::OverworldMount_TryStartCustomMotion::only-ledge-hop-and-b-jump-start-mounted-hop",
+          "build/overworld-devtools/test-e5fd4f6fa1be4ffd8c47884b0fb636ab/manifest.json::accepted-mount.stantler-running-ledge-mounted-hop",
+          "build/overworld-devtools/test-c59f13e15618470ea0f3fe9ad732504f/manifest.json::accepted-recorder-control",
+          "tests/overworld/test-recipes/mount.walk-transition-mid-motion.json::registered-mounted-walk-boundary-rebind"
+        ]
+      }
     },
     "legacy.mounted-walk-transition": {
       "status": "ported",
@@ -657,10 +709,10 @@
         "reviewedAt": "2026-09-12",
         "reason": "Running the removed S5 adapter cannot prove the current pending-result state machine. The deterministic cursor coverage belongs to the extracted host check; real pacing belongs to the bounded-call witness and unmounted cadence contract.",
         "removedAssumption": "One grass-only call scans all 289 reservoir positions, checks all 240 eligible positions, leaves its output unchanged, and returns false.",
-        "currentContract": "A legacy Land/Surf attempt checks at most16 distance-eligible positions without expanding its original16-candidate limit. An explicit profile scan checks at most12 candidates per update and preserves all240 candidates across20 resumed batches.",
+        "currentContract": "A legacy Land/Surf attempt checks at most16 distance-eligible positions without expanding its original16-candidate limit. An explicit profile scan checks at most4 candidates per update and preserves all240 candidates across60 resumed batches.",
         "evidence": [
           "tools/overworld/test_spawn_refill_budget.py::test_helper_checks_at_most_sixteen_eligible_tiles_per_update",
-          "tools/overworld/test_spawn_destination_scan.py::test_profile_destination_masks_check_at_most_sixteen_candidates_per_update",
+          "tools/overworld/test_spawn_destination_scan.py::test_profile_destination_masks_check_at_most_four_candidates_per_update",
           "tests/overworld/scenarios/world.unmounted.spawn-zero-stutter.json::current-zero-stutter-and-refill-contract"
         ]
       }

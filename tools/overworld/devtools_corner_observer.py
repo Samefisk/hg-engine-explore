@@ -12,10 +12,10 @@ CANDIDATE_RETURNS = frozenset((0, 1 << 1, 1 << 2, 1 << 5))
 
 
 def check_corner_policy(value):
-    """Check the actual 72-byte mounted lane, including diagonal permission."""
+    """Check the actual 80-byte mounted lane, including diagonal permission."""
     try:
         raw = bytes.fromhex(value["profileHex"])
-        valid = (len(raw) == 72 and type(value["profile19"]) is int
+        valid = (len(raw) == 80 and type(value["profile19"]) is int
                  and value["profile19"] == raw[19] and raw[19] in (1, 2))
     except (KeyError, TypeError, ValueError):
         valid = False
@@ -93,10 +93,10 @@ class NativeCornerObserver(NativeMountedPacingObserver):
         return self.result()
 
     def _mount_binding(self, current):
-        raw = self.session.read(self.mount_state, 104)
-        self._require(len(raw) == 104, "mount state read incomplete")
+        raw = self.session.read(self.mount_state, 112)
+        self._require(len(raw) == 112, "mount state read incomplete")
         field, surface = struct.unpack_from("<II", raw)
-        binding = struct.unpack_from("<IHHHHBBBB", raw, 80)
+        binding = struct.unpack_from("<IHHHHBBBB", raw, 88)
         actor, source = current["publicSubject"], current["sourceIdentity"]
         self._require(field == current["worldContext"]["fieldPointer"]
                       and surface % 2 == 0 and 0x02000000 <= surface <= 0x023FFFFC,
@@ -105,10 +105,10 @@ class NativeCornerObserver(NativeMountedPacingObserver):
                       current["worldContext"]["mapId"], actor["handle"]["mapGeneration"],
                       actor["handle"]["encounterGeneration"], actor["form"], actor["level"])
                       and binding[7] < 6, "mount snapshot binding differs")
-        generation = struct.unpack_from("<I", raw, 96)[0]
-        self._require(generation > 0 and raw[100] == 2 and raw[20] == 1,
+        generation = struct.unpack_from("<I", raw, 104)[0]
+        self._require(generation > 0 and raw[108] == 2 and raw[20] == 1,
                       "mount session/Walk lane differs")
-        return dict(bindingHex=raw[80:96].hex(), sessionGeneration=generation,
+        return dict(bindingHex=raw[88:104].hex(), sessionGeneration=generation,
                     surfacePointer=surface, fieldPointer=field)
 
     def completed_boundary(self):
@@ -126,8 +126,8 @@ class NativeCornerObserver(NativeMountedPacingObserver):
         """Same memory read for native entry/return and stopped-guest control."""
         self._require(self.session.rt.unsigned(self.session.emu, self.mount_state)
                       == current["worldContext"]["fieldPointer"], "mount state field differs")
-        profile = self.session.read(self.mount_state + 8, 72)
-        self._require(len(profile) == 72, "mounted direction profile read incomplete")
+        profile = self.session.read(self.mount_state + 8, 80)
+        self._require(len(profile) == 80, "mounted direction profile read incomplete")
         return dict(profileHex=profile.hex(), profile19=profile[19] & 0x03)
 
     def _checked_policy(self, current):

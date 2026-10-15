@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.stantler-newest-held-direction",
+  "title": "New Up wins over held Left after the mounted skid finishes",
+  "status": "active",
+  "capabilities": ["walk.skid", "mount.presentation"],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md#8-path-advance-commit-and-reactions and data/overworld_behavior_profiles.json:sprint",
+    "actor": "One current Mounted Stantler (species 234, party slot 0) on map 33",
+    "trigger": "Prepare map 33 (593,402) facing West. Hold Left until the fifth Walk first targets (588,402), within 19–32 completed frames and a 32-frame cap. Keep Left held and press Up for the next 24. The fresh Up edge is recorded while both keys are held.",
+    "observable": "The in-flight Left Walk finishes. Up becomes the requested direction. Two full West skid tiles face Up and each commit once. The next Walk starts Up from the last skid tile, while Left remains held. No due or active skid is canceled.",
+    "setupAudit": "complete",
+    "setupMutations": [{
+      "phase": "before-observation",
+      "target": "fixture",
+      "change": "Copy test.nds and test.sav. Teleport to map 33 (593,402), prepare party slot 0 level-10 Stantler, mount, settle 16 neutral frames, and bind that live actor. Do not edit profile, policy, motion, facing, terrain or input during observation."
+    }],
+    "limits": [
+      "Prepared position and party do not prove natural travel or acquisition. Both action windows use normal keys and unchanged Sprint timing.",
+      "This route proves the newest Up press over a still-held Left key. The extracted-C ordered-pair check owns all twelve cardinal pairs.",
+      "Skid duration is read from the current mounted actor and matched to every completed frame; the scenario does not assume fixed four- or eight-frame tiles.",
+      "The preserved ROM3475 run test-2ce0b23c10f24461ad3f45be9dccf5fb uses the earlier fixed Left24 trigger and is a red reproduction: rawNew Up is present, yet the next native Walk INPUT requests Left and no skid occurs. The current route stops at the fifth Walk target to remove PID timing variance. Registration requires a new current-ROM acceptance run."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "stantler", "species": 234, "role": "MOUNTED", "acquisition": "mount",
+    "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Prepare and bind mounted Stantler at map 33 (593,402)."},
+    {"at": 1, "kind": "input", "value": "Hold Left until the fifth Walk first targets (588,402), within 19–32 completed frames and a 32-frame cap."},
+    {"at": 2, "kind": "input", "value": "Press Up while Left stays held for 24 completed frames."}
+  ],
+  "stop": {"frameBudget": 240, "condition": "Two complete West skid commits followed by an Up Walk from the measured final skid tile."},
+  "expect": {
+    "requiredEvents": ["MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["MOTION_CANCELED", "CONTEXT_CHANGED", "ACTOR_REBOUND", "CONTROL_REBOUND"],
+    "invariants": [
+      "A fresh native Up edge occurs while Left and Up are held with no simulated keys.",
+      "The due Walk INPUT requests Up and proposes exactly two West skid tiles facing Up.",
+      "The old Left Walk and both skid tiles each commit, finish and return control in order.",
+      "Each skid tile has all its measured motion frames at that tile's displayed duration.",
+      "The rider and mount share one rendered base and face Up through both West skid tiles.",
+      "No extra ordinary West Walk starts after the old Left tile commits.",
+      "An Up Walk starts from the last skid tile while both keys remain held."
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "mount.stantler-newest-held-direction",
+    "claims": ["natural-input", "live-actor-identity", "logical-commit", "rendered-motion", "frame-pacing", "control-release"],
+    "minimumFrames": 43}
+}

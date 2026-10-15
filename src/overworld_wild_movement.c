@@ -110,7 +110,7 @@ static int OverworldWildCustomMovement_BuildDirections(LocalMapObject *object, u
     int behavior = MapObject_GetParam(object, OW_WILD_MOVEMENT_PARAM_BEHAVIOR);
 
     if (fieldSystem == NULL) {
-        fieldSystem = object->fsys;
+        fieldSystem = LocalMapObject_GetFieldSystem(object);
     }
     if (fieldSystem == NULL || fieldSystem->playerAvatar == NULL) {
         return 0;

@@ -1,0 +1,246 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.ram.brief-notice",
+  "title": "Brief player sighting during an ordinary Onix Walk starts Ram at the next intent",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.ram-brief-notice"
+  ],
+  "budgets": {
+    "maxSeconds": 180,
+    "maxFrames": 300,
+    "noProgressFrames": 120,
+    "minObservedFrames": 25
+  },
+  "subjects": [
+    {
+      "id": "onix",
+      "species": 95,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "ram-brief-notice-v1",
+      "subject": "onix"
+    }
+  ],
+  "setup": [
+    {
+      "id": "route29-origin",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 606,
+        "z": 403,
+        "facing": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-passive-follower",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "create-passive-follower",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-onix",
+      "op": "spawn",
+      "args": {
+        "species": 95,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 602,
+        "z": 402
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-onix",
+      "op": "bind",
+      "args": {
+        "subject": "onix"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "read-current-line-terrain",
+      "op": "terrain",
+      "args": {
+        "x": 603,
+        "z": 402,
+        "radius": 3
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "wait-ordinary-walk",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "ram-brief-notice-v1",
+          "when": "final",
+          "stage": "ordinary-moving"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "cross-into-line",
+      "op": "step",
+      "args": {
+        "frames": 12,
+        "keys": [
+          "UP",
+          "B"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "ram-brief-notice-v1",
+          "when": "final",
+          "stage": "player-on-line"
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 12,
+        "noProgressFrames": 12
+      }
+    },
+    {
+      "id": "brief-line-hold",
+      "op": "step",
+      "args": {
+        "frames": 6,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 6,
+        "noProgressFrames": 6
+      }
+    },
+    {
+      "id": "leave-line",
+      "op": "step",
+      "args": {
+        "frames": 12,
+        "keys": [
+          "DOWN",
+          "B"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "ram-brief-notice-v1",
+          "when": "final",
+          "stage": "player-off-line"
+        }
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 12,
+        "noProgressFrames": 12
+      }
+    },
+    {
+      "id": "wait-charge",
+      "op": "step",
+      "args": {
+        "frames": 80,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "ram-brief-notice-v1",
+          "when": "final",
+          "stage": "charge-started"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 80,
+        "noProgressFrames": 80
+      }
+    },
+    {
+      "id": "finish-first-charge-tile",
+      "op": "step",
+      "args": {
+        "frames": 48,
+        "keys": [],
+        "until": {
+          "kind": "measurement-complete",
+          "measurement": "ram-brief-notice-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 48,
+        "noProgressFrames": 48
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "ram-brief-notice-v1",
+      "when": "final"
+    }
+  ]
+}

@@ -27,7 +27,7 @@ class NaturalAppearHopHeightMeasurement:
     """One natural Wild Mareep from native spawn through Appear Hop release."""
 
     def __init__(self, schema, source_sha256, *, max_frames, authored_profiles):
-        if schema.get("compactSize") != 72 or not isinstance(source_sha256, str) \
+        if schema.get("compactSize") != 80 or not isinstance(source_sha256, str) \
                 or len(source_sha256) != 64 or not isinstance(authored_profiles, dict):
             raise ValueError("current profile inputs are missing")
         if type(max_frames) is not int or not 1 <= max_frames <= 60001:

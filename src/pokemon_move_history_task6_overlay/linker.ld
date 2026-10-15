@@ -52,6 +52,8 @@ SECTIONS {
                 ASSERT(. == ORIGIN(rom) + 0xD8,
                     "task-6 diagnostic mailbox size differs");
                 FILL(0x0000)
+                KEEP(*(.overworld_motion_slam_phase_check))
+                ASSERT(. == ORIGIN(rom) + 0xF0, "Slam phase private leaf extent differs");
                 . = ORIGIN(rom) + 0xF0;
                 FILL(0xABCD)
                 ASSERT(. == ORIGIN(rom) + 0xF0,
@@ -119,8 +121,16 @@ SECTIONS {
                 __bss_start__ = . ;
                 *(.bss)
                 __bss_end__ = . ;
-                ASSERT(__bss_end__ <= ORIGIN(rom) + 0xE40,
-                    "task-6 resident helper overlaps role-controller reserve");
+                ASSERT(__bss_end__ <= ORIGIN(rom) + 0xD40,
+                    "task-6 resident helper overlaps mounted Jump boundary");
+                /* Fixed mounted B Jump boundary called by overlay 159. */
+                . = ORIGIN(rom) + 0xD40;
+                KEEP(*(.overworld_mount_jump))
+                KEEP(*(.overworld_mount_jump_tail))
+                ASSERT(OverworldMountJump_Boundary == ORIGIN(rom) + 0xD40,
+                    "mounted Jump boundary moved");
+                ASSERT(. <= ORIGIN(rom) + 0xE40,
+                    "mounted Jump boundary overlaps role-controller reserve");
                 . = ORIGIN(rom) + 0xE40;
                 KEEP(*(.text.OverworldRoleController_Reduce))
                 ASSERT(OverworldRoleController_Reduce

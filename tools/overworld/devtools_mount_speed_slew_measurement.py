@@ -1,4 +1,4 @@
-"""One held Stantler run with post-cap variance fade and eased speed changes.
+"""One held Stantler run with authored variance and eased speed changes.
 
 The mounted callback reader and completed-queue MotionRecorder are the same
 ones used by the existing Cyndaquil S4 pacing witness. This meter only changes
@@ -18,6 +18,14 @@ FASTEST = 2
 VARIANCE = 2
 ACCELERATION_STEP = 1
 FIRST_COMMIT = 2
+LINEAR_VARIANTS = {12: (6, 2), 60: (8, 4)}
+
+
+def linear_tuning(ramp):
+    """Only the two registered idle fixtures can use this native proof."""
+    if type(ramp) is not int or ramp not in LINEAR_VARIANTS:
+        raise ValueError("mounted Linear variant requires ramp12 or Sprint ramp60")
+    return LINEAR_VARIANTS[ramp]
 
 
 def stop_skid_tail(last_walk_time):
@@ -43,6 +51,133 @@ def keyed_walk_duration(index, subject_identity, encounter_generation, commit_se
     nominal = max(FASTEST, NOMINAL_START - index * ACCELERATION_STEP)
     width = variance_width(index) if fade else VARIANCE
     return min(32, nominal + (((state >> 24) * (width + 1)) >> 8))
+
+
+def linear_walk_reference(subject_identity, encounter_generation, first_commit, ramp=12):
+    """Independent reciprocal-speed and keyed-duration reference for thirteen Walks."""
+    base, fastest = linear_tuning(ramp)
+    elapsed = carry = 0
+    rows = []
+    for index in range(MOTIONS):
+        q8 = (fastest << 8) if elapsed >= ramp else \
+            (base * fastest * ramp << 8) // \
+            (fastest * ramp + (base - fastest) * elapsed)
+        nominal, next_carry = (q8 + carry) >> 8, (q8 + carry) & 255
+        width = VARIANCE - min(elapsed, ramp) * VARIANCE // ramp
+        state = (subject_identity ^ (encounter_generation << 16) ^ (first_commit + index)) & 0xFFFFFFFF
+        state ^= state >> 16
+        state = state * 0x7FEB352D & 0xFFFFFFFF
+        state ^= state >> 15
+        state = state * 0x846CA68B & 0xFFFFFFFF
+        state ^= state >> 16
+        duration = nominal + ((state >> 24) * (width + 1) >> 8)
+        rows.append(dict(elapsed=elapsed, carry=carry, nominal=nominal,
+                         nextCarry=next_carry, width=width, duration=duration,
+                         nextElapsed=min(ramp, elapsed + duration)))
+        elapsed, carry = rows[-1]["nextElapsed"], next_carry
+    return rows
+
+
+def require_linear_full_speed_admission(elapsed, response, ramp):
+    """The first legal admission at the deadline has no remaining jitter."""
+    _, fastest = linear_tuning(ramp)
+    if elapsed >= ramp and (response[24] != fastest or response[19] != fastest):
+        raise ValueError("mounted Linear did not reach full speed and zero variance at its ramp deadline")
+
+
+def validate_linear_walks(actor, motions, receipts, ramp=12):
+    """Join real INPUT, accepted START_RESULT and COMMIT to each complete Walk."""
+    from tools.overworld.devtools_acceleration_measurement import policy_bytes
+    base, fastest = linear_tuning(ramp)
+    reference = linear_walk_reference(actor["subjectIdentity"],
+        actor["handle"]["encounterGeneration"], actor["commitSequence"], ramp)
+    identity = ("handle", "species", "form", "level", "subjectIdentity", "role",
+                "authorityGeneration", "engineAnchorGeneration", "presentationGeneration")
+    if len(motions) < MOTIONS or not isinstance(receipts, list) or len(receipts) > 128:
+        raise ValueError("mounted Linear lacks complete native policy receipts")
+    # Check the deadline directly from real native INPUT bytes first. This
+    # also rejects preserved old behavior for its specific late-variance fact,
+    # even when its earlier jitter already differs from the new reference.
+    for event in receipts:
+        data = event["data"]
+        if data.get("operation") == 1 and data.get("returnValue") == 1 \
+                and actor["commitSequence"] <= data["publicSubject"].get("commitSequence", -1) < actor["commitSequence"] + MOTIONS \
+                and all(data["publicSubject"].get(key) == actor.get(key) for key in identity):
+            before = policy_bytes(data["policyBefore"], data["policyBeforeHex"])
+            response = bytes.fromhex(data["responseHex"])
+            if len(before) != 36 or len(response) != 28:
+                raise ValueError("mounted Linear policy ABI or heading differs")
+            require_linear_full_speed_admission(before[32], response, ramp)
+    for index, (motion, expected) in enumerate(zip(motions[:MOTIONS], reference)):
+        if motion["duration"] != expected["duration"] or motion["commitBefore"] != actor["commitSequence"] + index:
+            raise ValueError("mounted Linear lost its keyed variance value")
+        found = {1: [], 2: [], 3: []}
+        for event in receipts:
+            data = event["data"]
+            subject = data["publicSubject"]
+            if subject.get("commitSequence") != motion["commitBefore"]:
+                continue
+            request, response = (bytes.fromhex(data[key]) for key in ("requestHex", "responseHex"))
+            op = data.get("operation")
+            if op not in found or data.get("returnValue") != 1 \
+                    or len(request) != 28 or len(response) != 28 \
+                    or request[:4] != b"\x01\x00\x1c\x00" or response[:10] != request[:10] \
+                    or request[8] != actor["handle"]["slot"] or request[9] != op \
+                    or (op != 2 and request[10] != 3):
+                raise ValueError("mounted Linear policy ABI or heading differs")
+            if any(subject.get(key) != actor.get(key) or data["publicSubjectAfter"].get(key) != actor.get(key)
+                   for key in identity):
+                raise ValueError("mounted Linear policy subject differs")
+            if op == 2:
+                # Existing START_RESULT packets carry the accepted proposal,
+                # but do not capture lane or policy bytes. COMMIT checks the
+                # consumed carry; no extra native reader is needed.
+                if request[15] != 1 or response[16] != 1 or response[21] != 0 \
+                        or request[17:20] != bytes((3, 3, expected["duration"])) \
+                        or response[17:27] != request[17:27] \
+                        or request[20] & (2 | 32 | 64) \
+                        or request[24:27] != bytes((expected["nominal"], expected["nextCarry"], expected["elapsed"])) \
+                        or event["frame"] != motion["startFrame"] \
+                        or subject.get("motionKind") != "WALK" or subject.get("motionPhase") != "MOVING":
+                    raise ValueError("mounted Linear lacks an accepted normal Walk admission")
+                found[op].append(event)
+                continue
+            lane = bytes.fromhex(data["laneHex"])
+            before, after = (policy_bytes(data[key], data[key + "Hex"]) for key in ("policyBefore", "policyAfter"))
+            if len(lane) != 80 or (lane[7], lane[50], lane[51], lane[71], lane[64] >> 1) != (base, ramp, fastest, 34, VARIANCE):
+                raise ValueError("mounted Linear native lane differs")
+            if tuple(before[32:35]) != (expected["elapsed"], expected["carry"] if op == 1 else expected["nextCarry"], 1 if index or op == 3 else 0):
+                raise ValueError("mounted Linear elapsed, carry or mode before differs")
+            if op == 1:
+                if response[16:20] != bytes((2, 3, 3, expected["duration"])) or response[20] & (2 | 32 | 64) \
+                        or response[21] != 0 or response[24:27] != bytes((expected["nominal"], expected["nextCarry"], expected["elapsed"])) \
+                        or tuple(after[32:35]) != (expected["elapsed"], expected["carry"], 1) or after[22] != 1:
+                    raise ValueError("mounted Linear proposal differs from shared-clock variance")
+                if not event["frame"] <= motion["startFrame"]:
+                    raise ValueError("mounted Linear proposal is after its motion")
+            else:
+                if request[11] != 1 or not request[14] & 4 \
+                        or before[0] != 3 or before[3] != base or before[22] != 2:
+                    raise ValueError("mounted Linear commit is not an accepted Right Walk")
+                if tuple(after[32:35]) != (expected["nextElapsed"], expected["nextCarry"], 1):
+                    raise ValueError("mounted Linear shared clock did not advance by displayed Walk time")
+                if not motion["travelEnd"]["frame"] <= event["frame"] <= motion["finishFrame"]:
+                    raise ValueError("mounted Linear commit is outside its terminal boundary")
+            found[op].append(event)
+        if not found[1] or len(found[2]) != 1 or len(found[3]) != 1:
+            raise ValueError("mounted Linear lacks one real accepted and committed policy boundary")
+        start, commit = found[2][0], found[3][0]
+        proposal = [event for event in found[1]
+                    if event["data"]["sequence"] < start["data"]["sequence"]
+                    and bytes.fromhex(event["data"]["responseHex"])[17:27]
+                        == bytes.fromhex(start["data"]["requestHex"])[17:27]]
+        if not proposal or start["data"]["sequence"] >= commit["data"]["sequence"]:
+            raise ValueError("mounted Linear accepted start is not joined to its proposal and commit")
+    at_full = [row for row in reference if row["elapsed"] >= ramp]
+    if not {2, 1, 0}.issubset(row["width"] for row in reference) or len(at_full) < 2 \
+            or any(row["nominal"] != fastest or row["width"] != 0 or row["duration"] != fastest for row in at_full):
+        raise ValueError("mounted Linear does not reach full speed and zero variance at its one ramp deadline")
+    return reference
 
 
 def walk_progress(elapsed, duration, prior):
@@ -128,6 +263,80 @@ def require_continuous_one_frame_cadence(previous, successor):
 
 
 class MountedSpeedSlewMeasurement(MountedPacingMeasurement):
+    def __init__(self, max_frames, *, linear_ramp=None):
+        super().__init__(max_frames)
+        if linear_ramp is not None:
+            linear_tuning(linear_ramp)
+        self.linear_ramp = linear_ramp
+        self.first_commit = FIRST_COMMIT
+        self.linear_policies = []
+
+    def configure(self, receipt, snapshot, subject):
+        """Bind the Linear variant to its exact idle, non-advancing fixture."""
+        q = receipt.get("value", receipt)
+        base, fastest = linear_tuning(self.linear_ramp)
+        if self.linear_ramp is None or self.initial is not None \
+                or getattr(self, "_typed_configuration", None) is not None \
+                or q.get("completed") is not True or q.get("prepared") is not True \
+                or q.get("acceptedProof") is not False or q.get("guestAdvanced") is not False \
+                or q.get("scope") != "prepared-idle-mounted-walk-fixture" \
+                or q.get("subject") != subject \
+                or tuple(q.get(k) for k in ("directionMode", "travelTime", "fastestTime",
+                    "timeToFullSpeed", "timeVariance")) != (0, base, fastest, self.linear_ramp, VARIANCE) \
+                or q.get("changedOffsets") != [7, 19, 50, 51, 64, 71]:
+            raise ValueError("mounted Linear idle fixture differs")
+        before, after = q.get("before"), q.get("after")
+        if not isinstance(before, dict) or not isinstance(after, dict):
+            raise ValueError("mounted Linear idle fixture lacks native states")
+        raw, actual = bytes.fromhex(before["mountStateHex"]), bytes.fromhex(after["mountStateHex"])
+        if len(raw) != 192 or len(actual) != 192:
+            raise ValueError("mounted Linear idle fixture native size differs")
+        expected = bytearray(raw)
+        for offset, value in ((7, base), (19, 0), (50, self.linear_ramp), (51, fastest),
+                              (64, (raw[8 + 64] & 1) | 4), (71, 34)):
+            expected[8 + offset] = value
+        selected = select_current_actor(snapshot, subject)
+        actor = next(a for a in snapshot["actors"] if a["handle"] == selected["handle"])
+        readiness = after.get("readiness", {})
+        from struct import unpack_from
+        binding = unpack_from("<IHHHHBBBB", actual, 88)
+        generation, phase, cancel, motion, reserved = unpack_from("<IBBBB", actual, 104)
+        if actual != bytes(expected) or q.get("expectedStateHex") != actual.hex() \
+                or before.get("profileHex") != raw[8:88].hex() \
+                or after.get("profileHex") != actual[8:88].hex() \
+                or before.get("bindingHex") != raw[88:104].hex() \
+                or after.get("bindingHex") != actual[88:104].hex() \
+                or before.get("readiness") != readiness \
+                or before.get("clock") != after.get("clock") \
+                or before.get("sessionGeneration") != after.get("sessionGeneration") \
+                or after.get("sessionGeneration") != generation or generation <= 0 \
+                or (phase, cancel, motion, reserved) != (3, 0, 0, 0) or actual[122] != 1 \
+                or any(actual[i] for i in (120, 123, 128, 148, 149, 150, 151, 180, 182, 183)) \
+                or binding[:7] != (actor["subjectIdentity"], actor["species"], snapshot["context"]["mapId"],
+                    actor["handle"]["mapGeneration"], actor["handle"]["encounterGeneration"],
+                    actor["form"], actor["level"]) or binding[7] >= 6 \
+                or after.get("clock") != {k: snapshot[k] for k in ("frame", "nativeCycle")} \
+                or readiness.get("snapshot") != {k: snapshot.get(k) for k in
+                    ("frame", "nativeCycle", "actorFrame", "context", "player")} \
+                or readiness.get("subject") != subject \
+                or actor.get("species") != 234 or actor.get("role") != "MOUNTED" \
+                or actor.get("inputOwnership") != 1 or actor.get("motionKind") != "NONE" \
+                or actor.get("motionPhase") != "IDLE" or actor.get("reservationId") != 0 \
+                or actor.get("movementPolicy", {}).get("pending") != 0 \
+                or any(readiness.get("actor", {}).get(k) != actor.get(k) for k in
+                    ("handle", "species", "form", "level", "role", "subjectIdentity", "logical",
+                     "commitSequence", "authorityGeneration", "engineAnchorGeneration",
+                     "presentationGeneration", "engineIdentity", "engineObject")):
+            raise ValueError("mounted Linear idle fixture changed unrelated state")
+        self._typed_configuration = deepcopy(q)
+        return self.result()
+
+    def _duration(self, index):
+        if self.linear_ramp is not None:
+            return self.linear_reference[index]["duration"]
+        return keyed_walk_duration(index, self.actor["subjectIdentity"],
+            self.actor["handle"]["encounterGeneration"], self.first_commit + index)
+
     def arm(self, subject, snapshot, receipt, trace_sequences=None):
         self._require(self.initial is None, "mounted speed reader already armed")
         self.subject = deepcopy(subject)
@@ -137,6 +346,11 @@ class MountedSpeedSlewMeasurement(MountedPacingMeasurement):
                       and actor.get("inputOwnership") == 1 and actor.get("motionPhase") == "IDLE"
                       and actor.get("reservationId") == 0, "requires idle mounted Stantler")
         self.initial, self.actor = deepcopy(snapshot), deepcopy(actor)
+        if self.linear_ramp is not None:
+            self._require(actor["logical"] == {"x": 585, "y": 402}, "mounted Linear must start on its checked lane")
+            self.first_commit = actor["commitSequence"]
+            self.linear_reference = linear_walk_reference(actor["subjectIdentity"],
+                actor["handle"]["encounterGeneration"], self.first_commit, self.linear_ramp)
         value = self._reader(receipt, False)
         self._require(value.get("counts") == self.counts, "reader already contains callbacks")
         self.sequence = snapshot["nativeObservation"]["sequence"]
@@ -155,16 +369,34 @@ class MountedSpeedSlewMeasurement(MountedPacingMeasurement):
             except (ValueError, KeyError, TypeError) as error:
                 self.failures.append(str(error))
                 return self.result()
-            index = actor["commitSequence"] - FIRST_COMMIT
+            index = actor["commitSequence"] - self.first_commit
             if actor["motionKind"] == "WALK" and 0 <= index < MOTIONS \
-                    and variance_width(index) == 0 and actor["motionDuration"] != FASTEST:
+                    and (self.linear_reference[index]["width"] if self.linear_ramp is not None else variance_width(index)) == 0 and actor["motionDuration"] != (linear_tuning(self.linear_ramp)[1] if self.linear_ramp is not None else FASTEST):
                 self.failures.append("mounted speed variance did not fade at nominal maximum")
         if self.windows and self.windows[0]["joined"] >= MOTIONS and not self.failures:
             pair = snapshot.get("mountPacing", {}).get("latestCompletedPose", {})
             actor = self._actor(snapshot)
             if pair.get("input", {}).get("heldKeys") != 0 or actor["motionKind"] not in ("NONE", "SKID"):
                 self.failures.append("mounted stop-skid tail has input or unexpected motion")
+        if self.linear_ramp is not None:
+            for event in events:
+                data = event.get("data", {})
+                if event.get("kind") == "native-observation" and data.get("observation") == "walk-policy" \
+                        and data.get("slot") == self.actor["handle"]["slot"] \
+                        and data.get("operation") in (1, 2, 3) \
+                        and (data["operation"] == 2 or bytes.fromhex(data["requestHex"])[10] == 3) \
+                        and self.first_commit <= data["publicSubject"].get("commitSequence", -1) < self.first_commit + MOTIONS:
+                    self.linear_policies.append(deepcopy(event))
+            if len(self.linear_policies) > 128:
+                self.failures.append("mounted Linear policy receipt bound exceeded")
         value = super().observe(snapshot, events)
+        if self.linear_ramp is not None and self.main_complete and not self.failures:
+            try:
+                validate_linear_walks(self.actor, self.windows[0]["recorder"].completed,
+                                     self.linear_policies, self.linear_ramp)
+            except (KeyError, TypeError, ValueError) as error:
+                self.failures.append(str(error))
+                return self.result()
         if not self.failures:
             try:
                 draw = snapshot.get("mountedDrawPose", {})
@@ -255,11 +487,9 @@ class MountedSpeedSlewMeasurement(MountedPacingMeasurement):
                       and motion["commitAfter"] == (motion["commitBefore"] + 1) & 0xFFFFFFFF,
                       "mounted speed motion is not the expected Right Walk or stop skid")
         duration = motion["duration"]
-        expected = window["stopSkidDuration"] if skid else keyed_walk_duration(
-            index, self.actor["subjectIdentity"],
-            self.actor["handle"]["encounterGeneration"], motion["commitBefore"])
+        expected = window["stopSkidDuration"] if skid else self._duration(index)
         self._require(type(duration) is int
-                      and motion["commitBefore"] == FIRST_COMMIT + index
+                      and motion["commitBefore"] == self.first_commit + index
                       and duration == expected,
                       "mounted speed lost its keyed variance value")
         if index:
@@ -350,6 +580,9 @@ class MountedSpeedSlewMeasurement(MountedPacingMeasurement):
         self._require(type(control.get("flags")) is int and not control["flags"] & 1
                       and control.get("playerMoveState") in (0, 3),
                       "mounted speed control is not released")
+        if self.linear_ramp is not None:
+            validate_linear_walks(self.actor, self.windows[0]["recorder"].completed,
+                                 self.linear_policies, self.linear_ramp)
         self.cleanup = deepcopy(receipt)
         self.closed = True
         return self.finish()
@@ -388,6 +621,7 @@ class MountedSpeedSlewMeasurement(MountedPacingMeasurement):
                     frames=self.frames, started=self.started, mainComplete=self.main_complete,
                     ready=self.ready, callbackClock="native return cycles",
                     completedClock="main-task-queue completions",
+                    linearRamp=self.linear_ramp, linearPolicies=deepcopy(self.linear_policies),
                     windows=[{k: deepcopy(v) for k, v in window.items() if k != "recorder"} |
                              {"motions": deepcopy(window["recorder"].completed)}
                              for window in self.windows])

@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 1,
+  "id": "follower.baby-damage-seek-safety",
+  "title": "An accepted hit to the baby Follower starts its authored safety response",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.baby-follower-damage-safety"
+  ],
+  "budgets": {
+    "maxSeconds": 300,
+    "maxFrames": 600,
+    "noProgressFrames": 420,
+    "minObservedFrames": 2
+  },
+  "subjects": [
+    {
+      "id": "baby",
+      "species": 173,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    },
+    {
+      "id": "threat",
+      "species": 70,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "baby-follower-damaged-v1",
+      "subject": "baby"
+    }
+  ],
+  "setup": [
+    {
+      "id": "safety-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 408,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-baby",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 173,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "spawn-baby",
+      "op": "spawn",
+      "args": {
+        "species": 173,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-baby",
+      "op": "bind",
+      "args": {
+        "subject": "baby"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-threat",
+      "op": "spawn",
+      "args": {
+        "species": 70,
+        "form": 0,
+        "role": "wild",
+        "level": 10,
+        "x": 585,
+        "z": 410
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-threat",
+      "op": "bind",
+      "args": {
+        "subject": "threat"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "enter-ambush-path",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "DOWN",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "observe-damage-safety",
+      "op": "step",
+      "args": {
+        "frames": 360,
+        "keys": [],
+        "until": {
+          "kind": "measurement-complete",
+          "measurement": "baby-follower-damaged-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 360,
+        "noProgressFrames": 360
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "baby-follower-damaged-v1",
+      "when": "final"
+    }
+  ]
+}

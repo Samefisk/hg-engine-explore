@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.ambush.player-tile-landing",
+  "title": "Wild Ambush landing and shared overlap exit",
+  "status": "active",
+  "capabilities": ["condition.evaluation", "chase", "hop"],
+  "proofLevel": "S4",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "data/overworld_behavior_profiles.json#ambush and the player request of 2026-09-28",
+    "actor": "One prepared, current WILD Weepinbell (species 70) with the authored Ambush conditional Attitude at Route 29 map 33.",
+    "trigger": "Place the player at (585,408), spawn Weepinbell at (583,406), then hold the player still without changing profile, condition, timers, collision, or actor state. Ambush condition 49529 must resolve PLAYER at an idle intent boundary.",
+    "observable": "Requirement current.ambush-player-tile-landing: the active timed Ambush condition and application 26 remain bound to the same Weepinbell. Its normal directed Hop targets and lands on the stationary player's exact tile (585,408), with complete rendered travel, one logical commit, motion finish, and control return. After real contact, normal Player knockback is allowed. The same full actor must overlap the Player at equal physical base Y, finish a native shared one-tile exit to a clear neighboring tile, and emit its next normal profile intent and START. Native accepted shared movement owns the unchanged profile-terrain and stock blocked-direction checks.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {"phase": "before-observation", "target": "fixture", "change": "Use disposable test.sav, checked teleport, native Wild Weepinbell spawn, and exact bind. The observation window uses no profile, condition, timer, collision, position, or input mutation."}
+    ],
+    "limits": [
+      "The old ROM recording session-qfa6a3db reaches (585,407), never the player tile, and is a required failing control for this checker.",
+      "This prepared case proves one Weepinbell on one clear map lane. It does not prove natural spawning, all Ambush species, or battle initiation.",
+      "The test observes the resolved Ambush application and live Hop. The Workshop editor field is checked separately by source and editor tests.",
+      "This case observes accepted native shared recovery and sampled Player/Actor occupancy; it does not enumerate all stock NPC objects. Different-height rejection remains the separate actual-C overlap control."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [
+    {"id": "weepinbell", "species": 70, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}
+  ],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Keep the player fixed at (585,408) and bind the prepared Weepinbell at (583,406)."},
+    {"at": 1, "kind": "lifecycle", "value": "Observe Ambush condition 49529 and application 26 active with PLAYER as its captured target before the Hop intent."},
+    {"at": 2, "kind": "lifecycle", "value": "Observe the same actor Hop to the exact player tile, complete its rendered path, commit once, finish, and return control."},
+    {"at": 3, "kind": "lifecycle", "value": "With continued neutral input, observe equal-support overlap, the same actor completing a native shared legal exit, and its next profile intent and START."}
+  ],
+  "stop": {"frameBudget": 360, "condition": "Original exact-player-tile Hop completes, then the same full actor completes a native shared legal exit and starts its next profile motion."},
+  "expect": {
+    "requiredEvents": ["INTENT_CREATED", "MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
+    "forbiddenEvents": ["MOTION_CANCELED", "ACTOR_REBOUND", "ACTOR_DETACHED", "CONTEXT_CHANGED"],
+    "invariants": [
+      "The subject remains the same current WILD Weepinbell with Ambush application 26 active for the landing Hop",
+      "The player remains on map33 tile(585,408) until the original Hop contact/landing; later normal contact knockback gives no actor-exit credit",
+      "The target, terminal logical tile, and rendered terminal center equal the player tile",
+      "The Hop has one logical commit and ordered intent, start, finish, and control-return events",
+      "No cancellation or actor replacement can bridge landing, equal-support overlap, native exit travel, and the next same-actor profile START"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "profile.ambush.player-tile-landing",
+    "claims": ["live-actor-identity", "profile-resolution", "engine-boundary", "logical-commit", "rendered-motion", "control-release"],
+    "minimumFrames": 10
+  }
+}

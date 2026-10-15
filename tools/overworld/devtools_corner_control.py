@@ -78,7 +78,7 @@ def calibrate_corner_policy(reader, *, checker=None):
                 "corner calibration lacks matching completed native strict evidence")
         require(checker(clean["policy"]) is True, "clean corner policy failed unchanged checker")
         original_state = bytes.fromhex(clean["mountStateHex"])
-        require(len(original_state) == STATE_BYTES and original_state[8:80].hex() == clean["policy"]["profileHex"],
+        require(len(original_state) == STATE_BYTES and original_state[8:88].hex() == clean["policy"]["profileHex"],
                 "corner full state differs from the same reader")
         address = reader.mount_state + 27
         original = original_state[27:28]
@@ -90,7 +90,7 @@ def calibrate_corner_policy(reader, *, checker=None):
         expected = deepcopy(clean)
         changed_state = bytearray(original_state); changed_state[27] = 0
         expected["mountStateHex"] = changed_state.hex()
-        expected["policy"] = dict(profileHex=changed_state[8:80].hex(), profile19=0)
+        expected["policy"] = dict(profileHex=changed_state[8:88].hex(), profile19=0)
         try:
             receipt["guestMemoryWrites"] += 1
             s.write(address, b"\0")

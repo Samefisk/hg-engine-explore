@@ -7,8 +7,10 @@
     "rom": "test.nds",
     "save": "test.sav"
   },
-  "expectationSource": "Separate native observer calibration for legacy.live-observer-controls. Preserve the normal Ledyba route and a complete natural spawn Hop plus three chain actions as the valid baseline. Then hold the actual current native render pose for two completed samples during a natural reposition and require the unchanged MotionRecorder to detect render-stall. Separately clear only the same object's active bit and require the real identity reader to reject it. Retain every bad frame and the exact same-frame restoration receipt. This control cannot supply normal-play credit.",
-  "requirements": ["legacy.live-observer-controls"],
+  "expectationSource": "Separate native observer calibration for legacy.live-observer-controls. Preserve the normal44-tile Cherrygrove-to-Route30 route and a complete natural144-frame Fly In plus three chain actions as the valid baseline. Then hold the actual current native render pose for two completed samples during a natural reposition and require the unchanged MotionRecorder to detect render-stall. Separately clear only the same object's active bit and require the real identity reader to reject it. Retain every bad frame and the exact same-frame restoration receipt. This control cannot supply normal-play credit.",
+  "requirements": [
+    "legacy.live-observer-controls"
+  ],
   "budgets": {
     "maxSeconds": 300,
     "maxFrames": 6000,
@@ -36,9 +38,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 33,
-          "x": 585,
-          "z": 406
+          "map": 67,
+          "x": 564,
+          "z": 392
         }
       },
       "budget": {
@@ -69,7 +71,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "UP"
+          "RIGHT"
         ],
         "until": {
           "kind": "player-step-count",
@@ -93,9 +95,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 33,
-          "x": 585,
-          "z": 405
+          "map": 67,
+          "x": 565,
+          "z": 392
         }
       },
       "budget": {
@@ -114,7 +116,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "UP"
+          "DOWN"
         ],
         "until": {
           "kind": "player-step-count",
@@ -138,9 +140,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 33,
-          "x": 585,
-          "z": 404
+          "map": 67,
+          "x": 565,
+          "z": 393
         }
       },
       "budget": {
@@ -159,7 +161,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "UP"
+          "DOWN"
         ],
         "until": {
           "kind": "player-step-count",
@@ -183,9 +185,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 33,
-          "x": 585,
-          "z": 403
+          "map": 67,
+          "x": 565,
+          "z": 394
         }
       },
       "budget": {
@@ -204,7 +206,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "UP"
+          "DOWN"
         ],
         "until": {
           "kind": "player-step-count",
@@ -228,9 +230,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 33,
-          "x": 585,
-          "z": 402
+          "map": 67,
+          "x": 565,
+          "z": 395
         }
       },
       "budget": {
@@ -249,7 +251,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "DOWN"
         ],
         "until": {
           "kind": "player-step-count",
@@ -273,9 +275,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 33,
-          "x": 584,
-          "z": 402
+          "map": 67,
+          "x": 565,
+          "z": 396
         }
       },
       "budget": {
@@ -294,7 +296,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "DOWN"
         ],
         "until": {
           "kind": "player-step-count",
@@ -318,9 +320,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 33,
-          "x": 583,
-          "z": 402
+          "map": 67,
+          "x": 565,
+          "z": 397
         }
       },
       "budget": {
@@ -363,9 +365,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 33,
-          "x": 582,
-          "z": 402
+          "map": 67,
+          "x": 564,
+          "z": 397
         }
       },
       "budget": {
@@ -408,9 +410,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 33,
-          "x": 581,
-          "z": 402
+          "map": 67,
+          "x": 563,
+          "z": 397
         }
       },
       "budget": {
@@ -453,9 +455,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 33,
-          "x": 580,
-          "z": 402
+          "map": 67,
+          "x": 562,
+          "z": 397
         }
       },
       "budget": {
@@ -498,9 +500,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 33,
-          "x": 579,
-          "z": 402
+          "map": 67,
+          "x": 561,
+          "z": 397
         }
       },
       "budget": {
@@ -519,7 +521,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "UP"
         ],
         "until": {
           "kind": "player-step-count",
@@ -543,9 +545,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 33,
-          "x": 578,
-          "z": 402
+          "map": 67,
+          "x": 561,
+          "z": 396
         }
       },
       "budget": {
@@ -564,7 +566,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "UP"
         ],
         "until": {
           "kind": "player-step-count",
@@ -588,9 +590,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 33,
-          "x": 577,
-          "z": 402
+          "map": 67,
+          "x": 561,
+          "z": 395
         }
       },
       "budget": {
@@ -633,9 +635,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 33,
-          "x": 576,
-          "z": 402
+          "map": 67,
+          "x": 560,
+          "z": 395
         }
       },
       "budget": {
@@ -654,7 +656,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "UP"
+          "LEFT"
         ],
         "until": {
           "kind": "player-step-count",
@@ -678,9 +680,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 33,
-          "x": 576,
-          "z": 401
+          "map": 67,
+          "x": 559,
+          "z": 395
         }
       },
       "budget": {
@@ -699,7 +701,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "UP"
+          "LEFT"
         ],
         "until": {
           "kind": "player-step-count",
@@ -723,9 +725,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 33,
-          "x": 576,
-          "z": 400
+          "map": 67,
+          "x": 558,
+          "z": 395
         }
       },
       "budget": {
@@ -769,8 +771,8 @@
         "predicate": {
           "kind": "player-settled-at",
           "map": 67,
-          "x": 575,
-          "z": 400
+          "x": 557,
+          "z": 395
         }
       },
       "budget": {
@@ -814,8 +816,8 @@
         "predicate": {
           "kind": "player-settled-at",
           "map": 67,
-          "x": 574,
-          "z": 400
+          "x": 556,
+          "z": 395
         }
       },
       "budget": {
@@ -859,8 +861,8 @@
         "predicate": {
           "kind": "player-settled-at",
           "map": 67,
-          "x": 573,
-          "z": 400
+          "x": 555,
+          "z": 395
         }
       },
       "budget": {
@@ -904,8 +906,8 @@
         "predicate": {
           "kind": "player-settled-at",
           "map": 67,
-          "x": 572,
-          "z": 400
+          "x": 554,
+          "z": 395
         }
       },
       "budget": {
@@ -949,8 +951,8 @@
         "predicate": {
           "kind": "player-settled-at",
           "map": 67,
-          "x": 571,
-          "z": 400
+          "x": 553,
+          "z": 395
         }
       },
       "budget": {
@@ -994,8 +996,8 @@
         "predicate": {
           "kind": "player-settled-at",
           "map": 67,
-          "x": 570,
-          "z": 400
+          "x": 552,
+          "z": 395
         }
       },
       "budget": {
@@ -1014,7 +1016,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "UP"
+          "LEFT"
         ],
         "until": {
           "kind": "player-step-count",
@@ -1039,8 +1041,8 @@
         "predicate": {
           "kind": "player-settled-at",
           "map": 67,
-          "x": 570,
-          "z": 399
+          "x": 551,
+          "z": 395
         }
       },
       "budget": {
@@ -1059,7 +1061,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "UP"
+          "LEFT"
         ],
         "until": {
           "kind": "player-step-count",
@@ -1084,8 +1086,8 @@
         "predicate": {
           "kind": "player-settled-at",
           "map": 67,
-          "x": 570,
-          "z": 398
+          "x": 550,
+          "z": 395
         }
       },
       "budget": {
@@ -1104,7 +1106,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "UP"
         ],
         "until": {
           "kind": "player-step-count",
@@ -1129,8 +1131,8 @@
         "predicate": {
           "kind": "player-settled-at",
           "map": 67,
-          "x": 569,
-          "z": 398
+          "x": 550,
+          "z": 394
         }
       },
       "budget": {
@@ -1174,8 +1176,8 @@
         "predicate": {
           "kind": "player-settled-at",
           "map": 67,
-          "x": 569,
-          "z": 397
+          "x": 550,
+          "z": 393
         }
       },
       "budget": {
@@ -1194,7 +1196,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "UP"
         ],
         "until": {
           "kind": "player-step-count",
@@ -1219,8 +1221,8 @@
         "predicate": {
           "kind": "player-settled-at",
           "map": 67,
-          "x": 568,
-          "z": 397
+          "x": 550,
+          "z": 392
         }
       },
       "budget": {
@@ -1239,7 +1241,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "UP"
         ],
         "until": {
           "kind": "player-step-count",
@@ -1264,8 +1266,8 @@
         "predicate": {
           "kind": "player-settled-at",
           "map": 67,
-          "x": 567,
-          "z": 397
+          "x": 550,
+          "z": 391
         }
       },
       "budget": {
@@ -1284,7 +1286,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "UP"
         ],
         "until": {
           "kind": "player-step-count",
@@ -1309,8 +1311,8 @@
         "predicate": {
           "kind": "player-settled-at",
           "map": 67,
-          "x": 566,
-          "z": 397
+          "x": 550,
+          "z": 390
         }
       },
       "budget": {
@@ -1329,7 +1331,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "UP"
         ],
         "until": {
           "kind": "player-step-count",
@@ -1354,8 +1356,8 @@
         "predicate": {
           "kind": "player-settled-at",
           "map": 67,
-          "x": 565,
-          "z": 397
+          "x": 550,
+          "z": 389
         }
       },
       "budget": {
@@ -1374,7 +1376,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "UP"
         ],
         "until": {
           "kind": "player-step-count",
@@ -1399,8 +1401,8 @@
         "predicate": {
           "kind": "player-settled-at",
           "map": 67,
-          "x": 564,
-          "z": 397
+          "x": 550,
+          "z": 388
         }
       },
       "budget": {
@@ -1419,7 +1421,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "UP"
         ],
         "until": {
           "kind": "player-step-count",
@@ -1444,8 +1446,8 @@
         "predicate": {
           "kind": "player-settled-at",
           "map": 67,
-          "x": 563,
-          "z": 397
+          "x": 550,
+          "z": 387
         }
       },
       "budget": {
@@ -1464,7 +1466,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "UP"
         ],
         "until": {
           "kind": "player-step-count",
@@ -1489,8 +1491,8 @@
         "predicate": {
           "kind": "player-settled-at",
           "map": 67,
-          "x": 562,
-          "z": 397
+          "x": 550,
+          "z": 386
         }
       },
       "budget": {
@@ -1509,7 +1511,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "UP"
         ],
         "until": {
           "kind": "player-step-count",
@@ -1534,8 +1536,8 @@
         "predicate": {
           "kind": "player-settled-at",
           "map": 67,
-          "x": 561,
-          "z": 397
+          "x": 550,
+          "z": 385
         }
       },
       "budget": {
@@ -1579,8 +1581,8 @@
         "predicate": {
           "kind": "player-settled-at",
           "map": 67,
-          "x": 561,
-          "z": 396
+          "x": 550,
+          "z": 384
         }
       },
       "budget": {
@@ -1623,9 +1625,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 67,
-          "x": 561,
-          "z": 395
+          "map": 34,
+          "x": 550,
+          "z": 383
         }
       },
       "budget": {
@@ -1644,7 +1646,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "UP"
         ],
         "until": {
           "kind": "player-step-count",
@@ -1668,9 +1670,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 67,
-          "x": 560,
-          "z": 395
+          "map": 34,
+          "x": 550,
+          "z": 382
         }
       },
       "budget": {
@@ -1689,7 +1691,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "UP"
         ],
         "until": {
           "kind": "player-step-count",
@@ -1713,9 +1715,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 67,
-          "x": 559,
-          "z": 395
+          "map": 34,
+          "x": 550,
+          "z": 381
         }
       },
       "budget": {
@@ -1734,7 +1736,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "UP"
         ],
         "until": {
           "kind": "player-step-count",
@@ -1758,9 +1760,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 67,
-          "x": 558,
-          "z": 395
+          "map": 34,
+          "x": 550,
+          "z": 380
         }
       },
       "budget": {
@@ -1779,7 +1781,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "UP"
         ],
         "until": {
           "kind": "player-step-count",
@@ -1803,9 +1805,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 67,
-          "x": 557,
-          "z": 395
+          "map": 34,
+          "x": 550,
+          "z": 379
         }
       },
       "budget": {
@@ -1824,7 +1826,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "UP"
         ],
         "until": {
           "kind": "player-step-count",
@@ -1848,9 +1850,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 67,
-          "x": 556,
-          "z": 395
+          "map": 34,
+          "x": 550,
+          "z": 378
         }
       },
       "budget": {
@@ -1869,7 +1871,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "UP"
         ],
         "until": {
           "kind": "player-step-count",
@@ -1893,9 +1895,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 67,
-          "x": 555,
-          "z": 395
+          "map": 34,
+          "x": 550,
+          "z": 377
         }
       },
       "budget": {
@@ -1914,7 +1916,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "UP"
         ],
         "until": {
           "kind": "player-step-count",
@@ -1938,9 +1940,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 67,
-          "x": 554,
-          "z": 395
+          "map": 34,
+          "x": 550,
+          "z": 376
         }
       },
       "budget": {
@@ -1959,7 +1961,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "RIGHT"
         ],
         "until": {
           "kind": "player-step-count",
@@ -1983,9 +1985,9 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 67,
-          "x": 553,
-          "z": 395
+          "map": 34,
+          "x": 551,
+          "z": 376
         }
       },
       "budget": {
@@ -2004,7 +2006,7 @@
       "args": {
         "frames": 64,
         "keys": [
-          "LEFT"
+          "RIGHT"
         ],
         "until": {
           "kind": "player-step-count",
@@ -2024,1041 +2026,6 @@
     },
     {
       "id": "route-44-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 67,
-          "x": 552,
-          "z": 395
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-45-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "LEFT"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 45
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-45-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 67,
-          "x": 551,
-          "z": 395
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-46-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "LEFT"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 46
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-46-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 67,
-          "x": 550,
-          "z": 395
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-47-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "UP"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 47
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-47-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 67,
-          "x": 550,
-          "z": 394
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-48-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "UP"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 48
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-48-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 67,
-          "x": 550,
-          "z": 393
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-49-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "UP"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 49
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-49-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 67,
-          "x": 550,
-          "z": 392
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-50-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "UP"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 50
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-50-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 67,
-          "x": 550,
-          "z": 391
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-51-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "UP"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 51
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-51-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 67,
-          "x": 550,
-          "z": 390
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-52-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "UP"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 52
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-52-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 67,
-          "x": 550,
-          "z": 389
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-53-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "UP"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 53
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-53-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 67,
-          "x": 550,
-          "z": 388
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-54-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "UP"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 54
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-54-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 67,
-          "x": 550,
-          "z": 387
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-55-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "UP"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 55
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-55-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 67,
-          "x": 550,
-          "z": 386
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-56-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "UP"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 56
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-56-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 67,
-          "x": 550,
-          "z": 385
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-57-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "UP"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 57
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-57-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 67,
-          "x": 550,
-          "z": 384
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-58-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "UP"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 58
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-58-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 34,
-          "x": 550,
-          "z": 383
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-59-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "UP"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 59
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-59-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 34,
-          "x": 550,
-          "z": 382
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-60-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "UP"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 60
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-60-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 34,
-          "x": 550,
-          "z": 381
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-61-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "UP"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 61
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-61-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 34,
-          "x": 550,
-          "z": 380
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-62-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "UP"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 62
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-62-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 34,
-          "x": 550,
-          "z": 379
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-63-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "UP"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 63
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-63-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 34,
-          "x": 550,
-          "z": 378
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-64-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "UP"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 64
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-64-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 34,
-          "x": 550,
-          "z": 377
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-65-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "UP"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 65
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-65-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 34,
-          "x": 550,
-          "z": 376
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-66-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "RIGHT"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 66
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-66-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 34,
-          "x": 551,
-          "z": 376
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-67-admit",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "RIGHT"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 67
-        }
-      },
-      "budget": {
-        "maxSeconds": 20,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      },
-      "skipIf": {
-        "kind": "actor-present",
-        "subject": "ledyba"
-      }
-    },
-    {
-      "id": "route-67-settle",
       "op": "wait",
       "args": {
         "predicate": {

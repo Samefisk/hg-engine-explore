@@ -1,32 +1,104 @@
 """Read and independently check mounted presentation; never advance the guest."""
 from copy import deepcopy
+import hashlib
+import struct
+
+from tools.overworld.devtools_observer import NativeObservationError
 
 STATE_ADDRESS = 0x01FFA500
+STATE_BYTES = 72
 MOUNT_ADDRESS = 0x023BC744
+MOUNT_SESSION_OFFSET = 0x68
+MOUNT_MODE_OFFSET = 0x6F
 POSE_KEYS = ("x", "z", "velocityX", "velocityZ", "bodyY", "riderY", "leanX", "leanZ", "phase", "walking")
+
+
+def authenticate_gait(session):
+    """Seal resident code/state layout once for this exact session and ROM."""
+    from scripts.verify_pokemon_move_history_capture import elf_bytes_at, elf_section_layout
+
+    owner = (id(session), session.emu, session.rom_hash)
+    if session.emu is None:
+        raise NativeObservationError("mounted gait session is closed")
+    cached = getattr(session, "_mounted_gait_identity", None)
+    if (cached is not None and cached[0][0] == owner[0]
+            and cached[0][1] is owner[1] and cached[0][2] == owner[2]):
+        return deepcopy(cached[1])
+    linked = session.rt.REPO / "build/overworld_mount_chain_overlay_linked.o"
+    sections = elf_section_layout(linked)
+    identity = {}
+    for name, address, limit in (("gait", 0x01FF9D00, 0x01FFA100),
+                                 ("presentation", 0x01FFA100, STATE_ADDRESS)):
+        matches = [row for row in sections if row[2] == address]
+        if (len(matches) != 1 or matches[0][0] != 1 or not matches[0][1] & 4
+                or not 0 < matches[0][3] <= limit - address):
+            raise NativeObservationError("mounted " + name + " code host differs")
+        size = matches[0][3]
+        expected = elf_bytes_at(linked, address, size)
+        # GCC10's sealed Apply entry reads these current Mount fields. Older
+        # profile layouts used +60/+67; do not read those bytes as gait input.
+        if name == "gait" and any(expected[offset:offset + 2] != instruction
+                for offset, instruction in ((0x12, b"\x83\x6e"),
+                                             (0x1A, b"\x6f\x33"),
+                                             (0x1C, b"\x1b\x78"),
+                                             (0x32, b"\x03\x7e"))):
+            raise NativeObservationError("mounted gait input layout differs")
+        if len(expected) != size or session.packaged_code(address, size) != expected:
+            raise NativeObservationError("mounted " + name + " linked/package code differs")
+        if session.rt.actor_memory_read(session.emu, address, size) != expected:
+            raise NativeObservationError("mounted " + name + " loaded code differs")
+        identity[name] = dict(address=address, size=size,
+                              sha256=hashlib.sha256(expected).hexdigest())
+    state = [row for row in sections if row[2] == STATE_ADDRESS]
+    if (len(state) != 1 or state[0][0] != 1 or state[0][1] & 3 != 3
+            or not STATE_BYTES <= state[0][3] <= 128):
+        raise NativeObservationError("mounted gait state layout differs")
+    identity["state"] = dict(address=STATE_ADDRESS, size=STATE_BYTES)
+    session._mounted_gait_identity = (owner, deepcopy(identity))
+    return identity
 
 
 def read_gait(session, current):
     rt, emu = session.rt, session.emu
-    def pose(address):
-        result = {key: rt.signed(emu, address + index * 4) for index, key in enumerate(POSE_KEYS[:4])}
-        result.update({key: rt.signed(emu, address + 16 + index * 2, 2)
-                       for index, key in enumerate(POSE_KEYS[4:8])})
-        result.update(phase=rt.unsigned(emu, address + 24, 2), walking=rt.unsigned(emu, address + 26, 1))
-        return result
-    mode = rt.unsigned(emu, MOUNT_ADDRESS + 0x67, 1)
+    pointer = current.get("playerPointer")
+    if (type(pointer) is not int or pointer % 4
+            or not 0x02000000 <= pointer <= 0x02400000 - 0x12C):
+        raise NativeObservationError("mounted gait player pointer differs")
+    authenticate_gait(session)
+    raw = rt.actor_memory_read(emu, STATE_ADDRESS, STATE_BYTES)
+    if not isinstance(raw, (bytes, bytearray)) or len(raw) != STATE_BYTES:
+        raise NativeObservationError("mounted gait state read is incomplete")
+    def pose(offset):
+        return dict(zip(POSE_KEYS, struct.unpack_from("<4i4hHB", raw, offset)))
+    stamp, generation, owner, initialized = struct.unpack_from("<3IB", raw, 56)
+    mode = rt.unsigned(emu, MOUNT_ADDRESS + MOUNT_MODE_OFFSET, 1)
     return dict(schemaVersion=1, address=STATE_ADDRESS,
-        previous=pose(STATE_ADDRESS), pose=pose(STATE_ADDRESS + 28),
-        stamp=rt.unsigned(emu, STATE_ADDRESS + 56),
-        session=rt.unsigned(emu, STATE_ADDRESS + 60),
-        owner=rt.unsigned(emu, STATE_ADDRESS + 64),
-        initialized=rt.unsigned(emu, STATE_ADDRESS + 68, 1),
+        previous=pose(0), pose=pose(28),
+        stamp=stamp, session=generation, owner=owner, initialized=initialized,
         input=dict(x=rt.signed(emu, current["playerPointer"] + 0x70),
             z=rt.signed(emu, current["playerPointer"] + 0x78),
             stamp=rt.unsigned(emu, 0x021D1138),
-            session=rt.unsigned(emu, MOUNT_ADDRESS + 0x60), owner=current["playerPointer"],
+            session=rt.unsigned(emu, MOUNT_ADDRESS + MOUNT_SESSION_OFFSET), owner=current["playerPointer"],
             mode=1 if mode == 4 else 0 if mode == 0 else 2,
             options=rt.unsigned(emu, MOUNT_ADDRESS + 0x18, 1)))
+
+
+def read_gait_pair(session, current, *, player=None, mount=None):
+    """Collect actual pair/state bytes only; consumers judge the guest pose."""
+    value = dict(playerPointer=current["playerPointer"], mountPointer=current["mountPointer"])
+    for name, supplied in (("player", player), ("mount", mount)):
+        pointer = value[name + "Pointer"]
+        if (type(pointer) is not int or pointer % 4
+                or not 0x02000000 <= pointer <= 0x02400000 - 0x12C):
+            raise NativeObservationError("mounted gait " + name + " pointer differs")
+    value["gait"] = read_gait(session, current)
+    for name, supplied in (("player", player), ("mount", mount)):
+        pointer = value[name + "Pointer"]
+        value[name] = deepcopy(supplied if supplied is not None else
+                               session.rt.object_state(session.emu, pointer))
+        value[name].update(unk88_z=session.rt.signed(session.emu, pointer + 0x90),
+                           unk94_z=session.rt.signed(session.emu, pointer + 0x9C))
+    return value
 
 
 def expected_pose(previous, input):

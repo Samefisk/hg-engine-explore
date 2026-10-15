@@ -4,6 +4,7 @@
  */
 #include "../../include/overworld_spawn_identity.h"
 #include "../../include/map_events_internal.h"
+#include "../../include/overworld_actor_appearance.h"
 
 #define OW_WILD_OBJECT_ID_START 0xE0
 #define OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT 2074
@@ -11,6 +12,28 @@
 typedef struct OverworldWildSpawnRuntimePrefix {
     OVERWORLD_WILD_CUSTOM_JUMP_RUNTIME_PREFIX_FIELDS;
 } OverworldWildSpawnRuntimePrefix;
+
+/* Enter only after the resident caller verifies stock Field is loaded and
+ * validates every matching object. Forget must precede native destruction. */
+static int __attribute__((noinline, used,
+    section(".overworld_field_spawn_orphans")))
+OverworldWildSpawnIdentity_DeleteOrphans(MapObjectMan *manager, int slot)
+{
+    int deleted = 0;
+    int i;
+
+    OVERWORLD_ACTOR_APPEARANCE_ENTRY->forget(manager, slot);
+    for (i = 0; i < (int)manager->object_count; i++) {
+        LocalMapObject *candidate = &manager->objects[i];
+
+        if ((candidate->flags & MAPOBJECTFLAG_ACTIVE) != 0
+            && (u32)candidate->id == OW_WILD_OBJECT_ID_START + (u32)slot) {
+            DeleteMapObject(candidate);
+            deleted++;
+        }
+    }
+    return deleted;
+}
 
 int __attribute__((noinline, used, section(".overworld_spawn_identity")))
 OverworldWildSpawnIdentity_PrepareSlot(
@@ -21,7 +44,6 @@ OverworldWildSpawnIdentity_PrepareSlot(
 {
     MapObjectMan *manager;
     const OverworldWildSpawnRuntimePrefix *runtime;
-    int deleted = 0;
     int i;
     int j;
 
@@ -38,7 +60,8 @@ OverworldWildSpawnIdentity_PrepareSlot(
         || state->spawns[slot].object != NULL
         || state->pendingSlot == slot
         || state->movementQueuedBattleSlot == slot
-        || (presentation->managerRestoreMask & (1u << slot)) != 0) {
+        || (presentation->managerRestoreMask & (1u << slot)) != 0
+        || !IsOverlayLoaded(1)) {
         return -1;
     }
 
@@ -77,14 +100,5 @@ OverworldWildSpawnIdentity_PrepareSlot(
             }
         }
     }
-    for (i = 0; i < (int)manager->object_count; i++) {
-        LocalMapObject *candidate = &manager->objects[i];
-
-        if ((candidate->flags & MAPOBJECTFLAG_ACTIVE) != 0
-            && (u32)candidate->id == OW_WILD_OBJECT_ID_START + (u32)slot) {
-            DeleteMapObject(candidate);
-            deleted++;
-        }
-    }
-    return deleted;
+    return OverworldWildSpawnIdentity_DeleteOrphans(manager, slot);
 }

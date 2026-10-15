@@ -76,7 +76,7 @@ def measurements(replay, record):
     previous = None
     for case, config in zip(CASES, configurations):
         profile, before = bytes.fromhex(config["profileHex"]), bytes.fromhex(config["beforeProfileHex"])
-        need(config.get("caseIndex") == case["index"] and len(profile) == len(before) == 72
+        need(config.get("caseIndex") == case["index"] and len(profile) == len(before) == 80
              and config.get("changedOffsets") == [7, 19, 50, 51], "Walk matrix configuration shape differs")
         expected = bytearray(before)
         for offset, actual in ((7, case["duration"]), (19, case["mode"]), (50, 0), (51, case["duration"])):

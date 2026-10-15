@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.ram-low-speed",
+  "title": "Adjacent Onix Ram is too slow to hurt the player",
+  "status": "active",
+  "capabilities": ["player.health", "collision.attack"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/player-hp-implementation-plan.md",
+    "actor": "One current WILD Onix (species 95) at Route 29 tile (585,408), adjacent to the player at (585,407).",
+    "trigger": "Wait for Onix to gain its normal Ram application, then leave both actors in place for 80 completed game frames with no player input.",
+    "observable": "The live and saved player HP stay at 100, accepted hit count stays zero, and field control does not enter battle.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {"phase": "before-observation", "target": "fixture", "change": "Use checked teleport, native Wild Onix spawn, and exact live identity bind. Keep Onix movement, Ram policy, damage, and player HP unmodified."}
+    ],
+    "limits": [
+      "Prepared adjacent placement tests the Ram speed boundary, not natural population spawn selection.",
+      "The actor application and 80 field frames are observed; this does not directly record a rejected collision callback.",
+      "A missing current adjacent Onix, lost Ram application, player movement, damage, accepted hit, battle, or wrong save HP fails."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "onix", "species": 95, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Place and bind current Wild Onix adjacent to the player."},
+    {"at": 1, "kind": "lifecycle", "value": "Observe active Ram application and 80 neutral field frames."},
+    {"at": 2, "kind": "lifecycle", "value": "Read live and saved player HP after the low-speed window."}
+  ],
+  "stop": {"frameBudget": 360, "condition": "Ram application, 80 adjacent neutral frames, and final checked HP receipt, or first failed identity, field, application, or HP check."},
+  "expect": {"requiredEvents": [], "forbiddenEvents": [],
+    "invariants": ["Current WILD Onix remains adjacent during the Ram window", "HP and saved HP remain 100", "Accepted hit count remains zero", "No battle occurs"]},
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "player-hp.ram-low-speed",
+    "claims": ["live-actor-identity", "engine-boundary", "natural-input", "control-release"],
+    "minimumFrames": 81}
+}

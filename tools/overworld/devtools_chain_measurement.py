@@ -18,7 +18,7 @@ from tools.overworld.normal_play_observer import (
 )
 
 
-KIND_IDS = {"WALK": 1, "HOP": 2, "TELEPORT": 3, "REPOSITION": 5}
+KIND_IDS = {"WALK": 1, "HOP": 2, "TELEPORT": 3, "REPOSITION": 5, "FLY_IN": 6}
 MOTION_DECISIONS = ("ACCEPTED", "RETRY_WORLD_BUSY", "BLOCKED", "SIDE_TILE", "TERRAIN", "OCCUPIED",
                     "RESERVED", "DIRECTION", "PROFILE", "ALREADY_ACTIVE", "STALE_FIELD", "CONTEXT_LOST", "NO_CANDIDATE")
 CHAIN_OUTCOMES = ("RETRY", "STARTED", "COMPLETE", "ABORT")
@@ -60,14 +60,17 @@ class LedybaChainMeasurement:
     a bound fails; data is never evicted.
     """
 
-    def __init__(self, schema, expected_source_sha256, *, max_frames, accepted_setup_mode="normal"):
+    def __init__(self, schema, expected_source_sha256, *, max_frames, accepted_setup_mode="normal", spawn_kind="HOP"):
         if accepted_setup_mode not in ("normal", "prepared"):
             raise ValueError("unknown accepted observation setup mode")
+        if spawn_kind not in ("HOP", "FLY_IN"):
+            raise ValueError("unsupported Ledyba spawn kind")
+        self.spawn_kind = spawn_kind
         self.accepted_setup_mode = accepted_setup_mode
         self.max_frames = _integer(max_frames, "max_frames", 1, 60000)
         _bytes(expected_source_sha256, 32, "authored source SHA-256")
-        if schema.get("compactSize") != 72:
-            raise ValueError("the public resolver lane ABI must be 72 bytes")
+        if schema.get("compactSize") != 80:
+            raise ValueError("the public resolver lane ABI must be 80 bytes")
         self.schema = deepcopy(schema)
         self.source_sha256 = expected_source_sha256
         self.frames = self.identity_samples = 0
@@ -109,14 +112,14 @@ class LedybaChainMeasurement:
     def _profile(self, receipt):
         if receipt.get("resolved") is not True:
             return
-        result = _bytes(receipt.get("resultHex"), 200, "resolved profile")
+        result = _bytes(receipt.get("resultHex"), 216, "resolved profile")
         request = _bytes(receipt.get("requestHex"), 44, "resolver request").hex()
         fingerprint = _integer(receipt.get("fingerprint"), "profile fingerprint", 1)
-        lanes = [result[offset:offset + 72].hex() for offset in (0, 72)]
+        lanes = [result[offset:offset + 80].hex() for offset in (0, 80)]
         if receipt.get("sourceSha256") != self.source_sha256 \
                 or receipt.get("lanes") != lanes \
-                or int.from_bytes(result[176:180], "little") != fingerprint \
-                or receipt.get("appliedOverrides") != int.from_bytes(result[172:176], "little"):
+                or int.from_bytes(result[192:196], "little") != fingerprint \
+                or receipt.get("appliedOverrides") != int.from_bytes(result[188:192], "little"):
             raise ValueError("resolver source, fingerprint or full lanes differ")
         value = {key: deepcopy(receipt[key]) for key in
                  ("fingerprint", "sourceSha256", "lanes", "resultHex", "appliedOverrides")}
@@ -151,15 +154,21 @@ class LedybaChainMeasurement:
         self.observation_group = "render"
         tx, tz, ox, oz, locomotion, direction = struct.unpack_from("<4hBB", raw, 20)
         origin, target = [ox, oz], [tx, tz]
+        base_y = 0
+        if self.spawn_kind == "FLY_IN":
+            startup_raw = _bytes(data.get("startupHex"), 16, "Fly In startup")
+            if startup_raw[:10] != raw[20:30] or any(startup_raw[10:12]):
+                raise ValueError("Fly In startup bytes disagree")
+            base_y = int.from_bytes(startup_raw[12:16], "little", signed=True)
         startup = {"origin": origin, "target": target, "locomotion": locomotion,
-                   "hopDirection": direction, "targetBaseY": 0}
+                   "hopDirection": direction, "targetBaseY": base_y}
         # PrepareSpawnStartup takes this Hop destination from this encounter's
         # selected spawn position. Borrowed destinations can strand an actor
         # on another species' tree/roof/flower-bed surface.
         spawn_position = list(struct.unpack_from("<ii", raw, 0))
         if spawn_position != target:
             raise ValueError("Hop landing does not match this Pokemon's own spawn location")
-        if data.get("startup") != startup or locomotion != 4 \
+        if data.get("startup") != startup or locomotion != (9 if self.spawn_kind == "FLY_IN" else 4) \
                 or jump.get("origin") != origin or jump.get("target") != target:
             raise ValueError("native off-screen startup and actual nested Hop differ")
         delta = [tx - ox, tz - oz]
@@ -173,13 +182,14 @@ class LedybaChainMeasurement:
                 or not isinstance(tile, list) or len(tile) != 2:
             raise ValueError("off-screen origin has no current spawn-entry player observation")
         px, pz = (_integer(value, "spawn-entry player coordinate", -32768, 32767) for value in tile)
-        if abs(ox - px) <= 8 and abs(oz - pz) <= 6:
+        visible = [13, 11] if self.spawn_kind == "FLY_IN" else [8, 6]
+        if abs(ox - px) <= visible[0] and abs(oz - pz) <= visible[1]:
             raise ValueError("spawn origin is inside the player-relative 8 by 6 visible rectangle")
         self.spawn_geometry = {"preparedPointer": pointer, "preparedPrefixHex": raw.hex(),
             "spawnPosition": spawn_position,
             "preparedEncounter": encounter, "startup": startup, "playerAtEntry": deepcopy(player),
             "delta": delta, "outsideVisibleRectangle": True,
-            "visibleRectangleHalfExtents": [8, 6]}
+            "visibleRectangleHalfExtents": visible}
 
     def _acquire(self, snapshot, receipts):
         for data in receipts:
@@ -210,8 +220,10 @@ class LedybaChainMeasurement:
                     or jump.get("sourceIdentity") != actor.get("sourceIdentity"):
                 raise ValueError("spawn Hop receipt does not name the current subject/object")
             self._spawn_contract(data, jump, actor, snapshot)
-            if actor["motionKind"] != "HOP" or actor["motionPhase"] != "MOVING" \
-                    or actor["motionElapsed"] != 0 \
+            elapsed = actor["motionElapsed"]
+            if actor["motionKind"] != self.spawn_kind or actor["motionPhase"] != "MOVING" \
+                    or elapsed not in ((0, 1) if self.spawn_kind == "FLY_IN" else (0,)) \
+                    or self.spawn_kind == "FLY_IN" and actor["motionDuration"] != 144 \
                     or jump.get("origin") != [actor["origin"]["x"], actor["origin"]["y"]] \
                     or jump.get("target") != [actor["target"]["x"], actor["target"]["y"]] \
                     or jump["origin"] == jump["target"]:
@@ -232,7 +244,18 @@ class LedybaChainMeasurement:
                     or creates[0].get("sequence", data["sequence"]) >= data["sequence"]:
                 raise ValueError(
                     "visible field sprite was not created at the off-screen Hop origin")
-            if [actor.get("render", {}).get("x"), actor.get("render", {}).get("y")] != origin \
+            if self.spawn_kind == "FLY_IN":
+                # Normal maintenance can take its first shared sample before
+                # the coherent queue boundary. Constructor + ordered native
+                # START still prove origin; the shared recorder requires every
+                # subsequent elapsed1..143 sample and the exact144 terminal.
+                expected = [(origin[i] << 16) + 0x8000
+                    + (1 if jump["target"][i] >= origin[i] else -1)
+                    * ((abs(jump["target"][i] - origin[i]) << 16) // 144) * elapsed
+                    for i in range(2)]
+                if [actor["engineObject"]["pos_x"], actor["engineObject"]["pos_z"]] != expected:
+                    raise ValueError("Fly In first shared sample differs from its native origin/elapsed")
+            elif [actor.get("render", {}).get("x"), actor.get("render", {}).get("y")] != origin \
                     or [actor["engineObject"]["pos_x"] >> 16,
                         actor["engineObject"]["pos_z"] >> 16] != origin:
                 raise ValueError("off-screen spawn Hop frame zero is not rendered at its origin")
@@ -293,16 +316,16 @@ class LedybaChainMeasurement:
                 raise ValueError("last spawn resolver result differs from the current actor")
             self.profile = {**deepcopy(self.profiles[fingerprint]), "requestHex": latest["requestHex"]}
             self.expectation = decode_lane(bytes.fromhex(self.profile["lanes"][0]), self.schema)
-            if any(self.expectation[key] != value for key, value in LEDYBA_CONTRACT.items()):
+            if self.spawn_kind == "HOP" and any(self.expectation[key] != value for key, value in LEDYBA_CONTRACT.items()):
                 raise ValueError("resolved profile is not the reviewed Ledyba 8–14/four-skid contract")
             walk_field = next(field for field in self.schema["fields"]
                               if field["key"] == "walkOptions")
             self.walk_options = [bytes.fromhex(value)[walk_field["offset"]]
                                  for value in self.profile["lanes"]]
-            if self.walk_options != [96, 96]:
+            if self.spawn_kind == "HOP" and self.walk_options != [96, 96]:
                 raise ValueError("resolved Ledyba lanes lost face-player Walk")
             # All potential AI lanes must preserve the measured projection.
-            if any(decode_lane(bytes.fromhex(lane), self.schema) != self.expectation for lane in self.profile["lanes"]):
+            if self.spawn_kind == "HOP" and any(decode_lane(bytes.fromhex(lane), self.schema) != self.expectation for lane in self.profile["lanes"]):
                 raise ValueError("resolved AI lanes disagree on the captured chain/pause contract")
             self.subject, self.spawn = selected, deepcopy(data)
             self.spawn_frame = snapshot["frame"]
@@ -375,7 +398,7 @@ class LedybaChainMeasurement:
         lane = None
         if operation in (1, 4):
             lane_hex = data.get("laneHex")
-            lane = decode_lane(_bytes(lane_hex, 72, "policy lane"), self.schema)
+            lane = decode_lane(_bytes(lane_hex, 80, "policy lane"), self.schema)
             indexes = [index for index, value in enumerate(self.profile["lanes"]) if value == lane_hex]
             if not indexes or lane != self.expectation:
                 self._fail("chain-profile-changed", expected=self.expectation, actual=lane,
@@ -516,7 +539,7 @@ class LedybaChainMeasurement:
                 lane = boundary["lane"]
                 terrain_field = next(field for field in self.schema["fields"] if field["key"] == "chillAllowedTerrainMask")
                 if terrain_field["cType"] != "u16": raise ValueError("terrain mask ABI changed")
-                lane_raw = _bytes(boundary["laneHex"], 72, "abort resolved lane")
+                lane_raw = _bytes(boundary["laneHex"], 80, "abort resolved lane")
                 terrain_mask = int.from_bytes(lane_raw[terrain_field["offset"]:terrain_field["offset"] + 2], "little")
                 distance = lane["chainRepositionDistance"]
                 expected = set()
@@ -805,7 +828,17 @@ class LedybaChainMeasurement:
             if len(starts) != 1:
                 errors.append({"reason": "missing-motion-start-event", "frame": motion["startFrame"]})
             if motion.get("spawn"):
-                arc = motion["kind"] == "HOP" and any(sample["jumpOffset"] != 0 for sample in motion["samples"])
+                if self.spawn_kind == "FLY_IN":
+                    samples = motion["samples"]
+                    base_y = self.spawn["startup"]["targetBaseY"]
+                    heights = [sample["render"][1] + sample["jumpOffset"] for sample in samples]
+                    arc = motion["kind"] == "FLY_IN" and motion["duration"] == 144 \
+                        and bool(samples) and all(sample["jumpOffset"] >= 0 for sample in samples) \
+                        and base_y < heights[0] <= base_y + 6 * 65536 \
+                        and all(base_y <= right <= left for left, right in zip(heights, heights[1:])) \
+                        and motion["terminalRender"][1] == base_y
+                else:
+                    arc = motion["kind"] == "HOP" and any(sample["jumpOffset"] != 0 for sample in motion["samples"])
                 spawn_passed = arc and len(errors) == motion_error_start
                 if not arc:
                     errors.append({"reason": "spawn-hop-has-no-observed-arc"})

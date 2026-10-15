@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.throw-cargo-retarget",
+  "title": "Wild Geodude switches to nearer reachable Cargo without canceling its Walk",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.throw-cargo-retarget"
+  ],
+  "budgets": {
+    "maxSeconds": 260,
+    "maxFrames": 760,
+    "noProgressFrames": 400,
+    "minObservedFrames": 2
+  },
+  "subjects": [
+    {
+      "id": "geodude",
+      "species": 74,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "first-cargo",
+      "species": 155,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "near-cargo",
+      "species": 70,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "throw-cargo-retarget-v1",
+      "subject": "geodude"
+    }
+  ],
+  "setup": [
+    {
+      "id": "throw-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 584,
+        "z": 402,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-passive-follower",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "create-passive-follower",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-first-cargo",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "wild",
+        "level": 20,
+        "x": 585,
+        "z": 402
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-first-cargo",
+      "op": "bind",
+      "args": {
+        "subject": "first-cargo"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-geodude",
+      "op": "spawn",
+      "args": {
+        "species": 74,
+        "form": 0,
+        "role": "wild",
+        "level": 20,
+        "x": 589,
+        "z": 402
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-geodude",
+      "op": "bind",
+      "args": {
+        "subject": "geodude"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "wait-first-pursuit",
+      "op": "step",
+      "args": {
+        "frames": 160,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "throw-cargo-retarget-v1",
+          "stage": "first-pursuit",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 160,
+        "noProgressFrames": 160
+      }
+    },
+    {
+      "id": "spawn-near-cargo",
+      "op": "spawn",
+      "args": {
+        "species": 70,
+        "form": 0,
+        "role": "wild",
+        "level": 20,
+        "x": 588,
+        "z": 403
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-near-cargo",
+      "op": "bind",
+      "args": {
+        "subject": "near-cargo"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "normal-cargo-retarget",
+      "op": "step",
+      "args": {
+        "frames": 360,
+        "keys": [],
+        "until": {
+          "kind": "measurement-complete",
+          "measurement": "throw-cargo-retarget-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 360,
+        "noProgressFrames": 360
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "throw-cargo-retarget-v1",
+      "when": "final"
+    }
+  ]
+}

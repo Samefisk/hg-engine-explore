@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.bar",
+  "title": "Player HP bar follows one Onix Ram",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/player-hp-implementation-plan.md",
+  "requirements": ["current.player-health-bar"],
+  "budgets": {"maxSeconds": 180, "maxFrames": 180, "noProgressFrames": 120, "minObservedFrames": 105},
+  "subjects": [{"id": "onix", "species": 95, "role": "WILD", "acquire": "spawn"}],
+  "measurements": [{"kind": "player-health-bar-v1", "subject": "onix"}],
+  "setup": [
+    {"id": "ram-tile", "op": "teleport", "args": {"map": 33, "x": 585, "z": 407, "facing": 1},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "spawn-onix", "op": "spawn", "args": {"species": 95, "form": 0, "role": "wild", "level": 5, "x": 585, "z": 412},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "bind-onix", "op": "bind", "args": {"subject": "onix"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "before-ram", "op": "player-health.observe", "args": {},
+      "budget": {"maxSeconds": 20, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "allow-natural-ram", "op": "step", "args": {"frames": 105, "keys": []},
+      "budget": {"maxSeconds": 55, "maxFrames": 105, "noProgressFrames": 105}},
+    {"id": "after-ram", "op": "player-health.observe", "args": {},
+      "budget": {"maxSeconds": 20, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "assertions": [{"kind": "measurement-complete", "measurement": "player-health-bar-v1", "when": "final"}]
+}

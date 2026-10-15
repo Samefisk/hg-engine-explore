@@ -17,18 +17,6 @@ CATALOG = ROOT / "data/overworld_behavior_profiles.json"
 
 
 CONTRACTS = {
-    "profile.notice-player.routine-return": {
-        "requirement": "current.notice-player-routine-return",
-        "capabilities": ["condition.evaluation", "alert"],
-        "subjects": [(179, "WILD")],
-        "claims": ["live-actor-identity", "profile-resolution", "feedback-effect",
-                   "rendered-motion", "frame-pacing", "control-release"],
-        "facts": {
-            "notice-player-presentation-pause-frames": 10,
-            "notice-player-exclamation-count": 1,
-            "notice-player-post-pause-routine-and-repeat-counts": [1, 0],
-        },
-    },
     "profile.stalker.visibility-gate": {
         "requirement": "current.stalker-visibility-gate",
         "capabilities": ["condition.evaluation", "vision", "chase"],
@@ -60,6 +48,19 @@ CONTRACTS = {
         "facts": {
             "startled-active-frame-count": 44,
             "startled-post-expiry-routine-resume-count": 1,
+        },
+    },
+    "profile.ambush.player-tile-landing": {
+        "requirement": "current.ambush-player-tile-landing",
+        "capabilities": ["condition.evaluation", "chase", "hop"],
+        "subjects": [(70, "WILD")],
+        "claims": ["live-actor-identity", "profile-resolution", "engine-boundary",
+                   "logical-commit", "rendered-motion", "control-release"],
+        "facts": {
+            "ambush-active-player-condition-and-layer": [25, 49529, 1, 1],
+            "ambush-exact-player-tile-commit": [1, 585, 408],
+            "ambush-complete-player-tile-hop": [1, 1],
+            "ambush-finish-and-control-return": [1, 1],
         },
     },
     "spawn.fly-in.uneven-height": {
@@ -148,10 +149,12 @@ class ProfileBuildingBlockRuntimeContractsTests(unittest.TestCase):
                 self.assertEqual(scenario["adapter"]["kind"], "devtools-test")
                 self.assertEqual(scenario["adapter"]["test"], scenario_id)
                 self.assertEqual(scenario["adapter"]["claims"], expected["claims"])
-                self.assertEqual(scenario["proofLevel"], "S3" if scenario_id !=
-                                 "spawn.fly-in.uneven-height" and scenario_id !=
-                                 "profile.waddle.walk-presentation-only" and scenario_id !=
-                                 "profile.floaty-bounce-hop-pause" else "S4")
+                s4 = {"spawn.fly-in.uneven-height",
+                      "profile.waddle.walk-presentation-only",
+                      "profile.floaty-bounce-hop-pause",
+                      "profile.ambush.player-tile-landing"}
+                self.assertEqual(scenario["proofLevel"],
+                                 "S4" if scenario_id in s4 else "S3")
                 self.assertEqual(scenario["capabilities"], expected["capabilities"])
                 self.assertEqual(
                     [(subject["species"], subject["role"])
@@ -211,12 +214,6 @@ class ProfileBuildingBlockRuntimeContractsTests(unittest.TestCase):
 
     def test_scenario_contracts_match_current_authored_values(self) -> None:
         profiles = {item["id"]: item for item in self.catalog["profiles"]}
-        self.assertEqual(profiles["notice-player"]["fields"]["alertTime"]["value"], 10)
-        notice = profiles["notice-player"]["conditions"][0]
-        self.assertEqual(notice["id"], "condition-notice-player")
-        self.assertEqual(notice["activation"], {
-            "mode": "timed", "durationFrames": 960, "cooldownFrames": 970})
-
         stalker = profiles["stalker"]["conditions"][0]
         self.assertEqual(stalker["id"], "condition-stalker-unseen-by-player")
         self.assertEqual(stalker["when"]["kind"], "target-cannot-see-subject")
@@ -233,6 +230,16 @@ class ProfileBuildingBlockRuntimeContractsTests(unittest.TestCase):
         startled = profiles["startled"]["conditions"][0]
         self.assertEqual(startled["activation"], {
             "mode": "timed", "durationFrames": 44, "cooldownFrames": 164})
+        ambush_profile = profiles["ambush"]
+        ambush = ambush_profile["conditions"][0]
+        self.assertEqual(ambush["id"], "condition-ambush-notices-player")
+        self.assertEqual(ambush["target"], {"kind": "player"})
+        self.assertEqual(ambush["activation"], {
+            "mode": "timed", "durationFrames": 36, "cooldownFrames": 126})
+        self.assertEqual(ambush_profile["fields"]["chillAction"]["value"],
+                         "OW_WILD_BEHAVIOR_LOCOMOTION_HOP")
+        self.assertEqual(ambush_profile["fields"]["chillTarget"]["value"],
+                         "OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER")
         self.assertEqual(profiles["fly-in"]["fields"]["spawnState"]["value"],
                          "OW_WILD_BEHAVIOR_SPAWN_STATE_FLY_IN")
         self.assertEqual(profiles["waddle"]["fields"]["walkSwayWidth"]["value"], 4)

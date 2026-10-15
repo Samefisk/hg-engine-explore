@@ -18,9 +18,13 @@ def explain_actor(snapshot, handle, schema=None):
             raw = bytes.fromhex(encoded)
             if len(raw) != schema["compactSize"]:
                 raise ValueError("observed lane size differs from the current schema")
-            lanes[name] = {field["key"]: {"value": int.from_bytes(raw[field["offset"]:field["offset"] +
-                {"u8": 1, "u16": 2, "u32": 4}[field["cType"]]], "little"), "unit": field["unit"]}
-                for field in schema["fields"]}
+            decoded = {}
+            for field in schema["fields"]:
+                size = {"u8": 1, "u16": 2, "u32": 4}[field["cType"]]
+                value = int.from_bytes(raw[field["offset"]:field["offset"] + size], "little")
+                value = (value >> field.get("bitOffset", 0)) & ((1 << field.get("bitWidth", size * 8)) - 1)
+                decoded[field["key"]] = {"value": value, "unit": field["unit"]}
+            lanes[name] = decoded
         resolved["decodedLanes"] = lanes
     return {"subject": deepcopy(actor), "frame": snapshot.get("frame"),
             "context": deepcopy(snapshot.get("context")),

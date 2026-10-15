@@ -61,9 +61,9 @@ class WalkPolicyReadControlTests(unittest.TestCase):
                     value[1]["speed"] += 1
                 return value
             f.observer._commit_policy = reader
-            original = f.read(0x022005BC, 32)
+            original = f.read(0x022005BC, 36)
             f.enter("walk-policy", r0=0x02220000)
-            self.assertEqual(f.read(0x022005BC, 32), original)
+            self.assertEqual(f.read(0x022005BC, 36), original)
             self.assertEqual(len(calls), 3)
             self.assertEqual(c.state, "failed")
             self.assertIn("only changed counter", c.failure)
@@ -86,13 +86,13 @@ class WalkPolicyReadControlTests(unittest.TestCase):
     def test_owner_change_after_write_still_restores_then_fatally_stops(self):
         with tempfile.TemporaryDirectory() as directory:
             f, c = self.fixture(directory)
-            original = f.read(0x022005BC, 32)
+            original = f.read(0x022005BC, 36)
             def write(address, data):
                 f.put(address, data)
                 f.actor["authorityGeneration"] += 1
             f.write = write
             f.enter("walk-policy", r0=0x02220000)
-            self.assertEqual(f.read(0x022005BC, 32), original)
+            self.assertEqual(f.read(0x022005BC, 36), original)
             self.assertEqual(len(f.fatals), 1)
             self.assertEqual(c.state, "failed")
 

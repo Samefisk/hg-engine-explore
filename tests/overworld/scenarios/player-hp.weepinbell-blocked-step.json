@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.weepinbell-blocked-step",
+  "title": "Blocked Route 29 Walk stays live beside a spawned Weepinbell",
+  "status": "active",
+  "capabilities": ["player.health"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "tests/overworld/scenarios/player-hp.weepinbell-blocked-step.json",
+    "actor": "The unchanged save's current FOLLOWER Mankey (species 56) and one spawned WILD Weepinbell (species 70) on Route 29, map 67.",
+    "trigger": "Continue from unchanged test.sav at (564,392), spawn level-5 Weepinbell at (562,392), then hold LEFT for 180 completed game frames.",
+    "observable": "The same current Mankey and Weepinbell remain bound; the player reaches and stays at the blocked tile (563,392); all 180 held-left main-loop frames complete without an ARM9 abort or stall.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {"phase": "before-observation", "target": "fixture", "change": "The shared worker copies test.nds and unchanged test.sav, then uses one native Wild spawn at (562,392). No teleport, party edit, population edit, or state repair."}
+    ],
+    "limits": [
+      "Prepared Weepinbell placement does not prove natural population selection or other blocked-step positions.",
+      "A setup mismatch, missing current actor, missing completed frame, ARM9 fault, or player leaving the blocked tile after reaching it fails."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [
+    {"id": "mankey", "species": 56, "role": "FOLLOWER", "acquisition": "follower", "minimum": 1, "maximum": 1, "motionActor": false, "requirePresentation": true},
+    {"id": "weepinbell", "species": 70, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": false, "requirePresentation": true}
+  ],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Check the saved Route 29 start, spawn and bind Weepinbell at (562,392), then bind Mankey."},
+    {"at": 1, "kind": "input", "value": "Hold LEFT for exactly 180 completed game frames while Weepinbell blocks the player."}
+  ],
+  "stop": {"frameBudget": 320, "condition": "180 completed held-left frames, or the first identity, player position, ARM9, or main-loop fault."},
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": ["CONTEXT_CHANGED", "ACTOR_DETACHED"],
+    "invariants": [
+      "The same source-checked FOLLOWER Mankey and WILD Weepinbell stay current and attached throughout the 180-frame input",
+      "The player starts at Route 29 (564,392), reaches (563,392), then stays there through the remaining LEFT frames",
+      "Every held-left main-loop frame completes in order without an ARM9 abort or stalled queue"
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "player-hp.weepinbell-blocked-step",
+    "claims": ["live-actor-identity", "natural-input", "frame-pacing"], "minimumFrames": 180}
+}

@@ -39,6 +39,7 @@ FAULTS = (
     "spawn-work-budget-repeated-resolution",
     "spawn-work-budget-repeated-metadata",
     "spawn-work-budget-repeated-class-selection",
+    "spawn-work-budget-repeated-refused-attempt",
     "spawn-work-budget-slow-resumed-finalizer",
     "spawn-work-budget-wrong-profile-source",
     "spawn-work-budget-late-main-loop",
@@ -186,9 +187,50 @@ def contract():
 def measurements(replay, record):
     meter = replay.get("measurements", {}).get(KIND, {})
     attempt = meter.get("attempt") or {}
+    rejected_attempts = meter.get("rejectedAttempts")
     entry = meter.get("entry") or {}
     pacing = meter.get("pacing") or {}
     subject = meter.get("subject") or {}
+    require(isinstance(rejected_attempts, list)
+            and len(rejected_attempts) <= 1
+            and meter.get("retirementPending") is None,
+            "spawn-work refused startup has not retired")
+    if rejected_attempts:
+        refused = rejected_attempts[0]
+        frames = refused.get("destinationFrames")
+        require(refused.get("retired") is True
+                and type(refused.get("spawnAttemptId")) is int
+                and refused["spawnAttemptId"] != attempt.get("spawnAttemptId")
+                and refused.get("worldContext") == attempt.get("worldContext")
+                and refused.get("callCount") == EXPECTED_DESTINATION_UPDATES
+                and refused.get("finalizerCallCount")
+                    == EXPECTED_DESTINATION_UPDATES + 1
+                and refused.get("candidateQueryCount") == EXPECTED_SCAN_CANDIDATES
+                and refused.get("maxQueriesPerUpdate")
+                    == MAX_CANDIDATE_QUERIES_PER_UPDATE
+                and refused.get("resolverReceiptCount") == 1
+                and refused.get("metadataReceiptCount") == 1
+                and refused.get("classSelectionReceiptCount") == 1
+                and refused.get("profileSourceSha256")
+                    == attempt.get("profileSourceSha256")
+                and type(refused.get("maxResumedFinalizerArm9Ticks")) is int
+                and refused["maxResumedFinalizerArm9Ticks"]
+                    <= MAX_RESUMED_FINALIZER_ARM9_TICKS
+                and refused.get("startupReturnValue") == 0
+                and refused.get("preparedCount") == 0
+                and refused.get("objectCreateCount") == 0
+                and type(refused.get("startFrame")) is int
+                and type(refused.get("scanEndFrame")) is int
+                and refused["scanEndFrame"] == refused["startFrame"]
+                    + EXPECTED_DESTINATION_UPDATES - 1
+                and refused.get("refusalFrame") == refused["scanEndFrame"] + 1
+                and refused.get("retiredFrame") == refused["refusalFrame"] + 1
+                and type(attempt.get("startFrame")) is int
+                and attempt["startFrame"] >= refused["retiredFrame"]
+                and isinstance(frames, list)
+                and frames == list(range(refused["startFrame"],
+                                         refused["scanEndFrame"] + 1)),
+                "spawn-work refused startup lacks bounded retirement proof")
     require(replay.get("passed") is True and replay.get("failures") == []
             and meter.get("passed") is True and meter.get("ready") is True
             and meter.get("closed") is True and meter.get("acceptedProof") is False
@@ -206,6 +248,9 @@ def measurements(replay, record):
             and attempt.get("successfulSpawnCount") == 1
             and meter.get("contextTransition", {}).get("from", {}).get("mapId") == 33
             and meter.get("contextTransition", {}).get("to", {}).get("mapId") == 67
+            and {key: attempt.get("worldContext", {}).get(key)
+                 for key in ("mapId", "fieldEpoch", "mapGeneration")}
+                == meter.get("contextTransition", {}).get("to")
             and entry.get("locomotion") == EXPECTED_ENTRY_LOCOMOTION
             and type(entry.get("species")) is int and entry["species"] > 0
             and entry["species"] == attempt.get("encounter", {}).get("species")
@@ -373,10 +418,12 @@ def measurements(replay, record):
 
 
 class SpawnWorkBudgetNegative:
-    def __init__(self, fault):
+    def __init__(self, fault, *, measurement=None):
         require(fault in FAULTS, "unknown spawn-work copied fault")
         self.fault = fault
+        self.measurement = measurement
         self.applied = False
+        self.attempt_owner = None
         self.seen_destinations = 0
         self.source_sha256 = None
         self.metadata_template = None
@@ -384,12 +431,22 @@ class SpawnWorkBudgetNegative:
         self.previous_player_pose = None
         self.destination_context_seen = False
         self.strict_pacing_samples = 0
+        self.refused_final = None
+        self.successful_start_frame = None
 
     @staticmethod
     def _destination(event):
         data = event.get("data", {})
         return (event.get("kind") == "native-observation"
                 and data.get("observation") == "spawn-destination-search")
+
+    @staticmethod
+    def _attempt_owner(data):
+        if (type(data.get("spawnAttemptId")) is not int
+                or type(data.get("slot")) is not int
+                or not isinstance(data.get("worldContext"), dict)):
+            return None
+        return (data["spawnAttemptId"], data["slot"], deepcopy(data["worldContext"]))
 
     def mutate(self, row, subjects):
         if row.get("phase") != "observe" or self.applied:
@@ -401,6 +458,28 @@ class SpawnWorkBudgetNegative:
         if any(sample.get("context", {}).get("mapId") == 67
                for sample in samples):
             self.destination_context_seen = True
+        selected_owner = None
+        if self.measurement is not None and self.fault in (
+                "spawn-work-budget-missing-post-spawn-pacing",
+                "spawn-work-budget-missing-natural-spawn",
+                "spawn-work-budget-entry-special-path",
+                "spawn-work-budget-entry-onscreen-origin"):
+            meter = self.measurement
+            # Use the checker's admitted field and fresh native attempt, never
+            # a boot map or an uncredited scan that completed during travel.
+            if (meter.failures or meter.context_transition is None
+                    or meter.active_context != meter.context_transition["to"]
+                    or meter.attempt is None):
+                return row
+            selected_owner = self._attempt_owner(meter.attempt)
+            if (selected_owner is None or any(
+                    selected_owner[2].get(key) != value
+                    for key, value in meter.active_context.items())
+                    or not samples or any(sample.get("context") != meter.active_context
+                                          for sample in samples)):
+                return row
+            self.attempt_owner = selected_owner
+            self.seen_destinations = len(meter.calls)
         if self.fault == "spawn-work-budget-player-render-stall":
             for sample in samples:
                 player = sample.get("player", {})
@@ -430,28 +509,73 @@ class SpawnWorkBudgetNegative:
                 interval["nativeCycles"] = NORMAL_MAIN_LOOP_NATIVE_CYCLES + 1
                 self.applied = True
                 return changed
+        completed = [event for event in events
+                     if event.get("kind") == "native-observation"
+                     and event.get("data", {}).get("observation") == "spawn-finalized"
+                     and event["data"].get("returnValue") == 1
+                     and self.attempt_owner is not None
+                     and self._attempt_owner(event["data"]) == self.attempt_owner]
         if self.fault == "spawn-work-budget-missing-post-spawn-pacing" \
-                and self.seen_destinations == EXPECTED_DESTINATION_UPDATES \
-                and not any(self._destination(event) for event in events) and pacing:
+                and self.successful_start_frame is not None \
+                and samples and samples[0].get("frame", -1) > self.successful_start_frame \
+                and pacing:
             changed["events"] = [event for event in events if event not in pacing]
             self.applied = True
             return changed
+        if (completed and self.seen_destinations == EXPECTED_DESTINATION_UPDATES
+                and not any(self._destination(event) for event in events) and samples):
+            self.successful_start_frame = samples[0].get("frame")
         if self.fault == "spawn-work-budget-missing-natural-spawn" \
                 and self.seen_destinations == EXPECTED_DESTINATION_UPDATES:
-            completed = [event for event in events
-                         if event.get("kind") == "native-observation"
-                         and event.get("data", {}).get("observation") == "spawn-finalized"
-                         and event.get("data", {}).get("returnValue") == 1]
             if completed:
                 changed["events"] = [item for item in events
-                                     if item.get("data", {}).get("observation")
-                                     not in ("spawn-prepared", "spawn-object-create")]
+                                     if not (item.get("data", {}).get("observation")
+                                             in ("spawn-prepared", "spawn-object-create")
+                                             and item["data"].get("slot")
+                                             == self.attempt_owner[1])]
                 self.applied = True
                 return changed
+        if self.fault == "spawn-work-budget-repeated-refused-attempt":
+            if self.refused_final is not None:
+                repeated = deepcopy(self.refused_final)
+                repeated["data"]["finalizationId"] += 1
+                if samples:
+                    repeated["frame"] = samples[0]["frame"]
+                replace = next((event for event in events
+                                if event.get("kind") == "native-observation"
+                                and event.get("data", {}).get("observation")
+                                    in ("sound-play", "sound-stop")), None)
+                if replace is not None:
+                    for key in ("sequence", "entryActorFrame", "returnActorFrame",
+                                "entryNativeCycle", "returnNativeCycle"):
+                        repeated["data"][key] = replace["data"][key]
+                    events[events.index(replace)] = repeated
+                else:
+                    events.append(repeated)
+                self.applied = True
+                return changed
+            if self.seen_destinations == EXPECTED_DESTINATION_UPDATES:
+                finals = [event for event in events
+                          if event.get("kind") == "native-observation"
+                          and event.get("data", {}).get("observation") == "spawn-finalized"
+                          and event.get("data", {}).get("returnValue") in (0, 1)]
+                if len(finals) == 1 and not any(
+                        self._destination(event) for event in events):
+                    if finals[0]["data"]["returnValue"] == 1:
+                        finals[0]["data"]["returnValue"] = 0
+                        finals[0]["data"]["pairEligible"] = False
+                        events[:] = [event for event in events
+                                     if event.get("data", {}).get("observation")
+                                     not in ("spawn-prepared", "spawn-object-create")]
+                    self.refused_final = deepcopy(finals[0])
+                    return changed
         if self.fault == "spawn-work-budget-entry-special-path":
             prepared = [event for event in events
                         if event.get("kind") == "native-observation"
-                        and event.get("data", {}).get("observation") == "spawn-prepared"]
+                        and event.get("data", {}).get("observation") == "spawn-prepared"
+                        and (selected_owner is None or any(
+                            event["data"].get("finalization", {}).get("receipt", {}).get("finalizationId")
+                            == item["data"].get("finalizationId") for item in completed))]
             if prepared:
                 prepared[0]["data"]["startup"]["locomotion"] = 2
                 self.applied = True
@@ -459,14 +583,19 @@ class SpawnWorkBudgetNegative:
         if self.fault == "spawn-work-budget-entry-onscreen-origin":
             prepared = [event for event in events
                         if event.get("kind") == "native-observation"
-                        and event.get("data", {}).get("observation") == "spawn-prepared"]
+                        and event.get("data", {}).get("observation") == "spawn-prepared"
+                        and (selected_owner is None or any(
+                            event["data"].get("finalization", {}).get("receipt", {}).get("finalizationId")
+                            == item["data"].get("finalizationId") for item in completed))]
             creates = [event for event in events
                        if event.get("kind") == "native-observation"
                        and event.get("data", {}).get("observation") == "spawn-object-create"]
             completed = [event for event in events
                          if event.get("kind") == "native-observation"
                          and event.get("data", {}).get("observation") == "spawn-finalized"
-                         and event.get("data", {}).get("returnValue") == 1]
+                         and event.get("data", {}).get("returnValue") == 1
+                         and (selected_owner is None
+                              or self._attempt_owner(event["data"]) == selected_owner)]
             if prepared and creates and completed:
                 target = prepared[0]["data"]["startup"]["target"]
                 origin = [target[0], target[1] - 1]
@@ -478,11 +607,27 @@ class SpawnWorkBudgetNegative:
         for index, event in enumerate(events):
             if not self._destination(event):
                 continue
-            self.seen_destinations += 1
             data = event["data"]
+            owner = self._attempt_owner(data)
+            if owner is None or (selected_owner is not None and owner != selected_owner):
+                continue
+            if (self.fault == "spawn-work-budget-repeated-refused-attempt"
+                    and owner != self.attempt_owner
+                    and data.get("candidateQueryCount") != 0):
+                continue
+            if owner != self.attempt_owner:
+                self.attempt_owner = owner
+                self.seen_destinations = 0
+                self.source_sha256 = None
+                self.metadata_template = None
+                self.class_selection_template = None
+                self.successful_start_frame = None
+            self.seen_destinations += 1
             finals = [item for item in events
                       if item.get("kind") == "native-observation"
-                      and item.get("data", {}).get("observation") == "spawn-finalized"]
+                      and item.get("data", {}).get("observation") == "spawn-finalized"
+                      and self._attempt_owner(item["data"]) == self.attempt_owner
+                      and item["data"].get("finalizationId") == data.get("finalizationId")]
             if finals and finals[0]["data"].get("resolverReceipts"):
                 self.source_sha256 = finals[0]["data"]["resolverReceipts"][0].get("sourceSha256")
             metadata = [item for item in events
@@ -506,6 +651,7 @@ class SpawnWorkBudgetNegative:
             elif self.fault == "spawn-work-budget-over-query-batch":
                 if data.get("candidateQueryCount") != MAX_CANDIDATE_QUERIES_PER_UPDATE:
                     continue
+                # Exact first invalid batch: five with the current four-query cap.
                 data["candidateQueryCount"] = MAX_CANDIDATE_QUERIES_PER_UPDATE + 1
             elif self.fault == "spawn-work-budget-missing-update":
                 if self.seen_destinations != 2:
@@ -549,6 +695,11 @@ class SpawnWorkBudgetNegative:
                                  "spawn-work-budget-entry-onscreen-origin",
                                  "spawn-work-budget-player-render-stall"):
                 continue
+            elif self.fault == "spawn-work-budget-repeated-refused-attempt":
+                data["candidateQueryCount"] = (
+                    0 if self.seen_destinations == 1
+                    else MAX_CANDIDATE_QUERIES_PER_UPDATE)
+                return changed
             else:
                 if not finals or not finals[0]["data"].get("resolverReceipts"):
                     continue
@@ -573,6 +724,7 @@ def validate_negative_result(result, fault):
         "spawn-work-budget-repeated-resolution": "resumed scan repeated profile resolution",
         "spawn-work-budget-repeated-metadata": "resumed scan repeated metadata preparation",
         "spawn-work-budget-repeated-class-selection": "resumed scan repeated class selection",
+        "spawn-work-budget-repeated-refused-attempt": "refused attempt repeated after terminal startup",
         "spawn-work-budget-slow-resumed-finalizer": "resumed finalizer exceeds guest work budget",
         "spawn-work-budget-wrong-profile-source": "profile receipt differs from the current source",
         "spawn-work-budget-late-main-loop": "main loop missed normal frame pace",

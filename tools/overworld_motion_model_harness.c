@@ -468,6 +468,189 @@ static void CheckWorldGateOwnership(void)
         "terminal cancel reopens world gates");
 }
 
+
+static void CheckCurvedSlamRise(void)
+{
+    OverworldMotionIntent intent = MakeIntent(OVERWORLD_MOTION_KIND_HOP, 16);
+    OverworldMotionCandidate candidate = MakeCandidate(6, 0, 0);
+    OverworldMotionPlan plan;
+    OverworldMotionState state;
+    OverworldMotionSample sample;
+    /* Independent Q4 heights: fast initial rise, then a level apex. */
+    static const u8 heights[] = {15, 28, 39, 48, 55, 60, 63, 64,
+        64, 64, 64, 64, 48, 32, 16, 0};
+    unsigned frame;
+    intent.flags = OVERWORLD_MOTION_FLAG_SLAM;
+    intent.arcHeightQ4 = 64;
+    intent.arcRiseFrames = 8;
+    intent.arcHangFrames = 4;
+    intent.pauseFrames = 0;
+    OverworldMotion_Reset(&state);
+    CHECK(OverworldMotion_SelectPlan(&intent, 0, 0, 0, &candidate, 1,
+              &plan, NULL) == OVERWORLD_MOTION_DECISION_ACCEPTED,
+        "six-tile curved Slam resolves through shared Motion");
+    CHECK(OverworldMotion_Begin(&state, &plan) == OVERWORLD_MOTION_DECISION_ACCEPTED,
+        "curved Slam begins through the ordinary owner");
+    for (frame = 1; frame <= sizeof(heights); frame++) {
+        OverworldMotion_Tick(&state, 7, &sample);
+        CHECK(sample.heightOffset == (s32)heights[frame - 1] * 4096,
+            "Slam curves upward, holds at four tiles and drops straight down");
+        if (frame >= 8) {
+            CHECK(sample.renderX == 0x68000 && sample.renderZ == 0x8000,
+                "curved Slam keeps its exact frozen landing through hang and drop");
+        }
+    }
+}
+
+static void CheckSlam(void)
+{
+    OverworldMotionIntent intent = MakeIntent(OVERWORLD_MOTION_KIND_HOP, 20);
+    OverworldMotionCandidate candidate = MakeCandidate(-1, 5, 0);
+    OverworldMotionPlan plan;
+    OverworldMotionState state;
+    OverworldMotionSample sample;
+    u16 flags;
+    int frame;
+    int advances = 0;
+    static const s32 lateHeights[] = {0x18000, 0x18000, 0x18000,
+        0x18000, 0x18000, 0x12000, 0xC000, 0x6000, 0};
+
+    CHECK(sizeof(OverworldMotionIntent) == 18 && sizeof(OverworldMotionPlan) == 40,
+        "Slam retains the fixed Motion intent and plan sizes");
+    CHECK(offsetof(OverworldMotionIntent, arcRiseFrames)
+            == offsetof(OverworldMotionIntent, spinSpeed)
+            && offsetof(OverworldMotionPlan, arcHangFrames)
+                == offsetof(OverworldMotionPlan, swayWidth),
+        "Slam phase aliases retain the old byte offsets");
+    intent.flags = OVERWORLD_MOTION_FLAG_SLAM;
+    intent.arcHeightQ4 = 24;
+    intent.arcRiseFrames = 12;
+    intent.arcHangFrames = 4;
+    intent.pauseFrames = 2;
+    candidate.targetBaseY = 0x9000;
+    OverworldMotion_Reset(&state);
+    CHECK(OverworldMotion_SelectPlan(&intent, -4, 3, -0x3000,
+              &candidate, 1, &plan, NULL) == OVERWORLD_MOTION_DECISION_ACCEPTED,
+        "Slam resolves without changing its authored phases");
+    CHECK(plan.arcRiseFrames == 12 && plan.arcHangFrames == 4
+            && plan.arcHeightQ4 == 24 && plan.duration == 20,
+        "Slam plan keeps rise, hang, total and peak");
+    CHECK(OverworldMotion_Begin(&state, &plan) == OVERWORLD_MOTION_DECISION_ACCEPTED,
+        "Slam begins in shared Motion");
+    for (frame = 1; frame <= 20; frame++) {
+        flags = OverworldMotion_Tick(&state, 7, &sample);
+        advances += CountPublishedAdvances(flags, &sample);
+        CHECK(sample.elapsed == frame && sample.duration == 20,
+            "Slam uses one shared total clock");
+        CHECK(sample.facing == 3 && sample.swayOffset == 0,
+            "Slam phase bytes never turn into spin or sway");
+        if (frame == 6) {
+            CHECK(sample.renderX == -0x20000 && sample.renderZ == 0x48000
+                    && sample.baseY == 0x3000 && sample.heightOffset == 0x12000,
+                "Slam has a curved three-quarter height at half-rise");
+        }
+        if (frame >= 12) {
+            CHECK(sample.renderX == -0x8000 && sample.renderZ == 0x58000
+                    && sample.baseY == 0x9000,
+                "Slam hangs and drops straight over its frozen landing");
+            CHECK(sample.heightOffset == lateHeights[frame - 12],
+                "Slam peak, hang and fast drop have exact frame heights");
+            CHECK(advances == 5, "Slam logical path completes at rise, not drop");
+            if (frame > 12) {
+                CHECK((flags & OVERWORLD_MOTION_TICK_PATH_ADVANCED) == 0,
+                    "Slam hang/drop never publishes a second path advance");
+            }
+        }
+        if (frame < 20) {
+            CHECK((flags & (OVERWORLD_MOTION_TICK_COMMIT_READY
+                        | OVERWORLD_MOTION_TICK_REACHED_TARGET)) == 0,
+                "Slam cannot finish while airborne or hanging");
+        }
+    }
+    CHECK(state.phase == OVERWORLD_MOTION_PHASE_COMMIT_PENDING
+            && sample.heightOffset == 0
+            && (flags & OVERWORLD_MOTION_TICK_COMMIT_READY),
+        "Slam reaches one ordinary terminal at drop end");
+    CHECK(OverworldMotion_AcknowledgeCommit(&state, 7)
+            == OVERWORLD_MOTION_DECISION_ACCEPTED
+            && state.commitSequence == 1 && state.settleRemaining == 2,
+        "Slam pause begins only after terminal acknowledgement");
+    CHECK(OverworldMotion_AcknowledgeCommit(&state, 7)
+            == OVERWORLD_MOTION_DECISION_ALREADY_ACTIVE,
+        "Slam terminal cannot be acknowledged twice");
+    OverworldMotion_Tick(&state, 7, &sample);
+    CHECK(state.phase == OVERWORLD_MOTION_PHASE_SETTLING,
+        "Slam keeps its first authored settling frame");
+    flags = OverworldMotion_Tick(&state, 7, &sample);
+    CHECK(state.phase == OVERWORLD_MOTION_PHASE_IDLE
+            && (flags & OVERWORLD_MOTION_TICK_FINISHED),
+        "Slam returns control through the ordinary pause lifecycle");
+
+    /* These boundary inputs exercise phase validity and division edges. */
+    {
+        static const u8 phases[][3] = {{1, 0, 1}, {3, 0, 7}, {4, 1, 1}, {255, 255, 255}};
+        unsigned i;
+        for (i = 0; i < sizeof(phases) / sizeof(phases[0]); i++) {
+            u16 total = (u16)phases[i][0] + phases[i][1] + phases[i][2];
+            intent.arcRiseFrames = phases[i][0];
+            intent.arcHangFrames = phases[i][1];
+            intent.duration = total;
+            intent.pauseFrames = 0;
+            OverworldMotion_Reset(&state);
+            CHECK(OverworldMotion_SelectPlan(&intent, -4, 3, -0x3000,
+                      &candidate, 1, &plan, NULL) == OVERWORLD_MOTION_DECISION_ACCEPTED,
+                "Slam accepts positive rise/drop and zero or maximum hang");
+            CHECK(OverworldMotion_Begin(&state, &plan)
+                    == OVERWORLD_MOTION_DECISION_ACCEPTED,
+                "Slam phase boundary begins");
+            for (frame = 1; frame <= total; frame++) {
+                OverworldMotion_Tick(&state, 7, &sample);
+                if (frame >= intent.arcRiseFrames) {
+                    CHECK(sample.renderX == -0x8000 && sample.renderZ == 0x58000,
+                        "every Slam phase boundary holds its landing after rise");
+                }
+                CHECK(sample.heightOffset >= 0 && sample.heightOffset <= 0x18000,
+                    "every Slam phase boundary stays within its configured peak");
+            }
+            CHECK(sample.heightOffset == 0
+                    && state.phase == OVERWORLD_MOTION_PHASE_COMMIT_PENDING,
+                "every Slam phase boundary completes only at its total duration");
+        }
+    }
+    intent.arcRiseFrames = 12;
+    intent.arcHangFrames = 4;
+    intent.duration = 20;
+    intent.arcHeightQ4 = 24;
+    for (frame = 0; frame < 5; frame++) {
+        OverworldMotionIntent invalid = intent;
+        switch (frame) {
+        case 0: invalid.arcRiseFrames = 0; break;
+        case 1: invalid.arcHeightQ4 = 0; break;
+        case 2: invalid.duration = 16; break;
+        case 3: invalid.duration = 15; break;
+        default: invalid.kind = OVERWORLD_MOTION_KIND_WALK; break;
+        }
+        CHECK(OverworldMotion_SelectPlan(&invalid, -4, 3, -0x3000,
+                  &candidate, 1, &plan, NULL) == OVERWORLD_MOTION_DECISION_PROFILE,
+            "malformed Slam cannot enter candidate selection");
+        memset(&plan, 0, sizeof(plan));
+        plan.version = invalid.version;
+        plan.kind = invalid.kind;
+        plan.duration = invalid.duration;
+        plan.flags = invalid.flags;
+        plan.arcHeightQ4 = invalid.arcHeightQ4;
+        plan.arcRiseFrames = invalid.arcRiseFrames;
+        plan.arcHangFrames = invalid.arcHangFrames;
+        OverworldMotion_Reset(&state);
+        CHECK(OverworldMotion_Begin(&state, &plan) == OVERWORLD_MOTION_DECISION_PROFILE,
+            "malformed direct Slam plan cannot begin");
+    }
+    candidate.rejectionFlags = OVERWORLD_MOTION_CANDIDATE_OCCUPIED;
+    CHECK(OverworldMotion_SelectPlan(&intent, -4, 3, -0x3000,
+              &candidate, 1, &plan, NULL) == OVERWORLD_MOTION_DECISION_OCCUPIED,
+        "Slam never grants occupied landing permission");
+}
+
 int main(void)
 {
     CheckCandidateOrder();
@@ -480,6 +663,8 @@ int main(void)
     CheckTeleportVisibility();
     CheckZeroDurationTeleport();
     CheckWorldGateOwnership();
+    CheckSlam();
+    CheckCurvedSlamRise();
     if (sFailures != 0) {
         return 1;
     }

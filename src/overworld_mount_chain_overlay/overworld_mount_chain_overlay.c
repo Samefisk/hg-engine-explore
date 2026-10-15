@@ -3,7 +3,13 @@
 #include "../../include/overworld_actor_system_internal.h"
 #include "../../include/overworld_wild_runtime.h"
 #include "../../include/overworld_wild_occupancy.h"
+#include "../../include/overworld_walk_module.h"
 #include "../../include/map_events_internal.h"
+#include "../../include/player_health.h"
+#include "../../include/overworld_walk_timing_policy.h"
+#include "../../include/overworld_walk_direction_policy.h"
+#include "../../include/overworld_mount_jump.h"
+#include "../../include/constants/buttons.h"
 
 /* These private mount calls have checked fixed addresses. The chain adapter
  * shares the field lifetime but cannot fit inside overlay 157's code slot. */
@@ -14,13 +20,26 @@ extern BOOL OverworldMount_TryStartCustomMotion(
     FIELD_PLAYER_AVATAR *avatar, u8 direction, u8 facingDirection,
     BOOL advanceFirstFrame);
 extern u8 OverworldMount_GetInputDirection(u32 keys);
+/* Read-only native front admission. Execution remains in the shared Hop owner. */
+extern BOOL OverworldMount_CanCrossFront(
+    OverworldMountRuntimeState *state, LocalMapObject *player,
+    const OverworldActorPolicyView *policy, u8 direction);
 __asm__(
     ".thumb\n"
-    ".thumb_func\n.thumb_set OverworldMount_ProcessPlayerControl, 0x023BC330\n"
-    ".thumb_func\n.thumb_set OverworldMount_TryStartCustomMotion, 0x023BB218\n"
+    ".thumb_func\n.thumb_set OverworldMount_ProcessPlayerControl, 0x023BC2AC\n"
+    ".global OverworldMount_TryStartCustomMotion\n"
+    ".thumb_func\n.thumb_set OverworldMount_TryStartCustomMotion, 0x023BB20C\n"
     ".thumb_func\n.thumb_set OverworldMount_GetInputDirection, 0x023BB67C\n"
+    ".thumb_func\n.thumb_set OverworldWalk_SelectNewestMountedInput, 0x023BF790\n"
+    ".thumb_func\n.thumb_set OverworldWalk_ApplyReleaseGrace, 0x023BB5AC\n"
+    ".thumb_func\n.thumb_set sub_0205F504, 0x0205F505\n"
+    ".thumb_func\n.thumb_set sub_02061108, 0x02061109\n"
+    ".thumb_func\n.thumb_set sub_0206064C, 0x0206064D\n"
     ".thumb_func\n.thumb_set OverworldActorPolicy_MountCommand, 0x023BA0E0\n"
     ".thumb_func\n.thumb_set OverworldWildOccupancy_Query, 0x023C0184\n"
+    ".thumb_func\n.thumb_set OverworldMount_CanCrossFront, 0x023B8630\n"
+    ".thumb_func\n.thumb_set OverworldMountJump_Boundary, 0x023BE140\n"
+    ".thumb_func\n.thumb_set OverworldMountJump_HopInPlace, 0x023B86DA\n"
     ".thumb_func\n.thumb_set __aeabi_uidivmod, 0x023DEE4C\n"
     ".thumb_func\n.thumb_set memset, 0x023DEEA2\n");
 
@@ -44,25 +63,33 @@ OverworldWalk_SelectDisplayedTimeImpl(
     call->reserved[3] =
         (call->stepFlags & OVERWORLD_ACTOR_WALK_STEP_RESET_ACCELERATION) != 0
             ? 0 : policy->lastWalkTime;
-    u8 variance = OW_WILD_BEHAVIOR_WALK_TIME_VARIANCE(
+    u32 variance = OW_WILD_BEHAVIOR_WALK_TIME_VARIANCE(
         call->lane->chainRepositionAllowDiagonal);
-    u8 fastest = call->lane->maxWalkSpeed;
-    if (fastest > call->lane->chillSpeed) {
-        fastest = call->lane->chillSpeed;
-    }
-    if (fastest < 1) fastest = 1;
-    if (fastest > 32) fastest = 32;
-    if (call->travelTime == fastest
-        && (call->stepFlags & OVERWORLD_ACTOR_WALK_STEP_RESET_ACCELERATION) == 0
+    if ((call->stepFlags & OVERWORLD_ACTOR_WALK_STEP_RESET_ACCELERATION) == 0
         && !OW_WILD_BEHAVIOR_WALK_DISABLES_ACCELERATION(call->lane->walkOptions)
         && call->lane->tilesToAccelerate != 0) {
         u8 count = policy->walkMomentum.tileCounter;
         u8 amount = call->lane->walkAccelerationStep;
-        if (amount == 33) {
-            variance = count >= 6 ? 0 : variance >> count;
-        } else {
-            u32 reduction = (u32)count * amount;
+        if (amount == OVERWORLD_WALK_ACCELERATION_LINEAR_SPEED) {
+            /* Speed and variance share the same completed moving-frame ramp. */
+            u32 reduction = (u32)policy->linearElapsed * variance
+                / call->lane->tilesToAccelerate;
             variance = reduction >= variance ? 0 : variance - reduction;
+        } else {
+            u8 fastest = call->lane->maxWalkSpeed;
+            if (fastest > call->lane->chillSpeed) {
+                fastest = call->lane->chillSpeed;
+            }
+            if (fastest < 1) fastest = 1;
+            if (fastest > 32) fastest = 32;
+            if (call->travelTime == fastest) {
+                if (amount == 33) {
+                    variance = count >= 6 ? 0 : variance >> count;
+                } else {
+                    u32 reduction = (u32)count * amount;
+                    variance = reduction >= variance ? 0 : variance - reduction;
+                }
+            }
         }
     }
     /* A keyed counter draw is stable across blocked retries and does not
@@ -96,7 +123,8 @@ OverworldWalk_SelectDisplayedTime(
     OverworldWalk_SelectDisplayedTimeImpl(call, snapshot, policy);
 }
 
-static BOOL __attribute__((noinline)) Chain_Reduce(
+static BOOL __attribute__((noinline,
+    section(".overworld_walk_displayed_time_code"))) Chain_Reduce(
     OverworldMountRuntimeState *state,
     u8 operation,
     u8 flags,
@@ -133,6 +161,15 @@ OverworldMount_ResetMomentum(void)
     }
 }
 
+/* Input-boundary owner for B Jump and the automatic ledge Hop. Both start
+ * the shared forward Hop at the current Walk time per tile. B Jump reach is
+ * OVERWORLD_JUMP_REACH (two to six tiles by Walk time per tile); the
+ * shared Jump clearance may raise its arc to its distance cap. When the full
+ * reach fails, the longest shorter Jump that clears lands and then crashes.
+ * With none, the mount crashes in place. Standing still with a held
+ * direction Jumps two tiles at the mounted Walk speed; with no direction it
+ * Hops in place.
+ * Returns nonzero when this boundary consumed the input. */
 static u8 __attribute__((noinline, used, optimize("Os"),
         section(".overworld_mount_forward_hop")))
 Chain_StartForwardHop(
@@ -140,72 +177,81 @@ Chain_StartForwardHop(
     FIELD_PLAYER_AVATAR *avatar,
     const OverworldActorPolicyView *policy,
     u8 direction,
-    BOOL obstacleOnly)
+    u32 newKeys)
 {
     OverworldWildBehaviorProfileData *lane = &state->snapshot.profile;
     u8 oldAction = lane->chillAction;
     u8 oldMin = lane->hopMinDistance;
     u8 oldMax = lane->hopMaxDistance;
     u8 oldTime = lane->hopTime;
-    u8 oldEndState = state->walkEndState;
-    u8 startResult;
-    int frontX;
-    int frontY;
+    u8 speed = policy->walkMomentum.speed;
+    u8 reach;
+    u8 distance;
+    u8 startResult = 0;
+    BOOL idle = avatar->state == PLAYER_STATE_WALKING
+        && (avatar->unk0 & 1u) == 0
+        && state->motionCooldown == 0
+        && state->snapshot.motionMode == OVERWORLD_MOUNT_MOTION_NONE
+        && !state->motionStreamPreparing && !state->pendingFieldStep
+        && (policy->pendingStep | policy->motionPhase
+            | policy->pendingSkid) == 0
+        && state->fieldSystem->taskman == NULL;
+    BOOL jump = OverworldMountJump_Boundary(state, policy, newKeys, idle);
 
-    if (direction > (obstacleOnly ? 3 : 7)) {
+    if (jump) {
+        /* Standing still, a held direction Jumps two tiles that way. */
+        reach = OVERWORLD_JUMP_REACH(speed);
+        if (direction > 7) {
+            direction = policy->walkMomentum.direction;
+            reach = OVERWORLD_MOUNT_JUMP_REACH(speed);
+        }
+        if (direction > 7 || (direction > 3
+                && !OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(
+                    lane->hopAllowNonCardinal))) {
+            reach = 0;
+        }
+        if (reach == 0) {
+            OverworldMountJump_HopInPlace(state, avatar);
+            return 1;
+        }
+    } else if (!idle || !OverworldMount_CanCrossFront(state,
+            avatar->mapObject, policy, direction)) {
         return 0;
-    }
-    if (avatar->state != PLAYER_STATE_WALKING
-        || (avatar->unk0 & 1u) != 0
-        || state->motionCooldown != 0) {
-        return obstacleOnly ? 0 : 2;
-    }
-    if (obstacleOnly) {
-        if (lane->chillAction != OW_WILD_BEHAVIOR_LOCOMOTION_WALK
-            || lane->hopAllowVerticalObstacles != 1
-            || lane->hopMinDistance != 2 || lane->hopMaxDistance != 2
-            || state->snapshot.motionMode != OVERWORLD_MOUNT_MOTION_NONE
-            || state->motionStreamPreparing || state->pendingFieldStep
-            || policy->pendingStep != OVERWORLD_ACTOR_WALK_PENDING_NONE
-            || policy->motionPhase != OVERWORLD_MOTION_PHASE_IDLE
-            || policy->pendingSkid != 0
-            || state->fieldSystem->taskman != NULL
-            || (((lane->walkOptions
-                    & OW_WILD_BEHAVIOR_WALK_OPTION_LOCK_DIRECTION) != 0
-                    || policy->walkMomentum.speed != 0)
-                && policy->walkMomentum.direction <= 3
-                && policy->walkMomentum.direction != direction)) {
-            return 0;
-        }
-        frontX = avatar->mapObject->xCurr
-            + (direction == 2 ? -1 : direction == 3);
-        frontY = avatar->mapObject->yCurr
-            + (direction == 0 ? -1 : direction == 1);
-        if (frontX < 0 || frontY < 0
-            || (!IsMetatileBlockedAt(state->fieldSystem, frontX, frontY)
-                && !OverworldWildOccupancy_Query(state->fieldSystem,
-                    avatar->mapObject, NULL, frontX, frontY, 0,
-                    OVERWORLD_WILD_OCCUPANCY_NONPLAYER))) {
-            return 0;
-        }
+    } else {
+        /* Automatic ledge Hop: exactly two tiles. */
+        reach = 2;
     }
     lane->chillAction = OW_WILD_BEHAVIOR_LOCOMOTION_HOP;
-    lane->hopMinDistance = 2;
-    lane->hopMaxDistance = 2;
-    lane->hopTime = policy->walkMomentum.speed != 0
-        ? policy->walkMomentum.speed
-        : lane->chillSpeed;
-    state->walkEndState = OVERWORLD_MOUNT_WALK_END_CHAIN_HOP;
-    startResult = OverworldMount_TryStartCustomMotion(
-        avatar, direction, direction, FALSE);
-    if (startResult != 1) {
-        state->walkEndState = oldEndState;
+    lane->hopTime = speed != 0 ? speed : lane->chillSpeed;
+    for (distance = reach; distance != 0; distance--) {
+        /* One exact Hop distance selects the Jump clearance model. */
+        lane->hopMinDistance = distance;
+        lane->hopMaxDistance = distance;
+        state->walkEndState = OVERWORLD_MOUNT_WALK_END_CHAIN_HOP;
+        startResult = OverworldMount_TryStartCustomMotion(
+            avatar, direction, direction, FALSE);
+        if (startResult == 1) {
+            break;
+        }
+        state->walkEndState = OVERWORLD_MOUNT_WALK_END_NONE;
+        if (!jump || startResult != 0) {
+            break;
+        }
     }
     lane->chillAction = oldAction;
     lane->hopMinDistance = oldMin;
     lane->hopMaxDistance = oldMax;
     lane->hopTime = oldTime;
-    return startResult;
+    if (!jump) {
+        return startResult;
+    }
+    /* A short Jump crashes once it lands; with no Jump, at the next
+     * boundary. A busy terrain stream (2) drops the press without one. */
+    if (startResult != 2 && distance != reach) {
+        (void)OverworldMountJump_Boundary(state, policy, distance,
+            OVERWORLD_MOUNT_JUMP_MARK_CRASH);
+    }
+    return 1;
 }
 
 static BOOL Chain_ActionActive(
@@ -264,6 +310,12 @@ OverworldMount_ChainControl(
     if (state->pendingFieldStep) {
         return;
     }
+    if (PlayerHealthOverlay_IsReady()) {
+        if (PlayerHealthField_OverrideControlEntry(
+                avatar, &direction, &newKeys, &heldKeys)) {
+            return;
+        }
+    }
     if (state->snapshot.phase != OVERWORLD_MOUNT_PHASE_RIDING
         || !state->presentationAttached
         || state->fieldSystem == NULL || avatar == NULL
@@ -272,6 +324,12 @@ OverworldMount_ChainControl(
             OVERWORLD_ACTOR_SYSTEM_FOLLOWER_SLOT, &policy)) {
         goto ordinary;
     }
+    /* Resolve the physical press order before Hop, preview, Walk, and the
+     * mounted turn reducer inspect these local keys. This only changes input;
+     * any accepted or active skid remains owned by the Walk policy. */
+    OverworldWalk_SelectNewestMountedInput(state, &newKeys, &heldKeys);
+    /* A brief blank D-pad mid-Walk keeps the last held direction. */
+    OverworldWalk_ApplyReleaseGrace(state, &heldKeys);
     if (policy.pendingStep == OVERWORLD_ACTOR_WALK_PENDING_CHAIN) {
         if (policy.motionPhase != OVERWORLD_MOTION_PHASE_IDLE) {
             return;
@@ -295,16 +353,9 @@ OverworldMount_ChainControl(
         return;
     }
     action = policy.chainPauseAction & 0x7F;
-    if (action == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_FORWARD) {
-        action = Chain_StartForwardHop(state, avatar, &policy,
-            policy.walkMomentum.direction, FALSE);
-        if (action == 2) {
-            return;
-        }
-        if (action == 0) {
-            goto consume;
-        }
-    } else if (action == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE) {
+    /* A mounted Movement Chain never moves the pair forward by itself:
+     * HOP_FORWARD is consumed like any other unsupported action. */
+    if (action == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE) {
         state->motionCooldown = (u16)policy.chainPauseTicks * 2;
         state->walkEndState = OVERWORLD_MOUNT_WALK_END_NONE;
     } else if (action >= OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE
@@ -328,7 +379,7 @@ consume:
         0, 0, 0, &call);
 ordinary:
     /* Stock Walk refuses a blocked tile before it saves a step proposal.
-     * Try the opted-in obstacle Hop at this input boundary instead. */
+     * Try a B Jump or the automatic ledge Hop at this boundary instead. */
     if (state->snapshot.phase == OVERWORLD_MOUNT_PHASE_RIDING
         && state->presentationAttached
         && !state->bufferedTogglePending
@@ -339,13 +390,37 @@ ordinary:
         u8 requestedDirection = OverworldMount_GetInputDirection(
             newKeys | heldKeys);
 
+        /* A busy Hop keeps this input. Falling through would start a blocked
+         * Walk, report a Crash, and clear the momentum before retrying. */
         if (Chain_StartForwardHop(state, avatar, &policy,
-                requestedDirection, TRUE) == 1) {
+                requestedDirection, newKeys) != 0) {
             return;
         }
     }
     OverworldMount_ProcessPlayerControl(
         avatar, param1, direction, newKeys, heldKeys, param5);
+}
+
+/* Skid and B Jump landing dust. Stock sub_0206064C draws the ground dust
+ * only off water, shallow water, ice and mud, exactly like a stock landing,
+ * so a water-runner skidding on water raises no dust. Custom motion does not
+ * refresh the object's cached tile behaviors, so first re-read them with
+ * sub_02061108 as stock sub_02060114 does; sub_0205F504 is then the current
+ * tile behavior. Boot-resident for the Wild runtime stub; exactly 24 bytes. */
+void __attribute__((naked, noinline, used, section(".overworld_skid_dust")))
+OverworldSkidDust_Play(LocalMapObject *object)
+{
+    (void)object;
+    __asm__(
+        "push {r4, lr}\n"
+        "mov r4, r0\n"
+        "bl sub_02061108\n"
+        "mov r0, r4\n"
+        "bl sub_0205F504\n"
+        "mov r1, r0\n"
+        "mov r0, r4\n"
+        "bl sub_0206064C\n"
+        "pop {r4, pc}\n");
 }
 
 u8 __attribute__((noinline, used,

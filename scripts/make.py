@@ -154,6 +154,21 @@ def GetSectionSize(section_file: str, section_name: str) -> int:
     return 0
 
 
+def ReadOverlayLoadAddress(linker_text: str) -> int:
+    import re
+
+    # Extracted private code can precede the overlay's own MEMORY region.
+    # Only the named rom region sets the SDK overlay load address.
+    rows = re.findall(r'^[ \t]*rom[ \t]*:[^\r\n]*$', linker_text, re.MULTILINE)
+    if len(rows) != 1:
+        raise RuntimeError('overlay linker must define one named rom origin')
+    match = re.match(r'^[ \t]*rom[ \t]*:[ \t]*ORIGIN[ \t]*=[ \t]*'
+                     r'(0x[0-9A-Fa-f]+)[ \t]*,', rows[0])
+    if match is None:
+        raise RuntimeError('overlay linker has a malformed named rom origin')
+    return int(match.group(1), 16)
+
+
 def VerifyOverworldWildSpawnsOverlay(linked_path: str, output_path: str, packaged_path: str) -> None:
     entry_name = 'gOverworldWildSpawnsOverlayEntry'
     callback_slots = (
@@ -335,6 +350,30 @@ def VerifyOverworldFieldServiceOverlay(linked_path: str, output_path: str, packa
     )
 
 
+def VerifyOverworldQueryCodeAddonOwnership(linked_path: str, overlay: bytes) -> None:
+    import json
+    from verify_overworld_query_code_addon import (
+        generated_header, packer, verify_selector,
+    )
+
+    # Selector owns the current-field delegates and loader. Condition bodies
+    # belong to the relocatable image, whose typed exports/relocations are
+    # authenticated by the same packer used to build the package.
+    verify_selector(Path(linked_path), overlay[0x1EA0:])
+    directory = Path(linked_path).parent / 'overworld_query_code_addon'
+    blob, receipt = packer().package((directory / 'image.elf').read_bytes())
+    if blob != (directory / 'query.bin').read_bytes():
+        raise RuntimeError('query code addon package differs from its linked image')
+    if json.loads((directory / 'package.json').read_text()) != json.loads(
+            json.dumps(receipt)):
+        raise RuntimeError('query code addon package receipt differs')
+    if (directory / 'overworld_query_code_addon_package.h').read_text() != \
+            generated_header(blob, receipt):
+        raise RuntimeError('query code addon generated package header differs')
+    # move_narc stages member 21 after make.py; the final package verifier
+    # checks that member against these exact bytes.
+
+
 def VerifyOverworldFollowerSelectorOverlay(
         linked_path: str,
         output_path: str,
@@ -357,9 +396,10 @@ def VerifyOverworldFollowerSelectorOverlay(
     ]
     condition_entry_name = 'gOverworldBehaviorConditionServiceEntry'
     condition_callback_names = [
-        'OverworldBehaviorCondition_PrepareActor',
-        'OverworldBehaviorCondition_EvaluatePrepared',
-        'OverworldBehaviorCondition_ValidateResolveRequest',
+        'OverworldQueryCodeAddon_ConditionPrepare',
+        'OverworldQueryCodeAddon_ConditionEvaluate',
+        'OverworldQueryCodeAddon_ResolverCall',
+        'OverworldQueryCodeAddon_ConditionNotify',
     ]
     condition_gate_name = 'OverworldBehaviorConditionService_Get'
     symbols = {}
@@ -482,12 +522,13 @@ def VerifyOverworldFollowerSelectorOverlay(
     )
     if condition_header != (
             0x4342574F,
-            8,
+            13,
             condition_entry_size,
             *expected_condition_callbacks,
-            0,
     ):
         raise RuntimeError('overlay 152 condition service ABI does not match')
+
+    VerifyOverworldQueryCodeAddonOwnership(linked_path, overlay)
 
     digest = hashlib.sha256(overlay).hexdigest()
     print(
@@ -508,6 +549,7 @@ def VerifyOverworldWildRuntimeOverlay(
         (1, 'OverworldWildRuntime_QuerySurface'),
         (2, 'OverworldWildRuntime_GetGroundBaseY'),
         (3, 'OverworldWildRuntime_FillActorView'),
+        (4, 'OverworldWildRuntime_ResolveBaseYAt'),
         (5, 'OverworldWildRuntime_RequestMotion'),
         (6, 'OverworldRoleController_Reduce'),
         (8, 'OverworldWildRuntime_BindActor'),
@@ -610,7 +652,7 @@ def VerifyOverworldWildRuntimeOverlay(
         raise RuntimeError('overlay 156 is shorter than its exported ABI entries')
 
     actual_header = struct.unpack_from('<IHH', overlay)
-    expected_header = (0x3152574F, 17, expected_entry_size)
+    expected_header = (0x3152574F, 18, expected_entry_size)
     if actual_header != expected_header:
         raise RuntimeError(
             'overlay 156 exported ABI magic/version/size does not match'
@@ -625,7 +667,7 @@ def VerifyOverworldWildRuntimeOverlay(
             'overlay 156 exported ABI does not exactly match its linked '
             'Thumb callbacks'
         )
-    if actual_callbacks[4] != 0 or actual_callbacks[7] != 0:
+    if actual_callbacks[7] != 0:
         raise RuntimeError('overlay 156 retired callback slots are not zero')
     for slot, name in callback_slots:
         pointer = actual_callbacks[slot]
@@ -661,6 +703,19 @@ def VerifyOverworldWildRuntimeOverlay(
         raise RuntimeError(
             'overlay 156 actor Walk owner callback is outside its resident image'
         )
+
+    from verify_pokemon_move_history_capture import elf_bytes_at, elf_helper_bindings
+    resolve_name = 'OverworldWildRuntime_ResolveBaseYAt'
+    resolve = elf_helper_bindings(Path(linked_path), (resolve_name,)).get(resolve_name)
+    if (resolve is None or resolve[2] != 'FUNC' or not resolve[0] & 1
+            or resolve[3] in ('ABS', 'UND') or resolve[1] <= 0
+            or (resolve[0] & ~1, resolve[1]) != symbols[resolve_name]
+            or resolve[1] > overlay_end - (resolve[0] & ~1)):
+        raise RuntimeError('overlay 156 base-height callback is not owned Thumb code')
+    resolve_offset = (resolve[0] & ~1) - expected_entry_address
+    if overlay[resolve_offset:resolve_offset + resolve[1]] != elf_bytes_at(
+            Path(linked_path), resolve[0] & ~1, resolve[1]):
+        raise RuntimeError('overlay 156 base-height callback body differs from its linked code')
 
     digest = hashlib.sha256(overlay).hexdigest()
     print(
@@ -991,10 +1046,7 @@ def writeall():
             # grab first line of format /* Overlay ### */, convert ### to a number
             newOverlay = int(line.split(" ")[2])
             # determine insertion location
-            for line in file:
-                if "ORIGIN" in line:
-                    address = int(line.split()[4][len("0x"):-1], 0x10)
-                    break
+            address = ReadOverlayLoadAddress(file.read())
         with open(f"base/overlay/overlay_{newOverlay:04}.bin", 'wb+') as rom:
             with open(NEW_OVERLAYS[i], 'rb') as binary:
                 rom.seek(0)
@@ -1057,6 +1109,19 @@ def writeall():
                 "--output", "build/overworld-system.debug.json",
                 "--objdump", OBJDUMP,
             ])
+        if newOverlay == 161:
+            subprocess.check_call([
+                sys.executable,
+                "-B",
+                "scripts/generate_player_health_debug.py",
+                "--linked", LINKED_SECTIONS[i + 1],
+                "--binary", NEW_OVERLAYS[i],
+                "--runtime-source", "src/player_health.c",
+                "--model-header", "include/player_health_model.h",
+                "--save-header", "include/save.h",
+                "--output", "build/player-health.debug.json",
+                "--objdump", OBJDUMP,
+            ])
         #print(f"{OVERLAYS[i]} written to overlay {newOverlay}...")
 
     # Both overlays must be written before checking this private code-host seam.
@@ -1064,9 +1129,11 @@ def writeall():
     from verify_pokemon_move_history_capture import verify_field_terrain_packaging
     field_package = Path("base/overlay/overlay_0131.bin").read_bytes()
     terrain_host_package = Path("base/overlay/overlay_0153.bin").read_bytes()
+    health_package = Path("base/overlay/overlay_0161.bin").read_bytes()
     if (field_package != Path("build/output_field.bin").read_bytes()
             or terrain_host_package
-            != Path("build/output_pokemon_move_history_overlay.bin").read_bytes()):
+            != Path("build/output_pokemon_move_history_overlay.bin").read_bytes()
+            or health_package != Path("build/output_player_health_overlay.bin").read_bytes()):
         raise RuntimeError("Field terrain packaged code differs from linked output")
     verify_field_terrain_packaging(
         Path("build/field_linked.o"),
@@ -1074,6 +1141,9 @@ def writeall():
         Path("build/pokemon_move_history_overlay/overworld_field_terrain_stream.o"),
         field_package,
         terrain_host_package,
+        Path("build/player_health_overlay_linked.o"),
+        Path("build/player_health_overlay/overworld_field_empty_axis.o"),
+        health_package,
         OBJDUMP,
     )
     print("Field terrain package gate: resident code, Field state, Thumb arguments verified")
@@ -1242,5 +1312,10 @@ if __name__ == '__main__':
     writeall()
     install()
     hook()
+    # Fully linked owner leaves use only the three audited, redirected stock spans.
+    from pack_overworld_emote_slots import install_emote_slots
+    install_emote_slots(Path("build"), Path("base/overlay/overlay_0001.bin"),
+                        Path("base/overlay/overlay_0158.bin"),
+                        Path("base/overarm9.bin"), Path("base/arm9.bin"))
     repoint()
     offset()

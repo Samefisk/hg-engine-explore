@@ -4,7 +4,7 @@ from copy import deepcopy
 from tools.overworld.devtools_mount_pacing_measurement import check_pair_pose
 from tools.overworld.devtools_mount_pacing_proof import MountedPacingNegative
 from tools.overworld.devtools_mount_speed_slew_measurement import (
-    keyed_walk_duration, walk_step_fx32, stop_skid_tail, variance_width,
+    keyed_walk_duration, walk_step_fx32, stop_skid_tail, variance_width, validate_linear_walks, linear_tuning,
 )
 from tools.overworld.devtools_records import select_current_actor
 from tools.overworld.normal_play_observer import complete_travel
@@ -142,11 +142,16 @@ def measurements(replay, record):
            for frame in gait_frames if frame["frame"] > motions[MOTIONS - 1]["finishFrame"]):
         raise ValueError("mounted stop-skid tail has input or unexpected motion")
     durations = [motion["duration"] for motion in motions[:MOTIONS]]
-    if any(motion["commitBefore"] != 2 + index
+    linear = meter.get("linearRamp")
+    if linear is not None:
+        linear_tuning(linear)
+    first_commit = actor["commitSequence"] if linear else 2
+    reference = validate_linear_walks(actor, motions, meter.get("linearPolicies"), linear) if linear else None
+    if any(motion["commitBefore"] != first_commit + index
            or type(motion["duration"]) is not int
-           or motion["duration"] != keyed_walk_duration(
+           or motion["duration"] != (reference[index]["duration"] if linear else keyed_walk_duration(
                index, actor["subjectIdentity"], actor["handle"]["encounterGeneration"],
-               motion["commitBefore"])
+               motion["commitBefore"]))
            for index, motion in enumerate(motions[:MOTIONS])):
         raise ValueError("mounted speed lost its keyed variance value")
     one_frame_gaps = [max(after["startFrame"] - before["travelEnd"]["frame"] - 1,
@@ -160,7 +165,7 @@ def measurements(replay, record):
     for index, motion in enumerate(motions):
         skid = index >= MOTIONS
         if not complete_travel(motion) or motion["kind"] != ("SKID" if skid else "WALK") \
-                or (skid and (motion["duration"] != skid_duration or motion["commitBefore"] != 2 + index)) \
+                or (skid and (motion["duration"] != skid_duration or motion["commitBefore"] != first_commit + index)) \
                 or motion["target"] != [motion["origin"][0]+1, motion["origin"][1]] \
                 or motion["commitAfter"] != (motion["commitBefore"]+1) & 0xFFFFFFFF \
                 or (index and motion["origin"] != motions[index-1]["target"]):
@@ -250,6 +255,26 @@ class MountedSpeedNegative(MountedPacingNegative):
 
     def mutate(self, row, subjects):
         if self.fault == "mounted-speed-persistent-variance":
+            if not self.applied and row.get("phase") == "observe":
+                changed = deepcopy(row)
+                handles = {s["handle"]["value"] for s in subjects.values()}
+                for event in changed.get("events", []):
+                    data = event.get("data", {})
+                    before = data.get("policyBefore", {})
+                    lane = bytes.fromhex(data.get("laneHex", ""))
+                    if data.get("observation") != "walk-policy" or data.get("operation") != 1 \
+                            or data.get("publicSubject", {}).get("handle", {}).get("value") not in handles \
+                            or len(lane) != 80 or lane[71] != 34:
+                        continue
+                    self.linear_seen = True
+                    if before.get("linearMode") == 1 and before.get("linearElapsed") == lane[50]:
+                        raw = bytearray.fromhex(data["responseHex"])
+                        raw[19] += 1
+                        data["responseHex"] = raw.hex()
+                        self.applied = True
+                        return changed
+                if getattr(self, "linear_seen", False):
+                    return row
             if self.applied or row.get("phase") != "observe":
                 return row
             changed = deepcopy(row)
@@ -357,5 +382,7 @@ def validate_negative_result(result, fault):
                 "mounted-gait-phase-reset": "mounted gait differs from distance and frame reference",
                 "mounted-gait-camera-bob": "mounted gait moved or shook the actual ground camera",
                 "mounted-speed-persistent-variance": "mounted speed variance did not fade at nominal maximum"}[fault]
-    if not any(expected in reason for reason in reasons):
+    if not any(expected in reason or (fault == "mounted-speed-persistent-variance" and
+                                     any(detail in reason for detail in ("mounted Linear proposal differs from shared-clock variance",
+                                         "mounted Linear did not reach full speed and zero variance at its ramp deadline"))) for reason in reasons):
         raise ValueError("mounted speed copied control failed for an unrelated reason: " + fault)

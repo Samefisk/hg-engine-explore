@@ -12,7 +12,7 @@ from tools.overworld.devtools_mount_pacing_observer import NativeMountedPacingOb
 from tools.overworld.devtools_observer import public_bytes
 
 SYMBOL = 'OverworldMount_TryStartCustomMotion.constprop.0'
-STATE_ADDRESS, STATE_BYTES = 0x023BC744, 184
+STATE_ADDRESS, STATE_BYTES = 0x023BC744, 192
 MAX_ATTEMPTS = 256
 
 
@@ -81,7 +81,7 @@ class NativeMountedHopStartObserver(NativeMountedPacingObserver):
             self._require(context['returnValue'] in (0, 1), 'custom start returned invalid BOOL')
             current = self._current()
             raw = public_bytes(self.session, STATE_ADDRESS, STATE_BYTES)
-            if context['returnValue'] == 0 or raw[102] != 1:
+            if context['returnValue'] == 0 or raw[111] != 1:
                 return None
             actor = current['publicSubject']
             identity, = struct.unpack_from('<H', raw, 126)

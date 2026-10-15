@@ -7,34 +7,62 @@ They do not patch profiles, conditions, actors, timers, or collision results.
 from __future__ import annotations
 
 from copy import deepcopy
+import json
+from pathlib import Path
 
 from tools.overworld.devtools_records import select_current_actor
 from tools.overworld.normal_play_observer import MotionRecorder, complete_travel
+from scripts.overworld_behavior_profile_viewer import _runtime_source_behavior_catalog
+from tools.overworld.devtools_application_bank import (
+    decode_application_bank, global_application, local_application,
+    species_applications,
+)
 
 
-NOTICE = "notice-player-runtime-v1"
 STALKER = "stalker-runtime-v1"
 PLAYFUL = "playful-runtime-v1"
 STARTLED = "startled-runtime-v1"
+AMBUSH = "ambush-player-landing-v1"
 FLY_IN = "fly-in-runtime-v1"
 WADDLE = "waddle-runtime-v1"
 FLOATY_BOUNCE = "floaty-bounce-hop-pause-v1"
 HELD = "held-control-runtime-v1"
 BLOCKED_FACING = "blocked-wild-facing-v1"
+FOLLOWER_STOP = "follower-stop-facing-v1"
+RAM_UNTIL_CRASH = "ram-until-crash-v1"
+RAM_BEHIND = "ram-behind-entry-v1"
+FOLLOWER_RAM = "follower-ram-pokemon-v1"
+RAM_LEDGE = "ram-ledge-continuity-v1"
+RAM_BRIEF_NOTICE = "ram-brief-notice-v1"
+THROW_NOTICE_WALK_COMMIT = "throw-notice-walk-commit-v1"
+FOLLOWER_THROW_HIT_ABORT = "follower-throw-hit-abort-v1"
 FLY_IN_DURATION_FRAMES = 144
 BLOCKED_FACING_FRAMES = 128
 
 
+def application_index(application_id, *, allow_disabled=False):
+    catalog = json.loads((Path(__file__).resolve().parents[2] /
+                          "data/overworld_behavior_profiles.json").read_text())
+    runtime = _runtime_source_behavior_catalog(catalog)
+    matches = [i for i, a in enumerate(runtime["applications"]) if a["id"] == application_id]
+    if len(matches) != 1:
+        authored = [a for a in catalog["applications"] if a["id"] == application_id]
+        if allow_disabled and not matches and len(authored) == 1 and authored[0].get("enabled") is False:
+            return None
+        raise ValueError("canonical application is missing or ambiguous: " + application_id)
+    return matches[0]
+
+
 FEATURES = {
-    NOTICE: dict(requirement="current.notice-player-routine-return",
-                 subjects=(("mareep", 179),), conditionIds=(1289,), application=13),
     STALKER: dict(requirement="current.stalker-visibility-gate",
-                  subjects=(("gastly", 92),), conditionIds=(35956,), application=15),
+                  subjects=(("gastly", 92),), conditionIds=(35956,), application=application_index("apply-stalker")),
     PLAYFUL: dict(requirement="current.playful-target-and-collision",
                   subjects=(("clefairy", 35), ("clefable", 36)),
-                  conditionIds=(31250, 38737), application=22),
+                  conditionIds=(34198, 58853), application=application_index("apply-find-playmate")),
     STARTLED: dict(requirement="current.startled-timed-retreat",
-                   subjects=(("bellsprout", 69),), conditionIds=(7515,), application=20),
+                   subjects=(("bellsprout", 69),), conditionIds=(7515,), application=application_index("apply-startled")),
+    AMBUSH: dict(requirement="current.ambush-player-tile-landing",
+                 subjects=(("weepinbell", 70),), conditionIds=(49529,), application=application_index("apply-ambush")),
     FLY_IN: dict(requirement="current.fly-in-uneven-height",
                  subjects=(("pidgey", 16),)),
     WADDLE: dict(requirement="current.waddle-walk-presentation-only",
@@ -45,12 +73,60 @@ FEATURES = {
                subjects=(("mankey", 56), ("rattata", 19))),
     BLOCKED_FACING: dict(requirement="current.blocked-wild-facing",
                          subjects=(("exeggcute", 102),)),
+    FOLLOWER_STOP: dict(requirement="current.follower-stop-facing",
+                        subjects=(("stantler", 234),), role="FOLLOWER", acquire="existing"),
+    RAM_UNTIL_CRASH: dict(requirement="current.ram-until-crash",
+                         subjects=(("onix", 95),), conditionIds=(20305,),
+                         application=application_index("apply-ram")),
+    RAM_BEHIND: dict(requirement="current.ram-behind-entry",
+                       subjects=(("onix",95),), conditionIds=(20305,), application=application_index("apply-ram")),
+    FOLLOWER_RAM: dict(requirement="current.follower-ram-pokemon",
+                       subjects=(("onix",95),("snorlax",143)), conditionIds=(49626,),
+                       application=application_index("apply-ram")),
+    RAM_LEDGE: dict(requirement="current.ram-ledge-continuity",
+                    subjects=(("onix", 95),), conditionIds=(20305,),
+                    application=application_index("apply-ram")),
+    RAM_BRIEF_NOTICE: dict(requirement="current.ram-brief-notice",
+                           subjects=(("onix", 95),), conditionIds=(20305,),
+                           application=application_index("apply-ram")),
+    THROW_NOTICE_WALK_COMMIT: dict(requirement="current.throw-notice-walk-commit",
+                                   subjects=(("snorlax", 143), ("geodude", 74)),
+                                   conditionIds=(24737,),
+                                   application=application_index("apply-throw")),
+    FOLLOWER_THROW_HIT_ABORT: dict(requirement="current.follower-throw-hit-abort",
+                                   subjects=(("mankey", 56), ("onix", 95)),
+                                   roles={"mankey": "FOLLOWER", "onix": "WILD"},
+                                   acquires={"mankey": "existing", "onix": "spawn"},
+                                   conditionIds=(12365, 26783),
+                                   application=application_index("apply-throw")),
 }
 
 
 def require(value, reason):
     if not value:
         raise ValueError("profile feature: " + reason)
+
+
+def make_measurement(kind, test=None, max_frames=600):
+    if kind == FOLLOWER_STOP:
+        from tools.overworld.devtools_follower_stop_measurement import FollowerStopMeasurement
+        return FollowerStopMeasurement(kind, test, max_frames)
+    if kind == RAM_LEDGE:
+        from tools.overworld.devtools_ram_ledge_measurement import RamLedgeMeasurement
+        return RamLedgeMeasurement(kind, test, max_frames)
+    if kind in (RAM_UNTIL_CRASH,RAM_BEHIND):
+        from tools.overworld.devtools_ram_until_crash_measurement import RamUntilCrashMeasurement
+        return RamUntilCrashMeasurement(kind, test, max_frames)
+    if kind == RAM_BRIEF_NOTICE:
+        from tools.overworld.devtools_ram_brief_notice_measurement import RamBriefNoticeMeasurement
+        return RamBriefNoticeMeasurement(kind, test, max_frames)
+    if kind == THROW_NOTICE_WALK_COMMIT:
+        from tools.overworld.devtools_throw_notice_walk_commit_measurement import ThrowNoticeWalkCommitMeasurement
+        return ThrowNoticeWalkCommitMeasurement(kind, test, max_frames)
+    if kind == FOLLOWER_THROW_HIT_ABORT:
+        from tools.overworld.devtools_follower_throw_hit_abort_measurement import FollowerThrowHitAbortMeasurement
+        return FollowerThrowHitAbortMeasurement(kind, test, max_frames)
+    return ProfileFeatureMeasurement(kind, test, max_frames)
 
 
 def _handle(actor):
@@ -81,11 +157,137 @@ def decode_condition(event):
         "truth": bool(reason & (1 << 13)),
         "active": bool(reason & (1 << 14)),
         "timed": bool(reason & (1 << 15)),
+        "untilCrash": bool(value_a & (1 << 31)),
+        "activationMode": "until-crash" if value_a & (1 << 31)
+            else "timed" if reason & (1 << 15) else "while-true",
         "conditionId": value_a & 0xFFFF,
-        "targetSlot": (value_a >> 16) & 0xFFFF,
+        "targetSlot": (value_a >> 16) & 0x7FFF,
         "activeUntil": value_b & 0xFFFF,
         "cooldownUntil": (value_b >> 16) & 0xFFFF,
     }
+
+
+def _ambush_event_owner(event, subject):
+    data = event.get("data", {})
+    handle = subject["handle"]
+    return data.get("actorHandle") == handle["value"] and data.get("actor") == {
+        key: handle[key] for key in handle if key != "value"}
+
+
+def ambush_exit_evidence(meter, contact_frame):
+    """A native shared step is distinct from Actor Hop and Player knockback.
+
+    Commands 0x34..0x37 are the existing shared one-tile Hop exits. Their
+    accepted native owner checks profile terrain and stock blocked direction
+    before setting SINGLE_MOVEMENT. Observe that command's complete actor
+    travel; a request, another actor, or a Player displacement gives no credit.
+    """
+    subject = meter["subjects"]["weepinbell"]
+    samples, events = meter["samples"], meter["events"]
+    directions = {52: (0, -1), 53: (0, 1), 54: (-1, 0), 55: (1, 0)}
+    identity_keys = ("handle", "subjectIdentity", "species", "role",
+                     "authorityGeneration", "engineAnchorGeneration",
+                     "presentationGeneration")
+    for index, start in enumerate(samples):
+        command = start.get("native", {}).get("command")
+        if index == 0 or command not in directions or start["frame"] <= contact_frame:
+            continue
+        overlap = samples[index - 1]
+        owner = overlap.get("owner", {})
+        origin = overlap["logical"]
+        center = [(v << 16) + 0x8000 for v in origin]
+        if (any(owner.get(k) != subject.get(k) for k in identity_keys)
+                or overlap["motionKind"] != "NONE" or overlap["motionPhase"] != "IDLE"
+                or overlap.get("reservationId") != 0
+                or overlap["render"][::2] != center or overlap["offsetY"] != 0
+                or overlap["player"]["tile"] != origin
+                or overlap["player"].get("render", [])[::2] != center
+                or overlap["player"].get("offsetY") != 0
+                or overlap["render"][1] != overlap["player"]["render"][1]
+                or overlap.get("native", {}).get("flags", 0) & 2
+                or overlap.get("native", {}).get("command") not in (0, 1, 2, 3, 255)
+                or not start.get("native", {}).get("flags", 0) & 2
+                or start["render"] != overlap["render"]):
+            continue
+        # The overlap follows an actual complete Hop of this same lifetime.
+        landed = next((motion for motion in meter["motions"]
+                       if motion.get("handle") == subject["handle"]
+                       and motion.get("kind") == "HOP" and complete_travel(motion)
+                       and contact_frame <= motion.get("finishFrame", -1) <= overlap["frame"]
+                       and motion.get("terminalLogical") == origin
+                       and motion.get("commitAfter") == overlap["commitSequence"]), None)
+        if landed is None:
+            continue
+        terminal = [e for e in events if e["frame"] == landed["finishFrame"]
+                    and _ambush_event_owner(e, subject)]
+        names = ("LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED")
+        terminal = [next((e for e in terminal if e["data"].get("event") == name), None)
+                    for name in names]
+        if any(e is None for e in terminal) or not all(
+                a["data"]["sequence"] < b["data"]["sequence"]
+                for a, b in zip(terminal, terminal[1:])):
+            continue
+        dx, dy = directions[command]
+        target = [origin[0] + dx, origin[1] + dy]
+        target_center = [(v << 16) + 0x8000 for v in target]
+        path, previous_progress = [], -1
+        for row in samples[index:]:
+            expected_frame = start["frame"] + len(path)
+            if (row["frame"] != expected_frame
+                    or any(row.get("owner", {}).get(k) != subject.get(k) for k in identity_keys)
+                    or row.get("context") != overlap.get("context")
+                    or row["commitSequence"] != overlap["commitSequence"]
+                    or row["logical"] not in (origin, target)
+                    or not row.get("native", {}).get("flags", 0) & 1
+                    or row["offsetY"] != 0 or row["render"][1] != overlap["render"][1]
+                    or row["player"]["tile"] == target
+                    or target in row.get("otherActorTiles", [])):
+                break
+            x, z = row["render"][0], row["render"][2]
+            progress = (x - center[0]) * dx + (z - center[1]) * dy
+            on_axis = (z == center[1] if dx else x == center[0])
+            if not on_axis or not 0 <= progress <= 65536 or progress <= previous_progress:
+                break
+            path.append(row)
+            previous_progress = progress
+            if [x, z] == target_center:
+                if row["logical"] != target:
+                    break
+                # The normal profile resumes from the completed native exit.
+                successor = next((r for r in samples[index + len(path) - 1:]
+                                  if r["origin"] == target and r["elapsed"] == 0
+                                  and r["motionKind"] == "HOP" and r["motionPhase"] == "MOVING"
+                                  and r["render"][::2] == target_center
+                                  and r.get("owner") == row.get("owner")
+                                  and r.get("context") == row.get("context")
+                                  and r["commitSequence"] == row["commitSequence"]
+                                  and r["behaviorFingerprint"] != 0
+                                  and r.get("profileCurrent") is True), None)
+                if successor is None:
+                    break
+                starts = [e for e in events if e["frame"] == successor["frame"]
+                          and _ambush_event_owner(e, subject)]
+                intent = next((e for e in starts if e["data"].get("event") == "INTENT_CREATED"), None)
+                begun = next((e for e in starts if e["data"].get("event") == "MOTION_STARTED"), None)
+                if intent is None or begun is None or intent["data"]["sequence"] >= begun["data"]["sequence"]:
+                    break
+                if any(e["data"].get("event") in ("MOTION_CANCELED", "ACTOR_DETACHED", "ACTOR_REBOUND")
+                       and _ambush_event_owner(e, subject)
+                       and meter.get("initial", {}).get("frame", 0) <= e["frame"]
+                           <= successor["frame"] for e in events):
+                    break
+                return {"handle": deepcopy(subject["handle"]), "overlapFrame": overlap["frame"],
+                        "exitStartFrame": start["frame"], "exitEndFrame": row["frame"],
+                        "nextStartFrame": successor["frame"], "origin": origin, "target": target,
+                        "baseY": overlap["render"][1], "nativeCommand": command,
+                        "travelFrames": [r["frame"] for r in path],
+                        "nextIntent": deepcopy(intent), "nextStart": deepcopy(begun)}
+            if (row["motionKind"] != "NONE" or row["motionPhase"] != "IDLE"
+                    or row.get("reservationId") != 0
+                    or row.get("native", {}).get("command") != command
+                    or not row.get("native", {}).get("flags", 0) & 2):
+                break
+    return None
 
 
 class ProfileFeatureMeasurement:
@@ -154,6 +356,15 @@ class ProfileFeatureMeasurement:
             found[name] = select_current_actor(snapshot, candidates[0])
         self.subjects = found
         self.subject = deepcopy(found[self.config["subjects"][0][0]])
+        self.application_bank = None
+        self.local_application = self.config.get("application")
+        blob_path = Path(__file__).resolve().parents[2] / "build/OverworldWildBehaviorData.bin"
+        if blob_path.exists():
+            self.application_bank = decode_application_bank(
+                blob_path.read_bytes(), Path(__file__).resolve().parents[2])
+            if self.config.get("application") is not None:
+                self.local_application = local_application(
+                    self.application_bank, self.subject["species"], self.config["application"])
         if self.kind == BLOCKED_FACING:
             cell = next((item for item in snapshot.get("terrain", {}).get("cells", [])
                          if item.get("x") == 580 and item.get("y") == 409), None)
@@ -162,6 +373,18 @@ class ProfileFeatureMeasurement:
                     and cell.get("surface", {}).get("present") is True
                     and cell["surface"].get("type") == "canopy",
                     "Exeggcute is not on the blocked canopy fixture")
+        if self.kind == AMBUSH:
+            actor = next(item for item in snapshot["actors"]
+                         if item.get("handle") == found["weepinbell"]["handle"])
+            if actor.get("motionKind") != "NONE" or actor.get("motionPhase") != "IDLE":
+                self.subjects = {}
+                self.subject = None
+                return False
+            require(snapshot.get("context", {}).get("mapId") == 33
+                    and [snapshot["player"]["x"], snapshot["player"]["y"]]
+                        == [585, 408]
+                    and _tile(actor) == [583, 406],
+                    "Ambush fixture or initial Wild tile differs")
         self.initial = deepcopy(snapshot)
         return True
 
@@ -228,6 +451,24 @@ class ProfileFeatureMeasurement:
                 for name, item in actors.items()
             },
         }
+        if self.kind == AMBUSH:
+            sample.update(
+                owner={key: deepcopy(actor[key]) for key in (
+                    "handle", "subjectIdentity", "species", "role",
+                    "authorityGeneration", "engineAnchorGeneration", "presentationGeneration")},
+                context=deepcopy(snapshot["context"]), reservationId=actor["reservationId"],
+                profileCurrent=(snapshot.get("nativeObservation", {}).get("coverageComplete") is True
+                    and snapshot["nativeObservation"].get("profilesEvicted") == 0
+                    and actor["behaviorFingerprint"] in
+                        snapshot["nativeObservation"].get("profileFingerprints", ())),
+                native={"command": engine["movement_cmd"], "flags": engine["flags"]},
+                otherActorTiles=[_tile(item) for item in snapshot["actors"]
+                                 if item.get("active") is True
+                                 and item.get("handle") != actor["handle"]
+                                 and item.get("engineObject", {}).get("pos_y") == engine["pos_y"]])
+            sample["player"].update(
+                render=[snapshot["player"][key] for key in ("pos_x", "pos_y", "pos_z")],
+                offsetY=snapshot["player"]["unk88_y"])
         if self.kind == FLY_IN:
             sample["shadowPolicy"] = deepcopy(actor.get("shadowPolicy"))
         if self.kind == WADDLE and actor["motionKind"] == "WALK" \
@@ -325,7 +566,7 @@ class ProfileFeatureMeasurement:
                 "Jigglypuff has no exact resolved profile receipt")
         receipt = matching[0]
         lane = bytes.fromhex(receipt["lanes"][0])
-        require(len(lane) == 72 and receipt["resultHex"][:144]
+        require(len(lane) == 80 and receipt["resultHex"][:160]
                 == lane.hex(), "Jigglypuff owner lane differs")
         profile = {
             "fingerprint": receipt["fingerprint"],
@@ -353,6 +594,9 @@ class ProfileFeatureMeasurement:
             if self.kind == BLOCKED_FACING:
                 require(snapshot.get("context") == self.initial.get("context"),
                         "blocked Exeggcute field context changed")
+            if self.kind == AMBUSH:
+                require(snapshot.get("context") == self.initial.get("context"),
+                        "Ambush field moved during the landing and exit test")
             if self.kind == HELD:
                 self._observe_held_state(snapshot, actors)
             self.frames += 1
@@ -379,14 +623,27 @@ class ProfileFeatureMeasurement:
                         and event.get("data", {}).get("actorHandle") in {
                             _handle(actor) for actor in actors.values()}:
                     self.events.append(deepcopy(event))
+                    if self.kind == AMBUSH:
+                        require(event["data"].get("event") not in
+                                ("MOTION_CANCELED", "ACTOR_DETACHED", "ACTOR_REBOUND", "CONTEXT_CHANGED"),
+                                "Ambush landing or shared exit lost its native actor lifecycle")
                     if self.kind == BLOCKED_FACING:
                         require(event["data"].get("event") not in
                                 ("MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_CANCELED"),
                                 "blocked Exeggcute started or committed motion")
                 if self._condition_event(event, _handle(primary)):
                     decoded = decode_condition(event)
-                    if decoded["application"] == self.config.get("application") \
+                    if decoded["application"] == self.local_application \
                             and decoded["conditionId"] in self.config.get("conditionIds", ()):
+                        if self.application_bank is not None:
+                            decoded["applicationLocal"] = decoded["application"]
+                            decoded["targetSourceApplicationLocal"] = decoded["targetSourceApplication"]
+                            decoded["application"] = global_application(
+                                self.application_bank, primary["species"], decoded["applicationLocal"])
+                            applications = species_applications(self.application_bank, primary["species"])
+                            source = decoded["targetSourceApplicationLocal"]
+                            decoded["targetSourceApplication"] = (
+                                applications[source] if source < len(applications) else None)
                         self.conditions.append(decoded)
             if self.kind == HELD and self.held_open_frame is not None \
                     and self.held_closed_frame is None:
@@ -397,6 +654,14 @@ class ProfileFeatureMeasurement:
                     and event["data"].get("actorHandle") == rattata_handle
                     for event in events)
             self._sample(snapshot, actors)
+            if self.kind == AMBUSH:
+                complete = [motion for motion in self.motion.completed
+                            if self._complete_motion(motion)]
+                # Normal contact can knock the Player back on the terminal
+                # frame. Keep the stationary setup until this actual landing.
+                if self._ambush_evidence(complete) is None:
+                    require([snapshot["player"]["x"], snapshot["player"]["y"]] == [585, 408],
+                            "Ambush player moved before the original landing")
             if self.kind == BLOCKED_FACING:
                 first = self.samples[0]
                 current = self.samples[-1]
@@ -491,6 +756,46 @@ class ProfileFeatureMeasurement:
                 return active, active_motion, transition, routine
         return None
 
+    def _ambush_evidence(self, complete):
+        active = [row for row in self.conditions
+                  if row["active"] and row["timed"]
+                  and row["conditionId"] == 49529
+                  and row["application"] == self.config["application"]
+                  and row["targetSourceApplication"] == self.config["application"]
+                  and row["targetKind"] == 1]
+        handle = _handle(self.subjects["weepinbell"])
+        for motion in complete:
+            if (motion["kind"] != "HOP" or motion["target"] != [585, 408]
+                    or motion["terminalLogical"] != [585, 408]):
+                continue
+            sample = next((row for row in self.samples
+                           if row["frame"] == motion["startFrame"]
+                           and row["behaviorFingerprint"] == motion["fingerprint"]
+                           and row["matchedLayerMask"] & (1 << self.local_application)), None)
+            condition = next((row for row in active
+                              if row["frame"] <= motion["startFrame"]
+                              and motion["startFrame"] - row["frame"] <= 1), None)
+            if sample is None or condition is None:
+                continue
+            names = ("INTENT_CREATED", "MOTION_STARTED", "LOGICAL_COMMIT",
+                     "MOTION_FINISHED", "CONTROL_RETURNED")
+            events = []
+            for name in names:
+                event = next((event for event in self._events(name, actor_name="weepinbell")
+                              if motion["startFrame"] <= event["frame"]
+                                  <= motion["finishFrame"]
+                              and (not events or event["data"]["sequence"]
+                                   > events[-1]["data"]["sequence"])), None)
+                if event is None:
+                    break
+                events.append(event)
+            if len(events) != len(names):
+                continue
+            if motion["commitAfter"] != motion["commitBefore"] + 1:
+                continue
+            return condition, motion, sample, events
+        return None
+
     @property
     def ready(self):
         if self.failures or not self.subjects:
@@ -498,8 +803,6 @@ class ProfileFeatureMeasurement:
         complete = [motion for motion in self.motion.completed
                     if self._complete_motion(motion)]
         triggered = [row for row in self.conditions if row["triggered"] and row["active"]]
-        if self.kind == NOTICE:
-            return bool(triggered and complete and self._events("CONTROL_RETURNED"))
         if self.kind == STALKER:
             return self._stalker_evidence(complete) is not None
         if self.kind == PLAYFUL:
@@ -513,6 +816,13 @@ class ProfileFeatureMeasurement:
                                   before=frame + 44)
             returns = self._events("CONTROL_RETURNED", after=frame + 44)
             return len(starts) >= 2 and bool(complete) and bool(returns)
+        if self.kind == AMBUSH:
+            landing = self._ambush_evidence(complete)
+            return landing is not None and ambush_exit_evidence(
+                {"subjects": self.subjects, "initial": self.initial,
+                 "samples": self.samples, "events": self.events,
+                 "motions": self.motion.completed},
+                landing[1]["finishFrame"]) is not None
         if self.kind == FLY_IN:
             return any(motion["kind"] == "FLY_IN" for motion in complete) \
                 and bool(self._events("LOGICAL_COMMIT", actor_name="pidgey")) \
@@ -548,10 +858,10 @@ class ProfileFeatureMeasurement:
         if self.kind == PLAYFUL and name == "actor-play-complete":
             actor_triggers = [row for row in self.conditions
                               if row["triggered"] and row["active"]
-                              and row["conditionId"] == 31250]
+                              and row["conditionId"] == self.config["conditionIds"][0]]
             player_triggers = [row for row in self.conditions
                                if row["triggered"] and row["active"]
-                               and row["conditionId"] == 38737]
+                               and row["conditionId"] == self.config["conditionIds"][1]]
             complete = [motion for motion in self.motion.completed
                         if self._complete_motion(motion)]
             return bool(actor_triggers and not player_triggers

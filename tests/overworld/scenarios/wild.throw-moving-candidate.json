@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.throw-moving-candidate",
+  "title": "Geodude picks up a moving Stantler, cancels its exact Walk, and throws it",
+  "status": "active",
+  "capabilities": [
+    "collision.attack"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "TICKETS.md#tkt-0059--pickup-targeting-must-not-interrupt-the-target-pok\u00e9mon",
+    "actor": "Current Wild Stantler and Geodude on Route29, with a native passive Cyndaquil follower from prepared party slot0 and the Player stationary at (585,407).",
+    "trigger": "Spawn and bind both Wild actors, then let Stantler finish its native spawn motion and start a normal Walk. Let Geodude notice the player, pursue the candidate, pick it up, and launch it under normal profile timing.",
+    "observable": "Both Wild actors are already spawned and bound when the first Stantler Walk is observed, before the measured Geodude Notice and pursuit. During an accepted Stantler Walk, current raw native Geodude bindings and claim masks name that exact Cargo and the normal captured Player Trigger. Geodude then Walks toward Stantler and later launches that same actor toward the Player. Initial Notice may return authenticated zero-pointer Pending before it captures Player and contributes Search. Preserve the exact authored20-frame alert and resume current query work at its end. If a compatible Walk graph already exists before the alert, it must survive. Otherwise keep the same query owner, policy, context and storage from allocation through the first complete native8-frame Walk and its exact commit, finish and control return; a nearest-Cargo ranking restart may rebuild the graph (TKT-0051). Only source-authorized exact-Cargo ownership fixation0 to1 is allowed; full owner, policy, context, storage and nodes stay current. Pending moving-target work is allowed before Reachable; a current reachable next step admits Walk within one frame. Existing scan limits and legality remain required. Immediately before pickup the same full Cargo must be in ordinary accepted MOVING Walk/Hop, with current raw native plan, nonzero reservation and AUTO control. The next completed frame must contain its exact Cargo CANCEL then CONTROL_RETURNED, preserve the same plan/token without commit, clear its public reservation, and show the same full carried claim and HELD control. Carrier cancellation is forbidden. No idle-at-pickup credit is allowed. While the target is free, retain its actual unclaimed native profile baseline and require the same complete resolved profile, native AUTO control, no early cancellation, and dense elapsed/render progress for an accepted move under the claim. Only actual pickup may transfer the target to native HELD control. This finite fixture must not trigger unrelated target-profile changes.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use checked teleport, native party0 Cyndaquil155 level20 and normal Follower spawn before Stantler234 at (585,403) and Geodude74 at (583,404). ROM3654 test-0c5609784bc0400f9ee7770b39a6f962 with Geodude at (583,403) had Stantler walk into reach on the alert-end frame, so claim and HELD shared one frame with no free move under the claim; one row down, Geodude claims the walking Stantler first (test-1a420b60d0324d58abf70a8419dfc1f7). Retained ROM3581 test-5387b225b4f74272982e021260be8497 shows the former Snorlax cargo independently applied Stomp Slam and moved Player from (585,407) to (585,408), before the intended moving pickup. Stantler uses its current ordinary Sprint profile and has no applicable Wild attack condition. No authored profile or condition is changed. The same sites keep the proven ground placement and Geodude approach. Spawn and bind Geodude before waiting for Stantler to start its own Walk. Its route, speed, pauses and direction are selected by the native owner; the new run must prove its own current route, support, moving pickup and unchanged target profile. Geodude keeps its authored20-frame Notice and native8-frame pursuit Walk. No speed, timer, motion, claim or RNG is injected."
+      }
+    ],
+    "limits": [
+      "Prepared placement does not prove natural population selection.",
+      "The current interaction and motion readers prove the exact full Cargo claim, Player Trigger, ordinary moving receipt and native CANCEL/CONTROL before HELD. Unrelated Wild actors earn no identity or pickup credit.",
+      "This test stops at launch. It does not claim flight landing or HP damage.",
+      "Profile-baseline equality applies to this fixture with no unrelated target-profile trigger; source-level condition checks retain evaluation for other normal conditions while claimed."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "stantler",
+      "species": 234,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "geodude",
+      "species": 74,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Place the player at (585,407), spawn Stantler at (585,403) and bind it, spawn Geodude at (583,404) and bind it, then observe Stantler start its own Walk."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Observe Stantler Walk while Geodude's Throw profile is active, then Geodude's Walk toward Stantler."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Observe Stantler still in its ordinary accepted move immediately before native CANCEL/CONTROL and exact HELD pickup."
+    },
+    {
+      "at": 3,
+      "kind": "lifecycle",
+      "value": "Observe that same Stantler launch from Geodude toward the player."
+    }
+  ],
+  "stop": {
+    "frameBudget": 700,
+    "condition": "The first Stantler launch after exact moving Cargo cancellation and HELD pickup, or the first failed identity, motion, claim, or field observation."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Both WILD actors retain their exact identities",
+      "Player remains at (585,407)",
+      "Both Wild actors are spawned and bound before the first observed Stantler Walk",
+      "Stantler Walks while Geodude's Throw profile is active",
+      "Geodude Walks toward Stantler",
+      "Same full Cargo is MOVING immediately before exact native CANCEL then CONTROL_RETURNED and HELD; carrier is not canceled",
+      "The same Stantler launches from Geodude's tile toward the player",
+      "No battle starts",
+      "Initial Notice may return authenticated zero-pointer Pending before it captures Player and contributes Search. Preserve the exact authored20-frame alert and resume current query work at its end. If a compatible Walk graph already exists before the alert, it must survive. Otherwise keep the same query owner, policy, context and storage from allocation through the first complete native8-frame Walk and its exact commit, finish and control return; a nearest-Cargo ranking restart may rebuild the graph (TKT-0051). Only source-authorized exact-Cargo ownership fixation0 to1 is allowed; full owner, policy, context, storage and nodes stay current. Pending moving-target work is allowed before Reachable; a current reachable next step admits Walk within one frame. Existing scan limits and legality remain required.",
+      "Pickup selection and pursuit keep the target own profile and native AUTO control",
+      "The claimed target accepted motion advances each completed update until its own terminal or actual HELD pickup"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "wild.throw-moving-candidate",
+    "claims": [
+      "live-actor-identity",
+      "natural-input",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumFrames": 2
+  }
+}

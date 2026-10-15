@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.throw-ground-lock-soak",
+  "title": "Wild Throw keeps control through a continuous run and proved faint cleanup",
+  "status": "active",
+  "capabilities": [
+    "condition.evaluation",
+    "chase"
+  ],
+  "proofLevel": "S5",
+  "costTier": 5,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/verification.md#intermittent-reports",
+    "actor": "Three separately bound Lv100 Wild Geodudes; native Lv100 Weepinbell Cargo and passive Lv100 Cyndaquil follower",
+    "trigger": "Normal Player Interest, repeated native Cargo pickup/launch, including pickup of a Geodude during its recovery",
+    "observable": "5040 continuous completed subject frames with at least two original healthy/current Geodudes throughout; natural Player Interest and query work for all three initial Geodudes; repeated full Throw flights and recovery-pickup cleanup; any primary faint has exact motion, source, claim, binding and held-Cargo release followed by full-owner DETACH. No orphan HELD, zero-timer CHILL recovery, retired subject-frame credit or later Throw credit. Five read-only living Player HP checkpoints at960/1920/2880/3840/4800 frames add no game frames.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Native placement on Route29, native Lv100 Wild spawns, one Lv100 passive follower party setup; no condition, target, timer or motion writes."
+      }
+    ],
+    "limits": [
+      "Prepared setup earns no subject frames. Three distinct Geodudes start current and attached. At least two original healthy Geodudes must remain current for every frame of the unchanged5040-frame window; each supplies at least5000 continuous subject frames.",
+      "Level100 preserves the same authored flat contact damage; no combat immunity or health repair is granted. Lower-lane normal input replaces the drifting equal-time rectangle and the horizontal contact lane. Its52x96+48=5040 frames and all Throw/lifetime guards remain; HP checkpoints after40/80/120/160/200 legs still have exact960/1920/2880/3840/4800 frames.",
+      "RESOURCE_LIMIT blocking is rejected if observed. The known red LIMIT reproduction is extracted production C, not native ROM evidence.",
+      "This controlled5040-frame window does not claim the exact hours-long unattended three-ground-lock symptom. A stock ARM9 abort, unproved identity loss, missing trigger, missing owned cleanup or fewer than two continuous original survivors fails. A primary may faint only through fully observed fresh zero HP, exact accepted motion completion, cleared native source/claims/bindings/timers, grounded Cargo release and next-frame full-owner DETACH. Its faint and later frames earn no credit. The spare setup Weepinbell may leave only after exact unclaimed native distance DELETE and DETACH; this earns no Throw credit."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "geodude-a",
+      "species": 74,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "geodude-b",
+      "species": 74,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "geodude-c",
+      "species": 74,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "cargo",
+      "species": 70,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "passive",
+      "species": 155,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Place and bind exact native subjects before the credited window."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "52 native circuits of B+LEFT24/B+DOWN32/B+RIGHT24/B+UP16, then finalLEFT24/DOWN24, total5040 continuous completed game frames. This uses the lower lane and limits north travel after the measured south blockers. Read current living Player HP after legs40/80/120/160/200 without advancing or changing the game."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Read living Player HP after 5040 frames. Existing active claims or flights retain exact current ownership; prior credited cycles must finish their own full cleanup."
+    }
+  ],
+  "stop": {
+    "frameBudget": 6800,
+    "condition": "Complete 5040 continuous frames, repeated complete prior Throw and recovery-pickup cleanup with valid current ownership, or stop at the first guard failure."
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "CONTEXT_CHANGED",
+      "ACTOR_REBOUND"
+    ],
+    "invariants": [
+      "Three original distinct Geodudes supply natural Interest/query/motion witnesses. At least two stay healthy and current through the whole continuous session. Any primary retirement proves faint cleanup and DETACH; old handles never return or earn later credit. The passive follower stays current. Spare Cargo may leave only through proved unclaimed native distance cleanup.",
+      "A terminal RESOURCE_LIMIT owner cannot block another ready idle unclaimed current Player-interested search.",
+      "Recovery cannot survive zero emote timer and CHILL; grounded HELD needs its exact carrier.",
+      "Every credited Cargo flight completes native commit, finish and control return; all owned state clears naturally."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "wild.throw-ground-lock-soak",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "natural-input",
+      "engine-boundary",
+      "control-release"
+    ],
+    "minimumFrames": 5000
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.ram.until-crash",
+  "title": "Onix begins Ram with the player beside it and keeps its charge until a real Crash",
+  "status": "active",
+  "capabilities": [
+    "profile.composition",
+    "walk.exact"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "One current native Wild Onix at602402, default Down1; stationary player607402 on loaded Route29.",
+    "trigger": "Retain an authenticated inactive centered native idle at602402 facing Down1. Player607402 is beside it. The natural condition must activate and start the exact East Walk602402\u2192603402 within one frame. Then normal Down16 input leaves the captured line.",
+    "observable": "The inactive idle entry has the same full native owner and exact current Until Crash condition. Initial player delta(+5,0) is beside Down1. Activation and a real East Walk occur without a facing write. Every original full charge metric remains: speed continuity, fixed heading, full native Walk completion, off-axis movement beyond96 frames, real Crash and100-frame inactive cooldown.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Checked teleport, native Wild spawn, exact subject bind. No profile, condition, motion, collision or HP writes."
+      },
+      {
+        "phase": "during-observation",
+        "target": "observation",
+        "change": "Only normal Down16 then neutral input. No guest-state changes."
+      }
+    ],
+    "limits": [
+      "Prepared placement is not natural population-spawn proof.",
+      "The route must provide more than96 actual charge frames before its blocker; an early blocker fails.",
+      "Authored32-tile range, occlusion, cardinal alignment and false-to-true rearm remain production-C host checks. This leaf proves side entry and the full long-charge lifecycle.",
+      "Memory and native receipts prove rendered motion and Crash; no screenshot or sound-from-speakers claim.",
+      "The prior forward-only spawn600403 recording is retained as before evidence. This fixture places Onix at the same old first measured East start602402 so all original movement and lifetime gates remain; no spawn or incomplete initial motion earns idle entry credit."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "onix",
+      "species": 95,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Native Onix602402 and player607402. Observe centered inactive idle with default Down1, then its exact East Ram Walk. No Onix facing writes."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Observe same-intent charge and normal player dodge."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Observe persistent charge, real Crash, and inactive cooldown."
+    }
+  ],
+  "stop": {
+    "frameBudget": 850,
+    "condition": "Complete the exact charge and Crash proof, or the first failed owner, timing, heading, effect or field receipt."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "One current Wild Onix owns the charge.",
+      "Every completed frame is retained.",
+      "Only an accepted Crash ends Ram.",
+      "Player starts beside authenticated inactive Down-facing Onix. Spawn animation cannot earn idle entry credit."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "profile.ram.until-crash",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "engine-boundary",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "control-release"
+    ],
+    "minimumFrames": 115
+  }
+}

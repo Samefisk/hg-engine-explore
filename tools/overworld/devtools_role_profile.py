@@ -14,9 +14,9 @@ import sys
 from tools.overworld.devtools_observer import NativeObservationError, public_bytes
 
 FOLLOWER_SLOT = 7
-PROFILE_BYTES, PRIMITIVE_BYTES = 144, 8
+PROFILE_BYTES, PRIMITIVE_BYTES = 160, 8
 BINDING_BYTES, POLICY_TRANSACTION_BYTES = 16, 16
-SNAPSHOT_BYTES, SNAPSHOT_OFFSET = 96, 8
+SNAPSHOT_BYTES, SNAPSHOT_OFFSET = 104, 8
 MAX_RECEIPTS = 128
 MAX_CAPTURES = 16
 
@@ -250,7 +250,7 @@ class RoleProfileObserver:
         data = public_bytes(self.session,self.mount_state,SNAPSHOT_OFFSET+SNAPSHOT_BYTES)
         snapshot,generation,phase = self._check_mount_snapshot(value,owner,data)
         control = self._calibrate(value,owner,data) if self.control else None
-        return dict(**value,ownerAfter=owner,ownerHex=snapshot[:72].hex(),sessionGeneration=generation,
+        return dict(**value,ownerAfter=owner,ownerHex=snapshot[:80].hex(),sessionGeneration=generation,
                     mountPhase=phase,priorPolicyFingerprint=prior_fingerprint,
                     priorPolicyMatchedLayerMask=prior_mask,
                     scope="prepared mount Begin input-to-Owner transfer only",
@@ -259,10 +259,10 @@ class RoleProfileObserver:
     def _check_mount_snapshot(self, value, owner, data):
         field,surface = struct.unpack_from("<II",data)
         snapshot = data[SNAPSHOT_OFFSET:]
-        generation,phase,cancel,motion,reserved = struct.unpack_from("<IBBBB",snapshot,88)
+        generation,phase,cancel,motion,reserved = struct.unpack_from("<IBBBB",snapshot,96)
         require(field == owner["fieldPointer"] and surface == value["surfacePointer"]
-                and snapshot[:72].hex() == value["profileHex"][:144]
-                and snapshot[72:88].hex() == value["bindingHex"]
+                and snapshot[:80].hex() == value["profileHex"][:160]
+                and snapshot[80:96].hex() == value["bindingHex"]
                 and generation > 0 and (phase,cancel,motion,reserved) == (1,0,0,0),
                 "mounted Owner snapshot differs from Begin inputs")
         return snapshot,generation,phase

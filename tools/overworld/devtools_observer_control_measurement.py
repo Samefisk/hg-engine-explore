@@ -17,7 +17,8 @@ def same_subject(left, right):
 
 class LiveObserverControlMeasurement:
     def __init__(self, schema, source_sha256, *, max_frames):
-        self.baseline = LedybaChainMeasurement(schema, source_sha256, max_frames=max_frames)
+        self.baseline = LedybaChainMeasurement(schema, source_sha256, max_frames=max_frames,
+            spawn_kind="FLY_IN")
         self.max_frames = max_frames
         self.baseline_result = self.subject = self.latest = None
         self.render = MotionRecorder()

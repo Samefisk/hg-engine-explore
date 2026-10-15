@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "id": "follower.throw-moving-cargo",
+  "title": "Mankey picks up its noticed moving Pok\u00e9mon, throws it away from the player, and follows again",
+  "status": "active",
+  "capabilities": [
+    "condition.evaluation",
+    "chase"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "TICKETS.md#tkt-0059--pickup-targeting-must-not-interrupt-the-target-pok\u00e9mon",
+    "actor": "Current FOLLOWER Mankey56 and one WILD Bellsprout69, bound as both noticed Object of interest and Cargo through the same full native handle, subject and engine identity.",
+    "trigger": "Prepare only party/placement and one native Bell spawn. Use normal neutral frames for sight, exact-Interest Cargo capture, pursuit, pickup and Away launch. Then Right32 and neutral frames complete normal Follower return. No Y input, conditions, timers, claims or motion state are forced.",
+    "observable": "Sight and exact-Interest Cargo conditions in Pickup bind the same current Bellsprout. Before carry, its own accepted move either completes with native commit and control return, or the same moving Cargo has an exact native cancel, control return and HELD handoff. The carrier is never canceled. Mankey completes an authored half-speed Cargo Hop, resolves held Find Position plus Follower Away target14 at half speed, and launches that same Bell to an accepted native cardinal endpoint at exact Throw range8 with greater Chebyshev distance from Player. The full native flight reaches its timed commit, landing and control return. Mankey clears held claims/bindings and completes normal base7 follow movement. Any admitted Position Hop must complete; no Position Hop is required when the current pickup tile already admits a legal Away line. The first complete unlimited Cargo Hop retains its exact current query key and graph through native return. While the target is free, retain its actual unclaimed native profile baseline and require the same complete resolved profile, native AUTO control, no early cancellation, and dense elapsed/render progress for an accepted move under the claim. Only actual pickup may transfer the target to native HELD control. This finite fixture must not trigger unrelated target-profile changes.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Checked teleport, party0 Mankey20, ordinary follower creation and one native Bell spawn590403, outside Player range3 but within Mankey sight range5. ROM3654 test-bacace76e8c54a308cf51d75b8da02b2 shows the former586403 Bell finishing its Walk two frames before the paced claim and staying in its own idle pause until pickup, so no free move occurred under the claim; the590403 layout gives a longer pursuit while the Bell keeps its own moves. Read-only Trigger and Cargo subject binds refer to that same returned identity. No timers, claims, profiles or movement state are forced."
+      }
+    ],
+    "limits": [
+      "Prepared placement does not prove natural spawning, party selection or every sight approach.",
+      "This finite sight-trigger case requires checked moving Cargo control return before carry and a complete half-speed carrier pursuit Hop; it does not prove every route or resource-limit retry.",
+      "The endpoint claim reads the actual admitted native flight plan. The production-C Away tests own safe endpoint selection, exact saved windup aim and support recheck before launch; this reader has no saved windup aim observation.",
+      "Find Position must resolve target14 and half speed while held. A legal current throw tile needs no Position motion. Every admitted Position speed witness must complete.",
+      "This case proves exact-Interest sight, pickup, Away flight and normal return. Accepted player-damage source capture without Vision has a separate requirement; this case does not prove damage.",
+      "Profile-baseline equality applies to this fixture with no unrelated target-profile trigger; source-level condition checks retain evaluation for other normal conditions while claimed."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "trigger",
+      "species": 69,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "cargo",
+      "species": 69,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Set player586407 South1, Mankey20 behind586408, then spawn Bell590403 and bind its same current identity as Interest and Cargo."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Observe natural sight, checked moving Bell control return and carry, half-speed pursuit, resolved Away Position phase, pickup, native exact-range Away flight and landing."
+    },
+    {
+      "at": 2,
+      "kind": "input",
+      "value": "Normal Right32 then neutral input must finish base-speed normal Follower return after claims and old bindings clear."
+    }
+  ],
+  "stop": {
+    "frameBudget": 1100,
+    "condition": "Complete current Interest-as-Cargo pickup, pursuit, native exact-range Away flight and free control, resolved Position phase and normal-return speed witnesses, or the first bad identity, binding, motion, speed, query or field observation."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Same full Follower identity; Interest and Cargo are the same full current Wild Bell identity",
+      "Natural sight captures Interest; exact-binding Cargo condition26783 captures that same actor",
+      "Moving Cargo has its own native terminal or checked cancel and control return before carry; carrier motion is preserved",
+      "No Player binding fallback or battle",
+      "Held Find Position resolves half speed and Follower Away target14",
+      "Same Cargo launches to a native safe cardinal endpoint exactly8 tiles away and farther from Player",
+      "Full native Cargo flight lands, commits and returns free control",
+      "Normal Follower movement completes after old claims/bindings clear and recovery ends",
+      "Pursuit Hop uses authored integer-half travel time; normal return uses base7",
+      "Admitted Position movement completes; a legal current Away line needs no forced Position Hop",
+      "Unlimited Cargo Hop retains its native query key/graph through control return",
+      "Pickup selection and pursuit keep the target own profile and native AUTO control",
+      "The claimed target accepted motion advances each completed update until its own terminal or actual HELD pickup"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "follower.throw-moving-cargo",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "natural-input",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumFrames": 2
+  }
+}

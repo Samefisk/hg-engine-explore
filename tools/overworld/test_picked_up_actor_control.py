@@ -43,11 +43,12 @@ PRELUDE = r'''
 typedef int BOOL;
 typedef uint8_t u8;
 typedef uint16_t u16;
+typedef uint32_t u32;
 
 #define TRUE 1
 #define FALSE 0
 #define OW_WILD_MAX_SPAWNS 10
-#define OW_WILD_FOLLOWER_SLOT 9
+#define OW_WILD_FOLLOWER_SLOT 7
 #define OW_WILD_ACTOR_CONTROL_AUTONOMOUS 0
 #define OW_WILD_ACTOR_CONTROL_HELD 1
 #define OW_WILD_HELPER_THROW_TARGET_NONE 0
@@ -84,6 +85,7 @@ typedef struct OverworldWildThrowState {
     u8 targets[OW_WILD_MAX_SPAWNS];
     u16 targetMask;
     u16 carrierMask;
+    u16 recoveringMask;
 } OverworldWildThrowState;
 
 typedef struct OverworldWildPresentationState {
@@ -100,12 +102,15 @@ static int shadow_count;
 static int sync_count;
 static int held_when_synced;
 static int mode_when_walk_cleared;
+/* This fixture has no condition state; the condition owner is covered by the joined composition fixture. */
+static void OverworldWildSpawns_ClearPendingNotices(OverworldWildSpawnState *state,int slot) { (void)state;(void)slot; }
+static BOOL context_current = TRUE;
 static OverworldWildHelperOverlayEntry helper_entry;
 
 static BOOL OverworldWildHelper_IsPickupThrowMovementContextCurrent(
     OverworldWildSpawnState *state)
 {
-    return state != 0;
+    return state != 0 && context_current;
 }
 
 static BOOL OverworldWildHelper_IsExactObject(
@@ -115,16 +120,6 @@ static BOOL OverworldWildHelper_IsExactObject(
 {
     (void)fieldSystem;
     return state != 0 && state->spawns[slot].object != 0;
-}
-
-static void MapObject_SetBits(LocalMapObject *object, uint32_t bits)
-{
-    object->flags |= bits;
-}
-
-static void MapObject_ClearBits(LocalMapObject *object, uint32_t bits)
-{
-    object->flags &= ~bits;
 }
 
 static void OverworldWildHelper_SyncCarriedThrowTarget(
@@ -182,7 +177,7 @@ static void OverworldWildSpawns_ReconcileNativeShadow(
 '''
 
 
-DRIVER = r'''
+DRIVER_PRELUDE = r'''
 static void ReleaseMask(OverworldWildSpawnState *state, u16 mask)
 {
     int slot;
@@ -193,7 +188,9 @@ static void ReleaseMask(OverworldWildSpawnState *state, u16 mask)
         }
     }
 }
+'''
 
+DRIVER = DRIVER_PRELUDE + r'''
 int main(void)
 {
     OverworldWildSpawnState state;
@@ -213,6 +210,9 @@ int main(void)
     state.spawns[1].active = TRUE;
     state.spawns[1].object = &target;
     state.movementBehaviorClasses[1] = 2;
+    throwState.targets[0] = OW_WILD_HELPER_THROW_TARGET_ENCODE(1);
+    throwState.targetMask = 1u << 1;
+    throwState.carrierMask = 1u << 0;
 
     assert(OverworldWildHelper_StartCarriedThrowTarget(
         &state, &throwState, &presentation, 0, 1));
@@ -227,7 +227,7 @@ int main(void)
 
     /* Carrier cancellation releases its held target without changing class. */
     restoreMask = OverworldWildHelper_ClearPickupThrowState(
-        &state, &throwState, &presentation, 0);
+        &state, &throwState, &presentation, 0, TRUE);
     assert(restoreMask == (1u << 1));
     ReleaseMask(&state, restoreMask);
     assert(state.movementActorControlModes[1]
@@ -237,10 +237,13 @@ int main(void)
     assert(clear_walk_count == 1 && normalize_count == 1 && shadow_count == 1);
 
     /* Target cleanup, used by drop/despawn paths, releases the same state. */
+    throwState.targets[0] = OW_WILD_HELPER_THROW_TARGET_ENCODE(1);
+    throwState.targetMask = 1u << 1;
+    throwState.carrierMask = 1u << 0;
     assert(OverworldWildHelper_StartCarriedThrowTarget(
         &state, &throwState, &presentation, 0, 1));
     restoreMask = OverworldWildHelper_ClearPickupThrowState(
-        &state, &throwState, &presentation, 1);
+        &state, &throwState, &presentation, 1, TRUE);
     assert(restoreMask == (1u << 1));
     ReleaseMask(&state, restoreMask);
     assert(state.movementActorControlModes[1]
@@ -258,8 +261,114 @@ int main(void)
 '''
 
 
+RECOVERY_DRIVER = DRIVER_PRELUDE + r'''
+static void PrepareRecoveringCargo(
+    OverworldWildSpawnState *state,
+    OverworldWildThrowState *throwState,
+    OverworldWildPresentationState *presentation,
+    LocalMapObject *carrier,
+    LocalMapObject *target)
+{
+    memset(state, 0, sizeof(*state));
+    memset(throwState, 0, sizeof(*throwState));
+    memset(presentation, 0, sizeof(*presentation));
+    memset(carrier, 0, sizeof(*carrier));
+    memset(target, 0, sizeof(*target));
+    state->spawns[0].active = TRUE;
+    state->spawns[0].object = carrier;
+    state->spawns[1].active = TRUE;
+    state->spawns[1].object = target;
+    state->movementSpotStates[1] = 3; /* TIRED after its own Throw. */
+    state->movementEmoteTimers[1] = 59;
+    state->movementEmoteTimers[2] = 44;
+    state->movementBehaviorClasses[1] = 2;
+    throwState->targets[0] = OW_WILD_HELPER_THROW_TARGET_ENCODE(1);
+    throwState->targetMask = 1u << 1;
+    throwState->carrierMask = 1u << 0;
+    throwState->recoveringMask = (1u << 1) | (1u << 2) | (1u << 4);
+    context_current = TRUE;
+}
+
+int main(void)
+{
+    OverworldWildSpawnState state, beforeState;
+    OverworldWildThrowState throwState, beforeThrow;
+    OverworldWildPresentationState presentation, beforePresentation;
+    LocalMapObject carrier, target, beforeCarrier, beforeTarget;
+    int fault, beforeSync;
+    u16 restoreMask;
+
+    /* Both carrier roles use the same physical transition into held control. */
+    for (int slot=0;slot<=OW_WILD_FOLLOWER_SLOT;slot+=OW_WILD_FOLLOWER_SLOT) {
+        PrepareRecoveringCargo(&state,&throwState,&presentation,&carrier,&target);
+        if (slot) {
+            state.spawns[slot]=state.spawns[0];
+            throwState.targets[slot]=throwState.targets[0];throwState.targets[0]=0;
+            throwState.carrierMask=1u<<slot;
+        }
+        assert(state.movementActorControlModes[1]==OW_WILD_ACTOR_CONTROL_AUTONOMOUS);
+        assert(state.movementSpotStates[1]==3&&state.movementEmoteTimers[1]==59);
+        assert(OverworldWildHelper_StartCarriedThrowTarget(
+            &state,&throwState,&presentation,slot,1));
+        assert(state.movementActorControlModes[1]==OW_WILD_ACTOR_CONTROL_HELD);
+        assert(state.movementSpotStates[1]==0&&state.movementEmoteTimers[1]==0);
+        assert(throwState.targets[slot]==OW_WILD_HELPER_THROW_TARGET_ENCODE_CARRIED(1));
+        assert(held_when_synced==OW_WILD_ACTOR_CONTROL_HELD);
+    }
+
+    /* Failed pickup must not erase recovery or change any owned state. */
+    for (fault = 0; fault < 6; fault++) {
+        PrepareRecoveringCargo(
+            &state, &throwState, &presentation, &carrier, &target);
+        if (fault == 0) throwState.targets[0] = 0;
+        if (fault == 1) throwState.targetMask = 0;
+        if (fault == 2) throwState.carrierMask = 0;
+        if (fault == 3) context_current = FALSE;
+        if (fault == 4) state.spawns[0].object = 0;
+        if (fault == 5) state.spawns[1].object = 0;
+        beforeState = state;
+        beforeThrow = throwState;
+        beforePresentation = presentation;
+        beforeCarrier = carrier;
+        beforeTarget = target;
+        beforeSync = sync_count;
+        assert(!OverworldWildHelper_StartCarriedThrowTarget(
+            &state, &throwState, &presentation, 0, 1));
+        assert(memcmp(&state, &beforeState, sizeof(state)) == 0);
+        assert(memcmp(&throwState, &beforeThrow, sizeof(throwState)) == 0);
+        assert(memcmp(&presentation, &beforePresentation, sizeof(presentation)) == 0);
+        assert(memcmp(&carrier, &beforeCarrier, sizeof(carrier)) == 0);
+        assert(memcmp(&target, &beforeTarget, sizeof(target)) == 0);
+        assert(sync_count == beforeSync);
+    }
+
+    PrepareRecoveringCargo(
+        &state, &throwState, &presentation, &carrier, &target);
+    assert(OverworldWildHelper_StartCarriedThrowTarget(
+        &state, &throwState, &presentation, 0, 1));
+    assert(state.movementActorControlModes[1] == OW_WILD_ACTOR_CONTROL_HELD);
+    assert(state.movementSpotStates[1] == 0);
+    assert(state.movementEmoteTimers[1] == 0);
+    assert((throwState.recoveringMask & (1u << 1)) == 0);
+    assert(throwState.recoveringMask == ((1u << 2) | (1u << 4)));
+    assert(state.movementEmoteTimers[2] == 44);
+    assert(state.movementBehaviorClasses[1] == 2);
+    assert(held_when_synced == OW_WILD_ACTOR_CONTROL_HELD);
+    assert(throwState.targets[0]
+        == OW_WILD_HELPER_THROW_TARGET_ENCODE_CARRIED(1));
+
+    restoreMask = OverworldWildHelper_ClearPickupThrowState(
+        &state, &throwState, &presentation, 0, TRUE);
+    ReleaseMask(&state, restoreMask);
+    assert(state.movementActorControlModes[1] == OW_WILD_ACTOR_CONTROL_AUTONOMOUS);
+    assert(throwState.recoveringMask == ((1u << 2) | (1u << 4)));
+    return 0;
+}
+'''
+
+
 class PickedUpActorControlTests(unittest.TestCase):
-    def test_pickup_clear_and_release_keep_real_behavior_class(self) -> None:
+    def run_host_driver(self, driver: str) -> None:
         helper = HELPER_SOURCE.read_text(encoding="utf-8")
         spawns = SPAWNS_SOURCE.read_text(encoding="utf-8")
         source = "\n".join(
@@ -280,7 +389,7 @@ class PickedUpActorControlTests(unittest.TestCase):
                     "OverworldWildSpawns_ReleaseHeldActorControl",
                     "void",
                 ),
-                DRIVER,
+                driver,
             )
         )
         with tempfile.TemporaryDirectory(prefix="held-actor-control-") as directory:
@@ -307,6 +416,12 @@ class PickedUpActorControlTests(unittest.TestCase):
             )
             self.assertEqual(completed.returncode, 0, completed.stderr)
 
+    def test_pickup_clear_and_release_keep_real_behavior_class(self) -> None:
+        self.run_host_driver(DRIVER)
+
+    def test_pickup_ends_only_cargo_recovery_and_failed_pickup_changes_nothing(self) -> None:
+        self.run_host_driver(RECOVERY_DRIVER)
+
     def test_runtime_no_longer_uses_the_picked_up_class(self) -> None:
         product_sources = (
             HELPER_SOURCE,
@@ -330,12 +445,10 @@ class PickedUpActorControlTests(unittest.TestCase):
             "BOOL",
         )
         carried = movement.index(
-            "if (throwTarget & OW_WILD_SPAWNER_THROW_TARGET_CARRIED_FLAG)"
+            "if ((throwTarget & OW_WILD_SPAWNER_THROW_TARGET_CARRIED_FLAG) != 0)"
         )
-        approach = movement.index(
-            "movementTarget = OW_WILD_BEHAVIOR_TARGET_PLAYER_CARDINAL_LINE;",
-            carried,
-        )
+        approach = movement.index("read.dx = read.playerX - read.objectX;", carried)
+        self.assertIn("read.dy = read.playerY - read.objectY;", movement[approach:])
         random_target = movement.index(
             "if (movementTarget == OW_WILD_BEHAVIOR_TARGET_RANDOM_NEARBY)",
             carried,
@@ -364,7 +477,9 @@ class PickedUpActorControlTests(unittest.TestCase):
         cleanup = extract_function(
             spawns, "OverworldWildSpawns_ClearThrowStateForSlot", "void"
         )
-        self.assertIn("OverworldWildSpawns_ReleaseHeldActorControl", cleanup)
+        self.assertIn("OverworldWildSpawns_ClearThrowRelations(state, slot, TRUE)", cleanup)
+        relations = extract_function(spawns, "OverworldWildSpawns_ClearThrowRelations", "void")
+        self.assertIn("OverworldWildSpawns_ReleaseHeldActorControl", relations)
         finished = extract_function(
             spawns, "OverworldWildSpawns_HandleFinishedMovementCommand", "void"
         )

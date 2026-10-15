@@ -95,7 +95,7 @@ class MountedTeleportMatrixMeasurement(MountControlStressMeasurement):
         before,after=value['before'],value['after']
         old,new=bytes.fromhex(before['profileHex']),bytes.fromhex(after['profileHex'])
         a,b=bytes.fromhex(before['mountStateHex']),bytes.fromhex(after['mountStateHex'])
-        require(len(old)==len(new)==72 and len(a)==len(b)==184 and a[8:80]==old and b[8:80]==new,
+        require(len(old)==len(new)==80 and len(a)==len(b)==192 and a[8:88]==old and b[8:88]==new,
                 'Teleport configuration raw state differs')
         observed=before['readiness'].get('actor', {})
         require(all(observed.get(k)==actor.get(k) for k in ('handle','subjectIdentity','species','role',*GENERATIONS))
@@ -105,7 +105,7 @@ class MountedTeleportMatrixMeasurement(MountControlStressMeasurement):
             require(old==self.last_profile,'Teleport profile changed between cases')
         changed=bytearray(a)
         for offset,key in ((12,'locomotion'),(23,'teleportTime'),(24,'teleportPause')):changed[8+offset]=expected[key]
-        require(bytes(changed)==b and before['bindingHex']==after['bindingHex']==a[80:96].hex()
+        require(bytes(changed)==b and before['bindingHex']==after['bindingHex']==a[88:104].hex()
                 and before['sessionGeneration']==after['sessionGeneration']>0
                 and before['clock']==after['clock']
                 and before['readiness']==after['readiness'], 'Teleport configure changed unrelated state')

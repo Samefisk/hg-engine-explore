@@ -308,6 +308,20 @@ class ServiceTests(unittest.TestCase):
         self.assertIn(("record.start", {"maxFrames": 7000}), self.service.worker.calls)
         self.assertEqual(self.service.recording.max_frames, 1800)
 
+    def test_manual_throw_recording_passes_opt_in_to_worker(self):
+        self.start()
+        result = self.command("record.start", {"maxFrames": 120, "throwInteractions": True,
+                                               "appearancePalette": True})
+        self.assertTrue(result["ok"], result)
+        self.assertIn(("record.start", {"maxFrames": 120, "throwInteractions": True,
+                                         "appearancePalette": True}),
+                      self.service.worker.calls)
+        self.command("record.stop")
+        for option in ("throwInteractions", "appearancePalette"):
+            for value in (1, "true", {}, None):
+                with self.subTest(option=option, value=value), self.assertRaises(ValueError):
+                    validate_command("record.start", {option: value})
+
     def test_failed_trace_arm_does_not_claim_recording(self):
         self.start()
         self.service.worker.fail = DevtoolsError("trace-busy", "native trace is already armed")

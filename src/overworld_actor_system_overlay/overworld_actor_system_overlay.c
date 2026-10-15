@@ -54,10 +54,14 @@ OverworldWildRuntime_PlayStepDirtParticle(LocalMapObject *object)
 /* Preserve Thumb metadata for the direct resident helper import. */
 __asm__(
     ".thumb\n"
+    ".thumb_func\n.thumb_set OverworldMountWalkProposal_Finish, 0x01FFF4C0\n"
+    ".thumb_func\n.thumb_set OverworldMountWalkProposal_RestoreReserved, 0x01FFF4A0\n"
     ".thumb_func\n.thumb_set ActorSystem_ClampWalkTimeWide, 0x023BF488\n"
     ".thumb_func\n.thumb_set OverworldWalk_SkidTiles, 0x023BF4D6\n"
     ".thumb_func\n.thumb_set OverworldActorHopPlanner_Plan, 0x023BD4F0\n"
     ".thumb_func\n.thumb_set OverworldActorTeleportPlanner_Plan, 0x023BD4F8\n");
+
+__asm__(".thumb\n.thumb_func\n.thumb_set OverworldActorHitCrash_Apply, 0x01FFD380\n");
 
 /* Compiler helpers live in the resident core as Thumb functions. An untyped
  * import makes the linker switch to ARM before entering that Thumb code. */
@@ -264,6 +268,8 @@ static void ActorSystem_EnsureInitialized(void)
     }
 
     ActorSystem_Zero(state, sizeof(*state));
+    ActorSystem_Zero(OVERWORLD_ACTOR_ACKNOWLEDGEMENTS,
+        sizeof(OVERWORLD_ACTOR_ACKNOWLEDGEMENTS));
     state->magic = OVERWORLD_ACTOR_SYSTEM_STATE_MAGIC;
     state->version = OVERWORLD_ACTOR_SYSTEM_ABI_VERSION;
     state->size = sizeof(*state);
@@ -448,7 +454,7 @@ static void ActorSystem_RememberReply(const OverworldActorReply *reply)
 {
     OverworldActorSystemState *state = &gOverworldActorSystemState;
 
-    state->acknowledgements[state->ackWriteIndex] = *reply;
+    OVERWORLD_ACTOR_ACKNOWLEDGEMENTS[state->ackWriteIndex] = *reply;
     state->ackWriteIndex = (state->ackWriteIndex + 1)
         % OVERWORLD_ACTOR_SYSTEM_ACK_CAPACITY;
     if (ActorSystem_SequenceIsNewer(
@@ -461,11 +467,11 @@ static const OverworldActorReply *ActorSystem_FindReply(u32 sequence)
 {
     u32 index;
 
-    for (index = 0; index < ARRAY_COUNT(gOverworldActorSystemState.acknowledgements);
+    for (index = 0; index < ARRAY_COUNT(OVERWORLD_ACTOR_ACKNOWLEDGEMENTS);
          index++) {
-        if (gOverworldActorSystemState.acknowledgements[index].sequence
+        if (OVERWORLD_ACTOR_ACKNOWLEDGEMENTS[index].sequence
             == sequence) {
-            return &gOverworldActorSystemState.acknowledgements[index];
+            return &OVERWORLD_ACTOR_ACKNOWLEDGEMENTS[index];
         }
     }
     return NULL;
@@ -1017,7 +1023,8 @@ motion_rejected:
         return OVERWORLD_ACTOR_RESULT_OK;
     }
 plan_accepted:
-    if (ActorSystem_IsTargetReservedByOtherActor(
+    if ((plan->flags & OVERWORLD_MOTION_FLAG_FORCED) == 0
+        && ActorSystem_IsTargetReservedByOtherActor(
             call->actorSlot,
             plan,
             call->targetSurfaceId)) {
@@ -1118,6 +1125,10 @@ ActorSystem_TryAcknowledgeMotionCommit(
     decision = OverworldMotion_AcknowledgeCommit(motion, fieldEpoch);
     if (decision != OVERWORLD_MOTION_DECISION_ACCEPTED) {
         return decision;
+    }
+    if ((motion->plan.flags & OVERWORLD_MOTION_FLAG_SLAM) != 0) {
+        OverworldActor_PlayStompSound(
+            OW_WILD_BEHAVIOR_WALK_OPTION_LOCK_DIRECTION);
     }
     /* Engine acknowledgements can follow Tick in this same field frame.
      * Publish the new phase before policy readers decide whether to wait. */
@@ -1396,6 +1407,9 @@ OverworldActorSystem_PopulationControlImpl(
     u8 kind;
 
     ActorSystem_EnsureInitialized();
+    if (operation == OVERWORLD_ACTOR_POPULATION_CONTROL_HAS_REFILL_WAIT) {
+        return gOverworldActorSystemState.population.refillArmed;
+    }
     if (operation == OVERWORLD_ACTOR_POPULATION_CONTROL_RESET
         && ActorSystem_TransitionIsActive()) {
         /* FIELD_REBIND already queued the destination reconciliation. A
@@ -1523,6 +1537,10 @@ static BOOL ActorSystem_ReduceWalk(OverworldActorWalkPolicyCall *call)
         return FALSE;
     }
     slot = &gOverworldActorSystemState.slots[call->actorSlot];
+    if (call->operation == OVERWORLD_ACTOR_WALK_POLICY_HIT_CRASH) {
+        return OverworldActorHitCrash_Apply(
+            slot, call, gOverworldActorSystemState.fieldEpoch);
+    }
     if (!OVERWORLD_ACTOR_WALK_POLICY_OWNER_ENTRY->reduceWalk(
             &slot->policy,
             &slot->snapshot,
@@ -1567,40 +1585,7 @@ ActorSystem_FinishMountedWalk(
     BOOL crashOnBlocked,
     OverworldActorWalkPolicyCall *output)
 {
-    OverworldActorPolicyState *policy =
-        &gOverworldActorSystemState
-            .slots[OVERWORLD_ACTOR_SYSTEM_FOLLOWER_SLOT].policy;
-
-    ActorSystem_Zero(output, sizeof(*output));
-    output->version = OVERWORLD_ACTOR_WALK_POLICY_VERSION;
-    output->size = sizeof(*output);
-    output->lane = &state->snapshot.profile;
-    output->actorSlot = OVERWORLD_ACTOR_SYSTEM_FOLLOWER_SLOT;
-    output->operation = OVERWORLD_ACTOR_WALK_POLICY_START_RESULT;
-    output->laneState = OW_WILD_SPAWNER_SPOT_STATE_CHILL;
-    output->startResult = started
-        ? OVERWORLD_ACTOR_WALK_POLICY_START_ACCEPTED
-        : OVERWORLD_ACTOR_WALK_POLICY_START_BLOCKED;
-    output->stepFlags = state->reservedPolicyState[
-        OVERWORLD_MOUNT_WALK_STEP_FLAGS_INDEX];
-    output->stepDirection = state->reservedPolicyState[
-        OVERWORLD_MOUNT_WALK_STEP_DIRECTION_INDEX];
-    output->facingDirection = state->reservedPolicyState[
-        OVERWORLD_MOUNT_WALK_FACING_DIRECTION_INDEX];
-    output->travelTime = state->reservedPolicyState[
-        OVERWORLD_MOUNT_WALK_TRAVEL_TIME_INDEX];
-    /* A new skid follows a displayed Walk tile. Continuation distance is
-     * ignored by START_RESULT, so its cleared lastWalkTime is harmless. */
-    output->distance = (output->stepFlags
-            & OVERWORLD_ACTOR_WALK_STEP_SKID) != 0
-        ? OverworldWalk_SkidTiles(policy->lastWalkTime)
-        : 0;
-    output->reserved[0] = state->reservedPolicyProfile[
-        OVERWORLD_MOUNT_WALK_NOMINAL_TIME_INDEX];
-    if (crashOnBlocked) {
-        output->flags |= OVERWORLD_ACTOR_WALK_POLICY_FLAG_CRASH_ON_BLOCKED;
-    }
-    return ActorSystem_ReduceWalk(output);
+    return OverworldMountWalkProposal_Finish(state, started, crashOnBlocked, output);
 }
 
 static BOOL __attribute__((noinline, optimize("Os"),

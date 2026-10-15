@@ -15,7 +15,7 @@ REQUIRED_SECTIONS = frozenset(".overworld_walk_" + name for name in (
     "clamp_time", "accelerate_time", "decelerate_time_body",
     "skid_tiles", "skid_time", "stop_skid_plan", "stomp_applies", "direction_from_keys", "delta_x",
     "delta_y", "is_forty_five_degree_turn", "direction_from_delta",
-    "diagonal_facing", "resolve_mounted_diagonal", "filter_mounted_input",
+    "diagonal_facing", "resolve_mounted_diagonal", "newest_mounted_input", "filter_mounted_input",
     "start_mounted_flat", "mount_abort",
 ))
 

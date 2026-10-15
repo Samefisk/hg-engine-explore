@@ -172,7 +172,7 @@
           "id": "condition-ram-notices-player",
           "when": {
             "kind": "notice-target",
-            "vision": { "mode": "current" },
+            "vision": { "mode": "custom", "range": 5, "cone": "forward-90", "adjacentAwareness": true },
             "chancePercent": 100
           },
           "activation": {

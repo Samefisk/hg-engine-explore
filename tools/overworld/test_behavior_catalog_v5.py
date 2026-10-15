@@ -16,11 +16,14 @@ REPO = Path(__file__).resolve().parents[2]
 VIEWER_PATH = REPO / "scripts/overworld_behavior_profile_viewer.py"
 MIGRATOR = REPO / "scripts/migrate_overworld_behavior_catalog_v4_to_v5.py"
 CLASSIFICATIONS = [
+    "mood",
     "routine",
-    "placement",
-    "capability",
-    "attitude",
     "style",
+    "placement",
+    "follower",
+    "capability",
+    "attack",
+    "attitude",
     "follower-mount",
     "modifier",
 ]
@@ -119,7 +122,7 @@ class BehaviorCatalogV5Tests(unittest.TestCase):
         ):
             VIEWER.validate_behavior_catalog(changed)
 
-    def test_mounted_is_a_visible_empty_system_override(self) -> None:
+    def test_mounted_visibly_disables_movement_chain(self) -> None:
         mounted_application_id = self.v5["runtimeBindings"]["mountedApplication"]
         mounted_application = next(
             application
@@ -134,7 +137,8 @@ class BehaviorCatalogV5Tests(unittest.TestCase):
 
         self.assertEqual(mounted_profile["name"], "Mounted")
         self.assertEqual(mounted_profile["classification"], "follower-mount")
-        self.assertEqual(mounted_profile["fields"], {})
+        self.assertEqual(mounted_profile["fields"]["ramAccelerationSteps"],
+                         {"operator": "replace", "value": 0})
         self.assertNotIn("target", mounted_application)
 
     def test_migration_moves_subject_ownership_without_changing_runtime_projection(self) -> None:
@@ -170,6 +174,7 @@ class BehaviorCatalogV5Tests(unittest.TestCase):
             application
             for application in changed["applications"]
             if "target" in application and set(application["target"]) != {"pool"}
+            and application["target"]["mode"] != "disabled"
         )
         assignment_pool = {
             "id": "assignment-pool",

@@ -13,8 +13,8 @@
     "kind": "normal-play",
     "expectationSource": "data/overworld_behavior_profiles.json",
     "actor": "One naturally spawned WILD Ledyba (165), bound by the actual finalized personality, source identity, current native object, and full generation-safe actor handle.",
-    "trigger": "Use the unchanged test.sav and the reviewed 67-tile normal-input route from map 33 through map 67 to map 34. Stop new route input when the actual Ledyba appears; observe that same actor's own native spawn Hop.",
-    "observable": "Requirements shared.ledyba-pool-site-v1 and shared.ledyba-pool-surface-v1: keep the species-bound native finalizer's own legacy POOL site through the complete Hop and control return. The native field-object creation call must use the off-screen origin for the visible sprite, never the landing target. Actor and engine render positions must still equal that origin at elapsed frame zero. At the same target, prove loaded metatile permission and model provenance, exclusion of authored surfaces, successful native height refresh and matching terminal Y. Missing, reused or mismatched native receipts fail.",
+    "trigger": "From unchanged test.sav at Cherrygrove map67 (564,392), use44 exact normal player tiles: Right1 to (565,392), Down5 to (565,397), Left4 to (561,397), Up2 to (561,395), Left11 to (550,395), Up19 to Route30 (550,376), Right2 to (552,376). Stop new input on natural Ledyba acquisition and finish only the current admitted tile. No teleport, party, profile, RNG or save writes. Observe that same actor's own native144-frame Fly In.",
+    "observable": "Requirements shared.ledyba-pool-site-v1 and shared.ledyba-pool-surface-v1: preserve the actual current Fly In WILD Ledyba's own finalized legacy POOL site through its complete 144-frame flight. The native field-object creation call must create its visible sprite at the off-screen origin, never the landing target. Bind the first coherent elapsed-zero or elapsed-one flight sample to that constructor and the exact native START. At the exact admission and logical terminal target require current loaded metatile permission and exclusion of authored surfaces. The actual finalized targetBaseY must match physical terminal Y with zero shared height offset. Require the ordered full-identity logical commit, finish and control return. Missing data is unknown, not legal. This does not prove universal unmodeled geometry, later movement or chain actions.",
     "setupAudit": "complete",
     "setupMutations": [
       {
@@ -25,25 +25,25 @@
       {
         "phase": "before-observation",
         "target": "fixture",
-        "change": "Use the same 137 setup actions as chain.ledyba-witness: require map 33 at (585,406) and zero admitted player steps, then take at most 67 normal cardinal steps through Cherrygrove to Route 30. Each step waits for actual admission and the exact settled tile. Skip new route actions when the natural Wild Ledyba is present. Never teleport, edit the party or save, force a spawn, change the clock/RNG, or reset profile, motion or chain state."
+        "change": "Use the same91 setup actions as observation.ledyba-live-controls: require unchanged map67 at (564,392) and zero admitted player steps, then take at most44 normal cardinal tiles via (565,392), (565,397), (561,397), (561,395), (550,395), (550,376), ending at Route30 map34 (552,376). Each tile requires actual native admission and the exact settled endpoint. Stop new route input on natural Wild Ledyba acquisition and finish the admitted tile. Never teleport, edit party/save, force a spawn, change clock/RNG, or reset profile, motion or chain state."
       },
       {
         "phase": "before-observation",
         "target": "observation",
-        "change": "Install the shared read-only native finalizer, resolver, spawn and own-target height taps before boot. Retain exact native surface-query and height-refresh results, before/after loaded terrain and model provenance, actual object positions and world identity. Observe actor and engine state together at each authenticated completed-main-queue boundary with public semantic trace."
+        "change": "Install the existing shared read-only native finalizer, resolver and spawn taps before boot. Retain the exact finalized Fly In targetBaseY, field-object constructor, START, object and full world identity. At the one finalized POOL target, use the shared loaded-terrain and authored-surface readers only at admission and exact logical terminal. Observe actor and engine state together at each authenticated completed-main-queue boundary with public semantic trace."
       },
       {
         "phase": "before-observation",
         "target": "observation",
-        "change": "Bind only the current naturally spawned Wild Ledyba and retain its native field-object creation call plus every frame through its complete first spawn Hop. Creation, actor render and engine render must all start at the off-screen origin, followed by exact logical landing and terminal/control events. Controller replay must reject landing-tile sprite creation, an early landing-tile render, missing/stale subjects, a changed POOL site, missing finalization provenance and missing required terminal meanings."
+        "change": "Bind only the current naturally spawned Wild Ledyba. Retain its actual off-screen field-object creation call and every coherent frame from elapsed zero or one through the 144-frame Fly In and exact logical terminal/control return. Controller replay must reject landing-tile creation, an invalid first render, changed subjects or POOL site, missing native provenance, missing target cells, and missing terminal meanings."
       }
     ],
     "limits": [
       "This S3 scenario retains the own-site requirement and adds a separate loaded-metatile, authored-surface-exclusion and native terminal-height requirement. It does not clear population, later mobility, Ledyba chain, visual-quality, cadence or long-run requirements.",
-      "Coordinate equality is not surface proof. Require native loaded metatile permission for this encounter's terrain, no authored surface at its own target, successful non-ignored height refresh and matching terminal Y. Missing loaded provenance or a false surface query alone cannot prove land. Universal unmodeled geometry and all other species/roles remain outside this claim.",
+      "Coordinate equality is not surface proof. Require the exact loaded admission and terminal metatile for this Land/Surf encounter, no authored surface at its own target, and terminal physical Y equal to the native finalized ground height with zero shared height offset. A Fly In does not use the obsolete Hop height-refresh receipt. Unknown terrain/catalog or inferred height cannot prove land. Universal unmodeled geometry and other species/roles are outside this claim.",
       "The profile must be the actual winning authored legacy POOL owner rule. Explicit modern destination overrides, forced or conditional layers, headbutt encounters and tree-top exceptions are outside this witness and fail its setup contract.",
       "A native personality/shiny finalizer may change PID. Bind the actor to the final output PID while keeping species, form and level exact; do not require the earlier candidate PID to survive.",
-      "The shared recorder must observe the actual native field-object creation call at the off-screen origin and the 16-cardinal-tile startup from elapsed frame zero, with both actor and engine render at the origin rather than the landing target, then the full Hop, logical commit and control return. This is a bounded spawn-prefix check, not the three-action chain checker finish condition.",
+      "Require the actual native constructor at the off-screen origin, the authored 16-cardinal-tile Fly In (kind 9), the first coherent elapsed-zero or elapsed-one sample, all remaining samples through144, exact logical commit and control return. This reuses the shared MotionRecorder and proves the spawn prefix, not later chain actions.",
       "The whole job is limited to 6000 completed game frames and 300 seconds. The final observation action is limited to 512 frames and 60 seconds, with 240 no-progress frames. At least 16 bound-subject observation frames are required; setup frames do not meet that floor.",
       "Missing frames or native sequences, invalid identity/presentation, missing finalizer/spawn pairing, altered setup mode, timeout or incomplete landing fail. Keep original failure evidence; a setup failure is not proof of a changed destination.",
       "Run only through the registered shared Workshop/owctl job. A pure checker result is not acceptance; the controller must independently replay the current ROM, save, source, recipe and retained observations. Stop only the private session owned by this job."
@@ -73,22 +73,22 @@
     {
       "at": 0,
       "kind": "setup",
-      "value": "Drive the unchanged normal route with preboot native observation, stop new input at natural Ledyba acquisition and bind its exact live identity."
+      "value": "From unchanged test.sav at Cherrygrove map67 (564,392), use44 exact normal player tiles: Right1 to (565,392), Down5 to (565,397), Left4 to (561,397), Up2 to (561,395), Left11 to (550,395), Up19 to Route30 (550,376), Right2 to (552,376). Stop new input on natural Ledyba acquisition and finish only the current admitted tile. No teleport, party, profile, RNG or save writes. Keep preboot native observation and bind the exact live identity."
     },
     {
       "at": 1,
       "kind": "lifecycle",
-      "value": "Match the same encounter's finalizer input POOL position and resolved authored destination to the exact prepared spawn output and nested Hop."
+      "value": "Match the same encounter's finalized POOL position and winning current authored destination/Fly In owners to the exact prepared spawn output and nested native START."
     },
     {
       "at": 2,
       "kind": "lifecycle",
-      "value": "Require the native field-object creation coordinates, elapsed-zero actor render and elapsed-zero engine render to all equal the off-screen origin and reject the landing target. Observe the full first Hop through logical landing and control return. Match the same actor's terminal Y to its native own-target height receipt and require loaded metatile permission with authored surfaces excluded."
+      "value": "Require the actual off-screen constructor, coherent first Fly sample and complete 144-frame flight through logical landing/control return. Match terminal physical Y to the finalized targetBaseY and prove the same loaded metatile and absent authored surface at admission and terminal."
     }
   ],
   "stop": {
     "frameBudget": 6000,
-    "condition": "The same live natural Ledyba preserves its own POOL site, finishes its spawn Hop with control returned and proves its loaded metatile and native terminal height, or an exact failure/budget ends the private job."
+    "condition": "The same live natural Ledyba preserves its own POOL site, finishes its 144-frame Fly In with control returned and proves its loaded metatile and native terminal height, or an exact failure/budget ends the private job."
   },
   "expect": {
     "requiredEvents": [
@@ -101,9 +101,9 @@
     "invariants": [
       "Each accepted motion has exactly one terminal result",
       "Control returns after the selected motion finishes or cancels",
-      "This finalized encounter keeps its own authored POOL site through its completed spawn Hop",
-      "The visible field sprite is created at the off-screen origin, and the first Hop frame never flashes at the landing tile",
-      "The native own-target surface, loaded metatile and terminal height evidence belongs to this encounter and world"
+      "This finalized encounter keeps its own authored POOL site through its completed 144-frame Fly In",
+      "The visible field sprite is created at the off-screen origin, and the first Fly sample follows the off-screen native constructor",
+      "The native own-target loaded metatile, authored-surface exclusion and finalized terminal height evidence belongs to this encounter and world"
     ]
   },
   "capture": "none",

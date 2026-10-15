@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "id": "population.distance-despawn-cherrygrove",
+  "title": "Unrelated Wild distance removal during a current Cargo claim in Cherrygrove",
+  "status": "active",
+  "capabilities": [
+    "population"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "Exact current free WILD Mareep179 Cargo, Geodude74 carrier and one ordinary Snorlax143.",
+    "trigger": "Only checked placement. Natural claim, two normal settled player tiles, the first authenticated scheduled far sample, then one fresh normal step on the already-read corridor requests the second maintenance cycle.",
+    "observable": "The first real scheduled far sample proves a free chase claim. The second protects the same full current Trigger/Cargo pair through free chase or a valid native pickup/windup, with no recovery or release. Both samples protect carrier/Cargo and do not protect the unrelated actor. Exact identity distance telemetry deletes the unrelated actor only at native IDLE with no reservation. Any actually deferred accepted motion must finish normally first.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Checked teleport, three native Wild spawns, current support reads and exact full-identity binds. No claim, timer, profile, motion, or deletion writes."
+      }
+    ],
+    "limits": [
+      "Current native terrain proves the three normal exit tiles. Held input ends at admission; neutral input settles each exact tile. First and second actual far receipts remain mandatory.",
+      "One unrelated actor per map. Either-axis 16 boundary, return-to-range, shiny, stale object and motion deferral remain existing actual-C controls."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cargo",
+      "species": 179,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "carrier",
+      "species": 74,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "unrelated",
+      "species": 143,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Prepare map67 Player565,398; bind the actual returned Cargo/carrier/unrelated identities."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Natural current claim, two scheduled far samples, completed ordinary motion, exact native distance deletion."
+    }
+  ],
+  "stop": {
+    "frameBudget": 800,
+    "condition": "Exact claim-backed two-sample native deletion, or first invalid identity, owner, claim, motion, Field boundary or deadline."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Current Field and all three exact native identities",
+      "Free chase at the first actual far sample; the same current Trigger/Cargo and native pair masks remain protected at later calls, including valid pickup/windup",
+      "Carrier/Cargo hard protected, unrelated ordinary actor not protected",
+      "Current actual either-axis distance greater than16",
+      "Native idle/control boundary before exact distance deletion; any actually deferred accepted motion completes without cancel"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "population.distance-despawn-cherrygrove",
+    "claims": [
+      "live-actor-identity",
+      "engine-boundary",
+      "natural-input",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumFrames": 2
+  }
+}

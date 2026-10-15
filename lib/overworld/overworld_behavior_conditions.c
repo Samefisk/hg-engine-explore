@@ -12,6 +12,15 @@
 #define OVERWORLD_BEHAVIOR_CONDITION_SIZE_OPTIMIZED
 #endif
 
+
+/* The combined native unit shares one fixed Query image. These branches move
+ * with that image and need no absolute local call pointer. */
+#if defined(__arm__)
+#define CONDITION_LOCAL_CALL __attribute__((short_call))
+#else
+#define CONDITION_LOCAL_CALL
+#endif
+
 typedef u16 OverworldBehaviorConditionHandleHalfword
     __attribute__((may_alias));
 
@@ -37,7 +46,7 @@ static u16 OverworldBehaviorCondition_Distance(s32 dx, s32 dy)
     return x > y ? x : y;
 }
 
-static u8 OverworldBehaviorCondition_SameHandle(
+static u8 __attribute__((noinline)) CONDITION_LOCAL_CALL OverworldBehaviorCondition_SameHandle(
     const OverworldActorHandle *left,
     const OverworldActorHandle *right)
 {
@@ -57,7 +66,7 @@ static u8 OverworldBehaviorCondition_SameHandle(
     return 1;
 }
 
-static u8 OverworldBehaviorCondition_InRange(
+static u8 CONDITION_LOCAL_CALL OverworldBehaviorCondition_InRange(
     const OverworldBehaviorConditionDefinition *definition,
     const OverworldBehaviorConditionWorldView *world,
     s16 x,
@@ -68,9 +77,11 @@ static u8 OverworldBehaviorCondition_InRange(
     u16 ax = OverworldBehaviorCondition_Abs(dx);
     u16 ay = OverworldBehaviorCondition_Abs(dy);
 
-    if ((dx == 0 && dy == 0)
-        || ax > definition->distance
-        || ay > definition->distance) {
+    if (dx == 0 && dy == 0) {
+        return definition->rangeKind == OVERWORLD_BEHAVIOR_CONDITION_RANGE_RADIUS
+            && (definition->reserved & OVERWORLD_BEHAVIOR_CONDITION_RADIUS_SAME_TILE);
+    }
+    if (ax > definition->distance || ay > definition->distance) {
         return 0;
     }
     switch (definition->rangeKind) {
@@ -84,17 +95,13 @@ static u8 OverworldBehaviorCondition_InRange(
         }
         /* fall through */
     case OVERWORLD_BEHAVIOR_CONDITION_RANGE_FACING_LINE:
-        switch (world->subjectFacing) {
-        case 0:
-            return dx == 0 && dy < 0;
-        case 1:
-            return dx == 0 && dy > 0;
-        case 2:
-            return dy == 0 && dx < 0;
-        case 3:
-            return dy == 0 && dx > 0;
+        if (world->subjectFacing < 2) {
+            return dx == 0
+                && (world->subjectFacing == 0 ? dy < 0 : dy > 0);
         }
-        return 0;
+        return world->subjectFacing < 4
+            && dy == 0
+            && (world->subjectFacing == 2 ? dx < 0 : dx > 0);
     default:
         return 0;
     }
@@ -107,6 +114,20 @@ static u8 OverworldBehaviorCondition_UsesVision(
             == OVERWORLD_BEHAVIOR_CONDITION_RANGE_VISION_CURRENT
         || definition->rangeKind
             == OVERWORLD_BEHAVIOR_CONDITION_RANGE_VISION_CUSTOM;
+}
+
+static u8 OverworldBehaviorCondition_FactsMatch(
+    const OverworldBehaviorConditionDefinition *definition,
+    const OverworldBehaviorConditionWorldView *world)
+{
+    u8 facts;
+
+    if (definition->kind == OVERWORLD_BEHAVIOR_CONDITION_TERRAIN_SPEED) {
+        return 1;
+    }
+    facts = world->reserved[0];
+    return (facts & definition->terrainMask) == definition->terrainMask
+        && (facts & definition->terrainOverrideMask) == 0;
 }
 
 #if defined(OVERWORLD_BEHAVIOR_HOST) \
@@ -130,7 +151,7 @@ static OverworldVisionSpec OverworldBehaviorCondition_VisionSpec(
 }
 
 static u8 __attribute__((noinline)) OVERWORLD_BEHAVIOR_CONDITION_SIZE_OPTIMIZED
-OverworldBehaviorCondition_CanSee(
+CONDITION_LOCAL_CALL OverworldBehaviorCondition_CanSee(
     const OverworldBehaviorConditionDefinition *definition,
     u8 currentRange,
     u8 currentOptions,
@@ -157,7 +178,7 @@ OverworldBehaviorCondition_CanSee(
 }
 #else
 static u8 __attribute__((naked, noinline))
-OverworldBehaviorCondition_CanSee(
+CONDITION_LOCAL_CALL OverworldBehaviorCondition_CanSee(
     const OverworldBehaviorConditionDefinition *definition,
     u8 currentRange,
     u8 currentOptions,
@@ -257,7 +278,15 @@ static void OverworldBehaviorCondition_ClearStoredTarget(
     state->targetKind = OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE;
 }
 
-static void OverworldBehaviorCondition_CaptureTarget(
+static void __attribute__((noinline)) CONDITION_LOCAL_CALL OverworldBehaviorCondition_Deactivate(
+    OverworldBehaviorConditionEntryState *state)
+{
+    OverworldBehaviorCondition_SetStateActive(state, 0);
+    state->flags &= ~OVERWORLD_BEHAVIOR_CONDITION_STATE_NOTICE_PENDING;
+    OverworldBehaviorCondition_ClearStoredTarget(state);
+}
+
+static void __attribute__((noinline)) CONDITION_LOCAL_CALL OverworldBehaviorCondition_CaptureTarget(
     OverworldBehaviorConditionEntryState *state,
     const OverworldBehaviorConditionTargetReference *target)
 {
@@ -328,17 +357,109 @@ static u8 OverworldBehaviorCondition_RestoreTarget(
 }
 
 static u8 __attribute__((noinline)) OVERWORLD_BEHAVIOR_CONDITION_SIZE_OPTIMIZED
-OverworldBehaviorCondition_Truth(
+CONDITION_LOCAL_CALL __attribute__((optimize("Os,no-tree-forwprop,no-expensive-optimizations,no-if-conversion,no-tree-loop-im,no-schedule-insns2"))) OverworldBehaviorCondition_FindActor(
+    const OverworldBehaviorConditionDefinition *definition,
+    const OverworldBehaviorConditionEntryInput *input,
+    const OverworldBehaviorConditionWorldView *world,
+    OverworldBehaviorConditionTargetReference *target,
+    u8 playerOpened)
+{
+    u16 bestDistance = 0xFFFF;
+    u8 found = 0;
+    u8 inverse = definition->kind
+        == OVERWORLD_BEHAVIOR_CONDITION_TARGET_CANNOT_SEE_SUBJECT;
+    u8 i;
+
+    for (i = 0; i < world->actorCount; i++) {
+        const OverworldBehaviorConditionActorObservation *candidate =
+            &world->actors[i];
+        u8 matches;
+        u16 distance;
+
+        if ((input->eligibleActorMask & (1u << i)) == 0
+            || !candidate->valid
+            || OverworldBehaviorCondition_SameHandle(
+                &world->subject, &candidate->actor)) {
+            continue;
+        }
+        if (definition->kind == OVERWORLD_BEHAVIOR_CONDITION_PLAYER_DAMAGED) {
+            matches = (candidate->facingAndOcclusion
+                & OVERWORLD_BEHAVIOR_CONDITION_OBSERVATION_PLAYER_DAMAGE_SOURCE) != 0;
+        } else if (playerOpened) {
+            matches = 1;
+        } else if (inverse) {
+            matches = !OverworldBehaviorCondition_CanSee(
+                definition,
+                candidate->visionRange,
+                candidate->visionOptions,
+                candidate->x,
+                candidate->y,
+                candidate->facingAndOcclusion
+                    & OVERWORLD_BEHAVIOR_CONDITION_OBSERVATION_FACING_MASK,
+                world->subjectX,
+                world->subjectY,
+                (candidate->facingAndOcclusion
+                    & OVERWORLD_BEHAVIOR_CONDITION_OBSERVATION_OCCLUDED_TO_SUBJECT)
+                    != 0);
+        } else if (OverworldBehaviorCondition_UsesVision(definition)) {
+            matches = OverworldBehaviorCondition_CanSee(
+                definition,
+                world->subjectVisionRange,
+                world->subjectVisionOptions,
+                world->subjectX,
+                world->subjectY,
+                world->subjectFacing,
+                candidate->x,
+                candidate->y,
+                (candidate->facingAndOcclusion
+                    & OVERWORLD_BEHAVIOR_CONDITION_OBSERVATION_OCCLUDED_FROM_SUBJECT)
+                    != 0);
+        } else {
+            matches = OverworldBehaviorCondition_InRange(
+                definition, world, candidate->x, candidate->y);
+        }
+        if (!matches) {
+            continue;
+        }
+        if (input->reserved == OVERWORLD_BEHAVIOR_CONDITION_INPUT_NOTICE_GEOMETRY) {
+            /* This private pass returns all candidate slots for native
+             * traces. It cannot capture or publish this transient value. */
+            if (candidate->actor.slot < OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS)
+                target->actor.slot |= 1u << candidate->actor.slot;
+            found = 1;
+            continue;
+        }
+        distance = OverworldBehaviorCondition_Distance(
+            candidate->x - world->subjectX,
+            candidate->y - world->subjectY);
+        if (found && distance >= bestDistance) {
+            continue;
+        }
+        found = 1;
+        bestDistance = distance;
+        if (definition->targetKind
+                == OVERWORLD_BEHAVIOR_CONDITION_TARGET_MATCHED_ACTOR) {
+            target->kind = OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR;
+            target->actor = candidate->actor;
+        }
+    }
+    return found;
+}
+
+static u8 __attribute__((noinline)) OVERWORLD_BEHAVIOR_CONDITION_SIZE_OPTIMIZED
+CONDITION_LOCAL_CALL __attribute__((optimize("Os,no-tree-forwprop,no-expensive-optimizations,no-if-conversion,no-tree-loop-im,no-schedule-insns2"))) OverworldBehaviorCondition_Truth(
     const OverworldBehaviorConditionDefinition *definition,
     const OverworldBehaviorConditionEntryInput *input,
     const OverworldBehaviorConditionWorldView *world,
     OverworldBehaviorConditionTargetReference *target)
 {
-    u16 bestDistance = 0xFFFF;
     u8 value = 0;
-    u8 i;
 
     OverworldBehaviorCondition_ClearTarget(target);
+    target->actor.slot = 0;
+    if (input->chanceRoll >= definition->chance) {
+        return 0;
+    }
     if (definition->kind == OVERWORLD_BEHAVIOR_CONDITION_TERRAIN_SPEED) {
         u16 explicitMask = definition->terrainOverrideMask;
         u16 acceptedMask = definition->terrainMask & explicitMask;
@@ -374,11 +495,35 @@ OverworldBehaviorCondition_Truth(
                         != 0)
                 : OverworldBehaviorCondition_InRange(
                     definition, world, world->playerX, world->playerY));
-        if (value
-            && definition->targetKind
-                == OVERWORLD_BEHAVIOR_CONDITION_TARGET_PLAYER) {
-            target->kind = OVERWORLD_BEHAVIOR_TARGET_REFERENCE_PLAYER;
+        if (value) {
+            if (definition->targetKind
+                    == OVERWORLD_BEHAVIOR_CONDITION_TARGET_PLAYER) {
+                target->kind = OVERWORLD_BEHAVIOR_TARGET_REFERENCE_PLAYER;
+            } else if (definition->targetKind
+                    == OVERWORLD_BEHAVIOR_CONDITION_TARGET_MATCHED_ACTOR) {
+                /* The player opens the intent. Cargo selection is map-wide;
+                 * the actor pool and runtime eligibility filter the mask. */
+                value = OverworldBehaviorCondition_FindActor(
+                    definition, input, world, target, 1);
+            }
         }
+    } else if (definition->kind
+        == OVERWORLD_BEHAVIOR_CONDITION_SUBJECT_DAMAGED) {
+        value = (world->playerFacingAndOcclusion
+            & OVERWORLD_BEHAVIOR_CONDITION_OBSERVATION_SUBJECT_DAMAGED) != 0;
+        if (value && definition->targetKind
+                == OVERWORLD_BEHAVIOR_CONDITION_TARGET_PLAYER) {
+            value = world->playerValid;
+            target->kind = value ? OVERWORLD_BEHAVIOR_TARGET_REFERENCE_PLAYER
+                : OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE;
+        }
+    } else if (definition->kind
+        == OVERWORLD_BEHAVIOR_CONDITION_ACTOR_FACTS) {
+        value = definition->targetKind
+                == OVERWORLD_BEHAVIOR_CONDITION_TARGET_MATCHED_ACTOR
+            ? OverworldBehaviorCondition_FindActor(
+                definition, input, world, target, 1)
+            : 1;
     } else if (definition->kind
             == OVERWORLD_BEHAVIOR_CONDITION_TARGET_CANNOT_SEE_SUBJECT
         && definition->targetKind
@@ -401,105 +546,62 @@ OverworldBehaviorCondition_Truth(
             target->kind = OVERWORLD_BEHAVIOR_TARGET_REFERENCE_PLAYER;
         }
     } else {
-        u8 inverse = definition->kind
-            == OVERWORLD_BEHAVIOR_CONDITION_TARGET_CANNOT_SEE_SUBJECT;
-
-        for (i = 0; i < world->actorCount; i++) {
-            const OverworldBehaviorConditionActorObservation *candidate =
-                &world->actors[i];
-            u8 matches;
-            u16 distance;
-
-            if ((input->eligibleActorMask & (1u << i)) == 0
-                || !candidate->valid
-                || OverworldBehaviorCondition_SameHandle(
-                    &world->subject, &candidate->actor)) {
-                continue;
-            }
-            if (inverse) {
-                matches = !OverworldBehaviorCondition_CanSee(
-                    definition,
-                    candidate->visionRange,
-                    candidate->visionOptions,
-                    candidate->x,
-                    candidate->y,
-                    candidate->facingAndOcclusion
-                        & OVERWORLD_BEHAVIOR_CONDITION_OBSERVATION_FACING_MASK,
-                    world->subjectX,
-                    world->subjectY,
-                    (candidate->facingAndOcclusion
-                        & OVERWORLD_BEHAVIOR_CONDITION_OBSERVATION_OCCLUDED_TO_SUBJECT)
-                        != 0);
-            } else if (OverworldBehaviorCondition_UsesVision(definition)) {
-                matches = OverworldBehaviorCondition_CanSee(
-                        definition,
-                        world->subjectVisionRange,
-                        world->subjectVisionOptions,
-                        world->subjectX,
-                        world->subjectY,
-                        world->subjectFacing,
-                        candidate->x,
-                        candidate->y,
-                        (candidate->facingAndOcclusion
-                            & OVERWORLD_BEHAVIOR_CONDITION_OBSERVATION_OCCLUDED_FROM_SUBJECT)
-                            != 0);
-            } else {
-                matches = OverworldBehaviorCondition_InRange(
-                    definition, world, candidate->x, candidate->y);
-            }
-            if (!matches) {
-                continue;
-            }
-            distance = OverworldBehaviorCondition_Distance(
-                candidate->x - world->subjectX,
-                candidate->y - world->subjectY);
-            if (value && distance >= bestDistance) {
-                continue;
-            }
-            value = 1;
-            bestDistance = distance;
-            if (definition->targetKind
-                    == OVERWORLD_BEHAVIOR_CONDITION_TARGET_MATCHED_ACTOR) {
-                target->kind = OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR;
-                target->actor = candidate->actor;
-            }
-        }
-    }
-    if (value && input->chanceRoll >= definition->chance) {
-        value = 0;
-        OverworldBehaviorCondition_ClearTarget(target);
+        value = OverworldBehaviorCondition_FindActor(
+            definition, input, world, target, 0);
     }
     return value;
 }
 
-u8 OverworldBehaviorCondition_DefinitionValid(
+u8 CONDITION_LOCAL_CALL __attribute__((optimize("Os,no-tree-forwprop,no-expensive-optimizations,no-if-conversion,no-tree-loop-im,no-schedule-insns2,no-tree-dominator-opts"))) OverworldBehaviorCondition_DefinitionValid(
     const OverworldBehaviorConditionDefinition *definition)
 {
     if (definition->conditionId == OVERWORLD_BEHAVIOR_CONDITION_NO_ENTRY
         || definition->applicationIndex
             >= OVERWORLD_BEHAVIOR_CONDITION_MAX_APPLICATIONS
         || definition->kind
-            > OVERWORLD_BEHAVIOR_CONDITION_TARGET_CANNOT_SEE_SUBJECT
+            > OVERWORLD_BEHAVIOR_CONDITION_SUBJECT_DAMAGED
         || definition->activationMode
-            > OVERWORLD_BEHAVIOR_CONDITION_TIMED
+            > OVERWORLD_BEHAVIOR_CONDITION_UNTIL_CRASH
         || definition->targetKind
             > OVERWORLD_BEHAVIOR_CONDITION_TARGET_MATCHED_ACTOR
         || definition->chance > 100
         || (definition->activationMode
                 == OVERWORLD_BEHAVIOR_CONDITION_TIMED
-            && definition->durationFrames == 0)
-        || (definition->activationMode
-                == OVERWORLD_BEHAVIOR_CONDITION_WHILE_TRUE
-            && (definition->durationFrames != 0
-                || definition->cooldownFrames != 0))
-        || definition->terrainMask > OVERWORLD_BEHAVIOR_CONDITION_TERRAIN_MASK_MAX
-        || definition->terrainOverrideMask > OVERWORLD_BEHAVIOR_CONDITION_TERRAIN_MASK_MAX
-        || (definition->minMovementSpeed && definition->maxMovementSpeed
+            ? definition->durationFrames == 0
+            : (definition->durationFrames != 0
+                || (definition->activationMode
+                        == OVERWORLD_BEHAVIOR_CONDITION_WHILE_TRUE
+                    && definition->cooldownFrames != 0)))
+        || ((definition->terrainMask | definition->terrainOverrideMask)
+            & ~OVERWORLD_BEHAVIOR_CONDITION_TERRAIN_MASK_MAX) != 0
+        || (definition->maxMovementSpeed
             && definition->minMovementSpeed > definition->maxMovementSpeed)) {
         return 0;
     }
     if (definition->kind == OVERWORLD_BEHAVIOR_CONDITION_TERRAIN_SPEED) {
         return definition->targetKind == OVERWORLD_BEHAVIOR_CONDITION_TARGET_NONE;
+    }
+    if (((definition->terrainMask | definition->terrainOverrideMask)
+            & ~OVERWORLD_BEHAVIOR_ACTOR_FACT_MASK) != 0
+        || (definition->terrainMask & definition->terrainOverrideMask) != 0) {
+        return 0;
+    }
+    if (definition->kind == OVERWORLD_BEHAVIOR_CONDITION_ACTOR_FACTS) {
+        return definition->targetKind != OVERWORLD_BEHAVIOR_CONDITION_TARGET_PLAYER
+            && definition->activationMode
+                == OVERWORLD_BEHAVIOR_CONDITION_WHILE_TRUE;
+    }
+    if (definition->kind == OVERWORLD_BEHAVIOR_CONDITION_PLAYER_DAMAGED) {
+        return definition->targetKind == OVERWORLD_BEHAVIOR_CONDITION_TARGET_MATCHED_ACTOR
+            && definition->activationMode == OVERWORLD_BEHAVIOR_CONDITION_WHILE_TRUE
+            && definition->rangeKind == 0 && definition->distance == 0
+            && definition->reserved == 0;
+    }
+    if (definition->kind == OVERWORLD_BEHAVIOR_CONDITION_SUBJECT_DAMAGED) {
+        return definition->targetKind != OVERWORLD_BEHAVIOR_CONDITION_TARGET_MATCHED_ACTOR
+            && definition->rangeKind == 0 && definition->distance == 0
+            && definition->reserved == 0 && definition->chance == 100
+            && definition->minMovementSpeed == 0 && definition->maxMovementSpeed == 0;
     }
     if (definition->rangeKind < OVERWORLD_BEHAVIOR_CONDITION_RANGE_FACING_LINE
         || definition->rangeKind > OVERWORLD_BEHAVIOR_CONDITION_RANGE_VISION_CUSTOM) {
@@ -510,17 +612,25 @@ u8 OverworldBehaviorCondition_DefinitionValid(
         return 0;
     }
     if (definition->rangeKind == OVERWORLD_BEHAVIOR_CONDITION_RANGE_VISION_CUSTOM) {
-        OverworldVisionSpec spec = { definition->distance, definition->reserved };
-
-        if (!OverworldVision_IsValidSpec(&spec)) {
+        if (definition->distance == 0
+            || definition->distance > OVERWORLD_VISION_MAX_RANGE
+            || (definition->reserved & ~OVERWORLD_VISION_OPTIONS_MASK) != 0
+            || (definition->reserved & OVERWORLD_VISION_CONE_MASK) == 0) {
             return 0;
         }
     }
-    return (0x6153u
-        & (1u << (definition->kind * 4 + definition->targetKind))) != 0;
+    if (definition->kind == OVERWORLD_BEHAVIOR_CONDITION_PLAYER_NOTICED) {
+        return 1;
+    }
+    if (definition->kind == OVERWORLD_BEHAVIOR_CONDITION_POKEMON_NOTICED) {
+        return definition->targetKind
+            != OVERWORLD_BEHAVIOR_CONDITION_TARGET_PLAYER;
+    }
+    return definition->targetKind
+        != OVERWORLD_BEHAVIOR_CONDITION_TARGET_NONE;
 }
 
-OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluateEntry(
+OverworldBehaviorConditionStatus CONDITION_LOCAL_CALL __attribute__((optimize("Os,no-tree-forwprop,no-expensive-optimizations,no-if-conversion,no-tree-loop-im,no-schedule-insns2"))) OverworldBehaviorCondition_EvaluateEntry(
     const OverworldBehaviorConditionDefinition *definition,
     const OverworldBehaviorConditionEntryInput *input,
     const OverworldBehaviorConditionWorldView *world,
@@ -543,59 +653,104 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluateEntry(
     memset(result, 0, sizeof(*result));
     result->conditionId = definition->conditionId;
     result->applicationIndex = definition->applicationIndex;
-    OverworldBehaviorCondition_ClearTarget(&result->target);
 #if !defined(OVERWORLD_BEHAVIOR_CONDITION_COMBINED_RUNTIME)
     if (!OverworldBehaviorCondition_DefinitionValid(definition)
         || world->actorCount > OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS
-        || input->chanceRoll >= 100) {
+        || input->chanceRoll >= 100
+        || input->reserved > OVERWORLD_BEHAVIOR_CONDITION_INPUT_NOTICE_GEOMETRY) {
         return OVERWORLD_BEHAVIOR_CONDITION_INVALID_DEFINITION;
     }
 #endif
 
     wasActive = OverworldBehaviorCondition_StateActive(state);
-    OverworldBehaviorCondition_ClearTarget(&activeTarget);
+    /* A fact gate is a lifetime guard even for a timed condition. A picked-up
+     * target must retire the search profile at this intent boundary. */
+    if (!OverworldBehaviorCondition_FactsMatch(definition, world)) {
+        if (input->reserved != OVERWORLD_BEHAVIOR_CONDITION_INPUT_NOTICE_GEOMETRY)
+            OverworldBehaviorCondition_Deactivate(state);
+        return OVERWORLD_BEHAVIOR_CONDITION_OK;
+    }
+    if (input->reserved == OVERWORLD_BEHAVIOR_CONDITION_INPUT_NOTICE_GEOMETRY
+        && definition->activationMode == OVERWORLD_BEHAVIOR_CONDITION_UNTIL_CRASH
+        && (wasActive || (!(state->flags & OVERWORLD_BEHAVIOR_CONDITION_STATE_REARM)
+            && OverworldBehaviorCondition_StateHasTriggered(state)
+            && !OverworldBehaviorCondition_Reached(world->frame, state->cooldownUntil))))
+        return OVERWORLD_BEHAVIOR_CONDITION_OK;
     truth = OverworldBehaviorCondition_Truth(
         definition, input, world, &truthTarget);
     result->conditionTrue = truth;
+    if (input->reserved == OVERWORLD_BEHAVIOR_CONDITION_INPUT_NOTICE_GEOMETRY) {
+        result->target.actor.slot = truthTarget.actor.slot;
+        return OVERWORLD_BEHAVIOR_CONDITION_OK;
+    }
+    if (definition->activationMode
+            == OVERWORLD_BEHAVIOR_CONDITION_UNTIL_CRASH) {
+        state->flags |= OVERWORLD_BEHAVIOR_CONDITION_STATE_UNTIL_CRASH;
+        if ((state->flags
+                & OVERWORLD_BEHAVIOR_CONDITION_STATE_CRASH_PENDING) != 0) {
+            OverworldBehaviorCondition_Deactivate(state);
+            state->flags &= ~OVERWORLD_BEHAVIOR_CONDITION_STATE_CRASH_PENDING;
+            state->flags |= OVERWORLD_BEHAVIOR_CONDITION_STATE_REARM;
+            state->cooldownUntil = world->frame + definition->cooldownFrames;
+            return OVERWORLD_BEHAVIOR_CONDITION_OK;
+        }
+        if ((state->flags & OVERWORLD_BEHAVIOR_CONDITION_STATE_REARM) != 0) {
+            if (!truth && OverworldBehaviorCondition_Reached(
+                    world->frame, state->cooldownUntil)) {
+                state->flags &= ~OVERWORLD_BEHAVIOR_CONDITION_STATE_REARM;
+            }
+            return OVERWORLD_BEHAVIOR_CONDITION_OK;
+        }
+    }
     if (wasActive
         && !OverworldBehaviorCondition_RestoreTarget(
             state, input, world, &activeTarget, &targetX, &targetY)) {
-        OverworldBehaviorCondition_SetStateActive(state, 0);
-        OverworldBehaviorCondition_ClearStoredTarget(state);
+        OverworldBehaviorCondition_Deactivate(state);
         return OVERWORLD_BEHAVIOR_CONDITION_STALE_TARGET;
     }
 
     if (definition->activationMode
         == OVERWORLD_BEHAVIOR_CONDITION_WHILE_TRUE) {
-        if (OverworldBehaviorCondition_StateActive(state)
-            && state->targetKind != OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE
-            && !OverworldBehaviorCondition_UsesVision(definition)
-            && !OverworldBehaviorCondition_InRange(
-                definition, world, targetX, targetY)) {
-            OverworldBehaviorCondition_SetStateActive(state, 0);
-            OverworldBehaviorCondition_ClearStoredTarget(state);
-        }
-        if (OverworldBehaviorCondition_StateActive(state)
-            && OverworldBehaviorCondition_UsesVision(definition)
-            && truth
-            && activeTarget.kind
-                == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR
-            && (truthTarget.kind
-                    != OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR
-                || !OverworldBehaviorCondition_SameHandle(
-                    &activeTarget.actor, &truthTarget.actor))) {
-            OverworldBehaviorCondition_SetStateActive(state, 0);
-            OverworldBehaviorCondition_ClearStoredTarget(state);
-        }
         if (!truth
             || (definition->targetKind != OVERWORLD_BEHAVIOR_CONDITION_TARGET_NONE
                 && truthTarget.kind == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE)) {
-            OverworldBehaviorCondition_SetStateActive(state, 0);
-            OverworldBehaviorCondition_ClearStoredTarget(state);
-        } else if (!OverworldBehaviorCondition_StateActive(state)
-            && !wasActive) {
+            OverworldBehaviorCondition_Deactivate(state);
+        } else if (wasActive) {
+            u8 usesVision = OverworldBehaviorCondition_UsesVision(definition);
+
+            if ((!usesVision
+                    && definition->kind != OVERWORLD_BEHAVIOR_CONDITION_ACTOR_FACTS
+                    && definition->kind != OVERWORLD_BEHAVIOR_CONDITION_PLAYER_DAMAGED
+                    && definition->kind != OVERWORLD_BEHAVIOR_CONDITION_SUBJECT_DAMAGED
+                    && state->targetKind
+                        != OVERWORLD_BEHAVIOR_TARGET_REFERENCE_NONE
+                    && !OverworldBehaviorCondition_InRange(
+                        definition, world, targetX, targetY))
+                || (usesVision
+                    && activeTarget.kind
+                        == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR
+                    && (truthTarget.kind
+                            != OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR
+                        || !OverworldBehaviorCondition_SameHandle(
+                            &activeTarget.actor, &truthTarget.actor)))) {
+                OverworldBehaviorCondition_Deactivate(state);
+            }
+        } else {
             OverworldBehaviorCondition_SetStateActive(state, 1);
             OverworldBehaviorCondition_CaptureTarget(state, &truthTarget);
+            activeTarget = truthTarget;
+            result->triggered = 1;
+        }
+    } else if (definition->activationMode
+            == OVERWORLD_BEHAVIOR_CONDITION_UNTIL_CRASH) {
+        if (!wasActive && truth
+            && (!OverworldBehaviorCondition_StateHasTriggered(state)
+                || OverworldBehaviorCondition_Reached(
+                    world->frame, state->cooldownUntil))) {
+            OverworldBehaviorCondition_SetStateActive(state, 1);
+            OverworldBehaviorCondition_SetStateHasTriggered(state);
+            OverworldBehaviorCondition_CaptureTarget(state, &truthTarget);
+            state->activeUntil = 0;
             activeTarget = truthTarget;
             result->triggered = 1;
         }
@@ -603,8 +758,7 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluateEntry(
         if (OverworldBehaviorCondition_StateActive(state)
             && OverworldBehaviorCondition_Reached(
                 world->frame, state->activeUntil)) {
-            OverworldBehaviorCondition_SetStateActive(state, 0);
-            OverworldBehaviorCondition_ClearStoredTarget(state);
+            OverworldBehaviorCondition_Deactivate(state);
         }
         if ((!OverworldBehaviorCondition_StateHasTriggered(state)
                 || definition->cooldownFrames == 0
@@ -627,6 +781,13 @@ OverworldBehaviorConditionStatus OverworldBehaviorCondition_EvaluateEntry(
 
     result->active = OverworldBehaviorCondition_StateActive(state);
     if (result->active) {
+        if (input->reserved == OVERWORLD_BEHAVIOR_CONDITION_INPUT_MOVING_NOTICE) {
+            if (result->triggered)
+                state->flags |= OVERWORLD_BEHAVIOR_CONDITION_STATE_NOTICE_PENDING;
+        } else if (state->flags & OVERWORLD_BEHAVIOR_CONDITION_STATE_NOTICE_PENDING) {
+            result->triggered = 1;
+            state->flags &= ~OVERWORLD_BEHAVIOR_CONDITION_STATE_NOTICE_PENDING;
+        }
         result->target.kind = activeTarget.kind;
         if (activeTarget.kind == OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR) {
             result->target.actor = activeTarget.actor;

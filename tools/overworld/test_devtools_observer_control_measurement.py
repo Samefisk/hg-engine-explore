@@ -6,7 +6,10 @@ and object readers, MotionRecorder and TestEvaluator are their actual code.
 This is host proof, not a claim that the live ROM control has run.
 """
 from copy import deepcopy
+import hashlib
 import json
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -16,6 +19,7 @@ from tools.overworld.devtools_runtime import actor_identity_checks
 from tools.overworld.devtools_test_contract import TestEvaluator
 from tools.overworld import test_devtools_observer_control as native_fixture
 from tools.overworld.test_devtools_chain_measurement import SCHEMA, SOURCE, Stream
+from tools.overworld.test_devtools_spawn_measurement import fly_stream
 from tools.overworld.test_devtools_test_contract import recipe
 
 
@@ -24,7 +28,13 @@ KIND = "live-observer-control-v1"
 
 class Fixture:
     def __init__(self):
-        self.stream = Stream().complete()
+        self.stream = fly_stream(first_elapsed=0)
+        for count in (8, 14, 10):
+            for index in range(count):
+                self.stream.motion("WALK", (1, 0), roll=20 if index == count - 1 else None,
+                    selected=index == count - 1, lane_index=1)
+            for delta in ((2, 2), (-2, 2), (-2, -2), (2, -2)):
+                self.stream.motion("REPOSITION", delta)
         # Generic spawn binding also needs the actual attachment event. The
         # chain fixture has only motion traces; add this separate observation
         # and retain all subsequent sequence positions, counts and poses.
@@ -85,7 +95,7 @@ class Fixture:
                            target={"x": origin["x"] + 2, "y": origin["y"] + 2})
             for key, offset in (("x", 0x70), ("y", 0x78)):
                 f.mem.u32(f.obj + offset, (origin[key] << 16) + 0x8000 + 2 * 0x10000 * elapsed // 8)
-            f.mem.u32(f.obj + 0x74, 0)
+            f.mem.u32(f.obj + 0x74, f.actor["engineObject"]["pos_y"])
             f.mem.u32(f.obj + 0x28, 2)
         f.session.completed_frames += 1
         rt.EXECUTED_FRAME_COUNT += 2
@@ -234,12 +244,89 @@ class MeasurementTests(unittest.TestCase):
                 KIND: {"schema": SCHEMA, "sourceSha256": SOURCE}}):
             result = _replay_shared_test(test, rows)
             self.assertTrue(result["passed"], result)
-            self.assertEqual(result["observedFrames"], 410)
+            self.assertEqual(result["observedFrames"], 544)
             self.assertTrue(result["measurements"][KIND]["cleanup"]["closed"])
             for fault in ("absent-subject", "stale-subject"):
                 negative = _replay_shared_test(test, rows, fault=fault)
                 self.assertFalse(negative["passed"], negative)
                 self.assertTrue(negative["failures"])
+
+    def test_current_fly_baseline_keeps_three_chains_and_rejects_old_hop_contract(self):
+        from tools.overworld.devtools_chain_measurement import LedybaChainMeasurement
+        fixture, meter = self.ready()
+        self.assertEqual(meter.result()["baseline"]["spawnGeometry"]["startup"]["locomotion"], 9)
+        old = fixture.baseline(LedybaChainMeasurement(SCHEMA, SOURCE, max_frames=1000))
+        self.assertFalse(old.finish()["passed"])
+        self.assertTrue(any("startup" in item.get("message", "") for item in old.failures), old.failures)
+        for fault in ("duration", "locomotion", "missing-start"):
+            with self.subTest(fault=fault):
+                rows = deepcopy(fixture.stream.items)
+                if fault == "duration":
+                    rows[1][0]["actors"][0]["motionDuration"] -= 1
+                elif fault == "locomotion":
+                    spawn = next(e["data"] for e in rows[1][1]
+                                 if e.get("data", {}).get("observation") == "spawn-prepared")
+                    spawn["startup"]["locomotion"] = 4
+                else:
+                    rows[1][1][:] = [e for e in rows[1][1]
+                                     if e.get("data", {}).get("event") != "MOTION_STARTED"]
+                bad = LiveObserverControlMeasurement(SCHEMA, SOURCE, max_frames=1000)
+                for snapshot, events in rows:
+                    bad.observe(snapshot, events)
+                self.assertFalse(bad.stage("baseline"))
+                self.assertTrue(bad.result()["failures"])
+
+    def test_current_recipes_seal_all_44_normal_steps_and_reject_changed_setup(self):
+        from tools.overworld import control
+        root = Path(__file__).resolve().parents[2]
+        registry = json.loads((root / "tools/overworld/runtime_proof_registry.json").read_text())
+        points = [(67, 565, 392)] + [(67, 565, z) for z in range(393, 398)]
+        points += [(67, x, 397) for x in range(564, 560, -1)]
+        points += [(67, 561, z) for z in (396, 395)]
+        points += [(67, x, 395) for x in range(560, 549, -1)]
+        points += [(67 if z >= 384 else 34, 550, z) for z in range(394, 375, -1)]
+        points += [(34, x, 376) for x in (551, 552)]
+        self.assertEqual(len(points), 44)
+        for name in ("observation.ledyba-live-controls", "spawn.ledyba-pool-site"):
+            recipe_path = Path("tests/overworld/test-recipes") / (name + ".json")
+            test = json.loads((root / recipe_path).read_text())
+            control._shared_test_registration(test, root)
+            self.assertEqual(test["setup"][0]["args"]["predicate"],
+                             {"kind": "player-settled-at", "map": 67, "x": 564, "z": 392})
+            self.assertEqual(test["setup"][1]["args"]["predicate"]["value"], 0)
+            previous = (564, 392)
+            for n, (map_id, x, z) in enumerate(points, 1):
+                admit, settle = test["setup"][2*n:2*n+2]
+                dx, dz = x - previous[0], z - previous[1]
+                direction = {(1, 0): "RIGHT", (-1, 0): "LEFT", (0, 1): "DOWN", (0, -1): "UP"}[dx, dz]
+                self.assertEqual(admit["op"], "step")
+                self.assertEqual(admit["args"], {"frames": 64, "keys": [direction],
+                    "until": {"kind": "player-step-count", "operator": "eq", "value": n}})
+                self.assertEqual(settle["op"], "wait")
+                self.assertEqual(settle["args"]["predicate"],
+                    {"kind": "player-settled-at", "map": map_id, "x": x, "z": z})
+                for action in (admit, settle):
+                    self.assertEqual(action["skipIf"], {"kind": "actor-present", "subject": "ledyba"})
+                previous = (x, z)
+            self.assertEqual(registry["sharedTests"][name]["recipeSha256"],
+                             hashlib.sha256((root / recipe_path).read_bytes()).hexdigest())
+            # The real registered recipe seal rejects changed setup, even if
+            # the generic recipe parser accepts that individual operation.
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                (temp / "tools/overworld").mkdir(parents=True)
+                (temp / "tests/overworld/test-recipes").mkdir(parents=True)
+                (temp / "tools/overworld/runtime_proof_registry.json").write_text(json.dumps(registry))
+                for fault in ("endpoint", "counter", "stop", "teleport"):
+                    with self.subTest(recipe=name, fault=fault):
+                        changed = deepcopy(test)
+                        if fault == "endpoint": changed["setup"][3]["args"]["predicate"]["x"] += 1
+                        elif fault == "counter": changed["setup"][2]["args"]["until"]["value"] += 1
+                        elif fault == "stop": changed["setup"][2].pop("skipIf")
+                        else: changed["setup"][2].update(op="teleport", args={"map": 34, "x": 552, "z": 376, "facing": 1})
+                        (temp / recipe_path).write_text(json.dumps(changed))
+                        with self.assertRaises((control.ValidationFailure, ValueError)):
+                            control._shared_test_registration(changed, temp)
 
     def test_full_real_control_path_retains_two_detections_and_frozen_three_chain_baseline(self):
         fixture, meter = self.ready()

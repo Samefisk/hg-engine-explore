@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.throw-notice-walk-commit",
+  "title": "Natural Throw notice does not strand an accepted Wild Walk",
+  "status": "active",
+  "capabilities": [
+    "profile.composition",
+    "walk.exact"
+  ],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "The one prepared, bound Wild Geodude at Route 29 tile (586,412), with prepared Snorlax.",
+    "trigger": "Wait for its accepted ordinary 16-frame North Walk from its current origin on row412, within five horizontal tiles of the Player while the player is at (585,406). One ordinary DOWN+B input moves the player to logical tile (585,407), inside notice range on the next completed frame.",
+    "observable": "The next frame has the current Player notice and resolves Throw speed 8. The same accepted Walk token commits, finishes, and returns control at its legal terminal. The old token and COMMIT_PENDING state stay gone for eight frames.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Checked teleport to (585,406), passive follower, bound Snorlax and Geodude at (586,412)."
+      },
+      {
+        "phase": "during-observation",
+        "target": "observation",
+        "change": "Neutral input until an exact accepted North Walk from the current origin on row412, within five horizontal tiles of the Player; one ordinary DOWN+B player step; then neutral input. No actor, profile, or timer writes."
+      }
+    ],
+    "limits": [
+      "This controlled prepared-actor case is not population-spawn proof.",
+      "This bounded case proves the notice during one accepted Walk, not a full Throw lifecycle. The unchanged recipe retains historical action wait-ordinary-up-walk and stage ordinary-up-walk; the stage checks a one-tile North endpoint from the current row412 origin within five horizontal tiles of the Player, with facing North. It does not require the original spawn tile after an earlier ordinary step."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "snorlax",
+      "species": 143,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "geodude",
+      "species": 74,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Bind Snorlax and Geodude with a passive follower; keep the player outside notice range at (585,406)."
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Wait for Geodude's ordinary North Walk from its current origin on row412, then use one DOWN+B step to enter notice range."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Observe next-frame Throw speed 8, exact Walk token commit, motion finish, control return, and eight clean frames."
+    }
+  ],
+  "stop": {
+    "frameBudget": 550,
+    "condition": "Eight clean frames after the accepted Walk control return, or the first owner, token, notice, or terminal failure."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "The next-frame notice resolves Throw speed 8 while the accepted Walk plan stays unchanged.",
+      "The same Walk commits and returns control by its legal terminal.",
+      "No old-token COMMIT_PENDING state remains after control return."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "wild.throw-notice-walk-commit",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "engine-boundary",
+      "logical-commit",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumFrames": 25
+  }
+}

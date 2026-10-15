@@ -21,11 +21,12 @@ typedef struct {
     u32 lastAcknowledgedSequence;
     u32 frame;
     OverworldActorCommand commands[OVERWORLD_ACTOR_SYSTEM_COMMAND_CAPACITY];
-    OverworldActorReply acknowledgements[OVERWORLD_ACTOR_SYSTEM_ACK_CAPACITY];
     OverworldActorRuntimeSlot slots[OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS];
     OverworldActorTraceHeader trace;
 } OverworldActorSystemState;
 static OverworldActorSystemState gOverworldActorSystemState;
+static OverworldActorReply testActorAcknowledgements[OVERWORLD_ACTOR_SYSTEM_ACK_CAPACITY];
+#define OVERWORLD_ACTOR_ACKNOWLEDGEMENTS testActorAcknowledgements
 static unsigned terminalCount;
 static BOOL busy;
 static void ActorSystem_EnsureInitialized(void) {}
@@ -57,6 +58,7 @@ static OverworldActorCommand Reset(const char *name)
 {
     OverworldActorCommand c;
     caseName = name; memset(&gOverworldActorSystemState, 0, sizeof(gOverworldActorSystemState));
+    memset(testActorAcknowledgements, 0, sizeof(testActorAcknowledgements));
     terminalCount = 0; busy = FALSE;
     gOverworldActorSystemState.fieldEpoch = 2;
     memset(&c, 0, sizeof(c)); c.version = OVERWORLD_ACTOR_SYSTEM_ABI_VERSION;

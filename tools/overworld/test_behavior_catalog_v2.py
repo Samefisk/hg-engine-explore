@@ -102,16 +102,18 @@ class BehaviorCatalogV5CutoverTests(unittest.TestCase):
         ):
             VIEWER.validate_behavior_catalog(changed)
 
-    def test_notice_player_replaces_default_active(self) -> None:
-        profile = self.profile("notice-player")
-        application = next(
-            item for item in self.catalog["applications"]
-            if item["id"] == "apply-notice-player"
-        )
-        self.assertEqual(profile["kind"], "conditional")
-        self.assertTrue(profile["conditions"])
-        self.assertEqual(application["profile"], profile["id"])
-        self.assertNotIn("target", application)
+    def test_notice_player_removed_but_specialized_notice_and_alerts_remain(self) -> None:
+        self.assertNotIn("notice-player", {p["id"] for p in self.catalog["profiles"]})
+        self.assertNotIn("apply-notice-player", {a["id"] for a in self.catalog["applications"]})
+        for profile_id, condition_id, alert_time in (
+            ("throw", "condition-throw-notices-player", 20),
+            ("startled", "condition-startled-notices-player", 10),
+            ("playful", "condition-playful-notices-player", 20),
+        ):
+            profile = self.profile(profile_id)
+            self.assertTrue(any(c["id"] == condition_id for c in profile["conditions"]))
+            self.assertEqual(profile["fields"]["alertTime"], {"operator": "replace", "value": alert_time})
+        self.assertEqual(self.profile("throw")["conditions"][0]["when"]["kind"], "notice-player")
 
     def test_profile_owned_conditions_can_use_independent_subject_pools(self) -> None:
         changed = copy.deepcopy(self.catalog)
@@ -153,7 +155,7 @@ class BehaviorCatalogV5CutoverTests(unittest.TestCase):
         source = json.loads(VIEWER.BEHAVIOR_SCHEMA_SOURCE.read_text())
         generated = json.loads(VIEWER.BEHAVIOR_SCHEMA_METADATA.read_text())
         self.assertEqual(source["schemaVersion"], 2)
-        self.assertEqual(source["blobVersion"], 81)
+        self.assertEqual(source["blobVersion"], 85)
         by_offset = {field["offset"]: field for field in source["fields"]}
         self.assertEqual(by_offset[1]["key"], "visionRange")
         self.assertEqual(by_offset[4]["key"], "visionCone")

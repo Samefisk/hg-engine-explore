@@ -70,21 +70,13 @@ class WorkshopConditionalPreviewTests(unittest.TestCase):
         evaluation = result["conditionEvaluation"]
         self.assertEqual(
             evaluation["activeApplicationIds"],
-            ["apply-perch", "apply-notice-player"],
+            ["apply-perch"],
         )
         self.assertEqual(
             evaluation["winningCondition"]["conditionId"],
-            "condition-notice-player",
+            "condition-perch-on-elevated-surface",
         )
-        self.assertEqual(
-            evaluation["targetSource"],
-            {
-                "profileId": "notice-player",
-                "applicationId": "apply-notice-player",
-                "conditionId": "condition-notice-player",
-                "target": {"kind": "player"},
-            },
-        )
+        self.assertIsNone(evaluation["targetSource"])
         layer = next(
             layer
             for layer in result["resolverLayers"]
@@ -95,11 +87,58 @@ class WorkshopConditionalPreviewTests(unittest.TestCase):
         self.assertIn("chillState", {change["field"] for change in layer["changes"]})
         self.assertIn("apply-perch", result["appliedApplicationIds"])
 
+    def test_condition_owner_above_255_uses_subject_local_slots(self) -> None:
+        catalog = copy.deepcopy(self.catalog)
+        applications = catalog["applications"]
+        style = next(a for a in applications if a["id"] == "apply-waddle")
+        expressions, order = VIEWER.parse_define_expressions(VIEWER.DEFINE_SOURCE_FILES)
+        macros = VIEWER.evaluate_defines(expressions)
+        species = VIEWER.parse_species(expressions, macros, order)[:270]
+        self.assertEqual(len(species), 270)
+        additions = []
+        for index, entry in enumerate(species):
+            application = copy.deepcopy(style)
+            application["id"] = f"preview-growth-{index}"
+            application["target"]["members"] = [entry["symbol"]]
+            additions.append(application)
+        insertion = applications.index(style) + 1
+        applications[insertion:insertion] = additions
+        runtime = VIEWER._runtime_source_behavior_catalog(catalog)["applications"]
+        self.assertGreater(next(i for i, a in enumerate(runtime)
+            if a["id"] == "apply-playful"), 255)
+
+        payload = self.payload(catalog)
+        payload["subject"]["species"] = "SPECIES_CLEFAIRY"
+        payload["observation"]["player"]["valid"] = False
+        payload["candidates"] = [{"id": "target-a", "species": "SPECIES_CLEFABLE",
+            "role": "wild", "valid": True, "x": 11, "y": 10}]
+        result = reliability.resolve_conditional_preview(
+            VIEWER, payload)
+        evaluation = result["conditionEvaluation"]
+        self.assertEqual(evaluation["activeApplicationIds"], ["apply-find-playmate", "apply-playful"])
+        self.assertEqual(evaluation["winningCondition"]["applicationId"], "apply-playful")
+        entry = next(entry for entry in evaluation["entries"]
+            if entry["applicationId"] == "apply-playful")
+        self.assertTrue(entry["winsProfile"])
+        self.assertIn("apply-playful", result["appliedApplicationIds"])
+
+    def test_current_roster_rejects_two_generations_in_one_slot(self) -> None:
+        candidate = {"id": "target-a", "species": "SPECIES_CLEFABLE", "role": "wild",
+            "handle": {"slot": 1, "generation": 1}}
+        payload = self.payload(self.catalog)
+        payload["candidates"] = [candidate, {**candidate, "id": "target-b",
+            "handle": {"slot": 1, "generation": 2}}]
+        with self.assertRaisesRegex(ValueError, "candidate slots must be unique"):
+            reliability.resolve_conditional_preview(VIEWER, payload)
+        payload["candidates"] = [{**candidate, "handle": {"slot": 0, "generation": 2}}]
+        with self.assertRaisesRegex(ValueError, "subject slot has a different current identity"):
+            reliability.resolve_conditional_preview(VIEWER, payload)
+
     def test_actor_target_timer_state_round_trips_and_role_filter_is_shared(self) -> None:
         catalog = copy.deepcopy(self.catalog)
         playful = next(
             profile for profile in catalog["profiles"]
-            if profile["id"] == "playful"
+            if profile["id"] == "find-playmate"
         )
         playful["conditions"][0]["target"]["roles"] = ["wild"]
         payload = self.payload(catalog, terrain_mask=65)
@@ -119,11 +158,11 @@ class WorkshopConditionalPreviewTests(unittest.TestCase):
         first = reliability.resolve_conditional_preview(VIEWER, payload)
         evaluation = first["conditionEvaluation"]
         winner = evaluation["winningCondition"]
-        self.assertEqual(winner["conditionId"], "condition-playful-notices-compatible-actor")
+        self.assertEqual(winner["conditionId"], "condition-playful-next-to-playmate")
         actor_entry = next(
             item
             for item in evaluation["entries"]
-            if item["conditionId"] == "condition-playful-notices-compatible-actor"
+            if item["conditionId"] == "condition-find-playmate-notices-compatible-actor"
         )
         self.assertTrue(actor_entry["winsProfile"])
         self.assertEqual(
@@ -133,11 +172,13 @@ class WorkshopConditionalPreviewTests(unittest.TestCase):
         state = next(
             item
             for item in evaluation["nextState"]
-            if item["conditionId"] == "condition-playful-notices-compatible-actor"
+            if item["conditionId"] == "condition-find-playmate-notices-compatible-actor"
         )
         self.assertEqual(state["activeUntil"], 520)
         self.assertEqual(state["cooldownUntil"], 530)
 
+        payload["bindings"] = evaluation["bindings"]
+        payload["bindingOwner"] = evaluation["bindingOwner"]
         payload["observation"]["frame"] = 105
         payload["candidates"][0]["x"] = 30
         payload["candidates"][0]["y"] = 30
@@ -146,7 +187,7 @@ class WorkshopConditionalPreviewTests(unittest.TestCase):
         held = next(
             item
             for item in second["conditionEvaluation"]["entries"]
-            if item["conditionId"] == "condition-playful-notices-compatible-actor"
+            if item["conditionId"] == "condition-find-playmate-notices-compatible-actor"
         )
         self.assertFalse(held["conditionTrue"])
         self.assertTrue(held["active"])
@@ -155,11 +196,13 @@ class WorkshopConditionalPreviewTests(unittest.TestCase):
         payload["observation"]["frame"] = 100
         payload["candidates"][0].update({"role": "follower", "x": 11, "y": 10})
         payload["conditionState"] = []
+        payload.pop("bindings", None)
+        payload.pop("bindingOwner", None)
         filtered = reliability.resolve_conditional_preview(VIEWER, payload)
         actor_entry = next(
             item
             for item in filtered["conditionEvaluation"]["entries"]
-            if item["conditionId"] == "condition-playful-notices-compatible-actor"
+            if item["conditionId"] == "condition-find-playmate-notices-compatible-actor"
         )
         self.assertTrue(actor_entry["subjectMatched"])
         self.assertFalse(actor_entry["conditionTrue"])

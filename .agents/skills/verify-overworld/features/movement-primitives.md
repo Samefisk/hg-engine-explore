@@ -38,7 +38,12 @@ Preconditions:
   exact player-step count, paired poses and control return. This is not Wild
   role parity, authored-profile timing, or sound-from-speakers proof. See
   [checked tests](../../../../documentation/overworld-system/devtools-tests.md#author-an-executable-test).
-- **Hop.** Run `scripts/owctl scenario run hop.cardinal-and-diagonal --json` and `scripts/owctl scenario run hop.ledge-up-and-down --json`. For mounted lifecycle races, also run `scripts/owctl scenario run hop.mounted-single-motion --json`.
+- **Hop.** Run `scripts/owctl scenario run hop.ledge-up-and-down --json`. A mounted Hop starts only from a ledge or B Jump; use `mount.stantler-running-ledge` for the mounted ledge Hop.
+- **Random Hop search.** `host.random-hop-search` runs the actual helper C.
+  An open area needs one landing validation; blocked candidates are not
+  repeated, every authored vector remains available, and Walk history keeps
+  its priority rules. This host check does not replace the current-ROM
+  `world.unmounted.spawn-zero-stutter` gate.
 - **Teleport.** Run `scripts/owctl scenario run teleport.fixed-and-per-tile --json` when its shared port is active. Require native visibility, pose, timing and terminal-event measurements; screenshots supply no proof.
 - **Chain pause.** The current `chain.pause.counts-semantic-moves` case is a
   controlled retry, not normal Ledyba timing proof. Use the

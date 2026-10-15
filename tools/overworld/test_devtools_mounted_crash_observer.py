@@ -26,9 +26,9 @@ class MountedCrashObserverTests(unittest.TestCase):
     def test_header_offsets_are_current_arm_layout(self):
         root=Path(__file__).resolve().parents[2]
         code='#include "include/overworld_mount_internal.h"\n'
-        for field,offset in [('snapshot.motionMode',102),('motionFrameCount',144),('motionElapsed',146)]:
+        for field,offset in [('snapshot.motionMode',111),('motionFrameCount',144),('motionElapsed',146)]:
             code+=f'_Static_assert(__builtin_offsetof(OverworldMountRuntimeState,{field})=={offset},"{field}");\n'
-        code+='_Static_assert(sizeof(OverworldMountRuntimeState)==184,"state size");\n'
+        code+='_Static_assert(sizeof(OverworldMountRuntimeState)==188,"state size");\n'
         run=subprocess.run(['clang','-target','armv5te-none-eabi','-fsyntax-only','-Wno-unknown-attributes',
             '-Wno-gnu-folding-constant','-I',str(root),'-x','c','-'],input=code,text=True,capture_output=True,timeout=15)
         self.assertEqual(run.returncode,0,run.stderr)
@@ -38,17 +38,17 @@ class MountedCrashObserverTests(unittest.TestCase):
         for name in ('update','presentation','finish','sound','soundStart'):
             self.assertIsNone(r._entry(name))
         self.assertEqual(sum(r.counts.values()),0)
-        put(r.mount_state+102,b'\x03');put(r.mount_state+144,struct.pack('<HH',32,31))
+        put(r.mount_state+111,b'\x03');put(r.mount_state+144,struct.pack('<HH',32,31))
         value=r._entry('update');put(r.mount_state+146,struct.pack('<H',32))
         returned=r._returned(value,dict(returnValue=0,returned=r.observer._clock()))
         self.assertEqual((returned['before']['elapsed'],returned['after']['elapsed']),(31,32))
         r.completed_boundary();self.assertEqual(r.result()['latestCompleted']['elapsed'],32)
-        value=r._entry('finish');put(r.mount_state+102,b'\x00');put(r.mount_state+144,b'\0'*4)
+        value=r._entry('finish');put(r.mount_state+111,b'\x00');put(r.mount_state+144,b'\0'*4)
         actor['commitSequence']+=1  # Mutable public state is retained, not treated as owner drift.
         returned=r._returned(value,dict(returnValue=0,returned=r.observer._clock()))
         self.assertEqual((returned['before']['mode'],returned['after']['mode']),(3,0))
         self.assertIn('unk88_z',returned['after']['pose']['player'])
-        self.assertEqual(len(bytes.fromhex(returned['after']['mountStateHex'])),184)
+        self.assertEqual(len(bytes.fromhex(returned['after']['mountStateHex'])),188)
         r.close();self.assertEqual(r.close(),r.result());self.assertFalse(r.observer.hooks.callbacks)
 
     def test_code_identity_and_bounds_fail_closed(self):

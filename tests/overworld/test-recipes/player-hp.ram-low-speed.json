@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.ram-low-speed",
+  "title": "Adjacent low-speed Onix Ram leaves player HP unchanged",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/player-hp-implementation-plan.md",
+  "requirements": [
+    "current.player-health-ram-low-speed"
+  ],
+  "budgets": {
+    "maxSeconds": 180,
+    "maxFrames": 360,
+    "noProgressFrames": 120,
+    "minObservedFrames": 81
+  },
+  "subjects": [
+    {
+      "id": "onix",
+      "species": 95,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "player-health-ram-low-speed-v1",
+      "subject": "onix"
+    }
+  ],
+  "setup": [
+    {
+      "id": "ram-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 407,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-onix",
+      "op": "spawn",
+      "args": {
+        "species": 95,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 585,
+        "z": 408
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-onix",
+      "op": "bind",
+      "args": {
+        "subject": "onix"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "before-ram",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "wait-ram-application",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "player-health-ram-low-speed-v1",
+          "stage": "ram-active",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "allow-adjacent-ram",
+      "op": "step",
+      "args": {
+        "frames": 80,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 45,
+        "maxFrames": 80,
+        "noProgressFrames": 80
+      }
+    },
+    {
+      "id": "after-ram",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "player-health-ram-low-speed-v1",
+      "when": "final"
+    }
+  ]
+}

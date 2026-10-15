@@ -24,9 +24,9 @@ class ManifestError(ValueError):
 TARGET_CONTRACT_DIGESTS = {
     "pools": "e8b04f22243b287d29f9d6617f1a06af70f263b2ba46eff5b6191df22fbecb14",
     "memberships": "060416a2a48bbe0d0ccdafdd162b5eeec4411d6e31342b7483be700f7b56ae3b",
-    "profile-fields": "99dc0ff2b3fcfa03cdf0c14a7f90a825608602e1019d565b9f3080f1f09cd8b6",
+    "profile-fields": "110f8ff62f016c37bfc6ed8d7d925d46fcb3b32fb7bef930bbc89b9622efcc9c",
     "application-targets": "13a36b6b2638cbc4dc2c5359065d1e7b86ef54f23051d896bc793207dfe67a91",
-    "conditions": "666e4d1ebadd193052d9512ee14509f525bfb3ab4124da356b1b2a3a6fd17e17",
+    "conditions": "a910483a645b789473891f51cb748df2a226400333f7864607d78dd477bddde7",
     "runtime-bindings": "9905bf77a44f40d55aa6e2d99ab012147055164c87c8b271daadaafc624718e6",
 }
 

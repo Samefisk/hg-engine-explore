@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.moving-heal-mounted",
+  "title": "Player heals during mounted travel after one real Ambush hit",
+  "status": "active",
+  "capabilities": [
+    "player.health"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/player-hp-implementation-plan.md#implementation-rules",
+    "actor": "Same current Wild Weepinbell70 and same current Mounted Cyndaquil155 and its Player rider.",
+    "trigger": "After exact prepared placement, walk Up until one real attacking Ambush body contact. Then use normal Up+B, Right+B and bounded east/west road inputs.",
+    "observable": "Live and saved Player HP100\u219280 on one natural collision. Eligible HP clock+300:80/rem0; +305:80/rem50; +306:81/rem0; +360:90/rem0. Native ordinary travel occurs during both wait and healing; same Field, role, input and hit count persist.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Checked teleport map33/player585407 South, fullHP party0 Cyndaquil155Lv50 and ordinary mounted role setup, five passive Wild spawns at582401..405, Weepinbell70Lv5 at585402 and current binds. No Player HP/timer/profile/RNG writes."
+      }
+    ],
+    "limits": [
+      "Prepared placement does not prove natural spawning or party selection.",
+      "Only normal directional input and read-only player-health.observe follow the first hit. Any second hit, paused eligible clock, map handoff or mount loss fails.",
+      "The 300-frame wait and10HP/sec use the health owner sequence. Dense completed native frames and poses also must match.",
+      "Menu/battle pause and fullHP clamp remain existing production model checks; this case proves moving recovery at80..90HP."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "weepinbell",
+      "species": 70,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Prepare placement and bind current actors."
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Normal Up approaches and receives one real Ambush hit."
+    },
+    {
+      "at": 2,
+      "kind": "input",
+      "value": "Normal travel stays on the clear road through360eligible HP frames."
+    }
+  ],
+  "stop": {
+    "frameBudget": 1300,
+    "condition": "One real hit, exact health clock360 and normal travel throughout wait/healing, or first identity/clock/control/HP failure."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Same current field owner and full actor generations",
+      "One attacking collision and one accepted HP loss",
+      "No post-hit setup writes",
+      "300eligible wait frames and10HP/sec",
+      "Actual ordinary moving poses during wait and healing"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "player-hp.moving-heal-mounted",
+    "claims": [
+      "live-actor-identity",
+      "engine-boundary",
+      "natural-input",
+      "control-release"
+    ],
+    "minimumFrames": 361
+  }
+}

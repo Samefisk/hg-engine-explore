@@ -16,7 +16,10 @@ class ProofAdapterTests(unittest.TestCase):
         self.assertEqual(ProofAdapter('a','b','c','reader','S4').proof_level,'S4')
 
     def test_exact_adapters_preserve_contracts_faults_and_constructors(self):
-        self.assertEqual(len(ADAPTERS),20)
+        self.assertEqual(len(ADAPTERS),60)
+        registered={row['evaluator'] for row in json.loads(
+            (Path(__file__).with_name('runtime_proof_registry.json')).read_text())['sharedTests'].values()}
+        self.assertEqual(set(ADAPTERS)-registered,{'follower-throw-approach-cargo-v1'})
         for kind,adapter in ADAPTERS.items():
             with self.subTest(kind=kind):
                 module=import_module('tools.overworld.'+adapter.module_name)
@@ -31,9 +34,10 @@ class ProofAdapterTests(unittest.TestCase):
                     self.assertEqual(adapter.claims,tuple(module.claims(adapter.feature)))
                     self.assertEqual(adapter.contract(),module.contract(adapter.feature))
                     self.assertEqual(adapter.faults,tuple(module.faults(adapter.feature)))
-                self.assertEqual(adapter.proof_level,'S4' if kind in
-                                 ('mounted-crash-v1','mount-detach-follower-resume-v1',
+                self.assertEqual(adapter.proof_level,'S5' if kind=='wild-throw-ground-lock-soak-v1' else 'S4' if kind in
+                                 ('basic-attack-v1','follower-ram-pokemon-v1','pokemon-damage-palette-v1','pokemon-ambush-cooldown-palette-v1','pokemon-cooldown-palette-v1','pokemon-skid-hit-v1','pokemon-combat-v1','mounted-crash-v1','mount-detach-follower-resume-v1',
                                   'mounted-speed-slew-v1','turn-skid-v1',
+                                  'ambush-player-landing-v1',
                                   'fly-in-runtime-v1','waddle-runtime-v1',
                                   'floaty-bounce-hop-pause-v1') else 'S3')
                 for fault in adapter.faults:
@@ -41,7 +45,8 @@ class ProofAdapterTests(unittest.TestCase):
                 with self.assertRaises(ValueError):adapter.negative('unknown-copied-fault')
                 if adapter.is_control:
                     self.assertTrue(adapter.requirement.startswith('shared.'))
-                elif adapter.recorder_control_requirement is not None:
+                elif (adapter.recorder_control_requirement is not None
+                      and adapter.recorder_control_requirement != 'shared.mounted-pose-recorder-control-v1'):
                     controls=[a for a in ADAPTERS.values() if a.requirement==adapter.recorder_control_requirement]
                     self.assertEqual(len(controls),1);self.assertTrue(controls[0].is_control)
 

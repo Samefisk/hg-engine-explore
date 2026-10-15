@@ -673,10 +673,14 @@ class V2ViewerHandler(legacy.ViewerHandler):
                 self.send_json({"ok": False, "error": {"code": "service_error", "message": str(exc)}}, status=500)
             return
         if path == "/restart-server":
+            if legacy.BUILD_LOCK.locked():
+                self.send_json({"ok": False, "error": "Build is running. Wait for it to finish before restarting Workshop."}, status=409)
+                return
             stop_devtools_session()
             with reliability.workspace_guard(ROOT):
-                reliability.begin_restart()
                 result = legacy.restart_server_soon()
+                if result.get("ok"):
+                    reliability.begin_restart()
                 result["previousServerInstanceId"] = SERVER_INSTANCE_ID
             self.send_json(result)
             return

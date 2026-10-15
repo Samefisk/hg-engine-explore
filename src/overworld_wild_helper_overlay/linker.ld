@@ -47,8 +47,16 @@ SECTIONS {
                 *(.data)
         } >rom = 0xff
 
-        ASSERT(ADDR(.data) + SIZEOF(.data) <= ORIGIN(rom) + 0x3DF8,
+        ASSERT(ADDR(.data) + SIZEOF(.data) <= ORIGIN(rom) + 0x3D34,
             "wild helper core overlaps condition visibility population")
+
+        .overworld_wild_throw_height ORIGIN(rom) + 0x3D34 : {
+                KEEP(*(.overworld_wild_throw_height))
+                ASSERT(SIZEOF(.overworld_wild_throw_height) == 0xC4,
+                    "private Throw-height wrapper size changed");
+                ASSERT(. <= ORIGIN(rom) + 0x3DF8,
+                    "private Throw-height wrapper exceeds Helper151 filler");
+        } >rom = 0xff
 
         .overworld_condition_visibility_populate ORIGIN(rom) + 0x3DF8 : {
                 KEEP(*(.overworld_condition_visibility_populate))

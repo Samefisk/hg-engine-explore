@@ -2,6 +2,7 @@
 
 import copy
 import json
+import struct
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -83,6 +84,69 @@ def chain_fixture():
 
 
 class LiveIdentityTests(unittest.TestCase):
+    @staticmethod
+    def _resolver_descriptor_fixture(debug):
+        image = bytearray(debug.FILE_SIZE)
+        names = (*debug.MAIN_CALLBACKS, *debug.COMPAT_CALLBACKS,
+                 *debug.RESOLVER_CALLBACKS, *debug.MOTION_CALLBACKS,
+                 *debug.POPULATION_CALLBACKS, *debug.MOVEMENT_POLICY_SYMBOLS)
+        symbols = {name: {"address": debug.OVERLAY_BASE + 0x500 + index * 4,
+                          "size": 4}
+                   for index, name in enumerate(names) if name is not None}
+        symbols[debug.STATE_SYMBOL] = {"address": debug.STATE_ADDRESS, "size": 0x988}
+        pointer = lambda name: symbols[name]["address"] | 1 if name else 0
+        struct.pack_into("<IHH4I", image, debug.ENTRY_ADDRESS - debug.OVERLAY_LOAD_ADDRESS,
+                         0x5341574F, 2, 24, *(pointer(name) for name in debug.MAIN_CALLBACKS))
+        struct.pack_into("<IHH6I", image, debug.COMPAT_ADDRESS - debug.OVERLAY_LOAD_ADDRESS,
+                         0x4341574F, 3, 32, *(pointer(name) for name in debug.COMPAT_CALLBACKS))
+        layout = [0x4C44574F, 1, 64, debug.OVERLAY_BASE, debug.OVERLAY_END,
+                  debug.STATE_ADDRESS, 10, 2, 16, 12, 32, 24, 24, 176, 88, 36, 32,
+                  0x988, 0, 0, 0, 0, 0, 0x78, 16, 4, 0x990, 176]
+        struct.pack_into("<IHHIII22H", image, debug.DEBUG_ADDRESS - debug.OVERLAY_LOAD_ADDRESS,
+                         *layout)
+        callbacks = (debug.RESOLVER_CALLBACKS, debug.MOTION_CALLBACKS,
+                     debug.POPULATION_CALLBACKS)
+        for index, (version, names) in enumerate(zip((3, 6, 3), callbacks)):
+            struct.pack_into("<IHHII", image,
+                debug.SERVICE_DIRECTORY_ADDRESS + index * 16 - debug.OVERLAY_LOAD_ADDRESS,
+                debug.SERVICE_MAGICS[index], version, 16, *(pointer(name) for name in names))
+        struct.pack_into("<IHHII", image,
+            debug.SERVICE_DIRECTORY_ADDRESS + 48 - debug.OVERLAY_LOAD_ADDRESS,
+            debug.SERVICE_MAGICS[3], 5, 16,
+            *(symbols[name]["address"] for name in debug.MOVEMENT_POLICY_SYMBOLS))
+        return image, symbols
+
+    def test_generated_resolver_descriptor_matches_authenticated_table(self):
+        from scripts import generate_overworld_actor_system_debug as debug
+        image, symbols = self._resolver_descriptor_fixture(debug)
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "actor.bin"
+            binary.write_bytes(image)
+            _, _, services = debug.verify_binary(binary, binary, symbols)
+        service = services[0]
+        offset = debug.SERVICE_DIRECTORY_ADDRESS - debug.OVERLAY_LOAD_ADDRESS
+        header = struct.unpack_from("<IHHII", image, offset)
+        self.assertEqual(service["version"], header[1])
+        self.assertEqual(service["size"], header[2])
+        self.assertEqual(service["callbacks"], dict(resolve=header[3], inspectClass=header[4]))
+
+    def test_generated_resolver_descriptor_rejects_stale_table_and_callback(self):
+        from scripts import generate_overworld_actor_system_debug as debug
+        image, symbols = self._resolver_descriptor_fixture(debug)
+        offset = debug.SERVICE_DIRECTORY_ADDRESS - debug.OVERLAY_LOAD_ADDRESS
+        for field, format_, delta, value, message in (
+                ("old version", "H", 4, 2, "resolver service entry header changed"),
+                ("wrong size", "H", 6, 32, "resolver service entry header changed"),
+                ("wrong callback", "I", 8, symbols[debug.RESOLVER_CALLBACKS[0]]["address"] + 5,
+                 "ABI pointer for BehaviorResolver_Resolve")):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                changed = bytearray(image)
+                struct.pack_into("<" + format_, changed, offset + delta, value)
+                binary = Path(directory) / "actor.bin"
+                binary.write_bytes(changed)
+                with self.assertRaisesRegex(RuntimeError, message):
+                    debug.verify_binary(binary, binary, symbols)
+
     def test_native_active_flags_are_shared_and_bounded(self):
         from tools.overworld.spawn_identity import live_spawn_flags
         from tools.overworld.devtools_contract import source_paths
@@ -105,17 +169,21 @@ class LiveIdentityTests(unittest.TestCase):
 
     def test_generated_descriptor_publishes_required_context_offset(self):
         from scripts import generate_overworld_actor_system_debug as debug
-        symbols = {name: {"address": 1, "size": 2448}
+        symbols = {name: {"address": 1, "size": 2488}
                    for name in (*debug.MAIN_CALLBACKS, *debug.COMPAT_CALLBACKS, debug.STATE_SYMBOL)
                    if name is not None}
         layout = [0] * 28
         layout[18] = 12
+        layout[27] = 176
         with tempfile.TemporaryDirectory() as directory:
             path = str(Path(directory) / "debug.json")
             debug.write_descriptor(path, b"", symbols, layout, [], [0] * 8, {}, {}, {},
                                    debug.parse_context_offsets(REPO / "include/overworld_actor_system_internal.h"))
             descriptor = json.loads(Path(path).read_text())
         self.assertEqual(descriptor["state"]["offsets"].get("mapGeneration"), 46)
+        self.assertEqual(descriptor["state"]["actorStride"], 176)
+        self.assertEqual(descriptor["state"]["actorPolicyOffset"], 140)
+        self.assertEqual(descriptor["structures"]["actorPolicyState"], 36)
 
     def test_shared_observer_rejects_actor_from_previous_map_generation(self):
         actor, source, engine = identity_records()

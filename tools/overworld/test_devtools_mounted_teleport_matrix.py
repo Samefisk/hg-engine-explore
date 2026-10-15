@@ -7,13 +7,13 @@ from .test_devtools_mount_control_stress import StressFixture
 
 
 def config_receipt(f,index):
-    expected=configuration(index);old=bytearray(184);old[8:80]=bytes(72)
+    expected=configuration(index);old=bytearray(192);old[8:88]=bytes(80)
     if index:
         prior=configuration(index-1)
         for off,key in ((12,'locomotion'),(23,'teleportTime'),(24,'teleportPause')):old[8+off]=prior[key]
     new=bytearray(old)
     for off,key in ((12,'locomotion'),(23,'teleportTime'),(24,'teleportPause')):new[8+off]=expected[key]
-    def point(raw):return dict(profileHex=raw[8:80].hex(),mountStateHex=raw.hex(),bindingHex=raw[80:96].hex(),
+    def point(raw):return dict(profileHex=raw[8:88].hex(),mountStateHex=raw.hex(),bindingHex=raw[88:104].hex(),
                                sessionGeneration=1,clock=dict(frame=f.snapshot['frame']),readiness=dict(actor=deepcopy(f.actor),subject=deepcopy(f.subject)))
     return dict(completed=True,guestAdvanced=False,subject=deepcopy(f.subject),changedOffsets=[12,23,24],
                 before=point(old),after=point(new),**expected)

@@ -38,7 +38,7 @@ class CornerTests(unittest.TestCase):
         s.packaged_code = packaged
         previous_unsigned = s.rt.unsigned
         s.rt.unsigned = lambda emu, address, size=4: s.field_pointer() if address == 0x023BC744 else previous_unsigned(emu,address,size)
-        profile = bytearray(72); profile[19] = 1; profile[12] = 1
+        profile = bytearray(80); profile[19] = 1; profile[12] = 1
         put(0x023BC744,struct.pack("<II",s.field_pointer(),0x02213000))
         put(0x023BC744 + 8, profile)
         put(0x023BC744+80,struct.pack("<IHHHHBBBB",123,155,33,3,4,0,6,1,0))

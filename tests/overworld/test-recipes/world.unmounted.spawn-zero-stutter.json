@@ -12,7 +12,7 @@
     "current.unmounted-zero-stutter"
   ],
   "budgets": {
-    "maxSeconds": 300,
+    "maxSeconds": 900,
     "maxFrames": 4000,
     "noProgressFrames": 600,
     "minObservedFrames": 2600
@@ -27,15 +27,194 @@
   ],
   "setup": [
     {
-      "id": "follower-idle",
+      "id": "warmup-city-start",
       "op": "wait",
       "args": {
         "predicate": {
-          "kind": "actor-count",
-          "subject": "mankey",
-          "motionPhase": "IDLE",
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 564,
+          "z": 392
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "warmup-east",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "RIGHT",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
           "operator": "eq",
           "value": 1
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "warmup-east-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 565,
+          "z": 392
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "warmup-south",
+      "op": "step",
+      "args": {
+        "frames": 40,
+        "keys": [
+          "DOWN",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 7
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 40,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "warmup-south-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 565,
+          "z": 398
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "warmup-east-seam",
+      "op": "step",
+      "args": {
+        "frames": 96,
+        "keys": [
+          "RIGHT",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 27
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 96,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "warmup-east-seam-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 33,
+          "x": 585,
+          "z": 398
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "warmup-south-start",
+      "op": "step",
+      "args": {
+        "frames": 48,
+        "keys": [
+          "DOWN",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 35
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 48,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "warmup-south-start-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 33,
+          "x": 585,
+          "z": 406
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "warmup-release",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "follower-present",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "actor-present",
+          "subject": "mankey"
         }
       },
       "budget": {
@@ -67,9 +246,10 @@
           "UP"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 8
+          "value": 398
         }
       },
       "budget": {
@@ -90,7 +270,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -104,9 +284,10 @@
           "LEFT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 28
+          "value": 565
         }
       },
       "budget": {
@@ -127,7 +308,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -141,9 +322,10 @@
           "UP"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 33
+          "value": 393
         }
       },
       "budget": {
@@ -164,7 +346,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -178,9 +360,10 @@
           "LEFT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 55
+          "value": 543
         }
       },
       "budget": {
@@ -201,7 +384,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -215,9 +398,10 @@
           "DOWN"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 64
+          "value": 402
         }
       },
       "budget": {
@@ -238,7 +422,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -252,9 +436,10 @@
           "RIGHT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 76
+          "value": 555
         }
       },
       "budget": {
@@ -275,7 +460,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -289,9 +474,10 @@
           "UP"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 85
+          "value": 393
         }
       },
       "budget": {
@@ -312,7 +498,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -326,9 +512,10 @@
           "LEFT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 97
+          "value": 543
         }
       },
       "budget": {
@@ -349,7 +536,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -363,9 +550,10 @@
           "DOWN"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 106
+          "value": 402
         }
       },
       "budget": {
@@ -386,7 +574,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -400,9 +588,10 @@
           "RIGHT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 118
+          "value": 555
         }
       },
       "budget": {
@@ -423,7 +612,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -437,9 +626,10 @@
           "UP"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 127
+          "value": 393
         }
       },
       "budget": {
@@ -460,7 +650,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -474,9 +664,10 @@
           "LEFT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 139
+          "value": 543
         }
       },
       "budget": {
@@ -497,7 +688,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -511,9 +702,10 @@
           "DOWN"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 148
+          "value": 402
         }
       },
       "budget": {
@@ -534,7 +726,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -548,9 +740,10 @@
           "RIGHT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 160
+          "value": 555
         }
       },
       "budget": {
@@ -571,7 +764,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -585,9 +778,10 @@
           "UP"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 169
+          "value": 393
         }
       },
       "budget": {
@@ -608,7 +802,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -622,9 +816,10 @@
           "LEFT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 181
+          "value": 543
         }
       },
       "budget": {
@@ -645,7 +840,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -659,9 +854,10 @@
           "DOWN"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 190
+          "value": 402
         }
       },
       "budget": {
@@ -682,7 +878,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -696,9 +892,10 @@
           "RIGHT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 202
+          "value": 555
         }
       },
       "budget": {
@@ -719,7 +916,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -733,9 +930,10 @@
           "UP"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 211
+          "value": 393
         }
       },
       "budget": {
@@ -756,7 +954,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -770,9 +968,10 @@
           "LEFT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 223
+          "value": 543
         }
       },
       "budget": {
@@ -793,7 +992,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -807,9 +1006,10 @@
           "DOWN"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 232
+          "value": 402
         }
       },
       "budget": {
@@ -830,7 +1030,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -844,9 +1044,10 @@
           "RIGHT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 244
+          "value": 555
         }
       },
       "budget": {
@@ -867,7 +1068,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -881,9 +1082,10 @@
           "UP"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 253
+          "value": 393
         }
       },
       "budget": {
@@ -904,7 +1106,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -918,9 +1120,10 @@
           "LEFT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 265
+          "value": 543
         }
       },
       "budget": {
@@ -941,7 +1144,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -955,9 +1158,10 @@
           "DOWN"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 274
+          "value": 402
         }
       },
       "budget": {
@@ -978,7 +1182,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -992,9 +1196,10 @@
           "RIGHT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 286
+          "value": 555
         }
       },
       "budget": {
@@ -1015,7 +1220,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1029,9 +1234,10 @@
           "UP"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 295
+          "value": 393
         }
       },
       "budget": {
@@ -1052,7 +1258,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1066,9 +1272,10 @@
           "LEFT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 307
+          "value": 543
         }
       },
       "budget": {
@@ -1089,7 +1296,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1103,9 +1310,10 @@
           "DOWN"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 316
+          "value": 402
         }
       },
       "budget": {
@@ -1126,7 +1334,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1140,9 +1348,10 @@
           "RIGHT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 328
+          "value": 555
         }
       },
       "budget": {
@@ -1163,7 +1372,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1177,9 +1386,10 @@
           "UP"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 337
+          "value": 393
         }
       },
       "budget": {
@@ -1200,7 +1410,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1214,9 +1424,10 @@
           "LEFT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 349
+          "value": 543
         }
       },
       "budget": {
@@ -1237,7 +1448,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1251,9 +1462,10 @@
           "DOWN"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 358
+          "value": 402
         }
       },
       "budget": {
@@ -1274,7 +1486,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1288,9 +1500,10 @@
           "RIGHT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 370
+          "value": 555
         }
       },
       "budget": {
@@ -1311,7 +1524,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1325,9 +1538,10 @@
           "UP"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 379
+          "value": 393
         }
       },
       "budget": {
@@ -1348,7 +1562,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1362,9 +1576,10 @@
           "LEFT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 391
+          "value": 543
         }
       },
       "budget": {
@@ -1385,7 +1600,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1399,9 +1614,10 @@
           "DOWN"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 400
+          "value": 402
         }
       },
       "budget": {
@@ -1422,7 +1638,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1436,9 +1652,10 @@
           "RIGHT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 412
+          "value": 555
         }
       },
       "budget": {
@@ -1459,7 +1676,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1473,9 +1690,10 @@
           "UP"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 421
+          "value": 393
         }
       },
       "budget": {
@@ -1496,7 +1714,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1510,9 +1728,10 @@
           "LEFT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 433
+          "value": 543
         }
       },
       "budget": {
@@ -1533,7 +1752,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1547,9 +1766,10 @@
           "DOWN"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 442
+          "value": 402
         }
       },
       "budget": {
@@ -1570,7 +1790,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1584,9 +1804,10 @@
           "RIGHT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 454
+          "value": 555
         }
       },
       "budget": {
@@ -1607,7 +1828,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1621,9 +1842,10 @@
           "UP"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 463
+          "value": 393
         }
       },
       "budget": {
@@ -1644,7 +1866,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1658,9 +1880,10 @@
           "LEFT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 475
+          "value": 543
         }
       },
       "budget": {
@@ -1681,7 +1904,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1695,9 +1918,10 @@
           "DOWN"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 484
+          "value": 402
         }
       },
       "budget": {
@@ -1718,7 +1942,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1732,9 +1956,10 @@
           "RIGHT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 496
+          "value": 555
         }
       },
       "budget": {
@@ -1755,7 +1980,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1769,9 +1994,10 @@
           "UP"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 505
+          "value": 393
         }
       },
       "budget": {
@@ -1792,7 +2018,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1806,9 +2032,10 @@
           "LEFT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 517
+          "value": 543
         }
       },
       "budget": {
@@ -1829,7 +2056,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1843,9 +2070,10 @@
           "DOWN"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 526
+          "value": 402
         }
       },
       "budget": {
@@ -1866,7 +2094,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1880,9 +2108,10 @@
           "RIGHT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 538
+          "value": 555
         }
       },
       "budget": {
@@ -1903,7 +2132,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1917,9 +2146,10 @@
           "UP"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 547
+          "value": 393
         }
       },
       "budget": {
@@ -1940,7 +2170,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1954,9 +2184,10 @@
           "LEFT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 559
+          "value": 543
         }
       },
       "budget": {
@@ -1977,7 +2208,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -1991,9 +2222,10 @@
           "DOWN"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 568
+          "value": 402
         }
       },
       "budget": {
@@ -2014,7 +2246,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -2028,9 +2260,10 @@
           "RIGHT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 580
+          "value": 555
         }
       },
       "budget": {
@@ -2051,7 +2284,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -2065,9 +2298,10 @@
           "UP"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 589
+          "value": 393
         }
       },
       "budget": {
@@ -2088,7 +2322,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -2102,9 +2336,10 @@
           "LEFT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 601
+          "value": 543
         }
       },
       "budget": {
@@ -2125,7 +2360,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -2139,9 +2374,10 @@
           "DOWN"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 610
+          "value": 402
         }
       },
       "budget": {
@@ -2162,7 +2398,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -2176,9 +2412,10 @@
           "RIGHT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 622
+          "value": 555
         }
       },
       "budget": {
@@ -2199,7 +2436,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -2213,9 +2450,10 @@
           "UP"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 631
+          "value": 393
         }
       },
       "budget": {
@@ -2236,7 +2474,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -2250,9 +2488,10 @@
           "LEFT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 643
+          "value": 543
         }
       },
       "budget": {
@@ -2273,7 +2512,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -2287,9 +2526,10 @@
           "DOWN"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 652
+          "value": 402
         }
       },
       "budget": {
@@ -2310,7 +2550,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -2324,9 +2564,10 @@
           "RIGHT"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "x",
           "operator": "eq",
-          "value": 664
+          "value": 555
         }
       },
       "budget": {
@@ -2347,7 +2588,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }
@@ -2361,9 +2602,10 @@
           "UP"
         ],
         "until": {
-          "kind": "player-step-count",
+          "kind": "player-field",
+          "path": "y",
           "operator": "eq",
-          "value": 673
+          "value": 393
         }
       },
       "budget": {
@@ -2384,7 +2626,7 @@
         }
       },
       "budget": {
-        "maxSeconds": 15,
+        "maxSeconds": 10,
         "maxFrames": 16,
         "noProgressFrames": 8
       }

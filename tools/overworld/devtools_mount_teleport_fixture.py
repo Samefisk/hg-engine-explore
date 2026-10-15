@@ -49,7 +49,7 @@ class MountTeleportFixture(MountWalkFixture):
         require(raw[PROFILE_OFFSET + 12] in (1, 6, 9, 10, 11),
                 "fixture requires mounted Walk or Teleport locomotion")
         field, surface = struct.unpack_from("<II", raw)
-        binding = struct.unpack_from("<IHHHHBBBB", raw, 80)
+        binding = struct.unpack_from("<IHHHHBBBB", raw, 88)
         source = actor["sourceIdentity"]
         require(field == self.reset.field and surface % 2 == 0
                 and 0x02000000 <= surface <= 0x023FFFFC,
@@ -58,15 +58,15 @@ class MountTeleportFixture(MountWalkFixture):
                 actor["handle"]["mapGeneration"], actor["handle"]["encounterGeneration"], actor["form"])
                 and binding[6] == actor["level"] and binding[7] < 6,
                 "fixture mounted binding differs from live subject")
-        generation, phase, cancel, motion, reserved = struct.unpack_from("<IBBBB", raw, 96)
+        generation, phase, cancel, motion, reserved = struct.unpack_from("<IBBBB", raw, 104)
         pending = {i: raw[i] for i in (120, 123, 128, 148, 149, 150, 151, 180, 182, 183) if raw[i]}
         require(generation > 0 and (phase, cancel, motion, reserved) == (2, 0, 0, 0)
                 and raw[122] == 1 and not pending,
                 "fixture mounted motion/input/stream state is not idle: "
                 + str(dict(generation=generation, phase=phase, cancel=cancel, motion=motion,
                            reserved=reserved, attached=raw[122], nonzeroBytes=pending)))
-        return dict(readiness=ready, mountStateHex=raw.hex(), profileHex=raw[8:80].hex(),
-                    bindingHex=raw[80:96].hex(), sessionGeneration=generation, clock=self._clock())
+        return dict(readiness=ready, mountStateHex=raw.hex(), profileHex=raw[8:88].hex(),
+                    bindingHex=raw[88:104].hex(), sessionGeneration=generation, clock=self._clock())
 
     def run(self):
         require(not self.started, "fixture is single-use")
@@ -125,7 +125,7 @@ class MountTeleportRestoreFixture(MountTeleportFixture):
     """Restore only the original three bytes retained by this session."""
     def __init__(self, session, subject, original_profile):
         super().__init__(session, subject, 9, 7, 0)
-        require(isinstance(original_profile, bytes) and len(original_profile) == 72
+        require(isinstance(original_profile, bytes) and len(original_profile) == 80
                 and original_profile[12] == 1, "restore needs the original Walk profile")
         self.original_profile = original_profile
         self.locomotion = original_profile[12]
@@ -135,6 +135,6 @@ class MountTeleportRestoreFixture(MountTeleportFixture):
     def _capture(self):
         value = super()._capture()
         current = bytes.fromhex(value["profileHex"])
-        require(all(current[i] == self.original_profile[i] for i in range(72)
+        require(all(current[i] == self.original_profile[i] for i in range(80)
                     if i not in (12, 23, 24)), "restore profile changed outside fixture bytes")
         return value

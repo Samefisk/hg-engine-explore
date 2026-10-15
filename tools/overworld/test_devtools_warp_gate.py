@@ -23,7 +23,7 @@ def sample():
         receipt=config_receipt(f,index)
         if index==0:
             raw=bytearray.fromhex(receipt['before']['mountStateHex']);raw[20]=1
-            receipt['before']['mountStateHex']=raw.hex();receipt['before']['profileHex']=raw[8:80].hex();original=raw[8:80]
+            receipt['before']['mountStateHex']=raw.hex();receipt['before']['profileHex']=raw[8:88].hex();original=raw[8:88]
         m.configure(receipt,f.snapshot)
         start=list(f.xy);target=[555,398] if index==0 else [555,392];commit=f.actor['commitSequence']
         for elapsed in range(1,9):

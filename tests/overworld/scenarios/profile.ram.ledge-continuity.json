@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.ram.ledge-continuity",
+  "title": "Onix keeps its charge through a legal ledge Hop",
+  "status": "active",
+  "capabilities": [
+    "profile.composition",
+    "walk.exact"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "One exact current Wild Onix590393 on Route29, with passive Cyndaquil follower.",
+    "trigger": "Natural South Ram entry with Player590395; normal Right admission/release to591395.",
+    "observable": "Accepted South ledge Hop590395\u2192590397 keeps the full current Ram and committed heading/acceleration; genuine South Walk590397\u2192590398 follows landing within1 completed frame.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Checked teleport, native Wild spawn, exact subject bind. No profile, condition, motion, collision or HP writes."
+      },
+      {
+        "phase": "during-observation",
+        "target": "observation",
+        "change": "Only normal Right input to admitted591395, release/settle, then neutral. No guest-state writes."
+      }
+    ],
+    "limits": [
+      "Prepared placement is not population-spawn proof.",
+      "The exact native ledger, current prepared conditions and raw policy must remain available.",
+      "No facing, RNG, condition, motion or timer writes.",
+      "TKT10 long charge and real Crash closure remain separate; this case must publish no Crash before its resumed Walk completes."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "onix",
+      "species": 95,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Current native Onix590393, Player590395, passive follower. Bind exact owner."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Natural South charge; normal Right dodge."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Complete legal South ledge Hop and next South Walk with preserved policy and active Ram."
+    }
+  ],
+  "stop": {
+    "frameBudget": 240,
+    "condition": "Complete the accepted ledge Hop and resumed Walk, or fail on any owner/condition/heading/speed/Crash/cancel/ledger error."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "One full current Wild Onix owns every frame.",
+      "Every completed queue is retained.",
+      "Legal ledge Hop preserves charge and cannot publish Crash."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "profile.ram.ledge-continuity",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "engine-boundary",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing",
+      "control-release"
+    ],
+    "minimumFrames": 40
+  }
+}

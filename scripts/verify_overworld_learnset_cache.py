@@ -508,6 +508,59 @@ def verify_exact_packaged_payload(generated: bytes, packaged: bytes, label: str)
     )
 
 
+def query_addon_member_id(repo: Path) -> int:
+    header = (repo / "include/overworld_query_code_addon.h").read_text()
+    declarations = re.findall(
+        r"^#define OVERWORLD_QUERY_CODE_ADDON_MEMBER_ID (\d+)\s*$", header, re.MULTILINE,
+    )
+    require(declarations == ["21"], "Query member must append after unchanged a028 members 0–20")
+    return int(declarations[0])
+
+
+def linked_query_addon_payload(repo: Path) -> bytes:
+    directory = repo / "build/overworld_query_code_addon"
+    image_path = directory / "image.elf"
+    package_path = directory / "query.bin"
+    require(image_path.is_file(), "Query linked image is missing")
+    require(package_path.is_file(), "Query generated package is missing")
+    spec = importlib.util.spec_from_file_location(
+        "learnset_query_addon_packer", repo / "tools/overworld/pack_query_code_addon.py",
+    )
+    require(spec is not None and spec.loader is not None, "Query packer cannot be loaded")
+    packer = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(packer)
+    try:
+        payload, _receipt = packer.package(image_path.read_bytes())
+    except ValueError as error:
+        fail(str(error))
+    verify_exact_packaged_payload(payload, package_path.read_bytes(), "Query linked/generated package")
+    return payload
+
+
+def verify_a028_member_payloads(
+    entries: list[str], staged: list[bytes], packaged: list[bytes],
+    query_member: int, query_payload: bytes,
+) -> None:
+    require(query_member == 21, "Query member no longer preserves old a028 indices")
+    expected_entries = [f"8_{index}" for index in range(7)] + [
+        f"9_{index:02d}" for index in range(7, query_member + 1)
+    ]
+    require(entries == expected_entries, "a028 source member count or sorted member names differ")
+    require(
+        len(staged) == len(packaged) == len(expected_entries),
+        "packaged a028 member count differs from authenticated sorted source directory",
+    )
+    for index, entry in enumerate(entries):
+        # The disabled battle-test member 9_16 is legitimately empty.
+        require(
+            packaged[index] == staged[index],
+            f"a028 member {index} differs from its exact sorted source {entry}",
+        )
+    verify_exact_packaged_payload(
+        query_payload, packaged[query_member], f"a028 member {query_member} (Query)",
+    )
+
+
 def verify_packaged_cache_narcs(repo: Path) -> None:
     """Tie verified cache/form inputs to the exact files passed to ndstool."""
     makefile = (repo / "Makefile").read_text()
@@ -558,6 +611,14 @@ def verify_packaged_cache_narcs(repo: Path) -> None:
     ):
         source = move_recipe if fragment.startswith("cp ") else codetables
         require(fragment in source, f"a028 dependency/copy contract differs: {fragment}")
+    overlays = (repo / "overlays.mk").read_text()
+    for fragment in (
+        "OVERWORLD_QUERY_CODE_ADDON_TARGET := $(BUILD)/a028/9_21",
+        "NARC_FILES += $(OVERWORLD_QUERY_CODE_ADDON_BIN)",
+        "cp $(OVERWORLD_QUERY_CODE_ADDON_BIN) $(OVERWORLD_QUERY_CODE_ADDON_TARGET)",
+    ):
+        source = move_recipe if fragment.startswith("cp ") else overlays
+        require(fragment in source, f"Query a028 dependency/copy contract differs: {fragment}")
     require(
         "NARCHIVE := $(PYTHON) tools/narcpy.py" in makefile,
         "a028 creator is not the authenticated narcpy path",
@@ -574,9 +635,7 @@ def verify_packaged_cache_narcs(repo: Path) -> None:
         all((a028_dir / entry).is_file() for entry in entries),
         "a028 source directory contains a non-file member",
     )
-    require(len(entries) == 21, f"a028 source has {len(entries)} members instead of 21")
-    require(entries[11] == "9_11", f"a028 member 11 is {entries[11]} instead of 9_11")
-    require(entries[20] == "9_20", f"a028 member 20 is {entries[20]} instead of 9_20")
+    query_member = query_addon_member_id(repo)
     a028_path = repo / "base/root/a/0/2/8"
     form_path = repo / "build/a028/9_11"
     parent_path = repo / "build/a028/9_20"
@@ -588,9 +647,9 @@ def verify_packaged_cache_narcs(repo: Path) -> None:
         "move-relearn parent table size differs from one u16 per species/form",
     )
     a028_members = narc_members(a028_path.read_bytes(), "packaged a028")
-    require(
-        len(a028_members) == len(entries) == 21,
-        "packaged a028 member count differs from authenticated sorted source directory",
+    verify_a028_member_payloads(
+        entries, [(a028_dir / entry).read_bytes() for entry in entries],
+        a028_members, query_member, linked_query_addon_payload(repo),
     )
     verify_exact_packaged_payload(form_path.read_bytes(), a028_members[11], "a028 member 11 (9_11)")
     verify_exact_packaged_payload(
@@ -600,7 +659,8 @@ def verify_packaged_cache_narcs(repo: Path) -> None:
     )
     reports.append(
         f"a028[11]=9_11=0x{len(a028_members[11]):X}; "
-        f"a028[20]=9_20=0x{len(a028_members[20]):X}/21 members"
+        f"a028[20]=9_20=0x{len(a028_members[20]):X}; "
+        f"a028[{query_member}]=Query=0x{len(a028_members[query_member]):X}/{len(entries)} members"
     )
     print("cache packaged NARC gate: " + "; ".join(reports))
 
@@ -2422,6 +2482,41 @@ def verify_personal_exhaustive_oracle(repo: Path) -> None:
     )
 
 
+def run_a028_member_fixtures() -> None:
+    entries = [f"8_{index}" for index in range(7)] + [f"9_{index:02d}" for index in range(7, 22)]
+    payloads = [f"member{index}".encode() for index in range(22)]
+    payloads[16] = b""
+    query = payloads[21]
+    verify_a028_member_payloads(entries, payloads, payloads, 21, query)
+
+    def reject(names, staged, packaged, member=21):
+        try:
+            verify_a028_member_payloads(names, staged, packaged, member, query)
+        except SystemExit:
+            return
+        fail("negative a028 member fixture was accepted")
+
+    reject(entries[1:], payloads[1:], payloads[1:])
+    reject(entries[:-1], payloads[:-1], payloads[:-1])
+    reject(entries + ["9_22"], payloads + [b"extra"], payloads + [b"extra"])
+    reject(entries, payloads, payloads[:-1])
+    reject(entries, payloads, payloads, member=20)
+    reordered = list(entries)
+    reordered[14], reordered[15] = reordered[15], reordered[14]
+    reject(reordered, payloads, payloads)
+    reordered_payloads = list(payloads)
+    reordered_payloads[14], reordered_payloads[15] = reordered_payloads[15], reordered_payloads[14]
+    reject(entries, payloads, reordered_payloads)
+    for index in (11, 14, 15, 20):
+        stale = list(payloads)
+        stale[index] = b"stale"
+        reject(entries, payloads, stale)
+    wrong_query = list(payloads)
+    wrong_query[21] = b"stale Query"
+    reject(entries, wrong_query, wrong_query)
+    print("a028 member fixtures: exact 22 members; old member and Query controls rejected")
+
+
 def run_unit_fixtures() -> None:
     def expect_rejection(action, label: str) -> None:
         try:
@@ -2649,6 +2744,7 @@ def run_unit_fixtures() -> None:
             lambda label=label: verify_exact_packaged_payload(b"generated", b"stale", label),
             f"stale packaged {label}",
         )
+    run_a028_member_fixtures()
 
     valid_warm = [("learnset_reset", 0x100), ("personal_publish", 0x104)]
     valid_cleanup = [

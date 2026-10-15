@@ -27,12 +27,13 @@ movement, chain repositioning, and Walk feedback.
   nonzero value adds a value from 0 through `walkTimeVariance` to each accepted
   normal Walk tile, including a braking turn. The result is capped at 32
   frames. Consecutive tiles select their values independently; the previous
-  displayed time does not limit the next value. Below maximum speed,
-  acceleration changes only nominal time. The first maximum-speed tile keeps
-  full variance. Each subsequent committed normal Walk reduces the available
+  displayed time does not limit the next value. In legacy Frame reduction and
+  `/2` modes, acceleration below maximum speed changes only nominal time. The
+  first maximum-speed tile keeps full variance. Each subsequent committed normal Walk reduces the available
   range by `walkAccelerationStep`, down to zero, independently of
   `tilesToAccelerate`. For `/2`, each such commit halves the remaining range,
-  rounding down. Disabled acceleration preserves the full range.
+  rounding down. Linear speed fades variance during the same moving-time ramp
+  as speed. Disabled acceleration preserves the full range.
 - The variance value is selected once when the tile starts. A rejected or
   blocked start does not consume a value, and an active tile does not reroll.
   Walk uses a pseudorandom value keyed by the actor identity and committed
@@ -55,12 +56,47 @@ movement, chain repositioning, and Walk feedback.
 
 ## Acceleration and momentum
 
-- `tilesToAccelerate` remains the number of consecutive real Walk tiles in the
+- In Frame reduction mode, `tilesToAccelerate` remains the number of consecutive real Walk tiles in the
   same direction needed for one acceleration step.
 - `walkAccelerationStep` selects the acceleration rule. Zero disables
   acceleration. Values 1 through 32 remove that many travel frames per step.
   Value 33 is shown as `/2` and keeps the old `ceil(current / 2)` rule. The
   profile default is 1 frame.
+- Value 34 adds the opt-in **Linear speed** mode. Existing profiles retain
+  their saved mode. Movement Style shows **Acceleration mode**, the existing
+  starting and fastest Walk times, and **Time to full speed** (1..255 moving
+  frames). In this mode the packed `tilesToAccelerate` byte holds that duration;
+  it is not a tile count. Legacy counts still normalize to 1..32.
+  Build validation accepts the packed interval and its bounds through 255,
+  including overrides that inherit Linear mode from another profile. It
+  accepts mode 34 only as an exact replacement; legacy operators keep their
+  existing limits.
+  Only an exact replacement of `walkAccelerationStep` with 34 selects Linear
+  speed. Legacy arithmetic and bounds remain capped at 33. Arithmetic and
+  bounds on an inherited Linear mode do nothing; replacing it with 0..33
+  selects the disabled or legacy rule again.
+- Linear speed interpolates speed, not travel time: at elapsed moving time
+  `e` within duration `T`, speed is `1/base + (1/fastest - 1/base) * e/T`.
+  The shared policy samples that speed at each tile boundary. Accepted Motion
+  retains its fixed integer duration; this does not accelerate inside a tile.
+  Q8 reciprocal times keep a fractional carry across accepted tiles, so early
+  rounding does not force all intermediate speeds into the same duration.
+- Only completed normal Walk durations advance Linear elapsed time. Waiting,
+  blocked starts, duplicate commits, skids, repositioning, and post-skid
+  recovery do not advance it. An accepted turn rewinds elapsed time by the
+  preceding displayed normal Walk duration and clears fractional carry. A
+  blocked turn changes neither. Stops and a change of mode/base/lane reset it.
+- Linear speed and variance use the same elapsed moving time. At a continuing
+  normal Walk admission, the variance width is
+  `V - floor(min(e, T) * V / T)`, where `V` is the authored variance. The
+  first tile admitted after elapsed time reaches `T` uses the fastest nominal
+  time and zero variance. Sprint uses `T = 60`: there is no second fade ramp
+  after those 60 moving frames. An active tile keeps its accepted duration;
+  both values are sampled at the next tile boundary. A fresh run or accepted
+  braking turn restores full variance under the existing reset rule.
+- The actor policy appends four bytes for Linear elapsed time, fractional
+  carry, mode identity, and a reserved zero byte. Policy size is 36 bytes; actor stride is
+  176 bytes. Existing policy offsets and the 28-byte public Walk call stay fixed.
 - Every result clamps at `maxWalkSpeed`, so it cannot become faster than the
   configured fastest time.
 - Examples: step 0 stays at 20. `/2` gives 20 to 10 to 5 to 3 to 2 to 1.
@@ -72,7 +108,7 @@ movement, chain repositioning, and Walk feedback.
 - Stopping resets the travel time to the base value.
 - Stopping, an accepted turn, and a momentum reset restore full variance.
   A rejected start, duplicate commit, skid, or reposition does not advance
-  variance fading. The existing acceleration counter stores completed
+  variance fading. In legacy modes, the existing acceleration counter stores completed
   maximum-speed Walks only while at the cap; it saturates at 255.
 - A turn skid restores one acceleration step slower than the displayed Walk
   time that was active before the skid.
@@ -80,10 +116,16 @@ movement, chain repositioning, and Walk feedback.
 
 ## Skid and feedback policy
 
-- Travel times 7 through 32 have no speed-based skid.
-- Travel times 5 through 6 skid for 1 tile.
-- Travel times 2 through 4 skid for 2 tiles.
-- Travel time 1 skids for 4 tiles.
+- `turnSkidOneTime`, `turnSkidTwoTime`, and `stopSkidTime` are independent
+  profile thresholds in displayed frames per tile. Each accepts 0 (Off) or
+  1..127; a lower time is faster. Defaults are 6, 4, and 6.
+- A turn uses two tiles when the two-turn threshold admits its time; otherwise
+  it uses one tile when the one-turn threshold admits it. Both Off means no
+  turn skid. The existing straight-step gate and 45-degree exemption remain.
+- A stop skids only when its own threshold admits the time. Its distance is
+  two tiles at time 4 or faster and one tile at a slower admitted time.
+- At time 1, an admitted two-turn or stop skid keeps the legacy four tiles.
+  A one-turn-only selection stays one tile. There is no fourth threshold.
 - A skid tile uses twice the current travel time, capped at 32 frames.
 - During a turn skid, the actor faces the requested new heading while it
   continues to travel along the committed old heading. The first recovery

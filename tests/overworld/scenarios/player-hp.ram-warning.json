@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.ram-warning",
+  "title": "Amber HP bar during live Onix Ram charge",
+  "status": "active",
+  "capabilities": ["player.health"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/player-hp-implementation-plan.md",
+    "actor": "One current WILD Onix (species 95) at Route 29 map 33 tile (585,412), with the player at (585,407).",
+    "trigger": "Let Onix notice the stationary player and start its normal Ram Walk.",
+    "observable": "The native HP bar submits an amber warning while the Ram Walk is active, before HP loss.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {"phase": "before-observation", "target": "fixture", "change": "Use checked teleport, native Wild Onix spawn and exact live identity bind. Do not change HP, condition, Ram policy or bar state."},
+      {"phase": "during-observation", "target": "fixture", "change": "No state mutation; the player stands still while Onix selects its normal Ram."}
+    ],
+    "limits": [
+      "Prepared placement tests the real Ram warning, not natural population spawn selection.",
+      "The checked native bar receipt proves submission, not final LCD pixels.",
+      "Missing current Onix, active Ram Walk, full HP, or amber submission fails."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "onix", "species": 95, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Place and bind Onix five tiles south of the player."},
+    {"at": 1, "kind": "lifecycle", "value": "Observe the Ram application and its first active Walk."},
+    {"at": 2, "kind": "lifecycle", "value": "Read amber native bar submission before contact."}
+  ],
+  "stop": {"frameBudget": 360, "condition": "Active Ram Walk and same-boundary amber HP bar receipt, or first invalid actor, HP, or field observation."},
+  "expect": {"requiredEvents": [], "forbiddenEvents": [],
+    "invariants": ["Current Wild Onix owns the active Ram Walk", "HP remains 100 with zero accepted hits", "No battle occurs"]},
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "player-hp.ram-warning",
+    "claims": ["live-actor-identity", "engine-boundary", "natural-input", "control-release"],
+    "minimumFrames": 2}
+}

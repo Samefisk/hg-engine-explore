@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "id": "follower.throw-player-damage",
+  "title": "Mankey throws away the actual source of accepted Player damage",
+  "status": "active",
+  "capabilities": [
+    "player.health",
+    "collision.attack",
+    "condition.evaluation",
+    "chase",
+    "hop"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "data/overworld_behavior_profiles.json#condition-throw-player-damaged",
+    "actor": "The same full-current FOLLOWER Mankey56 and WILD Weepinbell70 physical hit source.",
+    "trigger": "Normal UP+B from585407 toward the native Weepinbell585400; release all keys at the first swept-body contact with a current65099 damage binding to that full source, then read accepted20HP damage at that same completed frame. The knockback animation can start later. Sight binding before that hit is forbidden.",
+    "observable": "An accepted20HP hit lets the player-damaged condition bind its exact physical source as Object of Interest during the already accepted follower motion. That same motion must finish and return control before the follower claims and picks up the same full Actor as Cargo, winds up, throws it to a legal cardinal landing farther from the Player, completes native COMMIT/FINISH/CONTROL, clears the old claims, and completes the accepted normal Follow after normal Right32 input. Fresh Sight and Cargo may bind during that Follow, but cannot claim or pick up a target before its control returns.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Disposable ROM/save; teleport to586407 facing South, ordinary party0 Mankey20/follower creation and current idle bind at586408. Normal LEFT input releases on first logical admission at585407 within16 frames. Neutral input then requires centered, free Player at585407 and the same current idle Follower, each within16 frames, before native Wild70 spawn at585400. The follower remains out of the north lane. No profile, Vision, HP, event, claim, timer, binding or movement state is forced."
+      }
+    ],
+    "limits": [
+      "The proposed approach geometry is source-backed and unproved until the registered native run; the setup requires actual full-current source distance greater than Vision5.",
+      "This case must actually hit while the follower has an earlier accepted motion. An idle hit or Sight-first capture fails. The physical contact and65099 binding stop the input for the HP read; neither earns damage credit without that exact same-frame accepted20HP receipt. Elapsed time and the knockback animation are not hit proof.",
+      "Prepared placement earns no damage, target, motion, landing or return credit.",
+      "Blocked or protected contact with no accepted HP drop earns no trigger credit. Actual blocked movement that still causes accepted damage is not treated as a no-damage event.",
+      "No screenshot, new reader, forced event or new movement engine."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "source",
+      "species": 70,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Bind current Mankey and Weepinbell outside initial Sight5."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Normal Run then accepted Player hit; damage capture can apply during the old follower movement, which must finish before pickup."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Pick up the same source, wind up, throw away, complete flight and return to normal Follow."
+    }
+  ],
+  "stop": {
+    "frameBudget": 1400,
+    "condition": "The full accepted-hit→damage-binding→same-source pickup→away flight→normal Follow chain completes, or the first identity/HP/condition/motion/clock/cleanup guard fails."
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "ACTOR_REBOUND",
+      "CONTEXT_CHANGED",
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Real accepted HP drop and exact physical source; no Sight-first or Player target replacement",
+      "The previously accepted follower movement keeps its exact plan and returns control before native claim and pickup; damage capture can apply while it moves",
+      "Interest and Cargo are the same full source identity; legal native away flight completes before normal Follow"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "follower.throw-player-damage",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "natural-input",
+      "engine-boundary",
+      "control-release"
+    ],
+    "minimumFrames": 2
+  }
+}

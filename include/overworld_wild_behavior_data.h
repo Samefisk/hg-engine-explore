@@ -18,18 +18,19 @@ struct OverworldWildBehaviorPrimitives;
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_MAGIC 0x4F57424F
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION 13
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244
-#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 81
-#define OVERWORLD_WILD_BEHAVIOR_SEMANTIC_VERSION 81
+#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 95
+#define OVERWORLD_WILD_BEHAVIOR_SEMANTIC_VERSION 95
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_MAGIC 0x4F574544
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION 2
 #define OVERWORLD_WILD_SPAWN_METADATA_MAGIC 0x4F57534D
 #define OVERWORLD_WILD_SPAWN_METADATA_VERSION 3
 /* Shared runtime/build allocation bound; v3 records exceed the old16KiB cap. */
 #define OVERWORLD_WILD_SPAWN_METADATA_MAX_BLOB_SIZE 0x8000
-/* Keep the large behavior catalog with its field-session owner. Put the
- * smaller metadata cache on the default heap so stock field scripts retain
- * enough HEAPID_WORLD capacity without exhausting HEAPID_DEFAULT. */
-#define OVERWORLD_WILD_BEHAVIOR_DATA_HEAP_ID HEAPID_WORLD
+/* The behavior catalog uses FIELD1 (heap 4), and the larger Query add-on uses
+ * HEAPID_WORLD. A field rebuilt after a battle leaves FIELD1 fragmented below
+ * the add-on's size, while HEAPID_WORLD survives battles intact. The smaller
+ * metadata cache stays on the default heap. */
+#define OVERWORLD_WILD_BEHAVIOR_DATA_HEAP_ID 4
 #define OVERWORLD_WILD_SPAWN_METADATA_HEAP_ID HEAPID_DEFAULT
 #define OVERWORLD_WILD_SPAWN_METADATA_OVERLAY_MAGIC 0x4F57534F
 #define OVERWORLD_WILD_SPAWN_METADATA_OVERLAY_VERSION 3
@@ -44,21 +45,26 @@ struct OverworldWildBehaviorPrimitives;
 #define OVERWORLD_WILD_SURFACE_SERVICE_ENTRY_ADDR 0x023C30F0
 #define OVERWORLD_WILD_SPAWN_METADATA_MAX_FORM 31
 #define OW_WILD_BEHAVIOR_CLASS_DEFAULT 0
-#define OWBD_CLASS_PROFILE_COUNT 1
+#define OW_WILD_BEHAVIOR_CLASS_ROOFTOP_ACCESS 1
+#define OWBD_CLASS_PROFILE_COUNT 2
 #define OWBD_CLASS_RULE_COUNT 2
-#define OWBD_SPECIES_CLASS_RULE_COUNT 114
-#define OWBD_OVERRIDE_PROFILE_COUNT 30
-#define OWBD_CONDITION_ENTRY_COUNT 11
+#define OWBD_SPECIES_CLASS_RULE_COUNT 115
+#define OWBD_OVERRIDE_PROFILE_COUNT 38
+#define OWBD_MASKABLE_APPLICATION_COUNT 32
+#define OWBD_APPLICATION_BANK_DIRECTORY_COUNT 333
+#define OWBD_APPLICATION_BANK_INDEX_COUNT 1612
+#define OWBD_CONDITION_ENTRY_COUNT 26
 #define OWBD_CONDITION_ENTRY_STORAGE_COUNT \
     ((OWBD_CONDITION_ENTRY_COUNT) ? OWBD_CONDITION_ENTRY_COUNT : 1)
-#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_REST 10
-#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER 27
-#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_MOUNTED 28
-typedef char OverworldWildBehaviorOverrideProfileCountMustFitApplicabilityMask[
-    OWBD_OVERRIDE_PROFILE_COUNT <= 32 ? 1 : -1];
+#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_REST 11
+#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER 17
+#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_MOUNTED 36
+/* Global IDs are separate from each subject's32 local mask slots. */
+typedef char OverworldWildBehaviorOverrideProfileCountMustFitLinkedTable[
+    OWBD_OVERRIDE_PROFILE_COUNT <= 65534 ? 1 : -1];
 typedef char OverworldWildBehaviorConditionEntryCountMustFitRuntimeState[
-    OWBD_CONDITION_ENTRY_COUNT <= 32 ? 1 : -1];
-#define OWBD_OVERRIDE_MEMBER_COUNT 497
+    OWBD_CONDITION_ENTRY_COUNT <= 65535 ? 1 : -1];
+#define OWBD_OVERRIDE_MEMBER_COUNT 745
 #define OWBD_SURFACE_MODEL_COUNT OWBD_GENERATED_SURFACE_MODEL_COUNT
 #define OWBD_SURFACE_INSTANCE_COUNT OWBD_GENERATED_SURFACE_INSTANCE_COUNT
 #define OWBD_SURFACE_TEMPLATE_COUNT OWBD_GENERATED_SURFACE_TEMPLATE_COUNT
@@ -125,12 +131,18 @@ typedef enum OverworldWildSpawnDestination {
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER        (1u << 1)
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY       (1u << 2)
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_GRASS        (1u << 3)
-#define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER       (1u << 4)
+#define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_OBJECT_OF_INTEREST (1u << 4)
+/* Decode existing authoring data without changing its serialized bit. */
+#define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER \
+    OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_OBJECT_OF_INTEREST
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER_FRONT (1u << 5)
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP      (1u << 6)
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST     (1u << 7)
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX      (1u << 8)
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_FLOWERBED    (1u << 9)
+/* Presentation only: the body stays on top of deep water instead of sinking
+ * into it. WATER still grants access; tile matching ignores this bit. */
+#define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER_SURFACE (1u << 10)
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SURFACE_FIRST \
     OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SURFACE_ALL \
@@ -140,6 +152,9 @@ typedef enum OverworldWildSpawnDestination {
         | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX \
         | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_FLOWERBED)
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL          0x03FF
+/* Every stored Allowed-terrain policy bit, including presentation-only
+ * Water surface. Tile matching and destinations use ALL. */
+#define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_POLICY_ALL   0x07FF
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_DEFAULT      OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_LAND
 
 #define OW_WILD_SURFACE_TYPE_ROOFTOP 0
@@ -350,6 +365,47 @@ typedef enum OverworldWildSpawnDestination {
 #define OW_WILD_BEHAVIOR_HOP_SWAY_WIDTH_MAX 8
 #define OW_WILD_BEHAVIOR_JUMP_ARC_HEIGHT_MIN_Q4 16
 
+/* Byte 42 packs autonomous movement and pre-pickup Cargo target selection. */
+#define OW_WILD_BEHAVIOR_CONTROLLER_OPTIONS(continueWhenArrived, returnAfterMove) \
+    (((continueWhenArrived) & 1u) | (((returnAfterMove) & 1u) << 1))
+#define OW_WILD_BEHAVIOR_CONTINUES_WHEN_ARRIVED(options) ((options) & 1u)
+#define OW_WILD_BEHAVIOR_RETURNS_AFTER_MOVE(options) (((options) >> 1) & 1u)
+#define OW_WILD_BEHAVIOR_CARGO_TARGET_CHECK_INTERVAL(options) (((options) >> 2) & 15u)
+#define OW_WILD_BEHAVIOR_CARGO_TARGET_SWITCH_ADVANTAGE(options) ((options) >> 6)
+#define OW_WILD_BEHAVIOR_CONTROLLER_CARGO_OPTIONS(continueWhenArrived, returnAfterMove, interval, advantage) \
+    (OW_WILD_BEHAVIOR_CONTROLLER_OPTIONS(continueWhenArrived, returnAfterMove) \
+        | (((interval) & 15u) << 2) | (((advantage) & 3u) << 6))
+
+/* Byte 43 retains previous-tile permission in bit 0. Byte 57 retains
+ * the Reposition count in bits 0..3. Extra Hop in place rolls are separate
+ * from the pause-action admission roll and use only the high slices. */
+#define OW_WILD_BEHAVIOR_AVOIDS_PREVIOUS_TILE(options) ((options) & 1u)
+#define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_JUMP_COUNT(options) ((options) & 15u)
+#define OW_WILD_BEHAVIOR_CHAIN_HOP_IN_PLACE_EXTRA_HOPS(options) (((options) >> 4) & 3u)
+#define OW_WILD_BEHAVIOR_HOP_EFFECT_CHANCE_OFF 0
+#define OW_WILD_BEHAVIOR_HOP_EFFECT_CHANCE_25 1
+#define OW_WILD_BEHAVIOR_HOP_EFFECT_CHANCE_50 2
+#define OW_WILD_BEHAVIOR_HOP_EFFECT_CHANCE_100 3
+#define OW_WILD_BEHAVIOR_CHAIN_HOP_IN_PLACE_HEART_CHANCE(options) ((options) >> 6)
+#define OW_WILD_BEHAVIOR_CHAIN_HOP_IN_PLACE_CRY_CHANCE(options) ((options) >> 6)
+#define OW_WILD_BEHAVIOR_ON_REACH_ACTION(options) ((options) & 1u)
+#define OW_WILD_BEHAVIOR_CHAIN_HOP_IN_PLACE_EXTRA_CHANCE(options) ((options) >> 1)
+#define OW_WILD_BEHAVIOR_PREVIOUS_TILE_HOP_OPTIONS(avoidPreviousTile, chance) \
+    (((avoidPreviousTile) & 1u) | (((chance) & 127u) << 1))
+#define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_HOP_OPTIONS(repositionCount, extraHops) \
+    (((repositionCount) & 15u) | (((extraHops) & 3u) << 4))
+#define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_HOP_EFFECT_OPTIONS(repositionCount, extraHops, heartChance) \
+    (OW_WILD_BEHAVIOR_CHAIN_REPOSITION_HOP_OPTIONS(repositionCount, extraHops) \
+        | (((heartChance) & 3u) << 6))
+#define OW_WILD_BEHAVIOR_ON_REACH_HOP_OPTIONS(onReachAction, cryChance) \
+    (((onReachAction) & 1u) | (((cryChance) & 3u) << 6))
+#define OW_WILD_BEHAVIOR_SET_CHAIN_REPOSITION_JUMP_COUNT(options, count) \
+    ((options) = ((options) & 0xF0u) | ((count) & 15u))
+#define OW_WILD_BEHAVIOR_SET_CHAIN_HOP_IN_PLACE_EXTRA_HOPS(options, count) \
+    ((options) = ((options) & ~0x30u) | (((count) & 3u) << 4))
+#define OW_WILD_BEHAVIOR_SET_CHAIN_HOP_IN_PLACE_EXTRA_CHANCE(options, chance) \
+    ((options) = ((options) & 1u) | (((chance) & 127u) << 1))
+
 /* Mounted Walk presentation only. Each control inherits independently.
  * Stride codes 0..3 mean 16, 32, 48, or 64 pixels travelled per cycle. */
 #define OW_WILD_BEHAVIOR_MOUNT_GAIT_OPTIONS(bounce, stride, settle, lean) \
@@ -359,6 +415,18 @@ typedef enum OverworldWildSpawnDestination {
 #define OW_WILD_BEHAVIOR_MOUNT_STRIDE(options) (((options) >> 2) & 3u)
 #define OW_WILD_BEHAVIOR_MOUNT_SETTLE(options) (((options) >> 4) & 3u)
 #define OW_WILD_BEHAVIOR_MOUNT_LEAN(options) (((options) >> 6) & 3u)
+
+/* Skid thresholds use displayed frames per tile: zero is Off, 1..127 is
+ * the slowest admitted time. Packed booleans retain their independent low bit. */
+#define OW_WILD_BEHAVIOR_SKID_BOOLEAN(options) ((options) & 1u)
+#define OW_WILD_BEHAVIOR_SKID_THRESHOLD(options) ((options) >> 1)
+#define OW_WILD_BEHAVIOR_SKID_OPTIONS(enabled, threshold) \
+    (((enabled) & 1u) | (((threshold) & 127u) << 1))
+#define OW_WILD_BEHAVIOR_TURN_SKID_ONE_TIME(profile) ((profile)->range)
+#define OW_WILD_BEHAVIOR_TURN_SKID_TWO_TIME(profile) \
+    OW_WILD_BEHAVIOR_SKID_THRESHOLD((profile)->hopAllowVerticalObstacles)
+#define OW_WILD_BEHAVIOR_STOP_SKID_TIME(profile) \
+    OW_WILD_BEHAVIOR_SKID_THRESHOLD((profile)->chainRepositionDust)
 
 /* Compact blob representation. The Tired runtime lane is composed from the
  * Owner lane of the referenced override profile. Mounted gait reuses byte 16
@@ -372,7 +440,7 @@ typedef struct OverworldWildBehaviorProfileData {
     u8 stamina;
     u8 restTime;
     u8 chillSpeed;
-    u8 range;
+    u8 range; /* turnSkidOneTime storage; native movement axes stay signed -1. */
     u8 jumpLevel;
     u8 profileId;
     u8 spawnState;
@@ -408,14 +476,15 @@ typedef struct OverworldWildBehaviorProfileData {
     u8 hopSpinSpeed;
     u8 spawnHopTime;
     u8 circleRadius;
-    u8 continueWhenArrived;
-    u8 avoidPreviousTile;
+    u8 continueWhenArrived; /* Packed movement/Cargo controls; use the getters above. */
+    u8 avoidPreviousTile; /* Packed previous-tile/Hop controls; use getters. */
     u8 chainMovementVariance;
     u8 chainPauseVariance;
     u8 walkSwayWidth;
     u8 tiredProfile;
     u8 hopElevationTimeScale;
     u8 hopElevationArcScale;
+    /* Legacy tiles per event, or moving frames to full speed in Linear mode. */
     u8 tilesToAccelerate;
     u8 maxWalkSpeed;
     /* Spawn placement uses the same option bits as allowed terrain, but its
@@ -423,7 +492,7 @@ typedef struct OverworldWildBehaviorProfileData {
     u16 spawnDestinationMask;
     u16 spawnDestinationOverrideMask;
     u8 hopAllowVerticalObstacles;
-    u8 chainRepositionJumpCount;
+    u8 chainRepositionJumpCount; /* Packed Reposition/Hop counts; use getters. */
     u8 hopSwayWidth;
     u8 spawnHopSwayWidth;
     u8 chainRepositionSpeed;
@@ -441,18 +510,29 @@ typedef struct OverworldWildBehaviorProfileData {
     u8 chainPauseActionChance;
     /* Frames to pause after each completed normal Walk step. */
     u8 walkPause;
-    /* Low six bits: required Walk steps before a turn skid. Bit 6: whether
-     * normal movement plans the full turn-skid path. High bit: whether a
-     * lifecycle stop uses the stop-skid path. */
+    /* Low six bits: required Walk steps before a turn skid. Bit 6 is legacy
+     * path metadata; it cannot veto a skid. High bit selects lifecycle stop
+     * skids. Every skid travels clear tiles, then crashes at its first blocker. */
     u8 tilesBeforeTurnSkid;
     /* Zero disables stomp; otherwise stomp at this travel time or faster. */
     u8 walkStompTime;
-    /* Zero disables acceleration; 1..32 remove frames; 33 halves travel time. */
+    /* 0 disables; 1..32 remove frames; 33 halves time; 34 is Linear speed. */
     u8 walkAccelerationStep;
+    /* A resolved attacking profile permits player-contact damage when the
+     * moving body meets minImpactSpeed / 256 tiles per field frame. */
+    u8 attacking;
+    u8 minImpactSpeed;
+    u8 collisionDamage;
+    u8 onReachAction;
+    u8 throwMaxRange;
+    u8 throwWindupFrames;
+    u8 throwRecoveryFrames;
+    /* Low two bits select None, Slide, or Jump. High six bits hold tiles. */
+    u8 knockbackOptions;
 } OverworldWildBehaviorProfileData;
 
-typedef char OverworldWildBehaviorProfileDataSizeMustRemain72Bytes[
-    sizeof(OverworldWildBehaviorProfileData) == 72 ? 1 : -1];
+typedef char OverworldWildBehaviorProfileDataSizeMustRemain80Bytes[
+    sizeof(OverworldWildBehaviorProfileData) == 80 ? 1 : -1];
 
 /* Runtime composite. Its prefix intentionally matches the compact blob so the
  * owner Chill lane can be copied directly before linked state lanes are added. */
@@ -468,7 +548,7 @@ typedef struct OverworldWildBehaviorProfile {
             u8 stamina;
             u8 restTime;
             u8 chillSpeed;
-            u8 range;
+            u8 range; /* Reserved zero; native movement axes use signed -1. */
             u8 jumpLevel;
             u8 profileId;
             u8 spawnState;
@@ -501,7 +581,7 @@ typedef struct OverworldWildBehaviorProfile {
             u8 spawnHopTime;
             u8 circleRadius;
             u8 continueWhenArrived;
-            u8 avoidPreviousTile;
+            u8 avoidPreviousTile; /* Packed previous-tile/Hop controls; use getters. */
             u8 chainMovementVariance;
             u8 chainPauseVariance;
             u8 walkSwayWidth;
@@ -513,7 +593,7 @@ typedef struct OverworldWildBehaviorProfile {
             u16 spawnDestinationMask;
             u16 spawnDestinationOverrideMask;
             u8 hopAllowVerticalObstacles;
-            u8 chainRepositionJumpCount;
+            u8 chainRepositionJumpCount; /* Packed Reposition/Hop counts; use getters. */
             u8 hopSwayWidth;
             u8 spawnHopSwayWidth;
             u8 chainRepositionSpeed;
@@ -528,6 +608,14 @@ typedef struct OverworldWildBehaviorProfile {
             u8 tilesBeforeTurnSkid;
             u8 walkStompTime;
             u8 walkAccelerationStep;
+            u8 attacking;
+            u8 minImpactSpeed;
+            u8 collisionDamage;
+            u8 onReachAction;
+            u8 throwMaxRange;
+            u8 throwWindupFrames;
+            u8 throwRecoveryFrames;
+            u8 knockbackOptions;
         };
     };
     union {
@@ -584,6 +672,14 @@ typedef struct OverworldWildBehaviorProfile {
             u8 tiredTilesBeforeTurnSkid;
             u8 tiredWalkStompTime;
             u8 tiredWalkAccelerationStep;
+            u8 tiredAttacking;
+            u8 tiredMinImpactSpeed;
+            u8 tiredCollisionDamage;
+            u8 tiredOnReachAction;
+            u8 tiredThrowMaxRange;
+            u8 tiredThrowWindupFrames;
+            u8 tiredThrowRecoveryFrames;
+            u8 tiredKnockback;
         };
     };
 } OverworldWildBehaviorProfile;
@@ -601,8 +697,8 @@ typedef struct OverworldWildBehaviorPrimitives {
     u8 tiredReaction;
 } OverworldWildBehaviorPrimitives;
 
-typedef char OverworldWildBehaviorProfileSizeMustRemain144Bytes[
-    sizeof(OverworldWildBehaviorProfile) == 144 ? 1 : -1];
+typedef char OverworldWildBehaviorProfileSizeMustRemain160Bytes[
+    sizeof(OverworldWildBehaviorProfile) == 160 ? 1 : -1];
 typedef char OverworldWildBehaviorPrimitivesSizeMustRemain8Bytes[
     sizeof(OverworldWildBehaviorPrimitives) == 8 ? 1 : -1];
 
@@ -648,24 +744,24 @@ typedef struct OverworldWildBehaviorOverrideProfile {
     u8 conditionStart;
     u8 conditionCount;
     u32 mask;
-    u16 mask2;
+    u32 mask2;
     u32 mask3;
     OverworldWildBehaviorProfileData profile;
     u32 relativeMask;
-    u16 relativeMask2;
+    u32 relativeMask2;
     u32 relativeMask3;
     u32 atLeastMask;
-    u16 atLeastMask2;
+    u32 atLeastMask2;
     u32 atLeastMask3;
     u32 atMostMask;
-    u16 atMostMask2;
+    u32 atMostMask2;
     u32 atMostMask3;
     /* Used only when a relative adjustment is followed by a bound. */
     OverworldWildBehaviorProfileData compoundBoundProfile;
 } OverworldWildBehaviorOverrideProfile;
 
-typedef char OverworldWildBehaviorOverrideProfileSizeMustRemain212Bytes[
-    sizeof(OverworldWildBehaviorOverrideProfile) == 212 ? 1 : -1];
+typedef char OverworldWildBehaviorOverrideProfileSizeMustRemain228Bytes[
+    sizeof(OverworldWildBehaviorOverrideProfile) == 228 ? 1 : -1];
 
 typedef struct OverworldWildBehaviorConditionEntry {
     OverworldWildBehaviorMatch subjectMatch;
@@ -697,18 +793,103 @@ typedef struct OverworldWildBehaviorConditionEntry {
 typedef char OverworldWildBehaviorConditionEntrySizeMustRemain48Bytes[
     sizeof(OverworldWildBehaviorConditionEntry) == 48 ? 1 : -1];
 
+/* Append-only condition options preserve every existing catalog section.
+ * Capture values are0:none,1:Object of interest,2:Cargo. Uses values add3:Object of interest itself.
+ * Roles use the ordinary role mask.
+ * Pickup height is in native world units (one tile is16 world units). */
+typedef struct OverworldWildBehaviorConditionOptions {
+    u8 subjectRoleMask;
+    u8 captureBinding;
+    u8 bindingLifetime;
+    u8 bindOnly;
+    u16 bindingDurationFrames;
+    u8 usesBinding;
+    u8 mustBeReachableForPickup;
+    u8 pickupDistance;
+    u8 pickupHeight;
+    u8 failureResponse;
+    u8 retryFrames;
+    /* Zero means no dependency; otherwise global application ID plus one.
+     * The dependency must precede this condition's application. */
+    u16 requiredApplication;
+    u8 minTargetDistance;
+    u8 maxTargetDistance;
+    u8 boundTargetDistance;
+    u8 reservedDependency;
+} OverworldWildBehaviorConditionOptions;
+typedef char OverworldWildBehaviorConditionOptionsMustRemain18[
+    sizeof(OverworldWildBehaviorConditionOptions) == 18 ? 1 : -1];
+
 #define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_DISABLED 0
 #define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS 1
 #define OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL 2
 #define OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL 0
 #define OW_WILD_BEHAVIOR_PROFILE_KIND_CONDITIONAL 1
+#define OW_WILD_BEHAVIOR_KIND_THROW_HELD_ACTOR 12
+#define OW_WILD_BEHAVIOR_TARGET_CONDITION_ACTOR 10
+#define OW_WILD_BEHAVIOR_TARGET_PLAYER_THROW_LINE 11
+#define OW_WILD_BEHAVIOR_TARGET_CARGO 12
+#define OW_WILD_BEHAVIOR_TARGET_TRIGGER_THROW_LINE 13
+#define OW_WILD_BEHAVIOR_TARGET_PLAYER_AWAY_THROW_LINE 14
+#define OW_WILD_BEHAVIOR_ON_REACH_NONE 0
+#define OW_WILD_BEHAVIOR_ON_REACH_PICKUP_CONDITION_ACTOR 1
+#define OW_WILD_BEHAVIOR_KNOCKBACK_NONE 0
+#define OW_WILD_BEHAVIOR_KNOCKBACK_SLIDE 1
+#define OW_WILD_BEHAVIOR_KNOCKBACK_JUMP 2
+#define OW_WILD_BEHAVIOR_KNOCKBACK_TYPE_MASK 0x03
+#define OW_WILD_BEHAVIOR_KNOCKBACK_DISTANCE_SHIFT 2
+#define OW_WILD_BEHAVIOR_KNOCKBACK_DISTANCE_MASK 0x1C
+#define OW_WILD_BEHAVIOR_KNOCKBACK_OPTIONS(type, distance) \
+    (((type) & OW_WILD_BEHAVIOR_KNOCKBACK_TYPE_MASK) \
+        | (((distance) << OW_WILD_BEHAVIOR_KNOCKBACK_DISTANCE_SHIFT) \
+            & OW_WILD_BEHAVIOR_KNOCKBACK_DISTANCE_MASK))
+#define OW_WILD_BEHAVIOR_KNOCKBACK_TYPE(options) \
+    ((options) & OW_WILD_BEHAVIOR_KNOCKBACK_TYPE_MASK)
+#define OW_WILD_BEHAVIOR_KNOCKBACK_DISTANCE(options) \
+    (((options) & OW_WILD_BEHAVIOR_KNOCKBACK_DISTANCE_MASK) \
+        >> OW_WILD_BEHAVIOR_KNOCKBACK_DISTANCE_SHIFT)
+#define OW_WILD_BEHAVIOR_SET_KNOCKBACK_TYPE(options, type) \
+    ((options) = ((options) & ~OW_WILD_BEHAVIOR_KNOCKBACK_TYPE_MASK) \
+        | ((type) & OW_WILD_BEHAVIOR_KNOCKBACK_TYPE_MASK))
+#define OW_WILD_BEHAVIOR_SET_KNOCKBACK_DISTANCE(options, distance) \
+    ((options) = ((options) & ~OW_WILD_BEHAVIOR_KNOCKBACK_DISTANCE_MASK) \
+        | (((distance) << OW_WILD_BEHAVIOR_KNOCKBACK_DISTANCE_SHIFT) \
+            & OW_WILD_BEHAVIOR_KNOCKBACK_DISTANCE_MASK))
+/* Zero keeps the legacy all-recipient behavior. Roles are independent of
+ * attack kind. Flight copies these options and restores its ground profile. */
+#define OW_WILD_BEHAVIOR_DAMAGE_RECIPIENT_ALL 0
+#define OW_WILD_BEHAVIOR_DAMAGE_RECIPIENT_PLAYER 1
+#define OW_WILD_BEHAVIOR_DAMAGE_RECIPIENT_WILD 2
+#define OW_WILD_BEHAVIOR_DAMAGE_RECIPIENT_PLAYER_AND_WILD 3
+#define OW_WILD_BEHAVIOR_DAMAGE_RECIPIENT_ALLIED 4
+#define OW_WILD_BEHAVIOR_DAMAGE_RECIPIENT_PLAYER_AND_ALLIED 5
+#define OW_WILD_BEHAVIOR_DAMAGE_RECIPIENT_POKEMON 6
+#define OW_WILD_BEHAVIOR_DAMAGE_RECIPIENT_ALL_EXPLICIT 7
+#define OW_WILD_BEHAVIOR_DAMAGE_RECIPIENT_MASK 0xE0
+#define OW_WILD_BEHAVIOR_DAMAGE_RECIPIENTS(options) ((options) >> 5)
+#define OW_WILD_BEHAVIOR_COLLISION_OPTIONS(type, distance, recipients) \
+    (OW_WILD_BEHAVIOR_KNOCKBACK_OPTIONS(type, distance) | (((recipients) & 7) << 5))
+#define OW_WILD_BEHAVIOR_SET_DAMAGE_RECIPIENTS(options, recipients) \
+    ((options) = ((options) & ~OW_WILD_BEHAVIOR_DAMAGE_RECIPIENT_MASK) \
+        | (((recipients) & 7) << 5))
+#define OW_WILD_BEHAVIOR_DAMAGE_RECIPIENT_ALLOWED(options, role) \
+    (OW_WILD_BEHAVIOR_DAMAGE_RECIPIENTS(options) == 0 \
+        || (OW_WILD_BEHAVIOR_DAMAGE_RECIPIENTS(options) & (role)) != 0)
 #define OW_WILD_BEHAVIOR_CONDITION_SUBJECT_APPLICATION_NONE 0xFF
 #define OW_WILD_BEHAVIOR_CONDITION_PLAYER_NOTICED 0
 #define OW_WILD_BEHAVIOR_CONDITION_POKEMON_NOTICED 1
 #define OW_WILD_BEHAVIOR_CONDITION_TERRAIN_SPEED 2
 #define OW_WILD_BEHAVIOR_CONDITION_TARGET_CANNOT_SEE_SUBJECT 3
+#define OW_WILD_BEHAVIOR_CONDITION_ACTOR_FACTS 4
+#define OW_WILD_BEHAVIOR_CONDITION_PLAYER_DAMAGED 5
+#define OW_WILD_BEHAVIOR_CONDITION_SUBJECT_DAMAGED 6
+#define OW_WILD_BEHAVIOR_ACTOR_FACT_RESERVED (1u << 0)
+#define OW_WILD_BEHAVIOR_ACTOR_FACT_HELD (1u << 1)
+#define OW_WILD_BEHAVIOR_ACTOR_FACT_THROW_LINE (1u << 2)
+#define OW_WILD_BEHAVIOR_ACTOR_FACT_RECOVERING (1u << 3)
 #define OW_WILD_BEHAVIOR_CONDITION_WHILE_TRUE 0
 #define OW_WILD_BEHAVIOR_CONDITION_TIMED 1
+#define OW_WILD_BEHAVIOR_CONDITION_UNTIL_CRASH 2
 #define OW_WILD_BEHAVIOR_CONDITION_TARGET_NONE 0
 #define OW_WILD_BEHAVIOR_CONDITION_TARGET_PLAYER 1
 #define OW_WILD_BEHAVIOR_CONDITION_TARGET_ACTOR 2
@@ -733,10 +914,11 @@ typedef char OverworldWildBehaviorConditionEntrySizeMustRemain48Bytes[
 #define OW_WILD_BEHAVIOR_OVERRIDE_ALERT_EMOTE (1u << 2)
 #define OW_WILD_BEHAVIOR_OVERRIDE_ALERT_TIME (1u << 3)
 #define OW_WILD_BEHAVIOR_OVERRIDE_VISION_CONE (1u << 4)
+#define OW_WILD_BEHAVIOR_OVERRIDE_TURN_SKID_ONE_TIME (1u << 8)
 #define OW_WILD_BEHAVIOR_OVERRIDE_STAMINA (1u << 5)
 #define OW_WILD_BEHAVIOR_OVERRIDE_REST_TIME (1u << 6)
 #define OW_WILD_BEHAVIOR_OVERRIDE_CHILL_SPEED (1u << 7)
-#define OW_WILD_BEHAVIOR_OVERRIDE_RANGE (1u << 8)
+/* Override bit 8 is reserved with the retired movement-range byte. */
 #define OW_WILD_BEHAVIOR_OVERRIDE_JUMP_LEVEL (1u << 9)
 #define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_ID (1u << 10)
 #define OW_WILD_BEHAVIOR_OVERRIDE_SPAWN_STATE (1u << 11)
@@ -770,7 +952,24 @@ typedef char OverworldWildBehaviorConditionEntrySizeMustRemain48Bytes[
 #define OW_WILD_BEHAVIOR_OVERRIDE2_CIRCLE_RADIUS (1u << 12)
 #define OW_WILD_BEHAVIOR_OVERRIDE2_CONTINUE_WHEN_ARRIVED (1u << 13)
 #define OW_WILD_BEHAVIOR_OVERRIDE2_AVOID_PREVIOUS_TILE (1u << 14)
+#define OW_WILD_BEHAVIOR_OVERRIDE2_ATTACKING (1u << 15)
+#define OW_WILD_BEHAVIOR_OVERRIDE2_ON_REACH_ACTION (1u << 16)
+#define OW_WILD_BEHAVIOR_OVERRIDE2_THROW_MAX_RANGE (1u << 17)
+#define OW_WILD_BEHAVIOR_OVERRIDE2_THROW_WINDUP_FRAMES (1u << 18)
+#define OW_WILD_BEHAVIOR_OVERRIDE2_THROW_RECOVERY_FRAMES (1u << 19)
+#define OW_WILD_BEHAVIOR_OVERRIDE2_KNOCKBACK_TYPE (1u << 20)
+#define OW_WILD_BEHAVIOR_OVERRIDE2_KNOCKBACK_DISTANCE (1u << 21)
+#define OW_WILD_BEHAVIOR_OVERRIDE2_DAMAGE_RECIPIENTS (1u << 22)
 
+#define OW_WILD_BEHAVIOR_OVERRIDE2_TURN_SKID_TWO_TIME (1u << 23)
+#define OW_WILD_BEHAVIOR_OVERRIDE2_STOP_SKID_TIME (1u << 24)
+#define OW_WILD_BEHAVIOR_OVERRIDE2_RETURN_AFTER_MOVE (1u << 25)
+#define OW_WILD_BEHAVIOR_OVERRIDE2_CARGO_TARGET_CHECK_INTERVAL (1u << 26)
+#define OW_WILD_BEHAVIOR_OVERRIDE2_CARGO_TARGET_SWITCH_ADVANTAGE (1u << 27)
+#define OW_WILD_BEHAVIOR_OVERRIDE2_CHAIN_HOP_IN_PLACE_EXTRA_HOPS (1u << 28)
+#define OW_WILD_BEHAVIOR_OVERRIDE2_CHAIN_HOP_IN_PLACE_EXTRA_CHANCE (1u << 29)
+#define OW_WILD_BEHAVIOR_OVERRIDE2_CHAIN_HOP_IN_PLACE_HEART_CHANCE (1u << 30)
+#define OW_WILD_BEHAVIOR_OVERRIDE2_CHAIN_HOP_IN_PLACE_CRY_CHANCE (1u << 31)
 #define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_MOVEMENT_VARIANCE (1u << 0)
 #define OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_PAUSE_VARIANCE (1u << 1)
 #define OW_WILD_BEHAVIOR_OVERRIDE3_WALK_SWAY_WIDTH (1u << 2)
@@ -801,6 +1000,8 @@ typedef char OverworldWildBehaviorConditionEntrySizeMustRemain48Bytes[
 #define OW_WILD_BEHAVIOR_OVERRIDE3_WALK_PAUSE_VARIANCE (1u << 27)
 #define OW_WILD_BEHAVIOR_OVERRIDE3_STOP_SKID (1u << 28)
 #define OW_WILD_BEHAVIOR_OVERRIDE3_PLAN_TURN_SKID_PATH (1u << 29)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_MIN_IMPACT_SPEED (1u << 30)
+#define OW_WILD_BEHAVIOR_OVERRIDE3_COLLISION_DAMAGE (1u << 31)
 
 #define OW_WILD_BEHAVIOR_MATCH_CLASS_FORCED_ASLEEP 0xFD
 
@@ -934,6 +1135,28 @@ typedef char OverworldWildSurfaceBlockCacheSizeMustRemain8Bytes[
     sizeof(OverworldWildSurfaceBlockCache) == 8 ? 1 : -1];
 #endif
 
+/* Sparse conditional-only group. Record existence means authored/inherited
+ * replacement; four zero Arc bytes mean explicit none. IDs refer to global
+ * application rows, never species-local u32 mask bits. */
+#define OWBD_HOP_ARC_RECORD_COUNT 1
+#define OWBD_HOP_ARC_RECORD_STORAGE_COUNT 1
+typedef struct OverworldWildHopArcRecord {
+    u16 globalApplicationId;
+    u8 riseFrames, hangFrames, dropFrames, peakQ4;
+} OverworldWildHopArcRecord;
+typedef char OverworldWildHopArcRecordSizeMustRemain6[
+    sizeof(OverworldWildHopArcRecord) == 6 ? 1 : -1];
+
+/* Subject-local application bank, sorted by numeric species. */
+typedef struct OverworldApplicationBankDirectoryEntry {
+    u16 species;
+    u16 first;
+    u8 count;
+    u8 reserved;
+} OverworldApplicationBankDirectoryEntry;
+typedef char OverworldApplicationBankDirectoryEntrySizeMustRemain6[
+    sizeof(OverworldApplicationBankDirectoryEntry) == 6 ? 1 : -1];
+
 typedef struct OverworldWildBehaviorDataBlob {
     OverworldWildBehaviorDataBlobHeader header;
     OverworldWildBehaviorProfileData classProfiles[OWBD_CLASS_PROFILE_COUNT];
@@ -949,7 +1172,28 @@ typedef struct OverworldWildBehaviorDataBlob {
 #if OWBD_SURFACE_CATALOG_PADDING_SIZE != 0
     u8 surfacePadding[OWBD_SURFACE_CATALOG_PADDING_SIZE];
 #endif
+    /* Legacy 32-bit prefix retained for Blob layout compatibility. Runtime
+     * cooldown tint uses applicationRestTint through each subject bank. */
+    u32 restEnabledApplications;
+    OverworldWildBehaviorConditionOptions
+        conditionOptions[OWBD_CONDITION_ENTRY_STORAGE_COUNT];
+    OverworldWildHopArcRecord hopArcs[OWBD_HOP_ARC_RECORD_STORAGE_COUNT];
+    OverworldApplicationBankDirectoryEntry
+        applicationBankDirectory[OWBD_APPLICATION_BANK_DIRECTORY_COUNT];
+    u16 applicationBankIndexes[OWBD_APPLICATION_BANK_INDEX_COUNT];
+    u16 conditionGlobalApplications[OWBD_CONDITION_ENTRY_STORAGE_COUNT];
+    u16 conditionGlobalSubjectApplications[OWBD_CONDITION_ENTRY_STORAGE_COUNT];
+    u8 applicationLimitKeys[OWBD_OVERRIDE_PROFILE_COUNT];
+    u8 applicationRestTint[OWBD_OVERRIDE_PROFILE_COUNT];
+    u16 tiredClassGlobalIds[OWBD_CLASS_PROFILE_COUNT];
+    u16 tiredOverrideGlobalIds[OWBD_OVERRIDE_PROFILE_COUNT];
 } OverworldWildBehaviorDataBlob;
+
+typedef char OverworldWildBehaviorRestTintMustFollowPaddedSurfaceCatalog[
+    __builtin_offsetof(OverworldWildBehaviorDataBlob, restEnabledApplications)
+        == __builtin_offsetof(OverworldWildBehaviorDataBlob, surfaceTemplates)
+            + sizeof(((OverworldWildBehaviorDataBlob *)0)->surfaceTemplates)
+            + OWBD_SURFACE_CATALOG_PADDING_SIZE ? 1 : -1];
 
 typedef struct OverworldWildEncounterLookupDataBlobHeader {
     u32 magic;
@@ -1113,7 +1357,7 @@ typedef BOOL (*OverworldWildQueryPickupThrowTargetFunc)(
     int carrierSlot,
     int targetSlot,
     u8 query,
-    u16 unstableMask);
+    u32 motionMasks);
 typedef BOOL (*OverworldWildStartSpawnerMovementFunc)(
     struct OverworldWildSpawnState *state,
     FieldSystem *fieldSystem,

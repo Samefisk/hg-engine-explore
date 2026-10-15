@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Create and maintain the Markdown ticket queue in TICKETS.md."""
+"""Read and maintain the Markdown ticket queue in TICKETS.md."""
 
 from __future__ import annotations
 
 import argparse
 import contextlib
 import datetime as dt
+import json
 import os
 import re
 import shutil
@@ -395,8 +396,9 @@ def command_check(args: argparse.Namespace) -> None:
     print(ticket_id)
 
 
-def validation_errors() -> list[str]:
-    text = read_queue()
+def validation_errors(text: str | None = None, *, check_attachments: bool = True) -> list[str]:
+    if text is None:
+        text = read_queue()
     errors = []
     starts = re.findall(r"<!-- ticket:(TKT-\d{4}):start -->", text)
     ends = re.findall(r"<!-- ticket:(TKT-\d{4}):end -->", text)
@@ -434,6 +436,8 @@ def validation_errors() -> list[str]:
                     errors.append(f"{ticket_id}: done ticket has no completion evidence")
             except TicketError as error:
                 errors.append(f"{ticket_id}: {error}")
+        if not check_attachments:
+            continue
         for link in re.findall(r"!\[[^]]*\]\(([^)]+)\)", block):
             linked_path = (ROOT / link).resolve()
             expected_root = (ATTACHMENT_ROOT / ticket_id).resolve()
@@ -444,6 +448,130 @@ def validation_errors() -> list[str]:
             elif detect_image_format(linked_path) is None:
                 errors.append(f"{ticket_id}: invalid screenshot data {link}")
     return errors
+
+
+def ticket_snapshot() -> list[re.Match[str]]:
+    """Read one atomic queue snapshot without a lock or attachment access."""
+    text = read_queue()
+    errors = validation_errors(text, check_attachments=False)
+    if errors:
+        detail = "; ".join(errors[:5])
+        if len(errors) > 5:
+            detail += f"; {len(errors) - 5} more error(s)"
+        raise TicketError(f"invalid ticket queue: {detail}")
+    return list(BLOCK_RE.finditer(text))
+
+
+def section_text(body: str, heading: str) -> str:
+    index = REQUIRED_SECTIONS.index(heading)
+    next_heading = REQUIRED_SECTIONS[index + 1] if index + 1 < len(REQUIRED_SECTIONS) else None
+    start, end = section_bounds(body, heading, next_heading)
+    return body[start:end].strip()
+
+
+def bounded_text(value: str, limit: int, field: str, truncated: list[str]) -> str:
+    if len(value) <= limit:
+        return value
+    truncated.append(field)
+    return value[: limit - 1].rstrip() + "…"
+
+
+def ticket_view(match: re.Match[str], *, detail: bool = False) -> dict:
+    ticket_id, body = match.groups()
+    title_match = re.search(rf"(?m)^## {re.escape(ticket_id)} — (.+)$", body)
+    if title_match is None:
+        raise TicketError(f"{ticket_id} is missing its title")
+    truncated: list[str] = []
+    view = {"id": ticket_id}
+    for key in ("Type", "Status", "Priority", "Updated"):
+        view[key.lower()] = bounded_text(metadata_value(body, key) or "", 120, key.lower(), truncated)
+    view["title"] = bounded_text(title_match.group(1), 160, "title", truncated)
+    notes = re.findall(r"(?ms)^- (.*?)(?=^- |\Z)", section_text(body, "Work notes"))
+    latest_note = notes[-1].strip() if notes else None
+    view["latestNote"] = (
+        bounded_text(" ".join(latest_note.split()), 1200 if detail else 240, "latestNote", truncated)
+        if latest_note else None
+    )
+    if detail:
+        for key in ("Created", "Area"):
+            view[key.lower()] = bounded_text(metadata_value(body, key) or "", 160, key.lower(), truncated)
+        view["report"] = bounded_text(section_text(body, "Report"), 1200, "report", truncated)
+        checks = re.findall(r"(?ms)^- \[([ xX])\] (.*?)(?=^- \[[ xX]\] |\Z)", section_text(body, "Acceptance checks"))
+        if not checks:
+            raise TicketError(f"{ticket_id} has no acceptance checks")
+        view["acceptanceChecks"] = [
+            {"done": state.lower() == "x", "text": bounded_text(text.strip(), 600, f"acceptanceChecks[{index}]", truncated)}
+            for index, (state, text) in enumerate(checks[:12])
+        ]
+        view["acceptanceTotal"] = len(checks)
+        view["acceptanceOmitted"] = max(0, len(checks) - 12)
+    view["truncatedFields"] = truncated
+    return view
+
+
+def positive_limit(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("limit must be an integer from 1 to 100") from None
+    if not 1 <= number <= 100:
+        raise argparse.ArgumentTypeError("limit must be an integer from 1 to 100")
+    return number
+
+
+def command_list(args: argparse.Namespace) -> None:
+    selected = []
+    for match in ticket_snapshot():
+        body = match.group(2)
+        state = metadata_value(body, "Status")
+        if args.status:
+            if state not in args.status:
+                continue
+        elif not args.all and state == "done":
+            continue
+        if args.type and metadata_value(body, "Type") != args.type:
+            continue
+        selected.append(match)
+    views = [ticket_view(match) for match in selected[:args.limit]]
+    omitted = max(0, len(selected) - args.limit)
+    if args.json:
+        print(json.dumps({"tickets": views, "total": len(selected), "omitted": omitted}, ensure_ascii=False, indent=2))
+        return
+    print(f"Tickets: {len(views)} shown, {len(selected)} matched.")
+    for view in views:
+        print(f"{view['id']} [{view['status']}] {view['type']}/{view['priority']} — {view['title']}")
+        if view["latestNote"]:
+            print(f"  Latest note: {view['latestNote']}")
+        if view["truncatedFields"]:
+            print(f"  Shortened: {', '.join(view['truncatedFields'])}. Use show {view['id']} --full for full text.")
+    if omitted:
+        print(f"{omitted} more ticket(s). Use --limit (up to 100) or a --status/--type filter.")
+
+
+def command_show(args: argparse.Namespace) -> None:
+    normalized = args.ticket_id.upper()
+    matches = [match for match in ticket_snapshot() if match.group(1) == normalized]
+    if len(matches) != 1:
+        raise TicketError(f"expected one ticket for {normalized}, found {len(matches)}")
+    if args.full:
+        sys.stdout.write(matches[0].group(0))
+        return
+    view = ticket_view(matches[0], detail=True)
+    if args.json:
+        print(json.dumps({"ticket": view}, ensure_ascii=False, indent=2))
+        return
+    print(f"{view['id']} — {view['title']}")
+    print(f"Status: {view['status']} | Type: {view['type']} | Priority: {view['priority']}")
+    print(f"Updated: {view['updated']} | Area: {view['area']}")
+    print(f"\nReport:\n{view['report']}")
+    print(f"\nAcceptance checks ({len(view['acceptanceChecks'])}/{view['acceptanceTotal']} shown):")
+    for check in view["acceptanceChecks"]:
+        print(f"- [{'x' if check['done'] else ' '}] {check['text']}")
+    print(f"\nLatest note: {view['latestNote'] or 'No work note recorded.'}")
+    if view["acceptanceOmitted"]:
+        print(f"{view['acceptanceOmitted']} more acceptance check(s). Use show {view['id']} --full for the full entry.")
+    if view["truncatedFields"]:
+        print(f"Shortened: {', '.join(view['truncatedFields'])}. Use show {view['id']} --full for full text.")
 
 
 def command_validate(_: argparse.Namespace) -> None:
@@ -458,6 +586,22 @@ def command_validate(_: argparse.Namespace) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    list_tickets = subparsers.add_parser("list", help="show unfinished tickets in a compact read-only view")
+    selection = list_tickets.add_mutually_exclusive_group()
+    selection.add_argument("--all", action="store_true", help="include done tickets")
+    selection.add_argument("--status", choices=STATUSES, action="append", help="select a status; repeat to include several")
+    list_tickets.add_argument("--type", choices=("bug", "task"))
+    list_tickets.add_argument("--limit", type=positive_limit, default=20, help="maximum tickets shown (1–100, default 20)")
+    list_tickets.add_argument("--json", action="store_true")
+    list_tickets.set_defaults(func=command_list)
+
+    show = subparsers.add_parser("show", help="show one ticket's report, checks and latest note without edits")
+    show.add_argument("ticket_id")
+    show_format = show.add_mutually_exclusive_group()
+    show_format.add_argument("--json", action="store_true")
+    show_format.add_argument("--full", action="store_true", help="print the exact stored ticket block without truncation")
+    show.set_defaults(func=command_show)
 
     add = subparsers.add_parser("add", help="create a ticket from chat context")
     add.add_argument("--type", choices=("bug", "task"), required=True)

@@ -50,6 +50,8 @@ if str(NATIVE_RESOLVER_TOOLS) not in sys.path:
 
 import build_overworld_wild_spawn_metadata as spawn_metadata  # noqa: E402
 import native_resolver  # noqa: E402
+from overworld_application_bank_compiler import compile_bank, render_tail  # noqa: E402
+from workshop_build_journal import BuildJournal  # noqa: E402
 
 OVERLAY_SOURCE = ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
 HELPER_SOURCE = ROOT / "src/overworld_wild_helper_overlay/overworld_wild_helper_overlay.c"
@@ -164,6 +166,8 @@ BUILD_STATE = {
     "testNdsExists": TEST_NDS.exists(),
     "testNdsPath": str(TEST_NDS),
 }
+BUILD_JOURNAL = BuildJournal(ROOT)
+BUILD_STATE.update(BUILD_JOURNAL.restore(BUILD_OUTPUT_LIMIT))
 DATA_SOURCE_FILES = (
     OVERLAY_SOURCE,
     HELPER_SOURCE,
@@ -221,8 +225,8 @@ MACRO_LABEL_CACHES: OrderedDict[int, tuple[dict[str, int], dict[tuple[str, int |
 _BEHAVIOR_SCHEMA = json.loads(BEHAVIOR_SCHEMA_SOURCE.read_text(encoding="utf-8"))
 _BEHAVIOR_SCHEMA_GENERATED = json.loads(BEHAVIOR_SCHEMA_METADATA.read_text(encoding="utf-8"))
 _BEHAVIOR_SCHEMA_EDITOR = _BEHAVIOR_SCHEMA_GENERATED.get("editor", {})
-if _BEHAVIOR_SCHEMA.get("blobVersion") != 81 or len(_BEHAVIOR_SCHEMA_EDITOR.get("fields", ())) != 75:
-    raise RuntimeError("tools/overworld/behavior_schema.json is not the compact v81 schema")
+if _BEHAVIOR_SCHEMA.get("blobVersion") != 92 or len(_BEHAVIOR_SCHEMA_EDITOR.get("fields", ())) != 94:
+    raise RuntimeError("tools/overworld/behavior_schema.json is not the compact v92 schema")
 BEHAVIOR_SCHEMA_FIELDS = tuple(_BEHAVIOR_SCHEMA_EDITOR["fields"])
 PROFILE_FIELDS = [field["key"] for field in BEHAVIOR_SCHEMA_FIELDS]
 PROFILE_STORAGE_FIELDS = [
@@ -245,7 +249,8 @@ MATCH_FIELDS = [
 ]
 
 CONDITIONAL_TERRAIN_ALL_VALUE = 0x03FF
-MAX_RUNTIME_OVERRIDE_PROFILES = 32
+MAX_RUNTIME_OVERRIDE_PROFILES = 65534
+MAX_RUNTIME_APPLICATION_PROFILES = 65534
 
 FIELD_LABELS = {
     field["key"]: field["label"]
@@ -298,8 +303,14 @@ FIELD_PREFIXES = {
     "planTurnSkidPath": "OW_WILD_BEHAVIOR_BOOL_",
     "stopSkid": "OW_WILD_BEHAVIOR_BOOL_",
     "continueWhenArrived": "OW_WILD_BEHAVIOR_BOOL_",
+    "returnAfterMove": "OW_WILD_BEHAVIOR_BOOL_",
     "avoidPreviousTile": "OW_WILD_BEHAVIOR_BOOL_",
     "alertSpecialAction": "OW_WILD_BEHAVIOR_ALERT_SPECIAL_",
+    "onReachAction": "OW_WILD_BEHAVIOR_ON_REACH_",
+    "chainHopInPlaceHeartChance": "OW_WILD_BEHAVIOR_HOP_EFFECT_CHANCE_",
+    "chainHopInPlaceCryChance": "OW_WILD_BEHAVIOR_HOP_EFFECT_CHANCE_",
+    "knockbackType": "OW_WILD_BEHAVIOR_KNOCKBACK_",
+    "damageRecipients": "OW_WILD_BEHAVIOR_DAMAGE_RECIPIENT_",
     "spawnLocomotion": "OW_WILD_BEHAVIOR_LOCOMOTION_",
     "chillLocomotion": "OW_WILD_BEHAVIOR_LOCOMOTION_",
     "chillTarget": "OW_WILD_BEHAVIOR_TARGET_",
@@ -322,6 +333,7 @@ CANONICAL_BEHAVIOR_RAWS = [
     "OW_WILD_BEHAVIOR_KIND_ASLEEP",
     "OW_WILD_BEHAVIOR_KIND_TIRED_EMOTE",
     "OW_WILD_BEHAVIOR_KIND_NO_VISUAL",
+    "OW_WILD_BEHAVIOR_KIND_THROW_HELD_ACTOR",
 ]
 
 CANONICAL_MOVEMENT_STYLE_RAWS = [
@@ -346,6 +358,11 @@ CANONICAL_TARGET_RAWS = [
     "OW_WILD_BEHAVIOR_TARGET_TREE_TOP",
     "OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER",
     "OW_WILD_BEHAVIOR_TARGET_PLAYER_CARDINAL_LINE",
+    "OW_WILD_BEHAVIOR_TARGET_CONDITION_ACTOR",
+    "OW_WILD_BEHAVIOR_TARGET_PLAYER_THROW_LINE",
+    "OW_WILD_BEHAVIOR_TARGET_CARGO",
+    "OW_WILD_BEHAVIOR_TARGET_TRIGGER_THROW_LINE",
+    "OW_WILD_BEHAVIOR_TARGET_PLAYER_AWAY_THROW_LINE",
 ]
 
 CANONICAL_ACTIVE_TARGET_RAWS = [
@@ -356,7 +373,13 @@ CANONICAL_ACTIVE_TARGET_RAWS = [
 CANONICAL_ALERT_SPECIAL_ACTION_RAWS = [
     "OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE",
     "OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP",
+    # Legacy value remains decodable for existing data, but is not authorable.
     "OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW",
+]
+
+CANONICAL_ON_REACH_ACTION_RAWS = [
+    "OW_WILD_BEHAVIOR_ON_REACH_NONE",
+    "OW_WILD_BEHAVIOR_ON_REACH_PICKUP_CONDITION_ACTOR",
 ]
 
 CANONICAL_CHAIN_PAUSE_ACTION_RAWS = [
@@ -397,12 +420,13 @@ ALLOWED_TERRAIN_OPTIONS = [
     ("water", "Water", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER"),
     ("canopy", "Canopy", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY"),
     ("grass", "Grass", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_GRASS"),
-    ("player", "Player tile", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER"),
+    ("object-of-interest", "Object of interest tile", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_OBJECT_OF_INTEREST"),
     ("player-front", "Player front", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER_FRONT"),
     ("rooftop", "Rooftop", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ROOFTOP"),
     ("signpost", "Signpost", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_SIGNPOST"),
     ("mailbox", "Mailbox", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX"),
     ("flowerbed", "Flowerbed", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_FLOWERBED"),
+    ("water-surface", "Water surface", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER_SURFACE"),
 ]
 
 CANONICAL_PROFILE_FIELD_RAWS = {
@@ -410,15 +434,22 @@ CANONICAL_PROFILE_FIELD_RAWS = {
     "chillAction": CANONICAL_MOVEMENT_STYLE_RAWS,
     "chillTarget": CANONICAL_ACTIVE_TARGET_RAWS,
     "alertSpecialAction": CANONICAL_ALERT_SPECIAL_ACTION_RAWS,
+    "onReachAction": CANONICAL_ON_REACH_ACTION_RAWS,
     "chainPauseAction": CANONICAL_CHAIN_PAUSE_ACTION_RAWS,
     "hopAllowNonCardinal": CANONICAL_MOVEMENT_DIRECTION_RAWS,
     "hopAllowVerticalObstacles": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
     "planTurnSkidPath": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
     "stopSkid": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
     "continueWhenArrived": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
+    "returnAfterMove": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
     "avoidPreviousTile": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
-    "visionCone": ["OVERWORLD_VISION_CONE_FORWARD_90"],
+    "visionCone": ["OVERWORLD_VISION_CONE_FORWARD_90", "OVERWORLD_VISION_CONE_FORWARD_LINE", "OVERWORLD_VISION_CONE_CARDINAL_LINES"],
     "visionAdjacentAwareness": ["OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES"],
+    "knockbackType": [
+        "OW_WILD_BEHAVIOR_KNOCKBACK_NONE",
+        "OW_WILD_BEHAVIOR_KNOCKBACK_SLIDE",
+        "OW_WILD_BEHAVIOR_KNOCKBACK_JUMP",
+    ],
 }
 
 PROFILE_OPTION_EXCLUDED_SUFFIXES = (
@@ -439,6 +470,7 @@ PROFILE_OPTION_FIELD_EXCLUDED_RAWS = {
         "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT_PER_TILE_NO_FLICKER",
     },
     "chillTarget": {"OW_WILD_BEHAVIOR_TARGET_PLAYER_FRONT"},
+    "alertSpecialAction": {"OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW"},
 }
 
 # These are implementation encodings selected by the decoded Teleport controls,
@@ -691,6 +723,11 @@ BOUNDED_OVERRIDE_PROFILE_FIELDS = frozenset(
     for field in BEHAVIOR_SCHEMA_FIELDS
     if "atLeast" in field["operators"] and "atMost" in field["operators"]
 )
+DIVIDE_OVERRIDE_PROFILE_FIELDS = frozenset(
+    field["key"]
+    for field in _BEHAVIOR_SCHEMA["fields"]
+    if "divide" in field["operators"]
+)
 WALK_TIME_FIELDS = frozenset({
     "chillSpeed",
     "maxWalkSpeed",
@@ -704,6 +741,8 @@ RELATIVE_OVERRIDE_DELTA_MAX = 127
 RELATIVE_OVERRIDE_RAW_RE = re.compile(r"^[+-]\d+$")
 AT_LEAST_OVERRIDE_RAW_RE = re.compile(r"^/<(\d+)$")
 AT_MOST_OVERRIDE_RAW_RE = re.compile(r"^/>(\d+)$")
+DIVIDE_OVERRIDE_RAW_RE = re.compile(r"^/(\d+)$")
+DIVIDE_OVERRIDE_DIVISOR_MAX = 127
 COMPOUND_OVERRIDE_RAW_RE = re.compile(r"^([+-]\d+)\s*,\s*(/<|/>)(\d+)$")
 
 
@@ -723,9 +762,15 @@ def is_relative_override_raw(field: str, raw: str) -> bool:
     )
 
 
+def is_divide_override_raw(field: str, raw: str) -> bool:
+    return field in DIVIDE_OVERRIDE_PROFILE_FIELDS and (
+        DIVIDE_OVERRIDE_RAW_RE.fullmatch(clean_token(raw)) is not None
+    )
+
+
 def is_at_least_override_raw(field: str, raw: str) -> bool:
     parts = compound_override_parts(field, raw)
-    return field in BOUNDED_OVERRIDE_PROFILE_FIELDS and (
+    return is_divide_override_raw(field, raw) or field in BOUNDED_OVERRIDE_PROFILE_FIELDS and (
         AT_LEAST_OVERRIDE_RAW_RE.fullmatch(clean_token(raw)) is not None
         or (parts is not None and parts[1] == "/<")
     )
@@ -733,7 +778,7 @@ def is_at_least_override_raw(field: str, raw: str) -> bool:
 
 def is_at_most_override_raw(field: str, raw: str) -> bool:
     parts = compound_override_parts(field, raw)
-    return field in BOUNDED_OVERRIDE_PROFILE_FIELDS and (
+    return is_divide_override_raw(field, raw) or field in BOUNDED_OVERRIDE_PROFILE_FIELDS and (
         AT_MOST_OVERRIDE_RAW_RE.fullmatch(clean_token(raw)) is not None
         or (parts is not None and parts[1] == "/>")
     )
@@ -1083,6 +1128,8 @@ def humanize_symbol(symbol: str, prefix: str | None = None) -> str:
 
 
 def _uncached_macro_label(symbol: str, value: int | None, field: str | None, macros: dict[str, int]) -> str:
+    if field in {"chainHopInPlaceHeartChance", "chainHopInPlaceCryChance"} and value in (0, 1, 2, 3):
+        return "Off (0%)" if value == 0 else f"{(0, 25, 50, 100)[value]}%"
     label_overrides = {
         "OW_WILD_BEHAVIOR_LOCOMOTION_WANDER": "Walk",
         "OW_WILD_BEHAVIOR_LOCOMOTION_TELEPORT": "Teleport",
@@ -1096,10 +1143,10 @@ def _uncached_macro_label(symbol: str, value: int | None, field: str | None, mac
         "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_CARDINAL_AND_DIAGONAL": "Cardinal and diagonal",
         "OW_WILD_BEHAVIOR_MOVEMENT_DIRECTIONS_DIAGONAL_ONLY": "Diagonal only",
         "OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP": "Call for help",
-        "OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW": "Pick up and throw",
         "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_FORWARD": "Jump forward",
         "OW_WILD_BEHAVIOR_TARGET_PLAYER_CARDINAL_LINE": "Player cardinal line",
         "OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER": "Next to player",
+        "OW_WILD_BEHAVIOR_TARGET_CONDITION_ACTOR": "Object of interest",
         "OW_WILD_BEHAVIOR_CLASS_AGRESSIVE_CHASE": "Aggressive chase",
         "OW_WILD_BEHAVIOR_CLASS_AGGRESSIVE_RAM": "Aggressive ram",
         "OW_WILD_BEHAVIOR_CLASS_CANOPY_HOPPER_2": "Canopy hopper",
@@ -1233,6 +1280,8 @@ def canonical_profile_value_raw(value: dict, field: str) -> str:
             return f"{delta:+d}, {operator}{threshold}"
         if is_relative_override_raw(field, value.get("raw", "")):
             return f"{evaluated:+d}"
+        if is_divide_override_raw(field, value.get("raw", "")):
+            return f"/{evaluated}"
         if is_at_least_override_raw(field, value.get("raw", "")):
             return f"/<{evaluated}"
         if is_at_most_override_raw(field, value.get("raw", "")):
@@ -1251,6 +1300,8 @@ def profile_numeric_view(profile: dict[str, dict]) -> dict[str, dict]:
                 raw = f"{delta:+d}, {operator}{threshold}"
             elif is_relative_override_raw(field, value.get("raw", "")):
                 raw = f"{numeric(value):+d}"
+            elif is_divide_override_raw(field, value.get("raw", "")):
+                raw = f"/{numeric(value)}"
             elif is_at_least_override_raw(field, value.get("raw", "")):
                 raw = f"/<{numeric(value)}"
             elif is_at_most_override_raw(field, value.get("raw", "")):
@@ -1393,6 +1444,16 @@ def canonical_profile_change_raw(
         return "OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER"
     if field == "mountStride" and cleaned not in {"0", "1", "2", "3"}:
         raise ValueError("mountStride must be 0..3 (16, 32, 48, or 64 pixels per cycle)")
+    divide_match = DIVIDE_OVERRIDE_RAW_RE.fullmatch(cleaned)
+    if divide_match:
+        if not allow_relative:
+            raise ValueError(f"numeric override operators are only valid in override profiles: {field}")
+        if field not in DIVIDE_OVERRIDE_PROFILE_FIELDS:
+            raise ValueError(f"field cannot use a divide override value: {field}")
+        divisor = int(divide_match.group(1), 10)
+        if not 1 <= divisor <= DIVIDE_OVERRIDE_DIVISOR_MAX:
+            raise ValueError(f"divide divisor for {field} must be between 1 and {DIVIDE_OVERRIDE_DIVISOR_MAX}")
+        return f"/{divisor}"
     if field not in NUMERIC_PROFILE_FIELDS:
         canonical_options = CANONICAL_PROFILE_FIELD_RAWS.get(field, ())
         evaluated = numeric_raw(cleaned, field, macros)
@@ -1497,6 +1558,32 @@ def parse_mask(raw: str, macros: dict[str, int], override_fields: dict[str, str]
 
 
 _PACKED_PROFILE_STORAGE = {
+    "avoidPreviousTile": (
+        "OW_WILD_BEHAVIOR_PREVIOUS_TILE_HOP_OPTIONS",
+        (("avoidPreviousTile", 0, 1), ("chainHopInPlaceExtraChance", 1, 7)),
+    ),
+    "chainRepositionJumpCount": (
+        "OW_WILD_BEHAVIOR_CHAIN_REPOSITION_HOP_EFFECT_OPTIONS",
+        (("chainRepositionJumpCount", 0, 4), ("chainHopInPlaceExtraHops", 4, 2),
+         ("chainHopInPlaceHeartChance", 6, 2)),
+    ),
+    "onReachAction": (
+        "OW_WILD_BEHAVIOR_ON_REACH_HOP_OPTIONS",
+        (("onReachAction", 0, 1), ("chainHopInPlaceCryChance", 6, 2)),
+    ),
+    "continueWhenArrived": (
+        "OW_WILD_BEHAVIOR_CONTROLLER_CARGO_OPTIONS",
+        (("continueWhenArrived", 0, 1), ("returnAfterMove", 1, 1),
+         ("cargoTargetCheckInterval", 2, 4), ("cargoTargetSwitchAdvantage", 6, 2)),
+    ),
+    "hopAllowVerticalObstacles": (
+        "OW_WILD_BEHAVIOR_SKID_OPTIONS",
+        (("hopAllowVerticalObstacles", 0, 1), ("turnSkidTwoTime", 1, 7)),
+    ),
+    "chainRepositionDust": (
+        "OW_WILD_BEHAVIOR_SKID_OPTIONS",
+        (("chainRepositionDust", 0, 1), ("stopSkidTime", 1, 7)),
+    ),
     "mountBounce": (
         "OW_WILD_BEHAVIOR_MOUNT_GAIT_OPTIONS",
         (("mountBounce", 0, 2), ("mountStride", 2, 2), ("mountSettle", 4, 2), ("mountLean", 6, 2)),
@@ -1513,11 +1600,15 @@ _PACKED_PROFILE_STORAGE = {
         "OW_WILD_BEHAVIOR_TURN_SKID_OPTIONS",
         (("tilesBeforeTurnSkid", 0, 6), ("planTurnSkidPath", 6, 1), ("stopSkid", 7, 1)),
     ),
+    "knockbackType": (
+        "OW_WILD_BEHAVIOR_COLLISION_OPTIONS",
+        (("knockbackType", 0, 2), ("knockbackDistance", 2, 3), ("damageRecipients", 5, 3)),
+    ),
 }
 
 
 def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
-    """Parse only the current compact 72-byte profile initializer."""
+    """Parse only the current compact 80-byte profile initializer."""
 
     if len(items) == 1 and numeric(make_value(str(items[0]), None, macros)) == 0:
         storage_raws = {field: "0" for field in PROFILE_STORAGE_FIELDS}
@@ -1543,6 +1634,20 @@ def parse_profile(items: list, macros: dict[str, int]) -> dict[str, dict]:
     }
     for storage_field, (macro_name, packed_fields) in _PACKED_PROFILE_STORAGE.items():
         raw = storage_raws[storage_field]
+        if storage_field == "chainRepositionJumpCount":
+            old_match = re.fullmatch(r"OW_WILD_BEHAVIOR_CHAIN_REPOSITION_HOP_OPTIONS\((.*)\)", raw)
+            if old_match:
+                parts = split_top_level_csv(old_match.group(1))
+                if len(parts) != 2:
+                    raise ParseError("OW_WILD_BEHAVIOR_CHAIN_REPOSITION_HOP_OPTIONS needs 2 arguments")
+                raw = f"{macro_name}({parts[0]}, {parts[1]}, 0)"
+        if storage_field == "continueWhenArrived":
+            old_match = re.fullmatch(r"OW_WILD_BEHAVIOR_CONTROLLER_OPTIONS\((.*)\)", raw)
+            if old_match:
+                parts = split_top_level_csv(old_match.group(1))
+                if len(parts) != 2:
+                    raise ParseError("OW_WILD_BEHAVIOR_CONTROLLER_OPTIONS needs 2 arguments")
+                raw = f"{macro_name}({parts[0]}, {parts[1]}, 12, 1)"
         match = re.fullmatch(rf"{re.escape(macro_name)}\((.*)\)", raw)
         if match:
             parts = split_top_level_csv(match.group(1))
@@ -1620,10 +1725,18 @@ def parse_behavior_override(items: list, macros: dict[str, int]) -> dict:
         for bit in parsed["bits"]
         if bit.get("field")
     }
+    divide_fields = at_least_fields & at_most_fields
+    if divide_fields & relative_fields:
+        raise ParseError("divide override cannot also use a relative mask")
+    unsupported_divide = divide_fields - DIVIDE_OVERRIDE_PROFILE_FIELDS
+    if unsupported_divide:
+        raise ParseError("divide override masks include non-numeric fields: "
+                         + ", ".join(sorted(unsupported_divide)))
     for operator_name, operator_fields, supported_fields in (
         ("relative", relative_fields, RELATIVE_OVERRIDE_PROFILE_FIELDS),
-        ("at-least", at_least_fields, BOUNDED_OVERRIDE_PROFILE_FIELDS),
-        ("at-most", at_most_fields, BOUNDED_OVERRIDE_PROFILE_FIELDS),
+        ("at-least", at_least_fields - divide_fields, BOUNDED_OVERRIDE_PROFILE_FIELDS),
+        ("at-most", at_most_fields - divide_fields, BOUNDED_OVERRIDE_PROFILE_FIELDS),
+        ("divide", divide_fields, DIVIDE_OVERRIDE_PROFILE_FIELDS),
     ):
         inactive = sorted(operator_fields - mask_fields)
         if inactive:
@@ -1637,12 +1750,13 @@ def parse_behavior_override(items: list, macros: dict[str, int]) -> dict:
                 f"{operator_name} override masks include non-numeric fields: "
                 + ", ".join(unsupported)
             )
-    contradictory_bounds = at_least_fields & at_most_fields
-    if contradictory_bounds:
-        raise ParseError(
-            "override bound masks overlap for: "
-            + ", ".join(sorted(contradictory_bounds))
-        )
+    for field in divide_fields:
+        divisor = numeric(profile[field])
+        if divisor is None or not 1 <= divisor <= DIVIDE_OVERRIDE_DIVISOR_MAX:
+            raise ParseError(f"divide divisor for {field} must be between 1 and {DIVIDE_OVERRIDE_DIVISOR_MAX}")
+        canonical = f"/{divisor}"
+        profile[field].update({"raw": canonical, "value": divisor,
+                               "label": canonical, "symbol": None})
 
     original_profile_raws = {
         field: clean_token(profile[field].get("raw", ""))
@@ -1671,8 +1785,8 @@ def parse_behavior_override(items: list, macros: dict[str, int]) -> dict:
         })
 
     for operator, fields, wrappers in (
-        ("/<", at_least_fields, ("OW_WILD_BEHAVIOR_AT_LEAST", "OW_WILD_BEHAVIOR_NO_FASTER_THAN")),
-        ("/>", at_most_fields, ("OW_WILD_BEHAVIOR_AT_MOST", "OW_WILD_BEHAVIOR_NO_SLOWER_THAN")),
+        ("/<", at_least_fields - divide_fields, ("OW_WILD_BEHAVIOR_AT_LEAST", "OW_WILD_BEHAVIOR_NO_FASTER_THAN")),
+        ("/>", at_most_fields - divide_fields, ("OW_WILD_BEHAVIOR_AT_MOST", "OW_WILD_BEHAVIOR_NO_SLOWER_THAN")),
     ):
         for field in fields:
             wrapper_pattern = "(?:" + "|".join(map(re.escape, wrappers)) + ")"
@@ -1744,11 +1858,12 @@ def parse_behavior_override(items: list, macros: dict[str, int]) -> dict:
         "atLeastMask": at_least_mask,
         "atLeastMask2": at_least_mask2,
         "atLeastMask3": at_least_mask3,
-        "atLeastFields": sorted(at_least_fields),
+        "atLeastFields": sorted(at_least_fields - divide_fields),
         "atMostMask": at_most_mask,
         "atMostMask2": at_most_mask2,
         "atMostMask3": at_most_mask3,
-        "atMostFields": sorted(at_most_fields),
+        "atMostFields": sorted(at_most_fields - divide_fields),
+        "divideFields": sorted(divide_fields),
         "compoundBoundProfile": compound_bound_profile,
         "maskLabels": labels,
         "maskRaw": mask_raw_summary,
@@ -2163,7 +2278,7 @@ def build_edit_options(macros: dict[str, int], class_profiles: list[dict[str, di
                 add_value_option(options, seen, str(value), field, macros)
                 options[-1]["label"] = f"{16 * (value + 1)} px per cycle"
         elif field == "walkAccelerationStep":
-            for value in (0, 33, *range(1, 33)):
+            for value in (0, 33, *range(1, 33), 34):
                 add_value_option(options, seen, str(value), field, macros)
             for option in options:
                 value = option["value"]
@@ -2171,6 +2286,8 @@ def build_edit_options(macros: dict[str, int], class_profiles: list[dict[str, di
                     option["label"] = "0 — None"
                 elif value == 33:
                     option["label"] = "/2 — Old rule"
+                elif value == 34:
+                    option["label"] = "Linear speed"
                 else:
                     option["label"] = f"{value} — Remove {value} frame{'s' if value != 1 else ''}"
         elif field in NUMERIC_PROFILE_FIELDS:
@@ -2380,7 +2497,7 @@ def override_edit_profile(behavior: dict, macros: dict[str, int]) -> dict[str, d
         legacy_mask = spawn_destination_mask_for_legacy(behavior["profile"]["spawnDestination"])
         profile["spawnDestinationMask"] = make_value(str(legacy_mask), "spawnDestinationMask", macros)
         profile["spawnDestinationOverrideMask"] = make_value(
-            str(macros.get("OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL", 0x3FF)),
+            str(macros.get("OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL", 0x7FF)),
             "spawnDestinationOverrideMask",
             macros,
         )
@@ -5004,6 +5121,17 @@ def format_profile_initializer(raws: dict[str, str], indent: str) -> str:
     for field in PROFILE_STORAGE_FIELDS:
         if field in PROFILE_RESERVED_FIELDS:
             value = "0"
+        elif field == "avoidPreviousTile":
+            value = f"OW_WILD_BEHAVIOR_PREVIOUS_TILE_HOP_OPTIONS({raws[field]}, {raws['chainHopInPlaceExtraChance']})"
+        elif field == "chainRepositionJumpCount":
+            value = f"OW_WILD_BEHAVIOR_CHAIN_REPOSITION_HOP_EFFECT_OPTIONS({raws[field]}, {raws['chainHopInPlaceExtraHops']}, {raws['chainHopInPlaceHeartChance']})"
+        elif field == "onReachAction":
+            value = f"OW_WILD_BEHAVIOR_ON_REACH_HOP_OPTIONS({raws[field]}, {raws['chainHopInPlaceCryChance']})"
+        elif field == "continueWhenArrived":
+            value = f"OW_WILD_BEHAVIOR_CONTROLLER_CARGO_OPTIONS({raws[field]}, {raws['returnAfterMove']}, {raws['cargoTargetCheckInterval']}, {raws['cargoTargetSwitchAdvantage']})"
+        elif field in {"hopAllowVerticalObstacles", "chainRepositionDust"}:
+            threshold = "turnSkidTwoTime" if field == "hopAllowVerticalObstacles" else "stopSkidTime"
+            value = f"OW_WILD_BEHAVIOR_SKID_OPTIONS({raws[field]}, {raws[threshold]})"
         elif field == "mountBounce":
             value = (
                 "OW_WILD_BEHAVIOR_MOUNT_GAIT_OPTIONS("
@@ -5026,6 +5154,11 @@ def format_profile_initializer(raws: dict[str, str], indent: str) -> str:
                 f"{raws[field]}, {raws['planTurnSkidPath']}, "
                 f"{raws['stopSkid']})"
             )
+        elif field == "knockbackType":
+            value = (
+                "OW_WILD_BEHAVIOR_COLLISION_OPTIONS("
+                f"{raws[field]}, {raws['knockbackDistance']}, {raws['damageRecipients']})"
+            )
         else:
             value = raws[field]
         values.append(f"{value_indent}{value}")
@@ -5039,9 +5172,20 @@ def override_profile_storage_raws(raws: dict[str, str]) -> dict[str, str]:
     for field, raw in raws.items():
         compound = compound_override_parts(field, raw)
         if compound is not None:
-            result[field] = f"OW_WILD_BEHAVIOR_RELATIVE({compound[0]:+d})"
+            delta = compound[0]
+            if field == "chainRepositionJumpCount":
+                delta = max(-8, min(7, delta))
+            result[field] = f"OW_WILD_BEHAVIOR_RELATIVE({delta:+d})"
+        elif is_divide_override_raw(field, raw):
+            divisor = int(raw[1:], 10)
+            if field == "chainRepositionJumpCount":
+                divisor = min(8, divisor)
+            result[field] = str(divisor)
         elif is_relative_override_raw(field, raw):
-            result[field] = f"OW_WILD_BEHAVIOR_RELATIVE({int(raw, 10):+d})"
+            delta = int(raw, 10)
+            if field == "chainRepositionJumpCount":
+                delta = max(-8, min(7, delta))
+            result[field] = f"OW_WILD_BEHAVIOR_RELATIVE({delta:+d})"
         elif is_at_least_override_raw(field, raw):
             wrapper = "OW_WILD_BEHAVIOR_NO_FASTER_THAN" if field in WALK_TIME_FIELDS \
                 else "OW_WILD_BEHAVIOR_AT_LEAST"
@@ -5312,6 +5456,8 @@ def _catalog_override_field(field: str, raw: str) -> dict[str, int | str]:
             "value": relative,
             "threshold": threshold,
         }
+    if is_divide_override_raw(field, raw):
+        return {"operator": "divide", "value": int(raw[1:], 10)}
     if is_relative_override_raw(field, raw):
         return {"operator": "relative", "value": int(raw, 10)}
     if is_at_least_override_raw(field, raw):
@@ -5333,6 +5479,8 @@ def _catalog_override_raw(field: str, authored: object) -> str:
         return raw_value
     if operator_name == "relative":
         return f"{int(raw_value, 10):+d}"
+    if operator_name == "divide":
+        return f"/{int(raw_value, 10)}"
     if operator_name in {"atLeast", "atMost"}:
         return ("/<" if operator_name == "atLeast" else "/>") + str(int(raw_value, 10))
     if operator_name in {"relativeThenAtLeast", "relativeThenAtMost"}:
@@ -5432,11 +5580,17 @@ def _validate_catalog_override_field(field: str, authored: object, label: str) -
     expected_fields = {"operator", "value", "threshold"} if compound else {"operator", "value"}
     _catalog_object(authored, f"{label}.{field}", expected_fields)
     if operator_name not in {
-        "replace", "relative", "atLeast", "atMost",
+        "replace", "relative", "divide", "atLeast", "atMost",
         "relativeThenAtLeast", "relativeThenAtMost",
     }:
         raise ParseError(f"{label}.{field} has an unknown operator: {operator_name}")
     if operator_name == "replace":
+        if field == "returnAfterMove":
+            if type(authored["value"]) not in (int, str) or str(authored["value"]) not in {
+                "0", "1", "OW_WILD_BEHAVIOR_BOOL_NO", "OW_WILD_BEHAVIOR_BOOL_YES",
+            }:
+                raise ParseError(f"{label}.{field}.value must be 0 or 1")
+            return
         if field in {"mountBounce", "mountStride", "mountSettle", "mountLean"}:
             if isinstance(authored["value"], bool) or str(authored["value"]) not in {"0", "1", "2", "3"}:
                 raise ParseError(f"{label}.{field}.value must be an integer 0..3")
@@ -5446,7 +5600,22 @@ def _validate_catalog_override_field(field: str, authored: object, label: str) -
                 authored["value"], f"{label}.{field}.value"
             )
             return
-        _catalog_expression(authored["value"], f"{label}.{field}.value")
+        replacement = authored["value"]
+        _catalog_expression(replacement, f"{label}.{field}.value")
+        if field in NUMERIC_PROFILE_FIELD_OPTION_MAX:
+            literal = replacement if isinstance(replacement, int) else None
+            if isinstance(replacement, str) and re.fullmatch(
+                r"(?:0[xX][0-9A-Fa-f]+|[0-9]+)", clean_token(replacement)
+            ):
+                cleaned = clean_token(replacement)
+                literal = int(cleaned, 16 if cleaned.lower().startswith("0x") else 10)
+            if literal is not None:
+                minimum = NUMERIC_PROFILE_FIELD_OPTION_MIN[field]
+                maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX[field]
+                if literal < minimum or literal > maximum:
+                    raise ParseError(
+                        f"{label}.{field}.value must be {minimum}..{maximum}"
+                    )
         return
 
     value = authored["value"]
@@ -5454,6 +5623,12 @@ def _validate_catalog_override_field(field: str, authored: object, label: str) -
         raise ParseError(f"{label}.{field}.value must be an integer for {operator_name}")
     minimum = NUMERIC_PROFILE_FIELD_OPTION_MIN.get(field, 0)
     maximum = NUMERIC_PROFILE_FIELD_OPTION_MAX.get(field, 0xFF)
+    if operator_name == "divide":
+        if field not in DIVIDE_OVERRIDE_PROFILE_FIELDS:
+            raise ParseError(f"{label}.{field} does not support divide values")
+        if not 1 <= value <= DIVIDE_OVERRIDE_DIVISOR_MAX:
+            raise ParseError(f"{label}.{field} divide divisor must be between 1 and {DIVIDE_OVERRIDE_DIVISOR_MAX}")
+        return
     if operator_name == "relative":
         if field not in RELATIVE_OVERRIDE_PROFILE_FIELDS:
             raise ParseError(f"{label}.{field} does not support relative values")
@@ -5482,8 +5657,8 @@ BEHAVIOR_CATALOG_SCHEMA = "../tools/overworld/schemas/behavior-authoring-v4.sche
 BEHAVIOR_CATALOG_SCHEMA_V5 = "../tools/overworld/schemas/behavior-authoring-v5.schema.json"
 BEHAVIOR_FIELD_SCHEMA = "../tools/overworld/behavior_schema.json"
 CATALOG_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
-MAX_CONDITION_ENTRIES = 32
-MAX_CONDITIONS_PER_PROFILE = 32
+MAX_CONDITION_ENTRIES = 65535
+MAX_CONDITIONS_PER_PROFILE = 65535
 CONDITION_RANGE_KINDS = {
     "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE",
     "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE_CLOSE_RADIUS",
@@ -5506,18 +5681,125 @@ PROFILE_CLASSIFICATIONS = {
     "modifier",
 }
 PROFILE_CLASSIFICATIONS_V5 = (
+    "mood",
     "routine",
-    "placement",
-    "capability",
-    "attitude",
     "style",
+    "placement",
+    "follower",
+    "capability",
+    "attack",
+    "attitude",
     "follower-mount",
     "modifier",
 )
+# Water surface is presentation-only and outside the condition terrain range.
 CONDITION_TERRAIN_BITS = {
     raw: 1 << index
-    for index, (_key, _label, raw) in enumerate(ALLOWED_TERRAIN_OPTIONS)
+    for index, (key, _label, raw) in enumerate(ALLOWED_TERRAIN_OPTIONS)
+    if key != "water-surface"
 }
+# Existing saved expressions retain their bit4 meaning.
+CONDITION_TERRAIN_BITS["OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER"] = 1 << 4
+ACTOR_FACT_BITS = {
+    "reserved": 1,
+    "held": 2,
+    "throw-line-valid": 4,
+    "recovering": 8,
+    "trigger-valid": 16,
+    "targeted-for-pickup": 32,
+}
+
+
+
+CONDITION_OPTION_KEYS = {"subjectRoles", "binding", "usesBinding", "failure", "requiresAppliedProfile"}
+TARGET_PICKUP_KEYS = {"mustBeReachableForPickup", "pickupReach"}
+
+
+def _catalog_condition_options(condition: dict, label: str,
+        application_indexes_by_profile: dict[str, int] | None = None) -> tuple[int, ...]:
+    roles = condition.get("subjectRoles", [])
+    if not isinstance(roles, list) or any(not isinstance(role, str) for role in roles) \
+            or len(roles) != len(set(roles)) \
+            or set(roles) - {"wild", "follower", "mounted"}:
+        raise ParseError(f"{label}.subjectRoles must contain unique actor roles")
+    role_mask = sum({"wild": 1, "follower": 2, "mounted": 4}[role] for role in roles)
+    binding_names = {"trigger": 1, "cargo": 2}
+    capture = lifetime = duration = bind_only = 0
+    if "binding" in condition:
+        binding = _catalog_object(condition["binding"], f"{label}.binding",
+            {"name", "lifetime", "contributeProfile"}, {"durationFrames"})
+        if binding["name"] not in binding_names:
+            raise ParseError(f"{label}.binding.name must be trigger or cargo")
+        capture = binding_names[binding["name"]]
+        if type(binding["contributeProfile"]) is not bool:
+            raise ParseError(f"{label}.binding.contributeProfile must be a boolean")
+        bind_only = int(not binding["contributeProfile"])
+        if binding["lifetime"] == "frames":
+            lifetime = 1
+            duration = _catalog_bounded_integer(binding.get("durationFrames"),
+                f"{label}.binding.durationFrames", 1, 65535)
+        elif binding["lifetime"] != "until-clear" or "durationFrames" in binding:
+            raise ParseError(f"{label}.binding lifetime must be frames or until-clear")
+        if condition["target"]["kind"] == "none":
+            raise ParseError(f"{label}.binding needs an identity target")
+        if capture == 2 and condition["target"]["kind"] != "actor":
+            raise ParseError(f"{label}.cargo binding needs a Pokemon identity")
+    required_bindings = {**binding_names, "object-of-interest-itself": 3}
+    uses = condition.get("usesBinding")
+    if uses is not None and uses not in required_bindings:
+        raise ParseError(f"{label}.usesBinding must be trigger, cargo, or object-of-interest-itself")
+    if uses == "object-of-interest-itself" and capture != 2:
+        raise ParseError(f"{label}.object-of-interest-itself must capture Cargo")
+    target = condition["target"]
+    reachable = target.get("mustBeReachableForPickup", False)
+    if type(reachable) is not bool:
+        raise ParseError(f"{label}.target.mustBeReachableForPickup must be a boolean")
+    distance = height = 0
+    if "pickupReach" in target:
+        reach = _catalog_object(target["pickupReach"], f"{label}.target.pickupReach",
+            {"tiles", "heightUnits"})
+        distance = _catalog_bounded_integer(reach["tiles"], f"{label}.pickup.tiles", 1, 8)
+        height = _catalog_bounded_integer(reach["heightUnits"], f"{label}.pickup.heightUnits", 0, 64)
+    if reachable and (target["kind"] != "actor" or not distance):
+        raise ParseError(f"{label} reachable pickup needs an actor and explicit pickup reach")
+    response = retry = 0
+    if "failure" in condition:
+        failure = _catalog_object(condition["failure"], f"{label}.failure",
+            {"response", "retryFrames"})
+        if failure["response"] != "drop-and-clear":
+            raise ParseError(f"{label}.failure.response must be drop-and-clear")
+        response = 1
+        retry = _catalog_bounded_integer(failure["retryFrames"], f"{label}.failure.retryFrames", 0, 255)
+    required = condition.get("requiresAppliedProfile")
+    if required is not None:
+        _validate_catalog_id(required, f"{label}.requiresAppliedProfile")
+    required_application = (application_indexes_by_profile[required] + 1
+        if required is not None and application_indexes_by_profile is not None else 0)
+    bound_distance = int(condition["when"]["kind"] == "bound-target-distance")
+    minimum = condition["when"].get("minTiles", 0) if bound_distance else 0
+    maximum = condition["when"].get("maxTiles", 0) if bound_distance else 0
+    return (role_mask, capture, lifetime, bind_only, duration,
+        required_bindings.get(uses, 0), int(reachable), distance, height, response, retry,
+        required_application, minimum, maximum, bound_distance, 0)
+
+
+def _catalog_actor_facts(value: object, label: str) -> tuple[int, int]:
+    facts = _catalog_object(value, label, {"all", "none"})
+    masks = []
+    for key in ("all", "none"):
+        names = facts[key]
+        if not isinstance(names, list) or any(not isinstance(name, str) for name in names) \
+                or len(names) != len(set(names)):
+            raise ParseError(f"{label}.{key} must be a list of unique facts")
+        unknown = set(names) - ACTOR_FACT_BITS.keys()
+        if unknown:
+            raise ParseError(f"{label}.{key} contains unknown facts")
+        masks.append(sum(ACTOR_FACT_BITS[name] for name in names))
+    if masks[0] == 0 and masks[1] == 0:
+        raise ParseError(f"{label} must require or exclude at least one fact")
+    if masks[0] & masks[1]:
+        raise ParseError(f"{label} cannot require and exclude the same fact")
+    return masks[0], masks[1]
 
 
 class _RuntimeProfile(dict):
@@ -5616,7 +5898,7 @@ def _validate_catalog_condition_subjects(
             raise ParseError(f"{label} references missing application {application_id}")
         if profiles_by_id[application["profile"]]["kind"] != "normal":
             raise ParseError(f"{label} application must use a normal profile")
-        if application["target"]["mode"] == "disabled":
+        if application["target"]["mode"] == "disabled" or application.get("enabled", True) is False:
             raise ParseError(f"{label} application cannot be disabled")
         return 0
     target = _catalog_object(value, label, {"mode", "match", "members"})
@@ -5638,6 +5920,7 @@ def _validate_catalog_condition_target(value: object, label: str) -> int:
         value,
         label,
         {"kind", "roles", "selection", "groupMask", "members"},
+        TARGET_PICKUP_KEYS,
     )
     roles = target["roles"]
     if not isinstance(roles, list) or not roles or len(roles) > 2:
@@ -5666,8 +5949,14 @@ def _validate_catalog_condition_activation(value: object, label: str) -> None:
     if mode == "while-true":
         _catalog_object(value, label, {"mode"})
         return
+    if mode == "until-crash":
+        activation = _catalog_object(value, label, {"mode", "cooldownFrames"})
+        _catalog_bounded_integer(
+            activation["cooldownFrames"], f"{label}.cooldownFrames", 0, 0xFFFF
+        )
+        return
     if mode != "timed":
-        raise ParseError(f"{label}.mode must be while-true or timed")
+        raise ParseError(f"{label}.mode must be while-true, timed, or until-crash")
     activation = _catalog_object(
         value,
         label,
@@ -5685,6 +5974,53 @@ def _validate_catalog_condition_when(value: object, label: str) -> str:
     if not isinstance(value, dict):
         raise ParseError(f"{label} must be an object")
     kind = value.get("kind")
+    if kind == "bound-target-distance":
+        condition = _catalog_object(value, label, {"kind", "minTiles", "maxTiles"})
+        minimum = _catalog_bounded_integer(condition["minTiles"], f"{label}.minTiles", 0, 32)
+        maximum = _catalog_bounded_integer(condition["maxTiles"], f"{label}.maxTiles", 1, 32)
+        if minimum > maximum:
+            raise ParseError(f"{label} target-distance range is reversed")
+        return kind
+    if kind == "actor-facts":
+        condition = _catalog_object(value, label, {"kind", "facts"})
+        _catalog_actor_facts(condition["facts"], f"{label}.facts")
+        return kind
+    if kind in {"player-damaged", "subject-damaged"}:
+        condition = _catalog_object(value, label, {"kind"}, {"facts"})
+        if "facts" in condition:
+            _catalog_actor_facts(condition["facts"], f"{label}.facts")
+        return kind
+    if kind == "notice-player":
+        condition = _catalog_object(value, label, {
+            "kind", "rangeKind", "rangeLength", "chancePercent",
+        }, {"visionOptions", "facts"})
+        if "facts" in condition:
+            _catalog_actor_facts(condition["facts"], f"{label}.facts")
+        range_kind = condition["rangeKind"]
+        if range_kind not in {
+            5, 6,
+            "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CURRENT",
+            "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CUSTOM",
+        }:
+            raise ParseError(f"{label}.rangeKind must use current or custom Vision")
+        _catalog_bounded_integer(
+            condition["rangeLength"], f"{label}.rangeLength", 0, 0xFF
+        )
+        _catalog_bounded_integer(
+            condition["chancePercent"], f"{label}.chancePercent", 0, 100
+        )
+        vision_options = _catalog_bounded_integer(
+            condition.get("visionOptions", 0), f"{label}.visionOptions", 0, 15
+        )
+        if range_kind in {
+            5, "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CURRENT",
+        } and (condition["rangeLength"] != 0 or vision_options != 0):
+            raise ParseError(f"{label} current Vision must not store custom values")
+        if range_kind in {
+            6, "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CUSTOM",
+        } and (not 1 <= condition["rangeLength"] <= 32 or (vision_options & 3) not in {1, 2, 3}):
+            raise ParseError(f"{label} custom Vision is invalid")
+        return kind
     if kind == "terrain-motion":
         condition = _catalog_object(value, label, {
             "kind", "terrainMask", "terrainOverrideMask",
@@ -5712,7 +6048,9 @@ def _validate_catalog_condition_when(value: object, label: str) -> str:
     if kind == "notice-target":
         condition = _catalog_object(value, label, {
             "kind", "rangeKind", "rangeLength", "chancePercent",
-        }, {"visionOptions"})
+        }, {"visionOptions", "facts"})
+        if "facts" in condition:
+            _catalog_actor_facts(condition["facts"], f"{label}.facts")
         range_kind = condition["rangeKind"]
         if (
             isinstance(range_kind, bool)
@@ -5729,7 +6067,7 @@ def _validate_catalog_condition_when(value: object, label: str) -> str:
             condition["chancePercent"], f"{label}.chancePercent", 0, 100
         )
         vision_options = _catalog_bounded_integer(
-            condition.get("visionOptions", 0), f"{label}.visionOptions", 0, 7
+            condition.get("visionOptions", 0), f"{label}.visionOptions", 0, 15
         )
         if range_kind in {
             5, "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CURRENT",
@@ -5737,7 +6075,7 @@ def _validate_catalog_condition_when(value: object, label: str) -> str:
             raise ParseError(f"{label} current Vision must not store custom values")
         if range_kind in {
             6, "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CUSTOM",
-        } and (not 1 <= condition["rangeLength"] <= 32 or (vision_options & 3) != 1):
+        } and (not 1 <= condition["rangeLength"] <= 32 or (vision_options & 3) not in {1, 2, 3}):
             raise ParseError(f"{label} custom Vision is invalid")
         return kind
     if kind == "target-cannot-see-subject":
@@ -5759,7 +6097,7 @@ def _validate_catalog_condition_when(value: object, label: str) -> str:
             condition["chancePercent"], f"{label}.chancePercent", 0, 100
         )
         vision_options = _catalog_bounded_integer(
-            condition.get("visionOptions", 0), f"{label}.visionOptions", 0, 7
+            condition.get("visionOptions", 0), f"{label}.visionOptions", 0, 15
         )
         if range_kind in {
             5, "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CURRENT",
@@ -5767,13 +6105,58 @@ def _validate_catalog_condition_when(value: object, label: str) -> str:
             raise ParseError(f"{label} current Vision must not store custom values")
         if range_kind in {
             6, "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CUSTOM",
-        } and (not 1 <= condition["rangeLength"] <= 32 or (vision_options & 3) != 1):
+        } and (not 1 <= condition["rangeLength"] <= 32 or (vision_options & 3) not in {1, 2, 3}):
             raise ParseError(f"{label} custom Vision is invalid")
         return kind
     raise ParseError(
-        f"{label}.kind must be terrain-motion, notice-target, or "
-        "target-cannot-see-subject"
+        f"{label}.kind must be terrain-motion, notice-target, notice-player, "
+        "actor-facts, or target-cannot-see-subject"
     )
+
+
+def _catalog_tired_only_application_ids(catalog: dict) -> set[str]:
+    """Disabled Normal lane links need byte indexes, not activation bits."""
+    runtime = catalog.get("runtimeBindings", {})
+    linked = {runtime.get("defaultTiredApplication")}
+    for profile in catalog.get("profiles", []):
+        authored = profile.get("fields", {}).get("tiredProfile", {})
+        if authored.get("operator") == "replace":
+            linked.add(authored.get("value"))
+    forced = {runtime.get(key) for key in (
+        "followerApplication", "mountedApplication", "forcedAsleepApplication",
+    )}
+    profiles = {profile["id"]: profile for profile in catalog.get("profiles", [])}
+    return {application["id"] for application in catalog.get("applications", [])
+            if isinstance(application, dict)
+            and application.get("id") in linked - forced
+            and profiles.get(application.get("profile"), {}).get("kind") == "normal"
+            and ("target" not in application
+                 or isinstance(application["target"], dict)
+                 and application["target"].get("mode") == "disabled")}
+
+
+def _validate_catalog_application_capacity(catalog: dict) -> None:
+    applications = catalog["applications"]
+    if len(applications) > MAX_RUNTIME_APPLICATION_PROFILES:
+        raise ParseError(
+            f"behavior catalog supports at most {MAX_RUNTIME_APPLICATION_PROFILES} applications"
+        )
+    runtime = catalog.get("runtimeBindings", {})
+    required = {runtime.get(key) for key in (
+        "followerApplication", "mountedApplication", "defaultTiredApplication",
+        "forcedAsleepApplication",
+    )}
+    for profile in catalog.get("profiles", []):
+        tired = profile.get("fields", {}).get("tiredProfile", {})
+        if tired.get("operator") == "replace":
+            required.add(tired.get("value"))
+    for application in applications:
+        if type(application.get("enabled", True)) is not bool:
+            raise ParseError(f"application {application.get('id')}.enabled must be a boolean")
+        if application.get("enabled", True) is False and application.get("id") in required:
+            raise ParseError(
+                f"application {application['id']} is runtime-bound or Tired-referenced and cannot be disabled"
+            )
 
 
 def _validate_behavior_catalog_v4(catalog: object) -> None:
@@ -5809,7 +6192,14 @@ def _validate_behavior_catalog_v4(catalog: object) -> None:
             required.add("conditions")
         elif kind != "normal":
             raise ParseError(f"{label}.kind must be normal or conditional")
-        profile = _catalog_object(raw_profile, label, required, {"classification"})
+        optional = {"classification"}
+        if kind == "conditional":
+            optional.update(("showRestTintDuringCooldown", "hopArc"))
+        profile = _catalog_object(raw_profile, label, required, optional)
+        if "hopArc" in profile:
+            _validate_catalog_hop_arc(profile["hopArc"], f"{label}.hopArc")
+        if "showRestTintDuringCooldown" in profile and type(profile["showRestTintDuringCooldown"]) is not bool:
+            raise ParseError(f"{label}.showRestTintDuringCooldown must be a boolean")
         classification = profile.get("classification")
         if classification is not None and classification not in PROFILE_CLASSIFICATIONS:
             raise ParseError(f"{label}.classification is not supported")
@@ -5869,16 +6259,13 @@ def _validate_behavior_catalog_v4(catalog: object) -> None:
     applications = catalog["applications"]
     if not isinstance(applications, list) or not applications:
         raise ParseError("behavior catalog needs at least one application")
-    if len(applications) > MAX_RUNTIME_OVERRIDE_PROFILES:
-        raise ParseError(
-            f"behavior catalog supports at most {MAX_RUNTIME_OVERRIDE_PROFILES} applications"
-        )
+    _validate_catalog_application_capacity(catalog)
     applications_by_id = {}
     applications_by_profile: dict[str, list[dict]] = {}
     combined_member_count = 0
     for index, raw_application in enumerate(applications):
         label = f"application {index}"
-        application = _catalog_object(raw_application, label, {"id", "profile", "target"})
+        application = _catalog_object(raw_application, label, {"id", "profile", "target"}, {"enabled"})
         application_id = _validate_catalog_id(application["id"], f"{label}.id")
         if application_id in applications_by_id:
             raise ParseError(f"application ID is duplicated: {application_id}")
@@ -6020,7 +6407,16 @@ def _validate_behavior_catalog_v4(catalog: object) -> None:
                 raw_condition,
                 label,
                 {"id", "subjects", "when", "activation", "target"},
+                CONDITION_OPTION_KEYS,
             )
+            _catalog_condition_options(condition, label)
+            required = condition.get("requiresAppliedProfile")
+            if required is not None:
+                dependency = applications_by_profile.get(required, [])
+                if (profiles_by_id.get(required, {}).get("kind") != "conditional"
+                        or len(dependency) != 1 or not dependency[0].get("enabled", True)
+                        or applications.index(dependency[0]) >= applications.index(owned_applications[0])):
+                    raise ParseError(f"{label} requires an enabled earlier conditional profile")
             condition_id = _validate_catalog_id(condition["id"], f"{label}.id")
             if condition_id in condition_ids:
                 raise ParseError(
@@ -6041,7 +6437,13 @@ def _validate_behavior_catalog_v4(catalog: object) -> None:
             combined_member_count += _validate_catalog_condition_target(
                 condition["target"], f"{label}.target"
             )
-            if condition_kind == "notice-target" and condition["target"]["kind"] == "none":
+            if condition_kind == "bound-target-distance" and (
+                    condition["target"]["kind"] == "none"
+                    or condition.get("usesBinding") != "trigger"
+                    or condition["activation"]["mode"] != "while-true"):
+                raise ParseError(f"{label} bound target distance needs Object of interest, an identity target, and while-true activation")
+            if condition_kind in {"notice-target", "notice-player"} \
+                    and condition["target"]["kind"] == "none":
                 raise ParseError(f"{label} notice-target needs a player or actor target")
             if condition_kind == "target-cannot-see-subject" \
                     and condition["target"]["kind"] == "none":
@@ -6050,6 +6452,13 @@ def _validate_behavior_catalog_v4(catalog: object) -> None:
                 )
             if condition_kind == "terrain-motion" and condition["target"]["kind"] != "none":
                 raise ParseError(f"{label} terrain-motion must be targetless")
+            if condition_kind == "player-damaged" and (condition["target"]["kind"] != "actor"
+                    or condition["activation"]["mode"] != "while-true"):
+                raise ParseError(f"{label} player-damaged needs an actor target and while-true activation")
+            if condition_kind == "subject-damaged" and condition["target"]["kind"] == "actor":
+                raise ParseError(f"{label} subject-damaged can select the player or be targetless")
+            if condition_kind == "actor-facts" and condition["target"]["kind"] == "player":
+                raise ParseError(f"{label} actor-facts can select an actor or be targetless")
     if total_condition_count > MAX_CONDITION_ENTRIES:
         raise ParseError(
             f"behavior catalog supports at most {MAX_CONDITION_ENTRIES} condition entries"
@@ -6091,6 +6500,8 @@ def _resolve_v5_pool_reference(
     value: object,
     label: str,
     pools_by_id: dict[str, dict],
+    *,
+    allow_unassigned: bool = False,
 ) -> dict:
     if isinstance(value, dict) and set(value) == {"pool"}:
         pool_id = _validate_catalog_id(value["pool"], f"{label}.pool")
@@ -6103,7 +6514,10 @@ def _resolve_v5_pool_reference(
             "members": copy.deepcopy(pool["members"]),
         }
     target = _catalog_object(value, label, {"mode", "match", "members"})
-    if target["mode"] not in {"members", "all"}:
+    if allow_unassigned and target["mode"] == "disabled":
+        if target["members"]:
+            raise ParseError(f"{label} unassigned target must have no members")
+    elif target["mode"] not in {"members", "all"}:
         raise ParseError(f"{label}.mode must be members or all")
     _validate_catalog_target(target, label)
     return copy.deepcopy(target)
@@ -6121,6 +6535,7 @@ def _resolve_v5_actor_target(
         value,
         label,
         {"kind", "roles", "selection", "pool"},
+        TARGET_PICKUP_KEYS,
     )
     pool_id = _validate_catalog_id(target["pool"], f"{label}.pool")
     pool = pools_by_id.get(pool_id)
@@ -6144,6 +6559,9 @@ def _resolve_v5_actor_target(
         "groupMask": copy.deepcopy(pool["match"]["groupMask"]),
         "members": copy.deepcopy(pool["members"]),
     }
+    for key in TARGET_PICKUP_KEYS:
+        if key in target:
+            resolved[key] = copy.deepcopy(target[key])
     _validate_catalog_condition_target(resolved, label)
     return resolved
 
@@ -6154,22 +6572,40 @@ def _normalize_v5_condition_when(value: object, label: str) -> dict:
     if not isinstance(value, dict):
         raise ParseError(f"{label} must be an object")
     kind = value.get("kind")
+    if kind == "bound-target-distance":
+        condition = _catalog_object(value, label, {"kind", "minTiles", "maxTiles"})
+        minimum = _catalog_bounded_integer(condition["minTiles"], f"{label}.minTiles", 0, 32)
+        maximum = _catalog_bounded_integer(condition["maxTiles"], f"{label}.maxTiles", 1, 32)
+        if minimum > maximum:
+            raise ParseError(f"{label} target-distance range is reversed")
+        return copy.deepcopy(condition)
+    if kind == "actor-facts":
+        condition = _catalog_object(value, label, {"kind", "facts"})
+        _catalog_actor_facts(condition["facts"], f"{label}.facts")
+        return copy.deepcopy(condition)
+    if kind in {"player-damaged", "subject-damaged"}:
+        _validate_catalog_condition_when(value, label)
+        return copy.deepcopy(value)
     if kind == "notice-target" and "rangeKind" in value:
         _validate_catalog_condition_when(value, label)
         return copy.deepcopy(value)
     if kind == "terrain-motion":
         _validate_catalog_condition_when(value, label)
         return copy.deepcopy(value)
-    if kind not in {"notice-target", "target-cannot-see-subject"}:
+    if kind not in {"notice-target", "notice-player", "target-cannot-see-subject"}:
         raise ParseError(
-            f"{label}.kind must be terrain-motion, notice-target, or "
-            "target-cannot-see-subject"
+            f"{label}.kind must be terrain-motion, notice-target, notice-player, "
+            "actor-facts, or target-cannot-see-subject"
         )
     condition = _catalog_object(
         value,
         label,
         {"kind", "vision", "chancePercent"},
+        {"facts"} if kind in {"notice-player", "notice-target"} else set(),
     )
+    facts = condition.get("facts")
+    if facts is not None:
+        _catalog_actor_facts(facts, f"{label}.facts")
     chance = _catalog_bounded_integer(
         condition["chancePercent"], f"{label}.chancePercent", 0, 100
     )
@@ -6187,6 +6623,7 @@ def _normalize_v5_condition_when(value: object, label: str) -> dict:
             vision,
             f"{label}.vision",
             {"mode", "range", "cone", "adjacentAwareness"},
+            {"sameTileAwareness"},
         )
         range_length = _catalog_bounded_integer(
             custom["range"],
@@ -6194,23 +6631,31 @@ def _normalize_v5_condition_when(value: object, label: str) -> dict:
             1,
             32,
         )
-        if custom["cone"] != "forward-90":
-            raise ParseError(f"{label}.vision.cone must be forward-90")
+        if custom["cone"] not in {"forward-90", "forward-line", "cardinal-lines"}:
+            raise ParseError(f"{label}.vision.cone must be forward-90, forward-line, or cardinal-lines")
         if not isinstance(custom["adjacentAwareness"], bool):
             raise ParseError(
                 f"{label}.vision.adjacentAwareness must be true or false"
             )
+        same_tile_awareness = custom.get("sameTileAwareness", False)
+        if not isinstance(same_tile_awareness, bool):
+            raise ParseError(
+                f"{label}.vision.sameTileAwareness must be true or false"
+            )
         range_kind = "OW_WILD_BEHAVIOR_CONDITION_RANGE_VISION_CUSTOM"
-        options = 1 | (4 if custom["adjacentAwareness"] else 0)
+        options = {"forward-90": 1, "forward-line": 2, "cardinal-lines": 3}[custom["cone"]] | (4 if custom["adjacentAwareness"] else 0) | (8 if same_tile_awareness else 0)
     else:
         raise ParseError(f"{label}.vision.mode must be current or custom")
-    return {
+    normalized = {
         "kind": kind,
         "rangeKind": range_kind,
         "rangeLength": range_length,
         "chancePercent": chance,
         "visionOptions": options,
     }
+    if facts is not None:
+        normalized["facts"] = copy.deepcopy(facts)
+    return normalized
 
 
 def _v5_explicit_link_application_ids(catalog: dict) -> set[str]:
@@ -6228,6 +6673,54 @@ def _v5_explicit_link_application_ids(catalog: dict) -> set[str]:
         if isinstance(authored, dict) and isinstance(authored.get("value"), str):
             linked.add(authored["value"])
     return linked
+
+
+def _validate_catalog_hop_arc(value: object, label: str) -> tuple[int, int, int, int]:
+    """A conditional-only group; an explicit none clears an inherited arc."""
+    if not isinstance(value, dict):
+        raise ParseError(f"{label} must be a grouped arc object")
+    shape = value.get("shape")
+    if shape == "none":
+        _catalog_object(value, label, {"shape"})
+        return (0, 0, 0, 0)
+    if shape != "slam":
+        raise ParseError(f"{label}.shape must be none or slam")
+    _catalog_object(value, label,
+        {"shape", "riseFrames", "hangFrames", "dropFrames", "peakQ4"})
+    rise = _catalog_bounded_integer(value["riseFrames"], f"{label}.riseFrames", 1, 255)
+    hang = _catalog_bounded_integer(value["hangFrames"], f"{label}.hangFrames", 0, 255)
+    drop = _catalog_bounded_integer(value["dropFrames"], f"{label}.dropFrames", 1, 255)
+    peak = _catalog_bounded_integer(value["peakQ4"], f"{label}.peakQ4", 1, 255)
+    if rise + hang + drop > 255:
+        raise ParseError(f"{label} total must fit one frame byte")
+    return (rise, hang, drop, peak)
+
+
+def _catalog_hop_arc_layout(catalog: dict) -> tuple[tuple[int, int, int, int, int], ...]:
+    """Sparse records keyed by the compiler's enabled global application ID.
+
+    Capacity lowering supplies the same ID to each species' sorted local map.
+    No Arc record is addressed directly by a public u32 local mask bit.
+    """
+    if catalog["catalogVersion"] not in (4, 5):
+        return ()
+    runtime = _runtime_source_behavior_catalog(catalog)
+    profiles = {profile["id"]: profile for profile in catalog["profiles"]}
+    rows = []
+    for global_id, application in enumerate(runtime["applications"]):
+        if global_id >= 0xFFFF:
+            raise ParseError("global application ID exceeds the u16 identity range")
+        profile = profiles[application["profile"]]
+        if profile["kind"] != "conditional":
+            continue
+        inherited = None
+        for member in _catalog_profile_chain(profile["id"], profiles):
+            if "hopArc" in member:
+                inherited = _validate_catalog_hop_arc(member["hopArc"],
+                    f"profile {member['id']}.hopArc")
+        if inherited is not None:
+            rows.append((global_id, *inherited))
+    return tuple(rows)
 
 
 def _normalize_behavior_catalog_v5(catalog: object) -> dict:
@@ -6274,7 +6767,14 @@ def _normalize_behavior_catalog_v5(catalog: object) -> dict:
             required.add("conditions")
         elif kind != "normal":
             raise ParseError(f"{label}.kind must be normal or conditional")
-        profile = _catalog_object(raw_profile, label, required, {"classification"})
+        optional = {"classification"}
+        if kind == "conditional":
+            optional.update(("showRestTintDuringCooldown", "hopArc"))
+        profile = _catalog_object(raw_profile, label, required, optional)
+        if "hopArc" in profile:
+            _validate_catalog_hop_arc(profile["hopArc"], f"{label}.hopArc")
+        if "showRestTintDuringCooldown" in profile and type(profile["showRestTintDuringCooldown"]) is not bool:
+            raise ParseError(f"{label}.showRestTintDuringCooldown must be a boolean")
         profile_id = _validate_catalog_id(profile["id"], f"{label}.id")
         if profile_id in profiles_by_id:
             raise ParseError(f"profile ID is duplicated: {profile_id}")
@@ -6285,8 +6785,27 @@ def _normalize_behavior_catalog_v5(catalog: object) -> dict:
             raise ParseError(
                 f"{label}.classification is required for every non-root profile"
             )
+        alert_action = profile["fields"].get("alertSpecialAction")
+        if (isinstance(alert_action, dict)
+            and alert_action.get("operator") == "replace"
+            and alert_action.get("value") not in (
+                0, 1, "0", "1",
+                "OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE",
+                "OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP",
+            )):
+            raise ParseError(
+                f"{label}.alertSpecialAction supports only None or Call for help; "
+                "use the Throw behavior profiles for pickup and throw"
+            )
         profiles_by_id[profile_id] = profile
         normalized = copy.deepcopy(profile)
+        # Preserve the separate arc tail when lowering the runtime catalog.
+        if profile_id == root_profile_id:
+            normalized["fields"].setdefault("returnAfterMove", {"operator": "replace", "value": 0})
+            normalized["fields"].setdefault("chainHopInPlaceExtraHops", {"operator": "replace", "value": 0})
+            normalized["fields"].setdefault("chainHopInPlaceExtraChance", {"operator": "replace", "value": 0})
+            normalized["fields"].setdefault("cargoTargetCheckInterval", {"operator": "replace", "value": 12})
+            normalized["fields"].setdefault("cargoTargetSwitchAdvantage", {"operator": "replace", "value": 1})
         if kind == "conditional":
             owned_vision_fields = CONDITIONAL_VISION_FIELDS & set(profile["fields"])
             if owned_vision_fields:
@@ -6296,6 +6815,12 @@ def _normalize_behavior_catalog_v5(catalog: object) -> dict:
                 )
         if classification in {"routine", "placement"}:
             normalized["classification"] = "archetype"
+        elif classification == "follower":
+            normalized["classification"] = "follower-mount"
+        elif classification == "mood":
+            normalized["classification"] = "modifier"
+        elif classification == "attack":
+            normalized["classification"] = "capability"
         normalized_profiles.append(normalized)
 
     raw_pools = catalog["pools"]
@@ -6317,10 +6842,7 @@ def _normalize_behavior_catalog_v5(catalog: object) -> dict:
     applications = catalog["applications"]
     if not isinstance(applications, list) or not applications:
         raise ParseError("behavior catalog needs at least one application")
-    if len(applications) > MAX_RUNTIME_OVERRIDE_PROFILES:
-        raise ParseError(
-            f"behavior catalog supports at most {MAX_RUNTIME_OVERRIDE_PROFILES} applications"
-        )
+    _validate_catalog_application_capacity(catalog)
     explicit_links = _v5_explicit_link_application_ids(catalog)
     normalized_applications = []
     application_ids = set()
@@ -6341,7 +6863,7 @@ def _normalize_behavior_catalog_v5(catalog: object) -> dict:
             raw_application,
             label,
             {"id", "profile"},
-            {"target"},
+            {"target", "enabled"},
         )
         application_id = _validate_catalog_id(application["id"], f"{label}.id")
         if application_id in application_ids:
@@ -6377,17 +6899,20 @@ def _normalize_behavior_catalog_v5(catalog: object) -> dict:
             "profile": profile_id,
             "target": (
                 _resolve_v5_pool_reference(
-                    application["target"], f"{label}.target", pools_by_id
+                    application["target"], f"{label}.target", pools_by_id,
+                    allow_unassigned=profile["kind"] == "normal",
                 )
                 if has_target
                 else copy.deepcopy(disabled_target)
             ),
+            **({"enabled": application["enabled"]} if "enabled" in application else {}),
         })
         if (
             has_target
             and isinstance(application["target"], dict)
             and set(application["target"]) == {"pool"}
             and profile["kind"] == "normal"
+            and application.get("enabled", True) is True
         ):
             application_pool_owners.setdefault(
                 application["target"]["pool"], application_id
@@ -6407,7 +6932,9 @@ def _normalize_behavior_catalog_v5(catalog: object) -> dict:
                 raw_condition,
                 label,
                 {"id", "subjects", "when", "activation", "target"},
+                CONDITION_OPTION_KEYS,
             )
+            _catalog_condition_options(condition, label)
             if isinstance(condition["subjects"], dict) \
                     and "application" in condition["subjects"]:
                 raise ParseError(
@@ -6461,6 +6988,13 @@ def _behavior_catalog_v4_with_vision_defaults(catalog: dict) -> dict:
         None,
     )
     if root is not None:
+        root["fields"].setdefault("returnAfterMove", {"operator": "replace", "value": 0})
+        root["fields"].setdefault("chainHopInPlaceExtraHops", {"operator": "replace", "value": 0})
+        root["fields"].setdefault("chainHopInPlaceExtraChance", {"operator": "replace", "value": 0})
+        root["fields"].setdefault("cargoTargetCheckInterval", {"operator": "replace", "value": 12})
+        root["fields"].setdefault("cargoTargetSwitchAdvantage", {"operator": "replace", "value": 1})
+        for field, value in (("turnSkidOneTime", 6), ("turnSkidTwoTime", 4), ("stopSkidTime", 6)):
+            root["fields"].setdefault(field, {"operator": "replace", "value": value})
         for field, value in (("mountBounce", 2), ("mountStride", 2), ("mountSettle", 1), ("mountLean", 1)):
             root["fields"].setdefault(field, {"operator": "replace", "value": value})
         root["fields"].setdefault(
@@ -6576,12 +7110,9 @@ def migrate_behavior_catalog_v4_to_v5(catalog: object) -> dict:
         if profile["kind"] == "conditional":
             application.pop("target")
         elif target["mode"] == "disabled":
-            if application["id"] not in explicit_links:
-                raise ParseError(
-                    f"normal application {application['id']} is disabled without an "
-                    "explicit link/system binding"
-                )
-            application.pop("target")
+            if application["id"] in explicit_links:
+                application.pop("target")
+            # Unassigned normal profiles retain their explicit empty target.
         elif application["id"] in pool_by_application:
             application["target"] = {
                 "pool": pool_by_application[application["id"]]
@@ -6592,7 +7123,7 @@ def migrate_behavior_catalog_v4_to_v5(catalog: object) -> dict:
             when = condition["when"]
             range_kind = when.get("rangeKind")
             if when.get("kind") in {
-                "notice-target", "target-cannot-see-subject",
+                "notice-target", "notice-player", "target-cannot-see-subject",
             } and range_kind in {
                 5,
                 6,
@@ -6609,14 +7140,18 @@ def migrate_behavior_catalog_v4_to_v5(catalog: object) -> dict:
                     vision = {
                         "mode": "custom",
                         "range": when["rangeLength"],
-                        "cone": "forward-90",
+                        "cone": {1: "forward-90", 2: "forward-line", 3: "cardinal-lines"}[options & 3],
                         "adjacentAwareness": bool(options & 4),
                     }
+                    if options & 8:
+                        vision["sameTileAwareness"] = True
                 condition["when"] = {
                     "kind": when["kind"],
                     "vision": vision,
                     "chancePercent": when["chancePercent"],
                 }
+                if "facts" in when:
+                    condition["when"]["facts"] = copy.deepcopy(when["facts"])
             subjects = condition["subjects"]
             if set(subjects) != {"application"}:
                 continue
@@ -6628,16 +7163,45 @@ def migrate_behavior_catalog_v4_to_v5(catalog: object) -> dict:
                 )
             condition["subjects"] = {"pool": pool_by_application[source_id]}
 
+    classification_rank = {
+        classification: index
+        for index, classification in enumerate(PROFILE_CLASSIFICATIONS_V5)
+    }
+    migrated["applications"].sort(
+        key=lambda application: classification_rank[
+            profiles_by_id[application["profile"]]["classification"]
+        ]
+    )
     validate_behavior_catalog(migrated)
     return migrated
 
 
 def _runtime_source_behavior_catalog(catalog: dict) -> dict:
     if catalog.get("catalogVersion") == 5:
-        return _normalize_behavior_catalog_v5(catalog)
-    if catalog.get("catalogVersion") == 4:
-        return _behavior_catalog_v4_with_vision_defaults(catalog)
-    return catalog
+        lowered = _normalize_behavior_catalog_v5(catalog)
+    elif catalog.get("catalogVersion") == 4:
+        lowered = _behavior_catalog_v4_with_vision_defaults(catalog)
+    else:
+        return catalog
+    disabled_profiles = {
+        application["profile"] for application in lowered["applications"]
+        if application.get("enabled", True) is False
+    }
+    lowered["applications"] = [
+        application for application in lowered["applications"]
+        if application.get("enabled", True) is True
+    ]
+    for application in lowered["applications"]:
+        application.pop("enabled", None)
+    active_profiles = {application["profile"] for application in lowered["applications"]}
+    for profile in lowered["profiles"]:
+        if profile["id"] in disabled_profiles - active_profiles and profile["kind"] == "conditional":
+            # Keep parent field materialization, but no inactive condition rows
+            # or application owner enter the positional runtime catalog.
+            profile["kind"] = "normal"
+            profile.pop("conditions")
+            profile.pop("showRestTintDuringCooldown", None)
+    return lowered
 
 
 def _lower_profile_reference(authored: dict, application_indexes: dict[str, int]) -> dict:
@@ -6645,7 +7209,8 @@ def _lower_profile_reference(authored: dict, application_indexes: dict[str, int]
     reference = result["value"]
     if reference not in application_indexes:
         raise ParseError(f"profile field references missing application {reference}")
-    result["value"] = application_indexes[reference]
+    global_id = application_indexes[reference]
+    result["value"] = global_id if global_id < 255 else 0xFF
     return result
 
 
@@ -6876,6 +7441,15 @@ def _catalog_condition_layout(catalog: dict) -> tuple[list[dict], list[dict]]:
     return metadata, entries
 
 
+def _catalog_rest_enabled_applications(catalog: dict) -> int:
+    """Local conditional-profile setting; parent values never contribute."""
+    profiles = {profile["id"]: profile for profile in catalog["profiles"]}
+    return sum(1 << index for index, application in enumerate(catalog["applications"])
+               if index < 32
+               and profiles[application["profile"]]["kind"] == "conditional"
+               and profiles[application["profile"]].get("showRestTintDuringCooldown", False) is True)
+
+
 def _format_catalog_condition_entry(entry: dict, indent: str) -> str:
     inner = indent + "    "
     values = (
@@ -6915,6 +7489,7 @@ def _format_catalog_condition_entry(entry: dict, indent: str) -> str:
 def render_behavior_catalog(catalog: dict, raw_source: str) -> str:
     """Render named authoring data into the fixed-layout compatibility blob."""
     validate_behavior_catalog(catalog)
+    hop_arc_rows = _catalog_hop_arc_layout(catalog)
     canonical_catalog = _runtime_source_behavior_catalog(catalog)
     catalog = project_behavior_catalog_runtime(catalog)
     class_profiles = catalog.get("classProfiles")
@@ -7056,6 +7631,10 @@ def render_behavior_catalog(catalog: dict, raw_source: str) -> str:
             subject_application_index = application_indexes[
                 subject_application_id
             ]
+            if subject_application_index >= 255:
+                subject_application_index = (
+                    "OW_WILD_BEHAVIOR_CONDITION_SUBJECT_APPLICATION_NONE"
+                )
         else:
             subject_target = subjects
             subject_start = len(flat_members)
@@ -7088,17 +7667,44 @@ def render_behavior_catalog(catalog: dict, raw_source: str) -> str:
             chance_percent = "100"
             min_speed = str(when["minMovementSpeed"])
             max_speed = str(when["maxMovementSpeed"])
+        elif when["kind"] == "bound-target-distance":
+            kind = ("OW_WILD_BEHAVIOR_CONDITION_PLAYER_NOTICED"
+                if target["kind"] == "player" else "OW_WILD_BEHAVIOR_CONDITION_POKEMON_NOTICED")
+            terrain_mask = terrain_override_mask = "0"
+            range_kind = "OW_WILD_BEHAVIOR_ALERT_RANGE_RADIUS"
+            range_length = str(when["maxTiles"])
+            chance_percent = "100"
+            min_speed = max_speed = "0"
+        elif when["kind"] in {"actor-facts", "player-damaged", "subject-damaged"}:
+            kind = {"actor-facts": "OW_WILD_BEHAVIOR_CONDITION_ACTOR_FACTS",
+                    "player-damaged": "OW_WILD_BEHAVIOR_CONDITION_PLAYER_DAMAGED",
+                    "subject-damaged": "OW_WILD_BEHAVIOR_CONDITION_SUBJECT_DAMAGED"}[when["kind"]]
+            all_mask, none_mask = _catalog_actor_facts(
+                when["facts"], f"condition {condition['id']} facts"
+            ) if "facts" in when else (0, 0)
+            terrain_mask = str(all_mask)
+            terrain_override_mask = str(none_mask)
+            range_kind = "0"
+            range_length = "0"
+            chance_percent = "100"
+            min_speed = "0"
+            max_speed = "0"
         else:
             if when["kind"] == "target-cannot-see-subject":
                 kind = "OW_WILD_BEHAVIOR_CONDITION_TARGET_CANNOT_SEE_SUBJECT"
+            elif when["kind"] == "notice-player":
+                kind = "OW_WILD_BEHAVIOR_CONDITION_PLAYER_NOTICED"
             else:
                 kind = (
                     "OW_WILD_BEHAVIOR_CONDITION_PLAYER_NOTICED"
                     if target["kind"] == "player"
                     else "OW_WILD_BEHAVIOR_CONDITION_POKEMON_NOTICED"
                 )
-            terrain_mask = "0"
-            terrain_override_mask = "0"
+            all_mask, none_mask = _catalog_actor_facts(
+                when["facts"], f"condition {condition['id']} facts"
+            ) if "facts" in when else (0, 0)
+            terrain_mask = str(all_mask)
+            terrain_override_mask = str(none_mask)
             range_kind = clean_token(str(when["rangeKind"]))
             range_length = str(when["rangeLength"])
             chance_percent = str(when["chancePercent"])
@@ -7131,18 +7737,19 @@ def render_behavior_catalog(catalog: dict, raw_source: str) -> str:
             "targetMemberStart": str(target_start),
             "targetMemberCount": str(target_count),
             "conditionId": str(source["conditionId"]),
-            "applicationIndex": str(source["applicationIndex"]),
+            "applicationIndex": (str(source["applicationIndex"])
+                if source["applicationIndex"] < 255 else "0xFF"),
             "subjectMode": {
                 "members": "OW_WILD_BEHAVIOR_OVERRIDE_TARGET_MEMBERS",
                 "all": "OW_WILD_BEHAVIOR_OVERRIDE_TARGET_ALL",
             }[subject_target["mode"]],
             "subjectApplicationIndex": str(subject_application_index),
             "kind": kind,
-            "activationMode": (
-                "OW_WILD_BEHAVIOR_CONDITION_WHILE_TRUE"
-                if activation["mode"] == "while-true"
-                else "OW_WILD_BEHAVIOR_CONDITION_TIMED"
-            ),
+            "activationMode": {
+                "while-true": "OW_WILD_BEHAVIOR_CONDITION_WHILE_TRUE",
+                "timed": "OW_WILD_BEHAVIOR_CONDITION_TIMED",
+                "until-crash": "OW_WILD_BEHAVIOR_CONDITION_UNTIL_CRASH",
+            }[activation["mode"]],
             "targetKind": target_kind,
             "targetRoleMask": target_role_mask,
             "targetSelection": (
@@ -7187,10 +7794,86 @@ def render_behavior_catalog(catalog: dict, raw_source: str) -> str:
     rendered = raw_source
     for start, end, replacement in sorted(replacements, key=lambda item: item[0], reverse=True):
         rendered = rendered[:start] + replacement + rendered[end:]
+    mask = _catalog_rest_enabled_applications(canonical_catalog)
+    rendered, count = re.subn(
+        r"(/\* restEnabledApplications \*/\s*)0x[0-9A-Fa-f]{8}u",
+        lambda match: match[1] + f"0x{mask:08X}u", rendered,
+    )
+    if count != 1:
+        raise ParseError("behavior blob needs exactly one restEnabledApplications tail")
+    application_indexes_by_profile = {application["profile"]: index
+        for index, application in enumerate(canonical_catalog["applications"])}
+    rows = ["        {" + ", ".join(map(str, _catalog_condition_options(
+        source["condition"], source["condition"]["id"], application_indexes_by_profile))) + "}"
+        for source in condition_sources]
+    options_span = initializer_brace_span(rendered, "conditionOptions")
+    rendered = (rendered[:options_span[0]] + "{\n" + ",\n".join(rows or ["        {0}"])
+        + "\n    }" + rendered[options_span[1]:])
+    arc_span = initializer_brace_span(rendered, "hopArcs")
+    arc_rows = ["        {" + ", ".join(map(str, arc)) + "}" for arc in hop_arc_rows]
+    rendered = (rendered[:arc_span[0]] + "{\n" + ",\n".join(arc_rows or ["        {0}"])
+        + "\n    }" + rendered[arc_span[1]:])
+    bank = compile_bank(canonical_catalog, ROOT / "include/constants/species.h")
+    condition_global = [source["applicationIndex"] for source in condition_sources]
+    condition_subject_global = [
+        application_indexes[source["condition"]["subjects"]["application"]]
+        if "application" in source["condition"]["subjects"] else 0xFFFF
+        for source in condition_sources
+    ]
+    profiles_by_id = {profile["id"]: profile for profile in canonical_catalog["profiles"]}
+    limit_keys = []
+    rest_tint = []
+    occupied_limit_keys = {0, 1}
+    for global_id, application in enumerate(canonical_catalog["applications"]):
+        source_profile = profiles_by_id[application["profile"]]
+        fields = {}
+        for ancestor in _catalog_profile_chain(application["profile"], profiles_by_id):
+            fields.update(ancestor["fields"])
+        limit = fields.get("overworldLimit", {}).get("value", 0)
+        if int(limit) > 0:
+            key = global_id + 2 if global_id + 2 < 256 else next(
+                (key for key in range(2, 256) if key not in occupied_limit_keys), None)
+            if key is None or key in occupied_limit_keys:
+                raise ParseError("more than 254 distinct overworld limit groups")
+            occupied_limit_keys.add(key)
+            limit_keys.append(key)
+        else:
+            limit_keys.append(0)
+        rest_tint.append(int(source_profile["kind"] == "conditional"
+            and source_profile.get("showRestTintDuringCooldown", False) is True))
+    def tired_reference(profile_id: str, inherited: bool) -> int:
+        chain = (_catalog_profile_chain(profile_id, profiles_by_id)
+            if inherited else [profiles_by_id[profile_id]])
+        selected = None
+        for profile in chain:
+            authored = profile["fields"].get("tiredProfile")
+            if authored is not None:
+                selected = authored["value"]
+        return application_indexes[selected] if selected is not None else 0xFFFF
+
+    tired_class = [tired_reference(binding["profile"], True)
+        for binding in canonical_catalog["runtimeBindings"]["classOrder"]]
+    tired_override = [tired_reference(application["profile"], False)
+        for application in canonical_catalog["applications"]]
+    bank_tail = render_tail(bank, condition_global,
+        condition_subject_global, limit_keys, rest_tint,
+        tired_class, tired_override)
+    # The new tail is an append-only catalog section. Existing offsets remain
+    # fixed; repeated generator runs replace only these named initializers.
+    if "/* applicationBankDirectory */" in rendered:
+        start = rendered.index("    /* applicationBankDirectory */")
+        end = rendered.rindex("\n};\n\n#endif // IMPLEMENT_OVERWORLD_WILD_SPAWNS")
+        rendered = rendered[:start] + bank_tail + rendered[end:]
+    else:
+        marker = "\n};\n\n#endif // IMPLEMENT_OVERWORLD_WILD_SPAWNS"
+        if rendered.count(marker) != 1:
+            raise ParseError("behavior blob tail boundary is not unique")
+        rendered = rendered.replace(marker, ",\n" + bank_tail + marker, 1)
     return rendered
 
 
 def render_behavior_catalog_header(raw_header: str, catalog: dict, raw_source: str) -> str:
+    authored_catalog = catalog
     validate_behavior_catalog(catalog)
     catalog = _runtime_source_behavior_catalog(catalog)
     runtime_application_orders = {
@@ -7205,6 +7888,14 @@ def render_behavior_catalog_header(raw_header: str, catalog: dict, raw_source: s
         raise ParseError("class profile symbols must be present and unique")
     old_count = len(class_define_entries(raw_header))
     raw_header = replace_class_define_block(raw_header, symbols, old_count)
+    subject_damage_symbol = "OW_WILD_BEHAVIOR_CONDITION_SUBJECT_DAMAGED"
+    if subject_damage_symbol not in raw_header:
+        anchor = "#define OW_WILD_BEHAVIOR_CONDITION_PLAYER_DAMAGED 5\n"
+        if raw_header.count(anchor) != 1:
+            raise ParseError("compact condition kind block is missing or ambiguous")
+        raw_header = raw_header.replace(anchor, anchor + f"#define {subject_damage_symbol} 6\n")
+    else:
+        raw_header = replace_define_value(raw_header, subject_damage_symbol, 6)
     counts = behavior_blob_counts(raw_source)
     for symbol, profile_name, binding_name in (
         (
@@ -7232,6 +7923,14 @@ def render_behavior_catalog_header(raw_header: str, catalog: dict, raw_source: s
         if order is None:
             raise ParseError(f"runtime-owned {profile_name} override must exist exactly once")
         raw_header = replace_define_value(raw_header, symbol, order)
+    arc_count = len(_catalog_hop_arc_layout(authored_catalog))
+    raw_header = replace_define_value(raw_header, "OWBD_HOP_ARC_RECORD_COUNT", arc_count)
+    raw_header = replace_define_value(raw_header, "OWBD_HOP_ARC_RECORD_STORAGE_COUNT", max(1, arc_count))
+    bank = compile_bank(catalog, ROOT / "include/constants/species.h")
+    raw_header = replace_define_value(raw_header,
+        "OWBD_APPLICATION_BANK_DIRECTORY_COUNT", len(bank["rows"]))
+    raw_header = replace_define_value(raw_header,
+        "OWBD_APPLICATION_BANK_INDEX_COUNT", len(bank["indexes"]))
     return rewrite_behavior_blob_count_defines(raw_header, counts)
 
 
@@ -7464,13 +8163,16 @@ def elapsed_label(seconds: float) -> str:
 
 def update_build_state(**changes) -> None:
     with BUILD_STATE_LOCK:
-        BUILD_STATE.update(changes)
+        state = {**BUILD_STATE, **changes}
+        BUILD_JOURNAL.save(state, start=changes.get("running") is True)
+        BUILD_STATE.update(state)
 
 
 def append_build_output(text: str) -> None:
     if not text:
         return
     with BUILD_STATE_LOCK:
+        BUILD_JOURNAL.append(text)
         output = (BUILD_STATE.get("output") or "") + text
         output = output[-BUILD_OUTPUT_LIMIT:]
         BUILD_STATE["output"] = output
@@ -7480,6 +8182,7 @@ def append_build_output(text: str) -> None:
 def build_status_payload() -> dict:
     with BUILD_STATE_LOCK:
         payload = dict(BUILD_STATE)
+    payload["outputLogPath"] = str(BUILD_JOURNAL.log)
     started_at = payload.get("startedAt")
     ended_at = payload.get("endedAt")
     if started_at is None:
@@ -9613,36 +10316,52 @@ def run_build_job(open_after: bool) -> None:
 
 
 def restart_server_soon() -> dict:
-    def restart() -> None:
-        time.sleep(0.25)
-        sys.stdout.flush()
-        sys.stderr.flush()
-        os.execv(sys.executable, [sys.executable, *sys.argv])
+    if not BUILD_LOCK.acquire(blocking=False):
+        return {"ok": False, "error": "Build is running. Wait for it to finish before restarting Workshop."}
 
-    threading.Thread(target=restart, daemon=True).start()
+    def restart() -> None:
+        try:
+            time.sleep(0.25)
+            sys.stdout.flush()
+            sys.stderr.flush()
+            os.execv(sys.executable, [sys.executable, *sys.argv])
+        finally:
+            # Successful exec replaces the process and its locks. A failed
+            # exec must reopen admission for a later build or restart.
+            BUILD_LOCK.release()
+
+    try:
+        threading.Thread(target=restart, daemon=True).start()
+    except Exception:
+        BUILD_LOCK.release()
+        raise
     return {"ok": True, "message": "Restarting server"}
 
 
 def start_build_job(open_after: bool = False) -> dict:
     if not BUILD_LOCK.acquire(blocking=False):
         raise RuntimeError("Build already running")
-    update_build_state(
-        running=True,
-        startedAt=time.time(),
-        endedAt=None,
-        command=BUILD_COMMAND,
-        output=f"Starting Docker build via {BUILD_COMMAND}...\n",
-        latestLine="Starting Docker build...",
-        ok=None,
-        code=None,
-        error=None,
-        open=None,
-        openError=None,
-        testNdsExists=TEST_NDS.exists(),
-        testNdsPath=str(TEST_NDS),
-    )
-    thread = threading.Thread(target=run_build_job, args=(open_after,), daemon=True)
-    thread.start()
+    try:
+        update_build_state(
+            running=True,
+            startedAt=time.time(),
+            endedAt=None,
+            command=BUILD_COMMAND,
+            output=f"Starting Docker build via {BUILD_COMMAND}...\n",
+            latestLine="Starting Docker build...",
+            ok=None,
+            code=None,
+            error=None,
+            open=None,
+            openError=None,
+            testNdsExists=TEST_NDS.exists(),
+            testNdsPath=str(TEST_NDS),
+        )
+        thread = threading.Thread(target=run_build_job, args=(open_after,), daemon=True)
+        thread.start()
+    except Exception:
+        BUILD_LOCK.release()
+        raise
     return build_status_payload()
 
 
@@ -16224,7 +16943,7 @@ HTML = r"""<!doctype html>
     const SPAWN_DESTINATION_BEHIND_TYPE = "__SPAWN_DESTINATION_BEHIND_PLAYER";
     const SPAWN_DESTINATION_NEXT_TO_PLAYER_RAW = "OW_WILD_SPAWN_DESTINATION_NEXT_TO_PLAYER";
     const SPAWN_STATE_HOP_FROM_OFF_SCREEN_RAW = "OW_WILD_BEHAVIOR_SPAWN_STATE_HOP_FROM_OFF_SCREEN";
-    const NUMERIC_PROFILE_FIELD_KEYS = new Set(["alertTime", "stamina", "restTime", "chillSpeed", "range", "hopMinDistance", "hopMaxDistance", "hopPause", "teleportTime", "teleportPause", "overworldLimit", "spawnDestinationMinDistance", "spawnDestinationMaxDistance", "ramAccelerationSteps", "ramMaxSpeed", "chillAllowedTerrainMask", "chillAllowedTerrainOverrideMask", "hopTime", "chaseBoostDistance", "chaseBoostSpeed", "hopSpinSpeed", "spawnHopTime", "circleRadius", "chainMovementVariance", "chainPauseVariance", "tiredProfile", "hopElevationTimeScale", "hopElevationArcScale", "tilesToAccelerate", "maxWalkSpeed", "spawnDestinationMask", "spawnDestinationOverrideMask", "chainRepositionJumpCount", "hopSwayWidth", "spawnHopSwayWidth", "chainRepositionSpeed", "chainRepositionDistance", "walkOptions", "wanderStraightChance", "chainPauseActionChance", "walkPause", "tilesBeforeTurnSkid", "walkStompTime", "walkAccelerationStep", "walkTimeVariance", "walkPauseVariance"]);
+    const NUMERIC_PROFILE_FIELD_KEYS = new Set(["alertTime", "stamina", "restTime", "chillSpeed", "hopMinDistance", "hopMaxDistance", "hopPause", "teleportTime", "teleportPause", "overworldLimit", "spawnDestinationMinDistance", "spawnDestinationMaxDistance", "ramAccelerationSteps", "ramMaxSpeed", "chillAllowedTerrainMask", "chillAllowedTerrainOverrideMask", "hopTime", "chaseBoostDistance", "chaseBoostSpeed", "hopSpinSpeed", "spawnHopTime", "circleRadius", "chainMovementVariance", "chainPauseVariance", "tiredProfile", "hopElevationTimeScale", "hopElevationArcScale", "tilesToAccelerate", "maxWalkSpeed", "spawnDestinationMask", "spawnDestinationOverrideMask", "chainRepositionJumpCount", "hopSwayWidth", "spawnHopSwayWidth", "chainRepositionSpeed", "chainRepositionDistance", "walkOptions", "wanderStraightChance", "chainPauseActionChance", "chainHopInPlaceExtraHops", "chainHopInPlaceExtraChance", "walkPause", "tilesBeforeTurnSkid", "walkStompTime", "walkAccelerationStep", "walkTimeVariance", "walkPauseVariance"]);
     const PLAIN_PROFILE_NUMBER_FIELDS = new Set([
       "chaseBoostDistance", "chaseBoostSpeed", "circleRadius",
     ]);
@@ -16232,7 +16951,7 @@ HTML = r"""<!doctype html>
       "chillSpeed", "maxWalkSpeed", "chaseBoostSpeed",
       "chainRepositionSpeed", "walkStompTime",
     ]);
-    const PROFILE_NUMBER_FIELD_LIMITS = {"alertTime":{"min":0,"max":255},"stamina":{"min":0,"max":255},"restTime":{"min":0,"max":255},"chillSpeed":{"min":1,"max":32},"range":{"min":0,"max":255},"hopMinDistance":{"min":0,"max":12},"hopMaxDistance":{"min":0,"max":12},"hopPause":{"min":0,"max":255},"teleportTime":{"min":0,"max":64},"teleportPause":{"min":0,"max":255},"overworldLimit":{"min":0,"max":10},"spawnDestinationMinDistance":{"min":1,"max":8},"spawnDestinationMaxDistance":{"min":1,"max":8},"ramAccelerationSteps":{"min":0,"max":32},"ramMaxSpeed":{"min":0,"max":255},"chillAllowedTerrainMask":{"min":0,"max":1023},"chillAllowedTerrainOverrideMask":{"min":0,"max":1023},"hopTime":{"min":0,"max":64},"chaseBoostDistance":{"min":0,"max":32},"chaseBoostSpeed":{"min":0,"max":32},"hopSpinSpeed":{"min":0,"max":15},"spawnHopTime":{"min":0,"max":64},"circleRadius":{"min":0,"max":8},"chainMovementVariance":{"min":0,"max":32},"chainPauseVariance":{"min":0,"max":255},"tiredProfile":{"min":0,"max":255},"hopElevationTimeScale":{"min":0,"max":255},"hopElevationArcScale":{"min":0,"max":255},"tilesToAccelerate":{"min":1,"max":32},"maxWalkSpeed":{"min":1,"max":32},"spawnDestinationMask":{"min":0,"max":1023},"spawnDestinationOverrideMask":{"min":0,"max":1023},"chainRepositionJumpCount":{"min":1,"max":8},"hopSwayWidth":{"min":0,"max":8},"spawnHopSwayWidth":{"min":0,"max":8},"chainRepositionSpeed":{"min":1,"max":32},"chainRepositionDistance":{"min":1,"max":5},"walkOptions":{"min":0,"max":255},"wanderStraightChance":{"min":0,"max":100},"chainPauseActionChance":{"min":0,"max":100},"walkPause":{"min":0,"max":255},"tilesBeforeTurnSkid":{"min":0,"max":32},"walkStompTime":{"min":0,"max":32},"walkAccelerationStep":{"min":0,"max":33},"walkTimeVariance":{"min":0,"max":32},"walkPauseVariance":{"min":0,"max":32}};
+    const PROFILE_NUMBER_FIELD_LIMITS = {"alertTime":{"min":0,"max":255},"stamina":{"min":0,"max":255},"restTime":{"min":0,"max":255},"chillSpeed":{"min":1,"max":32},"hopMinDistance":{"min":0,"max":12},"hopMaxDistance":{"min":0,"max":12},"hopPause":{"min":0,"max":255},"teleportTime":{"min":0,"max":64},"teleportPause":{"min":0,"max":255},"overworldLimit":{"min":0,"max":10},"spawnDestinationMinDistance":{"min":1,"max":8},"spawnDestinationMaxDistance":{"min":1,"max":8},"ramAccelerationSteps":{"min":0,"max":32},"ramMaxSpeed":{"min":0,"max":255},"chillAllowedTerrainMask":{"min":0,"max":2047},"chillAllowedTerrainOverrideMask":{"min":0,"max":2047},"hopTime":{"min":0,"max":64},"chaseBoostDistance":{"min":0,"max":32},"chaseBoostSpeed":{"min":0,"max":32},"hopSpinSpeed":{"min":0,"max":15},"spawnHopTime":{"min":0,"max":64},"circleRadius":{"min":0,"max":8},"chainMovementVariance":{"min":0,"max":32},"chainPauseVariance":{"min":0,"max":255},"tiredProfile":{"min":0,"max":255},"hopElevationTimeScale":{"min":0,"max":255},"hopElevationArcScale":{"min":0,"max":255},"tilesToAccelerate":{"min":1,"max":32},"maxWalkSpeed":{"min":1,"max":32},"spawnDestinationMask":{"min":0,"max":1023},"spawnDestinationOverrideMask":{"min":0,"max":1023},"chainRepositionJumpCount":{"min":1,"max":8},"hopSwayWidth":{"min":0,"max":8},"spawnHopSwayWidth":{"min":0,"max":8},"chainRepositionSpeed":{"min":1,"max":32},"chainRepositionDistance":{"min":1,"max":5},"walkOptions":{"min":0,"max":255},"wanderStraightChance":{"min":0,"max":100},"chainPauseActionChance":{"min":0,"max":100},"chainHopInPlaceExtraHops":{"min":0,"max":2},"chainHopInPlaceExtraChance":{"min":0,"max":100},"walkPause":{"min":0,"max":255},"tilesBeforeTurnSkid":{"min":0,"max":32},"walkStompTime":{"min":0,"max":32},"walkAccelerationStep":{"min":0,"max":33},"walkTimeVariance":{"min":0,"max":32},"walkPauseVariance":{"min":0,"max":32}};
     const PROFILE_FIELD_HINTS = {
       profileId: "Optional behavior-family label. Most profiles can leave this as Default.",
       chillAllowedTerrainMask: "Per-terrain On/Off values for this behavior.",
@@ -16253,6 +16972,10 @@ HTML = r"""<!doctype html>
       walkPause: "Frames to pause after each completed normal Walk step. 0 removes the pause.",
       tilesBeforeTurnSkid: "Continuous Walk steps required before a turn can skid. 0 disables turn skids.",
       stopSkid: "For Walk, skid when the behavior lifecycle stops a run. Movement Chain pauses and actions do not start it.",
+      chainHopInPlaceExtraHops: "Extra hops after Hop in place is admitted. Zero keeps one hop.",
+      chainHopInPlaceExtraChance: "Separate chance to add the extra hops. It does not change the pause action chance.",
+      chainHopInPlaceHeartChance: "Separate chance to show hearts during the Hop in place sequence.",
+      chainHopInPlaceCryChance: "Separate chance to play this Pokémon’s cry during the Hop in place sequence.",
       chainRepositionJumpCount: "Number of fixed-facing random surrounding-tile moves performed by Reposition jumps, steps, or skids.",
       chainRepositionSpeed: "Travel time in frames for Reposition steps and skids; jumps use Hop timing.",
       chainRepositionDistance: "Tiles travelled by each Reposition skid.",
@@ -16322,7 +17045,7 @@ HTML = r"""<!doctype html>
       chillAllowedTerrainMask: { label: "Allowed terrains", shortLabel: "Terrains", category: "chill", subgroup: "Terrain", iconFamily: "terrain" },
       chillAllowedTerrainOverrideMask: { label: "Terrain inheritance", shortLabel: "Terrain mode", category: "chill", subgroup: "Terrain", iconFamily: "terrain" },
       hopAllowNonCardinal: { label: "Allowed movement directions", shortLabel: "Directions", category: "chill", subgroup: "Movement", iconFamily: "condition" },
-      hopAllowVerticalObstacles: { label: "Cross vertical obstacles", shortLabel: "Vertical obstacles", category: "chill", subgroup: "Movement", iconFamily: "condition" },
+      hopAllowVerticalObstacles: { label: "Jump", shortLabel: "Jump", category: "chill", subgroup: "Movement", iconFamily: "condition" },
       hopMinDistance: { label: "Minimum hop distance", shortLabel: "Min hop", unit: "tiles", category: "chill", subgroup: "Range", iconFamily: "range" },
       hopMaxDistance: { label: "Maximum hop distance", shortLabel: "Max hop", unit: "tiles", category: "chill", subgroup: "Range", iconFamily: "range" },
       hopTime: { label: "Hop travel time", shortLabel: "Hop time", unit: "ticks", category: "chill", subgroup: "Timing", iconFamily: "timing" },
@@ -16337,6 +17060,10 @@ HTML = r"""<!doctype html>
       ramMaxSpeed: { label: "Chain pause", shortLabel: "Pause", unit: "ticks", category: "chill", subgroup: "Timing", iconFamily: "timing" },
       chainPauseAction: { label: "Chain pause actions", shortLabel: "Actions", category: "chill", subgroup: "Movement", iconFamily: "movement", rowIcon: true },
       chainPauseActionChance: { label: "Pause action chance", shortLabel: "Action chance", unit: "%", category: "chill", subgroup: "Movement", iconFamily: "trigger" },
+      chainHopInPlaceExtraHops: { label: "Hop in place extra hops", shortLabel: "Extra hops", unit: "hops", category: "chill", subgroup: "Movement", iconFamily: "movement" },
+      chainHopInPlaceExtraChance: { label: "Extra hop chance", shortLabel: "Extra chance", unit: "%", category: "chill", subgroup: "Movement", iconFamily: "trigger" },
+      chainHopInPlaceHeartChance: { label: "Hop heart chance", shortLabel: "Heart chance", category: "chill", subgroup: "Visual", iconFamily: "visualAudio" },
+      chainHopInPlaceCryChance: { label: "Hop cry chance", shortLabel: "Cry chance", category: "chill", subgroup: "Visual", iconFamily: "visualAudio" },
       chainRepositionJumpCount: { label: "Reposition moves", shortLabel: "Moves", unit: "moves", category: "chill", subgroup: "Movement", iconFamily: "movement" },
       chainRepositionSpeed: { label: "Reposition Walk time", shortLabel: "Reposition time", unit: "frames", category: "chill", subgroup: "Timing", iconFamily: "timing" },
       chainRepositionDistance: { label: "Reposition skid distance", shortLabel: "Skid distance", unit: "tiles", category: "chill", subgroup: "Movement", iconFamily: "range" },
@@ -16348,7 +17075,6 @@ HTML = r"""<!doctype html>
       alertTime: { label: "Alert duration", shortLabel: "Duration", unit: "ticks", category: "alert", subgroup: "Timing", iconFamily: "timing" },
       alertSpecialAction: { label: "Special action", shortLabel: "Action", category: "alert", subgroup: "Special", iconFamily: "special", rowIcon: true },
       alertActionSpecialAction: { label: "Alert action", shortLabel: "Action", category: "alert", subgroup: "Special", iconFamily: "special", rowIcon: true },
-      ownerActionSpecialAction: { label: "Owner action", shortLabel: "Action", category: "chill", subgroup: "Special", iconFamily: "special", rowIcon: true },
       stamina: { label: "Stamina", shortLabel: "Stamina", unit: "ticks", category: "stats", subgroup: "Stats", iconFamily: "stamina" },
       playerAdjacentDirectionMasks: { label: "Position relative to player", shortLabel: "Position", category: "chill", subgroup: "Targeting", iconFamily: "condition" },
 
@@ -16367,7 +17093,6 @@ HTML = r"""<!doctype html>
       tiredRamMaxSpeed: { label: "Movement Chain pause", shortLabel: "Pause", unit: "ticks", category: "tired", subgroup: "Timing", iconFamily: "timing" },
       restTime: { label: "Rest duration", shortLabel: "Rest", unit: "ticks", category: "tired", subgroup: "Timing", iconFamily: "timing" },
 
-      range: { label: "Flee trigger range", shortLabel: "Flee range", unit: "tiles", category: "stats", subgroup: "Range", iconFamily: "range" },
       chaseBoostSpeed: { label: "Chase boost Walk time", shortLabel: "Boost time", unit: "frames", category: "chill", subgroup: "Timing", iconFamily: "timing" },
       profileId: { label: "Behavior family", shortLabel: "Family", category: "special", subgroup: "Special", iconFamily: "special", rowIcon: true },
     };
@@ -16385,7 +17110,6 @@ HTML = r"""<!doctype html>
     const PROFILE_MOVEMENT_FIELDS = new Set(["chillAction", "specialAction"]);
     const PROFILE_OPTION_FALLBACKS = {};
     const PROFILE_RAW_DISPLAY_OVERRIDES = {
-      OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW: "Pick up and throw",
       OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE: "None",
       OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE: "Hop in place",
       OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND: "Look around",
@@ -16395,6 +17119,7 @@ HTML = r"""<!doctype html>
       OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE: "Pause",
       OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_FORWARD: "Jump forward",
       OW_WILD_BEHAVIOR_TARGET_PLAYER_CARDINAL_LINE: "Player cardinal line",
+      OW_WILD_BEHAVIOR_TARGET_CONDITION_ACTOR: "Object of interest",
       [CIRCLE_PLAYER_TARGET_RAW]: "Circle player",
     };
     const PROFILE_OVERRIDE_NO_TARGET_CLASS_RAW = "0xFE";
@@ -16444,6 +17169,10 @@ HTML = r"""<!doctype html>
           "ramMaxSpeed",
           "chainPauseAction",
           "chainPauseActionChance",
+          "chainHopInPlaceExtraHops",
+          "chainHopInPlaceExtraChance",
+          "chainHopInPlaceHeartChance",
+          "chainHopInPlaceCryChance",
           "chainRepositionJumpCount",
           "chainRepositionSpeed",
           "chainRepositionDistance",
@@ -16458,7 +17187,6 @@ HTML = r"""<!doctype html>
           "circleRadius",
           "continueWhenArrived",
           "avoidPreviousTile",
-          OWNER_ACTION_SPECIAL_FIELD,
           "stamina",
         ],
       },
@@ -16479,13 +17207,6 @@ HTML = r"""<!doctype html>
         icon: "clock",
         typeClass: "type-flow",
         fields: ["restTime", "tiredProfile"],
-      },
-      {
-        key: "stats",
-        label: "Stats",
-        icon: "speed",
-        typeClass: "type-flow",
-        fields: ["range"],
       },
       {
         key: "special",
@@ -17990,10 +18711,10 @@ HTML = r"""<!doctype html>
         OW_WILD_BEHAVIOR_LOCOMOTION_FLUTTER: "Flutter",
         OW_WILD_BEHAVIOR_ALERT_SPECIAL_NONE: "None",
         OW_WILD_BEHAVIOR_ALERT_SPECIAL_CALL_FOR_HELP: "Call for help",
-        OW_WILD_BEHAVIOR_ALERT_SPECIAL_PICKUP_THROW: "Pick up and throw",
         OW_WILD_BEHAVIOR_TARGET_NONE: "Behavior default",
         OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER: "Toward player",
         OW_WILD_BEHAVIOR_TARGET_AWAY_FROM_PLAYER: "Away from player",
+        OW_WILD_BEHAVIOR_TARGET_PLAYER_AWAY_THROW_LINE: "Away from player throw line",
         OW_WILD_BEHAVIOR_TARGET_TREE_TOP: "Tree top",
         OW_WILD_BEHAVIOR_TARGET_PLAYFUL_ORBIT: "Toward player (legacy)",
         OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER: "Next to player",
@@ -18549,6 +19270,10 @@ HTML = r"""<!doctype html>
         chainHopPause: "ramMaxSpeed",
         chainPauseAction: "chainPauseAction",
         chainPauseActionChance: "chainPauseActionChance",
+        chainHopInPlaceExtraHops: "chainHopInPlaceExtraHops",
+        chainHopInPlaceExtraChance: "chainHopInPlaceExtraChance",
+        chainHopInPlaceHeartChance: "chainHopInPlaceHeartChance",
+        chainHopInPlaceCryChance: "chainHopInPlaceCryChance",
         chainRepositionJumpCount: "chainRepositionJumpCount",
         chainRepositionSpeed: "chainRepositionSpeed",
         chainRepositionDistance: "chainRepositionDistance",
@@ -18585,6 +19310,10 @@ HTML = r"""<!doctype html>
         chainHopPause: "ramMaxSpeed",
         chainPauseAction: "chainPauseAction",
         chainPauseActionChance: "chainPauseActionChance",
+        chainHopInPlaceExtraHops: "chainHopInPlaceExtraHops",
+        chainHopInPlaceExtraChance: "chainHopInPlaceExtraChance",
+        chainHopInPlaceHeartChance: "chainHopInPlaceHeartChance",
+        chainHopInPlaceCryChance: "chainHopInPlaceCryChance",
         chainRepositionJumpCount: "chainRepositionJumpCount",
         chainRepositionSpeed: "chainRepositionSpeed",
         chainRepositionDistance: "chainRepositionDistance",
@@ -18774,6 +19503,22 @@ HTML = r"""<!doctype html>
             className: "profile-suboption-field",
             hint: "Chance to run the pause action. A failed roll starts another movement chain.",
             numberLimits: { min: 0, max: 100 },
+          }),
+          profileEditFieldItem(item, suboptionFields.chainHopInPlaceExtraHops, {
+            className: "profile-suboption-field",
+            hint: "Extra hops after Hop in place is admitted. Zero keeps one hop.",
+            numberLimits: { min: 0, max: 2 },
+          }),
+          profileEditFieldItem(item, suboptionFields.chainHopInPlaceExtraChance, {
+            className: "profile-suboption-field",
+            hint: "Separate chance to add the extra hops after the pause action is admitted.",
+            numberLimits: { min: 0, max: 100 },
+          }),
+          profileEditFieldItem(item, suboptionFields.chainHopInPlaceHeartChance, {
+            className: "profile-suboption-field",
+          }),
+          profileEditFieldItem(item, suboptionFields.chainHopInPlaceCryChance, {
+            className: "profile-suboption-field",
           }),
           profileEditFieldItem(item, suboptionFields.chainRepositionJumpCount, {
             className: "profile-suboption-field",
@@ -19257,7 +20002,7 @@ HTML = r"""<!doctype html>
         ["shield", "type-test", "Family", profilePendingDisplay(item, "profileId")],
         ["target", "type-placement", "Spawn", profilePendingDisplay(item, "spawnState")],
         ["clock", "type-flow", "Walk time", profilePendingDisplay(item, "chillSpeed")],
-        ["ruler", "type-placement", "Range", profilePendingDisplay(item, "range")]
+        ["ruler", "type-placement", "Movement range", "Unlimited"]
       ];
       return chips.map(([icon, typeClass, label, value]) => `
         <span class="profile-core-chip" title="${esc(label)}: ${esc(value)}">

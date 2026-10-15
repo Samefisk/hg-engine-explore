@@ -1,0 +1,188 @@
+{
+  "schemaVersion": 1,
+  "id": "pokemon-appearance.cooldown-palette",
+  "title": "Real UntilCrash cooldown uploads blue palette; native expiry clears it",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.pokemon-cooldown-palette"
+  ],
+  "budgets": {
+    "maxSeconds": 900,
+    "maxFrames": 3300,
+    "noProgressFrames": 1200,
+    "minObservedFrames": 1
+  },
+  "subjects": [
+    {
+      "id": "onix",
+      "species": 95,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "pokemon-cooldown-palette-v1",
+      "subject": "onix"
+    }
+  ],
+  "setup": [
+    {
+      "id": "ram-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 407,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-passive-follower",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "create-passive-follower",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-onix",
+      "op": "spawn",
+      "args": {
+        "species": 95,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 585,
+        "z": 402
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-onix",
+      "op": "bind",
+      "args": {
+        "subject": "onix"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "first-natural-charge",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "pokemon-cooldown-palette-v1",
+          "stage": "attack-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "dodge-first-charge",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "ordinary-first-crash",
+      "op": "step",
+      "args": {
+        "frames": 480,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "pokemon-cooldown-palette-v1",
+          "stage": "crashed",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 480,
+        "noProgressFrames": 480
+      }
+    },
+    {
+      "id": "blue-and-natural-expiry",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-complete",
+          "measurement": "pokemon-cooldown-palette-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 180,
+        "noProgressFrames": 180
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "pokemon-cooldown-palette-v1",
+      "when": "final"
+    }
+  ]
+}

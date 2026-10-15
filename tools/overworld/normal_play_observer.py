@@ -80,6 +80,11 @@ def motion_key(actor):
     )
 
 
+def arc_height(elapsed, duration):
+    """Native Hop arc height in fx32 units at one elapsed frame."""
+    return 16 * (((4 * elapsed * (duration - elapsed) // duration) << 12) // duration)
+
+
 def complete_travel(motion):
     """A sampled terminal pose can supply the last travel frame, not missing frames."""
     samples = motion["samples"]

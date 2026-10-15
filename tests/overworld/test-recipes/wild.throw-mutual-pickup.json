@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.throw-mutual-pickup",
+  "title": "Two Wild Geodude keep mutual Cargo claims until one normal pickup",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.throw-mutual-pickup"
+  ],
+  "budgets": {
+    "maxSeconds": 180,
+    "maxFrames": 520,
+    "noProgressFrames": 220,
+    "minObservedFrames": 2
+  },
+  "subjects": [
+    {
+      "id": "geodude-a",
+      "species": 74,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "geodude-b",
+      "species": 74,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "throw-mutual-pickup-v1",
+      "subject": "geodude-a"
+    }
+  ],
+  "setup": [
+    {
+      "id": "pair-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 586,
+        "z": 406,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-passive-follower",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "create-passive-follower",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-geodude-a",
+      "op": "spawn",
+      "args": {
+        "species": 74,
+        "form": 0,
+        "role": "wild",
+        "level": 20,
+        "x": 584,
+        "z": 402
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-geodude-a",
+      "op": "bind",
+      "args": {
+        "subject": "geodude-a"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-geodude-b",
+      "op": "spawn",
+      "args": {
+        "species": 74,
+        "form": 0,
+        "role": "wild",
+        "level": 20,
+        "x": 588,
+        "z": 402
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-geodude-b",
+      "op": "bind",
+      "args": {
+        "subject": "geodude-b"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "normal-mutual-pickup",
+      "op": "step",
+      "args": {
+        "frames": 180,
+        "keys": [],
+        "until": {
+          "kind": "measurement-complete",
+          "measurement": "throw-mutual-pickup-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 180,
+        "noProgressFrames": 180
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "throw-mutual-pickup-v1",
+      "when": "final"
+    }
+  ]
+}

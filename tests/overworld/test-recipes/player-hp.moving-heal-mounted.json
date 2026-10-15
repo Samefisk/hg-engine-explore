@@ -1,0 +1,652 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.moving-heal-mounted",
+  "title": "Player heals during mounted travel after one real Ambush hit",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/player-hp-implementation-plan.md#implementation-rules",
+  "requirements": [
+    "current.player-health-moving-heal"
+  ],
+  "budgets": {
+    "maxSeconds": 600,
+    "maxFrames": 1300,
+    "noProgressFrames": 300,
+    "minObservedFrames": 361
+  },
+  "subjects": [
+    {
+      "id": "weepinbell",
+      "species": 70,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquire": "existing"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "player-health-moving-heal-mounted-v1",
+      "subject": "weepinbell"
+    }
+  ],
+  "setup": [
+    {
+      "id": "ambush-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 407,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-cyndaquil",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "create-mounted",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "mounted",
+        "slot": 0,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-mount",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "bind-cyndaquil",
+      "op": "bind",
+      "args": {
+        "subject": "cyndaquil"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-passive-69",
+      "op": "spawn",
+      "args": {
+        "species": 69,
+        "form": 0,
+        "role": "wild",
+        "level": 10,
+        "x": 582,
+        "z": 401
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-passive-43",
+      "op": "spawn",
+      "args": {
+        "species": 43,
+        "form": 0,
+        "role": "wild",
+        "level": 10,
+        "x": 582,
+        "z": 402
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-passive-44",
+      "op": "spawn",
+      "args": {
+        "species": 44,
+        "form": 0,
+        "role": "wild",
+        "level": 10,
+        "x": 582,
+        "z": 403
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-passive-45",
+      "op": "spawn",
+      "args": {
+        "species": 45,
+        "form": 0,
+        "role": "wild",
+        "level": 10,
+        "x": 582,
+        "z": 404
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-passive-182",
+      "op": "spawn",
+      "args": {
+        "species": 182,
+        "form": 0,
+        "role": "wild",
+        "level": 10,
+        "x": 582,
+        "z": 405
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-weepinbell",
+      "op": "spawn",
+      "args": {
+        "species": 70,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 585,
+        "z": 402
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-weepinbell",
+      "op": "bind",
+      "args": {
+        "subject": "weepinbell"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "before-contact",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "wait-contact",
+      "op": "step",
+      "args": {
+        "frames": 300,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "player-health-moving-heal-mounted-v1",
+          "stage": "contact-crossed",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 300,
+        "noProgressFrames": 300
+      }
+    },
+    {
+      "id": "at-contact",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "move-escape-north",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": [
+          "UP",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "move-escape-east",
+      "op": "step",
+      "args": {
+        "frames": 64,
+        "keys": [
+          "RIGHT",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "move-delay-loop-0",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "LEFT",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "move-delay-loop-1",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "RIGHT",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "move-delay-loop-2",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "LEFT",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "move-delay-loop-3",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "RIGHT",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "move-delay-loop-4",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "LEFT",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "move-delay-loop-5",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "RIGHT",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "move-delay-loop-6",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "LEFT",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "move-delay-loop-7",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "RIGHT",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "move-delay-loop-8",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "LEFT",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "move-delay-loop-9",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "RIGHT",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "move-delay-loop-10",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "LEFT",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "move-delay-loop-11",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "RIGHT",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "move-delay-loop-12",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "LEFT",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "move-delay-last",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "after-delay",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "move-first-five",
+      "op": "step",
+      "args": {
+        "frames": 5,
+        "keys": [
+          "LEFT",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 5,
+        "noProgressFrames": 5
+      }
+    },
+    {
+      "id": "before-first-heal",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "move-first-one",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": [
+          "LEFT",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "first-heal",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "move-heal-0",
+      "op": "step",
+      "args": {
+        "frames": 18,
+        "keys": [
+          "RIGHT",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 18,
+        "noProgressFrames": 18
+      }
+    },
+    {
+      "id": "move-heal-1",
+      "op": "step",
+      "args": {
+        "frames": 18,
+        "keys": [
+          "LEFT",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 18,
+        "noProgressFrames": 18
+      }
+    },
+    {
+      "id": "move-heal-2",
+      "op": "step",
+      "args": {
+        "frames": 18,
+        "keys": [
+          "RIGHT",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 18,
+        "noProgressFrames": 18
+      }
+    },
+    {
+      "id": "after-one-second",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "player-health-moving-heal-mounted-v1",
+      "when": "final"
+    }
+  ]
+}

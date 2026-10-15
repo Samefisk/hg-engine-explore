@@ -82,11 +82,23 @@ static int assertions, deletes, creates, resets, startup_ok, creation_ok;
 static int create_x, create_y, height_x, height_y;
 static int sOverworldWildPerfMapObjectDeletesThisFrame;
 static LocalMapObject *deleted[64];
+static BOOL appearanceForgot;
+static BOOL fieldLoaded;
+static u32 IsOverlayLoaded(u32 id) { if (id != 1) abort(); return fieldLoaded; }
 #define CHECK(expr) do { assertions++; if (!(expr)) { \
     fprintf(stderr, "spawn identity invariant failed at %d: %s\n", __LINE__, #expr); return 1; } } while (0)
 
+static void OverworldActorAppearance_ForgetLoaded(MapObjectMan *current, u16 slot) {
+    if (current != &manager || slot >= OW_WILD_MAX_SPAWNS) abort();
+    appearanceForgot = TRUE;
+}
+static const struct { void (*forget)(MapObjectMan *, u16); } appearanceEntry = {
+    OverworldActorAppearance_ForgetLoaded,
+};
+#define OVERWORLD_ACTOR_APPEARANCE_ENTRY (&appearanceEntry)
 static void DeleteMapObject(LocalMapObject *object) {
     if (deletes >= 64 || !(object->flags & MAPOBJECTFLAG_ACTIVE)) abort();
+    if (!appearanceForgot) abort();
     deleted[deletes++] = object;
     memset(object, 0, sizeof(*object));
 }
@@ -114,10 +126,14 @@ static void MapObject_SetScript(LocalMapObject *o, u32 id) { o->scriptId = id; }
 static void OverworldWildSpawns_ApplyMovementRange(LocalMapObject *o, int range) { (void)o; (void)range; }
 static void OverworldWildSpawns_ApplyPokemonRenderParams(LocalMapObject *o,
     u16 species, u8 form, u32 sprite, BOOL shiny) { (void)o; (void)species; (void)form; (void)sprite; (void)shiny; }
-static BOOL OverworldWildSpawns_IsCanopyHopper(const OverworldWildBehaviorPrimitives *p) { (void)p; return FALSE; }
-static void OverworldWildSpawns_ClearObjectFlags(LocalMapObject *o, u32 flags) { o->flags &= ~flags; }
-static void OverworldWildSpawns_ApplySurfaceHeight(FieldSystem *f, LocalMapObject *o, int x, int y) {
-    (void)f; (void)o; height_x = x; height_y = y;
+static void OverworldWildSpawns_ApplySurfaceHeight(FieldSystem *f, LocalMapObject *o, int x, int y, BOOL absoluteOnly) {
+    (void)f; (void)o; if (absoluteOnly) abort(); height_x = x; height_y = y;
+}
+static void OverworldWildSpawns_ResolveObjectLandingHeight(FieldSystem *f, LocalMapObject *o, int x, int y) {
+    int slot = (int)o->id - OW_WILD_OBJECT_ID_START;
+    if (slot < 0 || slot >= OW_WILD_MAX_SPAWNS || !state.spawns[slot].active
+        || state.spawns[slot].object != o) abort();
+    OverworldWildSpawns_ApplySurfaceHeight(f, o, x, y, FALSE);
 }
 static void OverworldWildSpawns_InitSpawnSlotState(OverworldWildSpawnState *s, FieldSystem *f,
     OverworldWildSpawnTerrain terrain, int slot, LocalMapObject *o, const OverworldWildRolledEncounter *encounter,
@@ -151,6 +167,8 @@ static void reset(void) {
     prepared.startup.targetX = 30; prepared.startup.targetY = 40;
     prepared.startup.startX = 14; prepared.startup.startY = 40;
     deletes = creates = resets = 0; startup_ok = creation_ok = TRUE;
+    appearanceForgot = FALSE;
+    fieldLoaded = TRUE;
     create_x = create_y = height_x = height_y = -1;
     sOverworldWildPerfMapObjectDeletesThisFrame = 0;
 }
@@ -166,6 +184,10 @@ static LocalMapObject *stock_first(int slot) {
 static BOOL spawn(int slot) { return OverworldWildSpawns_SpawnPreparedEncounter(&state, &field, 0, slot, &prepared); }
 
 int main(void) {
+    reset(); fieldLoaded = FALSE;
+    CHECK(OverworldWildSpawnIdentity_PrepareSlot(&field, &state, 0,
+        &runtime.spawnPresentations) == -1);
+    CHECK(!appearanceForgot && deletes == 0);
     reset(); CHECK(spawn(0));
     CHECK(create_x == 30 && create_y == 40);
     CHECK(height_x == 30 && height_y == 40);

@@ -202,8 +202,15 @@ struct LocalMapObject {
     /*0x0E8*/ u8 unkE8[0x10];
     /*0x0F8*/ u8 unkF8[0x10];
     /*0x108*/ u8 unk108[0x20];
-    /*0x128*/ FieldSystem *fsys;
+    /*0x128*/ u16 unk128;
 };
+
+/* Stock map objects keep their field through the manager at 0xB4. The value
+ * at 0x128 is a u16, not a FieldSystem pointer. */
+static inline FieldSystem *LocalMapObject_GetFieldSystem(LocalMapObject *object)
+{
+    return ((MapObjectMan *)object->unkB4)->fsys;
+}
 
 #define BIT_MOVE (1<<1)
 #define BIT_MOVE_START (1<<2)

@@ -13,7 +13,7 @@ from tools.overworld.test_devtools_acceleration_measurement import fixture as ac
 from tools.overworld.test_devtools_walk_matrix_contract import fixture as motion_fixture
 
 
-def synthetic_stream(fault=None, *, native_fault=None):
+def synthetic_stream(fault=None, *, native_fault=None, retained_policy=False):
     """Exercise all 65 cases in the real pure meter; no guest data or ROM claim."""
     from tools.overworld.devtools_walk_matrix_measurement import WalkMatrixMeasurement, DELTAS
     from tools.overworld.devtools_walk_matrix_observer import decode_motion, decode_sample
@@ -28,14 +28,15 @@ def synthetic_stream(fault=None, *, native_fault=None):
     snapshot["player"].update(face_x=32768,face_y=32768)
     snapshot.update(frame=10,nativeCycle=100,actorFrame=20,selector=dict(heldKeys=0,rawHeld=0,simulatedKeys=0))
     subject = select_current_actor(snapshot,actor)
-    pointer = 0x02300000+68+7*172+88
+    stride, policy_bytes = (172, 32) if retained_policy else (176, 36)
+    pointer = 0x02300000+68+7*stride+88
     reader = dict(armed=True,closed=False,failure=None,acceptedProof=False,guestMemoryWrites=0,
         subject=subject,startFrame=10,pending=0,returned=0,counts=dict(ticks=0,movingWalk=0),
-        layout=dict(stateAddress=0x02300000,actorsOffset=68,actorStride=172,snapshotBytes=88,
-                    motionBytes=52,policyOffset=140,policyBytes=32,capacity=10),
+        layout=dict(stateAddress=0x02300000,actorsOffset=68,actorStride=stride,snapshotBytes=88,
+                    motionBytes=52,policyOffset=140,policyBytes=policy_bytes,capacity=10),
         motionPointer=pointer)
     snapshot["walkMatrix"] = deepcopy(reader)
-    state = bytearray(184);state[20]=1
+    state = bytearray(192);state[20]=1
     negative = MatrixNegative(fault) if fault else None
     trace_seq = 0
 
@@ -109,10 +110,10 @@ def synthetic_stream(fault=None, *, native_fault=None):
     try:
         for case in CASES:
             if case["index"] and not meter.stage("case-complete"):break
-            before=dict(mountStateHex=state.hex(),profileHex=state[8:80].hex(),bindingHex=state[80:96].hex(),sessionGeneration=1,
+            before=dict(mountStateHex=state.hex(),profileHex=state[8:88].hex(),bindingHex=state[88:104].hex(),sessionGeneration=1,
                 clock=dict(frame=snapshot["frame"],nativeCycle=snapshot["nativeCycle"]),readiness=dict(actor=deepcopy(actor)))
             for offset,value in ((7,case["duration"]),(19,case["mode"]),(50,0),(51,case["duration"])):state[8+offset]=value
-            after=dict(deepcopy(before),mountStateHex=state.hex(),profileHex=state[8:80].hex())
+            after=dict(deepcopy(before),mountStateHex=state.hex(),profileHex=state[8:88].hex())
             config=dict(completed=True,prepared=True,acceptedProof=False,guestAdvanced=False,
                 scope="prepared-idle-mounted-walk-fixture",directionMode=case["mode"],travelTime=case["duration"],
                 changedOffsets=[7,19,50,51],before=before,after=after,expectedStateHex=state.hex(),subject=subject)
@@ -150,7 +151,7 @@ def good_result():
             event["subject"] = deepcopy(subject)
     gate = dict(before=[588,406], after=[588,406], mode="IDLE", pending=0)
     matrix = validate_matrix(cases, gate)
-    profile = bytearray(72)
+    profile = bytearray(80)
     configurations = []
     for case in CASES:
         before = profile.hex()
@@ -171,6 +172,14 @@ def good_result():
 
 
 class MatrixProofTests(unittest.TestCase):
+    def test_current_and_retained_policy_layouts_replay_exact_motion_pointer(self):
+        for retained in (False, True):
+            with self.subTest(retained=retained):
+                meter, _ = synthetic_stream(retained_policy=retained)
+                self.assertTrue(meter.finish()["passed"], meter.finish()["failures"])
+                self.assertEqual(meter.reader_layout["actorStride"], 172 if retained else 176)
+                self.assertEqual(meter.reader_layout["policyBytes"], 32 if retained else 36)
+
     def test_saved_full_matrix_replay_and_all_controller_faults(self):
         from tools.overworld.control import _replay_shared_test, _shared_artifact, load_observations
         root=Path(__file__).resolve().parents[2]
@@ -307,7 +316,7 @@ class MatrixProofTests(unittest.TestCase):
             if fault == "absent": value["initial"]["actors"] = []
             elif fault == "stale": value["initial"]["actors"][0]["authorityGeneration"] += 1
             elif fault == "terminal": value["terminalSnapshot"]["actors"][0]["reservationId"] = 1
-            elif fault == "profile": value["configurations"][0]["profileHex"] = "00"*72
+            elif fault == "profile": value["configurations"][0]["profileHex"] = "00"*80
             elif fault == "config-count": value["configurations"].pop()
             elif fault == "summary": value["proofEvidence"]["natural-input"][0]["actual"] = 64
             elif fault == "cleanup": record["sessionCleanup"]["closed"] = False

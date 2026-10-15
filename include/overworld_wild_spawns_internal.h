@@ -163,6 +163,7 @@ typedef struct OverworldWildThrowState {
     u8 targets[OW_WILD_MAX_SPAWNS];
     u16 targetMask;
     u16 carrierMask;
+    u16 recoveringMask;
 } OverworldWildThrowState;
 
 typedef struct OverworldWildSavedShiny {
@@ -292,6 +293,10 @@ void OverworldWildSpawns_RenderPlayerBallProjectile(
     void *projectile,
     OverworldWildFollowerReleaseRotationCallback rotate);
 
+/* Active encounters use zero only for fainted HP. New publication marks HP
+ * unknown until the resident combat service computes native maximum HP. */
+#define OW_WILD_HP_UNINITIALIZED 0xFFFF
+
 typedef struct OverworldWildResidentData {
     u8 pendingFlags;
     u8 battleFlags;
@@ -405,7 +410,10 @@ typedef void (*OverworldWildSetNativeShadowSuppressedFunc)(
     u8 refillLandSurfSlot; \
     u8 refillPositionChecksRemaining; \
     void *movementStagedHopMovementLists[OW_WILD_MAX_SPAWNS]; \
-    u8 reservedActorMotionState[OW_WILD_MAX_SPAWNS * 7 - 48]; \
+    /* Private ordinary refill ownership; reuse five reserved bytes. */ \
+    u32 refillQueuedSerial; \
+    u8 refillFailureStreak; \
+    u8 reservedActorMotionState[OW_WILD_MAX_SPAWNS * 7 - 53]; \
     s32 movementCustomJumpShadowBaseY[OW_WILD_MAX_SPAWNS]
 
 #define OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY ((const OverworldWildSpawnsOverlayEntry *)OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY_ADDR)

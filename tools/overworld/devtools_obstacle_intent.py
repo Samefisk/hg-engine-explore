@@ -77,13 +77,13 @@ class NativeObstacleIntent:
                     or field != session.rt.unsigned(session.emu, session.rt.G_FIELD_SYS_PTR)
                     or obj != current["engine"]["pointer"]):
                 raise ObstacleIntentError("Obstacle intent native owner differs")
-            profile_bytes = public_bytes(session, profile, 144)
+            profile_bytes = public_bytes(session, profile, 160)
             resolved = observer.profiles.get(current["actor"]["behaviorFingerprint"], {})
-            if not resolved.get("resolved") or resolved.get("resultHex", "")[:288] != profile_bytes.hex():
+            if not resolved.get("resolved") or resolved.get("resultHex", "")[:320] != profile_bytes.hex():
                 raise ObstacleIntentError("Obstacle intent profile differs from resolver")
             primitive_bytes = public_bytes(session, primitives, 8) if primitives else None
             if (primitive_bytes is not None
-                    and resolved["resultHex"][288:304] != primitive_bytes.hex()):
+                    and resolved["resultHex"][320:336] != primitive_bytes.hex()):
                 raise ObstacleIntentError("Obstacle intent primitives differ from resolver")
             x, y = self.origin
             actor = current["actor"]
@@ -119,7 +119,7 @@ class NativeObstacleIntent:
         try:
             session = self.session
             if (public_bytes(session, value["contextPointer"], 28).hex() != value["contextHex"]
-                    or public_bytes(session, value["profilePointer"], 144).hex()
+                    or public_bytes(session, value["profilePointer"], 160).hex()
                     != value["profileHex"]
                     or value["primitivesPointer"] and public_bytes(
                         session, value["primitivesPointer"], 8).hex()

@@ -152,7 +152,7 @@ class CanopyHopperCapabilityTests(unittest.TestCase):
         )
         runtime = (
             ROOT
-            / "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c"
+            / "src/player_health_overlay/overworld_walk_input_policy.c"
         ).read_text()
         reducer = function_bodies(runtime)["OverworldActorWalkPolicy_ReduceInput"]
         self.assertIn(

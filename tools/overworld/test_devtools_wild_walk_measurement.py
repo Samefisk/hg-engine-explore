@@ -66,6 +66,80 @@ def wild_fixture(*, pause=32, delta=(1,0), duration=4, startup_noop=False):
     return baseline,subject,reader,rows
 
 
+def multi_walk_fixture(durations=(5,4), *, successor=False, terminal_noop=False):
+    """Join real per-tile wire fixtures at completed idle boundaries."""
+    initial,subject,reader,rows=wild_fixture(duration=durations[0],pause=0 if terminal_noop else 1)
+    previous=rows[-1][0]
+    clear_count=previous["wildWalk"]["counts"]["clear"]
+    for duration in durations[1:]:
+        fresh,_,_,following=wild_fixture(duration=duration,pause=0 if terminal_noop else 1)
+        prev=previous["actors"][0];old=fresh["actors"][0]
+        dx,dz=prev["logical"]["x"]-old["logical"]["x"],prev["logical"]["y"]-old["logical"]["y"]
+        offsets=dict(frame=previous["frame"]-fresh["frame"],actorFrame=previous["actorFrame"]-fresh["actorFrame"],
+            nativeCycle=previous["nativeCycle"]-fresh["nativeCycle"],commitSequence=prev["commitSequence"]-old["commitSequence"])
+        ns=previous["nativeObservation"]["sequence"]-fresh["nativeObservation"]["sequence"]
+        ts=max(e["data"].get("sequence",0) for _,ee in rows for e in ee if e["kind"]=="native")
+        visited=set()
+        def shift(value):
+            if isinstance(value,(list,dict)):
+                if id(value) in visited:return
+                visited.add(id(value))
+            if isinstance(value,list):
+                for v in value:shift(v)
+            elif isinstance(value,dict):
+                if set(value)=={"x","y"}:value["x"]+=dx;value["y"]+=dz
+                for k,v in list(value.items()):
+                    if k=="subject":continue
+                    if k in offsets and type(v) is int:value[k]+=offsets[k]
+                    elif k in ("entryActorFrame","returnActorFrame"):value[k]+=offsets["actorFrame"]
+                    elif k in ("entryNativeCycle","returnNativeCycle"):value[k]+=offsets["nativeCycle"]
+                    elif k=="pos_x":value[k]+=dx<<16
+                    elif k=="pos_z":value[k]+=dz<<16
+                    else:shift(v)
+        for snap,events in following:
+            shift(snap);shift(events)
+            snap["nativeObservation"]["sequence"]+=ns
+            snap["wildWalk"]["counts"]["clear"]+=clear_count
+            snap["wildWalk"]["startFrame"]=initial["frame"]
+            for e in events:
+                data=e["data"]
+                if e["kind"]=="native-observation":data["sequence"]+=ns
+                else:
+                    data["sequence"]+=ts
+                    if data["event"] in ("LOGICAL_COMMIT","MOTION_FINISHED"):data["valueA"]+=offsets["commitSequence"]
+                    elif data["event"]=="CONTROL_RETURNED":data["valueB"]+=offsets["commitSequence"]
+        if successor:
+            # The next elapsed-zero start shares the old native return frame.
+            for snap,ee in following:
+                snap["frame"]-=1;snap["actorFrame"]-=1;snap["nativeCycle"]-=2
+                snap["wildWalk"]["latestCompletedInput"]["frame"]-=1
+                snap["wildWalk"]["latestCompletedInput"]["nativeCycle"]-=2
+                for e in ee:
+                    e["frame"]-=1
+                    for key in ("actorFrame","entryActorFrame","returnActorFrame"):
+                        if key in e["data"]:e["data"][key]-=1
+                    for key in ("entryNativeCycle","returnNativeCycle"):
+                        if key in e["data"]:e["data"][key]-=2
+            snap,ee=following.pop(0)
+            rows[-1]=(snap,rows[-1][1]+ee)
+            if terminal_noop:
+                clear=next(e for e in rows[-1][1] if e.get("data",{}).get("observation")=="wild-walk-clear")
+                noop=deepcopy(clear)
+                noop["data"]["before"]=deepcopy(clear["data"]["after"])
+                noop["data"]["after"]=deepcopy(noop["data"]["before"])
+                noop["data"]["sequence"]+=1
+                rows[-1][1].append(noop)
+                snap["nativeObservation"]["sequence"]+=1
+                snap["wildWalk"]["counts"]["clear"]+=1
+                for later,events in following:
+                    later["nativeObservation"]["sequence"]+=1
+                    later["wildWalk"]["counts"]["clear"]+=1
+                    for event in events:
+                        if event["kind"]=="native-observation":event["data"]["sequence"]+=1
+        rows+=following;previous=rows[-1][0];clear_count=previous["wildWalk"]["counts"]["clear"]
+    return initial,subject,reader,rows
+
+
 def replay(data):
     initial,subject,receipt,rows = data
     meter = WildWalkMeasurement(1200)
@@ -132,8 +206,94 @@ class WildWalkMeasurementTests(unittest.TestCase):
         for delta in ((1,0),(-1,0),(0,1),(0,-1),(1,1),(-1,-1),(1,-1),(-1,1)):
             with self.subTest(delta=delta): self.assertEqual(replay(wild_fixture(delta=delta)).failures,[])
 
-    def test_invalid_duration_rejected(self):
-        self.assertIn("wild Walk requires exact four-frame travel",replay(wild_fixture(duration=8)).failures)
+    def test_valid_nonfour_never_grants_exact_credit(self):
+        meter=replay(wild_fixture(duration=8))
+        self.assertEqual(meter.failures,[])
+        self.assertFalse(meter.ready)
+        self.assertEqual([p["motion"]["duration"] for p in meter.prelude],[8])
+        self.assertFalse(meter.finish()["passed"])
+
+    def test_full_checked_prelude_then_first_exact_four(self):
+        data=multi_walk_fixture((5,9,4));meter=replay(data)
+        self.assertEqual(meter.failures,[])
+        self.assertTrue(meter.ready)
+        self.assertEqual([p["motion"]["duration"] for p in meter.prelude],[5,9])
+        self.assertEqual(meter.motion["duration"],4)
+        self.assertEqual(meter.clear_count,3)
+        self.assertTrue(meter.close(dict(data[2],closed=True,counts={"clear":3}),data[3][-1][0])["passed"])
+
+    def test_zero_pause_successor_prelude_keeps_all_travel_and_return(self):
+        for durations in ((5,4),(4,4)):
+            data=multi_walk_fixture(durations,successor=True);meter=replay(data)
+            self.assertEqual(meter.failures,[])
+            self.assertTrue(meter.ready)
+            self.assertEqual(meter.prelude[0]["motion"]["duration"],durations[0])
+            self.assertIsNotNone(meter.prelude[0]["successorStart"])
+            self.assertEqual(meter.motion["duration"],4)
+            self.assertEqual(meter.clear_count,2)
+        data=multi_walk_fixture(successor=True)
+        boundary=next(s for s,e in data[3] if sum(x["data"].get("event")=="MOTION_STARTED" for x in e)
+            and any(x["data"].get("event")=="CONTROL_RETURNED" for x in e))
+        boundary["actors"][0]["engineObject"]["pos_x"]+=1
+        self.assertTrue(replay(data).failures)
+
+    def test_bad_prelude_motion_clear_lifecycle_and_clock_rejected(self):
+        for fault in ("render","elapsed","clear","finish","identity","clock","bound","duration"):
+            data=multi_walk_fixture();sample,events=data[3][1]
+            if fault=="render":sample["actors"][0]["engineObject"]["pos_x"]+=1
+            elif fault=="elapsed":sample["actors"][0]["motionElapsed"]+=1
+            elif fault=="identity":sample["actors"][0]["authorityGeneration"]+=1
+            elif fault=="clock":sample["frame"]+=1
+            elif fault=="duration":data[3][0][0]["actors"][0]["motionDuration"]=0
+            else:
+                if fault=="bound":
+                    meter=WildWalkMeasurement(3);meter.arm(data[1],data[0],data[2])
+                    for snap,ee in data[3]:meter.observe(snap,ee)
+                    self.assertIn("wild Walk frame bound exceeded",meter.failures);continue
+                for _,ee in data[3][:7]:
+                    for e in ee:
+                        if fault=="clear" and e["kind"]=="native-observation":e["data"]["after"]["active"]=1
+                        elif fault=="finish" and e["data"].get("event")=="MOTION_FINISHED":e["data"]["event"]="WORLD_EFFECT"
+            with self.subTest(fault=fault):self.assertTrue(replay(data).failures)
+
+    def test_terminal_noop_requires_exact_real_clear_and_zero_successor(self):
+        from tools.overworld.devtools_wild_walk_proof import validate_prelude
+        data=multi_walk_fixture(successor=True,terminal_noop=True)
+        meter=replay(data)
+        self.assertEqual(meter.failures,[])
+        self.assertTrue(meter.ready)
+        self.assertEqual(meter.clear_count,3)
+        self.assertEqual(len(meter.prelude[0]["idleNoopClears"]),1)
+        validate_prelude(meter.result())
+        for fault in ("changed","logical","commit","owner","clock","future-clock","missing-real","late"):
+            data=multi_walk_fixture(successor=True,terminal_noop=True)
+            row=next((snapshot,events) for snapshot,events in data[3]
+                if any(e.get("data",{}).get("observation")=="wild-walk-clear"
+                       and e["data"]["before"]["active"]==0 for e in events))
+            snapshot,events=row
+            noop=next(e for e in events if e.get("data",{}).get("observation")=="wild-walk-clear"
+                       and e["data"]["before"]["active"]==0)
+            if fault=="changed":noop["data"]["after"]["objectFlags"]^=2
+            elif fault=="clock":noop["data"]["entryActorFrame"]-=1
+            elif fault=="future-clock":noop["data"]["returnActorFrame"]+=1
+            elif fault=="missing-real":
+                next(e for e in events if e.get("data",{}).get("observation")=="wild-walk-clear"
+                     and e["data"]["before"]["active"]==1)["data"]["observation"]="other-native-receipt"
+            elif fault=="late":snapshot["actors"][0]["motionElapsed"]=1
+            else:
+                for side in ("before","after"):
+                    current=noop["data"][side]["current"]
+                    if fault=="logical":current["publicSubject"]["logical"]["x"]+=1
+                    elif fault=="commit":current["publicSubject"]["commitSequence"]+=1
+                    else:current["slot"]+=1
+            with self.subTest(fault=fault):self.assertTrue(replay(data).failures)
+        for key,value in (("observedBy","idle-inference"),("successorElapsed",1)):
+            forged=meter.result()
+            forged["prelude"][0]["motion"]["travelEnd"][key]=value
+            with self.subTest(key=key),self.assertRaises(ValueError):validate_prelude(forged)
+        forged=meter.result()
+        forged["prelude"][0]["idleNoopClears"][0]["data"]["before"]["current"]["publicSubject"]["commitSequence"]+=1
+        with self.assertRaises(ValueError):validate_prelude(forged)
 
     def test_clear_is_not_inferred_from_idle(self):
         data = wild_fixture()

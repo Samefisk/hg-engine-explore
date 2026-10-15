@@ -45,6 +45,58 @@ class FieldLifecycleTests(unittest.TestCase):
             self.assertTrue(value["known"])
             self.assertEqual(value["terrain"]["exitPredicate"], ready == 1 and busy == 0)
 
+    def test_authenticated_terrain_watch_axes_and_guarded_reads(self):
+        f = self.fixture()
+        terrain, watcher = f[3], 0x02214000
+        for address, vector in ((terrain + 0xD0, (100, 200, 300)),
+                                (watcher, (110, 210, 300))):
+            for index, value in enumerate(vector):
+                f[4](address + index * 4, value)
+        for offset, value in ((0xDC, watcher), (0xE0, terrain + 0xD8),
+                              (0xE4, watcher + 8), (0xE8, 1), (0xEC, 4), (0xF0, 1)):
+            f[4](terrain + offset, value)
+        authenticated = []
+        def authenticate(address, size):
+            authenticated.append((address, size))
+            return True
+        value = self.observe(f, authenticate)
+        self.assertTrue(value["known"])
+        self.assertTrue(value["diagnosticOnly"])
+        self.assertIn((0x021F50F0, 0x3BC), authenticated)
+        self.assertEqual(value["terrain"]["sampledPosition"], dict(x=100, y=200, z=300))
+        self.assertEqual(value["terrain"]["watcherPosition"], dict(x=110, y=210, z=300))
+        self.assertEqual((value["terrain"]["axisActive"], value["terrain"]["axisDirection"],
+                          value["terrain"]["watcherEnabled"]), (1, 4, 1))
+        self.assertEqual((value["terrain"]["axisHighValue"], value["terrain"]["axisLowValue"],
+                          value["terrain"]["axisDelta"]), (300, 300, 0))
+        self.assertEqual(value["readBytes"], sum(size for _, size in f[6]))
+        self.assertEqual(value["readBytes"], 129)
+        self.assertIn((terrain + 0xD0, 36), f[6])
+        self.assertIn((watcher, 12), f[6])
+        self.assertIn((terrain + 0xD8, 4), f[6])
+        self.assertIn((watcher + 8, 4), f[6])
+        f = self.fixture()
+        value = self.observe(f, lambda address, size: address != 0x021F50F0)
+        self.assertFalse(value["known"])
+        self.assertEqual(value["terrain"]["readyWord"], 1)
+        self.assertNotIn((f[3] + 0xD0, 36), f[6])
+        for offset in (0xDC, 0xE0, 0xE4):
+            for invalid in (3, 0x01FFFFFC, 0x02400000):
+                f = self.fixture()
+                f[4](f[3] + offset, invalid)
+                value = self.observe(f)
+                self.assertFalse(value["known"])
+                self.assertEqual(value["reason"], "invalid-pointer")
+                self.assertEqual(value["terrain"]["readyWord"], 1)
+                self.assertFalse(any(address == invalid for address, _ in f[6]))
+        f = self.fixture()
+        value = self.observe(f)
+        self.assertTrue(value["known"])
+        self.assertIsNone(value["terrain"]["watcherPosition"])
+        self.assertIsNone(value["terrain"]["axisHighValue"])
+        self.assertIsNone(value["terrain"]["axisLowValue"])
+        self.assertEqual(value["readBytes"], 109)
+
     def test_finalizer_never_reads_freed_terrain(self):
         f = self.fixture(3, 2, 0)
         f[4](f[0] + 0x2C, 3)

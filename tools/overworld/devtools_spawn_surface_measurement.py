@@ -38,10 +38,107 @@ def _engine(engine, source, world):
           "landing engine ownership is missing or changed")
 
 
-def _check(spawn, snapshot, source_sha256, authored_profiles, verified_stop_boundary):
+def pool_fly_loaded_cell(spawn, snapshot, *, stage):
+    """Reuse the shared live terrain/catalog sample at the actual POOL target."""
+    target, world = spawn["position"], spawn["worldContext"]
+    _need(snapshot.get("prepared") is False
+          and snapshot.get("observationBoundary") == "main-task-queue-completion"
+          and all(snapshot.get("context", {}).get(k) == world[k]
+                  for k in ("mapId", "fieldEpoch", "mapGeneration")), "Fly In terrain boundary/world differs")
+    if "poolFlyTerrain" in snapshot:
+        rows = [row for row in snapshot["poolFlyTerrain"] if row.get("subject", {}).get("handle") == spawn["publicSubject"]["handle"]]
+        _need(len(rows) == 1 and rows[0].get("status") == "observed" and rows[0].get("stage") == stage
+              and rows[0].get("worldContext") == world and rows[0].get("target") == target
+              and all(rows[0]["subject"].get(k) == spawn["publicSubject"].get(k)
+                      for k in ("species", "role", "subjectIdentity", "authorityGeneration", "engineAnchorGeneration", "presentationGeneration")),
+              "Fly In exact loaded POOL receipt differs")
+        cells = [rows[0].get("cell")]
+    else:
+        cells = [cell for cell in snapshot.get("terrain", {}).get("cells", [])
+                 if [cell.get("x"), cell.get("y")] == target]
+    _need(len(cells) == 1, "Fly In exact loaded POOL cell is missing or duplicated")
+    cell = cells[0]
+    p, raw, surface = cell.get("provenance", {}), cell.get("attribute"), cell.get("surface", {})
+    _need(cell.get("loaded") is True and p.get("fieldPointer") == world["fieldPointer"]
+          and p.get("landDataIdentity") == "current-map-matrix"
+          and p.get("store") in ("full-terrain-attributes", "rolling-land-manager")
+          and _int(p.get("landDataId")) and p["landDataId"] != 0xFFFF
+          and _int(p.get("attributeAddress")) and p["attributeAddress"] % 2 == 0
+          and 0x02000000 <= p["attributeAddress"] < 0x02400000
+          and _int(raw) and 0 <= raw <= 65535 and p.get("rawWord") == raw,
+          "Fly In loaded terrain provenance differs")
+    _need(all(_int(p.get(k)) and p[k] > 0 for k in ("matrixWidth", "matrixHeight"))
+          and target[0] < p["matrixWidth"] * 32 and target[1] < p["matrixHeight"] * 32
+          and cell.get("matrix_index") == target[1] // 32 * p["matrixWidth"] + target[0] // 32,
+          "Fly In loaded matrix index differs")
+    _need(cell.get("behavior") == raw & 255 and cell.get("collision") is bool(raw & 0x8000)
+          and cell.get("terrain_class") == (raw >> 8) & 127 and not cell["collision"],
+          "Fly In loaded tile decode/collision differs")
+    allowed = LAND_BEHAVIORS if spawn["terrain"] == 0 else SURF_BEHAVIORS
+    _need(spawn["terrain"] in (0, 1) and cell["behavior"] in allowed,
+          "Fly In POOL tile differs from its Land/Surf encounter source")
+    _need(surface.get("known") is True and surface.get("present") is False
+          and _int(surface.get("catalogPointer")) and surface["catalogPointer"] % 4 == 0
+          and 0x02000000 <= surface["catalogPointer"] < 0x02400000
+          and surface.get("landDataId") == p["landDataId"]
+          and [surface.get("localX"), surface.get("localZ")] == [n % 32 for n in target],
+          "Fly In authored surface is present or unknown")
+    return deepcopy(cell)
+
+
+def _check_pool_fly_surface(spawn, snapshot, ownership, stop, admission_cell):
+    world, target, subject = spawn["worldContext"], ownership["landingTarget"], spawn["publicSubject"]
+    _need(isinstance(admission_cell, dict), "Fly In has no loaded admission cell")
+    terminal_cell = pool_fly_loaded_cell(spawn, snapshot, stage="terminal")
+    _need(terminal_cell == admission_cell, "Fly In loaded target changed before its terminal")
+    actors = [a for a in snapshot.get("actors", []) if a.get("handle") == subject.get("handle")]
+    _need(len(actors) == 1, "Fly In terminal actor is missing or duplicated")
+    actor = actors[0]
+    source = spawn["jumpReceipts"][0]["sourceIdentity"]
+    _need(live_identity(actor, actor.get("sourceIdentity", {}), actor.get("engineIdentity", {}),
+                        species=165, role="WILD", current_epoch=world["fieldEpoch"])
+          and actor.get("sourceIdentity") == source
+          and all(actor.get(k) == subject.get(k) for k in
+                  ("species", "form", "level", "subjectIdentity", "authorityGeneration",
+                   "engineAnchorGeneration", "presentationGeneration")), "Fly In terminal subject differs")
+    _engine(actor.get("engineIdentity"), source, world)
+    _need(isinstance(stop, dict) and stop.get("frame") == snapshot["frame"], "Fly In terminal boundary is missing")
+    successor = stop.get("kind") == "terminal-with-unmeasured-successor"
+    if successor:
+        next_motion = stop.get("successor", {})
+        _need(stop.get("completedCommit") == actor["commitSequence"]
+              and next_motion.get("handle") == actor["handle"] and next_motion.get("origin") == target
+              and next_motion.get("kind") == actor["motionKind"]
+              and next_motion.get("target") == [actor["target"][k] for k in ("x", "y")]
+              and next_motion.get("elapsed") == actor["motionElapsed"] == 0
+              and actor["motionPhase"] == "MOVING" and next_motion.get("countedAsComplete") is False,
+              "Fly In unmeasured successor boundary differs")
+    else:
+        _need(stop.get("kind") == "idle" and actor["motionPhase"] == "IDLE"
+              and actor["reservationId"] == 0 and actor["inputOwnership"] == 0,
+              "Fly In terminal control is not returned")
+    engine, base_y = actor["engineObject"], spawn["startup"]["targetBaseY"]
+    _need(_int(base_y) and engine.get("pos_y") == base_y and engine.get("unk88_y") == 0,
+          "Fly In terminal height differs from its actual finalized ground height")
+    _need([engine.get("pos_x"), engine.get("pos_z")] == [(n << 16) + 0x8000 for n in target]
+          and (successor or [actor["logical"][k] for k in ("x", "y")] == target),
+          "Fly In terminal is not its POOL target center")
+    for clock, snap in (("ActorFrame", "actorFrame"), ("NativeCycle", "nativeCycle")):
+        _need(_int(snapshot.get(snap)) and _int(spawn.get("return" + clock))
+              and snapshot[snap] >= spawn["return" + clock], "Fly In terminal clocks precede its spawn")
+    return {"passed": True, "scope": SCOPE, "acceptedProof": False,
+            "loadedTerrainVerified": True, "authoredSurfaceExcluded": True, "terminalHeightVerified": True,
+            "subject": deepcopy(subject), "target": target, "terrain": spawn["terrain"],
+            "nativeLandingY": base_y, "terminalFrame": snapshot["actorFrame"],
+            "heightSource": "finalized-Fly-In-target", "nativeHeightRefreshRequired": False}
+
+
+def _check(spawn, snapshot, source_sha256, authored_profiles, verified_stop_boundary, fly_admission_cell):
     ownership = check_pool_spawn_receipt(spawn, source_sha256=source_sha256,
                                          authored_profiles=authored_profiles)
     _need(ownership["passed"], "own POOL target was not preserved")
+    if ownership["startupKind"] == 9:
+        return _check_pool_fly_surface(spawn, snapshot, ownership, verified_stop_boundary, fly_admission_cell)
     _need(spawn["terrain"] in (0, 1), "surface witness supports only Land/Surf POOL encounters")
     jumps = spawn.get("jumpReceipts")
     _need(isinstance(jumps, list) and len(jumps) == 1, "one exact spawn jump is required")
@@ -171,7 +268,7 @@ def _check(spawn, snapshot, source_sha256, authored_profiles, verified_stop_boun
 
 
 def check_pool_spawn_surface(spawn, terminal_snapshot, *, source_sha256, authored_profiles,
-                             verified_stop_boundary=None):
+                             verified_stop_boundary=None, fly_admission_cell=None):
     """Validate native landing receipts plus a same-actor terminal snapshot.
 
     Caller must separately prove full motion lifecycle/coverage. Optional
@@ -182,12 +279,12 @@ def check_pool_spawn_surface(spawn, terminal_snapshot, *, source_sha256, authore
     forbidden data raises ValueError; success cannot grant controller acceptance.
     """
     try:
-        return _check(spawn, terminal_snapshot, source_sha256, authored_profiles, verified_stop_boundary)
+        return _check(spawn, terminal_snapshot, source_sha256, authored_profiles, verified_stop_boundary, fly_admission_cell)
     except (KeyError, TypeError, AttributeError, IndexError, OverflowError) as error:
         raise ValueError("incomplete spawn surface evidence") from error
 
 
-def check_natural_appear_hop_surface(spawn, terminal_snapshot, *, species=179):
+def _check_natural_appear_hop_surface(spawn, terminal_snapshot, *, species, terrain, prepared):
     """Validate the first native height read for one natural Appear Hop.
 
     This is the current recorder-calibration path. It deliberately does not
@@ -195,7 +292,8 @@ def check_natural_appear_hop_surface(spawn, terminal_snapshot, *, species=179):
     """
     try:
         _need(spawn.get("observation") == "spawn-prepared"
-              and spawn.get("setupMode") == "normal"
+              and spawn.get("setupMode") == ("prepared" if prepared else "normal")
+              and terrain in (0, 1) and spawn.get("terrain") == terrain
               and spawn.get("returnValue") == 1,
               "natural Appear Hop needs one successful normal spawn")
         _need(spawn.get("startup", {}).get("locomotion") == 7
@@ -228,7 +326,7 @@ def check_natural_appear_hop_surface(spawn, terminal_snapshot, *, species=179):
         _need(h["engineIdentity"] == h["engineIdentityAfter"],
               "native landing engine changed")
         _need(terminal_snapshot.get("observationBoundary") == "main-task-queue-completion"
-              and terminal_snapshot.get("prepared") is False
+              and terminal_snapshot.get("prepared") is prepared
               and all(terminal_snapshot.get("context", {}).get(key) == world[key]
                       for key in ("mapId", "fieldEpoch", "mapGeneration")),
               "terminal boundary/world differs")
@@ -318,8 +416,8 @@ def check_natural_appear_hop_surface(spawn, terminal_snapshot, *, species=179):
                   and cell["collision"] == bool(raw & 0x8000)
                   and cell.get("terrain_class") == (raw >> 8) & 127,
                   "terrain decode differs")
-            _need(not cell["collision"] and cell["behavior"] in LAND_BEHAVIORS,
-                  "natural landing target is blocked or not land")
+            _need(not cell["collision"] and cell["behavior"] in (LAND_BEHAVIORS if terrain == 0 else SURF_BEHAVIORS),
+                  "natural landing target is blocked or has the wrong encounter terrain")
             cells.append(cell)
         _need(cells[0] == cells[1],
               "loaded terrain changed during landing height resolution")
@@ -330,6 +428,22 @@ def check_natural_appear_hop_surface(spawn, terminal_snapshot, *, species=179):
                 "terminalFrame": terminal_snapshot["actorFrame"]}
     except (KeyError, TypeError, AttributeError, IndexError, OverflowError) as error:
         raise ValueError("incomplete natural Appear Hop surface evidence") from error
+
+
+def check_natural_appear_hop_surface(spawn, terminal_snapshot, *, species=179):
+    """Keep the existing normal LAND recorder-calibration contract."""
+    return _check_natural_appear_hop_surface(spawn, terminal_snapshot,
+        species=species, terrain=0, prepared=False)
+
+
+def check_natural_water_surface(spawn, terminal_snapshot, *, species):
+    """Same native height/ownership proof, for natural Surf in a prepared window.
+
+    The caller must separately prove the natural finalizer and constructor.
+    Prepared means the declared teleport; it grants no placement or spawn credit.
+    """
+    return _check_natural_appear_hop_surface(spawn, terminal_snapshot,
+        species=species, terrain=1, prepared=True)
 
 
 EXPECTED_HEIGHT_REASON = "terminal Y differs from native landing height"

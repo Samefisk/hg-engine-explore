@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "id": "pokemon-hp.collision-knockback",
+  "title": "Ordinary Ambush damages wild and mounted Pok\u00e9mon and uses one shared Jump knockback",
+  "status": "active",
+  "capabilities": [
+    "player.health",
+    "collision.attack",
+    "hop"
+  ],
+  "proofLevel": "S4",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "Current Wild Snorlax and Ambush Weepinbell, with current mounted party Cyndaquil, on Route 29.",
+    "trigger": "After declared placement, allow the ordinary Weepinbell Ambush Hop to collide with Snorlax and later the mounted player. Do not force HP, motion, profiles, timers or RNG.",
+    "observable": "Native real Wild and party HP lose exactly 20 per accepted hit. The mount collision also reduces saved rider HP. Both target types use an airborne one-tile Jump, restore their normal height and control, retain a per-target 60-frame hit guard, and never hit the attacker itself.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use private copies of test.nds/test.sav, teleport to map33 tile585,407, prepare level50 party Cyndaquil and mount it, spawn level50 Snorlax at585,405 and level10 Weepinbell at585,404, and bind all current generation-safe identities. Native motion and damage remain normal after setup."
+      }
+    ],
+    "limits": [
+      "Prepared placement does not prove natural party selection, healing or wild population acquisition.",
+      "One bounded neutral input window must contain real collisions; missing HP loss or motion is a failure. No guest HP/motion writes supply the trigger.",
+      "Native completed queue poses and actual party/resident HP supply proof. No screenshots or video are captured.",
+      "This integrated case covers Wild and Mounted targets; the party-backed Follower role shares storage but has separate host storage checks."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "snorlax",
+      "species": 143,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "weepinbell",
+      "species": 70,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Bind the current three actors and their full HP."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Observe normal Ambush collisions, real HP loss, and both Jump arcs."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Observe completed one-tile landings, per-target guards and restored mounted seat."
+    }
+  ],
+  "stop": {
+    "frameBudget": 600,
+    "condition": "Both Wild and Mounted targets take one normal hit and finish one Jump, then20 clean tail frames; fail on missing identity, HP, profile, motion, field or control."
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED"
+    ],
+    "forbiddenEvents": [
+      "ACTOR_REBOUND",
+      "CONTEXT_CHANGED"
+    ],
+    "invariants": [
+      "Each current target uses its real current and normal max HP",
+      "One attacking profile supplies fixed collision damage and Jump1 for both target roles",
+      "Wild and Mounted targets jump without stock walking knockback; the mounted rider and Pok\u00e9mon share one anchor and restore seat height"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "pokemon-hp.collision-knockback",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "engine-boundary",
+      "rendered-motion",
+      "natural-input",
+      "control-release"
+    ],
+    "minimumFrames": 35
+  }
+}

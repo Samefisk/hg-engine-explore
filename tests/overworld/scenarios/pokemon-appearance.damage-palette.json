@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "id": "pokemon-appearance.damage-palette",
+  "title": "Real collision HP loss changes mounted and wild palettes; normal nurse healing clears follower tint",
+  "status": "active",
+  "capabilities": [
+    "pokemon.appearance"
+  ],
+  "proofLevel": "S4",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "Current Wild Snorlax and Weepinbell, mounted party Cyndaquil, then the same healed party Cyndaquil as Follower.",
+    "trigger": "Allow ordinary Ambush collisions to produce two mounted HP losses and a Wild HP loss. Use checked normal nurse input to heal the same party member, then bind its current Follower.",
+    "observable": "Real party/resident HP and actual SDK palette bytes show the softer injury-dependent red pulse at the current Actor frame. Two real party hits remain required. Rising and falling strength at unchanged HP reuse one private palette; each exact MAT word5 uses the completed upload. Native stock healing restores full HP; the current Follower has no tint record/callback and uses its original palette.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use private ROM/save copies and the same declared native placement and party setup as the existing collision test. HP/motion/timers/RNG remain natural after binding."
+      }
+    ],
+    "limits": [
+      "Prepared native actor acquisition does not prove natural spawning or normal party selection.",
+      "Every receipt comes from the current completed queue and exact current full identity. No screenshots or video.",
+      "Full-HP clear is checked after genuine field teardown and normal nurse healing; it does not claim item healing in place."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "snorlax",
+      "species": 143,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "weepinbell",
+      "species": 70,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "healed-cyndaquil",
+      "species": 155,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Bind actual current actors and their real full HP."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Read actual palette upload bytes and material word after natural gameplay changes."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Observe native healing or natural expiry clear the tint."
+    }
+  ],
+  "stop": {
+    "frameBudget": 6000,
+    "condition": "Complete every exact native palette and clear fact; fail on missing identity, upload completion, material use, HP or full condition state."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Actual palette bytes and actual MAT command must agree on the same current Pok\u00e9mon.",
+      "Missing or stale receipts fail; cache or configured values alone cannot pass."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "pokemon-appearance.damage-palette",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "engine-boundary",
+      "rendered-motion",
+      "natural-input",
+      "control-release"
+    ],
+    "minimumFrames": 60
+  }
+}

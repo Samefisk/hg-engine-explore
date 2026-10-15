@@ -8,6 +8,11 @@ MEMORY {
          */
         rom     : ORIGIN = 0x023BAB00, LENGTH = 0x1D00
         ewram   : ORIGIN = 0x023BAB00, LENGTH = 0x1D00
+        combat  : ORIGIN = 0x01FFF980, LENGTH = 0x200
+        hit     : ORIGIN = 0x01FFF700, LENGTH = 0x100
+        hopTick : ORIGIN = 0x022083B8, LENGTH = 0x48
+        terrainIdle : ORIGIN = 0x01FF9770, LENGTH = 0x10
+        inspect : ORIGIN = 0x01FFA4E0, LENGTH = 0xC
 }
 
 OverworldWalk_DeltaX = 0x023BF59C | 1;
@@ -34,6 +39,52 @@ OverworldMount_ResetMomentum = 0x01FF9AB0 | 1;
 OverworldMount_BufferedDirection = 0x01FF9AD4 | 1;
 
 SECTIONS {
+        .overworld_mount_private_terrain_idle ORIGIN(terrainIdle) : {
+                KEEP(*(.overworld_mount_private_terrain_idle))
+                ASSERT(ABSOLUTE(ADDR(.overworld_mount_private_terrain_idle)) == 0x01FF9770,
+                    "private Mount terrain-idle leaf moved");
+                ASSERT(SIZEOF(.overworld_mount_private_terrain_idle) == LENGTH(terrainIdle),
+                    "private Mount terrain-idle leaf changed size");
+        } >terrainIdle
+        .overworld_mount_private_inspect ORIGIN(inspect) : {
+                KEEP(*(.overworld_mount_private_inspect))
+                ASSERT(ABSOLUTE(ADDR(.overworld_mount_private_inspect)) == 0x01FFA4E0,
+                    "private Mount policy inspect moved");
+                ASSERT(SIZEOF(.overworld_mount_private_inspect) == LENGTH(inspect),
+                    "private Mount policy inspect changed size");
+        } >inspect
+        .overworld_field_mount_hop_tick ORIGIN(hopTick) : {
+                KEEP(*(.overworld_field_mount_hop_tick))
+                ASSERT(ABSOLUTE(ADDR(.overworld_field_mount_hop_tick)) == 0x022083B8,
+                    "private Mount Hop bridge moved");
+                ASSERT(ABSOLUTE(.) <= ORIGIN(hopTick) + LENGTH(hopTick),
+                    "private Mount Hop bridge exceeds Field filler");
+                . = LENGTH(hopTick);
+                ASSERT(SIZEOF(.overworld_field_mount_hop_tick) == LENGTH(hopTick),
+                    "private Mount Hop bridge changed Field filler size");
+        } >hopTick
+        .overworld_mount_combat_tail : {
+                KEEP(*(.overworld_mount_combat_tail))
+                ASSERT(ABSOLUTE(.) == 0x01FFF7EC,
+                    "Mount hit body changed private Hop-ops filler");
+                KEEP(*(.overworld_mount_private_hop_ops))
+                ASSERT(ABSOLUTE(.) == 0x01FFF7FC,
+                    "private Mount Hop ops changed size");
+                ASSERT(SIZEOF(.overworld_mount_combat_tail) <= LENGTH(hit),
+                    "mount hit adapter exceeds resident slot");
+        } >hit
+        .overworld_mount_combat : {
+                KEEP(*(.overworld_mount_combat))
+                /* Append the Walk preview after the fixed HP entry. */
+                KEEP(*(.overworld_mount_preview))
+                ASSERT(ABSOLUTE(.) == 0x01FFFB58,
+                    "Mount preview changed private player-check filler");
+                KEEP(*(.overworld_mount_private_player))
+                ASSERT(ABSOLUTE(.) == 0x01FFFB80,
+                    "private Mount player check changed size");
+                ASSERT(SIZEOF(.overworld_mount_combat) <= LENGTH(combat),
+                    "mount combat capsule exceeds resident slot");
+        } >combat
         .text : {
                 FILL (0xABCD)
                 KEEP(*(.overworld_mount_precode))
@@ -42,11 +93,21 @@ SECTIONS {
                 /* Private forwarding code stays inside this overlay. Its
                  * body and the fixed public entries below do not change. */
                 KEEP(*(.overworld_mount_boundary_thunk))
+                /* Appended in the freed Hop-search reserve; earlier fixed
+                 * private leaves keep their addresses. */
+                KEEP(*(.overworld_mount_jump_landed))
                 ASSERT(. <= ORIGIN(rom) + 0x314,
                     "overworld mount precode exceeds reserve");
                 . = ORIGIN(rom) + 0x314;
                 __text_start = . ;
                 KEEP(*(.overworld_mount_motion))
+                ASSERT(. <= ORIGIN(rom) + 0xAAC,
+                    "overworld mount motion overlaps release grace");
+                . = ORIGIN(rom) + 0xAAC;
+                /* Mounted release grace, called by overlay-159 chain control. */
+                KEEP(*(.overworld_mount_release_grace))
+                ASSERT(ABSOLUTE(OverworldWalk_ApplyReleaseGrace) == ORIGIN(rom) + 0xAAC,
+                    "mounted release grace entry moved");
                 ASSERT(. <= ORIGIN(rom) + 0xB00,
                     "overworld mount motion overlaps fixed entry");
                 . = ORIGIN(rom) + 0xB00;
@@ -97,8 +158,8 @@ SECTIONS {
 
         .bss (NOLOAD) : {
                 __bss_start__ = . ;
-                /* Retain the historic four-byte prefix so the runtime state
-                 * and its resident Select latch keep their fixed addresses. */
+                /* The four-byte prefix stores the last rendered player unk88
+                 * value; the state and Select latch keep their fixed addresses. */
                 . = . + 4;
                 __mount_state_start = ABSOLUTE(.);
                 KEEP(*(.overworld_mount_state))

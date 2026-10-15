@@ -21,7 +21,8 @@ class MountWalkFixtureCommandTests(unittest.TestCase):
             fixture.return_value.run.return_value=deepcopy(native)
             args=self.args();result=DevtoolsSession.mount_walk_configure(session,args)
             fixture.assert_called_once_with(session,args['subject'],1,4,None,
-                                            turning=None,crash_sound=None)
+                                            turning=None,crash_sound=None,fastest_time=None,time_to_full_speed=None,
+                                            time_variance=None)
         self.assertTrue(session.prepared)
         self.assertEqual(result,{**native,'snapshot':endpoint})
 
@@ -38,7 +39,63 @@ class MountWalkFixtureCommandTests(unittest.TestCase):
             args={**self.args(),'stompTime':0}
             DevtoolsSession.mount_walk_configure(session,args)
             fixture.assert_called_once_with(session,args['subject'],1,4,0,
-                                            turning=None,crash_sound=None)
+                                            turning=None,crash_sound=None,fastest_time=None,time_to_full_speed=None,
+                                            time_variance=None)
+
+    def test_time_variance_command_bounds_and_runtime_dispatch(self):
+        from tools.overworld.devtools_runtime import DevtoolsSession
+        for variance in (0, 1, 32):
+            args = {**self.args(), "timeVariance": variance}
+            self.assertEqual(validate_command("mount-walk.configure", args), args)
+            session = SimpleNamespace(prepared=False, snapshot=lambda *a, **k: {},
+                                      _prepared_result_boundary=lambda receipt: receipt)
+            with patch("tools.overworld.devtools_mount_walk_fixture.MountWalkFixture") as fixture:
+                fixture.return_value.run.return_value = {"timeVariance": variance}
+                result = DevtoolsSession.mount_walk_configure(session, args)
+                fixture.assert_called_once_with(session, args["subject"], 1, 4, None,
+                                                turning=None, crash_sound=None, fastest_time=None,
+                                                time_to_full_speed=None, time_variance=variance)
+                self.assertEqual(result["timeVariance"], variance)
+        for variance in (True, -1, 33, 1.5, "0"):
+            with self.subTest(variance=variance), self.assertRaises(ValueError):
+                validate_command("mount-walk.configure", {**self.args(), "timeVariance": variance})
+
+    def test_linear_command_bounds_and_dispatch(self):
+        from tools.overworld.devtools_runtime import DevtoolsSession
+        args = {**self.args(), "travelTime": 16, "fastestTime": 4, "timeToFullSpeed": 120}
+        self.assertEqual(validate_command("mount-walk.configure", args), args)
+        session = SimpleNamespace(prepared=False, snapshot=lambda *a, **k: {},
+                                  _prepared_result_boundary=lambda receipt: receipt)
+        with patch("tools.overworld.devtools_mount_walk_fixture.MountWalkFixture") as fixture:
+            fixture.return_value.run.return_value = {}
+            DevtoolsSession.mount_walk_configure(session, args)
+            fixture.assert_called_once_with(session, args["subject"], 1, 16, None,
+                                            turning=None, crash_sound=None,
+                                            fastest_time=4, time_to_full_speed=120, time_variance=None)
+        for changes in ({"fastestTime": 17}, {"fastestTime": 0}, {"fastestTime": 33},
+                        {"fastestTime": True}, {"timeToFullSpeed": 0},
+                        {"timeToFullSpeed": 256}, {"timeToFullSpeed": True}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                validate_command("mount-walk.configure", {**args, **changes})
+        for missing in ("travelTime", "fastestTime", "timeToFullSpeed"):
+            bad = deepcopy(args)
+            del bad[missing]
+            with self.subTest(missing=missing), self.assertRaises(ValueError):
+                validate_command("mount-walk.configure", bad)
+        value = recipe()
+        value["mode"] = "prepared"
+        value["subjects"][0]["role"] = "MOUNTED"
+        action = dict(id="linear", op="mount-walk.configure",
+                      args={k: v for k, v in args.items() if k != "subject"},
+                      budget=dict(maxSeconds=5, maxFrames=1, noProgressFrames=1))
+        action["args"]["subject"] = "subject"
+        value["setup"] = [action]
+        self.assertEqual(validate_test(value)["setup"], [action])
+        for missing in ("travelTime", "fastestTime", "timeToFullSpeed"):
+            bad = deepcopy(value)
+            del bad["setup"][0]["args"][missing]
+            with self.subTest(test_missing=missing), self.assertRaises(ValueError):
+                validate_test(bad)
 
     def test_failed_native_receipt_reaches_worker_error_details(self):
         from tools.overworld.devtools_runtime import DevtoolsSession
@@ -82,7 +139,7 @@ class MountWalkFixtureCommandTests(unittest.TestCase):
 
     def test_checked_setup_resolves_current_bound_actor(self):
         value=recipe();value['mode']='prepared';value['subjects'][0]['role']='MOUNTED'
-        action=dict(id='lane',op='mount-walk.configure',args=dict(subject='subject',directionMode=1),
+        action=dict(id='lane',op='mount-walk.configure',args=dict(subject='subject',directionMode=1,timeVariance=0),
             budget=dict(maxSeconds=5,maxFrames=1,noProgressFrames=1))
         value['setup']=[action]
         self.assertEqual(validate_test(value)['setup'],[action])
@@ -94,11 +151,21 @@ class MountWalkFixtureCommandTests(unittest.TestCase):
             configured=deepcopy(value)
             configured['setup'][0]['args']['stompTime']=threshold
             with self.assertRaises(ValueError):validate_test(configured)
+        for variance in (0, 32):
+            configured = deepcopy(value)
+            configured['setup'][0]['args']['timeVariance'] = variance
+            self.assertEqual(validate_test(configured)['setup'], configured['setup'])
+        for variance in (True, -1, 33, 1.5, "0"):
+            configured = deepcopy(value)
+            configured['setup'][0]['args']['timeVariance'] = variance
+            with self.subTest(variance=variance), self.assertRaises(ValueError):
+                validate_test(configured)
         evaluator=TestEvaluator(value);current=snapshot();current['actors'][0]['role']='MOUNTED'
         with self.assertRaises(ValueError):evaluator.mount_walk_fixture_args(action['args'],current)
         evaluator.bind('subject',current)
         resolved=evaluator.mount_walk_fixture_args(action['args'],current)
         self.assertEqual(resolved['subject']['handle'],current['actors'][0]['handle'])
+        self.assertEqual(resolved['timeVariance'], 0)
         stale=deepcopy(current);stale['actors'][0]['authorityGeneration']+=1
         with self.assertRaises(ValueError):evaluator.mount_walk_fixture_args(action['args'],stale)
         for bad in ({**value,'mode':'normal'},{**value,'setup':[],'actions':[action]}):

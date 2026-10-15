@@ -1,5 +1,5 @@
 """Host-only scope and state controls for optional spawn reader ablation."""
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 from unittest import TestCase, main
 from unittest.mock import patch
 
@@ -60,10 +60,25 @@ class SpawnCostProbeTests(TestCase):
             with self.assertRaisesRegex(ValueError, "in-flight"):
                 enable_spawn_cost_probe(session, {"mode": "baseline"})
             self.assertFalse(hasattr(session, "spawn_cost_probe"))
-        for name, value in (("native_bridge_active", True), ("pending_samples", []), ("prepared", False)):
+        for name, value in (("native_bridge_active", True), ("pending_samples", [])):
             session, _ = self.fixture()
             setattr(session, name, value)
             with self.assertRaises(ValueError): enable_spawn_cost_probe(session, {"mode": "baseline"})
+
+    def test_baseline_keeps_unchanged_continue_state(self):
+        session, observer = self.fixture()
+        session.prepared = False
+        calls = observer.calls.copy()
+        receipt = enable_spawn_cost_probe(session, {"mode": "baseline"})
+        self.assertFalse(session.prepared)
+        self.assertFalse(receipt["acceptedProof"])
+        self.assertTrue(receipt["acceptanceForbidden"])
+        self.assertEqual(observer.calls, calls)
+        self.assertEqual((session.completed_frames, session.rt.EXECUTED_FRAME_COUNT), (42, 99))
+        session, _ = self.fixture()
+        session.prepared = False
+        with self.assertRaisesRegex(ValueError, "prepared setup"):
+            enable_spawn_cost_probe(session, {"mode": "omit-spawn-details"})
 
     def test_changed_observer_and_counter_exhaustion_latch_failure(self):
         session, observer = self.fixture()
@@ -95,6 +110,7 @@ class SpawnCostProbeTests(TestCase):
             observer.hooks = SimpleNamespace(add=add, remove=lambda pc: callbacks.pop(pc))
             observer.MAX_DEPTH = 64
             observer.TIMED_CALLS = NativeObservation.TIMED_CALLS
+            observer._live_code = MethodType(NativeObservation._live_code, observer)
             observer._guest_clock = lambda: seen.append("guest-clock") or {}
             observer._clock = lambda: dict(nativeCycle=99, actorFrame=20)
             observer._queue = lambda *_: seen.append("queue")

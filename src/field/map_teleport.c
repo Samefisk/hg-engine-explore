@@ -10,6 +10,8 @@
 #include "../../include/map_events_internal.h"
 #include "../../include/overlay.h"
 #include "../../include/overworld_follower_selector.h"
+#include "../../include/player_health.h"
+#include "../../include/task.h"
 #include "../../include/overworld_actor_system_internal.h"
 #include "../../include/overworld_mount_internal.h"
 #include "../../include/overworld_walk_direction_policy.h"
@@ -207,9 +209,14 @@ OverworldFollowerSelector_TaskPoll(FieldSystem *fieldSystem)
             OverworldFollowerSelector_SetYPressPending();
         } else if (!yDown
             && sOverworldFollowerSelectorYWasDown) {
-            /* Confirmation is press-driven. Never turn the opening Y
-             * release into an implicit follower selection. */
-            OverworldFollowerSelector_ClearYReleasePending();
+            /* Hold Y opens the menu; releasing Y confirms the highlighted
+             * slot. An open menu already consumed its press. A press the
+             * menu never consumed (field busy) is dropped, so it cannot
+             * open the menu later; the next press clears this release. */
+            OVERWORLD_FOLLOWER_SELECTOR_STATE =
+                (OVERWORLD_FOLLOWER_SELECTOR_STATE
+                    & (u8)~OVERWORLD_FOLLOWER_SELECTOR_Y_PRESS_PENDING_FLAG)
+                | OVERWORLD_FOLLOWER_SELECTOR_Y_RELEASE_PENDING_FLAG;
         }
     }
     sOverworldFollowerSelectorYWasDown = (u8)yDown;
@@ -353,6 +360,9 @@ static OverworldFieldMapHeaderChangeResult OverworldFieldService_OnMapHeaderChan
     manager = (MapObjectMan *)fieldSystem->mapObjectMan;
 
     if (!sOverworldFieldTransition.active) {
+        if (PlayerHealthOverlay_IsReady()) {
+            PLAYER_HEALTH_OVERLAY_ENTRY->stop(fieldSystem);
+        }
         preserve = fieldSystem->location->mapId == currentMapId
             && fieldSystem->playerAvatar != NULL
             && manager != NULL
@@ -442,6 +452,7 @@ __asm__(
 static BOOL OverworldFieldService_PollFrameImpl(FieldSystem *fieldSystem)
 {
     const OverworldWildSpawnsOverlayEntry *entry;
+    const u8 *fieldState;
 
     if (fieldSystem == NULL) {
         /* A trainer task stops the idle field task that normally retries a
@@ -452,7 +463,31 @@ static BOOL OverworldFieldService_PollFrameImpl(FieldSystem *fieldSystem)
         if (!OverworldFollowerSelector_ForceDirectUnload(NULL)) {
             return FALSE;
         }
+        if (PlayerHealthOverlay_IsReady()) {
+            PLAYER_HEALTH_OVERLAY_ENTRY->stop(NULL);
+        }
+        /* A replaced FieldSystem cannot safely use the old stream call.
+         * Drop its field-owned reservation before the next field enters. */
+        memset(&sOverworldFieldTerrainStream, 0,
+            sizeof(sOverworldFieldTerrainStream));
         sOverworldWildPlayerFrameServiceActive = FALSE;
+        return TRUE;
+    }
+
+    /* Runs on every ready field frame, including maps with no wild actors.
+     * The player-frame service below can sleep while the player rests. */
+    if (PlayerHealthOverlay_IsReady()) {
+        PLAYER_HEALTH_OVERLAY_ENTRY->begin(fieldSystem);
+    }
+    if (fieldSystem->taskman != NULL) {
+        return TRUE;
+    }
+
+    /* Keep the actor motion clock stopped with menus and field applications.
+     * The wild adapter cannot safely pause a Throw after this owner advances. */
+    fieldState = *(const u8 *const *)fieldSystem;
+    if (!sub_0203DF8C(fieldSystem) || fieldState == NULL
+        || *(const u32 *)(fieldState + 8) != 0) {
         return TRUE;
     }
 

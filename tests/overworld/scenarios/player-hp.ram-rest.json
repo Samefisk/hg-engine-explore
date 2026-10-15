@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.ram-rest",
+  "title": "Onix Ram damage and damage-free recovery",
+  "status": "active",
+  "capabilities": ["player.health", "collision.attack"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/player-hp-implementation-plan.md",
+    "actor": "One current WILD Onix (species 95) at map 33 tile (585,411), with the player at (585,407).",
+    "trigger": "Let Onix choose its normal Ram while the player stands still. Then move the hurt player to a safe tile and wait without input.",
+    "observable": "One Ram changes saved and live HP from 100 to 67 without battle and jumps the player from (585,407) to (585,404), with an elevated face height and a stationary movement command. At a safe tile, five stationary seconds do not heal; the next second heals 10 HP. Normal movement keeps the wait and healing rate.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {"phase": "before-observation", "target": "fixture", "change": "Use checked teleport, native Wild Onix spawn four tiles from the player, and exact live identity bind. Keep Onix movement, Ram policy, damage, and player HP unmodified."},
+      {"phase": "during-observation", "target": "fixture", "change": "Use checked teleport to map 34 tile (550,381) only after the Ram receipt. This removes later Onix attacks from the rest measurement."}
+    ],
+    "limits": [
+      "Prepared Onix placement tests the real Ram collision and HP path, not natural population spawn selection.",
+      "The safe-tile teleport and two measured field-settle frames precede the 360 stationary game frames; the first HP read records any arrival rest credit.",
+      "A missing current Onix, incorrect HP/save value, missing or extra knockback, battle transition, player motion during rest, wrong frame count, or lost healing during movement fails."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "onix", "species": 95, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Place and bind Onix four tiles from the player."},
+    {"at": 1, "kind": "lifecycle", "value": "Observe a natural Ram contact and exact HP loss."},
+    {"at": 2, "kind": "setup", "value": "Move the injured player to the safe rest tile."},
+    {"at": 3, "kind": "lifecycle", "value": "Observe 300 still frames, 60 healing frames, and 16 moving healing frames."}
+  ],
+  "stop": {"frameBudget": 910, "condition": "One checked Ram, two field-settle frames, rest threshold, 10 HP heal, and continued moving heal, or the first failed identity, clock, HP, or field observation."},
+  "expect": {"requiredEvents": [], "forbiddenEvents": [],
+    "invariants": ["Current WILD Onix owns the Ram window", "HP and saved HP stay equal", "No battle occurs", "Rest uses 360 exact still field frames"]},
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "player-hp.ram-rest",
+    "claims": ["live-actor-identity", "engine-boundary", "natural-input", "control-release"],
+    "minimumFrames": 548}
+}

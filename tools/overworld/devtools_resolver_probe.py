@@ -9,9 +9,9 @@ import hashlib
 import json
 import struct
 
-from tools.overworld.devtools_resolver_parity import CASE_NAMES, request_bytes
+from tools.overworld.devtools_resolver_parity import CASE_NAMES, RESOLVER_BLOB_VERSION, request_bytes
 
-BUFFER_BYTES = 1536
+BUFFER_BYTES = 1664
 CAPACITY = 14
 REQUEST = 16
 RESULT = 64
@@ -19,7 +19,7 @@ TRACE = 340
 STEPS = 352
 GUARD = b"ResolverGuard-v1"
 
-if STEPS + CAPACITY * 80 > BUFFER_BYTES - len(GUARD):
+if STEPS + CAPACITY * 88 > BUFFER_BYTES - len(GUARD):
     raise RuntimeError("resolver probe trace overlaps its ending guard")
 
 
@@ -37,14 +37,20 @@ def require(condition, message, *, fatal=False):
 
 
 class ResolverProbe:
-    def __init__(self, session, *, blob_address, blob_bytes, service_identity):
+    def __init__(self, session, *, blob_address, blob_bytes, service_identity, query_owner):
         self.session = session
         require(type(blob_address) is int and blob_address % 4 == 0
                 and isinstance(blob_bytes, bytes) and 0 < len(blob_bytes) <= 1024 * 1024
                 and 0x02000000 <= blob_address <= 0x02400000 - len(blob_bytes), "invalid bounded blob")
         require(isinstance(service_identity, dict), "missing authenticated service")
+        require(isinstance(query_owner, dict) and set(query_owner) ==
+                {"stateAddress", "rawHex", "entry", "fieldEpoch", "mapGeneration"}
+                and type(query_owner["stateAddress"]) is int
+                and len(bytes.fromhex(query_owner["rawHex"])) == 28,
+                "missing authenticated loaded Query owner")
         self.blob_address, self.blob = blob_address, blob_bytes
         self.service = deepcopy(service_identity)
+        self.query_owner = deepcopy(query_owner)
         self.blob_identity = {"size": len(blob_bytes), "sha256": hashlib.sha256(blob_bytes).hexdigest()}
         self.field = session.field_pointer()
         self.generation = session.native_heap_generation
@@ -57,7 +63,7 @@ class ResolverProbe:
             if isinstance(vector, dict)
         } if isinstance(vectors, list) else {}
         self.vectors = [by_name.get(name) for name in CASE_NAMES]
-        require(corpus.get("blobVersion") == 81
+        require(corpus.get("blobVersion") == RESOLVER_BLOB_VERSION
                 and all(isinstance(vector, dict) for vector in self.vectors),
                 "canonical resolver cases differ")
         self.requests = [request_bytes(v["request"]) for v in self.vectors]
@@ -69,6 +75,9 @@ class ResolverProbe:
         require(self.session.emu is not None and self.session.field_pointer() == self.field
                 and self.session.native_heap_generation == self.generation,
                 "resolver field/heap owner changed", fatal=True)
+        require(self.session.read(self.query_owner["stateAddress"], 28)
+                == bytes.fromhex(self.query_owner["rawHex"]),
+                "resolver loaded Query owner changed", fatal=True)
 
     def _blob(self):
         self._owner()
@@ -120,15 +129,16 @@ class ResolverProbe:
                         and returned["frame"] >= dispatched["frame"], "resolver clocks moved backwards")
                 trace = []
                 for index in range(count):
-                    offset = STEPS + index * 80
+                    offset = STEPS + index * 88
                     source, lane, kind, flags = struct.unpack_from("<HBBB", observed, offset)
                     require(observed[offset + 5:offset + 8] == bytes(3), "resolver trace reserved bytes changed")
                     trace.append(dict(sourceIndex=source, lane=lane, kind=kind, flags=flags,
-                                      profileHex=observed[offset + 8:offset + 80].hex()))
+                                      profileHex=observed[offset + 8:offset + 88].hex()))
                 self.receipts.append(dict(name=vector["name"], requestHex=request.hex(),
-                    resultHex=observed[RESULT:RESULT + 200].hex(), status=status,
+                    resultHex=observed[RESULT:RESULT + 216].hex(), status=status,
                     traceDropped=dropped, trace=trace, blobIdentity=deepcopy(self.blob_identity),
-                    serviceIdentity=deepcopy(self.service), dispatchClock=dispatched, returnClock=returned))
+                    serviceIdentity=deepcopy(self.service), queryOwner=deepcopy(self.query_owner),
+                    dispatchClock=dispatched, returnClock=returned))
             self.completed = True
         finally:
             # Never free an address from a destroyed/replaced field heap.
@@ -142,6 +152,7 @@ class ResolverProbe:
 
     def result(self):
         return {"completed": self.completed and self.released, "acceptedProof": False,
-                "receipts": deepcopy(self.receipts), "allocation": {"heapId": 11, "bytes": BUFFER_BYTES,
+                "receipts": deepcopy(self.receipts), "queryOwner": deepcopy(self.query_owner),
+                "allocation": {"heapId": 11, "bytes": BUFFER_BYTES,
                 "pointer": self.pointer, "released": self.released},
                 "scope": "controlled native resolver calls; comparator and live acceptance remain separate"}

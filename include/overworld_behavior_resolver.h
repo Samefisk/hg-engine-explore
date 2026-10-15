@@ -113,8 +113,8 @@ typedef struct BehaviorResolveResult {
 
 typedef char BehaviorResolveRequestSizeMustRemain44Bytes[
     sizeof(BehaviorResolveRequest) == 44 ? 1 : -1];
-typedef char BehaviorResolveResultSizeMustRemain200Bytes[
-    sizeof(BehaviorResolveResult) == 200 ? 1 : -1];
+typedef char BehaviorResolveResultSizeMustRemain216Bytes[
+    sizeof(BehaviorResolveResult) == 216 ? 1 : -1];
 typedef char BehaviorResolveTargetReferenceSizeMustRemain14Bytes[
     sizeof(BehaviorResolveTargetReference) == 14 ? 1 : -1];
 

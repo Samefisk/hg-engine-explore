@@ -6,6 +6,7 @@ from tools.overworld.devtools_main_loop_probe import (
     NORMAL_MAIN_LOOP_NATIVE_CYCLES,
 )
 from tools.overworld.devtools_unmounted_zero_stutter_measurement import (
+    BASE_REFILL_INTERVAL_FRAMES,
     KIND,
     MAX_DESTINATION_SCAN_FRAME_SPAN,
     MINIMUM_FRAMES,
@@ -28,6 +29,8 @@ FAULTS = (
     "zero-stutter-player-render-stall",
     "zero-stutter-missing-spawn-work",
     "zero-stutter-slow-spawn-scan",
+    "zero-stutter-short-refill-interval",
+    "zero-stutter-stale-refill-owner",
 )
 
 
@@ -48,6 +51,11 @@ def contract():
             "expected": [5, 6, 1],
         }],
         "population-bounds": [
+            {"name": "zero-stutter-post-success-refill-interval-count", "operator": "gte",
+             "type": "integer", "validator": "meaningful-observation", "minimum": 1},
+            {"name": "zero-stutter-minimum-post-success-refill-frames", "operator": "gte",
+             "type": "integer", "validator": "meaningful-observation",
+             "minimum": BASE_REFILL_INTERVAL_FRAMES},
             {
                 "name": "zero-stutter-spawn-work-witness-count", "operator": "gte",
                 "type": "integer", "validator": "meaningful-observation",
@@ -99,6 +107,7 @@ def measurements(replay, record):
     pacing = meter.get("pacing") or {}
     spawn = meter.get("spawnWork") or {}
     hop = meter.get("hopRhythm") or {}
+    refill = meter.get("refillIntervals") or {}
     subject = meter.get("subject") or {}
     require(replay.get("passed") is True and replay.get("failures") == []
             and meter.get("passed") is True and meter.get("ready") is True
@@ -110,6 +119,9 @@ def measurements(replay, record):
             and subject.get("species") == 56
             and subject.get("role") == "FOLLOWER"
             and subject.get("identityVerified") is True
+            and refill.get("count", 0) >= 1
+            and refill.get("baseFrames") == BASE_REFILL_INTERVAL_FRAMES
+            and refill.get("minimumActorFrames", 0) >= BASE_REFILL_INTERVAL_FRAMES
             and spawn.get("destinationSearchCount", 0) >= 1
             and spawn.get("finalizerCount", 0) >= 1
             and spawn.get("joinedWitnessCount", 0) >= 1
@@ -153,6 +165,10 @@ def measurements(replay, record):
               and isinstance(hop["profileSourceSha256"], str)
               and len(hop["profileSourceSha256"]) == 64)],
          "eq", [5, 6, 1]),
+        ("population-bounds", "zero-stutter-post-success-refill-interval-count",
+         refill["count"], "gte", 1),
+        ("population-bounds", "zero-stutter-minimum-post-success-refill-frames",
+         refill["minimumActorFrames"], "gte", BASE_REFILL_INTERVAL_FRAMES),
         ("population-bounds", "zero-stutter-spawn-work-witness-count",
          spawn["joinedWitnessCount"], "gte", 1),
         ("population-bounds", "zero-stutter-spawn-attempt-frame-span",
@@ -189,6 +205,7 @@ class UnmountedZeroStutterNegative:
         self.previous_pose = None
         self.spawn_attempt_id = None
         self.spawn_attempt_frame = None
+        self.refill_success_frame = None
 
     @staticmethod
     def _anchor(sample):
@@ -221,6 +238,31 @@ class UnmountedZeroStutterNegative:
         if activated_now:
             return row
         if self.applied:
+            return row
+        if self.fault in ("zero-stutter-short-refill-interval",
+                          "zero-stutter-stale-refill-owner"):
+            for event in events:
+                data = event.get("data", {})
+                if data.get("observation") == "entry-native-control" \
+                        and data.get("entry", {}).get("operation") == 7 \
+                        and data["entry"].get("outcome") == 3:
+                    self.refill_success_frame = data.get("returnActorFrame")
+                    continue
+                if data.get("observation") != "spawn-queued":
+                    continue
+                if self.refill_success_frame is not None:
+                    if self.fault == "zero-stutter-stale-refill-owner":
+                        data["worldContext"]["fieldEpoch"] += 1
+                    else:
+                        # Change only copied call clocks and its completed
+                        # Actor clock. The next game/native frame stays intact.
+                        short = self.refill_success_frame + BASE_REFILL_INTERVAL_FRAMES - 1
+                        data["entryActorFrame"] = data["returnActorFrame"] = short
+                        for sample in samples:
+                            if sample.get("frame") == event.get("frame"):
+                                sample["actorFrame"] = short
+                    self.applied = True
+                    return changed
             return row
         if self.fault == "zero-stutter-slow-spawn-scan":
             for event in events:
@@ -279,6 +321,8 @@ def validate_negative_result(result, fault):
         "zero-stutter-player-render-stall": "player render froze during movement",
         "zero-stutter-missing-spawn-work": "ended before its full spawn-work witness",
         "zero-stutter-slow-spawn-scan": "spawn destination scan exceeded its frame budget",
+        "zero-stutter-short-refill-interval": "new refill batch bypassed its base interval",
+        "zero-stutter-stale-refill-owner": "refill interval has a stale Field owner",
     }[fault]
     require(expected in text,
             "zero-stutter copied control failed for an unrelated reason: " + fault)

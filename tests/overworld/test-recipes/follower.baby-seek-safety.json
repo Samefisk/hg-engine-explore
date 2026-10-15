@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 1,
+  "id": "follower.baby-seek-safety",
+  "title": "Baby follower seeks the actual Player after noticing a Pokemon",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.baby-follower-safety"
+  ],
+  "budgets": {
+    "maxSeconds": 300,
+    "maxFrames": 600,
+    "noProgressFrames": 240,
+    "minObservedFrames": 2
+  },
+  "subjects": [
+    {
+      "id": "baby",
+      "species": 173,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    },
+    {
+      "id": "threat",
+      "species": 155,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "baby-follower-safety-v1",
+      "subject": "baby"
+    }
+  ],
+  "setup": [
+    {
+      "id": "safety-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 408,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-baby",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 173,
+        "level": 5
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "spawn-baby",
+      "op": "spawn",
+      "args": {
+        "species": 173,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 5
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-baby",
+      "op": "bind",
+      "args": {
+        "subject": "baby"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-threat",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "role": "wild",
+        "level": 5,
+        "x": 585,
+        "z": 410,
+        "form": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-threat",
+      "op": "bind",
+      "args": {
+        "subject": "threat"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "move-to-safety",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "UP",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "observe-safety",
+      "op": "step",
+      "args": {
+        "frames": 240,
+        "keys": [],
+        "until": {
+          "kind": "measurement-complete",
+          "measurement": "baby-follower-safety-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "baby-follower-safety-v1",
+      "when": "final"
+    }
+  ]
+}

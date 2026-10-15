@@ -92,7 +92,7 @@ class NativeWildWalkObserver(NativeMountedPacingObserver):
         self._require(0 <= regs.r3 <= 255 and all(value <= limit for value, limit in
             zip(words,(255,255,255,65535,255,255,65535))), "request arguments exceed native widths")
         request = dict(kind=regs.r3,lanePointer=regs.r2,
-            laneHex=public_bytes(self.session,regs.r2,72).hex(),
+            laneHex=public_bytes(self.session,regs.r2,80).hex(),
             **dict(zip(("visibility","arc","facing","duration","spin","sway","surfaceId"),words)))
         value = dict(request=request,before=self._read_request_state(current))
         self.request_count += 1

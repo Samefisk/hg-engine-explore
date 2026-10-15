@@ -45,7 +45,7 @@ def validate_baseline(natural):
              "matrix control baseline case differs")
         validate_motion(**motion)
         profile = bytes.fromhex(config["profileHex"])
-        need(len(profile) == 72 and profile[7] == profile[51] == expected["duration"]
+        need(len(profile) == 80 and profile[7] == profile[51] == expected["duration"]
              and (profile[19] & 0x03) == expected["mode"] and profile[50] == 0,
              "matrix control baseline profile differs")
     need(natural["cases"][0]["reservation"] != natural["cases"][1]["reservation"],

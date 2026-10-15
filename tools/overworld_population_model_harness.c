@@ -1,6 +1,7 @@
 #include "overworld_population_model.h"
 
 #include <stdio.h>
+#include <stddef.h>
 #include <string.h>
 
 static int sFailures;
@@ -262,6 +263,7 @@ static void CheckFieldLifecycleAndPausedTimer(void)
             && state.fieldEpoch == 6
             && state.centerX == 8
             && state.centerY == 9
+            && state.refillTimer == 1 && state.refillArmed
             && (result.flags & OVERWORLD_POPULATION_RESULT_RECONCILE_DUE)
             && result.pending,
         "field rebind updates region and queues one reconciliation");
@@ -270,7 +272,17 @@ static void CheckFieldLifecycleAndPausedTimer(void)
     CHECK(Apply(&state, &input, &result) == OVERWORLD_POPULATION_DECISION_OK
             && state.fieldActive,
         "field resume restarts eligible frame time");
-
+    input = MakeInput(OVERWORLD_POPULATION_INPUT_FRAME, 6);
+    input.flags = OVERWORLD_POPULATION_INPUT_TIMER_ELIGIBLE;
+    (void)Apply(&state, &input, &result);
+    CHECK(state.refillArmed && result.refillTimer == 0
+            && !(result.flags & OVERWORLD_POPULATION_RESULT_REFILL_DUE),
+        "rebind retains the old wait and resumes its remaining frame");
+    (void)Apply(&state, &input, &result);
+    CHECK(!state.refillArmed
+            && (result.flags & OVERWORLD_POPULATION_RESULT_REFILL_DUE),
+        "map crossing cannot bypass the carried wait expiry");
+    input = MakeInput(OVERWORLD_POPULATION_INPUT_FIELD_EVENT, 6);
     input.event = OVERWORLD_POPULATION_FIELD_DISCARD;
     input.eventSequence = 4;
     CHECK(Apply(&state, &input, &result) == OVERWORLD_POPULATION_DECISION_OK
@@ -295,8 +307,101 @@ static void CheckFieldLifecycleAndPausedTimer(void)
         "discard reconciliation does not create a dirty second pass");
 }
 
+static void CheckNativePlayerRequestsMaintenance(void)
+{
+    OverworldPopulationState state;
+    OverworldPopulationState before;
+    OverworldPopulationResult result;
+    OverworldPopulationInput input;
+    u8 phase;
+
+    Reset(&state, 7, 585, 411);
+    input = MakeInput(OVERWORLD_POPULATION_INPUT_PATH_ADVANCE, 7);
+    input.eventSequence = 1;
+    input.logicalX = 585;
+    input.logicalY = 412;
+    input.flags = OVERWORLD_POPULATION_INPUT_PLAYER_CENTERED
+        | OVERWORLD_POPULATION_INPUT_NATIVE_PLAYER;
+    CHECK(Apply(&state, &input, &result) == OVERWORLD_POPULATION_DECISION_OK
+            && state.centerX == 585 && state.centerY == 412
+            && state.maintenanceState == 1 && result.pending
+            && result.work == OVERWORLD_POPULATION_WORK_NONE
+            && (result.flags & OVERWORLD_POPULATION_RESULT_REGION_CHANGED)
+            && (result.flags & OVERWORLD_POPULATION_RESULT_RECONCILE_DUE),
+        "changed native Player center queues one maintenance pass");
+    before = state;
+    CHECK(Apply(&state, &input, &result) == OVERWORLD_POPULATION_DECISION_DUPLICATE
+            && memcmp(&state, &before, sizeof(state)) == 0
+            && !(result.flags & OVERWORLD_POPULATION_RESULT_RECONCILE_DUE),
+        "duplicate native Player step cannot dirty or advance the pass");
+    input.eventSequence = 2;
+    (void)Apply(&state, &input, &result);
+    CHECK(state.maintenanceState == 1
+            && !(result.flags & OVERWORLD_POPULATION_RESULT_RECONCILE_DUE),
+        "same-center native observation does not request work again");
+    before = state;
+    input.logicalY = 413;
+    input.eventSequence = 1;
+    CHECK(Apply(&state, &input, &result) == OVERWORLD_POPULATION_DECISION_STALE_SEQUENCE
+            && memcmp(&state, &before, sizeof(state)) == 0,
+        "stale native Player sequence cannot queue another pass");
+    input.eventSequence = 3;
+    input.fieldEpoch = 8;
+    CHECK(Apply(&state, &input, &result) == OVERWORLD_POPULATION_DECISION_STALE_FIELD
+            && memcmp(&state, &before, sizeof(state)) == 0,
+        "wrong Field native Player step cannot queue another pass");
+    input.fieldEpoch = 7;
+    input.kind = OVERWORLD_POPULATION_INPUT_COMMIT;
+    (void)Apply(&state, &input, &result);
+    CHECK(state.centerY == 412 && state.maintenanceState == 1
+            && (result.flags & OVERWORLD_POPULATION_RESULT_COMMIT_OBSERVED)
+            && !(result.flags & OVERWORLD_POPULATION_RESULT_RECONCILE_DUE),
+        "COMMIT remains observation only even with native Player flags");
+
+    Reset(&state, 7, 585, 411);
+    input.kind = OVERWORLD_POPULATION_INPUT_PATH_ADVANCE;
+    input.eventSequence = 1;
+    input.flags = OVERWORLD_POPULATION_INPUT_NATIVE_PLAYER;
+    (void)Apply(&state, &input, &result);
+    CHECK(state.centerY == 411 && !result.pending
+            && !(result.flags & OVERWORLD_POPULATION_RESULT_RECONCILE_DUE),
+        "non-centered actor input cannot request Player maintenance");
+    input.eventSequence = 2;
+    input.flags = OVERWORLD_POPULATION_INPUT_PLAYER_CENTERED;
+    (void)Apply(&state, &input, &result);
+    CHECK(state.centerY == 413 && !result.pending
+            && (result.flags & OVERWORLD_POPULATION_RESULT_REGION_CHANGED)
+            && !(result.flags & OVERWORLD_POPULATION_RESULT_RECONCILE_DUE),
+        "non-native centered input retains center behavior without new work");
+
+    for (phase = 1; phase <= 4; phase++) {
+        Reset(&state, 7, 585, 411);
+        state.maintenanceState = phase;
+        input.eventSequence = 1;
+        input.logicalY = 412;
+        input.flags = OVERWORLD_POPULATION_INPUT_PLAYER_CENTERED
+            | OVERWORLD_POPULATION_INPUT_NATIVE_PLAYER;
+        (void)Apply(&state, &input, &result);
+        CHECK(state.maintenanceState == (u8)(phase | 0x80)
+                && result.pending && result.work == OVERWORLD_POPULATION_WORK_NONE
+                && (result.flags & OVERWORLD_POPULATION_RESULT_RECONCILE_DUE),
+            "native Player step preserves queued phase and marks dirty replay");
+        input.eventSequence = 2;
+        input.logicalY = 413;
+        (void)Apply(&state, &input, &result);
+        CHECK(state.maintenanceState == (u8)(phase | 0x80)
+                && result.work == OVERWORLD_POPULATION_WORK_NONE,
+            "another native step cannot advance or replace active maintenance");
+    }
+}
+
 int main(void)
 {
+    CHECK(offsetof(OverworldPopulationState, centerX) == 8
+            && offsetof(OverworldPopulationState, centerY) == 10
+            && offsetof(OverworldPopulationInput, logicalX) == 8
+            && offsetof(OverworldPopulationInput, logicalY) == 10,
+        "paired population center copy stays aligned and adjacent");
     CHECK(sizeof(OverworldPopulationInput) == 24,
         "population input stays 24 bytes");
     CHECK(sizeof(OverworldPopulationResult) == 8,
@@ -309,6 +414,7 @@ int main(void)
     CheckBoundedWorkOrderAndDirtyReplay();
     CheckExplicitPathAndCommitInputs();
     CheckOneWrapSafeWorldSequence();
+    CheckNativePlayerRequestsMaintenance();
     CheckFieldLifecycleAndPausedTimer();
     if (sFailures != 0) {
         fprintf(stderr, "%d population model checks failed\n", sFailures);

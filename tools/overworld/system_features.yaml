@@ -26,13 +26,561 @@
   ],
   "checks": [
     {
+      "id": "host.pokemon-combat-storage",
+      "title": "Check production Pok\u00e9mon HP ownership, caps, guards and fainting",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_pokemon_combat.py"
+      ],
+      "requires": [],
+      "sourcePatterns": [
+        "include/overworld_combat.h",
+        "include/overworld_wild_spawns_internal.h",
+        "src/player_health_pokemon.c",
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "scripts/verify_pokemon_combat.py"
+      ]
+    },
+    {
+      "id": "host.pokemon-contact-owner",
+      "title": "Check resident Actor readiness and current Pok\u00e9mon contact ownership",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_pokemon_contact_owner.py"
+      ],
+      "requires": [],
+      "sourcePatterns": [
+        "include/overworld_actor_system.h",
+        "src/player_health_contact.c",
+        "scripts/verify_pokemon_contact_owner.py"
+      ]
+    },
+    {
+      "id": "runtime.pokemon-combat",
+      "title": "Check real wild and party Pok\u00e9mon collision HP and shared knockback",
+      "proofLevel": "S4",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "pokemon-hp.collision-knockback"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/overworld_combat.h",
+        "include/overworld_actor_system.h",
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "src/overworld_mount_overlay/overworld_mount_overlay.c",
+        "scripts/verify_pokemon_combat.py",
+        "scripts/verify_pokemon_contact_owner.py",
+        "scripts/pack_overworld_combat_capsules.py",
+        "scripts/generate_player_health_debug.py",
+        "tools/overworld/devtools_pokemon_combat*.py",
+        "tests/overworld/test-recipes/pokemon-hp.collision-knockback.json",
+        "tests/overworld/scenarios/pokemon-hp.collision-knockback.json"
+      ]
+    },
+    {
+      "id": "runtime.player-health-weepinbell-blocked-step",
+      "title": "Check Route 29 blocked Walk beside spawned Weepinbell keeps the main loop live",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "player-hp.weepinbell-blocked-step"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "armips/asm/overworld_mount.s",
+        "tools/overworld/devtools_weepinbell_blocked_step_proof.py",
+        "tests/overworld/test-recipes/player-hp.weepinbell-blocked-step.json",
+        "tests/overworld/scenarios/player-hp.weepinbell-blocked-step.json"
+      ]
+    },
+    {
+      "id": "runtime.player-health-route29-blocked-step",
+      "title": "Check Route 29 blocked Walk keeps the main loop live",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "player-hp.route29-blocked-step"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "armips/asm/overworld_mount.s",
+        "tools/overworld/devtools_route29_blocked_step_proof.py",
+        "tests/overworld/test-recipes/player-hp.route29-blocked-step.json",
+        "tests/overworld/scenarios/player-hp.route29-blocked-step.json"
+      ]
+    },
+    {
+      "id": "runtime.player-health-ram-low-speed",
+      "title": "Check adjacent low-speed Onix Ram leaves player HP unchanged",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "player-hp.ram-low-speed"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "lib/overworld/player_health_model.c",
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "data/overworld_behavior_profiles.json",
+        "scripts/generate_player_health_debug.py",
+        "tools/overworld/devtools_player_health*.py",
+        "tests/overworld/test-recipes/player-hp.ram-low-speed.json",
+        "tests/overworld/scenarios/player-hp.ram-low-speed.json"
+      ]
+    },
+    {
+      "id": "runtime.player-health-mounted-throw",
+      "title": "Check north-facing mounted rider clearance from Wild Throw",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "player-hp.mounted-throw"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "src/overworld_mount_chain_overlay/overworld_mount_presentation.c",
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "data/overworld_behavior_profiles.json",
+        "scripts/generate_player_health_debug.py",
+        "tools/overworld/devtools_player_health*.py",
+        "tests/overworld/test-recipes/player-hp.mounted-throw.json",
+        "tests/overworld/scenarios/player-hp.mounted-throw.json"
+      ]
+    },
+    {
+      "id": "runtime.player-health-zero-load",
+      "title": "Check zero-HP Continue through one stock blackout and normal movement",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "player-hp.zero-load"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "lib/overworld/player_health_model.c",
+        "scripts/generate_player_health_debug.py",
+        "scripts/overworld_devtools_worker.py",
+        "tools/overworld/devtools_player_health*.py",
+        "tools/overworld/player_health_zero_load_fixture.py",
+        "tools/overworld/devtools_player_health_zero_load*.py",
+        "tools/overworld/devtools_runtime.py",
+        "tests/overworld/test-recipes/player-hp.zero-load.json",
+        "tests/overworld/scenarios/player-hp.zero-load.json"
+      ]
+    },
+    {
+      "id": "runtime.player-health-save-reload",
+      "title": "Check injured HP across stock Save and private cartridge reload",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "player-hp.save-reload"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "lib/overworld/player_health_model.c",
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "data/overworld_behavior_profiles.json",
+        "scripts/generate_player_health_debug.py",
+        "scripts/overworld_devtools_worker.py",
+        "tools/overworld/devtools_player_health*.py",
+        "tools/overworld/devtools_start_menu_observer.py",
+        "tools/overworld/devtools_runtime.py",
+        "tests/overworld/test-recipes/player-hp.save-reload.json",
+        "tests/overworld/scenarios/player-hp.save-reload.json"
+      ]
+    },
+    {
+      "id": "runtime.player-health-ram-warning",
+      "title": "Check amber HP warning during an active wild Onix Ram",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "player-hp.ram-warning"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "lib/overworld/player_health_model.c",
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "data/overworld_behavior_profiles.json",
+        "scripts/generate_player_health_debug.py",
+        "tools/overworld/devtools_player_health*.py",
+        "tests/overworld/test-recipes/player-hp.ram-warning.json",
+        "tests/overworld/scenarios/player-hp.ram-warning.json"
+      ]
+    },
+    {
+      "id": "runtime.player-health-bar",
+      "title": "Check native player HP bar submission after Ram",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "player-hp.bar"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "lib/overworld/player_health_model.c",
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "data/overworld_behavior_profiles.json",
+        "scripts/generate_player_health_debug.py",
+        "tools/overworld/devtools_player_health*.py",
+        "tests/overworld/test-recipes/player-hp.bar.json",
+        "tests/overworld/scenarios/player-hp.bar.json"
+      ]
+    },
+    {
+      "id": "runtime.player-health-throw-contact",
+      "title": "Check wild Geodude Throw contact in the current ROM",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "player-hp.throw-contact"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "lib/overworld/player_health_model.c",
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "src/overworld_wild_helper_overlay/*.c",
+        "data/overworld_behavior_profiles.json",
+        "scripts/generate_player_health_debug.py",
+        "tools/overworld/devtools_player_health*.py",
+        "tests/overworld/test-recipes/player-hp.throw-contact.json",
+        "tests/overworld/scenarios/player-hp.throw-contact.json"
+      ]
+    },
+    {
+      "id": "runtime.player-health-hop-contact",
+      "title": "Check ordinary Wild Mankey Hop contact in the current ROM",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "player-hp.hop-contact"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "lib/overworld/player_health_model.c",
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "data/overworld_behavior_profiles.json",
+        "scripts/generate_player_health_debug.py",
+        "tools/overworld/devtools_player_health_hop_contact*.py",
+        "tests/overworld/test-recipes/player-hp.hop-contact.json",
+        "tests/overworld/scenarios/player-hp.hop-contact.json"
+      ]
+    },
+    {
+      "id": "runtime.player-health-ambush-jump",
+      "title": "Check active Wild Weepinbell Ambush south Jump1 knockback in the current ROM",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "player-hp.ambush-jump"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "lib/overworld/player_health_model.c",
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "data/overworld_behavior_profiles.json",
+        "scripts/generate_player_health_debug.py",
+        "tools/overworld/devtools_player_health_ambush_jump*.py",
+        "tests/overworld/test-recipes/player-hp.ambush-jump.json",
+        "tests/overworld/scenarios/player-hp.ambush-jump.json"
+      ]
+    },
+    {
+      "id": "runtime.player-health-mounted-ambush-height",
+      "title": "Mounted Ambush hit moves one shared anchor and restores seat height",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "player-hp.mounted-ambush-height"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "lib/overworld/player_health_model.c",
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "data/overworld_behavior_profiles.json",
+        "scripts/generate_player_health_debug.py",
+        "tools/overworld/devtools_player_health_mounted_ambush_height*.py",
+        "tests/overworld/test-recipes/player-hp.mounted-ambush-height.json",
+        "tests/overworld/scenarios/player-hp.mounted-ambush-height.json",
+        "src/overworld_mount_overlay/overworld_mount_overlay.c"
+      ]
+    },
+    {
+      "id": "runtime.wild-throw-moving-candidate",
+      "title": "Check Geodude pursuit and Throw pickup of a walking Wild Snorlax",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "wild.throw-moving-candidate"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "src/overworld_wild_helper_overlay/*.c",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_wild_throw_moving_candidate*.py",
+        "tests/overworld/test-recipes/wild.throw-moving-candidate.json",
+        "tests/overworld/scenarios/wild.throw-moving-candidate.json",
+        "lib/overworld/overworld_cargo_query_wild.c",
+        "lib/overworld/overworld_pickup_route_wild.c",
+        "include/overworld_pickup_route_wild.h",
+        "include/overworld_pickup_reach.h",
+        "tools/overworld/devtools_cargo_route_continuity.py",
+        "tools/overworld/test_devtools_cargo_route_continuity.py",
+        "tools/overworld/devtools_query_observer.py",
+        "tools/overworld/devtools_moving_cargo_pickup.py",
+        "tools/overworld/devtools_application_bank.py",
+        "tools/overworld/test_devtools_cargo_autonomy.py"
+      ]
+    },
+    {
+      "id": "runtime.player-health-ram-rest",
+      "title": "Check Onix Ram damage and damage-free still/moving healing",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "player-hp.ram-rest"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "lib/overworld/player_health_model.c",
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "data/overworld_behavior_profiles.json",
+        "scripts/generate_player_health_debug.py",
+        "tools/overworld/devtools_player_health*.py",
+        "tests/overworld/test-recipes/player-hp.ram-rest.json",
+        "tests/overworld/scenarios/player-hp.ram-rest.json"
+      ]
+    },
+    {
+      "id": "runtime.player-health-initial-state",
+      "title": "Check old-save player HP initialization in the current ROM",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "player-hp.initial-state"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "lib/overworld/player_health_model.c",
+        "scripts/generate_player_health_debug.py",
+        "tools/overworld/devtools_player_health*.py",
+        "tests/overworld/test-recipes/player-hp.initial-state.json",
+        "tests/overworld/scenarios/player-hp.initial-state.json"
+      ]
+    },
+    {
       "id": "host.mount-gait",
       "title": "Compiled mounted gait invariants across all speed and control settings",
       "proofLevel": "S1",
       "costTier": 1,
-      "command": ["{python}", "tools/overworld/test_mount_gait_model.py"],
+      "command": [
+        "{python}",
+        "tools/overworld/test_mount_gait_model.py"
+      ],
       "requires": [],
-      "sourcePatterns": ["include/overworld_mount_gait_model.h", "lib/overworld/overworld_mount_gait_model.c", "tools/overworld/test_mount_gait_model.py"]
+      "sourcePatterns": [
+        "include/overworld_mount_gait_model.h",
+        "lib/overworld/overworld_mount_gait_model.c",
+        "tools/overworld/test_mount_gait_model.py"
+      ]
     },
     {
       "id": "package.wild-occupancy",
@@ -476,7 +1024,6 @@
         "tools/overworld/runtime_proof_registry.json",
         "tools/overworld/system_features.yaml",
         "tools/overworld/test_profile_building_block_runtime_contracts.py",
-        "tests/overworld/scenarios/profile.notice-player.routine-return.json",
         "tests/overworld/scenarios/profile.stalker.visibility-gate.json",
         "tests/overworld/scenarios/profile.playful.target-and-collision.json",
         "tests/overworld/scenarios/profile.startled.timed-retreat.json",
@@ -680,6 +1227,24 @@
         "scripts/verify_overworld_motion_start_transaction.py",
         "tools/overworld/fixtures/motion_start_transaction_harness.c",
         "tools/overworld/test_motion_start_transaction.py"
+      ]
+    },
+    {
+      "id": "host.random-hop-search",
+      "title": "Random Hop preserves legal choice and stops at the first valid landing",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_random_hop_search.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_helper_overlay/**",
+        "tools/overworld/test_random_hop_search.py",
+        "tools/overworld/test_wander_straight_chance.py"
       ]
     },
     {
@@ -1166,7 +1731,8 @@
       ],
       "sourcePatterns": [
         "src/overworld_mount_overlay/**",
-        "src/pokemon_move_history_overlay/**"
+        "src/pokemon_move_history_overlay/**",
+        "src/overworld_mount_action_overlay/**"
       ]
     },
     {
@@ -1240,29 +1806,6 @@
       ]
     },
     {
-      "id": "runtime.mankey-hops",
-      "title": "Run mounted Mankey Hop cases",
-      "proofLevel": "S4",
-      "costTier": 4,
-      "command": [
-        "{python}",
-        "scripts/owctl",
-        "scenario",
-        "run",
-        "legacy.mankey-hops"
-      ],
-      "requires": [
-        "build",
-        "rom",
-        "sav",
-        "emulator"
-      ],
-      "sourcePatterns": [
-        "src/overworld_mount_overlay/**",
-        "src/pokemon_move_history_task6_overlay/**"
-      ]
-    },
-    {
       "id": "runtime.wild-teleport",
       "title": "Run a live wild Gastly Teleport lifecycle",
       "proofLevel": "S3",
@@ -1286,30 +1829,6 @@
       ]
     },
     {
-      "id": "runtime.mankey-control-stress",
-      "title": "Run mounted Mankey control stress",
-      "proofLevel": "S5",
-      "costTier": 5,
-      "command": [
-        "{python}",
-        "scripts/owctl",
-        "scenario",
-        "run",
-        "legacy.mankey-control-stress"
-      ],
-      "requires": [
-        "build",
-        "rom",
-        "sav",
-        "emulator"
-      ],
-      "sourcePatterns": [
-        "src/overworld_mount_overlay/**",
-        "src/pokemon_move_history_task6_overlay/**",
-        "src/field/map_teleport.c"
-      ]
-    },
-    {
       "id": "runtime.mount-walk-transition",
       "title": "Run mounted Walk transition",
       "proofLevel": "S4",
@@ -1330,30 +1849,6 @@
       "sourcePatterns": [
         "src/overworld_mount_overlay/**",
         "src/field/map_teleport.c"
-      ]
-    },
-    {
-      "id": "runtime.mount-transition",
-      "title": "Run mounted Hop transition",
-      "proofLevel": "S5",
-      "costTier": 5,
-      "command": [
-        "{python}",
-        "scripts/owctl",
-        "scenario",
-        "run",
-        "legacy.mounted-transition"
-      ],
-      "requires": [
-        "build",
-        "rom",
-        "sav",
-        "emulator"
-      ],
-      "sourcePatterns": [
-        "src/overworld_mount_overlay/**",
-        "src/field/map_teleport.c",
-        "src/pokemon_move_history_task6_overlay/**"
       ]
     },
     {
@@ -1651,9 +2146,2700 @@
         "src/overworld_wild_helper_overlay/**",
         "tools/overworld/test_spawn_destination_scan.py"
       ]
+    },
+    {
+      "id": "runtime.pokemon-skid-hit",
+      "title": "Check natural mounted skid hit plays Crash before shared knockback",
+      "proofLevel": "S4",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "pokemon-hp.skid-hit-crash-knockback"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/overworld_combat.h",
+        "src/player_health_pokemon.c",
+        "src/player_health_overlay/overworld_actor_hit_crash.c",
+        "src/overworld_mount_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "tools/overworld/devtools_pokemon_skid_hit*.py",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tests/overworld/test-recipes/pokemon-hp.skid-hit-crash-knockback.json",
+        "tests/overworld/scenarios/pokemon-hp.skid-hit-crash-knockback.json"
+      ]
+    },
+    {
+      "id": "host.follower-stop-facing",
+      "title": "Check empty follower stop replies preserve facing through production C",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_follower_stop_facing.py"
+      ],
+      "requires": [],
+      "sourcePatterns": [
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c",
+        "src/player_health_overlay/overworld_walk_input_policy.c",
+        "src/pokemon_move_history_overlay/overworld_walk_module.c",
+        "include/overworld_wild_movement.h",
+        "include/overworld_wild_behavior_data.h",
+        "include/overworld_actor_system.h",
+        "include/overworld_actor_system_internal.h",
+        "include/overworld_walk_timing_policy.h",
+        "scripts/verify_overworld_role_controller.py",
+        "tools/overworld/test_follower_stop_facing.py"
+      ]
+    },
+    {
+      "id": "runtime.follower-stop-facing",
+      "title": "Check a current Stantler follower keeps its final Walk facing at rest",
+      "proofLevel": "S3",
+      "costTier": 2,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "walk.follower.stop-facing"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "tests/overworld/test-recipes/walk.follower.stop-facing.json",
+        "tests/overworld/scenarios/walk.follower.stop-facing.json",
+        "tools/overworld/devtools_follower_stop_measurement.py",
+        "tools/overworld/devtools_follower_stop_proof.py",
+        "tools/overworld/test_devtools_follower_stop_measurement.py",
+        "tools/overworld/devtools_profile_feature_measurement.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json"
+      ]
+    },
+    {
+      "id": "host.ram-until-crash",
+      "title": "Check Until Crash, strict32 sight, momentum and caller continuation through production C",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "scripts/verify_overworld_condition_until_crash.py"
+      ],
+      "requires": [],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_behavior_condition*.h",
+        "include/overworld_wild_runtime_state_internal.h",
+        "include/overworld_vision.h",
+        "include/overworld_walk_timing_policy.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "lib/overworld/overworld_vision.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/player_health_overlay/overworld_walk_input_policy.c",
+        "src/pokemon_move_history_overlay/overworld_walk_module.c",
+        "src/overworld_follower_selector_overlay/overworld_behavior_condition_service.c",
+        "tools/overworld/devtools_ram_until_crash*.py",
+        "tools/overworld/test_devtools_ram_until_crash_measurement.py",
+        "tools/overworld/devtools_profile_feature_measurement.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/profile.ram.until-crash.json",
+        "tests/overworld/scenarios/profile.ram.until-crash.json",
+        "scripts/verify_overworld_condition_until_crash.py"
+      ]
+    },
+    {
+      "id": "runtime.ram-until-crash",
+      "title": "Check natural Onix charge survives lost sight until real Crash",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "profile.ram.until-crash"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_behavior_condition*.h",
+        "include/overworld_wild_runtime_state_internal.h",
+        "include/overworld_vision.h",
+        "include/overworld_walk_timing_policy.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "lib/overworld/overworld_vision.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/player_health_overlay/overworld_walk_input_policy.c",
+        "src/pokemon_move_history_overlay/overworld_walk_module.c",
+        "src/overworld_follower_selector_overlay/overworld_behavior_condition_service.c",
+        "tools/overworld/devtools_ram_until_crash*.py",
+        "tools/overworld/test_devtools_ram_until_crash_measurement.py",
+        "tools/overworld/devtools_profile_feature_measurement.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/profile.ram.until-crash.json",
+        "tests/overworld/scenarios/profile.ram.until-crash.json",
+        "tests/overworld/test-recipes/profile.ram.behind-entry.json",
+        "tests/overworld/scenarios/profile.ram.behind-entry.json"
+      ]
+    },
+    {
+      "id": "runtime.ram-behind-entry",
+      "title": "Check Ram activation with the player behind, locked North movement, Crash and cooldown",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "profile.ram.behind-entry"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_behavior_condition*.h",
+        "include/overworld_wild_runtime_state_internal.h",
+        "include/overworld_vision.h",
+        "include/overworld_walk_timing_policy.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "lib/overworld/overworld_vision.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/player_health_overlay/overworld_walk_input_policy.c",
+        "src/pokemon_move_history_overlay/overworld_walk_module.c",
+        "src/overworld_follower_selector_overlay/overworld_behavior_condition_service.c",
+        "tools/overworld/devtools_ram_until_crash*.py",
+        "tools/overworld/test_devtools_ram_until_crash_measurement.py",
+        "tools/overworld/devtools_profile_feature_measurement.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/profile.ram.until-crash.json",
+        "tests/overworld/scenarios/profile.ram.until-crash.json",
+        "tests/overworld/test-recipes/profile.ram.behind-entry.json",
+        "tests/overworld/scenarios/profile.ram.behind-entry.json"
+      ]
+    },
+    {
+      "id": "runtime.world.transition.wild-roof-height",
+      "title": "Check retained rooftop height across a natural field handoff",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "world.transition.wild-roof-height"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/overworld_actor_system_overlay/**",
+        "src/field/map_teleport.c",
+        "include/overworld_actor_system.h",
+        "include/overworld_wild_behavior_data.h",
+        "include/overworld_wild_spawns_internal.h",
+        "src/overworld_wild_behavior_data_overlay/**",
+        "data/OverworldWildBehaviorData.c",
+        "tools/overworld/devtools_wild_surface_rebind*.py",
+        "tools/overworld/test_devtools_wild_surface_rebind_measurement.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "scripts/verify_overworld_rebind_pass_through.py",
+        "tools/overworld/devtools_runtime.py",
+        "tools/overworld/devtools_engine.py",
+        "tools/overworld/control.py",
+        "tests/overworld/test-recipes/world.transition.wild-roof-height.json",
+        "tests/overworld/scenarios/world.transition.wild-roof-height.json"
+      ]
+    },
+    {
+      "id": "runtime.world.transition.wild-signpost-height",
+      "title": "Check retained signpost height across a natural field handoff",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "world.transition.wild-signpost-height"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/overworld_actor_system_overlay/**",
+        "src/field/map_teleport.c",
+        "include/overworld_actor_system.h",
+        "include/overworld_wild_behavior_data.h",
+        "include/overworld_wild_spawns_internal.h",
+        "src/overworld_wild_behavior_data_overlay/**",
+        "data/OverworldWildBehaviorData.c",
+        "tools/overworld/devtools_wild_surface_rebind*.py",
+        "tools/overworld/test_devtools_wild_surface_rebind_measurement.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "scripts/verify_overworld_rebind_pass_through.py",
+        "tools/overworld/devtools_runtime.py",
+        "tools/overworld/devtools_engine.py",
+        "tools/overworld/control.py",
+        "tests/overworld/test-recipes/world.transition.wild-signpost-height.json",
+        "tests/overworld/scenarios/world.transition.wild-signpost-height.json"
+      ]
+    },
+    {
+      "id": "host.pokemon-palette-reader",
+      "title": "Check actual palette reader methods and copied-receipt rejection",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_devtools_appearance_palette.py"
+      ],
+      "requires": [],
+      "sourcePatterns": [
+        "include/overworld_actor_appearance*.h",
+        "include/overworld_appearance_policy.h",
+        "lib/overworld/overworld_actor_appearance*.c",
+        "lib/overworld/overworld_appearance_policy.c",
+        "lib/overworld/overworld_field_capsule.ld",
+        "armips/asm/overworld_field_capsule.s",
+        "scripts/*overworld_field_capsule.py",
+        "include/overworld_combat.h",
+        "src/player_health*.c",
+        "include/overworld_behavior_conditions.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "data/overworld_behavior_profiles.json",
+        "src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.c",
+        "tools/overworld/devtools_appearance*.py",
+        "tools/overworld/test_devtools_appearance_palette.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_runtime.py",
+        "tools/overworld/devtools_observer.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/*/pokemon-appearance.*.json"
+      ]
+    },
+    {
+      "id": "runtime.pokemon-appearance.damage-palette",
+      "title": "Check actual damage red palette upload and material use",
+      "proofLevel": "S4",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "pokemon-appearance.damage-palette"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/overworld_actor_appearance*.h",
+        "include/overworld_appearance_policy.h",
+        "lib/overworld/overworld_actor_appearance*.c",
+        "lib/overworld/overworld_appearance_policy.c",
+        "lib/overworld/overworld_field_capsule.ld",
+        "armips/asm/overworld_field_capsule.s",
+        "scripts/*overworld_field_capsule.py",
+        "include/overworld_combat.h",
+        "src/player_health*.c",
+        "include/overworld_behavior_conditions.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "data/overworld_behavior_profiles.json",
+        "src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.c",
+        "tools/overworld/devtools_appearance*.py",
+        "tools/overworld/test_devtools_appearance_palette.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_runtime.py",
+        "tools/overworld/devtools_observer.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/*/pokemon-appearance.*.json"
+      ]
+    },
+    {
+      "id": "runtime.pokemon-appearance.cooldown-palette",
+      "title": "Check actual cooldown blue palette upload and material use",
+      "proofLevel": "S4",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "pokemon-appearance.cooldown-palette"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/overworld_actor_appearance*.h",
+        "include/overworld_appearance_policy.h",
+        "lib/overworld/overworld_actor_appearance*.c",
+        "lib/overworld/overworld_appearance_policy.c",
+        "lib/overworld/overworld_field_capsule.ld",
+        "armips/asm/overworld_field_capsule.s",
+        "scripts/*overworld_field_capsule.py",
+        "include/overworld_combat.h",
+        "src/player_health*.c",
+        "include/overworld_behavior_conditions.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "data/overworld_behavior_profiles.json",
+        "src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.c",
+        "tools/overworld/devtools_appearance*.py",
+        "tools/overworld/test_devtools_appearance_palette.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_runtime.py",
+        "tools/overworld/devtools_observer.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/*/pokemon-appearance.*.json"
+      ]
+    },
+    {
+      "id": "runtime.follower-throw-moving-cargo",
+      "title": "Check Follower exact Interest pickup, native Away flight and return",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "follower.throw-moving-cargo"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/overworld_target_bindings.h",
+        "include/overworld_cargo_query.h",
+        "include/overworld_cargo_query_wild.h",
+        "include/overworld_cargo_read_wild.h",
+        "include/overworld_pickup_route*.h",
+        "lib/overworld/overworld_target_bindings.c",
+        "lib/overworld/overworld_cargo*.c",
+        "lib/overworld/overworld_pickup*.c",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/player_health_overlay/player_health_throw_observation.c",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_follower_throw*.py",
+        "tools/overworld/test_devtools_follower_throw_measurement.py",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tests/overworld/test-recipes/follower.throw-moving-cargo.json",
+        "tests/overworld/scenarios/follower.throw-moving-cargo.json",
+        "src/pokemon_move_history_task6_overlay/overworld_actor_hop_planner.c",
+        "src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.c",
+        "tools/overworld/devtools_walk_matrix_observer.py",
+        "lib/overworld/overworld_cargo_query_wild.c",
+        "tools/overworld/devtools_cargo_route_continuity.py",
+        "tools/overworld/test_devtools_cargo_route_continuity.py",
+        "tools/overworld/devtools_query_observer.py",
+        "include/overworld_throw_away*.h",
+        "lib/overworld/overworld_throw_away*.c",
+        "include/overworld_behavior_condition_adapter.h",
+        "include/overworld_wild_runtime_state_internal.h",
+        "include/overworld_query_code_addon.h",
+        "lib/overworld/overworld_query_code_addon_entry.c",
+        "lib/overworld/overworld_query_code_addon_condition_delegate.c",
+        "lib/overworld/overworld_query_code_addon_field.c",
+        "lib/overworld/overworld_player_damage_condition.c",
+        "include/overworld_throw_held_wild.h",
+        "lib/overworld/overworld_throw_held_wild.c",
+        "include/overworld_contact_geometry.h",
+        "lib/overworld/overworld_contact_geometry.c",
+        "include/overworld_throw_observation_native.h",
+        "lib/overworld/overworld_throw_observation_query.c",
+        "lib/overworld/overworld_throw_observation_native.c",
+        "lib/overworld/overworld_query_code_addon.ld",
+        "tools/overworld/pack_query_code_addon.py",
+        "overlays.mk",
+        "tools/overworld/devtools_moving_cargo_pickup.py",
+        "tools/overworld/devtools_application_bank.py",
+        "tools/overworld/test_devtools_cargo_autonomy.py"
+      ]
+    },
+    {
+      "id": "host.follower-throw-proof",
+      "title": "Check Follower Throw memory claims and copied controls",
+      "proofLevel": "S0",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_devtools_follower_throw_measurement.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_target_bindings.h",
+        "include/overworld_cargo_query.h",
+        "include/overworld_cargo_query_wild.h",
+        "include/overworld_cargo_read_wild.h",
+        "include/overworld_pickup_route*.h",
+        "lib/overworld/overworld_target_bindings.c",
+        "lib/overworld/overworld_cargo*.c",
+        "lib/overworld/overworld_pickup*.c",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/player_health_overlay/player_health_throw_observation.c",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_follower_throw*.py",
+        "tools/overworld/test_devtools_follower_throw_measurement.py",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tests/overworld/test-recipes/follower.throw-moving-cargo.json",
+        "tests/overworld/scenarios/follower.throw-moving-cargo.json",
+        "src/pokemon_move_history_task6_overlay/overworld_actor_hop_planner.c",
+        "src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.c",
+        "tools/overworld/devtools_walk_matrix_observer.py",
+        "include/overworld_throw_away*.h",
+        "lib/overworld/overworld_throw_away*.c",
+        "include/overworld_behavior_condition_adapter.h",
+        "include/overworld_wild_runtime_state_internal.h",
+        "include/overworld_query_code_addon.h",
+        "lib/overworld/overworld_query_code_addon_entry.c",
+        "lib/overworld/overworld_query_code_addon_condition_delegate.c",
+        "lib/overworld/overworld_query_code_addon_field.c",
+        "lib/overworld/overworld_player_damage_condition.c",
+        "include/overworld_throw_held_wild.h",
+        "lib/overworld/overworld_throw_held_wild.c",
+        "include/overworld_contact_geometry.h",
+        "lib/overworld/overworld_contact_geometry.c",
+        "include/overworld_throw_observation_native.h",
+        "lib/overworld/overworld_throw_observation_query.c",
+        "lib/overworld/overworld_throw_observation_native.c",
+        "lib/overworld/overworld_query_code_addon.ld",
+        "tools/overworld/pack_query_code_addon.py",
+        "overlays.mk",
+        "tools/overworld/devtools_moving_cargo_pickup.py",
+        "tools/overworld/devtools_application_bank.py",
+        "tools/overworld/test_devtools_cargo_autonomy.py"
+      ]
+    },
+    {
+      "id": "host.player-health-moving-heal",
+      "title": "Check moving Player HP clock and same-reader copied controls",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_devtools_player_health_moving_heal_measurement.py"
+      ],
+      "requires": [],
+      "sourcePatterns": [
+        "tools/overworld/devtools_player_health_moving_heal*.py",
+        "tools/overworld/test_devtools_player_health_moving_heal_measurement.py"
+      ]
+    },
+    {
+      "id": "runtime.player-health-moving-heal-on-foot",
+      "title": "Check Player HP healing during on-foot movement",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "player-hp.moving-heal-on-foot"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "lib/overworld/player_health_model.c",
+        "tools/overworld/devtools_player_health_moving_heal*.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/proof_adapters.py",
+        "tests/overworld/test-recipes/player-hp.moving-heal-on-foot.json",
+        "tests/overworld/scenarios/player-hp.moving-heal-on-foot.json"
+      ]
+    },
+    {
+      "id": "runtime.player-health-moving-heal-mounted",
+      "title": "Check Player HP healing during mounted movement",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "player-hp.moving-heal-mounted"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "lib/overworld/player_health_model.c",
+        "tools/overworld/devtools_player_health_moving_heal*.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/proof_adapters.py",
+        "tests/overworld/test-recipes/player-hp.moving-heal-mounted.json",
+        "tests/overworld/scenarios/player-hp.moving-heal-mounted.json"
+      ]
+    },
+    {
+      "id": "runtime.wild.playful-in-place-hop",
+      "title": "Check natural Wild Playful one- and two-hop pauses",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "profile.playful.in-place-hop"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "src/overworld_wild_runtime_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "tools/overworld/devtools_observer.py",
+        "tools/overworld/devtools_playful_hop*.py",
+        "tools/overworld/test_devtools_playful_hop_measurement.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/profile.playful.in-place-hop.json",
+        "tests/overworld/scenarios/profile.playful.in-place-hop.json"
+      ]
+    },
+    {
+      "id": "host.playful-in-place-hop-proof",
+      "title": "Check natural Playful hops, heart, cry, and copied faults",
+      "proofLevel": "S0",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_devtools_playful_hop_measurement.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_playful_hop*.py",
+        "tools/overworld/devtools_observer.py",
+        "tools/overworld/test_devtools_playful_hop_measurement.py",
+        "tools/overworld/test_devtools_observer.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/profile.playful.in-place-hop.json",
+        "tests/overworld/scenarios/profile.playful.in-place-hop.json"
+      ]
+    },
+    {
+      "id": "runtime.wild.baby-player-fear",
+      "title": "Check existing Wild baby Player fear",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "wild.baby-player-fear"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "tools/overworld/devtools_baby_fear*.py",
+        "tools/overworld/test_devtools_baby_fear_measurement.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/wild.baby-player-fear.json",
+        "tests/overworld/scenarios/wild.baby-player-fear.json"
+      ]
+    },
+    {
+      "id": "runtime.wild.baby-pokemon-fear",
+      "title": "Check Wild baby fear of another Pokemon",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "wild.baby-pokemon-fear"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "tools/overworld/devtools_baby_fear*.py",
+        "tools/overworld/test_devtools_baby_fear_measurement.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/wild.baby-pokemon-fear.json",
+        "tests/overworld/scenarios/wild.baby-pokemon-fear.json"
+      ]
+    },
+    {
+      "id": "runtime.follower.baby-damage-seek-safety",
+      "title": "Check Baby Follower seeks Player after its own accepted HP loss",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "follower.baby-damage-seek-safety"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "tools/overworld/devtools_baby_fear*.py",
+        "tools/overworld/test_devtools_baby_fear_measurement.py",
+        "tools/overworld/devtools_observer.py",
+        "tools/overworld/test_devtools_observer.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/follower.baby-damage-seek-safety.json",
+        "tests/overworld/scenarios/follower.baby-damage-seek-safety.json",
+        "src/player_health_contact.c",
+        "lib/overworld/overworld_player_damage_condition.c",
+        "include/overworld_behavior_condition_adapter.h"
+      ]
+    },
+    {
+      "id": "runtime.follower.baby-seek-safety",
+      "title": "Check baby Follower seeks the Player with crying face after Pokemon fear",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "follower.baby-seek-safety"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "tools/overworld/devtools_baby_fear*.py",
+        "tools/overworld/test_devtools_baby_fear_measurement.py",
+        "tools/overworld/devtools_observer.py",
+        "tools/overworld/test_devtools_observer.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/follower.baby-seek-safety.json",
+        "tests/overworld/scenarios/follower.baby-seek-safety.json"
+      ]
+    },
+    {
+      "id": "host.baby-fear-proof",
+      "title": "Check baby fear source, motion and copied controls",
+      "proofLevel": "S0",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_devtools_baby_fear_measurement.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_baby_fear*.py",
+        "tools/overworld/test_devtools_baby_fear_measurement.py",
+        "tools/overworld/devtools_observer.py",
+        "tools/overworld/test_devtools_observer.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/*.baby-*.json",
+        "tests/overworld/scenarios/*.baby-*.json"
+      ]
+    },
+    {
+      "id": "runtime.pokemon-appearance.ambush-cooldown-palette",
+      "title": "Check healthy Weepinbell timed cooldown blue palette and natural clear",
+      "proofLevel": "S4",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "pokemon-appearance.ambush-cooldown-palette"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/overworld_actor_appearance*.h",
+        "include/overworld_appearance_policy.h",
+        "lib/overworld/overworld_actor_appearance*.c",
+        "lib/overworld/overworld_appearance_policy.c",
+        "lib/overworld/overworld_field_capsule.ld",
+        "armips/asm/overworld_field_capsule.s",
+        "scripts/*overworld_field_capsule.py",
+        "include/overworld_combat.h",
+        "src/player_health*.c",
+        "include/overworld_behavior_conditions.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "data/overworld_behavior_profiles.json",
+        "src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.c",
+        "tools/overworld/devtools_appearance*.py",
+        "tools/overworld/test_devtools_appearance_palette.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_runtime.py",
+        "tools/overworld/devtools_observer.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/*/pokemon-appearance.*.json"
+      ]
+    },
+    {
+      "id": "runtime.ram-ledge-continuity",
+      "title": "Check legal Ram ledge Hop and continuous resumed charge",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "profile.ram.ledge-continuity"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_behavior_condition*.h",
+        "include/overworld_wild_runtime_state_internal.h",
+        "include/overworld_vision.h",
+        "include/overworld_walk_timing_policy.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "lib/overworld/overworld_vision.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/player_health_overlay/overworld_walk_input_policy.c",
+        "src/pokemon_move_history_overlay/overworld_walk_module.c",
+        "src/overworld_follower_selector_overlay/overworld_behavior_condition_service.c",
+        "tools/overworld/devtools_ram_until_crash*.py",
+        "tools/overworld/test_devtools_ram_until_crash_measurement.py",
+        "tools/overworld/devtools_profile_feature_measurement.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/profile.ram.until-crash.json",
+        "tests/overworld/scenarios/profile.ram.until-crash.json",
+        "tools/overworld/devtools_ram_ledge*.py",
+        "tests/overworld/test-recipes/profile.ram.ledge-continuity.json",
+        "tests/overworld/scenarios/profile.ram.ledge-continuity.json"
+      ]
+    },
+    {
+      "id": "runtime.population.distance-despawn-route29",
+      "title": "Check native current-claim distance removal in route29",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "population.distance-despawn-route29"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/overworld_wild_spawns_internal.h",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "tools/overworld/devtools_observer.py",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_distance_despawn*.py",
+        "tools/overworld/test_devtools_distance_despawn_measurement.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/population.distance-despawn-route29.json",
+        "tests/overworld/scenarios/population.distance-despawn-route29.json"
+      ]
+    },
+    {
+      "id": "runtime.population.distance-despawn-cherrygrove",
+      "title": "Check native current-claim distance removal in cherrygrove",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "population.distance-despawn-cherrygrove"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/overworld_wild_spawns_internal.h",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "tools/overworld/devtools_observer.py",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_distance_despawn*.py",
+        "tools/overworld/test_devtools_distance_despawn_measurement.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/population.distance-despawn-cherrygrove.json",
+        "tests/overworld/scenarios/population.distance-despawn-cherrygrove.json"
+      ]
+    },
+    {
+      "id": "host.distance-despawn-proof",
+      "title": "Check current-claim distance receipts and copied controls",
+      "proofLevel": "S0",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_devtools_distance_despawn_measurement.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_wild_spawns_internal.h",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "tools/overworld/devtools_observer.py",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_distance_despawn*.py",
+        "tools/overworld/test_devtools_distance_despawn_measurement.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/population.distance-despawn-*.json",
+        "tests/overworld/scenarios/population.distance-despawn-*.json"
+      ]
+    },
+    {
+      "id": "runtime.follower-throw-target-above",
+      "title": "Check real signed-height follower.throw-target-above",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "follower.throw-target-above"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/overworld_target_bindings.h",
+        "include/overworld_cargo_query.h",
+        "include/overworld_cargo_query_wild.h",
+        "include/overworld_cargo_read_wild.h",
+        "include/overworld_pickup_route*.h",
+        "lib/overworld/overworld_target_bindings.c",
+        "lib/overworld/overworld_cargo*.c",
+        "lib/overworld/overworld_pickup*.c",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/player_health_overlay/player_health_throw_observation.c",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "src/player_health_contact.c",
+        "src/pokemon_move_history_task6_overlay/overworld_actor_hop_planner.c",
+        "lib/overworld/overworld_throw_binding_native.c",
+        "tools/overworld/devtools_cross_height_throw*.py",
+        "tools/overworld/test_devtools_cross_height_throw_measurement.py",
+        "tests/overworld/test-recipes/follower.throw-target-above.json",
+        "tests/overworld/scenarios/follower.throw-target-above.json"
+      ]
+    },
+    {
+      "id": "runtime.follower-throw-target-below",
+      "title": "Check real signed-height follower.throw-target-below",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "follower.throw-target-below"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/overworld_target_bindings.h",
+        "include/overworld_cargo_query.h",
+        "include/overworld_cargo_query_wild.h",
+        "include/overworld_cargo_read_wild.h",
+        "include/overworld_pickup_route*.h",
+        "lib/overworld/overworld_target_bindings.c",
+        "lib/overworld/overworld_cargo*.c",
+        "lib/overworld/overworld_pickup*.c",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/player_health_overlay/player_health_throw_observation.c",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "src/player_health_contact.c",
+        "src/pokemon_move_history_task6_overlay/overworld_actor_hop_planner.c",
+        "lib/overworld/overworld_throw_binding_native.c",
+        "tools/overworld/devtools_cross_height_throw*.py",
+        "tools/overworld/test_devtools_cross_height_throw_measurement.py",
+        "tests/overworld/test-recipes/follower.throw-target-below.json",
+        "tests/overworld/scenarios/follower.throw-target-below.json"
+      ]
+    },
+    {
+      "id": "runtime.held-throw-search",
+      "title": "Check held Cargo search without a timeout",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "wild.throw-held-search"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/overworld_target_bindings.h",
+        "include/overworld_behavior_resolver.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/player_health_overlay/player_health_throw_observation.c",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_held_throw_search*.py",
+        "tools/overworld/test_devtools_held_throw_search_measurement.py",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/wild.throw-held-search.json",
+        "tests/overworld/scenarios/wild.throw-held-search.json",
+        "tools/overworld/devtools_blocked_notice_hop_measurement.py",
+        "tools/overworld/devtools_mount_control_stress.py",
+        "tools/overworld/devtools_movement_predicates.py"
+      ]
+    },
+    {
+      "id": "host.held-throw-search-proof",
+      "title": "Check held Cargo bindings, clocks and release controls",
+      "proofLevel": "S0",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_devtools_held_throw_search_measurement.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_target_bindings.h",
+        "include/overworld_behavior_resolver.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/player_health_overlay/player_health_throw_observation.c",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_held_throw_search*.py",
+        "tools/overworld/test_devtools_held_throw_search_measurement.py",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/wild.throw-held-search.json",
+        "tests/overworld/scenarios/wild.throw-held-search.json",
+        "tools/overworld/devtools_blocked_notice_hop_measurement.py",
+        "tools/overworld/devtools_mount_control_stress.py",
+        "tools/overworld/devtools_movement_predicates.py"
+      ]
+    },
+    {
+      "id": "runtime.player-health-running-hit",
+      "title": "Check current running-hit animation at native knockback terminal",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "player-hp.running-hit"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "lib/overworld/player_health_model.c",
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "data/overworld_behavior_profiles.json",
+        "scripts/generate_player_health_debug.py",
+        "tools/overworld/devtools_player_health_running_hit*.py",
+        "tests/overworld/test-recipes/player-hp.running-hit.json",
+        "tests/overworld/scenarios/player-hp.running-hit.json"
+      ]
+    },
+    {
+      "id": "runtime.follower-throw-player-damage",
+      "title": "Check accepted Player damage makes Mankey throw away its exact source",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "follower.throw-player-damage"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/overworld_actor_system*.h",
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "src/player_health_overlay/**",
+        "include/overworld_behavior_conditions.h",
+        "include/overworld_target_bindings.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "lib/overworld/overworld_target_bindings.c",
+        "lib/overworld/overworld_cargo*.c",
+        "lib/overworld/overworld_pickup*.c",
+        "include/overworld_throw_away*.h",
+        "lib/overworld/overworld_throw_away*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/pokemon_move_history_task6_overlay/overworld_actor_hop_planner.c",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_damage_follower*.py",
+        "tools/overworld/test_devtools_damage_follower_measurement.py",
+        "tools/overworld/devtools_follower_throw_measurement.py",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_walk_matrix_observer.py",
+        "tools/overworld/devtools_query_observer.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tools/overworld/system_features.yaml",
+        "tests/overworld/test-recipes/follower.throw-player-damage.json",
+        "tests/overworld/scenarios/follower.throw-player-damage.json",
+        "include/overworld_behavior_condition_adapter.h",
+        "include/overworld_wild_runtime_state_internal.h",
+        "include/overworld_query_code_addon.h",
+        "lib/overworld/overworld_query_code_addon_entry.c",
+        "lib/overworld/overworld_query_code_addon_condition_delegate.c",
+        "lib/overworld/overworld_query_code_addon_field.c",
+        "lib/overworld/overworld_player_damage_condition.c",
+        "include/overworld_throw_held_wild.h",
+        "lib/overworld/overworld_throw_held_wild.c",
+        "include/overworld_contact_geometry.h",
+        "lib/overworld/overworld_contact_geometry.c",
+        "include/overworld_throw_observation_native.h",
+        "lib/overworld/overworld_throw_observation_query.c",
+        "lib/overworld/overworld_throw_observation_native.c",
+        "lib/overworld/overworld_query_code_addon.ld",
+        "tools/overworld/pack_query_code_addon.py",
+        "overlays.mk"
+      ]
+    },
+    {
+      "id": "host.follower-throw-player-damage-proof",
+      "title": "Check accepted-hit Follower claims and copied controls",
+      "proofLevel": "S0",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_devtools_damage_follower_measurement.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_actor_system*.h",
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "src/player_health_overlay/**",
+        "include/overworld_behavior_conditions.h",
+        "include/overworld_target_bindings.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "lib/overworld/overworld_target_bindings.c",
+        "lib/overworld/overworld_cargo*.c",
+        "lib/overworld/overworld_pickup*.c",
+        "include/overworld_throw_away*.h",
+        "lib/overworld/overworld_throw_away*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/pokemon_move_history_task6_overlay/overworld_actor_hop_planner.c",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_damage_follower*.py",
+        "tools/overworld/test_devtools_damage_follower_measurement.py",
+        "tools/overworld/devtools_follower_throw_measurement.py",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_walk_matrix_observer.py",
+        "tools/overworld/devtools_query_observer.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tools/overworld/system_features.yaml",
+        "tests/overworld/test-recipes/follower.throw-player-damage.json",
+        "tests/overworld/scenarios/follower.throw-player-damage.json",
+        "include/overworld_behavior_condition_adapter.h",
+        "include/overworld_wild_runtime_state_internal.h",
+        "include/overworld_query_code_addon.h",
+        "lib/overworld/overworld_query_code_addon_entry.c",
+        "lib/overworld/overworld_query_code_addon_condition_delegate.c",
+        "lib/overworld/overworld_query_code_addon_field.c",
+        "lib/overworld/overworld_player_damage_condition.c",
+        "include/overworld_throw_held_wild.h",
+        "lib/overworld/overworld_throw_held_wild.c",
+        "include/overworld_contact_geometry.h",
+        "lib/overworld/overworld_contact_geometry.c",
+        "include/overworld_throw_observation_native.h",
+        "lib/overworld/overworld_throw_observation_query.c",
+        "lib/overworld/overworld_throw_observation_native.c",
+        "lib/overworld/overworld_query_code_addon.ld",
+        "tools/overworld/pack_query_code_addon.py",
+        "overlays.mk"
+      ]
+    },
+    {
+      "id": "runtime.follower-throw-away-non45",
+      "title": "Check exact non-45 Follower Away flight, support and return",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "follower.throw-away-non45"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/overworld_target_bindings.h",
+        "include/overworld_cargo_query.h",
+        "include/overworld_cargo_query_wild.h",
+        "include/overworld_cargo_read_wild.h",
+        "include/overworld_pickup_route*.h",
+        "lib/overworld/overworld_target_bindings.c",
+        "lib/overworld/overworld_cargo*.c",
+        "lib/overworld/overworld_pickup*.c",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/player_health_overlay/player_health_throw_observation.c",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_follower_throw*.py",
+        "tools/overworld/test_devtools_follower_throw_measurement.py",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tests/overworld/test-recipes/follower.throw-away-non45.json",
+        "tests/overworld/scenarios/follower.throw-away-non45.json",
+        "src/pokemon_move_history_task6_overlay/overworld_actor_hop_planner.c",
+        "src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.c",
+        "tools/overworld/devtools_walk_matrix_observer.py",
+        "lib/overworld/overworld_cargo_query_wild.c",
+        "tools/overworld/devtools_cargo_route_continuity.py",
+        "tools/overworld/test_devtools_cargo_route_continuity.py",
+        "tools/overworld/devtools_query_observer.py",
+        "include/overworld_throw_away*.h",
+        "lib/overworld/overworld_throw_away*.c",
+        "include/overworld_behavior_condition_adapter.h",
+        "include/overworld_wild_runtime_state_internal.h",
+        "include/overworld_query_code_addon.h",
+        "lib/overworld/overworld_query_code_addon_entry.c",
+        "lib/overworld/overworld_query_code_addon_condition_delegate.c",
+        "lib/overworld/overworld_query_code_addon_field.c",
+        "lib/overworld/overworld_player_damage_condition.c",
+        "include/overworld_throw_held_wild.h",
+        "lib/overworld/overworld_throw_held_wild.c",
+        "include/overworld_contact_geometry.h",
+        "lib/overworld/overworld_contact_geometry.c",
+        "include/overworld_throw_observation_native.h",
+        "lib/overworld/overworld_throw_observation_query.c",
+        "lib/overworld/overworld_throw_observation_native.c",
+        "lib/overworld/overworld_query_code_addon.ld",
+        "tools/overworld/pack_query_code_addon.py",
+        "overlays.mk",
+        "include/overworld_throw_away_aim.h",
+        "include/overworld_actor_system_internal.h",
+        "lib/overworld/overworld_motion_model.c",
+        "src/pokemon_move_history_task6_overlay/**",
+        "tools/overworld/test_hop_spawn_entry_flag.py"
+      ]
+    },
+    {
+      "id": "runtime.follower-throw-query-priority",
+      "title": "Saved Mankey takes an unclaimed Wild Cargo query and throws the next Geodude",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "follower.throw-query-priority"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/overworld_actor_system*.h",
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "src/player_health_overlay/**",
+        "include/overworld_behavior_conditions.h",
+        "include/overworld_target_bindings.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "lib/overworld/overworld_target_bindings.c",
+        "lib/overworld/overworld_cargo*.c",
+        "lib/overworld/overworld_pickup*.c",
+        "include/overworld_throw_away*.h",
+        "lib/overworld/overworld_throw_away*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/pokemon_move_history_task6_overlay/overworld_actor_hop_planner.c",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_follower_query_priority*.py",
+        "tools/overworld/test_devtools_follower_query_priority_measurement.py",
+        "tools/overworld/devtools_follower_throw_measurement.py",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_walk_matrix_observer.py",
+        "tools/overworld/devtools_query_observer.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tools/overworld/system_features.yaml",
+        "tests/overworld/test-recipes/follower.throw-query-priority.json",
+        "tests/overworld/scenarios/follower.throw-query-priority.json",
+        "include/overworld_behavior_condition_adapter.h",
+        "include/overworld_wild_runtime_state_internal.h",
+        "include/overworld_query_code_addon.h",
+        "lib/overworld/overworld_query_code_addon_entry.c",
+        "lib/overworld/overworld_query_code_addon_condition_delegate.c",
+        "lib/overworld/overworld_query_code_addon_field.c",
+        "lib/overworld/overworld_player_damage_condition.c",
+        "include/overworld_throw_held_wild.h",
+        "lib/overworld/overworld_throw_held_wild.c",
+        "include/overworld_contact_geometry.h",
+        "lib/overworld/overworld_contact_geometry.c",
+        "include/overworld_throw_observation_native.h",
+        "lib/overworld/overworld_throw_observation_query.c",
+        "lib/overworld/overworld_throw_observation_native.c",
+        "lib/overworld/overworld_query_code_addon.ld",
+        "tools/overworld/pack_query_code_addon.py",
+        "overlays.mk",
+        "tools/overworld/devtools_damage_follower_measurement.py",
+        "tools/overworld/devtools_cargo_route_continuity.py",
+        "tools/overworld/devtools_follower_throw_approach_measurement.py",
+        "tools/overworld/devtools_movement_predicates.py"
+      ]
+    },
+    {
+      "id": "host.follower-throw-query-priority-proof",
+      "title": "Check saved-follower query priority claims and copied faults",
+      "proofLevel": "S0",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_devtools_follower_query_priority_measurement.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_actor_system*.h",
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "src/player_health_overlay/**",
+        "include/overworld_behavior_conditions.h",
+        "include/overworld_target_bindings.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "lib/overworld/overworld_target_bindings.c",
+        "lib/overworld/overworld_cargo*.c",
+        "lib/overworld/overworld_pickup*.c",
+        "include/overworld_throw_away*.h",
+        "lib/overworld/overworld_throw_away*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/pokemon_move_history_task6_overlay/overworld_actor_hop_planner.c",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_follower_query_priority*.py",
+        "tools/overworld/test_devtools_follower_query_priority_measurement.py",
+        "tools/overworld/devtools_follower_throw_measurement.py",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_walk_matrix_observer.py",
+        "tools/overworld/devtools_query_observer.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tools/overworld/system_features.yaml",
+        "tests/overworld/test-recipes/follower.throw-query-priority.json",
+        "tests/overworld/scenarios/follower.throw-query-priority.json",
+        "include/overworld_behavior_condition_adapter.h",
+        "include/overworld_wild_runtime_state_internal.h",
+        "include/overworld_query_code_addon.h",
+        "lib/overworld/overworld_query_code_addon_entry.c",
+        "lib/overworld/overworld_query_code_addon_condition_delegate.c",
+        "lib/overworld/overworld_query_code_addon_field.c",
+        "lib/overworld/overworld_player_damage_condition.c",
+        "include/overworld_throw_held_wild.h",
+        "lib/overworld/overworld_throw_held_wild.c",
+        "include/overworld_contact_geometry.h",
+        "lib/overworld/overworld_contact_geometry.c",
+        "include/overworld_throw_observation_native.h",
+        "lib/overworld/overworld_throw_observation_query.c",
+        "lib/overworld/overworld_throw_observation_native.c",
+        "lib/overworld/overworld_query_code_addon.ld",
+        "tools/overworld/pack_query_code_addon.py",
+        "overlays.mk",
+        "tools/overworld/devtools_damage_follower_measurement.py",
+        "tools/overworld/devtools_cargo_route_continuity.py",
+        "tools/overworld/devtools_follower_throw_approach_measurement.py",
+        "tools/overworld/devtools_movement_predicates.py"
+      ]
+    },
+    {
+      "id": "runtime.follower-ram-pokemon",
+      "title": "Follower Ram charges its captured Wild target, damages it and completes Jump knockback",
+      "proofLevel": "S4",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "follower.ram-pokemon"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_behavior_condition*.h",
+        "include/overworld_wild_runtime_state_internal.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "lib/overworld/overworld_cargo_read_wild.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/player_health.c",
+        "src/player_health_overlay/**",
+        "src/pokemon_move_history_overlay/**",
+        "tools/overworld/devtools_follower_ram*.py",
+        "tools/overworld/test_devtools_follower_ram_measurement.py",
+        "tools/overworld/devtools_profile_feature_measurement.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/follower.ram-pokemon.json",
+        "tests/overworld/scenarios/follower.ram-pokemon.json"
+      ]
+    },
+    {
+      "id": "runtime.wild-throw-ground-lock-soak",
+      "title": "Three Wild Geodudes keep Throw control through one continuous soak",
+      "proofLevel": "S5",
+      "costTier": 5,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "wild.throw-ground-lock-soak"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/overworld_actor_system*.h",
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "src/player_health_overlay/**",
+        "include/overworld_behavior_conditions.h",
+        "include/overworld_target_bindings.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "lib/overworld/overworld_target_bindings.c",
+        "lib/overworld/overworld_cargo*.c",
+        "lib/overworld/overworld_pickup*.c",
+        "include/overworld_throw_away*.h",
+        "lib/overworld/overworld_throw_away*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/pokemon_move_history_task6_overlay/overworld_actor_hop_planner.c",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_follower_throw_measurement.py",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_walk_matrix_observer.py",
+        "tools/overworld/devtools_query_observer.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tools/overworld/system_features.yaml",
+        "include/overworld_behavior_condition_adapter.h",
+        "include/overworld_wild_runtime_state_internal.h",
+        "include/overworld_query_code_addon.h",
+        "lib/overworld/overworld_query_code_addon_entry.c",
+        "lib/overworld/overworld_query_code_addon_condition_delegate.c",
+        "lib/overworld/overworld_query_code_addon_field.c",
+        "lib/overworld/overworld_player_damage_condition.c",
+        "include/overworld_throw_held_wild.h",
+        "lib/overworld/overworld_throw_held_wild.c",
+        "include/overworld_contact_geometry.h",
+        "lib/overworld/overworld_contact_geometry.c",
+        "include/overworld_throw_observation_native.h",
+        "lib/overworld/overworld_throw_observation_query.c",
+        "lib/overworld/overworld_throw_observation_native.c",
+        "lib/overworld/overworld_query_code_addon.ld",
+        "tools/overworld/pack_query_code_addon.py",
+        "overlays.mk",
+        "tools/overworld/devtools_damage_follower_measurement.py",
+        "tools/overworld/devtools_cargo_route_continuity.py",
+        "tools/overworld/devtools_follower_throw_approach_measurement.py",
+        "tools/overworld/devtools_movement_predicates.py",
+        "tools/overworld/devtools_wild_throw_soak*.py",
+        "tools/overworld/test_devtools_wild_throw_soak_measurement.py",
+        "tests/overworld/test-recipes/wild.throw-ground-lock-soak.json",
+        "tests/overworld/scenarios/wild.throw-ground-lock-soak.json",
+        "tools/overworld/normal_play_observer.py",
+        "include/overworld_wild_movement.h"
+      ]
+    },
+    {
+      "id": "host.wild-throw-ground-lock-soak-proof",
+      "title": "Check continuous Wild Throw controls and exact native recovery leak",
+      "proofLevel": "S0",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_devtools_wild_throw_soak_measurement.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "include/overworld_actor_system*.h",
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "src/player_health_overlay/**",
+        "include/overworld_behavior_conditions.h",
+        "include/overworld_target_bindings.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "lib/overworld/overworld_target_bindings.c",
+        "lib/overworld/overworld_cargo*.c",
+        "lib/overworld/overworld_pickup*.c",
+        "include/overworld_throw_away*.h",
+        "lib/overworld/overworld_throw_away*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/pokemon_move_history_task6_overlay/overworld_actor_hop_planner.c",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_follower_throw_measurement.py",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_walk_matrix_observer.py",
+        "tools/overworld/devtools_query_observer.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tools/overworld/system_features.yaml",
+        "include/overworld_behavior_condition_adapter.h",
+        "include/overworld_wild_runtime_state_internal.h",
+        "include/overworld_query_code_addon.h",
+        "lib/overworld/overworld_query_code_addon_entry.c",
+        "lib/overworld/overworld_query_code_addon_condition_delegate.c",
+        "lib/overworld/overworld_query_code_addon_field.c",
+        "lib/overworld/overworld_player_damage_condition.c",
+        "include/overworld_throw_held_wild.h",
+        "lib/overworld/overworld_throw_held_wild.c",
+        "include/overworld_contact_geometry.h",
+        "lib/overworld/overworld_contact_geometry.c",
+        "include/overworld_throw_observation_native.h",
+        "lib/overworld/overworld_throw_observation_query.c",
+        "lib/overworld/overworld_throw_observation_native.c",
+        "lib/overworld/overworld_query_code_addon.ld",
+        "tools/overworld/pack_query_code_addon.py",
+        "overlays.mk",
+        "tools/overworld/devtools_damage_follower_measurement.py",
+        "tools/overworld/devtools_cargo_route_continuity.py",
+        "tools/overworld/devtools_follower_throw_approach_measurement.py",
+        "tools/overworld/devtools_movement_predicates.py",
+        "tools/overworld/devtools_wild_throw_soak*.py",
+        "tools/overworld/test_devtools_wild_throw_soak_measurement.py",
+        "tests/overworld/test-recipes/wild.throw-ground-lock-soak.json",
+        "tests/overworld/scenarios/wild.throw-ground-lock-soak.json",
+        "tools/overworld/normal_play_observer.py",
+        "include/overworld_wild_movement.h"
+      ]
+    },
+    {
+      "id": "runtime.basic-attack",
+      "title": "Basic attack hops at its target, returns at once, then pauses",
+      "proofLevel": "S4",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "profile.basic-attack"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_behavior_condition*.h",
+        "include/overworld_wild_runtime_state_internal.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "lib/overworld/overworld_cargo_read_wild.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/player_health.c",
+        "src/player_health_overlay/**",
+        "src/pokemon_move_history_overlay/**",
+        "tools/overworld/devtools_basic_attack*.py",
+        "tools/overworld/test_devtools_basic_attack_measurement.py",
+        "tools/overworld/devtools_profile_feature_measurement.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/profile.basic-attack.json",
+        "tests/overworld/scenarios/profile.basic-attack.json",
+        "include/overworld_pickup_route*.h",
+        "lib/overworld/overworld_pickup_route*.c",
+        "lib/overworld/overworld_pickup_landing_wild.c",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/test_devtools_pokemon_combat_observer.py",
+        "include/overworld_return_move_wild.h",
+        "lib/overworld/overworld_return_move_wild.c",
+        "include/overworld_query_code_addon.h",
+        "lib/overworld/overworld_query_code_addon_entry.c",
+        "tools/overworld/test_return_move_runtime.py"
+      ]
+    },
+    {
+      "id": "runtime.ram-brief-notice",
+      "title": "Check a brief moving Ram notice survives player sight loss",
+      "proofLevel": "S3",
+      "costTier": 2,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "profile.ram.brief-notice"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "include/overworld_behavior_condition*.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "src/overworld_follower_selector_overlay/overworld_behavior_condition_service.c",
+        "tools/overworld/devtools_ram_brief_notice*.py",
+        "tools/overworld/devtools_appearance_observer.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_profile_feature_measurement.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/profile.ram.brief-notice.json",
+        "tests/overworld/scenarios/profile.ram.brief-notice.json"
+      ]
+    },
+    {
+      "id": "runtime.throw-notice-walk-commit",
+      "title": "Check a Throw notice returns control after an accepted Wild Walk",
+      "proofLevel": "S3",
+      "costTier": 2,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "wild.throw-notice-walk-commit"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c",
+        "src/overworld_actor_system_overlay/**",
+        "tools/overworld/devtools_throw_notice_walk_commit*.py",
+        "tools/overworld/devtools_profile_feature_measurement.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/wild.throw-notice-walk-commit.json",
+        "tests/overworld/scenarios/wild.throw-notice-walk-commit.json"
+      ]
+    },
+    {
+      "id": "runtime.follower-target-access-signpost",
+      "title": "Mankey rejects the inaccessible Signpost Pidgey and keeps following",
+      "proofLevel": "S3",
+      "costTier": 2,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "follower.target-access-signpost"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "include/overworld_behavior_condition*.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "include/overworld_condition_moving_notice_native.h",
+        "lib/overworld/overworld_condition_moving_notice_native.c",
+        "lib/overworld/overworld_cargo_read_wild.c",
+        "lib/overworld/overworld_pickup_route_wild.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "tools/overworld/devtools_target_access*.py",
+        "tests/overworld/test-recipes/follower.target-access-signpost.json",
+        "tests/overworld/scenarios/follower.target-access-signpost.json"
+      ]
+    },
+    {
+      "id": "runtime.follower-target-access-ground",
+      "title": "Mankey still captures an accessible ground Pok\u00e9mon",
+      "proofLevel": "S3",
+      "costTier": 2,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "follower.target-access-ground"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "include/overworld_behavior_condition*.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "include/overworld_condition_moving_notice_native.h",
+        "lib/overworld/overworld_condition_moving_notice_native.c",
+        "lib/overworld/overworld_cargo_read_wild.c",
+        "lib/overworld/overworld_pickup_route_wild.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "tools/overworld/devtools_target_access*.py",
+        "tests/overworld/test-recipes/follower.target-access-ground.json",
+        "tests/overworld/scenarios/follower.target-access-ground.json"
+      ]
+    },
+    {
+      "id": "host.target-access-proof",
+      "title": "Check native target access proof controls",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_devtools_target_access_measurement.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/devtools_target_access*.py",
+        "tools/overworld/test_devtools_target_access_measurement.py"
+      ]
+    },
+    {
+      "id": "host.follower-throw-hit-abort-proof",
+      "title": "Check copied pre-HELD carrier hit and claim retirement controls",
+      "proofLevel": "S0",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_devtools_follower_throw_hit_abort_measurement.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/devtools_follower_throw_hit_abort*.py",
+        "tools/overworld/test_devtools_follower_throw_hit_abort_measurement.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tests/overworld/test-recipes/follower.throw-hit-abort.json"
+      ]
+    },
+    {
+      "id": "runtime.follower-throw-hit-abort",
+      "title": "Check a real Ram hit retires pre-HELD Follower Throw Cargo and permits rebind",
+      "proofLevel": "S3",
+      "costTier": 2,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "follower.throw-hit-abort"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "src/player_health_contact.c",
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "lib/overworld/overworld_pickup_route_wild.c",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_follower_throw_hit_abort*.py",
+        "tools/overworld/devtools_profile_feature_measurement.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/follower.throw-hit-abort.json",
+        "tests/overworld/scenarios/follower.throw-hit-abort.json"
+      ]
+    },
+    {
+      "id": "runtime.throw-cargo-competition",
+      "title": "Check nearer Cargo pickup, protected HELD owner and losing pursuit cleanup",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "wild.throw-cargo-competition"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "lib/overworld/overworld_cargo_query_wild.c",
+        "lib/overworld/overworld_pickup_route_wild.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_throw_cargo_competition*.py",
+        "tools/overworld/test_devtools_throw_cargo_competition.py",
+        "tests/overworld/test-recipes/wild.throw-cargo-competition.json",
+        "tests/overworld/scenarios/wild.throw-cargo-competition.json"
+      ]
+    },
+    {
+      "id": "runtime.throw-cargo-retarget",
+      "title": "Check current Wild Cargo switch, accepted Walk and near Cargo launch",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "wild.throw-cargo-retarget"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "lib/overworld/overworld_cargo_query_wild.c",
+        "lib/overworld/overworld_pickup_route_wild.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_throw_cargo_retarget*.py",
+        "tools/overworld/test_devtools_throw_cargo_retarget.py",
+        "tests/overworld/test-recipes/wild.throw-cargo-retarget.json",
+        "tests/overworld/scenarios/wild.throw-cargo-retarget.json"
+      ]
+    },
+    {
+      "id": "runtime.throw-mutual-pickup",
+      "title": "Check two current Wild Cargo claims, one physical pickup and normal launch",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "wild.throw-mutual-pickup"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "lib/overworld/overworld_cargo_query_wild.c",
+        "lib/overworld/overworld_pickup_route_wild.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_throw_mutual_pickup*.py",
+        "tools/overworld/test_devtools_throw_mutual_pickup.py",
+        "tests/overworld/test-recipes/wild.throw-mutual-pickup.json",
+        "tests/overworld/scenarios/wild.throw-mutual-pickup.json"
+      ]
+    },
+    {
+      "id": "runtime.wild.damage-flee",
+      "title": "Check exact Wild self damage Flee response",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "wild.damage-flee"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "include/overworld_behavior_condition*.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "lib/overworld/overworld_player_damage_condition.c",
+        "src/player_health_contact.c",
+        "tools/overworld/devtools_baby_fear*.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/wild.damage-flee.json",
+        "tests/overworld/scenarios/wild.damage-flee.json"
+      ]
+    },
+    {
+      "id": "runtime.stomp-slam-player-contact",
+      "title": "Check captured Player Stomp Slam, shared damage and Jump2 landing",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "profile.stomp-slam.player-contact"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_motion_model.h",
+        "include/overworld_pickup*wild.h",
+        "lib/overworld/overworld_motion_model.c",
+        "lib/overworld/overworld_pickup*wild.c",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/pokemon_move_history_task6_overlay/**",
+        "src/player_health_contact.c",
+        "src/player_health.c",
+        "tools/overworld/devtools_stomp_slam*.py",
+        "tools/overworld/test_devtools_stomp_slam_measurement.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/profile.stomp-slam.player-contact.json",
+        "tests/overworld/scenarios/profile.stomp-slam.player-contact.json"
+      ]
+    },
+    {
+      "id": "runtime.stomp-slam-mounted-player-contact",
+      "title": "Check Stomp Slam onto the attached current Mount and Player",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "profile.stomp-slam.mounted-player-contact"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_motion_model.h",
+        "include/overworld_pickup*wild.h",
+        "lib/overworld/overworld_motion_model.c",
+        "lib/overworld/overworld_pickup*wild.c",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/pokemon_move_history_task6_overlay/**",
+        "src/player_health_contact.c",
+        "src/player_health.c",
+        "tools/overworld/devtools_stomp_slam*.py",
+        "tools/overworld/test_devtools_stomp_slam_measurement.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/profile.stomp-slam.mounted-player-contact.json",
+        "tests/overworld/scenarios/profile.stomp-slam.mounted-player-contact.json",
+        "tools/overworld/devtools_stomp_slam_mounted_proof.py",
+        "src/overworld_mount*overlay/**"
+      ]
+    },
+    {
+      "id": "runtime.mounted-rattata-walking-ledge",
+      "title": "Check fresh mounted Rattata ledge Hop",
+      "proofLevel": "S3",
+      "costTier": 2,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "mount.rattata-walking-ledge"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_mount*.h",
+        "include/overworld_actor*.h",
+        "include/overworld_motion*.h",
+        "src/overworld_mount*overlay/**",
+        "src/overworld_actor_system_overlay/**",
+        "src/pokemon_move_history_task6_overlay/**",
+        "lib/overworld/overworld_motion_model.c",
+        "tools/overworld/devtools_mounted_rattata_ledge*.py",
+        "tools/overworld/test_devtools_mounted_rattata_ledge_measurement.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/mount.rattata-walking-ledge.json",
+        "tests/overworld/scenarios/mount.rattata-walking-ledge.json"
+      ]
+    },
+    {
+      "id": "runtime.presentation.emote-three-slots",
+      "title": "Three independent quiet native emotes and drained cleanup",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "presentation.emote-three-slots"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/overworld_emote_slots_internal.h",
+        "lib/overworld/overworld_emote_slots*",
+        "scripts/pack_overworld_emote_slots.py",
+        "src/overworld_actor_system_overlay/linker.ld",
+        "armips/asm/overworld_emote_slots.s",
+        "overlays.mk",
+        "scripts/make.py",
+        "src/player_health_overlay/wild_movement_value.c",
+        "tools/overworld/devtools_emote*",
+        "tools/overworld/test_devtools_emote*",
+        "tools/overworld/devtools_runtime.py",
+        "tools/overworld/devtools_contract.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "scripts/overworld_devtools_worker.py",
+        "tests/overworld/*/presentation.emote-three-slots.json"
+      ]
+    },
+    {
+      "id": "runtime.wild.igglybuff-player-fear-cry",
+      "title": "Check Wild Igglybuff Cry on normal Player notice",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "wild.igglybuff-player-fear-cry"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "tools/overworld/devtools_baby_fear*.py",
+        "tools/overworld/test_devtools_baby_fear_measurement.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/wild.igglybuff-player-fear-cry.json",
+        "tests/overworld/scenarios/wild.igglybuff-player-fear-cry.json",
+        "tools/overworld/devtools_observer.py",
+        "tools/overworld/test_devtools_observer.py",
+        "tools/overworld/test_fear_alert_profiles.py"
+      ]
+    },
+    {
+      "id": "runtime.population.failed-series-retry",
+      "title": "Natural failed-series retry",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "population.failed-series-retry"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "include/overworld_entry_route.h",
+        "include/overworld_wild_helper.h",
+        "lib/overworld/overworld_entry_route.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "tools/overworld/devtools_spawn_priority_*.py",
+        "tools/overworld/devtools_spawn_outcome_records.py",
+        "tools/overworld/devtools_spawn_surface_measurement.py",
+        "tests/overworld/test-recipes/population.failed-series-retry.json"
+      ]
+    },
+    {
+      "id": "runtime.population.natural-water-spawn",
+      "title": "Natural Surf spawn and completed native water landing",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "population.natural-water-spawn"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "include/overworld_entry_route.h",
+        "include/overworld_wild_helper.h",
+        "lib/overworld/overworld_entry_route.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "tools/overworld/devtools_spawn_priority_*.py",
+        "tools/overworld/devtools_spawn_outcome_records.py",
+        "tools/overworld/devtools_spawn_surface_measurement.py",
+        "tests/overworld/test-recipes/population.natural-water-spawn.json"
+      ]
+    },
+    {
+      "id": "runtime.spawn.move-entry-arrival",
+      "title": "Prepared native Move entry reaches its owned target",
+      "proofLevel": "S3",
+      "costTier": 2,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "spawn.move-entry.arrival"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "include/overworld_entry_route.h",
+        "lib/overworld/overworld_entry_route.c",
+        "lib/overworld/overworld_cargo_query_wild.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "tools/overworld/devtools_query_observer.py",
+        "tools/overworld/devtools_move_entry_arrival_proof.py",
+        "tests/overworld/test-recipes/spawn.move-entry.arrival.json"
+      ]
+    },
+    {
+      "id": "runtime.world.route30-sentret-throw-pacing",
+      "title": "Three Sentret and saved Mankey Throw share one600-loop Route30 window",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "world.route30.sentret-throw-pacing"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_behavior_condition_adapter.h",
+        "lib/overworld/overworld_behavior_condition_adapter.c",
+        "lib/overworld/overworld_condition_moving_notice_native.c",
+        "lib/overworld/overworld_cargo_query_wild.c",
+        "src/overworld_actor_system_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_follower_selector_overlay/**",
+        "src/overworld_wild_runtime_overlay.c",
+        "tools/overworld/devtools_sentret_throw_*.py",
+        "tools/overworld/test_devtools_sentret_throw_measurement.py",
+        "tools/overworld/devtools_follower_throw_measurement.py",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_observer.py",
+        "tools/overworld/devtools_query_observer.py",
+        "tools/overworld/devtools_main_loop_probe.py",
+        "tools/overworld/devtools_cpu_work.py",
+        "tools/overworld/devtools_raw_chunk.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tests/overworld/test-recipes/world.route30.sentret-throw-pacing.json",
+        "tests/overworld/scenarios/world.route30.sentret-throw-pacing.json"
+      ]
+    },
+    {
+      "id": "runtime.population.route30-saturated-headroom",
+      "title": "Saturated Route30 pond bank keeps game-loop idle headroom and zero late loops",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "population.route30.saturated-headroom"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_entry_route.h",
+        "include/overworld_population_model.h",
+        "lib/overworld/overworld_entry_route.c",
+        "lib/overworld/overworld_population_model.c",
+        "lib/overworld/overworld_cargo_query_wild.c",
+        "src/player_health_contact.c",
+        "src/overworld_actor_system_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/overworld_follower_selector_overlay/**",
+        "tools/overworld/devtools_population_headroom_*.py",
+        "tools/overworld/test_devtools_population_headroom.py",
+        "tools/overworld/devtools_main_loop_probe.py",
+        "tools/overworld/test_devtools_main_loop_probe.py",
+        "tools/overworld/devtools_wait_probe.py",
+        "tools/overworld/devtools_observer.py",
+        "tools/overworld/devtools_raw_chunk.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tests/overworld/test-recipes/population.route30.saturated-headroom.json",
+        "tests/overworld/scenarios/population.route30.saturated-headroom.json"
+      ]
     }
   ],
   "capabilities": [
+    {
+      "id": "collision.attack",
+      "title": "Profile-gated collision damage",
+      "owner": "Wild behavior resolver and player health contact service",
+      "roles": [
+        "Wild"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/behavior_schema.json",
+        "data/overworld_behavior_profiles.json",
+        "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c",
+        "src/player_health_contact.c"
+      ],
+      "checks": [
+        "runtime.player-health-ram-low-speed",
+        "runtime.player-health-ram-rest",
+        "runtime.player-health-throw-contact",
+        "runtime.player-health-hop-contact",
+        "runtime.player-health-ambush-jump",
+        "runtime.player-health-mounted-ambush-height",
+        "runtime.wild-throw-moving-candidate",
+        "runtime.pokemon-combat",
+        "runtime.pokemon-skid-hit",
+        "runtime.player-health-running-hit",
+        "runtime.follower-throw-player-damage",
+        "host.follower-throw-player-damage-proof",
+        "runtime.follower-ram-pokemon",
+        "runtime.basic-attack",
+        "host.follower-throw-hit-abort-proof",
+        "runtime.follower-throw-hit-abort",
+        "runtime.stomp-slam-player-contact",
+        "runtime.stomp-slam-mounted-player-contact"
+      ],
+      "scenarios": [
+        "player-hp.ram-low-speed",
+        "player-hp.ram-rest",
+        "player-hp.throw-contact",
+        "player-hp.hop-contact",
+        "player-hp.ambush-jump",
+        "player-hp.mounted-ambush-height",
+        "wild.throw-moving-candidate",
+        "pokemon-hp.collision-knockback",
+        "pokemon-hp.skid-hit-crash-knockback",
+        "player-hp.running-hit",
+        "follower.throw-player-damage",
+        "follower.ram-pokemon",
+        "profile.basic-attack",
+        "follower.throw-hit-abort",
+        "profile.stomp-slam.player-contact",
+        "profile.stomp-slam.mounted-player-contact"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md",
+        "documentation/overworld-system/player-hp-implementation-plan.md"
+      ],
+      "traceGroups": [
+        "profile",
+        "motion",
+        "lifecycle"
+      ],
+      "minimumProof": [
+        "S3"
+      ]
+    },
+    {
+      "id": "player.health",
+      "title": "Player health save and field state",
+      "owner": "Player health field service",
+      "roles": [
+        "Player"
+      ],
+      "sourcePatterns": [
+        "include/player_health*.h",
+        "src/player_health*.c",
+        "lib/overworld/player_health_model.c"
+      ],
+      "checks": [
+        "runtime.player-health-weepinbell-blocked-step",
+        "runtime.player-health-route29-blocked-step",
+        "runtime.player-health-initial-state",
+        "runtime.player-health-ram-rest",
+        "runtime.player-health-ram-low-speed",
+        "runtime.player-health-ram-warning",
+        "runtime.player-health-throw-contact",
+        "runtime.player-health-hop-contact",
+        "runtime.player-health-ambush-jump",
+        "runtime.player-health-mounted-ambush-height",
+        "runtime.player-health-mounted-throw",
+        "runtime.player-health-bar",
+        "runtime.player-health-save-reload",
+        "runtime.player-health-zero-load",
+        "runtime.pokemon-combat",
+        "runtime.pokemon-skid-hit",
+        "host.player-health-moving-heal",
+        "runtime.player-health-moving-heal-on-foot",
+        "runtime.player-health-moving-heal-mounted",
+        "runtime.player-health-running-hit",
+        "runtime.follower-throw-player-damage",
+        "host.follower-throw-player-damage-proof",
+        "runtime.stomp-slam-player-contact",
+        "runtime.stomp-slam-mounted-player-contact"
+      ],
+      "scenarios": [
+        "player-hp.weepinbell-blocked-step",
+        "player-hp.route29-blocked-step",
+        "player-hp.initial-state",
+        "player-hp.ram-rest",
+        "player-hp.ram-low-speed",
+        "player-hp.ram-warning",
+        "player-hp.throw-contact",
+        "player-hp.hop-contact",
+        "player-hp.ambush-jump",
+        "player-hp.mounted-ambush-height",
+        "player-hp.mounted-throw",
+        "player-hp.bar",
+        "player-hp.save-reload",
+        "player-hp.zero-load",
+        "pokemon-hp.collision-knockback",
+        "pokemon-hp.skid-hit-crash-knockback",
+        "player-hp.moving-heal-on-foot",
+        "player-hp.moving-heal-mounted",
+        "player-hp.running-hit",
+        "follower.throw-player-damage",
+        "profile.stomp-slam.player-contact",
+        "profile.stomp-slam.mounted-player-contact"
+      ],
+      "docs": [
+        "documentation/overworld-system/player-hp-implementation-plan.md"
+      ],
+      "traceGroups": [
+        "lifecycle"
+      ],
+      "minimumProof": [
+        "S3"
+      ]
+    },
     {
       "id": "actor.system",
       "title": "Resident actor facade",
@@ -1692,7 +4878,10 @@
         "package.actor",
         "package.spawn-identity",
         "package.wild-occupancy",
-        "package.legacy-owner-deletion"
+        "package.legacy-owner-deletion",
+        "runtime.throw-cargo-competition",
+        "runtime.throw-cargo-retarget",
+        "runtime.throw-mutual-pickup"
       ],
       "scenarios": [
         "devtools.actor-identity",
@@ -1701,11 +4890,12 @@
         "actor.inspect-current-and-stale",
         "mount.begin-current-follower",
         "mount.select-mid-run",
+        "mount.select-during-follower-switch",
         "mount.detach-restores-control",
-        "mount.transition-mid-motion",
         "world.unmounted.long-travel-cadence",
         "world.unmounted.game-cadence",
         "world.unmounted.spawn-zero-stutter",
+        "population.route30.saturated-headroom",
         "world.unmounted.wild-soak",
         "observation.live-actor-and-motion-control",
         "observation.spawn-height-control",
@@ -1717,7 +4907,10 @@
         "observation.walk-matrix-state-control",
         "observation.stomp-policy-control",
         "observation.crash-reader-control",
-        "actor.held-control-resume"
+        "actor.held-control-resume",
+        "wild.throw-cargo-competition",
+        "wild.throw-cargo-retarget",
+        "wild.throw-mutual-pickup"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md",
@@ -1787,7 +4980,19 @@
         "profile.walk-timing",
         "walk.flying-insect",
         "package.actor",
-        "runtime.packaged-resolver-parity"
+        "runtime.packaged-resolver-parity",
+        "host.follower-stop-facing",
+        "runtime.follower-stop-facing",
+        "host.ram-until-crash",
+        "runtime.ram-until-crash",
+        "runtime.ram-ledge-continuity",
+        "runtime.ram-behind-entry",
+        "runtime.follower-ram-pokemon",
+        "runtime.basic-attack",
+        "runtime.ram-brief-notice",
+        "runtime.throw-notice-walk-commit",
+        "host.follower-throw-hit-abort-proof",
+        "runtime.follower-throw-hit-abort"
       ],
       "scenarios": [
         "profile.resolve.override-order",
@@ -1796,7 +5001,16 @@
         "mount.bellsprout-waddle-sway",
         "profile.resolve.packaged-rom-parity",
         "population.spawn-work-budget",
-        "world.unmounted.long-travel-cadence"
+        "world.unmounted.long-travel-cadence",
+        "walk.follower.stop-facing",
+        "profile.ram.until-crash",
+        "profile.ram.ledge-continuity",
+        "profile.ram.behind-entry",
+        "follower.ram-pokemon",
+        "profile.basic-attack",
+        "profile.ram.brief-notice",
+        "wild.throw-notice-walk-commit",
+        "follower.throw-hit-abort"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md",
@@ -1837,7 +5051,16 @@
         "walk.momentum",
         "package.actor",
         "runtime.wild-walk",
-        "runtime.mounted-frames"
+        "runtime.mounted-frames",
+        "host.follower-stop-facing",
+        "runtime.follower-stop-facing",
+        "host.ram-until-crash",
+        "runtime.ram-until-crash",
+        "runtime.ram-ledge-continuity",
+        "runtime.ram-behind-entry",
+        "runtime.follower-ram-pokemon",
+        "runtime.ram-brief-notice",
+        "runtime.throw-notice-walk-commit"
       ],
       "scenarios": [
         "walk.cardinal.frames-1-32",
@@ -1847,7 +5070,14 @@
         "world.unmounted.game-cadence",
         "world.unmounted.spawn-zero-stutter",
         "world.unmounted.wild-soak",
-        "walk.wild.blocked-facing"
+        "walk.wild.blocked-facing",
+        "walk.follower.stop-facing",
+        "profile.ram.until-crash",
+        "profile.ram.ledge-continuity",
+        "profile.ram.behind-entry",
+        "follower.ram-pokemon",
+        "profile.ram.brief-notice",
+        "wild.throw-notice-walk-commit"
       ],
       "docs": [
         "documentation/overworld_walk_frame_timing_spec.md"
@@ -1894,11 +5124,12 @@
         "mount.movement.frame-pacing",
         "mount.stantler-speed-slew",
         "mount.stantler-sprint-parity",
-        "mount.stantler-sprint-obstacle-hop",
-        "mount.stantler-sprint-npc-hop",
         "mount.stantler-sprint-wall-approach",
         "mount.stantler-key-edge",
-        "mount.bellsprout-waddle-sway"
+        "mount.bellsprout-waddle-sway",
+        "mount.stantler-linear-variance",
+        "mount.stantler-sprint-full-speed",
+        "mount.stantler-running-ledge"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -1925,18 +5156,26 @@
         "src/pokemon_move_history_overlay/**",
         "src/overworld_wild_runtime_overlay/**",
         "src/overworld_wild_spawns_overlay/**",
-        "src/overworld_mount_overlay/**"
+        "src/overworld_mount_overlay/**",
+        "src/overworld_mount_action_overlay/**"
       ],
       "checks": [
         "walk.policy",
         "walk.momentum",
-        "runtime.turn-skid"
+        "runtime.turn-skid",
+        "runtime.pokemon-skid-hit"
       ],
       "scenarios": [
         "walk.turn-skid.control-release",
         "walk.wild.runner-stop-skid",
         "walk.wild.runner-turn-runway",
-        "mount.stantler-turn-skid-facing"
+        "mount.stantler-turn-skid-facing",
+        "mount.stantler-turn-skid-blocked-exit",
+        "mount.stantler-turn-skid-blocked-second",
+        "mount.stantler-two-key-turn-skid-blocked-second",
+        "mount.stantler-turn-skid-blocked-first",
+        "mount.stantler-newest-held-direction",
+        "pokemon-hp.skid-hit-crash-knockback"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -2045,25 +5284,42 @@
       "checks": [
         "host.motion-model",
         "host.motion-start-transaction",
+        "host.random-hop-search",
         "host.hop-elevation-arc",
         "host.appear-hop-completion",
         "host.pb9-profile-building-block-scenarios",
         "package.actor",
         "hop.emote-directions",
-        "runtime.mankey-hops",
-        "runtime.mankey-control-stress"
+        "runtime.player-health-hop-contact",
+        "runtime.player-health-ambush-jump",
+        "runtime.player-health-mounted-ambush-height",
+        "runtime.pokemon-combat",
+        "runtime.player-health-running-hit",
+        "runtime.follower-throw-player-damage",
+        "host.follower-throw-player-damage-proof",
+        "runtime.follower-ram-pokemon",
+        "runtime.basic-attack",
+        "runtime.stomp-slam-player-contact",
+        "runtime.stomp-slam-mounted-player-contact",
+        "runtime.wild.igglybuff-player-fear-cry"
       ],
       "scenarios": [
-        "hop.cardinal-and-diagonal",
-        "hop.mankey-visual-arc",
-        "hop.mounted-single-motion",
+        "player-hp.hop-contact",
+        "player-hp.ambush-jump",
+        "player-hp.mounted-ambush-height",
+        "profile.ambush.player-tile-landing",
         "profile.floaty-bounce-hop-pause",
         "spawn.appear-hop-timing",
-        "mount.transition-mid-motion",
-        "mount.stantler-sprint-obstacle-hop",
-        "mount.stantler-sprint-npc-hop",
         "walk.wild.sprint-obstacle-approach",
-        "walk.wild.sprint-npc-hop"
+        "walk.wild.sprint-npc-hop",
+        "pokemon-hp.collision-knockback",
+        "player-hp.running-hit",
+        "follower.throw-player-damage",
+        "follower.ram-pokemon",
+        "profile.basic-attack",
+        "profile.stomp-slam.player-contact",
+        "profile.stomp-slam.mounted-player-contact",
+        "wild.igglybuff-player-fear-cry"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -2097,14 +5353,21 @@
       ],
       "sourcePatterns": [
         "src/pokemon_move_history_task6_overlay/**",
-        "src/overworld_wild_spawns_overlay/**"
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_mount_chain_overlay/**",
+        "src/overworld_mount_overlay/**",
+        "src/overworld_mount_action_overlay/**",
+        "include/overworld_actor_system_internal.h"
       ],
       "checks": [
         "host.motion-model",
-        "runtime.wild-ledge-hop"
+        "runtime.wild-ledge-hop",
+        "runtime.mounted-rattata-walking-ledge"
       ],
       "scenarios": [
-        "hop.ledge-up-and-down"
+        "hop.ledge-up-and-down",
+        "mount.stantler-running-ledge",
+        "mount.rattata-walking-ledge"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -2223,24 +5486,29 @@
       "checks": [
         "package.mount",
         "runtime.mounted-smoothness",
-        "runtime.cyndaquil-control"
+        "runtime.cyndaquil-control",
+        "runtime.stomp-slam-mounted-player-contact",
+        "runtime.mounted-rattata-walking-ledge"
       ],
       "scenarios": [
         "profile.resolve.follower-mounted-parity",
         "mount.begin-current-follower",
         "mount.select-mid-run",
+        "mount.select-during-follower-switch",
         "mount.detach-follower-resumes-motion",
         "mount.detach-restores-control",
-        "mount.transition-mid-motion",
         "mount.walk-transition-mid-motion",
         "mount.movement.frame-pacing",
         "mount.stantler-speed-slew",
         "mount.stantler-sprint-parity",
-        "mount.stantler-sprint-obstacle-hop",
-        "mount.stantler-sprint-npc-hop",
         "mount.stantler-sprint-wall-approach",
         "mount.stantler-key-edge",
-        "mount.bellsprout-waddle-sway"
+        "mount.bellsprout-waddle-sway",
+        "mount.stantler-linear-variance",
+        "mount.stantler-sprint-full-speed",
+        "mount.stantler-running-ledge",
+        "profile.stomp-slam.mounted-player-contact",
+        "mount.rattata-walking-ledge"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -2291,17 +5559,24 @@
         "host.mount-gait",
         "package.mount",
         "runtime.mounted-smoothness",
-        "runtime.mankey-control-stress"
+        "runtime.pokemon-skid-hit"
       ],
       "scenarios": [
         "walk.turn-skid.control-release",
         "walk.stomp.feedback",
         "walk.crash.feedback",
-        "hop.mounted-single-motion",
         "mount.movement.frame-pacing",
         "mount.stantler-speed-slew",
         "mount.walk-transition-mid-motion",
-        "mount.stantler-turn-skid-facing"
+        "mount.stantler-turn-skid-facing",
+        "mount.stantler-turn-skid-blocked-exit",
+        "mount.stantler-turn-skid-blocked-second",
+        "mount.stantler-two-key-turn-skid-blocked-second",
+        "mount.stantler-turn-skid-blocked-first",
+        "mount.stantler-newest-held-direction",
+        "pokemon-hp.skid-hit-crash-knockback",
+        "mount.stantler-linear-variance",
+        "mount.stantler-sprint-full-speed"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -2374,13 +5649,15 @@
         "runtime.wild-transition",
         "runtime.follower-transition",
         "runtime.mount-walk-transition",
-        "runtime.mount-transition"
+        "runtime.world.transition.wild-roof-height",
+        "runtime.world.transition.wild-signpost-height"
       ],
       "scenarios": [
         "world.transition.wild-invalidation",
         "world.transition.follower-rebind",
-        "mount.transition-mid-motion",
-        "mount.walk-transition-mid-motion"
+        "mount.walk-transition-mid-motion",
+        "world.transition.wild-roof-height",
+        "world.transition.wild-signpost-height"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -2393,7 +5670,7 @@
       ],
       "minimumProof": [
         "S3",
-        "S5"
+        "S4"
       ],
       "roleProof": [
         {
@@ -2404,7 +5681,7 @@
           ]
         },
         {
-          "proofLevel": "S5",
+          "proofLevel": "S4",
           "roles": [
             "Mounted"
           ]
@@ -2423,8 +5700,7 @@
         "src/overworld_mount_overlay/**"
       ],
       "checks": [
-        "package.mount",
-        "runtime.mount-transition"
+        "package.mount"
       ],
       "scenarios": [
         "warp.blocked-mid-motion"
@@ -2462,16 +5738,29 @@
         "host.spawn-refill-budget",
         "host.spawn-destination-budget",
         "package.actor",
-        "runtime.land-surf"
+        "runtime.land-surf",
+        "host.distance-despawn-proof",
+        "runtime.population.distance-despawn-route29",
+        "runtime.population.distance-despawn-cherrygrove",
+        "runtime.population.failed-series-retry",
+        "runtime.population.natural-water-spawn",
+        "runtime.world.route30-sentret-throw-pacing",
+        "runtime.population.route30-saturated-headroom"
       ],
       "scenarios": [
         "population.land-surf-separation",
         "spawn.ledyba-pool-site",
         "population.spawn-work-budget",
         "world.unmounted.spawn-zero-stutter",
+        "population.route30.saturated-headroom",
         "world.unmounted.long-travel-cadence",
         "world.unmounted.game-cadence",
-        "world.unmounted.wild-soak"
+        "world.unmounted.wild-soak",
+        "population.distance-despawn-route29",
+        "population.distance-despawn-cherrygrove",
+        "population.failed-series-retry",
+        "population.natural-water-spawn",
+        "world.route30.sentret-throw-pacing"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md",
@@ -2530,15 +5819,62 @@
         "host.pb9-profile-building-block-scenarios",
         "host.behavior-resolver",
         "host.actor-lane-projection",
-        "host.spawn-profile-lifecycle"
+        "host.spawn-profile-lifecycle",
+        "runtime.follower-throw-moving-cargo",
+        "host.follower-throw-proof",
+        "runtime.wild.playful-in-place-hop",
+        "host.playful-in-place-hop-proof",
+        "runtime.wild.baby-player-fear",
+        "runtime.wild.baby-pokemon-fear",
+        "runtime.follower.baby-damage-seek-safety",
+        "runtime.follower.baby-seek-safety",
+        "host.baby-fear-proof",
+        "runtime.follower-throw-target-above",
+        "runtime.follower-throw-target-below",
+        "runtime.held-throw-search",
+        "host.held-throw-search-proof",
+        "runtime.follower-throw-player-damage",
+        "host.follower-throw-player-damage-proof",
+        "runtime.follower-throw-away-non45",
+        "runtime.follower-throw-query-priority",
+        "host.follower-throw-query-priority-proof",
+        "runtime.wild-throw-ground-lock-soak",
+        "host.wild-throw-ground-lock-soak-proof",
+        "runtime.follower-target-access-signpost",
+        "runtime.follower-target-access-ground",
+        "host.target-access-proof",
+        "runtime.wild.damage-flee",
+        "runtime.stomp-slam-player-contact",
+        "runtime.stomp-slam-mounted-player-contact",
+        "runtime.wild.igglybuff-player-fear-cry"
       ],
       "scenarios": [
         "profile.condition.packaged-rom-evaluator",
         "profile.condition.live-wild-controller",
-        "profile.notice-player.routine-return",
         "profile.stalker.visibility-gate",
         "profile.playful.target-and-collision",
-        "profile.startled.timed-retreat"
+        "profile.playful.in-place-hop",
+        "profile.startled.timed-retreat",
+        "profile.ambush.player-tile-landing",
+        "follower.throw-moving-cargo",
+        "wild.baby-player-fear",
+        "wild.baby-pokemon-fear",
+        "follower.baby-damage-seek-safety",
+        "follower.baby-seek-safety",
+        "follower.throw-target-above",
+        "follower.throw-target-below",
+        "wild.throw-held-search",
+        "follower.throw-player-damage",
+        "follower.throw-away-non45",
+        "follower.throw-query-priority",
+        "wild.throw-ground-lock-soak",
+        "follower.target-access-signpost",
+        "follower.target-access-ground",
+        "wild.damage-flee",
+        "profile.stomp-slam.player-contact",
+        "profile.stomp-slam.mounted-player-contact",
+        "wild.igglybuff-player-fear-cry",
+        "world.route30.sentret-throw-pacing"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md",
@@ -2662,12 +5998,13 @@
         "host.behavior-schema",
         "host.behavior-conditions",
         "host.behavior-resolver",
-        "host.pb9-profile-building-block-scenarios"
+        "host.pb9-profile-building-block-scenarios",
+        "runtime.wild.igglybuff-player-fear-cry"
       ],
       "scenarios": [
-        "profile.notice-player.routine-return",
         "profile.playful.target-and-collision",
-        "profile.startled.timed-retreat"
+        "profile.startled.timed-retreat",
+        "wild.igglybuff-player-fear-cry"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -2710,7 +6047,10 @@
         "host.spawn-fly-in",
         "host.pb9-profile-building-block-scenarios",
         "host.proof-gate",
-        "runtime.land-surf"
+        "runtime.land-surf",
+        "runtime.population.failed-series-retry",
+        "runtime.population.natural-water-spawn",
+        "runtime.spawn.move-entry-arrival"
       ],
       "scenarios": [
         "population.land-surf-separation",
@@ -2718,7 +6058,11 @@
         "spawn.ledyba-pool-site",
         "spawn.fly-in.uneven-height",
         "population.spawn-work-budget",
-        "world.unmounted.spawn-zero-stutter"
+        "world.unmounted.spawn-zero-stutter",
+        "population.route30.saturated-headroom",
+        "population.failed-series-retry",
+        "population.natural-water-spawn",
+        "spawn.move-entry.arrival"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -2788,11 +6132,13 @@
         "host.behavior-schema",
         "host.behavior-resolver",
         "host.canopy-surface-catalog",
-        "runtime.land-surf"
+        "runtime.land-surf",
+        "runtime.population.natural-water-spawn"
       ],
       "scenarios": [
         "population.land-surf-separation",
-        "walk.wild.blocked-facing"
+        "walk.wild.blocked-facing",
+        "population.natural-water-spawn"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -2826,11 +6172,14 @@
         "host.behavior-schema",
         "host.motion-model",
         "host.pb9-profile-building-block-scenarios",
-        "walk.policy"
+        "walk.policy",
+        "host.follower-stop-facing",
+        "runtime.follower-stop-facing"
       ],
       "scenarios": [
         "profile.waddle.walk-presentation-only",
-        "walk.wild.blocked-facing"
+        "walk.wild.blocked-facing",
+        "walk.follower.stop-facing"
       ],
       "docs": [
         "documentation/overworld_walk_frame_timing_spec.md"
@@ -2937,12 +6286,51 @@
       "checks": [
         "host.behavior-schema",
         "host.behavior-resolver",
-        "host.pb9-profile-building-block-scenarios"
+        "host.pb9-profile-building-block-scenarios",
+        "runtime.follower-throw-moving-cargo",
+        "host.follower-throw-proof",
+        "runtime.wild.playful-in-place-hop",
+        "host.playful-in-place-hop-proof",
+        "runtime.wild.baby-player-fear",
+        "runtime.wild.baby-pokemon-fear",
+        "runtime.follower.baby-damage-seek-safety",
+        "runtime.follower.baby-seek-safety",
+        "host.baby-fear-proof",
+        "runtime.follower-throw-target-above",
+        "runtime.follower-throw-target-below",
+        "runtime.held-throw-search",
+        "host.held-throw-search-proof",
+        "runtime.follower-throw-player-damage",
+        "host.follower-throw-player-damage-proof",
+        "runtime.follower-throw-away-non45",
+        "runtime.follower-throw-query-priority",
+        "host.follower-throw-query-priority-proof",
+        "runtime.wild-throw-ground-lock-soak",
+        "host.wild-throw-ground-lock-soak-proof",
+        "runtime.wild.damage-flee",
+        "runtime.wild.igglybuff-player-fear-cry"
       ],
       "scenarios": [
         "profile.stalker.visibility-gate",
         "profile.playful.target-and-collision",
-        "profile.startled.timed-retreat"
+        "profile.playful.in-place-hop",
+        "profile.startled.timed-retreat",
+        "profile.ambush.player-tile-landing",
+        "follower.throw-moving-cargo",
+        "wild.baby-player-fear",
+        "wild.baby-pokemon-fear",
+        "follower.baby-damage-seek-safety",
+        "follower.baby-seek-safety",
+        "follower.throw-target-above",
+        "follower.throw-target-below",
+        "wild.throw-held-search",
+        "follower.throw-player-damage",
+        "follower.throw-away-non45",
+        "follower.throw-query-priority",
+        "wild.throw-ground-lock-soak",
+        "wild.damage-flee",
+        "wild.igglybuff-player-fear-cry",
+        "world.route30.sentret-throw-pacing"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -2992,6 +6380,110 @@
             "Wild"
           ]
         }
+      ]
+    },
+    {
+      "id": "pokemon.appearance",
+      "title": "HP and cooldown Pok\u00e9mon palette tint",
+      "owner": "Actor appearance presentation owner in Field overlay1",
+      "roles": [
+        "Wild",
+        "Follower",
+        "Mounted"
+      ],
+      "sourcePatterns": [
+        "include/overworld_actor_appearance*.h",
+        "include/overworld_appearance_policy.h",
+        "lib/overworld/overworld_actor_appearance*.c",
+        "lib/overworld/overworld_appearance_policy.c",
+        "lib/overworld/overworld_field_capsule.ld",
+        "armips/asm/overworld_field_capsule.s",
+        "scripts/*overworld_field_capsule.py",
+        "include/overworld_combat.h",
+        "src/player_health*.c",
+        "include/overworld_behavior_conditions.h",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "data/overworld_behavior_profiles.json",
+        "src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.c",
+        "tools/overworld/devtools_appearance*.py",
+        "tools/overworld/test_devtools_appearance_palette.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_runtime.py",
+        "tools/overworld/devtools_observer.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/*/pokemon-appearance.*.json"
+      ],
+      "checks": [
+        "host.pokemon-palette-reader",
+        "runtime.pokemon-appearance.damage-palette",
+        "runtime.pokemon-appearance.cooldown-palette",
+        "runtime.pokemon-appearance.ambush-cooldown-palette"
+      ],
+      "scenarios": [
+        "pokemon-appearance.damage-palette",
+        "pokemon-appearance.cooldown-palette",
+        "pokemon-appearance.ambush-cooldown-palette"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md",
+        ".agents/skills/verify-overworld/features/pokemon-appearance.md"
+      ],
+      "traceGroups": [
+        "presentation",
+        "profile",
+        "lifecycle"
+      ],
+      "minimumProof": [
+        "S4"
+      ]
+    },
+    {
+      "id": "presentation.emote-slots",
+      "title": "Three independent native emote slots",
+      "owner": "Stock field effect owner with shared three-slot resource admission",
+      "roles": [
+        "Wild"
+      ],
+      "sourcePatterns": [
+        "include/overworld_emote_slots_internal.h",
+        "lib/overworld/overworld_emote_slots*",
+        "scripts/pack_overworld_emote_slots.py",
+        "src/overworld_actor_system_overlay/linker.ld",
+        "armips/asm/overworld_emote_slots.s",
+        "overlays.mk",
+        "scripts/make.py",
+        "src/player_health_overlay/wild_movement_value.c",
+        "tools/overworld/devtools_emote*",
+        "tools/overworld/test_devtools_emote*",
+        "tools/overworld/devtools_runtime.py",
+        "tools/overworld/devtools_contract.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "scripts/overworld_devtools_worker.py",
+        "tests/overworld/*/presentation.emote-three-slots.json"
+      ],
+      "checks": [
+        "runtime.presentation.emote-three-slots"
+      ],
+      "scenarios": [
+        "presentation.emote-three-slots"
+      ],
+      "docs": [
+        "documentation/overworld-system/architecture.md",
+        ".agents/skills/verify-overworld/features/emote-slots.md"
+      ],
+      "traceGroups": [
+        "presentation",
+        "lifecycle"
+      ],
+      "minimumProof": [
+        "S3"
       ]
     }
   ]

@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.ram-warning",
+  "title": "Amber HP bar stays on during an active Onix Ram",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/player-hp-implementation-plan.md",
+  "requirements": [
+    "current.player-health-ram-warning"
+  ],
+  "budgets": {
+    "maxSeconds": 180,
+    "maxFrames": 360,
+    "noProgressFrames": 120,
+    "minObservedFrames": 2
+  },
+  "subjects": [
+    {
+      "id": "onix",
+      "species": 95,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "player-health-ram-warning-v1",
+      "subject": "onix"
+    }
+  ],
+  "setup": [
+    {
+      "id": "ram-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 407,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-onix",
+      "op": "spawn",
+      "args": {
+        "species": 95,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 585,
+        "z": 412
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-onix",
+      "op": "bind",
+      "args": {
+        "subject": "onix"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "wait-ram-application",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "player-health-ram-warning-v1",
+          "stage": "ram-active",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "wait-active-charge",
+      "op": "step",
+      "args": {
+        "frames": 40,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "player-health-ram-warning-v1",
+          "stage": "charge-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "read-charge-warning",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "player-health-ram-warning-v1",
+      "when": "final"
+    }
+  ]
+}

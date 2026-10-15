@@ -63,7 +63,15 @@ typedef enum OverworldActorWalkPolicyOperation {
     OVERWORLD_ACTOR_WALK_POLICY_CHAIN_PUT_PENDING = 13,
     OVERWORLD_ACTOR_WALK_POLICY_PUBLISH_EFFECT = 14,
     OVERWORLD_ACTOR_WALK_POLICY_SWAP_PROFILE = 15,
+    OVERWORLD_ACTOR_WALK_POLICY_PREVIEW_INPUT = 16,
+    OVERWORLD_ACTOR_WALK_POLICY_HIT_CRASH = 17,
 } OverworldActorWalkPolicyOperation;
+
+/* Hit Crash is one policy transition and one later engine settlement. The
+ * caller keeps the accepted reservation in reserved[0..1] and field epoch in
+ * reserved[2..3]. No engine END or logical commit belongs to this transition. */
+#define OVERWORLD_ACTOR_WALK_HIT_CRASH_START 0
+#define OVERWORLD_ACTOR_WALK_HIT_CRASH_SETTLE 0x80
 
 typedef enum OverworldActorWalkPolicyDecision {
     OVERWORLD_ACTOR_WALK_POLICY_IGNORED = 0,
@@ -97,6 +105,9 @@ typedef enum OverworldActorWalkPolicyStartResult {
 #define OVERWORLD_ACTOR_WALK_POLICY_SKID_PATH_TILES_INDEX 1
 #define OVERWORLD_ACTOR_WALK_POLICY_STOP_SKID_TILES_INDEX \
     OVERWORLD_ACTOR_WALK_POLICY_SKID_PATH_TILES_INDEX
+/* PREVIEW_INPUT reports the original pending step here. The preview never
+ * commits its proposal or advances the live policy. */
+#define OVERWORLD_ACTOR_WALK_POLICY_PREVIEW_PENDING_INDEX 3
 
 /* pendingStep is a fixed ABI byte shared by both adapters. */
 #define OVERWORLD_ACTOR_WALK_PENDING_NONE 0

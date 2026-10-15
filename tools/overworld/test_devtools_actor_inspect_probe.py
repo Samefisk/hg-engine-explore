@@ -11,7 +11,7 @@ class Session:
     def __init__(self):
         self.rt = SimpleNamespace(EXECUTED_FRAME_COUNT=100, ACTOR_DESCRIPTOR={
             "facade": dict(version=2),
-            "state": dict(address=0x02010000, size=2448, actorStride=172,
+            "state": dict(address=0x02010000, size=2488, actorStride=176,
                           offsets=dict(actors=68, fieldEpoch=12, mapGeneration=46)),
             "capacities": dict(actors=10),
             "structures": dict(query=24, snapshot=176, actorState=88)})
@@ -34,11 +34,11 @@ class Session:
         raw = bytearray(88)
         struct.pack_into("<HH6HI", raw, 0, 2, 88, 7, 65535, 2, 3, 4, 0, 99)
         raw[84] = 1
-        self.put(0x02010000, bytes(2448))
-        self.put(0x02010000, struct.pack("<IHH", 0x5353574F, 2, 2448))
+        self.put(0x02010000, bytes(2488))
+        self.put(0x02010000, struct.pack("<IHH", 0x5353574F, 2, 2488))
         self.put(0x0201000c, struct.pack("<H", 2))
         self.put(0x0201002e, struct.pack("<H", 3))
-        self.actor_address = 0x02010000 + 68 + 7 * 172
+        self.actor_address = 0x02010000 + 68 + 7 * 176
         self.put(self.actor_address, raw)
 
     def field_pointer(self): return self.field

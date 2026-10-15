@@ -1,0 +1,365 @@
+{
+  "schemaVersion": 1,
+  "id": "population.natural-water-spawn",
+  "title": "Natural Surf spawn and completed native water landing",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md#10-population-and-lifecycle",
+  "requirements": [
+    "current.natural-water-spawn"
+  ],
+  "budgets": {
+    "maxSeconds": 240,
+    "maxFrames": 1201,
+    "noProgressFrames": 180,
+    "minObservedFrames": 600
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    }
+  ],
+  "setup": [
+    {
+      "id": "warmup-city-start",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 564,
+          "z": 392
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "warmup-east",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "RIGHT",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 1
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "warmup-east-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 565,
+          "z": 392
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "warmup-south",
+      "op": "step",
+      "args": {
+        "frames": 40,
+        "keys": [
+          "DOWN",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 7
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 40,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "warmup-south-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 67,
+          "x": 565,
+          "z": 398
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "warmup-east-seam",
+      "op": "step",
+      "args": {
+        "frames": 96,
+        "keys": [
+          "RIGHT",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 27
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 96,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "warmup-east-seam-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 33,
+          "x": 585,
+          "z": 398
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "warmup-south-start",
+      "op": "step",
+      "args": {
+        "frames": 48,
+        "keys": [
+          "DOWN",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 35
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 48,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "warmup-south-start-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 33,
+          "x": 585,
+          "z": 406
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "warmup-release",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "warmup-current-follower",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "actor-present",
+          "subject": "mankey"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "warmup-follower-settled",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "follower-settled",
+          "species": 56,
+          "partySlot": 2
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "warmup-bind-current-field",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "natural-window",
+      "op": "teleport",
+      "args": {
+        "map": 34,
+        "x": 565,
+        "z": 369,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "current-follower",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "follower-settled",
+          "species": 56,
+          "partySlot": 2
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "bind-current-field",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "water-1",
+      "op": "step",
+      "args": {
+        "frames": 150,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 150,
+        "noProgressFrames": 150
+      }
+    },
+    {
+      "id": "water-2",
+      "op": "step",
+      "args": {
+        "frames": 150,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 150,
+        "noProgressFrames": 150
+      }
+    },
+    {
+      "id": "water-3",
+      "op": "step",
+      "args": {
+        "frames": 150,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 150,
+        "noProgressFrames": 150
+      }
+    },
+    {
+      "id": "water-4",
+      "op": "step",
+      "args": {
+        "frames": 150,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 150,
+        "noProgressFrames": 150
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "natural-water-spawn-v1",
+      "when": "final"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "natural-water-spawn-v1",
+      "subject": "mankey"
+    }
+  ]
+}

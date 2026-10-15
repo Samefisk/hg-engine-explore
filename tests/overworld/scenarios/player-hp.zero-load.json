@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.zero-load",
+  "title": "A valid zero-HP Continue starts one blackout and restores control",
+  "status": "active",
+  "capabilities": [
+    "player.health"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/player-hp-implementation-plan.md",
+    "actor": "The player loaded from a private, checksum-valid zero-HP Continue save. No wild actor is required.",
+    "trigger": "Continue the current ROM from a run-owned copy of test.sav with PH1 HP zero and the selected stock save checksum updated.",
+    "observable": "The first authenticated boot boundary retains HP zero and one stock blackout chain. The chain ends at the saved healing checkpoint, HP and party heal, money and bag remain unchanged, and normal Up input moves the player.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Prepare only a private copy of test.sav. Change the six owned HP record bytes in its selected normal save copy and recalculate the normal-slot footer checksum. Preserve the inactive copy, all unrelated bytes, source file hash and destination checkpoint. Record the exact changed-byte manifest. This is a controlled zero-load fixture, not a claim that normal Save is available at zero HP."
+      },
+      {
+        "phase": "during-observation",
+        "target": "fixture",
+        "change": "No direct writes. Continue and stock blackout/arrival dialogue use normal button input through the shared service on port 8767."
+      }
+    ],
+    "limits": [
+      "The run-owned fixture changes only PH1 bytes and the selected stock checksum; it does not claim that the game can Save at zero HP.",
+      "The completed-queue trace must include one root and stock blackout chain from Continue through task release. A final full-HP read alone cannot pass.",
+      "The one required blackout A press occurs only at its authenticated message wait. Up input occurs after field task release.",
+      "At most 3000 measured post-boot frames and 540 seconds. The original ROM/save and failed data are preserved.",
+      "Copied-data controls reject missing zero, wrong private hash, missing stock task, duplicate root, wrong checkpoint, changed money/bag, unhealed party, retained task, missing input and no normal step.",
+      "Native memory data proves task ownership and game state; no LCD pixels or screen images are claimed."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Create and authenticate a run-owned checksum-valid zero-HP cartridge copy."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Continue retains zero HP and one root/stock blackout chain through the first input wait."
+    },
+    {
+      "at": 2,
+      "kind": "input",
+      "value": "Normal A input dismisses authenticated blackout and arrival waits."
+    },
+    {
+      "at": 3,
+      "kind": "lifecycle",
+      "value": "The stock task releases the field at the saved checkpoint with healed HP and party."
+    },
+    {
+      "at": 4,
+      "kind": "input",
+      "value": "Normal Up input moves the player after recovery."
+    }
+  ],
+  "stop": {
+    "frameBudget": 3000,
+    "condition": "One complete task trace, restored HP/party, unchanged economy and normal movement, or the first invalid native receipt."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Zero HP is loaded before recovery",
+      "Exactly one stock blackout chain starts and ends",
+      "The saved checkpoint chooses the destination",
+      "Player and party heal; money and bag do not change",
+      "Normal input moves after field release"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "player-hp.zero-load",
+    "claims": [
+      "engine-boundary",
+      "natural-input",
+      "control-release"
+    ],
+    "minimumFrames": 53
+  },
+  "subjects": []
+}

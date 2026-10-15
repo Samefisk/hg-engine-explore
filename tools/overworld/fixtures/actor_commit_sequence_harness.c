@@ -6,6 +6,8 @@
 #include <string.h>
 #include "overworld_actor_system.h"
 #include "overworld_motion_model.h"
+#include "overworld_actor_hop_geometry.h"
+#include "constants/sndseq.h"
 
 typedef int BOOL;
 typedef struct OverworldActorPolicyView OverworldActorPolicyView;
@@ -13,16 +15,22 @@ typedef struct OverworldActorPolicyProfileBinding OverworldActorPolicyProfileBin
 
 /* @DECLARATIONS@ */
 /* @CONSTANTS@ */
+/* @HOP_GEOMETRY@ */
 
 static unsigned assertions, cases, populations, logicalTraces, terminalTraces;
 static u32 traceCommit;
 static BOOL reducerAccepted;
 static u8 reducerDecision;
 static OverworldActorRuntimeSlot *observedSlot;
+static unsigned impactSounds;
+static u16 lastImpactSound;
 
 #define CHECK(condition) do { assertions++; if (!(condition)) { \
     fprintf(stderr, "actor commit invariant failed at line %d: %s\n", __LINE__, #condition); \
     exit(1); } } while (0)
+
+static void PlaySE(u16 sound) { impactSounds++; lastImpactSound = sound; }
+/* @STOMP_SOUND@ */
 
 static BOOL ReduceWalk(OverworldActorWalkPolicyCall *call)
 {
@@ -113,6 +121,8 @@ static void Arrange(OverworldActorRuntimeSlot *slot, u8 role, u32 sequence)
     slot->snapshot.commitSequence = sequence;
     observedSlot = slot;
     populations = logicalTraces = terminalTraces = 0;
+    impactSounds = 0;
+    lastImpactSound = 0;
     reducerAccepted = TRUE;
     reducerDecision = OVERWORLD_ACTOR_WALK_POLICY_CONSUMED;
 }
@@ -189,6 +199,7 @@ static void CheckContinuousMotions(void)
                     CHECK(slot.snapshot.commitSequence == seeds[seed] + index + 1u);
                 }
                 CHECK(slot.motion.phase == OVERWORLD_MOTION_PHASE_IDLE);
+                CHECK(impactSounds == 0);
                 cases++;
             }
         }
@@ -201,6 +212,13 @@ static void CheckRejectedBoundaries(void)
         for (unsigned rejection = 0; rejection < 9; rejection++) {
             OverworldActorRuntimeSlot slot;
             OverworldMotionPlan plan = Plan(kind ? OVERWORLD_MOTION_KIND_WALK : OVERWORLD_MOTION_KIND_HOP, 0);
+            if (!kind) {
+                plan.flags |= OVERWORLD_MOTION_FLAG_SLAM;
+                plan.duration = 16;
+                plan.arcHeightQ4 = 64;
+                plan.arcRiseFrames = 8;
+                plan.arcHangFrames = 4;
+            }
             OverworldActorWalkPolicyCall call = WalkPolicy();
             OverworldActorWalkPolicyCall *walk = kind ? &call : NULL;
             Arrange(&slot, OVERWORLD_ACTOR_ROLE_WILD, 0x12345678);
@@ -230,6 +248,7 @@ static void CheckRejectedBoundaries(void)
             CHECK(slot.snapshot.commitSequence == 0x12345678);
             CHECK(slot.motion.commitSequence == 0 && slot.motion.commitPublished == 0);
             CHECK(logicalTraces == 0 && populations == 0 && terminalTraces == 0);
+            CHECK(impactSounds == 0);
             CHECK(slot.snapshot.reservationId == 0x1234);
             cases++;
         }
@@ -303,8 +322,42 @@ static void CheckTerminalPublication(void)
     }
 }
 
+static void CheckSlamLandingSoundAndPause(void)
+{
+    OverworldActorRuntimeSlot slot;
+    OverworldMotionPlan plan = Plan(OVERWORLD_MOTION_KIND_HOP, 30);
+    OverworldMotionSample sample;
+    plan.flags |= OVERWORLD_MOTION_FLAG_SLAM;
+    plan.duration = 16;
+    plan.arcHeightQ4 = 64;
+    plan.arcRiseFrames = 8;
+    plan.arcHangFrames = 4;
+    Arrange(&slot, OVERWORLD_ACTOR_ROLE_WILD, 0);
+    ReachTarget(&slot, &plan);
+    CHECK(impactSounds == 0);
+    Commit(&slot); /* Also repeats the ACK: the impact must play only once. */
+    CHECK(impactSounds == 1 && lastImpactSound == SEQ_SE_GS_IWAOTOSHI02);
+    CHECK(slot.motion.phase == OVERWORLD_MOTION_PHASE_SETTLING);
+    CHECK(slot.motion.settleRemaining == 30);
+    for (unsigned frame = 1; frame <= 30; frame++) {
+        CHECK(OverworldMotion_Begin(&slot.motion, &plan)
+            == OVERWORLD_MOTION_DECISION_ALREADY_ACTIVE);
+        OverworldMotion_Tick(&slot.motion, 7, &sample);
+        CHECK(impactSounds == 1);
+        CHECK(slot.motion.settleRemaining == 30 - frame);
+        CHECK(slot.motion.phase == (frame == 30
+            ? OVERWORLD_MOTION_PHASE_IDLE : OVERWORLD_MOTION_PHASE_SETTLING));
+        ActorSystem_TryAcknowledgeMotionCommit(&slot, 7, NULL);
+        CHECK(impactSounds == 1);
+    }
+    CHECK(OverworldMotion_Begin(&slot.motion, &plan)
+        == OVERWORLD_MOTION_DECISION_ACCEPTED);
+    cases++;
+}
+
 int main(void)
 {
+    CheckSlamLandingSoundAndPause();
     CheckTerminalPublication();
     CheckContinuousMotions();
     CheckRejectedBoundaries();
