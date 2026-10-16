@@ -69,8 +69,8 @@ QUERY_SPAWN_CALLERS = {
 }
 
 # Current native ordinary helper selector; diagnostic-only in Baseline mode.
-HELPER_SCAN_OWNERS = {'helper': ('helper', 'OverworldWildHelper_TryPrepareSpawn', 37516732, 692, '8756f89f0704c3f12d8b577e6d3b5fe41e8138cb661393b684260340c3948233'), 'scanner': ('helper', 'OverworldWildHelper_TryPickSpawnPositionForTerrain.constprop.0', 37516060, 540, '5d8c95f8405ad8f53ea50a756626ccd46bf21930a68f058a0582ad598c80ff55'), 'terrain': ('wild', 'OverworldWildSpawns_HelperTryGetSpawnTerrain', 37546176, 10, '0418f1a8c1e513ebba2acf6978689ef2ba5563e663e43c15063aa9989fa9c074'), 'occupied': ('wild', 'OverworldWildSpawns_HelperIsTileOccupied', 37546216, 10, 'c2ee4357f3042a1f799140c82aa656f96b2a366979185d75ad5a316e9a81c5e4'), 'near': ('wild', 'OverworldWildSpawns_HelperIsNearActiveSpawn', 37549760, 10, '10435cf6d8380f79342084426c0dc2f125339bfa9aeb9a8c4561d03daf024cab')}
-HELPER_SCAN_TABLE_SHA = 'a57cfd3c60974525ee426235b2167ba79b988677ddd542fae31388c83020b46c'
+HELPER_SCAN_OWNERS = {'helper': ('helper', 'OverworldWildHelper_TryPrepareSpawn', 37516732, 692, '8756f89f0704c3f12d8b577e6d3b5fe41e8138cb661393b684260340c3948233'), 'scanner': ('helper', 'OverworldWildHelper_TryPickSpawnPositionForTerrain.constprop.0', 37516060, 540, '5d8c95f8405ad8f53ea50a756626ccd46bf21930a68f058a0582ad598c80ff55'), 'terrain': ('wild', 'OverworldWildSpawns_HelperTryGetSpawnTerrain', 37545908, 10, '0418f1a8c1e513ebba2acf6978689ef2ba5563e663e43c15063aa9989fa9c074'), 'occupied': ('wild', 'OverworldWildSpawns_HelperIsTileOccupied', 37545948, 10, 'c2ee4357f3042a1f799140c82aa656f96b2a366979185d75ad5a316e9a81c5e4'), 'near': ('wild', 'OverworldWildSpawns_HelperIsNearActiveSpawn', 37549664, 10, '2b02ea49b9d4fca1944459ecb5e564e73f9ffd7a3cf8871f933a80daeec05476')}
+HELPER_SCAN_TABLE_SHA = '62dc705d13fb68cd2c32215d2ce1fda4a0644183d0fa1ee93bfb87c3549debbb'
 # Exact BLX sites in the sealed ordinary scanner; its terrain local is u32.
 HELPER_SCAN_CALL_SITES = {'terrain': 0x023C74B2, 'occupied': 0x023C74C8, 'near': 0x023C74D8}
 HELPER_SCAN_TERRAIN_STACK_OFFSET = 0x28

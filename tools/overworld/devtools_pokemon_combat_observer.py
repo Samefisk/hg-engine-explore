@@ -78,7 +78,7 @@ def _interaction_layout(session):
     # This exact native getter loads its pointer from the flags base + 16.
     # Keep the private owner read bound to the complete current compiled body.
     require(hashlib.sha256(blob_getter[2]).hexdigest() ==
-            "7ba0b931b365ce25288248ae33270818c5bdda21d5e8df6478bb31a41f525494"
+            "bcb36b19130d455b4d3654f372ebe6db62b6cd0f78da7c9579a4678411e49923"
             and struct.unpack_from("<I", blob_getter[2], 108)[0] + 16 == blob_owner[0],
             "Pokémon condition catalog owner getter differs", "combat-interaction-identity")
     # Native Thumb getter: state+E4 -> runtime, then literal+514 -> conditions.

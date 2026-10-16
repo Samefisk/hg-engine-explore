@@ -77,8 +77,9 @@ SECTIONS {
                 KEEP(*(.overworld_mount_combat))
                 /* Append the Walk preview after the fixed HP entry. */
                 KEEP(*(.overworld_mount_preview))
-                ASSERT(ABSOLUTE(.) == 0x01FFFB58,
-                    "Mount preview changed private player-check filler");
+                ASSERT(ABSOLUTE(.) <= 0x01FFFB58,
+                    "Mount preview overlaps private player check");
+                . = ORIGIN(combat) + 0x1D8;
                 KEEP(*(.overworld_mount_private_player))
                 ASSERT(ABSOLUTE(.) == 0x01FFFB80,
                     "private Mount player check changed size");

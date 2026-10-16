@@ -725,12 +725,6 @@ OverworldMount_Begin(
     sOverworldMountState.fieldSystem = fieldSystem;
     sOverworldMountState.surfaceCatalog = surfaceCatalog;
     sOverworldMountState.snapshot.profile = profile->owner;
-    /* Mounted movement has no Hop locomotion: the rider jumps with B. */
-    if (sOverworldMountState.snapshot.profile.chillAction
-            == OW_WILD_BEHAVIOR_LOCOMOTION_HOP) {
-        sOverworldMountState.snapshot.profile.chillAction =
-            OW_WILD_BEHAVIOR_LOCOMOTION_WALK;
-    }
     sOverworldMountState.snapshot.binding = *binding;
     sOverworldMountState.snapshot.sessionGeneration = generation;
     sOverworldMountState.snapshot.phase = OVERWORLD_MOUNT_PHASE_BOUND;
@@ -1797,40 +1791,42 @@ OverworldMount_TryStartCustomMotion(
     sOverworldMountState.motionStartX = (s16)startX;
     sOverworldMountState.motionStartY = (s16)startY;
     if (rawLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP) {
-        if (sOverworldMountState.walkEndState
-                == OVERWORLD_MOUNT_WALK_END_CHAIN_HOP) {
-            OverworldMountActionCall actionCall = { 0 };
+        /* Every mounted Hop (Hop walking style, ledge Hop, B Jump) lands at
+         * one exact distance: the longest clear one from hopMaxDistance down
+         * to hopMinDistance. The chain adapter sets both to the one ledge Hop
+         * or B Jump distance it tries. */
+        OverworldMountActionCall actionCall = { 0 };
 
-            actionCall.version = OVERWORLD_MOUNT_ACTION_ADAPTER_VERSION;
-            actionCall.size = sizeof(actionCall);
-            actionCall.operation = OVERWORLD_MOUNT_ACTION_CHAIN_FORWARD_TARGET;
-            actionCall.action = lane->hopMaxDistance;
-            actionCall.direction = direction;
-            actionCall.state = &sOverworldMountState;
-            actionCall.avatar = avatar;
-            if (!OVERWORLD_MOUNT_ACTION_ADAPTER_DISPATCH(&actionCall)) {
-                return FALSE;
-            }
-            distance = lane->hopMaxDistance;
-            targetX = sOverworldMountState.motionTargetX;
-            targetY = sOverworldMountState.motionTargetY;
-            sOverworldMountState.motionTargetBaseY =
-                OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY->getGroundBaseY(
-                    sOverworldMountState.fieldSystem,
-                    sOverworldMountState.surfaceCatalog,
-                    player,
-                    targetX,
-                    targetY);
-            if (!OverworldMount_PlanHopTrajectory(
-                    (u8)distance, &trajectory)) {
-                return FALSE;
-            }
-            goto hop_target_found;
+        actionCall.version = OVERWORLD_MOUNT_ACTION_ADAPTER_VERSION;
+        actionCall.size = sizeof(actionCall);
+        actionCall.operation = OVERWORLD_MOUNT_ACTION_CHAIN_FORWARD_TARGET;
+        actionCall.direction = direction;
+        actionCall.state = &sOverworldMountState;
+        actionCall.avatar = avatar;
+        distance = lane->hopMaxDistance;
+next_distance:
+        actionCall.action = (u8)distance;
+        if (!OVERWORLD_MOUNT_ACTION_ADAPTER_DISPATCH(&actionCall)) {
+            goto shorter_distance;
         }
-        /* Only the ledge Hop and B Jump start a mounted Hop. */
-        return FALSE;
-hop_target_found:
-        ;
+        targetX = sOverworldMountState.motionTargetX;
+        targetY = sOverworldMountState.motionTargetY;
+        sOverworldMountState.motionTargetBaseY =
+            OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY->getGroundBaseY(
+                sOverworldMountState.fieldSystem,
+                sOverworldMountState.surfaceCatalog,
+                player,
+                targetX,
+                targetY);
+        if (!OverworldMount_PlanHopTrajectory(
+                (u8)distance, &trajectory)) {
+shorter_distance:
+            if (distance <= lane->hopMinDistance || distance <= 1) {
+                return FALSE;
+            }
+            distance--;
+            goto next_distance;
+        }
     } else {
         if (!OverworldMount_RequestTeleportPlan(
                 lane,
@@ -1917,6 +1913,7 @@ hop_target_found:
     }
     return TRUE;
 }
+
 
 static BOOL __attribute__((noinline)) OverworldMount_HandleCustomInput(
     FIELD_PLAYER_AVATAR *avatar,

@@ -1270,9 +1270,21 @@ place. A future skid tile or recovery destination is never a pre-start gate.
 The recovery Walk checks its own tile when it starts. Reposition Skids retain
 their selected direction, travel the clear prefix, and end in Crash at the
 first blocker, including an in-place skid when the first tile is blocked.
-No skid may cross a blocked tile. The legacy `planTurnSkidPath` data bit remains
-packed for compatibility but has no clearance-veto meaning. Profile Deck shows
-the fixed collision rule beside turn and stop skid controls.
+No skid may cross a blocked tile.
+
+`planTurnSkidPath` (Profile Deck: Predict skids) is the Owner-lane option that
+lets a Wild or Follower Walk predict its skids before it picks a direction; it
+never vetoes a skid that was already selected. While the actor has momentum,
+each candidate direction is previewed through Walk policy (`PREVIEW_INPUT`).
+The preview's skid slide, the first turned step and a stopping runway of
+`OverworldWalk_SkidTiles` tiles at the resulting speed must pass the Walk
+landing check. The player's tile ends a runway; a ledge ends it only in its
+own Hop direction, and any other ledge is a wall. An unsafe candidate ranks
+with avoided backtracks. When only unsafe candidates remain, the actor brakes
+to rest (Walk `RESET`, no Crash) and steps from rest. A `stopSkid` stop whose
+slide is blocked by a wall or the player also brakes instead of crashing.
+Locked Walks and rider input do not predict. Sprint enables the option.
+Profile Deck shows the fixed collision rule beside turn and stop skid controls.
 An ordinary Walk still checks only its next tile. Sprint can therefore reach
 the last clear tile before a wall or non-player actor even if a later obstacle
 Hop has no safe landing. The actual Hop validates the world when it starts.
@@ -1699,10 +1711,15 @@ reports the ordinary Crash.
   player terrain streamer, like cardinal Walk, so it neither waits for an
   idle loader nor stages a terrain anchor. Only a diagonal Jump still needs
   an idle stream; a busy stream drops that press without a crash.
-- **No mounted Hop walking style.** Directional input on a mount always
-  Walks. A Hop locomotion profile becomes Walk when the mount begins, and
-  the mounted lane-Hop landing search is gone; only the ledge Hop and B Jump
-  start a mounted Hop.
+- **Mounted Hop walking style.** A mount whose profile walking style is Hop
+  keeps it: held input Hops instead of Walking, as before B Jump. Each Hop
+  lands at the longest clear distance in the held direction, from
+  `hopMaxDistance` down to `hopMinDistance`, one exact forward target per try
+  (`OverworldMount_TryStartCustomMotion`). It uses the lane's Hop time and
+  pause, never crashes when nothing is clear, and never lands in water
+  unless the lane has the Water terrain bit. Unlike the pre-2026-10-13
+  search, it does not widen sideways. B Jump (Jump ability only) and the
+  automatic ledge Hop are unchanged. Restored 2026-10-16 (test3687).
 - **Jump into water.** A mounted Jump may land in water. A mount without
   the Water terrain bit (not a water runner) then costs the rider 10 HP
   through the ordinary contact hit, and on the landing tick
@@ -1729,7 +1746,7 @@ stock collision. A blocked tile with no native ground (a cliff face; stock
 height lookup `sub_02061248` finds no plate) is open to a Jump that lands
 lower than it starts, so a Jump falls off a cliff edge; on level ground or
 uphill it stays a wall. Any other blocked tile is 20 units, an occupying
-object 12, otherwise 0. Water is an open gap. A Wild or Follower landing classifier still rejects a water landing; the mounted forward-target check admits water for every mount (ledge Hop and B Jump). The arc is sampled once at the cell centre and must exceed
+object 12, otherwise 0. Water is an open gap. A Wild or Follower landing classifier still rejects a water landing; the mounted forward-target check admits water for every mount on a ledge Hop or B Jump (end state CHAIN_HOP), not on a Hop walking-style step. The arc is sampled once at the cell centre and must exceed
 the obstacle by 1 unit. The base arc stays 16 units; it rises only as needed
 and only up to the distance cap: 18 for two tiles, 22 for three and 24 for
 four or more. A wall therefore clears only near the middle of a four-tile or
@@ -2212,8 +2229,10 @@ authorable choice (state number 1 stays unused). Its Query entry search was
 rebuilt after every accepted step, so each tile waited about 13 updates for its
 root read, edge proof and ready receipt. The Scavenger profile (Rattata/Pikachu
 families) was the only user and spawns with the default Appear Hop. The Entry
-route and Wild overlay code that executed that trip is unreachable from catalog
-data and is kept only because the sealed Query image shares it (TKT-0065).
+route code that executed that trip is unreachable from catalog data and is kept
+only because the sealed Query image shares it (TKT-0065). Wild overlay 149
+dropped its `OW_WILD_SPAWN_ENTRY_MOVE` branches on 2026-10-15; nothing sets
+that entry mode.
 
 Spawn preparation, the owned queue, and entry travel use the existing Field
 Query loader and workspace. The fixed Wild adapter borrows a typed native

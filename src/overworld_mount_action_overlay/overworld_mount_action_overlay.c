@@ -978,6 +978,11 @@ static u8 OverworldMountAction_StartKnockback(OverworldMountActionCall *call)
         plan->duration, plan->arcHeightQ4);
 }
 
+/* End states run 0..CHAIN_HOP, so state / CHAIN_HOP is 1 only for CHAIN_HOP. */
+_Static_assert(OVERWORLD_MOUNT_WALK_END_STOP < OVERWORLD_MOUNT_WALK_END_CHAIN_HOP
+    && OVERWORLD_MOUNT_WALK_END_CHAIN_HOP == 4,
+    "only the chain-hop end state may admit a water landing");
+
 static u8 OverworldMountAction_ChainForwardTarget(
     OverworldMountActionCall *call)
 {
@@ -985,10 +990,11 @@ static u8 OverworldMountAction_ChainForwardTarget(
     int targetX;
     int targetY;
 
-    if (state == NULL || state->fieldSystem == NULL || call->direction > 7) {
+    /* The only caller passes the static mount state, never NULL. */
+    if (state->fieldSystem == NULL || call->direction > 7) {
         return FALSE;
     }
-    /* The caller passes the exact ledge Hop or B Jump distance. */
+    /* The caller passes the exact Hop, ledge Hop or B Jump distance. */
     targetX = state->motionStartX
         + OverworldWalkDirectionPolicy_DeltaX(call->direction) * call->action;
     targetY = state->motionStartY
@@ -1000,11 +1006,15 @@ static u8 OverworldMountAction_ChainForwardTarget(
             state->fieldSystem,
             /* The marker also selects one-tile Walk edges, which a cardinal
              * ledge Hop can never pass. Only a diagonal (4-7) Hop needs its
-             * strict side tiles; this sets 0x8000 for exactly those. Every
-             * mount may land in water: a non-water-runner splashes and is
-             * returned to its takeoff tile by the mount tick. */
+             * strict side tiles; this sets 0x8000 for exactly those. A
+             * ledge Hop or B Jump (end state CHAIN_HOP, 4) may land in
+             * water: a non-water-runner splashes and is returned to its
+             * takeoff tile by the mount tick. A Hop walking-style step
+             * keeps the lane terrain. */
             state->snapshot.profile.chillAllowedTerrainMask
-                | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER
+                | (u32)state->walkEndState
+                    / OVERWORLD_MOUNT_WALK_END_CHAIN_HOP
+                    * OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER
                 | ((call->direction & 4)
                     * (OVERWORLD_MOUNT_ACTION_STRICT_DIAGONAL_MARKER / 4)),
             targetX,

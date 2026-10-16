@@ -566,7 +566,7 @@ def retained_mask_capsule_contract(symbol, linked_body: bytes, packaged_body: by
             and hashlib.sha256(linked_body).hexdigest()
                 == "1edbd1908da0b08504c7de4f948799ab0d1940b3ebc83333bb2e0e8394c280b0"
             and packaged_body[0x130:0x14C] == linked_body
-            and re.search(r"\b23d47ec:\s+[0-9a-f]+\s+[0-9a-f]+\s+bl\s+1fff930\s+"
+            and re.search(r"\b23d4858:\s+[0-9a-f]+\s+[0-9a-f]+\s+bl\s+1fff930\s+"
                           r"<OverworldWildSpawns_RetainedMaskNamesActiveSpawns>", caller),
             "private retained mask leaf has wrong address, extent, bytes or Thumb call")
 
@@ -574,13 +574,13 @@ def retained_mask_capsule_contract(symbol, linked_body: bytes, packaged_body: by
 def retained_mask_call_owner_contract(symbol, binding, linked_body: bytes,
                                       packaged_body: bytes) -> None:
     """The reviewed T65 caller moved; its private leaf and target did not."""
-    require(symbol == (0x023D4658, 1072, ".text", "F")
-            and binding is not None and binding[:3] == (0x023D4659, 1072, "FUNC")
+    require(symbol == (0x023D46C4, 1072, ".text", "F")
+            and binding is not None and binding[:3] == (0x023D46C5, 1072, "FUNC")
             and binding[3].isdigit() and int(binding[3]) > 0
             and len(linked_body) == 1072 and packaged_body == linked_body
             and hashlib.sha256(linked_body).hexdigest()
-                == "52e9bb21680c42cea57add6b23976334dfebb99d76e80f2165900b8f306fcc81"
-            and decode_thumb_bl(linked_body, 0x023D4658, 0x023D47EC) == 0x01FFF930,
+                == "9d321a57ac1c6f5678b5c879f1dd1791aec9e9922ab07b956415a338809f1dd2"
+            and decode_thumb_bl(linked_body, 0x023D46C4, 0x023D4858) == 0x01FFF930,
             "private retained mask caller lost its exact Thumb owner, body, package or target")
 
 
@@ -1509,7 +1509,7 @@ def main() -> None:
         ((retained_symbol[0], retained_symbol[1], ".text", "F"), retained_body, carrier_package, transition_calls),
         (retained_symbol, bytes([retained_body[0] ^ 1]) + retained_body[1:], carrier_package, transition_calls),
         (retained_symbol, retained_body, carrier_package[:0x130] + bytes([carrier_package[0x130] ^ 1]) + carrier_package[0x131:], transition_calls),
-        (retained_symbol, retained_body, carrier_package, transition_calls.replace("23d47ec:", "23d47ce:")),
+        (retained_symbol, retained_body, carrier_package, transition_calls.replace("23d4858:", "23d47ce:")),
         (retained_symbol, retained_body, carrier_package, transition_calls.replace("bl\t1fff930", "blx\t1fff930")),
         (retained_symbol, retained_body, carrier_package, transition_calls.replace("1fff930", "1fff932")),
     ):
@@ -2014,20 +2014,23 @@ def main() -> None:
         and "== OW_WILD_BEHAVIOR_LOCOMOTION_HOP" in mount_source,
         "mounted Hop does not suppress synthetic warp/step transitions",
     )
-    # Mounted Hop locomotion is retired: the rider jumps with B. Only the
-    # chain-hop path (ledge Hop and B Jump) starts a mounted Hop, and a
-    # cardinal one streams terrain live like cardinal Walk.
+    # A Hop walking-style mount keeps its Hop locomotion and Hops on held
+    # input. Every mounted Hop (Hop style, ledge Hop, B Jump) takes one
+    # exact-distance forward target, from hopMaxDistance down to
+    # hopMinDistance; the chain adapter sets both to its one distance. Only the
+    # chain-hop path (ledge Hop and B Jump) streams terrain live like
+    # cardinal Walk.
     require(
         "OverworldMount_TryNextHopLandingCandidate" not in mount_source
         and re.search(
-            r"snapshot\.profile\.chillAction\s*== OW_WILD_BEHAVIOR_LOCOMOTION_HOP\)\s*\{\s*"
-            r"sOverworldMountState\.snapshot\.profile\.chillAction =\s*"
-            r"OW_WILD_BEHAVIOR_LOCOMOTION_WALK;",
-            mount_source) is not None
-        and "/* Only the ledge Hop and B Jump start a mounted Hop. */\n        return FALSE;" in mount_source
+            r"chillAction =\s*OW_WILD_BEHAVIOR_LOCOMOTION_WALK;",
+            mount_source) is None
+        and "actionCall.action = (u8)distance;" in mount_source
+        and "if (distance <= lane->hopMinDistance || distance <= 1) {" in mount_source
+        and "hop_target_found" not in mount_source
         and "if (!liveStream && !OverworldMount_BeginTerrainStream())" in mount_source
         and "(!liveStream && !OverworldMount_TerrainStreamIsIdle())" in mount_source,
-        "mounted Hop locomotion or the live cardinal chain-hop stream differs",
+        "mounted Hop walking style or the live cardinal chain-hop stream differs",
     )
     require(
         "motionStreamPreparing" in mount_runtime_source

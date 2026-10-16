@@ -543,8 +543,15 @@ class MountChainActionLifecycleTests(unittest.TestCase):
         self.assertIn(retry, body[cooldown:body.index("}", cooldown)])
         self.assertIn(retry, body[missing_follower:body.index("}", missing_follower)])
         self.assertEqual(body.count("? 2 : FALSE"), 2)
-        self.assertIn("/* Only the ledge Hop and B Jump start a mounted Hop. */\n"
-                      "        return FALSE;\nhop_target_found:", body)
+        # Every mounted Hop, including the Hop walking style, takes one exact
+        # forward target per try, from hopMaxDistance down to hopMinDistance.
+        self.assertNotIn("hop_target_found", body)
+        self.assertNotIn("TryNextHopLandingCandidate", body)
+        self.assertIn("distance = lane->hopMaxDistance;\nnext_distance:\n"
+                      "        actionCall.action = (u8)distance;", body)
+        self.assertIn("if (distance <= lane->hopMinDistance || distance <= 1) {\n"
+                      "                return FALSE;\n            }\n"
+                      "            distance--;\n            goto next_distance;", body)
         rejected = body.index("if (!actorMotionStarted && !OverworldMount_BeginSharedMotion(FALSE))")
         self.assertIn("return FALSE;", body[rejected:body.index("}", rejected)])
 
@@ -573,7 +580,9 @@ class MountChainActionLifecycleTests(unittest.TestCase):
         tick = function_body(source, "OverworldMount_Tick")
         self.assertIn("OverworldMount_UpdateCustomMotion();\n    OverworldMount_JumpLanded();", tick)
         action = (ROOT / "src/overworld_mount_action_overlay/overworld_mount_action_overlay.c").read_text()
-        self.assertIn("| OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER",
+        self.assertIn("| (u32)state->walkEndState\n"
+                      "                    / OVERWORLD_MOUNT_WALK_END_CHAIN_HOP\n"
+                      "                    * OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER",
                       function_body(action, "OverworldMountAction_ChainForwardTarget"))
 
     def test_real_chain_adapter_start_and_reset_outcomes(self):

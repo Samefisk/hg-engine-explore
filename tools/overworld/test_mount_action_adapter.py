@@ -23,6 +23,7 @@ STUBS = r'''
 #include <stdio.h>
 typedef unsigned char u8;
 typedef unsigned short u16;
+typedef unsigned int u32;
 typedef short s16;
 typedef int BOOL;
 #define TRUE 1
@@ -31,9 +32,11 @@ typedef int BOOL;
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER (1u << 1)
 #define OVERWORLD_WILD_LANDING_VALUE_SERVICE_VERSION 1
 #define OW_WILD_FOLLOWER_SLOT 7
+#define OVERWORLD_MOUNT_WALK_END_CHAIN_HOP 4
 typedef struct {
     struct { struct { u16 chillAllowedTerrainMask; } profile; } snapshot;
     void *fieldSystem;
+    u8 walkEndState;
     s16 motionStartX, motionStartY, motionTargetX, motionTargetY;
 } OverworldMountRuntimeState;
 typedef struct {
@@ -81,6 +84,7 @@ int main(void) {
     state.motionStartY = 20;
     call.state = &state;
     allowLanding = TRUE;
+    state.walkEndState = 4; /* CHAIN_HOP: ledge Hop or B Jump */
 
     /* A ledge Hop passes two tiles; a B Jump passes its exact reach. */
     call.action = 2;
@@ -90,7 +94,7 @@ int main(void) {
     CHECK(calls == 1 && seenX == 12 && seenY == 20);
     CHECK(seenFinalX == 12 && seenFinalY == 20);
     /* A cardinal (ledge) Hop must not select one-tile Walk edges. */
-    /* Every mount may land in water. */
+    /* A ledge Hop or B Jump may land any mount in water. */
     CHECK(seenMask == (u16)(0x1234 | OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER));
 
     call.direction = 5;
@@ -122,6 +126,14 @@ int main(void) {
     call.direction = 2;
     CHECK(OverworldMountAction_ChainForwardTarget(&call));
     CHECK(state.motionTargetX == 7 && state.motionTargetY == 20);
+
+    /* A Hop walking-style step (end state NONE or STOP) keeps lane terrain. */
+    state.walkEndState = 0;
+    CHECK(OverworldMountAction_ChainForwardTarget(&call));
+    CHECK(seenMask == 0x1234);
+    state.walkEndState = 3;
+    CHECK(OverworldMountAction_ChainForwardTarget(&call));
+    CHECK(seenMask == 0x1234);
     return 0;
 }
 '''

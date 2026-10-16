@@ -123,9 +123,9 @@ ENTRY_LAYOUT = {
     "Runtime_entryRouteReceipt": 2752,
     "Runtime_entryRouteSerial": 2816
 }
-ENTRY_NATIVE_OWNERS = {'ops': (37584724, 72, 'b3fa3371a761a7ab5a7712847d1984ce39c1ee50568fe0895686527d77452273'),
- 'remove': (37560532, 52, 'ac2cbbfe34ddcab9f9182f4e39f62780ba97dc11c217240017b2b0d4716b314f'),
- 'spawn': (37565892, 1204, 'ae67ca6350285bb8d5c5c58fd089031a223cd90f9221ee7749dee9766c709b2c')}
+ENTRY_NATIVE_OWNERS = {'ops': (37584708, 72, 'c7ef0e58f4394f9749d318b3daeff1727c1e5d0f3dd81b870b6b1828a25747a5'),
+ 'remove': (37560688, 52, 'd6f2f1f7d670b79aa49e26f72b2c02a5b63d9a3a5c2c769f6daa89965e81019a'),
+ 'spawn': (37566040, 1204, 'b18d2a881d1c8e2eda67ea16de97009b32b3d24a1e208b1d2fe04e69b593e10c')}
 # Each offset is measured from the actual ARM types; route and saved-query
 # fields grow at different boundaries. See the T65 native layout receipt.
 STATE_OFFSETS = {

@@ -11,9 +11,9 @@ from tools.overworld.devtools_observer import NativeObservationError, MOTION_DEC
 from tools.overworld.devtools_runtime import _elf_function_extent
 
 PINS = {
-    "owner": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_TryStartFrameDrivenOwnerMovementCommand", 0x023D6334, 2698, "11c6e0643b1634b9c8e280c27498f9955876c53b79f43f0f1a4523f8ef09a8a9"),
-    "attempt": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_TryStartBehaviorHopToPlannedTileWithArc", 0x023D0F4C, 484, "73655a74901f6792c5a13ca3767e1da1796488d72258434eb26f1f8eae172584"),
-    "landing": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_ClassifyBehaviorHopLandingTile", 0x023CE638, 188, "bd03028730af0b13d01ade584d053bfac0b5adde1c8981f33437fde70531de08"),
+    "owner": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_TryStartFrameDrivenOwnerMovementCommand", 0x023D63DC, 2536, "8eb5860708911166cbc604bafccc7d7440c421d57cd240f8648de319ce3dc5c6"),
+    "attempt": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_TryStartBehaviorHopToPlannedTileWithArc", 0x023D0FEC, 484, "21dd25c21572b0de2421764ac1d4de7ce5453283353bff582b42f65e75a8d02b"),
+    "landing": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_ClassifyBehaviorHopLandingTile", 0x023CE52C, 188, "c858a84fae896b163b614aa1bace94c94d8f0795c28d1657f1aadd3c0ea88add"),
     "occupancy": ("pokemon_move_history_overlay_linked.o", "OverworldWildOccupancy_Query", 0x023C0184, 214, "b09b014858b6e88d9e699d29d9db7eb25a2c1a654c22a0eb45e7f641eb45e78b"),
 }
 QUERY_OCCUPANCY = (9356, 436, 'ce26746f2668f9f511c9d5e8a7ce19e05b75817ccdf9337d24a26e21141004e1')

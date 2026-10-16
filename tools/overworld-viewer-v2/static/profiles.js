@@ -696,7 +696,7 @@ export function movementEditorGroups(nodes, scope = "chill") {
       { label: "Acceleration", fields: [f.walkAccelerationStep, f.maxWalkSpeed, f.walkAcceleration] },
       { label: "Walk rules and appearance", fields: [f.walkOptions, f.walkStompTime] },
       { label: "Mounted riding rhythm", note: "Body motion while riding. The camera, ground position, and movement speed stay unchanged.", fields: f.mountGait },
-      { label: "Turn and stop skids", note: "A skid always starts. It moves as far as it can, then crashes at the first blocked tile. If the next tile is blocked, it crashes in place.", fields: [f.tilesBeforeTurnSkid, f.turnSkidOneTime, f.turnSkidTwoTime, f.stopSkid, f.stopSkidTime] },
+      { label: "Turn and stop skids", note: "A skid always starts. It moves as far as it can, then crashes at the first blocked tile. If the next tile is blocked, it crashes in place. Predict skids lets a Pokémon avoid most of these crashes.", fields: [f.tilesBeforeTurnSkid, f.turnSkidOneTime, f.turnSkidTwoTime, f.stopSkid, f.stopSkidTime, f.planTurnSkidPath] },
       { label: "Pause after each step", note: "Use zero for continuous walking. Use a movement chain below for pauses after several moves.", fields: [f.walkPause, f.walkPauseVariance] },
     ] },
     { id: "hop", label: "Hop", note: "Set the path first, then the timing and motion.", groups: [
@@ -3820,6 +3820,12 @@ export function createProfilesController({
     }
     if (fields.stopSkid) {
       append([fields.stopSkid], usesWalkAcceleration);
+    }
+    if (fields.planTurnSkidPath) {
+      append([fields.planTurnSkidPath], usesWalkAcceleration, {
+        label: "Predict skids",
+        note: "Before choosing a direction at speed, check the skid slide, the turned step and room to stop. Prefer a direction that fits; brake instead of crashing when none does.",
+      });
     }
     const hopPathFields = fields.hopPath.fields.filter((field) => (
       field !== movementDirectionField

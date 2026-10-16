@@ -13,9 +13,9 @@ from tools.overworld.devtools_resolver_parity import packaged_query_identity, cu
 from tools.overworld.devtools_query_observer import relocated_image
 
 PINS = {
-    "frame": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_FrameMovementTask", 0x023D789C, 1300, "0171eea9c28d038fc46d810848dc64b60dc8ca6c9d0f8f56312c8c4a6d9f6fe1"),
-    "height": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_ResolveObjectLandingHeight", 0x023CEEE8, 48, "6125cf9cd40da395a7b54187687d1188953cde0733de9d1cc5940f3ac41e6c9c"),
-    "finish": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_HandleFinishedMovementCommand", 0x023D2D72, 930, "35f3e49c2304b5caef36a1ece39c6f549c4e3b68c32b8a128b01b107fbc3400a"),
+    "frame": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_FrameMovementTask", 0x023D7890, 1296, "fc3bca5b9cd7d809ee7a6c12de51fcba565bd91e95a54fc160f34acd7391606e"),
+    "height": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_ResolveObjectLandingHeight", 0x023CEDDC, 48, "07b5e87dd59897bf611c604faf04eede4b50dc8c8f937ccc923edb3e4496dd60"),
+    "finish": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_HandleFinishedMovementCommand", 0x023D2E06, 930, "c7682486010ecc943701331fef031d05ccddc7595a3372f532f10c52343374fa"),
     "resolver": ("overworld_actor_system_overlay_linked.o", "BehaviorResolver_Resolve", 0x023B84A8, 84, "be15a7659f1ec76cedb1b0ecc686ae00a408511c9b9e2522cf48865c9c6819f9"),
     "admit": ("overworld_actor_system_overlay_linked.o", "OverworldEmoteSlots_Admit", 0x023B9110, 272, "d1210539d613061cbee646211a77522a3a00605f346cef68ae90575cd1c1ee8d"),
     "prepare": ("overworld_actor_system_overlay_linked.o", "OverworldEmoteSlots_Prepare", 0x023BA01C, 128, "f1950ff831f0571f620d85623b2412a394d682732f5b349d6f8f8760ad287763"),

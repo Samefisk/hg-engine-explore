@@ -25,6 +25,7 @@ MEMORY {
 }
 
 OverworldWalk_ClampTime = 0x023BF488 | 1;
+OverworldWalk_SkidTiles = 0x023BF4D6 | 1;
 OverworldWalk_DirectionKey = 0x023BF586 | 1;
 OverworldWalk_DeltaX = 0x023BF59C | 1;
 OverworldWalk_DeltaY = 0x023BF5BE | 1;
@@ -102,6 +103,7 @@ SECTIONS {
         } >cleanupSpawn
         .overworld_wild_cleanup_presentation ORIGIN(cleanupPresentation) : {
                 KEEP(*(.overworld_wild_cleanup_presentation))
+                KEEP(*(.overworld_wild_cleanup_presentation.leaf))
                 ASSERT(ABSOLUTE(ADDR(.overworld_wild_cleanup_presentation)) == 0x01FFF432,
                     "private presentation cleanup moved");
                 ASSERT(SIZEOF(.overworld_wild_cleanup_presentation) <= LENGTH(cleanupPresentation),
@@ -175,6 +177,8 @@ SECTIONS {
         } >carrier
         .overworld_wild_combat_tail : {
                 KEEP(*(.overworld_wild_combat_tail))
+                /* Leaves follow the fixed hit adapter at the slot start. */
+                KEEP(*(.overworld_wild_combat_tail.leaf))
                 ASSERT(SIZEOF(.overworld_wild_combat_tail) <= LENGTH(hit),
                     "wild hit adapter exceeds resident slot");
         } >hit

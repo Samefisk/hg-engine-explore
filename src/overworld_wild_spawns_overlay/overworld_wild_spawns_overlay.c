@@ -2452,7 +2452,6 @@ static OW_WILD_SPAWNER_DIAGNOSTIC_STORAGE int sOverworldWildDiagnosticStateMapId
 static OW_WILD_SPAWNER_DIAGNOSTIC_STORAGE void *sOverworldWildDiagnosticStateMapObjectMan;
 static OW_WILD_SPAWNER_DIAGNOSTIC_STORAGE void *sOverworldWildDiagnosticStateMapObjects;
 #endif
-static OW_WILD_SPAWNER_DIAGNOSTIC_STORAGE u8 sOverworldWildMovementDiagnosticDirectionBlocked;
 #if OW_WILD_SPAWNER_PERF_DIAGNOSTICS
 static OW_WILD_SPAWNER_DIAGNOSTIC_STORAGE u16 sOverworldWildPerfProfileResolvesThisFrame;
 static OW_WILD_SPAWNER_DIAGNOSTIC_STORAGE u16 sOverworldWildPerfProfileCacheHitsThisFrame;
@@ -6979,6 +6978,66 @@ OverworldWildSpawns_GetCommittedWalkDirection(const OverworldActorPolicyView *po
         : OVERWORLD_ROLE_CONTROLLER_DIRECTION_NONE;
 }
 
+u8 OverworldWalk_SkidTiles(u8 time);
+
+/* Predict skids (the lane's planTurnSkidPath): the previewed step's skid
+ * slide, first turned step and the stopping runway at the resulting speed
+ * must all be open. A stop skid needs no runway. */
+static BOOL __attribute__((noinline, optimize("Os")))
+OverworldWildSpawns_IsPredictedRunwayBlocked(
+    const OverworldWildDirectionStepContext *stepContext,
+    OverworldActorWalkPolicyCall *call)
+{
+    FieldSystem *fieldSystem = stepContext->fieldSystem;
+    const LocalMapObject *player = fieldSystem->playerAvatar->mapObject;
+    int x = stepContext->object->xCurr;
+    int y = stepContext->object->yCurr;
+    int count = 1 + OverworldWalk_SkidTiles(call->reserved[0]);
+    u8 heading = call->stepDirection;
+    u8 turn = heading;
+    int slide = 0;
+    u32 ledge;
+
+    if (!OW_WILD_BEHAVIOR_PLANS_TURN_SKID_PATH(call->lane->tilesBeforeTurnSkid)) {
+        return FALSE;
+    }
+    if ((call->stepFlags & OVERWORLD_ACTOR_WALK_STEP_SKID) != 0) {
+        /* The slide, then the turned step and its runway. A stop skid
+         * only slides. */
+        slide = call->distance;
+        turn = call->facingDirection;
+        if ((call->stepFlags & OVERWORLD_ACTOR_WALK_STEP_STOP_SKID) != 0) {
+            turn = OW_WILD_WALK_DIRECTION_NONE;
+            count = 0;
+        }
+        count += slide;
+    }
+    for (; count > 0; count--) {
+        if (slide-- == 0) {
+            heading = turn;
+        }
+        x += OverworldWildSpawns_MovementDirectionDeltaX(heading);
+        y += OverworldWildSpawns_MovementDirectionDeltaY(heading);
+        /* The player ends the runway, but blocks a stop skid's slide. */
+        if (x == player->xCurr && y == player->yCurr) {
+            return turn == OW_WILD_WALK_DIRECTION_NONE;
+        }
+        /* A ledge facing this heading ends it (its Hop owns the crossing);
+         * any other ledge is a wall. Same mapping as the ledge Hop. */
+        ledge = GetMetatileBehaviorAt(fieldSystem, x, y) - OW_WILD_TILE_LEDGE_EAST;
+        if (ledge <= 3) {
+            return ledge ^ heading ^ (2 | (heading >> 1));
+        }
+        /* The Walk landing check, without its from-here edge marker. */
+        if (!OverworldWildSpawns_IsBehaviorAllowedHopLandingTile(
+                stepContext->state, stepContext->slot, fieldSystem,
+                stepContext->allowedTile, x, y, x, y)) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 static u8 __attribute__((noinline, optimize("Os"))) OverworldWildSpawns_TryStartAcceleratedWalkStep(
     const OverworldWildDirectionStepContext *stepContext,
     const OverworldActorPolicyView *priorPolicy,
@@ -7059,8 +7118,15 @@ static u8 __attribute__((noinline, optimize("Os"))) OverworldWildSpawns_TryStart
                 == OVERWORLD_ACTOR_WALK_PENDING_ACCEPTED) {
             return 2;
         }
-        return call.decision == OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP
-            && (call.stepFlags & OVERWORLD_ACTOR_WALK_STEP_SKID) != 0;
+        if (call.decision != OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP) {
+            return FALSE;
+        }
+        /* 3: a fast Walk that predicts skids found this step unsafe. */
+        if (priorPolicy->walkMomentum.speed != 0
+            && OverworldWildSpawns_IsPredictedRunwayBlocked(stepContext, &call)) {
+            return 3;
+        }
+        return (call.stepFlags & OVERWORLD_ACTOR_WALK_STEP_SKID) != 0;
     }
     return OverworldWildSpawns_ExecuteWalkPolicy(
         (OverworldWildDirectionStepContext *)stepContext, &call);
@@ -7302,7 +7368,6 @@ static OverworldWildDirectionStepResult __attribute__((noinline, optimize("Os"))
         return OW_WILD_DIRECTION_STEP_STARTED;
     }
     if (ledgeResult == OW_WILD_DIRECTION_STEP_BLOCKED) {
-        sOverworldWildMovementDiagnosticDirectionBlocked = TRUE;
         return ledgeResult;
     }
 
@@ -7320,7 +7385,6 @@ static OverworldWildDirectionStepResult __attribute__((noinline, optimize("Os"))
                 targetY,
                 targetX,
                 targetY)) {
-            sOverworldWildMovementDiagnosticDirectionBlocked = TRUE;
             return OW_WILD_DIRECTION_STEP_BLOCKED;
         }
     }
@@ -7336,13 +7400,11 @@ static OverworldWildDirectionStepResult __attribute__((noinline, optimize("Os"))
             : OW_WILD_DIRECTION_STEP_BLOCKED;
     }
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_BLOCKED_CHECK
-    sOverworldWildMovementDiagnosticDirectionBlocked =
-        (direction <= OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT
-            && (MapObject_IsMovementDirectionBlocked(
-                    stepContext->object,
-                    direction)
-                & ~OW_WILD_MAP_OBJECT_BLOCKED_BY_OBJECT) != 0);
-    if (sOverworldWildMovementDiagnosticDirectionBlocked) {
+    if (direction <= OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT
+        && (MapObject_IsMovementDirectionBlocked(
+                stepContext->object,
+                direction)
+            & ~OW_WILD_MAP_OBJECT_BLOCKED_BY_OBJECT) != 0) {
         return OW_WILD_DIRECTION_STEP_BLOCKED;
     }
 #endif
@@ -7398,15 +7460,12 @@ static OverworldWildDirectionStepResult OverworldWildSpawns_TryStartSingleDirect
             stepContext->allowedTile,
             targetX,
             targetY)) {
-        sOverworldWildMovementDiagnosticDirectionBlocked = TRUE;
         return OW_WILD_DIRECTION_STEP_BLOCKED;
     }
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_BLOCKED_CHECK
-    sOverworldWildMovementDiagnosticDirectionBlocked =
-        MapObject_IsMovementDirectionBlocked(
+    if (MapObject_IsMovementDirectionBlocked(
             stepContext->object,
-            direction);
-    if (sOverworldWildMovementDiagnosticDirectionBlocked) {
+            direction)) {
         return OW_WILD_DIRECTION_STEP_BLOCKED;
     }
 #endif
@@ -7606,6 +7665,7 @@ static BOOL __attribute__((optimize("Os"))) OverworldWildSpawns_TryStartSpawnerM
             int directionIndex = j;
             u8 direction;
             BOOL avoidedBacktrack;
+            BOOL predictedUnsafe;
 
             if (!lockDirection && preferredDirectionIndex > 0) {
                 directionIndex = j == 0
@@ -7627,12 +7687,23 @@ static BOOL __attribute__((optimize("Os"))) OverworldWildSpawns_TryStartSpawnerM
                 direction,
                 1,
                 avoidPreviousTile);
+            /* A predicted unsafe skid or runway ranks with backtracks. */
+            /* Only Walk lanes enable the prediction profile option. */
+            predictedUnsafe = !lockDirection
+                && OverworldWildSpawns_TryStartAcceleratedWalkStep(
+                    &stepContext, &policy, direction, TRUE) == 3;
 
-            if (avoidedBacktrack) {
+            if (avoidedBacktrack || predictedUnsafe) {
                 if (pass == 0) {
                     deferredBacktrack = TRUE;
                     blockedAnyDirection = TRUE;
                     continue;
+                }
+                if (predictedUnsafe) {
+                    /* No safe choice: brake to rest without a Crash. */
+                    OverworldWildSpawns_ClearWalkMovementState(
+                        state, slot, object);
+                    (void)OverworldActorPolicy_Inspect((u8)slot, &policy);
                 }
             } else if (pass != 0) {
                 continue;
@@ -8115,18 +8186,12 @@ static BOOL __attribute__((optimize("Os"))) OverworldWildSpawns_TryStartFrameDri
     }
     runtime = OW_WILD_RUNTIME(state);
     throwTarget = runtime->throwState.targets[slot];
+    /* Retired Move From Off Screen (ENTRY_MOVE) is never set. */
     if (OverworldWildSpawns_GetActiveConditionApplications(state, slot) == 0
-        && state->movementSpawnRunActive[slot] != OW_WILD_SPAWN_ENTRY_MOVE
         && throwTarget == OW_WILD_SPAWNER_THROW_TARGET_NONE) {
         return FALSE;
     }
-    if (state->movementSpawnRunActive[slot]==OW_WILD_SPAWN_ENTRY_MOVE
-        && throwTarget==OW_WILD_SPAWNER_THROW_TARGET_NONE
-        && OverworldWildSpawns_GetActiveConditionApplications(state,slot)==0)
-        return OverworldWildSpawns_TryStartGuidedEntry(state,slot,object,profile,primitives);
-    movementTarget = state->movementSpawnRunActive[slot] == OW_WILD_SPAWN_ENTRY_MOVE
-        ? OW_WILD_BEHAVIOR_TARGET_TOWARD_PLAYER
-        : primitives->chillTarget;
+    movementTarget = primitives->chillTarget;
     if (throwTarget == OW_WILD_SPAWNER_THROW_TARGET_NONE
         && movementTarget == OW_WILD_BEHAVIOR_TARGET_RANDOM_NEARBY
         && primitives->chillLocomotion == OW_WILD_BEHAVIOR_LOCOMOTION_HOP) {
@@ -8369,7 +8434,6 @@ OverworldWildSpawns_TryStartPlannedTeleport(
     }
 
     if (targetMode == OVERWORLD_ACTOR_TELEPORT_TARGET_ADJACENT
-        && state->movementSpawnRunActive[slot] != OW_WILD_SPAWN_ENTRY_MOVE
         && fieldSystem->playerAvatar == NULL) {
         return FALSE;
     }
@@ -8385,8 +8449,7 @@ OverworldWildSpawns_TryStartPlannedTeleport(
     world.slot = slot;
     world.allowedTile = allowedTile;
     world.facePlayer = targetMode
-            == OVERWORLD_ACTOR_TELEPORT_TARGET_ADJACENT
-        && state->movementSpawnRunActive[slot] != OW_WILD_SPAWN_ENTRY_MOVE;
+        == OVERWORLD_ACTOR_TELEPORT_TARGET_ADJACENT;
     if (world.facePlayer) {
         world.playerX = (s16)GetPlayerXCoord(fieldSystem->playerAvatar);
         world.playerY = (s16)GetPlayerYCoord(fieldSystem->playerAvatar);
@@ -8469,7 +8532,6 @@ OverworldWildSpawns_TryStartPlannedTeleport(
 #if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK
     OverworldWildSpawns_EnsureFrameMovementTask(state, fieldSystem);
 #endif
-    sOverworldWildMovementDiagnosticDirectionBlocked = FALSE;
     return TRUE;
 }
 
@@ -8555,7 +8617,6 @@ static BOOL OverworldWildSpawns_TryStartChillTeleportMovementCommand(
             directionRandom,
             distanceRandom)) {
         state->movementCooldowns[slot] = OW_WILD_SPAWNER_DEFAULT_MOVEMENT_PAUSE_FRAMES;
-        sOverworldWildMovementDiagnosticDirectionBlocked = TRUE;
         return FALSE;
     }
     return TRUE;
@@ -8588,24 +8649,18 @@ static BOOL OverworldWildSpawns_TryStartTeleportMovementCommand(
     allowedTile = OverworldWildSpawns_GetAllowedTileForSpotState(
         profile,
         state->movementSpotStates[slot]);
-    if (state->movementSpawnRunActive[slot] != OW_WILD_SPAWN_ENTRY_MOVE
-        && primitives->chillTarget == OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER
+    if (primitives->chillTarget == OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER
         && OverworldWildSpawns_IsTeleportOnPlayerAdjacentTile(
             state,
             fieldSystem,
             slot,
             object,
             profile)) {
-        sOverworldWildMovementDiagnosticDirectionBlocked = FALSE;
         OverworldWildSpawns_StartTeleportVisibleCooldown(state, slot, object, profile);
         return TRUE;
     }
 
-    if (state->movementSpawnRunActive[slot] == OW_WILD_SPAWN_ENTRY_MOVE) {
-        desiredX = state->movementSpawnRunTargetX[slot];
-        desiredY = state->movementSpawnRunTargetY[slot];
-        targetMode = OVERWORLD_ACTOR_TELEPORT_TARGET_ADJACENT;
-    } else if (primitives->chillTarget == OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER) {
+    if (primitives->chillTarget == OW_WILD_BEHAVIOR_TARGET_NEXT_TO_PLAYER) {
         if (!OverworldWildSpawns_TryGetPlayerAdjacentMovementTarget(
                 state,
                 fieldSystem,
@@ -8617,7 +8672,6 @@ static BOOL OverworldWildSpawns_TryStartTeleportMovementCommand(
                 && desiredX == object->xCurr
                 && desiredY == object->yCurr)) {
             state->movementCooldowns[slot] = OW_WILD_SPAWNER_TELEPORT_FAIL_COOLDOWN_FRAMES;
-            sOverworldWildMovementDiagnosticDirectionBlocked = TRUE;
             return FALSE;
         }
         targetMode = OVERWORLD_ACTOR_TELEPORT_TARGET_ADJACENT;
@@ -9130,6 +9184,11 @@ OverworldWildSpawns_TryStartWalkStopSkid(
     call.laneState = state->movementSpotStates[slot];
     (void)OverworldWildSpawns_ReduceWalk(&call);
     if (call.decision == OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP) {
+        if (OverworldWildSpawns_IsPredictedRunwayBlocked(&stepContext, &call)) {
+            /* A predicted blocked stop skid brakes to rest without a Crash. */
+            OverworldWildSpawns_ClearWalkMovementState(state, slot, object);
+            return TRUE;
+        }
         call.stepFlags |= OVERWORLD_ACTOR_WALK_STEP_PLANNED_STOP_SKID;
         call.reserved[OVERWORLD_ACTOR_WALK_POLICY_STOP_SKID_TILES_INDEX] =
             call.distance;
@@ -9652,7 +9711,9 @@ static void OverworldWildSpawns_StartSpotEmoteCommand(LocalMapObject *object, u3
     MapObject_SetSingleMovementActive(object);
 }
 
-static void OverworldWildSpawns_StartHopStartSoundSuppression(OverworldWildSpawnState *state, int slot)
+/* A resident leaf fills the Wild hit slot's unused tail. */
+static void __attribute__((noinline, section(".overworld_wild_combat_tail.leaf")))
+OverworldWildSpawns_StartHopStartSoundSuppression(OverworldWildSpawnState *state, int slot)
 {
     if (state == NULL || slot < 0 || slot >= OW_WILD_MAX_SPAWNS) {
         return;
@@ -10445,8 +10506,7 @@ OverworldWildSpawns_IssueIdleIntent(
     OverworldWildBehaviorProfile *profile,
     OverworldWildBehaviorPrimitives *primitives)
 {
-    if (OverworldWildSpawns_GetActiveConditionApplications(state, slot) != 0
-        || state->movementSpawnRunActive[slot] == OW_WILD_SPAWN_ENTRY_MOVE) {
+    if (OverworldWildSpawns_GetActiveConditionApplications(state, slot) != 0) {
         BOOL movementStarted;
 
         if (OW_WILD_BEHAVIOR_ON_REACH_ACTION(profile->onReachAction)
@@ -13347,17 +13407,6 @@ static void OverworldWildSpawns_SetPostSpawnStartupCooldown(
     u8 locomotion;
 
     if (state == NULL || slot < 0 || slot >= OW_WILD_MAX_SPAWNS) {
-        return;
-    }
-
-    if (state->movementSpawnRunActive[slot] == OW_WILD_SPAWN_ENTRY_MOVE) {
-        state->movementCooldowns[slot] = OW_WILD_SPAWNER_MOVEMENT_DECISION_COOLDOWN;
-#if OW_WILD_SPAWNER_MOVEMENT_DIAGNOSTIC_FRAME_TASK
-        if ((OW_WILD_RUNTIME(state)->movementFrameDrivenOwnerMask
-                & OW_WILD_SPAWNER_MOVEMENT_SLOT_MASK(slot)) != 0) {
-            OverworldWildSpawns_EnsureFrameMovementTask(state, state->movementFieldSystem);
-        }
-#endif
         return;
     }
 
@@ -16921,7 +16970,9 @@ static BOOL OverworldWildSpawns_HelperLoadArchiveData(
     return TRUE;
 }
 
-static BOOL OverworldWildSpawns_HelperTryGetEncounterDataId(
+/* Fills the resident cleanup slot's unused tail. */
+static BOOL __attribute__((noinline, section(".overworld_wild_cleanup_presentation.leaf")))
+OverworldWildSpawns_HelperTryGetEncounterDataId(
     void *context,
     int *encounterDataId)
 {

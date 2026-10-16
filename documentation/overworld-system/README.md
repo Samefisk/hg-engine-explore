@@ -129,9 +129,11 @@ Wild AI / Follower AI / Rider input / Script
   check each next tile as they move. At the first blocked tile they Crash at
   the last clear tile, without crossing the blocker. An adjacent blocker
   causes an in-place Crash. The same collision rule applies to Reposition
-  Skids. Profile Deck states this rule beside the skid controls; the old
-  `planTurnSkidPath` bit is retained for data compatibility and cannot veto a
-  skid. The recovery Walk checks its own destination when it starts.
+  Skids. Profile Deck states this rule beside the skid controls. Profiles with
+  `planTurnSkidPath` (Predict skids) avoid these crashes earlier: before a
+  fast Walk picks a direction, it rejects one whose skid slide, turned step or
+  stopping room is blocked, and brakes to rest when no direction fits. It
+  never cancels a skid already selected. The recovery Walk checks its own destination when it starts.
 - Unlocked mounted diagonal side and destination failures submit a rejected
   candidate through Actor Motion before Walk policy input. Locked Ram input
   first retains the role-selected direction and its normal crash policy.

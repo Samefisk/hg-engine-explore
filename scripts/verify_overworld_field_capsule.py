@@ -65,25 +65,25 @@ NOTICE_RETIRE_BINDINGS_ADDR, NOTICE_RETIRE_BINDINGS_SIZE = 0x023C2CEC, 124
 NOTICE_CLEAR_THROW = "OverworldWildSpawns_ClearThrowStateForSlot"
 NOTICE_CLEAR_THROW_ADDR, NOTICE_CLEAR_THROW_SIZE = 0x023C2D68, 10
 NOTICE_CLEAR_RELATIONS = "OverworldWildSpawns_ClearThrowRelations"
-NOTICE_CLEAR_RELATIONS_ADDR, NOTICE_CLEAR_RELATIONS_SIZE = 0x023D02DC, 228
+NOTICE_CLEAR_RELATIONS_ADDR, NOTICE_CLEAR_RELATIONS_SIZE = 0x023D0340, 228
 # Large catalogs use Prepared88, u16 catalog indexes and Blob95/options18.
 # Retirement's indexed halfword load adds four bytes within the same reserve;
 # capture/uses-binding bytes use reviewed offsets0xB6D1/0xB6D6.
-NOTICE_PHYSICAL_SHA256 = "8b4af841b5adfe1988d473f1622bb86710cad5bffd3c4ba66be2648313fd1f45"
+NOTICE_PHYSICAL_SHA256 = "eb67ccab15bccd4d164dc3f2def9d86dfa7161d837252400420544bd48bee65d"
 # T65 adds two borrowed World pointers (76 -> 84 bytes). Getter locals
 # move eight bytes on the stack; its guards, callbacks and extent stay exact.
 # The fitted Getter borrows Adapter's validated current Frame. Seal its exact
 # native body, the moving/valid guards, and the fixed padding before Bubble.
 # Capacity adds 360 bytes to condition runtime offsets. The four named
 # Wild targets retain their typed owners and exact reviewed call topology.
-CARGO_OBSERVATION_SHA256 = "a4e44080c944e94e4e647613ef0a3a1477bbc152fbc51e8b01f07928ce6b1791"
+CARGO_OBSERVATION_SHA256 = "ca4c93db435ab26d2cbf9edb2ccdd82eb14ce4fbfb20c6663cbdf9b0c8e95d50"
 CARGO_OBSERVATION_CODE = bytes.fromhex(
     'f0b5a9b005000391049205930300f8331888084101210e00084204d1214c2e9e'
     '365d731e9e4100f023fa002803d10024200029b0f0bd2f00e0370021386801f0'
-    'd1f9071ef3d0039b1806010e07ac009413ab049a280032f44ffc059a2592002e'
+    'cdf9071ef3d0039b1806010e07ac009413ab049a280032f44ffc059a2592002e'
     '04d011492e9b585c0028e0d03a0098321168a1602e9b23620c4860620c4aa262'
-    '0c49e162ff6f06a92000b8470400069b002bcdd0002ecbd10399280003f0acfa'
-    'c6e7c046b30700005708000080c1ff0145dc3c0249fc3c02'
+    '0c49e162ff6f06a92000b8470400069b002bcdd0002ecbd10399280003f0defa'
+    'c6e7c046b30700005708000080c1ff013ddc3c02e9fb3c02'
 )
 ACTOR_EVALUATE = "OverworldBehaviorConditionAdapter_EvaluateActor"
 ACTOR_EVALUATE_ADDR, ACTOR_EVALUATE_SIZE = 0x023B65C0, 880
@@ -274,10 +274,10 @@ def verify_cargo_observation(build, overlays):
     cargo_observation_contract(symbols.get(CARGO_OBSERVER), symbols.get(frame),
                                private, field_body, symbols.get(SHOW_BUBBLE),
                                symbols.get(SHOW_BUBBLE_CALLEE))
-    for name, address, size in ((abort, 0x023D03C0, 86),
-                               (query_target, 0x023CFC48, 64),
-                               (query, 0x023CE1AC, 120),
-                               (identity, 0x023CDC44, 72)):
+    for name, address, size in ((abort, 0x023D0424, 86),
+                               (query_target, 0x023CFBE8, 64),
+                               (query, 0x023CE1A4, 120),
+                               (identity, 0x023CDC3C, 72)):
         target = symbols.get(name)
         checked(target is not None and target[:3] == (address | 1, size, "FUNC")
                 and target[3] not in ("ABS", "UND"),
@@ -414,7 +414,7 @@ def notice_tail_contract(wrapper, target, private, linked_wrapper):
     tail = private[NOTICE_PHYSICAL_SIZE:NOTICE_PHYSICAL_SIZE + NOTICE_CLEAR_THROW_SIZE]
     checked(tail == linked_wrapper
             and hashlib.sha256(tail).hexdigest()
-                == "dc84bc5a1ed14df34f7427fbb9dc1bfea6a665b9d57369e69c4e49cfad762fdf"
+                == "2020073599c2aed75b3bf517217d2c6e0de4636ff6f4cfd2ed99d066d7462ab3"
             and private[NOTICE_PHYSICAL_SIZE + NOTICE_CLEAR_THROW_SIZE:]
                 == bytes.fromhex("c046") + bytes(12),
             "Wild notice clear wrapper or bounded filler differs")
@@ -1294,11 +1294,12 @@ def verify_hop_private_homes(build, linked, overlays):
     chain = build / "overworld_mount_chain_overlay_linked.o"
     imported = elf_helper_bindings(chain, (name,)).get(name)
     # B Jump/ledge chain Hops pass their exact distance and stream live when
-    # cardinal; mounted Hop locomotion is retired (926 bytes).
-    binding_contract(hosted, imported, 0x023BB20C, 926)
-    checked(hosted[1] == 926, "private Chain motion owner extent differs")
-    body_contract(elf_bytes_at(mount, 0x023BB20C, 926),
-                  overlay_span(overlays, 157, 0x023BB20C, 926))
+    # cardinal; a Hop walking-style mount tries hopMaxDistance down to
+    # hopMinDistance (914 bytes).
+    binding_contract(hosted, imported, 0x023BB20C, 914)
+    checked(hosted[1] == 914, "private Chain motion owner extent differs")
+    body_contract(elf_bytes_at(mount, 0x023BB20C, 914),
+                  overlay_span(overlays, 157, 0x023BB20C, 914))
 
 
 def verify_wild_policy_init(build, linked, overlays):
