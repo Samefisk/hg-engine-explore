@@ -47,8 +47,11 @@ numbers) when tried; add new ones with the evidence that suggests them.
 
 11. ~~Polish rigid weight.~~ Accepted 2026-10-16 (0.842 -> 0.851, hard
    failures 38 -> 33). Remaining overhangs sit mostly in echo (7/2) and
-   route-land9; the same trade for heightBreaks/criticalMismatches (polish
-   weights for those terms, rank guard unchanged) is the untested follow-up.
+   route-land9. Follow-up accepted 2026-10-16: polishHardWeight 200 on
+   route changes, height breaks and void (0.851 -> 0.873, 33 -> 25).
+   Left: rigid in 11 seeds, walkableComponents in 5 (twinwood, route29:
+   a sealed pocket no local cost sees; try a connectivity term in polish),
+   echo still fails five gates per seed.
 
 Judge ideas (need a defect or a vanilla false alarm first):
 
