@@ -71,6 +71,13 @@ def _layout_file(overrides: Path, maps: list[int]) -> str:
 
 
 def _generate_cmd(report: dict, layout_path: str) -> str:
+    if report.get("builder") == "paint":  # the semantic pipeline (style design + paint)
+        from .showcase import SHOWCASE
+        owner = next((e["map"] for e in SHOWCASE if e["land"] == report["land"]), None)
+        if owner is not None:
+            return f"python3 -B -m tools.maps.showcase design --map {owner} && {SHOWCASE_WRITE}"
+        return (f"python3 -B -m tools.maps.style paint --semantic SEMANTIC.txt --map {report['map']} "
+                f"--land {report['land']} && {SHOWCASE_WRITE}")
     return (f"python3 -B -m tools.maps.style generate --layout {layout_path} --map {report['map']} "
             f"--land {report['land']} --relax {report.get('relax', 0)} --seeds {report.get('seedsTried', 16)}"
             f" && {SHOWCASE_WRITE}")
@@ -256,14 +263,26 @@ def check_lab() -> tuple[dict, list[dict]]:
         return entry, [finding("lab-judge-changed", f"judge (seams.py, score.py, bench) hash {judge} differs from "
                                f"champion {champ['run']}'s {champ.get('judgeHash')}; accept needs --rebaseline",
                                f"{lab_cmd} judge-check && {lab_cmd} bench --label L   # then accept --rebaseline")]
-    if entry["codeMatches"]:
-        return entry, []
+    out = []
     if pending:
-        return entry, [finding("lab-decide", f"run(s) {pending} measured the current tree but are not in the ledger",
-                               f"{lab_cmd} accept --run {pending[-1]} --note N   # or: reject --run ... --note N")]
-    return entry, [finding("lab-bench", f"code hash {code} differs from champion {champ['run']}'s "
-                           f"{champ['codeHash']}; the next accept needs a full bench (~25 min)",
-                           f"{lab_cmd} bench --label L")]
+        out.append(finding("lab-decide", f"run(s) {pending} measured the current tree but are not in the ledger",
+                           f"{lab_cmd} accept --run {pending[-1]} --note N   # or: reject --run ... --note N"))
+    # The walk-class solver is retired (new maps use the semantic pipeline): its champion going
+    # stale is a note, not an action. The rebuild bench is the generator's score now.
+    entry["note"] = None if entry["codeMatches"] else "walk-class lab champion predates this tree (retired solver)"
+    from .style import rebuild
+    rchamp, rcode = rebuild.champion(), rebuild.code_hash()
+    entry["rebuildChampion"] = rchamp and rchamp["run"]
+    entry["rebuildMatches"] = bool(rchamp) and rchamp.get("codeHash") == rcode
+    rb = "python3 -B -m tools.maps.style.rebuild"
+    if not rchamp:
+        out.append(finding("rebuild-no-champion", "the rebuild ledger has no accepted run",
+                           f"{rb} --label baseline && {rb} accept --run DIR --note N"))
+    elif not entry["rebuildMatches"]:
+        out.append(finding("rebuild-bench", f"pipeline code {rcode} differs from rebuild champion "
+                           f"{rchamp['run']}'s {rchamp.get('codeHash')}; measure before the next accept",
+                           f"{rb} --label L"))
+    return entry, out
 
 
 def _land_maps(edited) -> dict[int, list[int]]:

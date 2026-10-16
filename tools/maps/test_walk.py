@@ -264,14 +264,21 @@ class SyntheticTests(unittest.TestCase):
 
 # Measured in melonDS (showcase.goal_checks / showcase.probe, proof_route29.probe).
 SHOWCASE_CASES = [
-    {"name": "541 crosses chunk seam", "map": 541, "at": [29, 42], "facing": "right",
-     "moves": "RIGHT 4", "expect": [541, 33, 42]},
-    {"name": "542 terrace jump down", "map": 542, "at": [20, 5], "facing": "down",
-     "moves": "DOWN 1", "expect": [542, 20, 7]},
-    {"name": "542 terrace refuses the climb", "map": 542, "at": [20, 7], "facing": "up",
-     "moves": "UP 1", "expect": [542, 20, 7]},
-    {"name": "543 ledge drop", "map": 543, "at": [15, 10], "facing": "down",
-     "moves": "DOWN 1", "expect": [543, 15, 12]},
+    # Measured in melonDS by `showcase probe` on the redesigned maps (2026-10-16).
+    {"name": "541 crosses chunk seam", "map": 541, "at": [32, 55], "facing": "left",
+     "moves": "LEFT 2", "expect": [541, 30, 55]},
+    {"name": "541 ledge jump down", "map": 541, "at": [41, 16], "facing": "down",
+     "moves": "DOWN 1", "expect": [541, 41, 18]},
+    {"name": "541 ledge refuses the climb", "map": 541, "at": [41, 18], "facing": "up",
+     "moves": "UP 1", "expect": [541, 41, 18]},
+    {"name": "542 crosses chunk seam", "map": 542, "at": [31, 9], "facing": "right",
+     "moves": "RIGHT 2", "expect": [542, 33, 9]},
+    {"name": "542 ledge jump down", "map": 542, "at": [33, 19], "facing": "down",
+     "moves": "DOWN 1", "expect": [542, 33, 21]},
+    {"name": "542 ledge refuses the climb", "map": 542, "at": [33, 21], "facing": "up",
+     "moves": "UP 1", "expect": [542, 33, 21]},
+    {"name": "543 crosses chunk seam", "map": 543, "at": [9, 32], "facing": "up",
+     "moves": "UP 2", "expect": [543, 9, 30]},
 ]
 PANELS = [(541, (559, 394), (32, 57)), (542, (561, 394), (5, 16)), (543, (563, 394), (16, 60))]
 CHERRYGROVE_ARRIVAL = [67, 561, 393]

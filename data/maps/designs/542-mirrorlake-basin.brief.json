@@ -1,0 +1,4 @@
+{"name": "Mirrorlake Basin", "map": 542, "template": 46, "kind": "route", "chunks": [2, 1], "seed": 5,
+ "exits": [{"side": "west", "at": 16, "width": 3, "arrival": [5, 16]}, {"side": "east", "at": 14, "width": 2}],
+ "wander": 0.5, "width": [3, 5], "clearings": 3, "grass": 4, "pond": 2, "flowers": 2,
+ "clumps": 3, "ledge": 1, "path": "exits", "trainers": 2, "items": 1}

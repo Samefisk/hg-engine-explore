@@ -10,9 +10,18 @@ and [style-system.md](../../../documentation/map-system/style-system.md).
 One iteration = one hypothesis, measured, decided, recorded. Leave the tree
 clean either way.
 
+The headline benchmark is the **rebuild bench** (`tools.maps.style.rebuild`,
+style-system.md "Semantic pipeline"): six held-out vanilla chunks rebuilt
+from their own semantic maps and compared with vanilla as rendered images.
+Void must not grow, `tileMatch` should rise. Look at its side-by-side PNGs
+before and after every change: they show what the numbers mean. The old
+`lab bench` (walk-class quilt solver, score.py gates) is kept only for that
+old generator; new maps never use it.
+
 ## 1. Orient (read, do not change anything)
 
 ```bash
+python3 -B -m tools.maps.style.rebuild status     # rebuild champion, and whether it is this tree
 python3 -B -m tools.maps.style.lab status
 python3 -B -m tools.maps.style.lab scan --write    # find defects before anyone reports them
 python3 -B -m tools.maps.style.lab defect check
@@ -43,26 +52,37 @@ before measuring anything.
 
 ## 2. Measure the baseline if needed
 
-If the champion's code hash matches the tree, its ledger numbers are the
-baseline. Otherwise run `lab bench --label baseline` on the unchanged tree.
+If the rebuild champion's code hash is this tree, its ledger numbers
+(`documentation/map-system/lab/rebuild-ledger.jsonl`) are the baseline.
+Otherwise run `python3 -B -m tools.maps.style.rebuild --label baseline` on the
+unchanged tree and accept it (first champion) or compare with it.
 
 ## 3a. Change the player (normal case)
 
-Edit only player files: `tools/maps/style/quilt.py`, `kit.py`, `layout.py`,
-`bdhc_gen.py`, `solver_config.json`. Keep the change to one idea. Then:
+Player files: `tools/maps/style/semantic.py` (what tiles are), `paint.py`
+(the painter), `design.py` (shapes and refine), `kit.py`, `bdhc_gen.py`.
+Keep the change to one idea; find it in the rebuild PNGs (a pond without its
+bank, a sliced tree, a notch at a wall corner), and break the case's defects
+down first (`Painter.report()`: walk/kind/level mismatches, bad seams,
+overhang violations, bare tiles, void tiles). Then:
 
 ```bash
-python3 -B -m unittest tools.maps.style.test_solver tools.maps.style.test_kit tools.maps.style.test_seams
-python3 -B -m tools.maps.style.lab bench --label <short-idea-name>
+python3 -B -m unittest tools.maps.style.test_semantic tools.maps.style.test_kit tools.maps.style.test_seams
+python3 -B -m tools.maps.style.rebuild --label <short-idea-name> [--case NAME]
 ```
 
-Use `--quick` or `--case NAME` while iterating; only a full bench of the
-final tree can be accepted. Then either:
+Use `--case` while iterating; only a full run of the final tree can be
+accepted. Then either:
 
-- `lab accept --run <id> --note "<idea>: <what changed>; <numbers>"`. It
-  refuses unless the run beats the champion. If refused, treat it as rejected.
-- `lab reject --run <id> --note "<idea>: <result>; lesson: <why it failed>"`,
+- `python3 -B -m tools.maps.style.rebuild accept --run <dir> --note "<idea>: <what changed>; <numbers>"`.
+  It refuses unless the run beats the champion. If refused, treat it as rejected.
+- `python3 -B -m tools.maps.style.rebuild reject --run <dir> --note "<idea>: <result>; lesson: <why it failed>"`,
   then revert the player change (`git checkout -- <files>`).
+
+A semantic change (a new kind, a layer, a level step) changes every target:
+the rebuild bench handles that (targets are re-extracted), but committed
+designs (`data/maps/designs/*.semantic.txt`) must be redesigned with
+`showcase design` before they are painted again.
 
 ## 3b. Change the judge (metric gap or vanilla false alarm only)
 
@@ -87,9 +107,9 @@ commits only the ledger line and the idea's new status.
 
 ## 5. Refresh the user's view (only after real gains)
 
-When the champion has improved since the showcase maps were generated
-(ledger), regenerate them with the commands in
-[showcase.md](../../../documentation/map-system/showcase.md), run lint, build
+When the rebuild champion has improved since the showcase maps were painted,
+redesign and repaint them (`python3 -B -m tools.maps.showcase design`, then
+`showcase write`), run lint, build
 with `hg-engine-delta-build`, and prove with `tools.maps.showcase probe`.
 Capture the sheets (`tools.maps.showcase shots`) and review them yourself
 first (AGENTS.md Maps); every visual problem becomes a defect (`lab defect

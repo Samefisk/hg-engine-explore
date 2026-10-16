@@ -1,0 +1,4 @@
+{"name": "Twinwood Crossing", "map": 541, "template": 33, "kind": "route", "chunks": [2, 2], "seed": 7,
+ "exits": [{"side": "south", "at": 32, "width": 2, "arrival": [32, 57]}, {"side": "north", "at": 22, "width": 2}],
+ "wander": 0.7, "width": [3, 6], "clearings": 4, "grass": 6, "pond": 1, "flowers": 5,
+ "clumps": 6, "ledge": 1, "path": "exits", "trainers": 2, "items": 2}

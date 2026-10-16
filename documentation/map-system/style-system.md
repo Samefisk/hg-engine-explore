@@ -1,8 +1,95 @@
 # Map style system
 
-How agents make new map chunks that look like HeartGold without anyone
-judging screenshots: never invent geometry, only recombine vanilla pieces in
-arrangements vanilla already uses, then measure how vanilla-like the result is.
+How agents make new maps that play well and look like HeartGold: never
+invent geometry, only recombine vanilla pieces in arrangements vanilla
+already uses, and judge the result by whether it can rebuild vanilla itself.
+
+```
+brief (gameplay intent, JSON) ──plan──► intent map (route, clearings, ponds,   style/design.py
+                                         grass, ledges; organic outdoors,
+                                         straight runs in caves)
+                              ──refine─► semantic map: kind, level, walk, shore  style/semantic.py
+                                         per tile, as vanilla arranges them
+                              ──check──► exits reachable, ledges one-way,
+                                         trainer sight lines, item spots (plan JSON)
+semantic map ──paint──► cell grid (vanilla cells, copied in runs)            style/paint.py
+             ──compose─► NSBMD + tiles + BDHC ──► land override ──► lint ──► build ──► in-game proof
+rebuild bench: vanilla chunk ─► its semantic map ─► paint without it ─► render vs vanilla   style/rebuild.py
+```
+
+## Semantic pipeline (current)
+
+The first generator (below, "Walk-class generator") matched only the game's
+walk classes: `.` meant grass, path and flowers alike, `T` meant tree belts,
+cave walls and the black outside of a cave. Given vanilla's own layout it
+rebuilt Route 29 as random paths and tree stumps and Union Cave as flat rock
+slabs with holes, while its scores said 0.99. Two things were missing: a
+description of what each tile *is*, and a score anchored to vanilla.
+
+**Semantic map** (`semantic.py`). Four layers per tile, read from any cell
+grid (vanilla or generated) by `extract(kit, grid)`, written as text by
+`SemanticMap.to_text()`:
+
+| layer | meaning |
+|---|---|
+| `kind` | the look from above: the top-most ground polygon's material name (vanilla names are descriptive). `T` pine tree, `Y` round tree, `.` grass, `g` light grass patch, `,` tall grass, `*` flowers, `=` path or cave floor, `~` pond, `%` river, `s` sea, `#` cliff or ledge, `W` cave wall, `R` dark outside (d_ro), `o` rock, `b` bridge, `O` hole. Edge variants (road01_r, dwall_ne) are the same kind. |
+| `level` | floor height in 8-unit steps (half a tile; water surfaces differ by 8) |
+| `walk` | the game's walk class (layout.py) |
+| `shore` | `b` where a land tile carries a water bank of its own |
+
+Rules learned the hard way (each one a measured rebuild failure): tree
+billboards lean (normal y ~0.6), so they are never ground and a walkable
+tile behind a tree stays ground; a blocked tile with nothing over its centre
+takes the kind of the blocked tiles around it (which wall tile a face's
+centroid lands on is noise); pond, river and sea never mix; the pine and the
+round tree are different kinds.
+
+**Paint** (`paint.py`). Texture-by-numbers over the kit: every target tile
+gets a vanilla occurrence (chunk position) and that occurrence's cell. One
+energy, minimised greedily then by single-tile and block-copy sweeps:
+
+- label: own label must match; the eight neighbours' labels should (this
+  picks edge, corner and inner-corner pieces, an autotiler learned from vanilla);
+- join: free where the neighbour continues the same source chunk at the same
+  offset, small for a join `seams.py` accepts, large otherwise;
+- overhang (`seams.rigid`) and bare (a tile vanilla always showed under some
+  neighbour's overhang, like a tree's shadow disc, needs one);
+- void: polygon coverage kept as per-tile counts of two rasters (straight
+  down and at the camera's pitch, `coverage.py` masks); a tile not asked to
+  be dark that shows black costs; black roof (`d_ro`) over a tile not asked
+  to be roof counts as void;
+- a final repair pass tries blocks with the look relaxed around tiles that
+  still show void or a bad seam.
+
+Every term is non-negative, so a move's label and join costs bound it from
+below: most moves are rejected without touching the rasters.
+
+**Design** (`design.py`). `plan()` draws an intent map from a brief:
+waypoints spread by farthest-point sampling, a route over a noise field
+(outdoors) or straight L-shaped legs (caves: vanilla cave walls are long and
+square-cornered), corridors and clearings, ponds in clearings of their own
+with a way to the route, tall grass, flowers, clumps, and a ledge only where
+the exits still reach each other. Outdoor tree land is snapped to 2x2 blocks
+(a vanilla tree's footprint); cave rock beyond the wall band is dark outside.
+`refine()` turns intents into semantic labels by the same coherent copying at
+label level, from the template map's own chunks first, and keeps every 2x2
+label window one vanilla uses (no cells exist for others). `check()` reports
+reachability, tall grass, trainer spots with 3+ tiles of sight across the
+route, and item spots far from it.
+
+**Rebuild bench** (`rebuild.py`). Six held-out vanilla chunks (Route 29, the
+Route 44 lake, Union Cave): extract the semantic map, paint it with the chunk
+excluded, render both (top and the game camera at four standable tiles) and
+compare. `void` (any black pixel vanilla does not have) must be 0;
+`tileMatch` is the share of tiles whose top-down look is within 18 of
+vanilla. Side-by-side images go to build/map-style/rebuild/<run>/. This is
+the generator's headline score, not the cell statistics of score.py.
+
+Commands: `style design --brief B --out S [--plan P]`, `style paint
+--semantic S --map TEMPLATE --land L`, `style.rebuild [--case NAME]`; the
+showcase maps: `showcase design [--map M]` then `showcase write`.
+
+## Walk-class generator (kept for the old lab benchmark)
 
 ```
 vanilla chunks ──slice──► kit (per map tileset)        tools/maps/style/kit.py
@@ -15,6 +102,9 @@ layout (ASCII, by an LLM) ──► solver (patch quilting + refinement)  style/
                             ──► improvement loop (bench, ledger, defects)  style/lab.py
                             ──► land override ──► lint ──► build ──► in-game proof
 ```
+
+The kit, compose, BDHC and seam rules below are shared with the semantic
+pipeline; the layout, quilt solver and score are this generator's own.
 
 ## Interfaces (all code in `tools/maps/style/`)
 

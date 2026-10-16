@@ -126,7 +126,16 @@ python3 -B -m tools.maps.proof_route29 probe    # passed:true on the edited ROM
 python3 -B -m tools.maps.proof_route29 remove   # then build again
 ```
 
-New 3D geometry: `python3 -B -m tools.maps.nsbmd generate --area ID --spec
+New terrain that must look like vanilla (routes, caves, reshaped areas):
+use [design-map-look](../../.agents/skills/design-map-look/SKILL.md). A brief
+of gameplay intent becomes a semantic map (what every tile is) and is painted
+with vanilla cells: `python3 -B -m tools.maps.style design --brief B --out S`,
+then `style paint --semantic S --map TEMPLATE --land N`
+([style-system.md](style-system.md), "Semantic pipeline"). Briefs, semantic
+maps and plans of committed maps live in `data/maps/designs/` (the override
+loader ignores that folder).
+
+Low-level 3D geometry: `python3 -B -m tools.maps.nsbmd generate --area ID --spec
 grid.json --out model.nsbmd` builds a chunk model from a tile grid using the
 area's texture names ([nsbmd.md](nsbmd.md)); put it beside `land.json` as
 `model.nsbmd`. Keep collision and BDHC consistent with the new floor yourself.
@@ -243,8 +252,13 @@ Run these after changing anything in `tools/maps/`.
 - Message indices used inside scripts are not checked; only text banks are.
 - Reachability ignores height layers, so bridges over-approximate it.
 - Generated models are checked structurally and for loading; how they look
-  is judged from renders and in game (the render void check is the only
-  automatic look check). Animated water and translucency are not generated.
+  is judged from renders and in game. The painter's own void rasters and the
+  rebuild bench (rendered vanilla vs rebuilt chunks) are the automatic look
+  checks. Animated water and translucency are not generated.
+- Painting is slow (about 1–2 minutes per chunk) and some vanilla shapes are
+  rare in a tileset (Route 44's ponds): the rebuild bench's lake cases still
+  show broken pond banks. Keep designed ponds, grass and flower beds
+  rectangular.
 - New map IDs: 540–591 can hold their own header (52 slots, see
   [header-expansion.md](header-expansion.md)); 592–599 are valid IDs that
   behave like MAP_NOTHING. `checkout --map 540 --parts header` gives a

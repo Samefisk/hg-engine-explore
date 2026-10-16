@@ -178,10 +178,9 @@ class CalibrationTests(unittest.TestCase):
     def test_bench_and_showcase_layouts(self):
         cases = [("tools/maps/style/bench_layouts/541-twinwood-crossing.txt", 33, 0),
                  ("tools/maps/style/bench_layouts/542-mirrorlake-basin.txt", 46, 0),
-                 ("tools/maps/style/bench_layouts/543-echo-cavern.txt", 107, 0),
-                 ("data/maps/layouts/541-twinwood-crossing.txt", 33, 0),
-                 ("data/maps/layouts/542-mirrorlake-basin.txt", 46, 1),
-                 ("data/maps/layouts/543-echo-cavern.txt", 107, 1)]
+                 ("tools/maps/style/bench_layouts/543-echo-cavern.txt", 107, 0)]
+        # (The showcase maps' own layouts were retired with the walk-class generator; they are
+        # designed from briefs now, data/maps/designs/.)
         for path, map_id, relax in cases:
             with self.subTest(path=path, relax=relax):
                 found = self.check(path, map_id, relax)

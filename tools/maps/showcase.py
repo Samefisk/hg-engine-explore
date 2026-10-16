@@ -1,6 +1,7 @@
 """Wire the three generated showcase maps (541-543) into the game.
 
-  python3 -B -m tools.maps.showcase write    # after tools.maps.style generate/new-map
+  python3 -B -m tools.maps.showcase design   # briefs -> semantic maps + plans, then paint the lands
+  python3 -B -m tools.maps.showcase write    # after design (or a paint/resolve): events, panels
   python3 -B -m tools.maps.showcase probe    # live melonDS walk-through, JSON out
   python3 -B -m tools.maps.showcase shots    # screenshot sheets, ONLY when the user asks
 
@@ -10,11 +11,18 @@ the way back. Each showcase map has a plain arrival tile and a return
 panel one step south of it. Plain-tile warps never trigger, so arriving
 can never bounce you straight back.
 
+Each map is designed from a brief in data/maps/designs/ (style/design.py):
+NNN-name.brief.json (gameplay intent) -> NNN-name.semantic.txt (what every
+tile is) + NNN-name.plan.json (route, exits, ledges, trainer and item spots),
+then painted with vanilla cells (style/paint.py).
+
 Content reuses the template maps' own local scripts (the headers point at
 their script and text banks): Route 29's talkers, signs and apricorn tree in
 Twinwood Crossing, Route 44's signs and apricorn tree in Mirrorlake Basin.
-Every placement snaps to the nearest open, reachable tile of the generated
-terrain, so regenerating a map keeps the content valid.
+They go to the plan's trainer and item spots, each snapped to the nearest
+open, reachable tile of the painted terrain. The probe's goal checks come
+from the plan too: jump each designed ledge (and fail to climb it), and walk
+the route across a chunk seam.
 """
 
 from __future__ import annotations
@@ -38,22 +46,68 @@ CHERRYGROVE_ARRIVAL = (561, 393)   # plain tile: where you land coming back
 SAVE_START = (564, 392)            # test.sav continues here, facing the PC door
 
 SHOWCASE = [
-    # map, name, arrival (plain), return panel, Cherrygrove panel
+    # map, name, arrival (plain), return panel, Cherrygrove panel, design (data/maps/designs/<design>.*)
     {"map": 541, "name": "Twinwood Crossing", "arrival": (32, 57), "panel": (32, 58), "door": (559, 394),
-     "layout": "541-twinwood-crossing.txt"},
+     "design": "541-twinwood-crossing", "land": 676},
     {"map": 542, "name": "Mirrorlake Basin", "arrival": (5, 16), "panel": (5, 17), "door": (561, 394),
-     "layout": "542-mirrorlake-basin.txt"},
+     "design": "542-mirrorlake-basin", "land": 680},
     {"map": 543, "name": "Echo Cavern", "arrival": (16, 60), "panel": (16, 61), "door": (563, 394),
-     "layout": "543-echo-cavern.txt"},
+     "design": "543-echo-cavern", "land": 682},
 ]
+DESIGNS = cli.REPO / "data/maps/designs"
 
-# (template object/bg index, wanted position) per map
+# Template script content per map: object and bg (sign) indices into the template's events.
 CONTENT = {
-    541: {"template": 33, "objects": [(0, (31, 50)), (1, (30, 27)), (2, (17, 22)), (3, (46, 31)), (9, (27, 24))],
-          "bgs": [(0, (34, 53)), (1, (16, 10))]},
-    542: {"template": 46, "objects": [(7, (55, 21))], "bgs": [(0, (7, 15)), (1, (31, 4))]},
+    541: {"template": 33, "objects": [0, 1, 2, 3, 9], "bgs": [0, 1]},
+    542: {"template": 46, "objects": [7], "bgs": [0, 1]},
     543: {"template": 107, "objects": [], "bgs": []},
 }
+
+
+def design_files(entry: dict) -> dict[str, Path]:
+    stem = DESIGNS / entry["design"]
+    return {k: stem.with_name(f"{stem.name}.{k}{ext}") for k, ext in
+            (("brief", ".json"), ("semantic", ".txt"), ("plan", ".json"))}
+
+
+def load_plan(entry: dict) -> dict:
+    return json.loads(design_files(entry)["plan"].read_text())
+
+
+def wanted_spots(entry: dict, plan: dict) -> tuple[list, list]:
+    """(object spots, sign spots) in priority order: trainers, items, then along the route."""
+    route = [tuple(p) for p in plan.get("route", [])]
+    trainers = [(t["x"], t["z"]) for t in plan.get("trainers", [])]
+    items = [(i["x"], i["z"]) for i in plan.get("items", [])]
+    along = [route[int(len(route) * f)] for f in (0.2, 0.4, 0.6, 0.8)] if route else []
+    ax, az = entry["arrival"]
+    signs = [(ax + 2, az - 1)] + ([route[len(route) // 2]] if route else [])
+    return trainers + items + along, signs
+
+
+def design(overrides: Path, maps: list[int] | None = None, seeds: int = 1) -> None:
+    """Design every showcase map from its brief and paint its lands."""
+    from .style import cli as style_cli, design as style_design
+    for entry in SHOWCASE:
+        if maps and entry["map"] not in maps:
+            continue
+        files = design_files(entry)
+        brief = json.loads(files["brief"].read_text())
+        sem, plan_, facts = style_design.design(brief)
+        if facts["problems"]:
+            raise SystemExit(f"map {entry['map']}: design problems {facts['problems']}")
+        files["semantic"].write_text(f"# {entry['name']}: designed from {files['brief'].name}\n" + sem.to_text())
+        files["plan"].write_text(json.dumps({"brief": brief, "intent": plan_.text().splitlines(), **facts,
+                                             "notes": plan_.notes, "route": [list(p) for p in plan_.route]},
+                                            indent=1) + "\n")
+        report = style_cli.paint_lands(files["semantic"].read_text(), brief["template"], entry["land"],
+                                       overrides, seeds)
+        report_dir = style_cli.REPORT_DIR if overrides.resolve() == (cli.REPO / "data/maps").resolve() \
+            else overrides.parent / "map-style-reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        (report_dir / f"report-{entry['land']:04d}.json").write_text(json.dumps(report, indent=1) + "\n")
+        print(f"map {entry['map']} {entry['name']}: lands {report['lands']}, paint {report['paint']}, "
+              f"labelMatch {report['labelMatch']}")
 
 
 def _land_path(overrides: Path, land: int) -> Path:
@@ -129,14 +183,15 @@ def write(overrides: Path) -> None:
         content = CONTENT[map_id]
         template = base.member("events", base.headers[content["template"]]["eventsBank"])
         taken = {entry["arrival"], entry["panel"]}
+        object_spots, sign_spots = wanted_spots(entry, load_plan(entry))
         objects = []
-        for number, (index, want) in enumerate(content["objects"]):
-            x, z = _snap(edited, map_id, want, taken)
+        for number, (index, want) in enumerate(zip(content["objects"], object_spots)):
+            x, z = _snap(edited, map_id, tuple(want), taken)
             taken.add((x, z))
             objects.append({**template["objects"][index], "id": number, "x": x, "z": z})
         bgs = []
-        for index, want in content["bgs"]:
-            x, z = _snap(edited, map_id, want, taken)
+        for index, want in zip(content["bgs"], sign_spots):
+            x, z = _snap(edited, map_id, tuple(want), taken)
             taken.add((x, z))
             bgs.append({**template["bgs"][index], "x": x, "z": z})
         events = {"bgs": bgs, "objects": objects, "coords": [], "warps": [
@@ -162,22 +217,52 @@ def _move(map_id: int, start: tuple[int, int], facing: int, key: str, frames: in
     return before, _where()
 
 
+def goal_specs() -> list[dict]:
+    """Measurable goals from the design plans: each ledge jumps one way, the route crosses a
+    chunk seam where the map has more than one chunk."""
+    from .style import semantic
+    out = []
+    for entry in SHOWCASE:
+        plan = load_plan(entry)
+        sem = semantic.SemanticMap.from_text(design_files(entry)["semantic"].read_text())
+        walk = lambda x, z: 0 <= z < len(sem.walk) and 0 <= x < len(sem.walk[0]) and sem.walk[z][x] in ".,"
+        for span in plan.get("notes", {}).get("ledgeTiles", [])[:1]:
+            spots = [(x, z) for x, z in span if walk(x, z - 1) and walk(x, z + 1) and sem.walk[z][x] == "v"]
+            if spots:
+                x, z = spots[len(spots) // 2]
+                out.append({"name": f"{entry['map']} ledge is one-way", "map": entry["map"], "kind": "ledge",
+                            "top": (x, z - 1), "bottom": (x, z + 1)})
+        route = [tuple(p) for p in plan.get("route", [])]
+        for a, b in zip(route, route[1:]):
+            if (a[0] // 32, a[1] // 32) != (b[0] // 32, b[1] // 32) and walk(*a) and walk(*b):
+                dx, dz = b[0] - a[0], b[1] - a[1]
+                key, facing = {(1, 0): ("RIGHT", 3), (-1, 0): ("LEFT", 2), (0, 1): ("DOWN", 1),
+                               (0, -1): ("UP", 0)}[(dx, dz)]
+                out.append({"name": f"{entry['map']} crosses chunk seam", "map": entry["map"], "kind": "seam",
+                            "start": a, "key": key, "facing": facing, "to": b})
+                break
+    return out
+
+
 def goal_checks() -> dict:
-    """One measured check per map's headline goal (runs inside a session)."""
+    """One measured check per design goal (runs inside a session)."""
     out = {}
-    # Twinwood Crossing: walk east across the x = 32 chunk seam in the long corridor.
-    before, after = _move(541, (29, 42), 3, "RIGHT", 24)
-    out["541 crosses chunk seam"] = {"before": before, "after": after,
-                                     "pass": before == (541, 29, 42) and after[0] == 541 and after[1] >= 33}
-    # Mirrorlake Basin: jump down terrace 1, then fail to climb it.
-    before, after = _move(542, (20, 5), 1, "DOWN", 8)
-    _, back = _move(542, (20, 7), 0, "UP", 16)
-    out["542 terrace is one-way"] = {"down": [before, after], "upAttempt": back,
-                                     "pass": before == (542, 20, 5) and after[2] >= 7 and back == (542, 20, 7)}
-    # Echo Cavern: drop over the ledge into the central chamber.
-    before, after = _move(543, (15, 10), 1, "DOWN", 8)
-    out["543 ledge drop"] = {"before": before, "after": after,
-                             "pass": before == (543, 15, 10) and after[0] == 543 and after[2] >= 12}
+    for goal in goal_specs():
+        m = goal["map"]
+        if goal["kind"] == "ledge":
+            before, after = _move(m, goal["top"], 1, "DOWN", 8)
+            _, back = _move(m, goal["bottom"], 0, "UP", 16)
+            out[goal["name"]] = {"down": [before, after], "upAttempt": back,
+                                 "pass": before == (m, *goal["top"]) and after == (m, *goal["bottom"])
+                                 and back == (m, *goal["bottom"])}
+        else:
+            before, after = _move(m, goal["start"], goal["facing"], goal["key"], 8)
+            # Walked off the start and ended in the chunk across the seam (a held key may
+            # carry the player more than one tile).
+            to_chunk = (goal["to"][0] // 32, goal["to"][1] // 32)
+            out[goal["name"]] = {"before": before, "after": after,
+                                 "pass": before == (m, *goal["start"]) and after[0] == m
+                                 and (after[1] // 32, after[2] // 32) == to_chunk}
     return out
 
 
@@ -227,8 +312,9 @@ SHOTS_DIR = cli.REPO / "build/map-showcase-screens"
 
 def _viewpoints(edited, entry: dict) -> list[tuple[str, tuple[int, int]]]:
     """A 3 x 3 spread of standable tiles over the map (nearest land to each target)."""
-    rows = [r for r in (cli.REPO / "data/maps/layouts" / entry["layout"]).read_text().splitlines()
-            if r and not r.startswith("#")]
+    from .style import semantic
+    rows = [r.replace(",", ".") for r in
+            semantic.SemanticMap.from_text(design_files(entry)["semantic"].read_text()).walk]
     height, width = len(rows), len(rows[0])
     land = [(x, z) for z in range(height) for x in range(width)
             if rows[z][x] in ".," and (t := edited.tile(entry["map"], x, z)) and not t[0]]
@@ -239,6 +325,18 @@ def _viewpoints(edited, entry: dict) -> list[tuple[str, tuple[int, int]]]:
             x, z = min(land, key=lambda p: (abs(p[0] - tx) + abs(p[1] - tz), p))
             out.append((f"{entry['map']}-{'nms'[j]}{'wce'[i]}-x{x:02d}-z{z:02d}", (x, z)))
     return out
+
+
+def _teleport_when_idle(map_id: int, x: int, z: int, tries: int = 6) -> None:
+    """Teleport, waiting out a follower still moving from the last spot (owctl reports busy)."""
+    for attempt in range(tries):
+        try:
+            _ow("teleport", str(map_id), str(x), str(z), "--facing", "1")
+            return
+        except SystemExit as error:
+            if '"busy"' not in str(error) or attempt == tries - 1:
+                raise
+            _ow("step", "60")
 
 
 def shots(rom: str, save: str) -> int:
@@ -258,7 +356,7 @@ def shots(rom: str, save: str) -> int:
         for entry, views in plan:
             files = []
             for name, (x, z) in views:
-                _ow("teleport", str(entry["map"]), str(x), str(z), "--facing", "1")
+                _teleport_when_idle(entry["map"], x, z)
                 _ow("step", "90")
                 target = SHOTS_DIR / f"{name}.png"
                 shutil.copy(_ow("capture")["screenshot"]["path"], target)
@@ -283,11 +381,16 @@ def shots(rom: str, save: str) -> int:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="tools.maps.showcase", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("action", choices=("write", "probe", "shots"))
+    parser.add_argument("action", choices=("design", "write", "probe", "shots"))
     parser.add_argument("--overrides", type=Path, default=cli.REPO / "data/maps")
+    parser.add_argument("--map", type=int, action="append", help="design: only these maps")
+    parser.add_argument("--seeds", type=int, default=1, help="design: paint seeds per map")
     parser.add_argument("--rom", default="test.nds")
     parser.add_argument("--save", default="test.sav")
     args = parser.parse_args(argv)
+    if args.action == "design":
+        design(args.overrides, args.map, args.seeds)
+        return 0
     if args.action == "write":
         write(args.overrides)
         return 0

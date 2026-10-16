@@ -1,138 +1,98 @@
 ---
 name: design-map-look
-description: Design and generate new or changed HeartGold map chunks that look like vanilla, from an ASCII layout, then prove them. Use for new routes, areas, rooms or reshaped terrain; use documentation/map-system/README.md for event/warp/header-only edits.
+description: Design and build new or reshaped HeartGold maps that meet gameplay goals and look like vanilla, from a brief, then prove them. Use for new routes, caves, areas or reshaped terrain; use documentation/map-system/README.md for event/warp/header-only edits.
 ---
 
-# Design a vanilla-looking map chunk
+# Design a map that plays well and looks like vanilla
 
-The look comes from construction, and you check it yourself in game before
-handing off (step 5):
-every piece of geometry is a vanilla tile cell, every new join continues the
-polygons on both sides (or is one vanilla has), and pieces that overhang their
-tile keep the neighbours vanilla gave them. Your job is the layout, the intent; the solver supplies
-the craft. Design truth: [style-system.md](../../../documentation/map-system/style-system.md).
+You write the *intent* (a brief); the tools draw shapes the way vanilla does,
+name every tile (semantic map), and build it only from vanilla cells copied in
+runs. You check it yourself before handing off (step 5). Design truth:
+[style-system.md](../../../documentation/map-system/style-system.md),
+"Semantic pipeline".
 
-## 1. Learn the tileset
+## 1. Pick the look and write the brief
 
-Pick an existing map whose look you want (its area tileset is the palette):
+The template map is the palette: its tileset, and its own chunks are the
+patterns copied first (Route 29 = 33, Route 44's lake = 46, Union Cave = 107).
+Write `data/maps/designs/NNN-name.brief.json`:
 
-```bash
-python3 -B -m tools.maps.style examples --map 33 --count 4
+```json
+{"name": "Twinwood Crossing", "map": 541, "template": 33, "kind": "route", "chunks": [2, 2], "seed": 7,
+ "exits": [{"side": "south", "at": 32, "width": 2, "arrival": [32, 57]}, {"side": "north", "at": 22}],
+ "wander": 0.7, "width": [3, 6], "clearings": 4, "grass": 6, "pond": 1, "flowers": 5,
+ "clumps": 6, "ledge": 1, "path": "exits", "trainers": 2, "items": 2}
 ```
 
-Read the class layouts: how thick tree walls are, where grass sits relative to
-paths, how ledges run, how water edges meet land. Copy those habits.
+- `kind`: `route` (tree land, organic edges snapped to 2x2 trees) or `cave`
+  (straight corridors and rectangular rooms; rock beyond the wall band is the
+  dark outside).
+- Gameplay: `exits` (every exit must reach every other), `grass` patches
+  (encounters), `ledge` (one-way, placed only where a way around remains),
+  `trainers` (spots that see 3+ tiles across the route), `items` (far from it).
+- Look: `clearings`, `pond` (+ `pondSize`), `flowers`, `clumps`, `path`
+  (`exits`, `full` or `none`), `wander`, `width`.
+- A different `seed` gives a different map from the same intent.
 
-## 2. Write the layout
-
-32 lines × 32 characters, saved under `build/map-style/` (layouts are
-scratch; the committed result is the override in `data/maps/`):
-
-- `.` open ground, `,` tall grass, `~` water, `T` blocked (trees, rocks,
-  cliffs), `v ^ < >` one-way ledges, `*` let the solver choose.
-- Border a standalone chunk with `T` at least two tiles thick.
-- Put `*` between classes where vanilla uses decorated edges (shorelines,
-  tree lines, grass borders). Or pass `--relax 1` to free blocked tiles that
-  touch other classes.
-- Keep paths at least 2 tiles wide; encounter grass in patches, not stripes.
-- Leave the warp/start tile on `.`.
-
-Before a long `generate`, run the pre-check (about 1–2 s): `python3 -B -m
-tools.maps.style precheck --layout build/map-style/L.txt --map 33 [--relax 1]
-[--events EV.json --origin X0 Z0 | --start X Z]` (same `--relax` as
-generate; event x/z are matrix-wide, `--origin` is the layout's top-left map
-tile). It compares
-the layout with the class layouts of every vanilla chunk of the tileset and
-exits 1 on errors that will certainly fail a gate: a class the tileset has no
-cells for (water, a ledge direction), standable pockets that stay sealed even
-if every `*` is walkable, and warp or start tiles off `.`. Warnings are
-arrangements vanilla never uses: 2x2 class windows, and 3x3 windows with grass
-read as ground, that no vanilla chunk has (`*` matches anything); ledges
-without ground on both sides; paths, walls or water 1 tile wide. Each warning
-region is printed beside the nearest vanilla window with its land id and
-coordinates, so you can copy that habit. Fix every error; treat warnings as
-hints. Known-good layouts get 0–4, vanilla chunks checked against the rest of
-their tileset 0–11, and a clean pre-check does not predict the solver's own
-mismatches, 1-tile pockets from `*` tiles or `seamRate`; only `generate`
-measures those. `--calibrate` reprints the vanilla baseline for a tileset.
-
-## 3. Generate and read the score
+## 2. Design
 
 ```bash
-python3 -B -m tools.maps.style generate --layout build/map-style/L.txt --map 33 --land N --seeds 16
+python3 -B -m tools.maps.style design --brief data/maps/designs/NNN-name.brief.json \
+  --out data/maps/designs/NNN-name.semantic.txt --plan data/maps/designs/NNN-name.plan.json
 ```
 
-`--land` is an existing land id to replace (only if no other map uses it, see
-`checkout` refusals) or the archive length to append. The command keeps the
-best seed that passes every gate:
+It prints the gameplay check (problems, tall grass, trainer and item spots)
+and the intent map. Exit code 1 means a gameplay problem (an exit cut off):
+change the brief, not the checker. Read the semantic map's `[kind]` layer:
+it should read like the template (for caves `R` outside, `#` rim, `W` wall
+band, `=` floor). Keep ponds, grass and flower beds rectangular, as vanilla
+does; organic outlines ask for edge pieces vanilla does not have.
 
-| Gate | Meaning |
-|---|---|
-| `criticalMismatches` = 0 | no wall, water or ledge where you asked for a path, or the reverse |
-| `walkableComponents` = 1 | no sealed pockets of standable land |
-| `rigidViolations` = 0 | no tree, cliff, ledge or slope cut off from its vanilla neighbours |
-| `holes` = 0 | no tile missing the ground vanilla always had |
-| `voidExposed` = 0 | no floorless void beside standable land |
-| `renderVoid` = 0 | no black void visible beside reachable ground (review gate: the map is still written; fix the report's `renderVoidTiles` with `resolve`) |
-| `seamRate` ≥ 0.95 | joins whose textures and heights continue, or that vanilla has |
-| game limits | model ≤ 0xF000 bytes, BDHC, polygons (checked on write) |
+## 3. Paint
 
-The solver copies whole vanilla windows (8×8 down to 4×4), so cosmetic
-swaps (grass ↔ ground) are allowed and reported as `layoutMatch`. The
-report's `hotspots` are the 8×8 areas with the most bad joins: give them to
-the user as the first places to look.
+```bash
+python3 -B -m tools.maps.style paint --semantic data/maps/designs/NNN-name.semantic.txt --map TEMPLATE --land N [--seeds 2]
+```
 
-If a gate fails, change the layout, never the gates: use shapes the
-`examples` show (2-tile tree blocks, ledge rows, grass patches), widen
-transitions with `*`, and try more `--seeds`. The realized layout is in
-`build/map-style/report-N.json`; diff it against yours.
-
-Once the chunk is wired into a map (step 4), look at it before any build:
-`python3 -B -m tools.maps.render sheet --map M` and `overview --map M`
-(read the PNGs in `build/map-render/`), and `render.voids` for void beside
-reachable ground (see the map README, "Look at it without building"). The
-renders match melonDS geometry, so fix what they show now.
-
-Fix one spot without re-rolling the map: `python3 -B -m tools.maps.style
-resolve --map M --region X0 Z0 W H [--set X Z C] --seeds 4` (dry run), or
-`--hotspots K` for the report's worst 8×8 areas. Cells outside the regions
-stay; a region changes only if it strictly improves with no new gate
-failure. Read before/after, repeat with `--write`, then re-render. Look at a
-tile with `python3 -B -m tools.maps.style inspect --map M --x X --z Z
---radius 2` (cell, vanilla sources, bad joins per side, overhang/hole/void
-flags, events). Reports older than stored layouts need `--layout FILE
---relax N` (the showcase maps used `--relax 1`).
+`--land` is the first land id (whole chunks, in reading order; replace only
+lands no other map uses, or append at the archive length). The report
+(`build/map-style/report-N.json`) has `paint`: walk/kind/level mismatches,
+bad seams, overhang violations (sliced trees, cut walls), bare tiles (tree
+shadows without trees) and void tiles; and `labelMatch` (how much of the
+design came out as asked). Walk mismatches change where the player can go:
+they must be 0 on the route, or fix the design. The showcase maps do all of
+this in one step: `python3 -B -m tools.maps.showcase design [--map M]`.
 
 ## 4. Wire it into a map
 
-- Existing map: the chunk replaces land `N` in place.
+- Existing map: the chunks replace their lands in place.
 - New map: `python3 -B -m tools.maps.style new-map --map 541 --template 33
-  --land N --start X Z` adds a 1×1 matrix, an events file with one warp tile
-  and a header for map 541 (IDs 540–591 can be stored). Add NPCs, signs and
-  real warps with the normal edit loop.
+  --land N --start X Z [--chunks W H]` adds a matrix, events with one warp
+  tile and a header (IDs 540–591 can be stored). Add NPCs, signs and warps
+  at the plan's trainer and item spots with `python3 -B -m tools.maps events`.
 
 Then `python3 -B -m tools.maps lint` must report 0 errors.
 
-## 5. Prove and hand off
+## 5. Look, prove, hand off
 
-Build with `hg-engine-delta-build`. Prove behavior in melonDS with memory
-reads:
-teleport onto the start tile, step in two directions, and read
-`owctl dev terrain` → `landModels` (the chunk's model name is `gen_NNNN`) and
-`events` (hash of your events file). `tools/maps/proof_model.py` is the
-template. Then review the look yourself: `python3 -B -m tools.maps.showcase
-shots` (or the same capture loop for your map) and inspect every sheet for
-black void beside floors, floating or cut-off walls/trees/cliffs, hard-edged
-texture squares and moving non-water textures. Each problem becomes a lab
-defect and gets fixed before hand-off. Run `python3 -B -m tools.maps.style.lab
-scan --map M --write` too: it files what the renderer and judge find, so the
-user is not the first to see it. Run `python3 -B -m tools.maps.status --map M`
-last; hand off only when it reports nothing to do. Then tell the user exactly where to look: map ID, coordinates and how
-to reach it (teleport or warp). Offer the review page, `python3 -B -m
-tools.maps.review --map M` (they click a spot and record what looks wrong).
-Their visual review closes the task; record any "looks wrong" note as a
-defect (`python3 -B -m tools.maps.style.lab defect add --map M --x X --z Z
---note "..."`, or the page's Record defect) so the improvement loop
-([improve-map-generator](../improve-map-generator/SKILL.md)) learns from it.
-If `inspect` shows nothing wrong at a flagged spot, that is a metric gap:
-say so in the defect.
+Look before any build: `python3 -B -m tools.maps.render sheet --map M` and
+`overview --map M --top` (PNGs in `build/map-render/`). Any black void beside
+a floor, a sliced tree, a cut wall, a pond without its bank or a stair-stepped
+patch edge is a failure: change the design (shape, seed) or paint more seeds;
+`style resolve` and `style inspect` work on painted reports too.
+
+Build with `hg-engine-delta-build`. Prove walking in melonDS with memory
+reads (the showcase probe jumps each designed ledge, fails to climb it, and
+walks the route across a chunk seam: `python3 -B -m tools.maps.showcase
+probe`). Then capture the sheets (`python3 -B -m tools.maps.showcase shots`)
+and inspect every one yourself; every problem becomes a lab defect and a fix
+before hand-off. Run `python3 -B -m tools.maps.style.lab scan --map M --write`
+and, last, `python3 -B -m tools.maps.status --map M` (hand off only when it
+reports nothing to do). Tell the user the map ID, how to reach it and where
+to look; offer `python3 -B -m tools.maps.review --map M`. Record their
+"looks wrong" notes as defects (`python3 -B -m tools.maps.style.lab defect add
+--map M --x X --z Z --note "..."`) so
+[improve-map-generator](../improve-map-generator/SKILL.md) learns from them.
+
+The old walk-class path (`style generate --layout`, `precheck`) still runs
+for the lab's old benchmark; do not use it for new maps.

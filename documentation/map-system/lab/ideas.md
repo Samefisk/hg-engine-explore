@@ -3,6 +3,29 @@
 Best guess first. Move an idea to the ledger (accepted or rejected, with the
 numbers) when tried; add new ones with the evidence that suggests them.
 
+## Semantic pipeline (rebuild bench, rebuild-ledger.jsonl)
+
+1. **Tree phase in the labels (D9, D10, D11).** Tree belts painted from
+   different vanilla sources slice billboards and leave shadow discs without
+   trees. Label each tree tile with its place in its tree (from the cell that
+   owns the billboard: anchor, right, below, below-right) so refine copies
+   whole trees and the painter cannot mix phases.
+2. **Pond banks in rare tilesets (D12).** Route 44's tileset has few ponds,
+   so bank pieces run out; the lake rebuild cases show it (tileMatch ~0.8).
+   Try borrowing pond rings from tilesets with the same pond textures
+   (material names match across tilesets 2 and 8), or restrict designed
+   ponds to sizes vanilla has.
+3. **Border depth from the camera (D13).** Derive NORTH/SOUTH/SIDE_BORDER
+   from the field camera's frustum instead of fixed tile counts.
+4. **Speed.** Painting takes 1–2 minutes per chunk (pure Python). The
+   bound-pruned moves are most of it; vectorise `energy()` for blocks or
+   port the inner loop to numpy.
+5. **Render-void repair stalls (D14).** The renderer-in-the-loop repair
+   cuts void from 7–14 tiles to 0–2 but not always to 0: try relaxed
+   candidates from the 3x3 label neighbourhood, or let it change labels.
+
+## Walk-class solver (old, lab bench)
+
 1. **Irregular window boundaries (min-cut).** Most remaining bad joins are
    different materials meeting at a window edge (tree shadow beside plain
    grass, wall beside grass). Let a new window keep part of the old content:

@@ -2,7 +2,9 @@
 
   python3 -B -m tools.maps.style examples --map 33 --count 3   # learn from vanilla
   python3 -B -m tools.maps.style precheck --layout L.txt --map 33 [--relax 1]   # ~1 s, before generate
-  python3 -B -m tools.maps.style generate --layout L.txt --map 33 --land 676 [--seeds 16] [--relax 1]
+  python3 -B -m tools.maps.style design --brief B.json --out S.txt [--plan P.json]   # intent -> semantic map
+  python3 -B -m tools.maps.style paint --semantic S.txt --map 33 --land 676 [--seeds 2]  # semantic map -> lands
+  python3 -B -m tools.maps.style generate --layout L.txt --map 33 --land 676 [--seeds 16] [--relax 1]  # old: walk classes only
   python3 -B -m tools.maps.style new-map --map 541 --template 33 --land 676 --start 16 16
   python3 -B -m tools.maps.style resolve --land 682 (--region X0 Z0 W H | --hotspots K) [--set X Z C] [--seeds 4] [--write]
   python3 -B -m tools.maps.style inspect --map 543 --x 16 --z 44 [--radius 2]
@@ -13,6 +15,12 @@ and writes data/maps/land/NNNN/{land.json, model.nsbmd}. A land id equal to
 the archive length appends a new chunk. The report (scores, the realized
 layout) goes to build/map-style/report-NNNN.json; nothing ROM-derived is
 written outside the override tree.
+
+`design` + `paint` are the current pipeline (style-system.md, "Semantic
+pipeline"): a brief of gameplay intent becomes a semantic map (what each tile
+is: kind, floor level, walk class), and `paint` realises it with vanilla cells
+(paint.py), writing lands and build/map-style/report-NNNN.json like generate.
+`generate` (walk classes only) is kept for the old lab benchmark.
 
 `resolve` re-solves only the given regions of a generated map (report grid
 coordinates with --land, matrix-wide with --map) and keeps every other tile;
@@ -149,6 +157,127 @@ def write_lands(base, kit: dict, grid: list[list[int]], map_id: int, land_id: in
             "modelHashes": {str(n): model_sha(m) for n, _, m in outputs}}
 
 
+def land_bytes(base, kit: dict, grid: list[list[int]], map_id: int, land_id: int) -> dict[int, bytes]:
+    """{land id: encoded land} for a solved grid, as write_lands composes it (nothing written)."""
+    area = base.member("area", base.headers[map_id]["areaDataBank"])
+    anim_materials = kits.area_animation_materials(world.RomSource(REPO / "rom.nds"), area["dynamicTextureType"])
+    out = {}
+    chunk_w, chunk_h = len(grid[0]) // layout.GRID, len(grid) // layout.GRID
+    for cz in range(chunk_h):
+        for cx in range(chunk_w):
+            part = [row[cx * layout.GRID:(cx + 1) * layout.GRID]
+                    for row in grid[cz * layout.GRID:(cz + 1) * layout.GRID]]
+            this_land = land_id + cz * chunk_w + cx
+            model, tiles, corners = kits.compose(kit, part, f"gen_{this_land:04d}", anim_materials=anim_materials)
+            land = {"backgroundSound": "", "tiles": tiles, "buildings": [], "bdhc": bdhc_gen.bdhc_from_corners(corners)}
+            out[this_land] = codecs.encode_land(land, model)
+    return out
+
+
+def rendered_void(base, overrides: Path, kit: dict, grid, map_id: int, land_id: int) -> list[tuple[int, int]] | None:
+    """Grid tiles where the renderer (render.voids) sees black void with these lands in place,
+    or None when no map uses land_id yet (nothing to render it in)."""
+    import dataclasses
+    from .. import render
+    edited = world.apply_overrides(base, overrides)
+    for header in edited.headers:
+        if header.get("alias"):
+            continue
+        try:
+            matrix = edited.matrix_for(header["id"])
+        except (KeyError, IndexError, ValueError):
+            continue
+        spots = [(x, z) for z, row in enumerate(matrix["landData"]) for x, land in enumerate(row) if land == land_id]
+        if spots and (matrix["headers"] is None or matrix["headers"][spots[0][1]][spots[0][0]] in (0, header["id"])):
+            target_map, (cx0, cz0) = header["id"], spots[0]
+            break
+    else:
+        return None
+    scene = render.MapScene(target_map, overrides)
+    raw = dict(scene.world.raw)
+    raw["land"] = list(raw["land"])
+    for land, data in land_bytes(base, kit, np.asarray(grid).tolist(), map_id, land_id).items():
+        if land < len(raw["land"]):
+            raw["land"][land] = data
+    scene.world = dataclasses.replace(scene.world, raw=raw, _cache={})
+    # Every tile where the renderer sees through to nothing, from above or from the camera:
+    # render.voids keeps only void beside reachable ground (its gate), but a notch in a
+    # wall band between corridors is just as visible. The caller skips tiles meant dark.
+    h, w = np.asarray(grid).shape
+    ox, oz = cx0 * layout.GRID, cz0 * layout.GRID
+    chunks = [(cx0 + cx, cz0 + cz) for cz in range(h // layout.GRID) for cx in range(w // layout.GRID)]
+    tiles = set()
+    ppt = 4
+    _, _, where = scene.overview(ppt, top=True, pick=True, chunks=chunks)
+    gaps = np.isnan(where[..., 0])
+    for z, x in zip(*np.nonzero(gaps)):
+        tiles.add((int(x) // ppt, int(z) // ppt))
+    _, cam, where = scene.overview(ppt, top=False, pick=True, chunks=chunks)
+    ys, xs = np.nonzero(np.isnan(where[..., 0]))
+    wv, hv = cam.size
+    k = cam.ortho_height / hv
+    origin = (cam.pos + ((xs + 0.5 - wv / 2) * k)[:, None] * cam.right
+              + ((hv / 2 - ys - 0.5) * k)[:, None] * cam.up)
+    t = (cam.floor - origin[:, 1]) / cam.forward[1]
+    hit = origin + t[:, None] * cam.forward
+    for px, pz in hit[:, [0, 2]]:
+        tiles.add((int(px // 16) - ox, int(pz // 16) - oz))
+    # The camera sees past the map's own edge: that void is the border's, not a tile's fault.
+    return sorted((x, z) for x, z in tiles if 1 <= x < w - 1 and 2 <= z < h - 1)
+
+
+def paint_lands(semantic_text: str, map_id: int, land_id: int, overrides: Path, seeds: int = 1,
+                render_rounds: int = 4) -> dict:
+    """Paint a semantic map with map_id's tileset; write the best seed's lands.
+
+    After painting, up to render_rounds times: render the map with the new lands
+    (render.voids, the renderer's own void check), charge the cells at void tiles,
+    and repair around them. The coverage rasters the painter uses are fast but
+    approximate; this closes the gap where they disagree with the renderer."""
+    from . import paint, semantic
+    base = _base()
+    tileset = _tileset_of_map(base, map_id)
+    started = time.time()
+    kit = kits.load_or_build_kit(world.RomSource(REPO / "rom.nds"), tileset)
+    target = semantic.SemanticMap.from_text(semantic_text)
+    h, w = target.shape
+    if h % layout.GRID or w % layout.GRID:
+        raise SystemExit(f"semantic map is {w}x{h}; it must be whole {layout.GRID}x{layout.GRID} chunks")
+    tried = []
+    for seed in range(seeds):
+        painter = paint.Painter(paint.source_for(kit), target, None, seed)
+        painter.solve()
+        tried.append((paint.rank(painter.report()), seed, painter))
+    tried.sort(key=lambda t: (t[0], t[1]))
+    _, seed, painter = tried[0]
+    rounds = []
+    for _ in range(render_rounds):
+        void = rendered_void(base, overrides, kit, painter.grid, map_id, land_id)
+        rounds.append(None if void is None else len(void))
+        if not void:
+            break
+        void = [(x, z) for x, z in void if painter.want_open[z, x]]  # not tiles meant dark
+        rounds[-1] = len(void)
+        if not void:
+            break
+        painter.mark_bad(void)
+        painter.repair_pass(only=void)
+    grid = painter.grid.copy()
+    found = painter.report()
+    got = semantic.extract(kit, grid)
+    report = {"map": map_id, "tileset": tileset, "land": land_id, "seed": seed, "builder": "paint",
+              "paint": found, "seedsTried": seeds, "renderVoidRounds": rounds,
+              "labelMatch": round(float(np.mean([[target.label(x, z) == got.label(x, z) for x in range(w)]
+                                                 for z in range(h)])), 4),
+              "renderVoidTiles": {k: sorted(map(list, v)) for k, v in
+                                  coverage.render_void(kit, grid).items() if k != "floor"},
+              "grid": grid.tolist(), "layout": [row.replace("?", "T") for row in target.walk],
+              "semantic": semantic_text, "realizedLayout": layout.render(grid.tolist(), kit),
+              "seconds": round(time.time() - started, 1)}
+    report.update(write_lands(base, kit, grid.tolist(), map_id, land_id, overrides))
+    return report
+
+
 def new_map(map_id: int, template: int, land_id: int, start: tuple[int, int], overrides: Path,
             size: tuple[int, int] = (1, 1)) -> dict:
     """W x H matrix (consecutive land ids from land_id) + events with one warp tile + header."""
@@ -229,6 +358,15 @@ def main(argv=None) -> int:
     gen.add_argument("--seeds", type=int, default=16)
     gen.add_argument("--relax", type=int, default=0)
     gen.add_argument("--seed-start", type=int, default=0, help="first seed (to continue a search)")
+    des = sub.add_parser("design", help="brief (gameplay intent) -> semantic map; see style/design.py")
+    des.add_argument("--brief", type=Path, required=True)
+    des.add_argument("--out", type=Path, required=True)
+    des.add_argument("--plan", type=Path)
+    pnt = sub.add_parser("paint", help="semantic map -> lands with vanilla cells; see style/paint.py")
+    pnt.add_argument("--semantic", type=Path, required=True)
+    pnt.add_argument("--map", type=int, required=True, help="map whose area tileset to use")
+    pnt.add_argument("--land", type=int, required=True, help="first land id to replace or append")
+    pnt.add_argument("--seeds", type=int, default=1)
     ex = sub.add_parser("examples")
     ex.add_argument("--map", type=int, required=True)
     ex.add_argument("--count", type=int, default=3)
@@ -273,6 +411,19 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     if args.command == "precheck":
         return _precheck(args)
+    if args.command == "design":
+        from . import design
+        argv2 = ["--brief", str(args.brief), "--out", str(args.out)] + (["--plan", str(args.plan)] if args.plan else [])
+        return design.main(argv2)
+    if args.command == "paint":
+        report = paint_lands(args.semantic.read_text(), args.map, args.land, args.overrides, args.seeds)
+        default = args.overrides.resolve() == (REPO / "data/maps").resolve()
+        report_dir = REPORT_DIR if default else args.overrides.parent / "map-style-reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        (report_dir / f"report-{args.land:04d}.json").write_text(json.dumps(report, indent=1) + "\n")
+        print(json.dumps({k: v for k, v in report.items()
+                          if k not in ("realizedLayout", "grid", "semantic", "layout")}, indent=1))
+        return 0
     if args.command in ("resolve", "inspect"):
         from . import edit
         layout_text = args.layout.read_text() if args.layout else None

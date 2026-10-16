@@ -1,8 +1,18 @@
 # Map generator improvement loop
 
 A loop that keeps making generated maps look more like vanilla without
-anyone re-explaining the goal. It has three speeds, all writing to the same
-memory:
+anyone re-explaining the goal.
+
+**Headline score (since 2026-10-16): the rebuild bench.** Six held-out
+vanilla chunks are rebuilt from their own semantic maps and compared with
+vanilla as rendered images (`python3 -B -m tools.maps.style.rebuild`,
+style-system.md "Semantic pipeline"); decisions go to `rebuild-ledger.jsonl`
+(`rebuild accept|reject --run DIR --note ...`, `rebuild status`). The old
+walk-class solver's numbers below (`lab bench`, `ledger.jsonl`, score.py
+gates) rated generated maps 0.99 while they looked broken: they measured the
+cells' statistics, not what a player sees. Keep them only for that solver.
+
+It has these speeds, all writing to the same memory:
 
 | Loop | Who runs it | What it changes | Command / guide |
 |---|---|---|---|
