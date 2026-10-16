@@ -80,6 +80,9 @@ class World:
     script_entries: list = field(default_factory=list)  # per scr_seq bank; None = unknown
     script_ranges: list = field(default_factory=list)   # [(first script id, bank)], descending
     overridden: dict[str, set[int]] = field(default_factory=dict)
+    # Land texture animation material names per a/1/4/0 member (AreaData field 3,
+    # "dynamicTextureType" in the area codec). Bound to land models by material index.
+    land_anims: list = field(default_factory=list)
     _cache: dict = field(default_factory=dict)
 
     def member(self, kind: str, index: int):
@@ -151,6 +154,9 @@ def apply_repo_banks(world: "World", repo: Path) -> None:
         world.archive_counts["scripts"] = max(world.archive_counts.get("scripts", 0), bank + 1)
 
 
+LAND_ANIM_ARCHIVE = "a/1/4/0"
+
+
 def load_base(source, header_offset: int = codecs.HEADER_TABLE_OFFSET_USA, repo: Path | None = None) -> World:
     raw = {kind: narc.members(source.read(rel)) for kind, rel in ARCHIVE_PATHS.items()}
     arm9 = source.arm9()
@@ -167,8 +173,12 @@ def load_base(source, header_offset: int = codecs.HEADER_TABLE_OFFSET_USA, repo:
         entries = [script_count(data) for data in scripts]
     if source.exists(TEXT_ARCHIVE):
         counts["text"] = len(narc.members(source.read(TEXT_ARCHIVE)))
+    anims = []
+    if source.exists(LAND_ANIM_ARCHIVE):
+        from .style.kit import area_animation_materials
+        anims = [area_animation_materials(source, i) for i in range(len(narc.members(source.read(LAND_ANIM_ARCHIVE))))]
     world = World(raw=raw, headers=headers, archive_counts=counts,
-                  script_entries=entries, script_ranges=script_ranges(arm9))
+                  script_entries=entries, script_ranges=script_ranges(arm9), land_anims=anims)
     if repo is not None:
         apply_repo_banks(world, repo)
     return world
@@ -189,7 +199,7 @@ def apply_overrides(base: World, overrides: Path) -> World:
     if not overrides.exists():
         return World(raw=raw, headers=headers, archive_counts=dict(base.archive_counts),
                      script_entries=list(base.script_entries), script_ranges=list(base.script_ranges),
-                     overridden=overridden)
+                     overridden=overridden, land_anims=base.land_anims)
 
     for kind in ARCHIVE_PATHS:
         folder = overrides / kind
@@ -249,4 +259,4 @@ def apply_overrides(base: World, overrides: Path) -> World:
             overridden["headers"].add(index)
     return World(raw=raw, headers=headers, archive_counts=dict(base.archive_counts),
                      script_entries=list(base.script_entries), script_ranges=list(base.script_ranges),
-                     overridden=overridden)
+                     overridden=overridden, land_anims=base.land_anims)

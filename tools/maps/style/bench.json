@@ -1,0 +1,16 @@
+{
+ "note": "Fixed benchmark for the map-generator improvement loop (tools/maps/style/lab.py). Changing it invalidates the ledger's champion score: re-run `lab bench --label baseline` and accept with --rebaseline.",
+ "seeds": [0, 1],
+ "quickSeeds": [0],
+ "cases": [
+  {"name": "twinwood", "kind": "layout", "map": 33, "layout": "tools/maps/style/bench_layouts/541-twinwood-crossing.txt"},
+  {"name": "mirrorlake", "kind": "layout", "map": 46, "layout": "tools/maps/style/bench_layouts/542-mirrorlake-basin.txt"},
+  {"name": "echo", "kind": "layout", "map": 107, "layout": "tools/maps/style/bench_layouts/543-echo-cavern.txt"},
+  {"name": "route29-land2", "kind": "holdout", "map": 33, "land": 2},
+  {"name": "route-land9", "kind": "holdout", "map": 33, "land": 9},
+  {"name": "lake-land87", "kind": "holdout", "map": 46, "land": 87},
+  {"name": "lake-land94", "kind": "holdout", "map": 46, "land": 94},
+  {"name": "cave-land389", "kind": "holdout", "map": 107, "land": 389},
+  {"name": "cave-land605", "kind": "holdout", "map": 107, "land": 605}
+ ]
+}

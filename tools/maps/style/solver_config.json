@@ -1,0 +1,149 @@
+{
+ "note": "Champion solver settings. Changed only by `python3 -B -m tools.maps.style.lab accept`; history in documentation/map-system/lab/ledger.jsonl.",
+ "solver": {
+  "placeSizes": [
+   8,
+   6
+  ],
+  "refineSizes": [
+   6,
+   4,
+   2,
+   1
+  ],
+  "layoutWeight": 4.0,
+  "seamWeight": 3.0,
+  "rigidWeight": 6.0,
+  "candidates": 48,
+  "cutoff": 1.0,
+  "refineRounds": 6,
+  "refinePerRound": 400,
+  "sideways": true,
+  "voidWeight": 4.0,
+  "polishRounds": 3,
+  "polishSizes": [
+   4,
+   3,
+   2,
+   1
+  ],
+  "polishCandidates": 1000,
+  "heightWeight": 8.0
+ },
+ "search": {
+  "placeSizes": [
+   [
+    8
+   ],
+   [
+    8,
+    6
+   ],
+   [
+    8,
+    6,
+    4
+   ],
+   [
+    6,
+    4
+   ],
+   [
+    10,
+    8
+   ]
+  ],
+  "refineSizes": [
+   [
+    6,
+    4,
+    2,
+    1
+   ],
+   [
+    8,
+    6,
+    4,
+    2,
+    1
+   ],
+   [
+    4,
+    2,
+    1
+   ],
+   [
+    6,
+    4,
+    3,
+    2,
+    1
+   ],
+   [
+    8,
+    4,
+    2,
+    1
+   ]
+  ],
+  "layoutWeight": [
+   2.0,
+   3.0,
+   4.0,
+   6.0
+  ],
+  "seamWeight": [
+   2.0,
+   3.0,
+   4.0,
+   6.0
+  ],
+  "rigidWeight": [
+   4.0,
+   6.0,
+   10.0
+  ],
+  "candidates": [
+   32,
+   48,
+   96,
+   160
+  ],
+  "cutoff": [
+   0.0,
+   1.0,
+   2.0,
+   4.0
+  ],
+  "refineRounds": [
+   4,
+   6,
+   10
+  ],
+  "refinePerRound": [
+   200,
+   400,
+   800
+  ],
+  "sideways": [
+   true,
+   false
+  ],
+  "voidWeight": [
+   0.0,
+   4.0,
+   8.0,
+   16.0
+  ],
+  "polishCandidates": [
+   300,
+   1000,
+   3000
+  ],
+  "heightWeight": [
+   4.0,
+   8.0,
+   16.0
+  ]
+ }
+}

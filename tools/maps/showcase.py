@@ -2,6 +2,7 @@
 
   python3 -B -m tools.maps.showcase write    # after tools.maps.style generate/new-map
   python3 -B -m tools.maps.showcase probe    # live melonDS walk-through, JSON out
+  python3 -B -m tools.maps.showcase shots    # screenshot sheets, ONLY when the user asks
 
 Cherrygrove (map 67) gets three warp panels just south-west of the
 Pokémon Center door, one per showcase map, and a plain arrival tile for
@@ -38,9 +39,12 @@ SAVE_START = (564, 392)            # test.sav continues here, facing the PC door
 
 SHOWCASE = [
     # map, name, arrival (plain), return panel, Cherrygrove panel
-    {"map": 541, "name": "Twinwood Crossing", "arrival": (32, 57), "panel": (32, 58), "door": (559, 394)},
-    {"map": 542, "name": "Mirrorlake Basin", "arrival": (5, 16), "panel": (5, 17), "door": (561, 394)},
-    {"map": 543, "name": "Echo Cavern", "arrival": (16, 60), "panel": (16, 61), "door": (563, 394)},
+    {"map": 541, "name": "Twinwood Crossing", "arrival": (32, 57), "panel": (32, 58), "door": (559, 394),
+     "layout": "541-twinwood-crossing.txt"},
+    {"map": 542, "name": "Mirrorlake Basin", "arrival": (5, 16), "panel": (5, 17), "door": (561, 394),
+     "layout": "542-mirrorlake-basin.txt"},
+    {"map": 543, "name": "Echo Cavern", "arrival": (16, 60), "panel": (16, 61), "door": (563, 394),
+     "layout": "543-echo-cavern.txt"},
 ]
 
 # (template object/bg index, wanted position) per map
@@ -218,10 +222,68 @@ def probe(rom: str, save: str) -> int:
     return 0 if passed else 1
 
 
+SHOTS_DIR = cli.REPO / "build/map-showcase-screens"
+
+
+def _viewpoints(edited, entry: dict) -> list[tuple[str, tuple[int, int]]]:
+    """A 3 x 3 spread of standable tiles over the map (nearest land to each target)."""
+    rows = [r for r in (cli.REPO / "data/maps/layouts" / entry["layout"]).read_text().splitlines()
+            if r and not r.startswith("#")]
+    height, width = len(rows), len(rows[0])
+    land = [(x, z) for z in range(height) for x in range(width)
+            if rows[z][x] in ".," and (t := edited.tile(entry["map"], x, z)) and not t[0]]
+    out = []
+    for j, fz in enumerate((0.2, 0.5, 0.8)):
+        for i, fx in enumerate((0.2, 0.5, 0.8)):
+            tx, tz = int(fx * width), int(fz * height)
+            x, z = min(land, key=lambda p: (abs(p[0] - tx) + abs(p[1] - tz), p))
+            out.append((f"{entry['map']}-{'nms'[j]}{'wce'[i]}-x{x:02d}-z{z:02d}", (x, z)))
+    return out
+
+
+def shots(rom: str, save: str) -> int:
+    """Capture each showcase map at nine spots and write one contact sheet per map.
+
+    Screenshots are for the user's visual review. Run only when the user asks
+    for them (AGENTS.md); agents never inspect images as a test step.
+    """
+    import shutil
+    from PIL import Image, ImageDraw
+    base = world.load_base(world.RomSource(cli.REPO / "rom.nds"))
+    edited = world.apply_overrides(base, cli.REPO / "data/maps")
+    SHOTS_DIR.mkdir(parents=True, exist_ok=True)
+    plan = [(entry, _viewpoints(edited, entry)) for entry in SHOWCASE]
+    _ow("start", "--rom", rom, "--save", save)
+    try:
+        for entry, views in plan:
+            files = []
+            for name, (x, z) in views:
+                _ow("teleport", str(entry["map"]), str(x), str(z), "--facing", "1")
+                _ow("step", "90")
+                target = SHOTS_DIR / f"{name}.png"
+                shutil.copy(_ow("capture")["screenshot"]["path"], target)
+                files.append(target)
+            scale, label = 2, 14
+            cell_w, cell_h = 256 * scale, (192 + label) * scale
+            sheet = Image.new("RGB", (cell_w * 3, cell_h * 3), "white")
+            draw = ImageDraw.Draw(sheet)
+            for i, path in enumerate(files):
+                top = Image.open(path).convert("RGB").crop((0, 0, 256, 192))
+                x0, y0 = (i % 3) * cell_w, (i // 3) * cell_h
+                sheet.paste(top.resize((256 * scale, 192 * scale), Image.NEAREST), (x0, y0 + label * scale))
+                draw.text((x0 + 6, y0 + 6), path.stem, fill="black")
+            out = SHOTS_DIR / f"sheet-{entry['map']}.png"
+            sheet.save(out)
+            print(out)
+    finally:
+        _ow("stop")
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="tools.maps.showcase", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("action", choices=("write", "probe"))
+    parser.add_argument("action", choices=("write", "probe", "shots"))
     parser.add_argument("--overrides", type=Path, default=cli.REPO / "data/maps")
     parser.add_argument("--rom", default="test.nds")
     parser.add_argument("--save", default="test.sav")
@@ -229,6 +291,8 @@ def main(argv=None) -> int:
     if args.action == "write":
         write(args.overrides)
         return 0
+    if args.action == "shots":
+        return shots(args.rom, args.save)
     return probe(args.rom, args.save)
 
 

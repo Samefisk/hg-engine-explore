@@ -54,7 +54,11 @@ passes `--root base/root --arm9 base/arm9.bin`.
    - local script IDs (1–1999) past the map's `scr_seq` entry count, and
      script/text banks or matrix cells past their archives. Bank counts
      include what the build adds from `data/text/` and `armips/scr_seq/`;
-     banks replaced from `armips/scr_seq/` are not entry-checked.
+     banks replaced from `armips/scr_seq/` are not entry-checked;
+   - land models whose material table does not start with the area's
+     texture-animation materials (`land-anim-order`): the game binds that
+     animation by material index, so other materials would scroll
+     ([style-system.md](style-system.md#kit-kitpy)).
 
    **Warnings** do not block: warps that do not lead back (vanilla shares
    return doors on purpose). Header 4095 is the game's "return to previous map" warp and is
@@ -97,6 +101,46 @@ area's texture names ([nsbmd.md](nsbmd.md)); put it beside `land.json` as
 loaded chunk points at. `tools.maps.proof_model` (write / probe / remove)
 proves a generated model loads in Elm's lab.
 
+## Look at it without building
+
+`tools/maps/render.py` draws land models offline from `rom.nds` plus
+`data/maps/`, in seconds, with no build or emulator:
+
+```bash
+python3 -B -m tools.maps.render view --map 543 --at 16 44     # the game's top screen standing there
+python3 -B -m tools.maps.render overview --map 543 [--top]    # whole map, tile labels, --mark X Z TEXT
+python3 -B -m tools.maps.render sheet --map 543               # 3x3 views + overview
+```
+
+Images go to `build/map-render/`. It reproduces the field camera preset of
+the header's `cameraType` (`gFieldCameraPresets`), the area light file,
+material lighting, all seven texture formats with repeat/flip, culling and
+translucency. Checked against melonDS on Route 29, Twinwood Crossing and Echo
+Cavern (2026-10-16): the same geometry and the same black void, pixel for
+pixel. Cave colours were within about 7/255. Outdoor colours differed only by
+the save clock's evening tint, a per-channel multiplier the renderer does not
+model. Not drawn: buildings/props, texture animation, fog, sprites.
+
+`render.voids(scene)` lists tiles where the black void shows beside ground
+the player can reach (from the map's warps), seen from above (`top`) or from
+the camera's pitch (`camera`). The tile metrics cannot see this: open defect
+D2's floating floor has clean joins. It counts only chunks without buildings
+(not drawn) and ignores the map edge and tiles near warps (room exits).
+Vanilla sample: 38 maps. Every route, town and cave scored 0; two indoor rooms
+(D49R0107, D24R0208) keep 9–15 edge tiles by design. The showcase maps score
+6/67, 19/41 and 34/109 (top/camera). It is a review aid, not a gate.
+
+Review page for the user: `python3 -B -m tools.maps.review --map 543` serves
+`http://127.0.0.1:8765/`. It shows the overview with overlays (the judge's
+tile problems, render void, hotspots, open defects). Clicking a spot shows the
+game view there, `tools.maps.style inspect` and the commands to inspect or
+re-solve around it. Record defect appends to the lab's `defects.jsonl`.
+Reload re-reads `data/maps/` after a generate or resolve.
+
+The renderer and review page do not replace in-game proof: walking and warps
+are still proven with memory reads, and the agent's final map-look review
+still uses `showcase shots` (AGENTS.md "Maps").
+
 ## Checks for the tool itself
 
 ```bash
@@ -105,6 +149,7 @@ python3 -B -m tools.maps check-reference    # matches the pokeheartgold decomp
 python3 -B -m unittest tools.maps.test_codecs
 python3 -B -m tools.maps.nsbmd roundtrip    # all 676 chunk models re-encode identically
 python3 -B -m unittest tools.maps.test_nsbmd
+python3 -B -m unittest tools.maps.test_render     # renderer, void check, review page
 ```
 
 Run these after changing anything in `tools/maps/`.
@@ -120,9 +165,9 @@ Run these after changing anything in `tools/maps/`.
 
 - Message indices used inside scripts are not checked; only text banks are.
 - Reachability ignores height layers, so bridges over-approximate it.
-- Generated models are checked structurally and for loading, not for how
-  they look; a person has to judge that. Animated water and translucency are
-  not generated.
+- Generated models are checked structurally and for loading; how they look
+  is judged from renders and in game (the render void check is the only
+  automatic look check). Animated water and translucency are not generated.
 - New map IDs: 540–591 can hold their own header (52 slots, see
   [header-expansion.md](header-expansion.md)); 592–599 are valid IDs that
   behave like MAP_NOTHING. `checkout --map 540 --parts header` gives a

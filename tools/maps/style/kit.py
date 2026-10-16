@@ -1039,9 +1039,54 @@ def _shape_dl(polys, scale, period=None):
     return cmds, flag
 
 
+# An untextured animation-slot material exactly as vanilla land models store it
+# (e.g. land 87 material 1, "swave_p").
+UNTEXTURED_SLOT = {"diffAmb": 0x7FFFE739, "specEmi": 0, "polyAttr": 0x1F0081, "polyAttrMask": 0x3F1FF8FF,
+                   "texImageParam": 0x40030000, "texImageParamMask": 0xFFFFFFFF, "texPlttBase": 0,
+                   "flag": 0x1FCF, "origWidth": 0, "origHeight": 0, "magW": 0x1000, "magH": 0x1000,
+                   "texture": None, "palette": None}
+
+
+def area_animation_materials(source, file_id: int) -> list[str]:
+    """Material names of an area's land texture animation (a/1/4/0 member, AreaData field 3).
+
+    The game binds this NSBTA to every land model by material INDEX, not by name
+    (map_prop_render.c AreaMapAnimation_InitAnimObj: mapData[i] = i | 0x100), so
+    vanilla land models start their material table with exactly these names.
+    0xFFFF means the area has no land animation.
+    """
+    import struct
+    if file_id == 0xFFFF:
+        return []
+    data = bytes(narc.members(source.read("a/1/4/0"))[file_id])
+
+    def dictionary(offset):
+        count = data[offset + 1]
+        size, entries = struct.unpack_from("<H", data, offset + 2)[0], struct.unpack_from("<H", data, offset + 6)[0]
+        unit = struct.unpack_from("<H", data, offset + entries)[0]
+        values = [struct.unpack_from("<I", data, offset + entries + 4 + unit * i)[0] for i in range(count)]
+        base = offset + size - 16 * count
+        names = [data[base + 16 * i:base + 16 * (i + 1)].split(b"\0")[0].decode("latin-1") for i in range(count)]
+        return names, values
+
+    if data[:4] != b"BTA0":
+        raise ComposeError(f"a/1/4/0 member {file_id} is not an NSBTA")
+    block = struct.unpack_from("<I", data, 16)[0]
+    _, offsets = dictionary(block + 8)
+    anim = block + offsets[0]  # the game uses the first animation only
+    names, _ = dictionary(anim + 8)
+    return names
+
+
 def compose(kit: dict, grid: list[list[int]], name: str = "chunk",
-            check: bool = True) -> tuple[bytes, dict, list]:
-    """Stitch a 32x32 grid of kit cell indices into (NSBMD bytes, tiles spec, corners)."""
+            check: bool = True, anim_materials: list[str] | None = None) -> tuple[bytes, dict, list]:
+    """Stitch a 32x32 grid of kit cell indices into (NSBMD bytes, tiles spec, corners).
+
+    anim_materials: the area's land animation materials (area_animation_materials).
+    They take material slots 0..n-1 in that order, as in vanilla; the animation
+    binds by index, so any other material there would scroll like water. The
+    slots are untextured (see below); drawn materials follow them.
+    """
     if len(grid) != GRID or any(len(row) != GRID for row in grid):
         raise ComposeError("grid must be 32 rows of 32 cell indices")
     cells = kit["cells"]
@@ -1072,8 +1117,20 @@ def compose(kit: dict, grid: list[list[int]], name: str = "chunk",
     scale = FX
     while not (-32768 <= nsbmd._raw_pos(lo, scale) and nsbmd._raw_pos(hi, scale) <= 32767):
         scale <<= 1  # smallest 2^k scale; -32768 is a valid fx16 (vanilla uses -512 at scale 64)
+    # Material table: the animation's slots first, then everything the grid draws.
+    # Slots hold untextured records, as most vanilla chunks do: drawing composed
+    # geometry through an animated textured slot crashed the game on a field reload
+    # (Mirrorlake 2026-10-16: teleports 542 (51,5) -> (12,16) -> (32,10), ARM9 abort,
+    # 3/3; untextured slots 0/3). Water drawn here therefore does not animate.
+    table: list = [("slot", anim_name) for anim_name in anim_materials or []]
+    table += used
     names, materials = set(), []
-    for k in used:
+    for k in table:
+        if isinstance(k, tuple):
+            m = {**UNTEXTURED_SLOT, "name": k[1]}
+            names.add(m["name"])
+            materials.append(m)
+            continue
         m = dict(kit["materials"][k])
         base, n = m["name"], 1
         while m["name"] in names:
@@ -1083,7 +1140,8 @@ def compose(kit: dict, grid: list[list[int]], name: str = "chunk",
         materials.append(m)
     # build_model gives materials/SBC/info in vanilla form; shapes are then re-encoded
     # as quad strips with short vertex commands.
-    first = [{"material": i, "triangles": [p[:3]]} for i, polys in enumerate(mesh_polys) for p in polys[:1]]
+    first = [{"material": table.index(used[i]), "triangles": [p[:3]]}
+             for i, polys in enumerate(mesh_polys) for p in polys[:1]]
     spec = nsbmd.build_model(name, materials, first, pos_scale=scale)
     model = spec["models"][0]
     for i, polys in enumerate(mesh_polys):

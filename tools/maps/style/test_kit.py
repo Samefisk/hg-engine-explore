@@ -85,6 +85,27 @@ class SyntheticTests(unittest.TestCase):
         info = nsbmd.parse(data)["models"][0]["info"]
         self.assertLess(info["numPolygon"], 1024)
 
+    def test_compose_reserves_area_animation_slots(self):
+        # The area texture animation binds by material index: its materials must come
+        # first, in order, even when the chunk does not use them.
+        ground = {"sig": "g", "cls": ".", "behavior": 0, "collision": False, "secondary": 0,
+                  "corners": [16.0] * 4, "count": 1,
+                  "polys": [{"mat": "m", "verts": [vert(0, 16, 0, 16), vert(16, 16, 16, 16),
+                                                    vert(16, 0, 16, 0), vert(0, 0, 0, 0)]}]}
+        water = dict(ground, sig="w", polys=[dict(ground["polys"][0], mat="river")])
+        kit = synthetic_kit([ground, water])
+        kit["materials"]["river"] = dict(kit["materials"]["m"], name="river")
+        kit["materialOrder"] = ["m", "river"]
+        kit["periods"]["river"] = (16, 16)
+        grid = [[1 if z == 3 else 0 for x in range(32)] for z in range(32)]
+        data, _, _ = K.compose(kit, grid, "synthetic", anim_materials=["pond_on", "river"])
+        self.assertEqual(nsbmd.validate(data)[0], [])
+        names = [m["name"] for m in nsbmd.parse(data)["models"][0]["materials"]]
+        self.assertEqual(names, ["pond_on", "river", "m", "river~2"])
+        model = nsbmd.parse(data)["models"][0]
+        textured = {i for t in model["textures"] for i in t["materials"]}
+        self.assertFalse(textured & {0, 1})  # animation slots stay untextured
+
     def test_bdhc_corners_flat_plate(self):
         bdhc = {"points": [[-256 * 4096, -256 * 4096], [256 * 4096, 256 * 4096]],
                 "normals": [[0, 4096, 0]], "constants": [-24 * 4096], "plates": [[0, 1, 0, 0]],

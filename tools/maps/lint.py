@@ -17,8 +17,26 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from . import reach
+import hashlib
+
+from . import codecs, nsbmd, reach
 from .world import World
+
+# Land models the game never binds the area animation to (field_terrain.c
+# MapModelNo_HasNoAreaMapAnimation, table _020FC5FC).
+NO_AREA_ANIMATION = {0xD0, 0xD2, 0xD3}
+_MATERIAL_NAMES: dict[str, list[str] | None] = {}
+
+
+def land_material_names(data: bytes) -> list[str] | None:
+    key = hashlib.sha1(data).hexdigest()
+    if key not in _MATERIAL_NAMES:
+        try:
+            model = nsbmd.parse(codecs.decode_land(data)[1])["models"][0]
+            _MATERIAL_NAMES[key] = [m["name"] for m in model["materials"]]
+        except Exception:  # not a parseable model: other checks report it
+            _MATERIAL_NAMES[key] = None
+    return _MATERIAL_NAMES[key]
 
 DYNAMIC_WARP_HEADER = 0xFFF  # vanilla "return to the previous map" warps
 ERROR, WARNING = "error", "warning"
@@ -50,6 +68,33 @@ def findings(world: World) -> dict[tuple, tuple[str, str]]:
         bad = sorted({land_id for row in land for land_id in row if land_id != 0xFFFF and land_id >= counts["land"]})
         if bad:
             out[("matrix-land", index)] = (ERROR, f"matrix {index} uses land {bad} past land ({counts['land']})")
+
+    # The area's land texture animation binds by material index: land models must
+    # start with its materials in order, or other materials (paths, cliffs) scroll.
+    checked = set()
+    for entry in world.headers:
+        if entry.get("alias") or entry["areaDataBank"] >= counts["area"] or entry["matrixId"] >= counts["matrix"]:
+            continue
+        anim_id = world.member("area", entry["areaDataBank"])["dynamicTextureType"]
+        if anim_id >= len(world.land_anims) or not world.land_anims[anim_id]:
+            continue
+        want = world.land_anims[anim_id]
+        matrix = world.matrix_for(entry["id"])
+        for z, row in enumerate(matrix["landData"]):
+            for x, land_id in enumerate(row):
+                owner = matrix["headers"][z][x] if matrix["headers"] else 0
+                if land_id in (0xFFFF,) or land_id >= counts["land"] or land_id in NO_AREA_ANIMATION:
+                    continue
+                if owner and owner != entry["id"]:
+                    continue
+                if (land_id, anim_id) in checked:
+                    continue
+                checked.add((land_id, anim_id))
+                names = land_material_names(world.raw["land"][land_id])
+                if names is not None and names[:len(want)] != want:
+                    out[("land-anim-order", land_id, anim_id)] = (
+                        ERROR, f"land {land_id} (map {entry['id']}) materials start {names[:len(want)]}, but area "
+                               f"animation {anim_id} binds by index to {want}: other materials would animate")
 
     reachable = reach.reachable_by_matrix(world)
 
