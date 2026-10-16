@@ -1,0 +1,307 @@
+{
+  "schemaVersion": 1,
+  "id": "follower.throw-query-priority",
+  "title": "Saved Mankey takes an unclaimed Wild Cargo query and throws the next Geodude",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "lib/overworld/overworld_cargo_query_wild.c#Follower-exact-Interest-priority",
+  "requirements": [
+    "current.follower-throw-query-priority"
+  ],
+  "budgets": {
+    "maxSeconds": 480,
+    "maxFrames": 1500,
+    "noProgressFrames": 300,
+    "minObservedFrames": 2
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    },
+    {
+      "id": "old-geodude",
+      "species": 74,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "source",
+      "species": 74,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "follower-throw-query-priority-v1",
+      "subject": "mankey"
+    }
+  ],
+  "setup": [
+    {
+      "id": "saved-route-approach",
+      "op": "step",
+      "args": {
+        "frames": 160,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 160,
+        "noProgressFrames": 160
+      }
+    },
+    {
+      "id": "settle-route-approach",
+      "op": "step",
+      "args": {
+        "frames": 40,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "throw-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 586,
+        "z": 407,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-saved-follower",
+      "op": "step",
+      "args": {
+        "frames": 20,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 20,
+        "noProgressFrames": 20
+      }
+    },
+    {
+      "id": "bind-mankey",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-old-geodude",
+      "op": "spawn",
+      "args": {
+        "species": 74,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 587,
+        "z": 408
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-old-geodude",
+      "op": "bind",
+      "args": {
+        "subject": "old-geodude"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "first-natural-throw",
+      "op": "step",
+      "args": {
+        "frames": 180,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 180,
+        "noProgressFrames": 180
+      }
+    },
+    {
+      "id": "spawn-occluded-geodude",
+      "op": "spawn",
+      "args": {
+        "species": 74,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 589,
+        "z": 408
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-occluded-geodude",
+      "op": "step",
+      "args": {
+        "frames": 220,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 220,
+        "noProgressFrames": 220
+      }
+    },
+    {
+      "id": "face-clear-target",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "settle-clear-target",
+      "op": "step",
+      "args": {
+        "frames": 100,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 100,
+        "noProgressFrames": 100
+      }
+    },
+    {
+      "id": "spawn-source",
+      "op": "spawn",
+      "args": {
+        "species": 74,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 587,
+        "z": 404
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-source",
+      "op": "bind",
+      "args": {
+        "subject": "source"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "second-natural-throw",
+      "op": "step",
+      "args": {
+        "frames": 300,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "follower-throw-query-priority-v1",
+          "stage": "landed",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 300,
+        "noProgressFrames": 300
+      }
+    },
+    {
+      "id": "move-player-right",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "normal-follow-return",
+      "op": "step",
+      "args": {
+        "frames": 240,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "follower-throw-query-priority-v1",
+          "stage": "resumed",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "follower-throw-query-priority-v1",
+      "when": "final"
+    }
+  ]
+}

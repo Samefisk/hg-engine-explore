@@ -1,0 +1,269 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.mounted-throw",
+  "title": "North-facing mounted rider avoids a Wild Throw at the old player box",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/player-hp-implementation-plan.md",
+  "requirements": [
+    "current.player-health-mounted-throw"
+  ],
+  "budgets": {
+    "maxSeconds": 240,
+    "maxFrames": 900,
+    "noProgressFrames": 400,
+    "minObservedFrames": 65
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquire": "existing"
+    },
+    {
+      "id": "bellsprout",
+      "species": 69,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "geodude",
+      "species": 74,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "player-health-mounted-throw-v1",
+      "subjects": [
+        "cyndaquil",
+        "bellsprout",
+        "geodude"
+      ]
+    }
+  ],
+  "setup": [
+    {
+      "id": "throw-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 407,
+        "facing": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-cyndaquil",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 10
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "mount-cyndaquil",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "mounted",
+        "slot": 0,
+        "level": 10
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-mount",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "bind-cyndaquil",
+      "op": "bind",
+      "args": {
+        "subject": "cyndaquil"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-geodude",
+      "op": "spawn",
+      "args": {
+        "species": 74,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 585,
+        "z": 404
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-geodude",
+      "op": "bind",
+      "args": {
+        "subject": "geodude"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "capture-player-trigger",
+      "op": "step",
+      "args": {
+        "frames": 60,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "player-health-mounted-throw-v1",
+          "stage": "trigger-bound",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 40,
+        "maxFrames": 60,
+        "noProgressFrames": 60
+      }
+    },
+    {
+      "id": "spawn-bellsprout",
+      "op": "spawn",
+      "args": {
+        "species": 69,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 585,
+        "z": 403
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-bellsprout",
+      "op": "bind",
+      "args": {
+        "subject": "bellsprout"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "before-throw",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "launch-natural-throw",
+      "op": "step",
+      "args": {
+        "frames": 240,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "player-health-mounted-throw-v1",
+          "stage": "launched"
+        }
+      },
+      "budget": {
+        "maxSeconds": 100,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "at-launch",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "cross-player",
+      "op": "step",
+      "args": {
+        "frames": 64,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 40,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "after-contact",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "player-health-mounted-throw-v1",
+      "when": "final"
+    }
+  ]
+}

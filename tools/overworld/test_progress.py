@@ -244,6 +244,16 @@ class SharedProgressTests(unittest.TestCase):
                 self.assertEqual(output.call_args.args[0]["state"], "recorded-pass")
             fixture.assert_not_called()
 
+    def test_named_history_only_computes_requested_scenario(self):
+        with mock.patch.object(control, "load_scenarios", return_value={
+                "shared.case": self.scenarios["shared.case"], "other": self.scenarios["shared.case"]}), \
+             mock.patch.object(control, "source_record", return_value=self.source), \
+             mock.patch.object(control, "summarize", return_value={"scenarios": [{"id": "shared.case"}],
+                 "acceptance": "not-evaluated", "note": "saved receipts", "invalidReceipts": []}) as summary, \
+             mock.patch.object(control, "_json"):
+            self.assertEqual(control.main(["scenario", "history", "shared.case", "--json"]), 0)
+        self.assertEqual(set(summary.call_args.args[1]), {"shared.case"})
+
     def test_final_gate_replays_shared_receipt_instead_of_trusting_recorded_bit(self):
         self.write_run()
         with mock.patch.object(control, "REPO", self.root), \

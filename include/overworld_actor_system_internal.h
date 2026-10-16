@@ -30,7 +30,7 @@ BOOL OverworldActorPolicy_MountCommand(u8 operation, void *payload);
 #define OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_MAGIC 0x504D574F /* OWMP */
 #define OVERWORLD_ACTOR_WALK_POLICY_OWNER_MAGIC 0x5057574F /* OWWP */
 #define OVERWORLD_ACTOR_SYSTEM_SERVICE_COUNT 4
-#define OVERWORLD_ACTOR_RESOLVER_SERVICE_VERSION 2
+#define OVERWORLD_ACTOR_RESOLVER_SERVICE_VERSION 3
 #define OVERWORLD_ACTOR_MOTION_SERVICE_VERSION 6
 #define OVERWORLD_ACTOR_POPULATION_SERVICE_VERSION 3
 #define OVERWORLD_ACTOR_POPULATION_FRAME_CALL_VERSION 1
@@ -142,9 +142,14 @@ typedef enum OverworldActorHopPlanOperation {
     OVERWORLD_ACTOR_HOP_PLAN_VECTOR = 0,
     OVERWORLD_ACTOR_HOP_PLAN_TRAJECTORY = 1,
     OVERWORLD_ACTOR_HOP_PLAN_FLAT_TRAJECTORY = 2,
+    OVERWORLD_ACTOR_HOP_PLAN_CLEARANCE_BEGIN = 3,
+    OVERWORLD_ACTOR_HOP_PLAN_CLEARANCE_STEP = 4,
 } OverworldActorHopPlanOperation;
 
 #define OVERWORLD_ACTOR_HOP_PLAN_FLAG_SPAWN_ENTRY (1u << 0)
+/* Read-only route geometry must defer when explicit-origin height is absent. */
+#define OVERWORLD_ACTOR_HOP_PLAN_FLAG_STRICT_HEIGHT (1u << 1)
+#define OVERWORLD_ACTOR_HOP_PLAN_FLAG_SLAM (1u << 2)
 
 /*
  * One caller-owned planning value crosses the Actor Motion request seam.
@@ -157,16 +162,23 @@ typedef struct OverworldActorHopPlanCall {
     const struct OverworldWildBehaviorProfileData *lane;
     struct FieldSystem *fieldSystem;
     const struct OverworldWildSurfaceCatalog *surfaceCatalog;
-    struct LocalMapObject *object;
+    /* Only CLEARANCE_BEGIN/STEP interpret this word as the typed cursor. */
+    union {
+        struct LocalMapObject *object;
+        struct OverworldActorHopClearanceCursor *clearanceCursor;
+    };
     s32 startBaseY;
     s32 targetBaseY;
     s16 startX;
     s16 startY;
     s16 targetX;
     s16 targetY;
-    s16 deltaX;
-    s16 deltaY;
+    __extension__ union { s16 deltaX; struct { u8 arcRiseFrames; u8 reservedRise; }; };
+    __extension__ union { s16 deltaY; struct { u8 arcHangFrames; u8 reservedHang; }; };
     /* Output: arc height in the high half, duration in the low half.
+     * TRAJECTORY + SLAM input keeps duration/peak in those same halves and
+     * uses the deltaX/deltaY low-byte aliases for rise/hang. VECTOR keeps the
+     * original signed deltas. The caller retains phases for its Motion plan.
      * FLAT_TRAJECTORY also takes its authored duration in the low half on
      * input. Flat clearance uses geometric edge fractions, not Hop timing;
      * it never adds an arc or lifts over an intervening raised surface. */
@@ -352,6 +364,8 @@ typedef enum OverworldActorPopulationControlOperation {
     OVERWORLD_ACTOR_POPULATION_CONTROL_CANCEL_MAINTENANCE,
     OVERWORLD_ACTOR_POPULATION_CONTROL_ADVANCE_MAINTENANCE,
     OVERWORLD_ACTOR_POPULATION_CONTROL_HAS_PENDING_MAINTENANCE,
+    /* Read the existing eligible-frame wait; does not consume maintenance. */
+    OVERWORLD_ACTOR_POPULATION_CONTROL_HAS_REFILL_WAIT,
 } OverworldActorPopulationControlOperation;
 
 typedef enum OverworldActorPopulationWork {
@@ -427,6 +441,8 @@ struct OverworldActorPolicyState {
     u32 behaviorFingerprint;
     u32 matchedLayerMask;
     u8 chainStepsRemaining;
+    /* HOP_IN_PLACE: retained total Hop count (1..3; legacy 0 means 1).
+     * Other actions retain their existing pause/action-time units. */
     u8 deferredChainPauseTicks;
     u8 deferredChainPauseAction;
     u8 variancePhase;
@@ -439,10 +455,16 @@ struct OverworldActorPolicyState {
     u16 pendingFirstPathAdvance;
     u16 pendingLastPathAdvance;
     u16 targetSurfaceId;
+    /* Linear-speed timing belongs to the actor; proposals commit carry only
+     * after admission. Earlier byte offsets remain stable for assembly. */
+    u8 linearElapsed;
+    u8 linearCarry;
+    u8 linearMode;
+    u8 linearCapFrames; /* Reserved zero byte; preserves the 36-byte ABI. */
 };
 
-typedef char OverworldActorPolicyStateSizeMustRemain32[
-    sizeof(OverworldActorPolicyState) == 32 ? 1 : -1];
+typedef char OverworldActorPolicyStateSizeMustRemain36[
+    sizeof(OverworldActorPolicyState) == 36 ? 1 : -1];
 typedef char OverworldActorPolicyWalkOffsetMustRemain0[
     offsetof(OverworldActorPolicyState, walkMomentum) == 0 ? 1 : -1];
 typedef char OverworldActorPolicyDirectionOffsetMustRemain0[
@@ -553,6 +575,17 @@ typedef struct OverworldActorRuntimeSlot {
     OverworldActorPolicyState policy;
 } OverworldActorRuntimeSlot;
 
+/* Actor owns these transitions; HP161 only hosts their fixed resident code. */
+BOOL OverworldActorHitCrash_Apply(
+    OverworldActorRuntimeSlot *slot,
+    OverworldActorWalkPolicyCall *call,
+    u16 fieldEpoch);
+void OverworldActorWalkPolicy_Crash(
+    OverworldActorPolicyState *policy,
+    OverworldActorWalkPolicyCall *call,
+    u8 baseSpeed,
+    u8 laneState);
+
 typedef struct OverworldActorSystemState {
     u32 magic;
     u16 version;
@@ -573,10 +606,16 @@ typedef struct OverworldActorSystemState {
     OverworldPopulationState population;
     OverworldActorRuntimeSlot slots[OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS];
     OverworldActorCommand commands[OVERWORLD_ACTOR_SYSTEM_COMMAND_CAPACITY];
-    OverworldActorReply acknowledgements[OVERWORLD_ACTOR_SYSTEM_ACK_CAPACITY];
     OverworldActorTraceHeader trace;
     OverworldActorTraceEvent events[OVERWORLD_ACTOR_SYSTEM_TRACE_CAPACITY];
 } OverworldActorSystemState;
+
+/* Actor command replies use an explicit loaded capsule. Slot/queue layouts
+ * stay fixed; debug metadata publishes the following trace offsets. */
+#define OVERWORLD_ACTOR_ACKNOWLEDGEMENTS_ADDR 0x01FFF380
+#define OVERWORLD_ACTOR_ACKNOWLEDGEMENTS \
+    (*(OverworldActorReply (*)[OVERWORLD_ACTOR_SYSTEM_ACK_CAPACITY]) \
+        OVERWORLD_ACTOR_ACKNOWLEDGEMENTS_ADDR)
 
 extern const OverworldActorSystemDebugLayout gOverworldActorSystemDebugLayout;
 extern const OverworldActorResolverServiceEntry
@@ -626,12 +665,12 @@ typedef char OverworldActorMotionStateSizeMustRemain52Bytes[
     sizeof(OverworldMotionState) == 52 ? 1 : -1];
 typedef char OverworldActorMotionSampleSizeMustRemain36Bytes[
     sizeof(OverworldMotionSample) == 36 ? 1 : -1];
-typedef char OverworldActorPolicyStateSizeMustRemain32Bytes[
-    sizeof(OverworldActorPolicyState) == 32 ? 1 : -1];
+typedef char OverworldActorPolicyStateSizeMustRemain36Bytes[
+    sizeof(OverworldActorPolicyState) == 36 ? 1 : -1];
 typedef char OverworldActorPolicyTargetSurfaceOffsetMustRemain30[
     offsetof(OverworldActorPolicyState, targetSurfaceId) == 30 ? 1 : -1];
-typedef char OverworldActorRuntimeSlotSizeMustRemain172Bytes[
-    sizeof(OverworldActorRuntimeSlot) == 172 ? 1 : -1];
+typedef char OverworldActorRuntimeSlotSizeMustRemain176Bytes[
+    sizeof(OverworldActorRuntimeSlot) == 176 ? 1 : -1];
 typedef char OverworldActorSystemStateMustFitResidentBlock[
     sizeof(OverworldActorSystemState) <= 0xF00 ? 1 : -1];
 

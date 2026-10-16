@@ -1,0 +1,44 @@
+---
+import Base from '../layouts/Base.astro';
+import Gallery from '../components/Gallery.astro';
+import { forArea, shots } from '../data/shots';
+import { areas, currentBuild, statusLabel } from '../data/testing';
+---
+<Base title="What's being tested" description="The areas of Wild at Heart currently in testing and what to look for.">
+  <div class="wrap">
+    <h1>What's being tested</h1>
+    <p class="meta">{currentBuild.label} · {currentBuild.date}</p>
+    <p>Play normally and notice anything that feels off. These are the areas where feedback is most useful right now.</p>
+
+    <div class="notice">
+      <strong>Please include your build.</strong> Tell me which build you are on when you report something, so I can match it to the right fix.
+    </div>
+
+    <div class="grid" style="margin-top:1.5rem">
+      {areas.map((a) => (
+        <section class="card">
+          <p style="margin:0 0 .4rem"><span class={`badge ${a.status}`}>{statusLabel[a.status]}</span></p>
+          <h3>{a.name}</h3>
+          {forArea(a.name).map((s) => (
+            <figure class="shot"><a href={`/shots/${s.file}`} target="_blank" rel="noopener"><img src={`/shots/${s.file}`} alt={s.alt} loading="lazy" /></a><figcaption>{s.title && <strong>{s.title}. </strong>}{s.caption}</figcaption></figure>
+          ))}
+          <p>{a.what}</p>
+          <p style="margin-bottom:.3rem"><strong>Look for</strong></p>
+          <ul class="tick">{a.lookFor.map((l) => <li>{l}</li>)}</ul>
+        </section>
+      ))}
+    </div>
+
+    <h2>Behavior gallery</h2>
+    <p>What each behavior looks like in the game. Tell me if one does not match what you see.</p>
+    <Gallery items={shots.filter((s) => s.title)} />
+
+    <h2>What does not need reporting</h2>
+    <ul class="tick">
+      <li>Missing features listed as planned or in progress above</li>
+      <li>Placeholder text or graphics</li>
+      <li>Anything already described in the latest <a href="/updates">update</a> as known</li>
+    </ul>
+    <div style="height:3rem"></div>
+  </div>
+</Base>

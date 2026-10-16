@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.throw-cargo-competition",
+  "title": "Near Geodude picks Cargo despite a farther pursuit; HELD stays protected",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.throw-cargo-competition"
+  ],
+  "budgets": {
+    "maxSeconds": 240,
+    "maxFrames": 700,
+    "noProgressFrames": 350,
+    "minObservedFrames": 2
+  },
+  "subjects": [
+    {
+      "id": "far-geodude",
+      "species": 74,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "cargo",
+      "species": 155,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "near-geodude",
+      "species": 74,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "throw-cargo-competition-v1",
+      "subject": "far-geodude"
+    }
+  ],
+  "setup": [
+    {
+      "id": "throw-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 584,
+        "z": 402,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-passive-follower",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "create-passive-follower",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-cargo",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "wild",
+        "level": 20,
+        "x": 586,
+        "z": 403
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-cargo",
+      "op": "bind",
+      "args": {
+        "subject": "cargo"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-far-geodude",
+      "op": "spawn",
+      "args": {
+        "species": 74,
+        "form": 0,
+        "role": "wild",
+        "level": 20,
+        "x": 579,
+        "z": 402
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-far-geodude",
+      "op": "bind",
+      "args": {
+        "subject": "far-geodude"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "wait-far-claim",
+      "op": "step",
+      "args": {
+        "frames": 160,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "throw-cargo-competition-v1",
+          "stage": "far-claimed",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 160,
+        "noProgressFrames": 160
+      }
+    },
+    {
+      "id": "spawn-near-geodude",
+      "op": "spawn",
+      "args": {
+        "species": 74,
+        "form": 0,
+        "role": "wild",
+        "level": 20,
+        "x": 585,
+        "z": 403
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-near-geodude",
+      "op": "bind",
+      "args": {
+        "subject": "near-geodude"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "normal-cargo-competition",
+      "op": "step",
+      "args": {
+        "frames": 300,
+        "keys": [],
+        "until": {
+          "kind": "measurement-complete",
+          "measurement": "throw-cargo-competition-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 300,
+        "noProgressFrames": 300
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "throw-cargo-competition-v1",
+      "when": "final"
+    }
+  ]
+}

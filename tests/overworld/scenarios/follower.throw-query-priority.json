@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "id": "follower.throw-query-priority",
+  "title": "Saved Mankey takes an unclaimed Wild Cargo query and throws the next Geodude",
+  "status": "active",
+  "capabilities": [
+    "condition.evaluation",
+    "chase"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "lib/overworld/overworld_cargo_query_wild.c#Follower-exact-Interest-priority",
+    "actor": "Unchanged Continue living FOLLOWER Mankey56 and two distinct WILD Geodude74.",
+    "trigger": "Replay the measured old stop: first Geodude lands at595407 and owns an idle unclaimed Pending query. The occluded Geodude589408 does not replace that owner. Normal Right input and settle place saved Mankey587406 North before fresh clear Sight target587404.",
+    "observable": "An authenticated busy unclaimed Wild query at595407 hands the same workspace to the current Follower exact Interest. Current native Reachable proof selects that same Geodude as Cargo. Full claim, legal pickup, authored half-speed Hop/pause, Away windup and native flight COMMIT/FINISH/CONTROL complete before a full normal Follow return.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Unchanged Continue; initial RIGHT160 and neutral40, teleport33 to586407 South, settle20 and bind saved Mankey. Spawn first Geodude587408, bind and wait180. Spawn occluded Geodude589408, wait220, RIGHT16 then neutral100. Spawn and bind the distinct clear source Geodude587404. These are the retained original failure steps, with normal prepared placement only. No Y, party/follower, profile, HP, timer, binding, query or movement writes."
+      }
+    ],
+    "limits": [
+      "If the first throw does not produce the measured busy Wild owner, the fixture fails and earns no priority credit.",
+      "All existing current identity, route proof, one native query and16 internal-work budgets remain required. Pending never admits movement.",
+      "Keep Notice20 and the authored Hop pause5. Prepared placement earns no motion or pickup credit.",
+      "The fixture is source-backed but needs a current registered game pass. No screenshots or new live reader."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "old-geodude",
+      "species": 74,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "source",
+      "species": 74,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Bind saved Mankey and recreate first Geodude unclaimed Pending query."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Fresh clear Geodude Sight and full query-owner priority handoff."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Current route, same Cargo claim/pickup, complete Away flight and normal Follow return."
+    }
+  ],
+  "stop": {
+    "frameBudget": 1500,
+    "condition": "Full busy-owner\u2192fresh Sight\u2192handoff\u2192Reachable\u2192pickup\u2192Away flight\u2192normal Follow chain completes, or first identity/query/claim/motion/clock guard fails."
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "ACTOR_REBOUND",
+      "CONTEXT_CHANGED",
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "The old owner is full-current Wild with no Cargo, claim, accepted movement or reservation.",
+      "The same workspace hands off only to exact current Follower Interest; Pending earns no movement credit.",
+      "Both bindings target the same second Geodude through pickup; complete flight and normal Follow retain authored pauses."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "follower.throw-query-priority",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "natural-input",
+      "engine-boundary",
+      "control-release"
+    ],
+    "minimumFrames": 2
+  }
+}

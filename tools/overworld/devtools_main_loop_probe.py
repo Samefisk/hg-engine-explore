@@ -5,6 +5,13 @@ only the authenticated return from the mandatory VBlank wait.  That gives one
 sample for each completed main-loop wait, with no guest writes or return-hook
 rewrites.  Diagnostic routes use the existing spawn-cost ``baseline`` mode.
 Acceptance tests can arm a bounded dynamic window without changing guest state.
+
+A row can also carry the idle headroom of its own loop.  The same authenticated
+code region contains the mandatory wait call (``ENTRY_SITE``) that precedes the
+return site.  When that entry is observed, the row adds ``waitArm9Ticks`` (the
+mandatory wait's return clock minus its entry clock) and the entry clock it came
+from.  Both keys are absent from rows whose entry was not observed, so earlier
+consumers and retained rows keep their exact shape.
 """
 from copy import deepcopy
 import hashlib
@@ -19,6 +26,11 @@ from tools.overworld.devtools_wait_probe import (
 
 
 RETURN_SITE = SITES[-1]
+# SITES[3] is the call into the mandatory wait that returns at SITES[-1]. The
+# wait probe pairs these two as its ``mandatory`` envelope (SITES[1] is only the
+# conditional wait entered on a zero frame counter).
+ENTRY_SITE = SITES[3]
+WAIT_SCOPE = "mandatory-vblank-wait-arm9-scheduler-ticks-return-minus-entry"
 WINDOWS = ((770, 1530), (3564, 3580))
 MAX_CYCLES = sum(end - start + 1 for start, end in WINDOWS)
 SCOPE = "postmandatory-vblank-return-inclusive-guest-scheduler-ticks"
@@ -120,14 +132,30 @@ class MainLoopProbe:
         self.active["samples"].append(sample)
         self.previous = sample
 
+    def _sample_entry(self):
+        """Read-only mandatory-wait entry clock; the loop's return pairs it."""
+        self._require(self.failure is None and not self.closed and self.active is not None,
+                      "entry callback outside active window")
+        guest = deepcopy(self.clock())
+        self._require(self._clock_ok(guest), "invalid guest entry clock")
+        regs = self.session.emu.memory.register_arm9
+        self._require(regs.r4 & 0xFFFFFFFF == SYSTEM, "system owner differs at wait entry")
+        self._require(regs.r0 & 0xFFFFFFFF == 1 and regs.r1 & 0xFFFFFFFF == 1,
+                      "mandatory wait arguments differ")
+        self._require(len(self.active["entries"]) < 1 and not self.active["samples"],
+                      "duplicate or out-of-order loop entry")
+        self.active["entries"].append(dict(entrySite=ENTRY_SITE, guestClock=guest))
+
     def _install(self):
         if self.tokens:
             return
         try:
             # E22 is resident main code. Authenticate its containing regions
             # once before arming this fixed-address reader; every callback
-            # then performs only the clocks, owner and counter reads.
+            # then performs only the clocks, owner and counter reads. The
+            # mandatory wait entry lies in the same authenticated region.
             self._authenticate()
+            self.tokens.append(self.hooks.add(ENTRY_SITE, self._sample_entry))
             self.tokens.append(self.hooks.add(RETURN_SITE, self._sample))
         except Exception as error:
             self.failure = self.failure or str(error)
@@ -160,9 +188,25 @@ class MainLoopProbe:
             self.last_frame = frame
             if self.active is not None:
                 active = self.active
+                self._require(not (active["entries"] and not active["samples"]),
+                              "loop entry has no matching return")
                 self._require(len(active["samples"]) == 1,
                               "completed queue has missing or duplicate loop return")
+                self._require(len(active["entries"]) <= 1,
+                              "completed queue has duplicate loop entry")
                 sample = deepcopy(active["samples"][0])
+                wait = {}
+                if active["entries"]:
+                    entry = active["entries"][0]
+                    entered = entry["guestClock"]["arm9Timestamp"]
+                    returned = sample["guestClock"]["arm9Timestamp"]
+                    self._require(entered <= returned
+                                  and entry["guestClock"]["frameSequence"]
+                                  <= sample["guestClock"]["frameSequence"],
+                                  "loop entry follows its return")
+                    wait = dict(waitEntrySite=entry["entrySite"],
+                                waitEntryArm9Timestamp=entered,
+                                waitArm9Ticks=returned - entered, waitScope=WAIT_SCOPE)
                 loop_id = self.completed + 1
                 previous = self.last_sample
                 same_window = (previous is not None
@@ -178,7 +222,7 @@ class MainLoopProbe:
                            intervalFromPrevious=(self._interval(previous, sample)
                                                  if same_window else None),
                            scope=SCOPE, diagnosticOnly=self.diagnostic_only,
-                           acceptedProof=False)
+                           acceptedProof=False, **wait)
                 self.last_sample = row
                 self.completed += 1
                 rows.append(row)
@@ -187,7 +231,8 @@ class MainLoopProbe:
             if window is not None:
                 self._require(self.completed < self.max_cycles, "cycle limit reached")
                 self._install()
-                self.active = dict(afterQueueFrame=frame, windowIndex=window, samples=[])
+                self.active = dict(afterQueueFrame=frame, windowIndex=window,
+                                   samples=[], entries=[])
             else:
                 self._detach()
             return rows
@@ -198,7 +243,7 @@ class MainLoopProbe:
 
     def result(self):
         return deepcopy(dict(schemaVersion=1, windows=[list(x) for x in self.windows],
-            returnSite=RETURN_SITE,
+            returnSite=RETURN_SITE, entrySite=ENTRY_SITE,
             identities=[dict(address=a, size=n, sha256=h) for a, n, h in IDENTITIES],
             completedLoops=self.completed, lastSample=self.last_sample, active=self.active,
             closed=self.closed, failure=self.failure, attachedHooks=len(self.tokens),

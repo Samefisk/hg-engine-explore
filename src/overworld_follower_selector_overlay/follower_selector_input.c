@@ -1369,7 +1369,8 @@ void OverworldFollowerSelectorInput_Filter(FieldSystem *fieldSystem)
     }
 
     mountSelection = (physicalNewKeys & PAD_BUTTON_SELECT) != 0;
-    if (OverworldFollowerSelector_IsYPressPending() || mountSelection) {
+    /* Releasing the held Y confirms; Select while holding Y mounts. */
+    if (OverworldFollowerSelector_IsYReleasePending() || mountSelection) {
         OVERWORLD_FOLLOWER_TRANSITION_QUEUE->reserved =
             OVERWORLD_FOLLOWER_SELECTION_REQUEST_PENDING
             | (mountSelection

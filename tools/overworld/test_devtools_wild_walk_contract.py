@@ -23,10 +23,14 @@ def spawn_setup(species=19, locomotion=0):
     actor["sourceIdentity"]["species"] = species
     encounter = dict(species=species,form=actor["form"],level=actor["level"],personality=actor["subjectIdentity"])
     world = dict(snapshot["context"],statePointer=0x02040000,fieldPointer=0x02050000)
-    raw = struct.pack("<iiB3xIHBB4hBB",0,0,0,encounter["personality"],species,actor["form"],actor["level"],0,0,0,0,locomotion,0).hex()
+    target = [16,0] if locomotion == 3 else [0,0]
+    origin = [0, 0] if locomotion == 3 else target
+    raw = struct.pack("<iiB3xIHBB4hBB",0,0,0,encounter["personality"],species,actor["form"],actor["level"],*target,*origin,locomotion,0).hex()
     common = dict(slot=actor["handle"]["slot"],terrain=0,statePointer=world["statePointer"],fieldPointer=world["fieldPointer"],
         preparedPointer=0x02060000,worldContext=world,preparedPrefixHex=raw,preparedEncounter=encounter,
-        startup=dict(target=[0,0],origin=[0,0],locomotion=locomotion,hopDirection=0,targetBaseY=0),position=[0,0],returnValue=1)
+        startup=dict(target=target,origin=origin,locomotion=locomotion,hopDirection=0,targetBaseY=0),position=[0,0],returnValue=1)
+    if locomotion == 3:
+        common["startupHex"] = bytes.fromhex(raw)[20:30].hex() + "00" * 6
     final = dict(common,observation="spawn-finalized",sequence=1,returnWorldContext=world,pairEligible=True)
     native = dict(common,observation="spawn-prepared",sequence=2,publicSubject=deepcopy(actor),finalization=dict(status="matched",receipt=final))
     receipt = dict(value=dict(slot=actor["handle"]["slot"],species=species,personality=actor["subjectIdentity"]),
@@ -43,7 +47,7 @@ def raw_replay(control=False, fault=None, startup_noop=False):
     baseline,_,reader,rows,calibration,close = control_fixture(startup_noop=startup_noop)
     initial=deepcopy(baseline);initial["actors"]=[];initial["fieldAvailable"]=True
     evaluator.observe_record(dict(phase="setup",initialSnapshot=initial,initialEvents=[],initialEventStartFrame=initial["frame"]))
-    receipt,baseline=spawn_setup(); baseline["fieldAvailable"]=True
+    receipt,baseline=spawn_setup(locomotion=3); baseline["fieldAvailable"]=True
     spawn_event=receipt["events"][0]; final=spawn_event["data"]["finalization"]["receipt"]
     actor=baseline["actors"][0]
     receipt["events"].insert(0,dict(frame=baseline["frame"],kind="native-observation",data=deepcopy(final)))
@@ -189,6 +193,66 @@ class WildWalkContractTests(unittest.TestCase):
         value=_wild_spawn_setup(receipt,snapshot)
         self.assertEqual(value["destination"],[0,0])
         self.assertEqual(value["subject"]["handle"],snapshot["actors"][0]["handle"])
+
+    def test_move_offscreen_spawn_binds_actual_native_start_site(self):
+        receipt,snapshot=spawn_setup(locomotion=3)
+        value=_wild_spawn_setup(receipt,snapshot,locomotion=3)
+        self.assertEqual(value["destination"],[0,0])
+        self.assertEqual(value["nativeSpawn"]["data"]["startup"]["target"],[16,0])
+        with self.assertRaisesRegex(ValueError,"identity or own native destination"):
+            _wild_spawn_setup(receipt,snapshot,locomotion=0)
+        # Keep command, exact bytes, field, full handle and actual start checks.
+        # Route admission, not a four-ray geometry rule, owns Move reachability.
+        for fault in ("pid","world","generation","actor-site","origin","zero","direction",
+                      "missing-startup","startup-prefix","startup-padding","startup-height"):
+            changed, current = deepcopy(receipt), deepcopy(snapshot)
+            native=changed["events"][0]["data"]
+            if fault == "pid": changed["value"]["personality"]+=1
+            elif fault == "world": current["context"]["fieldEpoch"]+=1
+            elif fault == "generation": current["actors"][0]["handle"]["generation"]+=1
+            elif fault == "actor-site": current["actors"][0]["logical"]["x"]=16
+            else:
+                raw=bytearray.fromhex(native["preparedPrefixHex"])
+                if fault in ("origin", "zero", "direction"):
+                    target = [0, 0] if fault == "zero" else [16, 0]
+                    origin = [1, 0] if fault == "origin" else [0, 0]
+                    struct.pack_into("<4h", raw, 20, *target, *origin)
+                    raw[29] = int(fault == "direction")
+                    native["preparedPrefixHex"] = raw.hex()
+                    native["startup"].update(target=target, origin=origin, hopDirection=raw[29])
+                    native["startupHex"] = raw[20:30].hex() + "00" * 6
+                elif fault == "missing-startup":
+                    native.pop("startupHex")
+                elif fault == "startup-height":
+                    native["startup"]["targetBaseY"] = 4096
+                else:
+                    startup = bytearray.fromhex(native["startupHex"])
+                    startup[0 if fault == "startup-prefix" else 10] ^= 1
+                    native["startupHex"] = startup.hex()
+                final = native["finalization"]["receipt"]
+                for key in ("preparedPrefixHex", "startup", "startupHex"):
+                    if key in native: final[key] = deepcopy(native[key])
+                    else: final.pop(key, None)
+            with self.subTest(fault=fault),self.assertRaises(ValueError):
+                _wild_spawn_setup(changed,current,locomotion=3)
+
+    def test_move_setup_accepts_noncardinal_and_long_origins_without_route_credit(self):
+        for target in ([17, 1], [40, 0]):
+            receipt, snapshot = spawn_setup(locomotion=3)
+            native = receipt["events"][0]["data"]
+            raw = bytearray.fromhex(native["preparedPrefixHex"])
+            struct.pack_into("<2h", raw, 20, *target)
+            native["preparedPrefixHex"] = raw.hex()
+            native["startup"].update(target=target, targetBaseY=4096)
+            native["startupHex"] = raw[20:30].hex() + "0000" + struct.pack("<i", 4096).hex()
+            final = native["finalization"]["receipt"]
+            for key in ("preparedPrefixHex", "startup", "startupHex"):
+                final[key] = deepcopy(native[key])
+            with self.subTest(target=target):
+                bound = _wild_spawn_setup(receipt, snapshot, locomotion=3)
+                self.assertEqual(bound["destination"], [0, 0])
+                self.assertEqual(bound["nativeSpawn"]["data"]["startup"]["target"], target)
+                self.assertNotIn("routeWitness", bound)
 
     def test_runner_spawn_accepts_its_profile_appear_hop(self):
         receipt,snapshot=spawn_setup(species=234,locomotion=7)

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import unittest
 
+from tools.overworld import control
 from tools.overworld.devtools_mounted_stantler_wall_approach_proof import (
     FAULTS, negative_controls, run,
 )
@@ -95,6 +96,7 @@ def fixture():
 class MountedStantlerWallApproachProofTests(unittest.TestCase):
     def test_exact_route_and_all_copied_controls(self):
         recipe = json.loads(RECIPE.read_text())
+        control._shared_test_registration(recipe, ROOT)
         rows = fixture()
         original = deepcopy(rows)
         self.assertTrue(run(rows, recipe)["passed"], run(rows, recipe))

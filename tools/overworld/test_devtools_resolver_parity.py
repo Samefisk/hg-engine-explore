@@ -18,17 +18,20 @@ class ResolverParityTests(unittest.TestCase):
         by_name = {vector["name"]: vector for vector in all_vectors}
         vectors = [by_name[name] for name in CASE_NAMES]
         blob = {"size": 100, "sha256": "a" * 64}
-        service = dict(magic=0x5250574F, version=2, size=16, resolveAddress=0x023B0001, entrySha256="b" * 64)
+        service = dict(magic=0x5250574F, version=3, size=16, resolveAddress=0x023B0001,
+                       entrySha256="b" * 64, queryVersion=9,
+                       queryPackageSha256="c" * 64, queryImageSha256="d" * 64,
+                       queryResolverOffset=0x9000, queryResolverEntrySha256="e" * 64)
         host = []; native = []
         for index, vector in enumerate(vectors):
             result = {key: index for key in METADATA}
-            result.update(status=0, profileHex=bytes([index] * 144).hex(), primitivesHex=bytes([index] * 8).hex(),
+            result.update(status=0, profileHex=bytes([index] * 160).hex(), primitivesHex=bytes([index] * 8).hex(),
                 resolvedTarget=dict(kind=0, actorSlot=0, actorGeneration=0, fieldEpoch=0,
                                     mapGeneration=0, encounterGeneration=0),
                 winningConditionId=65535, targetSourceApplication=255,
                 resolvedTargetConditionId=65535,
-                traceDropped=0, trace=[dict(sourceIndex=0, lane=0, kind=2, flags=3, profileHex="00" * 72),
-                                       dict(sourceIndex=1, lane=2, kind=3, flags=3, profileHex="01" * 72)])
+                traceDropped=0, trace=[dict(sourceIndex=0, lane=0, kind=2, flags=3, profileHex="00" * 80),
+                                       dict(sourceIndex=1, lane=2, kind=3, flags=3, profileHex="01" * 80)])
             host.append(result)
             native.append(dict(name=vector["name"], requestHex=request_bytes(vector["request"]).hex(),
                 resultHex=host_result_bytes(result).hex(), status=0, traceDropped=0, trace=deepcopy(result["trace"]),
@@ -46,7 +49,7 @@ class ResolverParityTests(unittest.TestCase):
 
     def test_every_result_byte_is_compared(self):
         vectors, native, host, identities = self.fixture()
-        for offset in range(200):
+        for offset in range(216):
             changed = deepcopy(native)
             raw = bytearray.fromhex(changed[0]["resultHex"]); raw[offset] ^= 1
             changed[0]["resultHex"] = raw.hex()
@@ -55,7 +58,8 @@ class ResolverParityTests(unittest.TestCase):
 
     def test_request_status_provenance_identity_and_case_controls(self):
         for fault in ("request", "status", "boolean-status", "trace-order", "trace-missing", "trace-dropped",
-                      "trace-profile", "blob", "service", "missing", "duplicate", "wrong-host", "short-result"):
+                      "trace-profile", "blob", "service", "query-package", "query-code",
+                      "missing", "duplicate", "wrong-host", "short-result"):
             vectors, native, host, identities = self.fixture()
             if fault == "request": native[0]["requestHex"] = "ff" * 44
             if fault == "status": native[0]["status"] = 1
@@ -63,9 +67,11 @@ class ResolverParityTests(unittest.TestCase):
             if fault == "trace-order": native[0]["trace"].reverse()
             if fault == "trace-missing": native[0]["trace"] = []
             if fault == "trace-dropped": native[0]["traceDropped"] = 1
-            if fault == "trace-profile": native[0]["trace"][0]["profileHex"] = "ff" * 72
+            if fault == "trace-profile": native[0]["trace"][0]["profileHex"] = "ff" * 80
             if fault == "blob": native[0]["blobIdentity"]["size"] += 1
             if fault == "service": native[0]["serviceIdentity"]["resolveAddress"] += 2
+            if fault == "query-package": native[0]["serviceIdentity"]["queryPackageSha256"] = "0" * 64
+            if fault == "query-code": native[0]["serviceIdentity"]["queryResolverEntrySha256"] = "0" * 64
             if fault == "missing": native.pop()
             if fault == "duplicate": native[1] = deepcopy(native[0])
             if fault == "wrong-host": host[0]["fingerprint"] += 1
@@ -108,14 +114,14 @@ int main(void) {
                            capture_output=True, check=True)
             native = subprocess.run([executable], capture_output=True, check=True).stdout
         host = dict(zip(METADATA, range(3,12)))
-        host.update(profileHex="11"*144,
+        host.update(profileHex="11"*160,
                     primitivesHex="22"*8,
                     resolvedTarget=dict(kind=0, actorSlot=0, actorGeneration=0,
                                         fieldEpoch=0, mapGeneration=0,
                                         encounterGeneration=0),
                     winningConditionId=65535, targetSourceApplication=255)
         host["resolvedTargetConditionId"] = 65535
-        self.assertEqual(len(native),200)
+        self.assertEqual(len(native),216)
         self.assertEqual(host_result_bytes(host), native)
 
     def test_request_bytes_match_compiled_public_layout(self):

@@ -16,6 +16,7 @@ from typing import Any, Iterable
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 PROOF_LEVELS = ("S0", "S1", "S2", "S3", "S4", "S5")
 ROLES = ("Wild", "Follower", "Mounted", "Scripted")
+CAPABILITY_ROLES = ROLES + ("Player",)
 REQUIREMENTS = (
     "source",
     "build",
@@ -362,9 +363,9 @@ def read_resolver_request(rt, emu, address):
 '''),
     "read_resolver_result": _function_ast_shape('''
 def read_resolver_result(rt, emu, address):
-    """BehaviorResolveResult v2: fixed 200-byte conditional-profile output."""
-    value = rt.actor_memory_read(emu, _public_abi_address(address, 200, allow_stack=True), 200)
-    if len(value) != 200:
+    """BehaviorResolveResult v2: fixed 208-byte conditional-profile output."""
+    value = rt.actor_memory_read(emu, _public_abi_address(address, 208, allow_stack=True), 208)
+    if len(value) != 208:
         raise ObservationFailure("public resolver result byte count changed")
     return value
 '''),
@@ -378,11 +379,11 @@ def read_walk_policy_call(rt, emu, address):
 '''),
     "read_resolved_lane": _function_ast_shape('''
 def read_resolved_lane(rt, emu, address, schema):
-    """One current 72-byte lane addressed by the checked public Walk policy call."""
-    if schema["compactSize"] != 72:
+    """One current 76-byte lane addressed by the checked public Walk policy call."""
+    if schema["compactSize"] != 76:
         raise ObservationFailure("normal recorder supports only current public lanes")
-    value = rt.actor_memory_read(emu, _public_abi_address(address, 72, allow_stack=True), 72)
-    if len(value) != 72:
+    value = rt.actor_memory_read(emu, _public_abi_address(address, 76, allow_stack=True), 76)
+    if len(value) != 76:
         raise ObservationFailure("public resolved lane byte count changed")
     return value
 '''),
@@ -1650,7 +1651,7 @@ def validate_feature_manifest(document: Any, path: Path) -> dict[str, Any]:
             capability.get("roles"),
             f"{location}.roles",
             errors,
-            choices=ROLES,
+            choices=CAPABILITY_ROLES,
             allow_empty=False,
         )
         _string_list(
@@ -1906,6 +1907,8 @@ def validate_scenario(document: Any, path: Path) -> dict[str, Any]:
     subjectless_service = root.get("id") in (
         "profile.resolve.packaged-rom-parity",
         "profile.condition.packaged-rom-evaluator",
+        "player-hp.initial-state",
+        "player-hp.zero-load",
     ) and (root.get("adapter") or {}).get("kind") == "devtools-test"
     if not isinstance(subjects, list) or ("subjects" in root and not subjects and not subjectless_service):
         _fail(errors, f"{path}.subjects", "must be a non-empty array")
@@ -2170,13 +2173,22 @@ def validate_scenario(document: Any, path: Path) -> dict[str, Any]:
                     "role": "FOLLOWER", "acquisition": "follower", "minimum": 1, "maximum": 1,
                     "motionActor": False, "requirePresentation": True}] \
                 and (root.get("verification") or {}).get("kind") == "controlled-case"
+            health_service = root.get("id") == "player-hp.initial-state" \
+                and test_name == root.get("id") and claims == ["engine-boundary"] \
+                and proof_level == "S3" and subjects == [] \
+                and (root.get("verification") or {}).get("kind") == "normal-play"
+            zero_load_service = root.get("id") == "player-hp.zero-load" \
+                and test_name == root.get("id") \
+                and claims == ["engine-boundary", "natural-input", "control-release"] \
+                and proof_level == "S3" and subjects == [] \
+                and (root.get("verification") or {}).get("kind") == "controlled-case"
             population_service = root.get("id") == "population.land-surf-separation" \
                 and test_name == root.get("id") and claims == ["terrain-selection"] \
                 and proof_level == "S3" and subjects == [{"id": "mankey", "species": 56,
                     "role": "FOLLOWER", "acquisition": "follower", "minimum": 1, "maximum": 1,
                     "motionActor": False, "requirePresentation": True}] \
                 and (root.get("verification") or {}).get("kind") == "controlled-case"
-            if not (resolver_service or condition_service or inspect_service or population_service) \
+            if not (resolver_service or condition_service or inspect_service or population_service or health_service or zero_load_service) \
                     and (not subjects or not claims or "live-actor-identity" not in claims):
                 _fail(errors, f"{path}.subjects", "shared actor tests need structured live subjects")
             if fixture is None or not fixture.get("rom") or not fixture.get("save"):
@@ -2929,6 +2941,8 @@ def cross_validate(
                     if registered.get("recipeSha256") != hashlib.sha256(test_bytes).hexdigest():
                         raise ValueError("shared scenario recipe differs from its reviewed hash")
                     expected_kind = {"normal": "normal-play", "prepared": "controlled-case", "observer-control": "observer-control"}[shared_test["mode"]]
+                    if registered.get("evaluator") == "player-health-zero-load-v1":
+                        expected_kind = "controlled-case"  # private save bytes are prepared before normal Continue
                     # This exact movement adapter audits prepared setup separately
                     # and forbids interventions during the measured normal route.
                     # Other prepared tests cannot acquire normal-play credit.

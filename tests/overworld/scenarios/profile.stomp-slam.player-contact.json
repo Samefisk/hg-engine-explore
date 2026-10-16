@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.stomp-slam.player-contact",
+  "title": "Wild Snorlax notices Player, performs Stomp Slam and deals a shared hit",
+  "status": "active",
+  "capabilities": [
+    "condition.evaluation",
+    "hop",
+    "collision.attack",
+    "player.health"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "TICKETS.md#tkt-0057--stomp-slam-conditional-ground-slam-jump-attack-for-heavy-stomp-pok\u00e9mon",
+    "actor": "One full-current Wild Snorlax143 and passive Cyndaquil155 Follower.",
+    "trigger": "Prepare placement, party and ordinary native spawns only. Neutral completed field frames let normal Player notice admit Stomp Slam. No HP, hit, condition, cooldown, motion, timer or RNG is written.",
+    "observable": "True range6 notice captures Player with180-frame duration and300-frame cooldown. The admitted shared native Hop travels six tiles with curved rise8/hang4/drop4 and peakQ4=56 (3.5 tiles). Its target endpoint remains fixed throughout flight while exact native body height follows the exact Q12 ease-out rise, hang and linear drop. The physical swept body, attacking1 and minimum speed16 accept one Player hit20. The same normal Slam commits once and returns control; Player Jump2 ends at the original base height. Contact may occur on rise or drop; target occupancy alone is insufficient.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Checked Route29 Player585407 South, ordinary party-slot0 Cyndaquil155Lv50 and native Follower spawn, then ordinary Wild Snorlax143Lv50 at585401. Bind exact current identities. Read real living, unprotected Player HP before normal notice/Slam starts."
+      }
+    ],
+    "limits": [
+      "One Player-target prepared placement, not every Heavy Stomp species, natural encounter selection or pacing.",
+      "Shared production-C checks cover exact Actor OOI occupancy, unrelated occupant exclusion and physical terrain checks.",
+      "The first qualifying physical contact must accept one normal20 hit. The run never forces movement or damage if normal notice fails.",
+      "Native completed-frame poses and HP replace image capture. The short run verifies exact admission timing but does not wait for cooldown expiry.",
+      "A zero-pause successor can start on the first Slam terminal frame. Ordered native commit/finish/control-return events and the actual successor origin prove that first terminal pose; later motion cannot replace its flight samples or release."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "snorlax",
+      "species": 143,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "passive",
+      "species": 155,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": false,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Bind normal Wild Snorlax and passive Follower; read real living Player HP."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Observe normal notice admission, full native Slam arc and accepted physical hit."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Observe one Slam commit/control return and Player Jump2 with exact final heights."
+    }
+  ],
+  "stop": {
+    "frameBudget": 600,
+    "condition": "One complete native Slam, shared accepted contact20 and finished Player Jump2; or the first identity, profile, motion, HP or control failure."
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "ACTOR_REBOUND",
+      "CONTEXT_CHANGED",
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Full current Wild Snorlax and passive Follower identities remain unchanged",
+      "True range6/180/300 notice captures full Player and resolves Chase/Hop attack20/min16 Jump2",
+      "Native six-tile curved rise8/hang4/drop4 peak56 arc retains one fixed Player endpoint",
+      "Shared physical contact accepts one normal20 Player hit",
+      "One normal commit/control return and Player Jump2 restore exact baseline heights"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "profile.stomp-slam.player-contact",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "rendered-motion",
+      "collision-decision",
+      "control-release"
+    ],
+    "minimumFrames": 22
+  }
+}

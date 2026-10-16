@@ -1,0 +1,126 @@
+{
+ "bgs": [
+  {
+   "scriptId": 5,
+   "type": 1,
+   "x": 34,
+   "z": 53,
+   "y": 0,
+   "dir": 4,
+   "dirPadding": 0
+  },
+  {
+   "scriptId": 6,
+   "type": 1,
+   "x": 16,
+   "z": 10,
+   "y": 0,
+   "dir": 4,
+   "dirPadding": 0
+  }
+ ],
+ "objects": [
+  {
+   "id": 0,
+   "spriteId": 317,
+   "movement": 4,
+   "type": 0,
+   "eventFlag": 0,
+   "scriptId": 7,
+   "facingDirection": 1,
+   "param0": 0,
+   "param1": 0,
+   "param2": 0,
+   "xRange": 0,
+   "yRange": 1,
+   "x": 31,
+   "z": 50,
+   "y": 0
+  },
+  {
+   "id": 1,
+   "spriteId": 332,
+   "movement": 15,
+   "type": 0,
+   "eventFlag": 0,
+   "scriptId": 8,
+   "facingDirection": 1,
+   "param0": 0,
+   "param1": 0,
+   "param2": 0,
+   "xRange": 0,
+   "yRange": 0,
+   "x": 30,
+   "z": 27,
+   "y": 0
+  },
+  {
+   "id": 2,
+   "spriteId": 322,
+   "movement": 15,
+   "type": 0,
+   "eventFlag": 0,
+   "scriptId": 3,
+   "facingDirection": 1,
+   "param0": 0,
+   "param1": 0,
+   "param2": 0,
+   "xRange": 0,
+   "yRange": 0,
+   "x": 17,
+   "z": 22,
+   "y": 0
+  },
+  {
+   "id": 3,
+   "spriteId": 326,
+   "movement": 5,
+   "type": 0,
+   "eventFlag": 0,
+   "scriptId": 9,
+   "facingDirection": 3,
+   "param0": 0,
+   "param1": 0,
+   "param2": 0,
+   "xRange": 1,
+   "yRange": 0,
+   "x": 46,
+   "z": 31,
+   "y": 0
+  },
+  {
+   "id": 4,
+   "spriteId": 262,
+   "movement": 0,
+   "type": 0,
+   "eventFlag": 0,
+   "scriptId": 2800,
+   "facingDirection": 0,
+   "param0": 5,
+   "param1": 0,
+   "param2": 0,
+   "xRange": 0,
+   "yRange": 0,
+   "x": 28,
+   "z": 24,
+   "y": 0
+  }
+ ],
+ "coords": [],
+ "warps": [
+  {
+   "x": 32,
+   "z": 57,
+   "header": 67,
+   "anchor": 8,
+   "y": 0
+  },
+  {
+   "x": 32,
+   "z": 58,
+   "header": 67,
+   "anchor": 8,
+   "y": 0
+  }
+ ]
+}

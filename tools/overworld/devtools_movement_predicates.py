@@ -35,6 +35,30 @@ SELECTOR_FIELDS = {
 FRAME_BOUNDARY = "main-task-queue-completion"
 
 
+def normal_input_at_edge(sample, previous, expected, *, first, events=()):
+    """Allow one physical key edge before the stock held-key publication.
+
+    A new press earns no native movement credit. Callers still require the
+    real admission. A release is only an input fact; terminal pose checks
+    remain with the movement measurement.
+    """
+    held = sample.get("selector", {}).get("rawHeld")
+    if held == expected:
+        return True
+    prior = previous.get("selector", {}).get("rawHeld")
+    if not first or (held, expected) not in ((0, 66), (66, 0), (0, 16), (16, 0)) \
+            or held != prior or sample.get("selector", {}).get("physicalPressed") != expected:
+        return False
+    if expected:
+        keys = ("x", "y", "pos_x", "pos_z", "movement_cmd", "movement_animation")
+        a, b = sample.get("player", {}), previous.get("player", {})
+        if any(key not in a or key not in b or a[key] != b[key] for key in keys) \
+                or any(e.get("kind") == "native-observation" and
+                       e.get("data", {}).get("observation") == "player-step-admitted" for e in events):
+            return False
+    return True
+
+
 def _int(value, label, low=0, high=0xFFFFFFFF):
     if type(value) is not int or not low <= value <= high:
         raise ValueError(f"{label} must be an integer in {low}..{high}")
@@ -70,7 +94,7 @@ def validate_movement_predicate(value):
             raise ValueError("unsupported dialogue state")
     elif kind == "player-settled-at":
         _shape(value, {"kind", "map", "x", "z"})
-        _int(value["map"], "map", 0, 539)
+        _int(value["map"], "map", 0, 599)
         for axis in ("x", "z"):
             _int(value[axis], axis, 0, 32767)
     else:
@@ -126,7 +150,7 @@ def player_settled_at(snapshot, map_id, x, z):
                 for key in ("x", "y", "x_prev", "y_prev", "pos_x", "pos_z", "unk88_y")}
     flags = _int(_path(player, "flags"), "player.flags")
     command = _int(_path(player, "movement_cmd"), "player.movement_cmd", 0, 255)
-    current_map = _int(_path(snapshot, "context.mapId"), "current map", 0, 539)
+    current_map = _int(_path(snapshot, "context.mapId"), "current map", 0, 599)
     task = _int(_path(snapshot, "fieldControl.taskPointer"), "field task")
     # MapObject_AreBitsSetForMovementScriptInit, stock0x02062108.
     ready = bool(flags & 1) and not flags & 2 and (not flags & 0x10 or bool(flags & 0x20))

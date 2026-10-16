@@ -39,7 +39,8 @@ class _Unknown(ValueError):
     pass
 
 
-def observe_dialogue(read, authenticate, field_pointer, frame, native_cycle, loaded_overlays):
+def observe_dialogue(read, authenticate, field_pointer, frame, native_cycle, loaded_overlays,
+                     *, blackout_parents=None):
     """Return JSON-safe state; waitIdentity is stable until the native wait changes.
 
     read(address, size) returns exactly size bytes. At most eight task parents,
@@ -187,13 +188,23 @@ def observe_dialogue(read, authenticate, field_pointer, frame, native_cycle, loa
         if task == 0:
             return finish("idle", "no-field-task")
         code(TASK_RUN_SCRIPTS, 0xD8)
-        seen, owners, children = set(), [], []
+        # Only the completed-frame zero-HP trace may supply these two parents.
+        # That trace checks both current-ROM function bodies and their field
+        # ownership before this reader receives their exact task identities.
+        if blackout_parents is not None:
+            require(isinstance(blackout_parents, tuple) and len(blackout_parents) == 2
+                    and all(isinstance(row, tuple) and len(row) == 4
+                            and all(type(item) is int for item in row)
+                            for row in blackout_parents)
+                    and [row[2:] for row in blackout_parents] == [(6, 0), (2, 0)],
+                    "blackout-parent-proof-invalid")
+        seen, owners, children, blackout_seen = set(), [], [], 0
         while task:
             require(task not in seen, "task-chain-cycle")
             require(len(seen) < 8, "task-chain-limit")
             seen.add(task)
             pointer(task, 32)
-            previous, callback, _, env, _, _, owner, _ = struct.unpack("<8I", raw(task, 32))
+            previous, callback, state, env, _, _, owner, _ = struct.unpack("<8I", raw(task, 32))
             result["tasks"].append({"pointer": task, "callback": callback, "environment": env})
             require(owner == field_pointer, "task-owner-mismatch")
             if callback == TASK_RUN_SCRIPTS | 1:
@@ -204,9 +215,16 @@ def observe_dialogue(read, authenticate, field_pointer, frame, native_cycle, loa
                 else:
                     code(NURSE_FOLLOWER_RECALL, 0x1DC, 1)
                 children.append((task, previous, env, callback))
+            elif (blackout_parents is not None and blackout_seen < 2
+                  and (task, callback, state, env) == blackout_parents[blackout_seen]
+                  and len(owners) == 1):
+                blackout_seen += 1
             else:
                 raise _Unknown("task-callback-unknown")
             task = previous
+        if blackout_parents is not None:
+            require(blackout_seen == 2 and len(result["tasks"]) == 3 + len(children),
+                    "blackout-parent-chain-mismatch")
         require(len(owners) == 1, "script-owner-count")
         task, env = owners[0]
         pointer(env, 0xE0)
@@ -218,6 +236,9 @@ def observe_dialogue(read, authenticate, field_pointer, frame, native_cycle, loa
                             "activeContextCount": count, "contextPointers": list(contexts),
                             "standardWaitMask": data[7], "contexts": [],
                             "scriptNumber": struct.unpack_from("<H", data, 10)[0]}
+        if blackout_parents is not None:
+            require(result["script"]["scriptNumber"] in (2012, 2013),
+                    "blackout-arrival-script-mismatch")
         if state == 0 and count == 0 and contexts == (0, 0, 0):
             return finish("busy", "script-starting")
         require(state == 1 and 1 <= count <= 3 and sum(bool(c) for c in contexts) == count,
@@ -252,7 +273,8 @@ def observe_dialogue(read, authenticate, field_pointer, frame, native_cycle, loa
         result["script"].update(context=ctx, mode=mode, callback=callback, scriptPointer=script_pc)
         require(mode in (0, 1, 2), "script-mode-unknown")
         if children:
-            require(len(children) == 1 and len(result["tasks"]) == 2,
+            require(len(children) == 1 and len(result["tasks"]) == 2 +
+                    (2 if blackout_parents is not None else 0),
                     "healing-task-chain-mismatch")
             child, previous, child_env, child_callback = children[0]
             require(result["tasks"][0]["pointer"] == child and previous == task

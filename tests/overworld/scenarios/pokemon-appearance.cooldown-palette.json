@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "id": "pokemon-appearance.cooldown-palette",
+  "title": "Ram own cooldown uploads blue, then native expiry restores the original palette",
+  "status": "active",
+  "capabilities": [
+    "pokemon.appearance"
+  ],
+  "proofLevel": "S4",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "One prepared full-HP Wild Onix with current full identity and its own authored Ram condition.",
+    "trigger": "Observe the first genuine Ram activation and natural end with ordinary input only. Ram uses the same16-frame RIGHT dodge and actual Crash; Ambush reaches its authored90-frame deadline. Then wait for the own-profile cooldown and native deadline clear.",
+    "observable": "Observe real Ram activation, its natural end, every remaining prepared condition in cooldown, completed exact blue SDK upload and MAT use, then the natural cooldown deadline clearing the same owner record/callback.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Prepare a native party-slot-0 level20 Cyndaquil follower before the attack subject, using the same party/spawn setup as Wild Throw. Use private ROM/save copies; teleport player to map33(585407), spawn Onix north at(585402), and bind its actual South1 facing and full identity. No facing, timer, HP, RNG or condition writes."
+      }
+    ],
+    "limits": [
+      "Copied data is host control only, never game acceptance.",
+      "The entire remaining prepared set must be observed; missing, active, expired, disabled or stale condition rows fail.",
+      "No timer, condition, HP, profile, mask or RNG is changed to make blue appear.",
+      "The former general Notice-overlap window is retired because TKT-0040 removes that profile. Each own-cooldown requirement remains registered."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "onix",
+      "species": 95,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Bind actual current actors and their real full HP."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Read actual palette upload bytes and material word after natural gameplay changes."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Observe native healing or natural expiry clear the tint."
+    }
+  ],
+  "stop": {
+    "frameBudget": 3300,
+    "condition": "Complete every exact native palette and clear fact; fail on missing identity, upload completion, material use, HP or full condition state."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Actual palette bytes and actual MAT command must agree on the same current Pok\u00e9mon.",
+      "Missing or stale receipts fail; cache or configured values alone cannot pass."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "pokemon-appearance.cooldown-palette",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "engine-boundary",
+      "rendered-motion",
+      "natural-input",
+      "control-release"
+    ],
+    "minimumFrames": 1
+  }
+}

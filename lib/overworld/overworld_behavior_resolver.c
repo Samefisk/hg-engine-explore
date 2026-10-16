@@ -1,7 +1,19 @@
 #include "../../include/overworld_behavior_resolver.h"
+#include "../../include/overworld_application_bank.h"
+#include <stddef.h>
+#include "../../include/overworld_behavior_packed_options.h"
+#if defined(__arm__)
+void OverworldBehaviorPackedOptions_Apply(OverworldWildBehaviorProfileData *, const OverworldWildBehaviorOverrideProfile *, u32);
+/* The separate Query imports object supplies one typed odd Thumb pointer. */
+#else
+#define OverworldBehaviorPackedOptions_Apply OverworldBehaviorPackedOptions_ApplyInline
+#endif
 #ifdef OVERWORLD_BEHAVIOR_RESOLVER_EXTERNAL_VALIDATOR
 #include "../../include/overworld_behavior_condition_runtime.h"
 #endif
+
+/* Keep the public resolver within its fixed resident code slot. */
+#pragma GCC optimize("Os,no-tree-forwprop,no-inline-small-functions,no-expensive-optimizations,no-if-conversion,no-tree-loop-im,no-schedule-insns2")
 
 #define RESOLVER_MATCH_ANY_SPECIES 0
 #define RESOLVER_MATCH_ANY_U8 0xFF
@@ -13,7 +25,8 @@
 #define RESOLVER_BEHAVIOR_KIND_WANDER 2
 #define RESOLVER_BEHAVIOR_KIND_HEADBUTT_TREE_HOP 7
 #define RESOLVER_BEHAVIOR_KIND_ASLEEP 8
-#define RESOLVER_BEHAVIOR_KIND_MAX 11
+#define RESOLVER_BEHAVIOR_KIND_THROW_HELD_ACTOR 12
+#define RESOLVER_BEHAVIOR_KIND_MAX 12
 
 #define RESOLVER_LOCOMOTION_NONE 0
 #define RESOLVER_LOCOMOTION_WANDER 1
@@ -22,14 +35,14 @@
 #define RESOLVER_LOCOMOTION_MAX 11
 
 #define RESOLVER_TARGET_NONE 0
-#define RESOLVER_TARGET_MAX 9
+#define RESOLVER_TARGET_MAX OW_WILD_BEHAVIOR_TARGET_PLAYER_AWAY_THROW_LINE
 #define RESOLVER_TARGET_RANDOM_NEARBY 1
 #define RESOLVER_TARGET_TOWARD_PLAYER 2
 #define RESOLVER_TARGET_AWAY_FROM_PLAYER 3
 #define RESOLVER_TARGET_TREE_TOP 4
 
 #define RESOLVER_ALERT_SPECIAL_NONE 0
-#define RESOLVER_ALERT_SPECIAL_PICKUP_THROW 2
+#define RESOLVER_ALERT_SPECIAL_CALL_FOR_HELP 1
 
 #define RESOLVER_REACTION_TIRED 5
 
@@ -49,8 +62,12 @@
 #define RESOLVER_WALK_TIME_MIN 1
 #define RESOLVER_WALK_TIME_MAX 32
 #define RESOLVER_WALK_ACCELERATION_DIVIDE_BY_2 33
+#define RESOLVER_WALK_ACCELERATION_LINEAR_SPEED 34
 
 #define RESOLVER_OVERRIDE_LIMIT_KEY_BASE OWBD_CLASS_PROFILE_COUNT
+#define RESOLVER_MASKABLE_APPLICATION_COUNT \
+    ((OWBD_OVERRIDE_PROFILE_COUNT < OWBD_MASKABLE_APPLICATION_COUNT) \
+        ? OWBD_OVERRIDE_PROFILE_COUNT : OWBD_MASKABLE_APPLICATION_COUNT)
 #define RESOLVER_RESERVED_OVERRIDE_MASK1 \
     ((1u << 1) | (1u << 4) | (1u << 14) | (1u << 16) | 0xF8000000u)
 
@@ -63,8 +80,9 @@
 static const u8 sRelativeFieldMaximums[] = {
     0, 0, 0, 255, 64, 64, 64, 32, 64, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0,
     0, 12, 12, 255, 64, 255, 0, 10, 8, 8, 32, 255, 0, 0, 0, 64, 32, 32,
-    15, 64, 15, 0, 0, 32, 255, 0, 0, 255, 255, 32, 32, 0, 0, 0, 8, 8, 8,
+    15, 64, 15, 0, 0, 32, 255, 0, 0, 255, 255, 255, 32, 0, 0, 0, 8, 8, 8,
     32, 5, 0, 0, 0, 0, 0, 0, 255, 32, 32, 33, 32, 32, 0, 0,
+    0, 0,
 };
 
 static const u8 sSpawnLocomotion[]
@@ -95,14 +113,17 @@ static const u8 sLegacySpawnDestinationMask[]
 #undef RESOLVER_SECTION
 /* The appended gait controls support replace only and use a packed merge. */
 typedef char BehaviorResolverRelativeFieldCountMustCoverLegacyFields[
-    sizeof(sRelativeFieldMaximums) == 72 ? 1 : -1];
-typedef char BehaviorResolverProfileDataSizeMustRemain72[
-    sizeof(OverworldWildBehaviorProfileData) == 72 ? 1 : -1];
-typedef char BehaviorResolverProfileSizeMustRemain144[
-    sizeof(OverworldWildBehaviorProfile) == 144 ? 1 : -1];
+    sizeof(sRelativeFieldMaximums) == 74 ? 1 : -1];
+typedef char BehaviorResolverProfileDataSizeMustRemain80[
+    sizeof(OverworldWildBehaviorProfileData) == 80 ? 1 : -1];
+typedef char BehaviorResolverProfileSizeMustRemain160[
+    sizeof(OverworldWildBehaviorProfile) == 160 ? 1 : -1];
 
 static u8 BehaviorResolver_FieldOffset(u8 fieldIndex)
 {
+    if (fieldIndex >= 72) {
+        return fieldIndex + 1;
+    }
     if (fieldIndex == 70 || fieldIndex == 71) {
         return 69;
     }
@@ -125,6 +146,9 @@ static u8 BehaviorResolver_ReadFieldValue(
 {
     const u8 *bytes = (const u8 *)profile;
 
+    if (fieldIndex == 53) {
+        return OW_WILD_BEHAVIOR_CHAIN_REPOSITION_JUMP_COUNT(bytes[offset]);
+    }
     if (fieldIndex == 59) {
         return OW_WILD_BEHAVIOR_CHAIN_REPOSITION_ALLOWS_CARDINAL(bytes[offset]);
     }
@@ -157,7 +181,9 @@ static void BehaviorResolver_WriteFieldValue(
 {
     u8 *bytes = (u8 *)profile;
 
-    if (fieldIndex == 59) {
+    if (fieldIndex == 53) {
+        OW_WILD_BEHAVIOR_SET_CHAIN_REPOSITION_JUMP_COUNT(bytes[offset], value);
+    } else if (fieldIndex == 59) {
         OW_WILD_BEHAVIOR_SET_CHAIN_REPOSITION_ALLOW_CARDINAL(bytes[offset], value);
     } else if (fieldIndex == 60) {
         OW_WILD_BEHAVIOR_SET_CHAIN_REPOSITION_ALLOW_DIAGONAL(bytes[offset], value);
@@ -178,6 +204,9 @@ static void BehaviorResolver_WriteFieldValue(
 
 static int BehaviorResolver_RelativeFieldValue(u8 fieldIndex, u8 value)
 {
+    if (fieldIndex == 53) {
+        return (s8)(value << 4) >> 4;
+    }
     if (fieldIndex == 68 || fieldIndex == 69) {
         return (value & 0x40) != 0 ? (int)value - 0x80 : value;
     }
@@ -301,7 +330,7 @@ static void BehaviorResolver_ResolveInheritedPolicies(
     OverworldWildBehaviorProfileData *profile)
 {
     u16 terrainOverride = profile->chillAllowedTerrainOverrideMask
-        & OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL;
+        & OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_POLICY_ALL;
     u16 destinationOverride = profile->spawnDestinationOverrideMask
         & OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL;
     u16 legacyDestination = BehaviorResolver_LegacySpawnDestinationMask(
@@ -318,65 +347,108 @@ static void BehaviorResolver_ResolveInheritedPolicies(
 
 static void BehaviorResolver_ApplyMask(
     OverworldWildBehaviorProfileData *profile,
-    const OverworldWildBehaviorProfileData *values,
+    const OverworldWildBehaviorOverrideProfile *overrideProfile,
     u32 mask,
-    u32 relativeMask,
-    u32 atLeastMask,
-    u32 atMostMask,
-    const OverworldWildBehaviorProfileData *bounds,
     u8 fieldIndex)
 {
-    while (mask != 0 && fieldIndex < sizeof(sRelativeFieldMaximums)) {
+    u8 word = fieldIndex == 0 ? 0 : fieldIndex == 27 ? 1 : 2;
+    const u8 *operators = (const u8 *)overrideProfile
+        + offsetof(OverworldWildBehaviorOverrideProfile, relativeMask)
+        + word * sizeof(u32);
+    u32 relativeMask = *(const u32 *)operators;
+    u32 atLeastMask = *(const u32 *)(operators + 3 * sizeof(u32));
+    u32 atMostMask = *(const u32 *)(operators + 6 * sizeof(u32));
+    /* Positive minima: 7, 27..28, 48..53 and 56..57. */
+    u32 minimumMask = word == 0 ? 1u << 7 : word == 1 ? 3 : 0xCFC0;
+
+    /* Calls start at 0, 27 or 42. A u32 mask exhausts after 32 shifts,
+     * so even the last word can visit only field indices through 73. */
+    while (mask != 0) {
         if (mask & 1u) {
             u8 offset = BehaviorResolver_FieldOffset(fieldIndex);
             u8 current = BehaviorResolver_ReadFieldValue(
                 profile, fieldIndex, offset);
             u8 value = BehaviorResolver_ReadFieldValue(
-                values, fieldIndex, offset);
+                &overrideProfile->profile, fieldIndex, offset);
 
-            if (relativeMask & 1u) {
-                int adjusted = (int)current
-                    + BehaviorResolver_RelativeFieldValue(fieldIndex, value);
-                int minimum = fieldIndex == 7
-                    || fieldIndex == 27
-                    || fieldIndex == 28
-                    || (fieldIndex >= 48 && fieldIndex < 54)
-                    || fieldIndex == 56
-                    || fieldIndex == 57;
+            /* Linear is a mode, not an arithmetic frame amount. Only an
+             * exact replacement may enter or leave it. Retained legacy
+             * numeric masks must not accidentally select the new mode. */
+            if (fieldIndex == 67
+                && current == RESOLVER_WALK_ACCELERATION_LINEAR_SPEED
+                && ((relativeMask | atLeastMask | atMostMask) & 1u)) {
+                goto nextField;
+            }
+            if ((relativeMask | (atLeastMask & atMostMask)) & 1u) {
+                u8 divide = (atLeastMask & atMostMask) & 1u;
+                int adjusted;
+                int minimum = minimumMask & 1u;
                 int maximum = sRelativeFieldMaximums[fieldIndex];
 
+                /* The previously invalid double-bound spelling selects /N.
+                 * Share the numeric clamp and packed write with relative. */
+                if (divide) {
+                    /* The caller removes retired/gait mask1 bits. Of the
+                     * remaining numeric maxima, only skid and the legacy
+                     * acceleration mode are replace-only; sway has max7. */
+                    if ((relativeMask & 1u)
+                        || (!maximum && fieldIndex != 44)
+                        || fieldIndex == 65 || fieldIndex == 67
+                        || (u8)(value - 1) > 126) {
+                        goto nextField;
+                    }
+#if defined(__arm__)
+                    adjusted = ((u32 (*)(u32, u32))0x023DEE4D)(current, value);
+#else
+                    adjusted = current / value;
+#endif
+                    if (fieldIndex == 5 || fieldIndex == 6) maximum = 255;
+                    if (fieldIndex == 39) maximum = 8;
+                    if (fieldIndex == 44) maximum = 7;
+                } else {
+                    adjusted = (int)current
+                        + BehaviorResolver_RelativeFieldValue(fieldIndex, value);
+                }
                 if (adjusted < minimum) {
                     adjusted = minimum;
                 } else if (adjusted > maximum) {
                     adjusted = maximum;
                 }
-                BehaviorResolver_WriteFieldValue(
-                    profile, fieldIndex, offset, (u8)adjusted);
                 current = (u8)adjusted;
+                if (divide) {
+                    value = current;
+                    goto writeField;
+                }
             }
             if ((atLeastMask & 1u) || (atMostMask & 1u)) {
                 u8 threshold = (relativeMask & 1u)
                     ? BehaviorResolver_ReadFieldValue(
-                        bounds, fieldIndex, offset)
+                        &overrideProfile->compoundBoundProfile, fieldIndex, offset)
                     : value;
 
+                if (fieldIndex == 67
+                    && threshold > RESOLVER_WALK_ACCELERATION_DIVIDE_BY_2) {
+                    threshold = RESOLVER_WALK_ACCELERATION_DIVIDE_BY_2;
+                }
                 if ((atLeastMask & 1u) && current < threshold) {
-                    BehaviorResolver_WriteFieldValue(
-                        profile, fieldIndex, offset, threshold);
+                    current = threshold;
                 } else if ((atMostMask & 1u)
                     && current > threshold) {
-                    BehaviorResolver_WriteFieldValue(
-                        profile, fieldIndex, offset, threshold);
+                    current = threshold;
                 }
-            } else if (!(relativeMask & 1u)) {
-                BehaviorResolver_WriteFieldValue(
-                    profile, fieldIndex, offset, value);
+                value = current;
+            } else if (relativeMask & 1u) {
+                value = current;
             }
+writeField:
+            BehaviorResolver_WriteFieldValue(profile, fieldIndex, offset, value);
         }
+nextField:
         mask >>= 1;
         relativeMask >>= 1;
         atLeastMask >>= 1;
         atMostMask >>= 1;
+        minimumMask >>= 1;
         fieldIndex++;
     }
 }
@@ -388,9 +460,12 @@ static void BehaviorResolver_ApplyOverride(
     u16 explicitDestinationMask;
     u16 explicitTerrainMask;
     u32 mask = overrideProfile->mask & ~RESOLVER_RESERVED_OVERRIDE_MASK1;
-    u16 mask2 = overrideProfile->mask2;
+    u32 mask2 = overrideProfile->mask2;
     u32 mask3 = overrideProfile->mask3;
     u32 authoredMask = overrideProfile->mask;
+    u32 throwMask = mask2 >> 17;
+    u8 throwField;
+    u32 knockbackMask;
     /* Expand the four independent replace-mask bits into their two-bit
      * storage slices. Numeric operators never apply to gait controls. */
     u8 gaitMask = (((authoredMask >> 16) & 1)
@@ -401,29 +476,36 @@ static void BehaviorResolver_ApplyOverride(
     profile->mountBounce ^= (profile->mountBounce
         ^ overrideProfile->profile.mountBounce) & gaitMask;
 
+    BehaviorResolver_ApplyMask(profile, overrideProfile, mask, 0);
     BehaviorResolver_ApplyMask(
         profile,
-        &overrideProfile->profile,
-        mask,
-        overrideProfile->relativeMask,
-        overrideProfile->atLeastMask,
-        overrideProfile->atMostMask,
-        &overrideProfile->compoundBoundProfile,
-        0);
-    BehaviorResolver_ApplyMask(
-        profile,
-        &overrideProfile->profile,
+        overrideProfile,
         mask2 & ~(OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_ALLOWED_TERRAIN_MASK
-            | OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_ALLOWED_TERRAIN_OVERRIDE_MASK),
-        overrideProfile->relativeMask2,
-        overrideProfile->atLeastMask2,
-        overrideProfile->atMostMask2,
-        &overrideProfile->compoundBoundProfile,
+            | OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_ALLOWED_TERRAIN_OVERRIDE_MASK
+            | OW_WILD_BEHAVIOR_OVERRIDE2_CONTINUE_WHEN_ARRIVED
+            | OW_WILD_BEHAVIOR_OVERRIDE2_AVOID_PREVIOUS_TILE
+            | OW_WILD_BEHAVIOR_OVERRIDE2_RETURN_AFTER_MOVE
+            | OW_WILD_BEHAVIOR_OVERRIDE2_CHAIN_HOP_IN_PLACE_EXTRA_HOPS
+            | OW_WILD_BEHAVIOR_OVERRIDE2_CHAIN_HOP_IN_PLACE_EXTRA_CHANCE
+            | OW_WILD_BEHAVIOR_OVERRIDE2_CHAIN_HOP_IN_PLACE_HEART_CHANCE
+            | OW_WILD_BEHAVIOR_OVERRIDE2_CHAIN_HOP_IN_PLACE_CRY_CHANCE
+            | OW_WILD_BEHAVIOR_OVERRIDE2_CARGO_TARGET_CHECK_INTERVAL
+            | OW_WILD_BEHAVIOR_OVERRIDE2_CARGO_TARGET_SWITCH_ADVANTAGE
+            | OW_WILD_BEHAVIOR_OVERRIDE2_ATTACKING
+            | OW_WILD_BEHAVIOR_OVERRIDE2_DAMAGE_RECIPIENTS
+            | OW_WILD_BEHAVIOR_OVERRIDE2_ON_REACH_ACTION
+            | OW_WILD_BEHAVIOR_OVERRIDE2_THROW_MAX_RANGE
+            | OW_WILD_BEHAVIOR_OVERRIDE2_THROW_WINDUP_FRAMES
+            | OW_WILD_BEHAVIOR_OVERRIDE2_THROW_RECOVERY_FRAMES
+            | OW_WILD_BEHAVIOR_OVERRIDE2_KNOCKBACK_TYPE
+            | OW_WILD_BEHAVIOR_OVERRIDE2_KNOCKBACK_DISTANCE
+            | OW_WILD_BEHAVIOR_OVERRIDE2_TURN_SKID_TWO_TIME
+            | OW_WILD_BEHAVIOR_OVERRIDE2_STOP_SKID_TIME),
         27);
     if (mask2 & OW_WILD_BEHAVIOR_OVERRIDE2_CHILL_ALLOWED_TERRAIN_OVERRIDE_MASK) {
         explicitTerrainMask =
             overrideProfile->profile.chillAllowedTerrainOverrideMask
-            & OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL;
+            & OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_POLICY_ALL;
         profile->chillAllowedTerrainMask =
             (profile->chillAllowedTerrainMask & ~explicitTerrainMask)
             | (overrideProfile->profile.chillAllowedTerrainMask
@@ -431,14 +513,24 @@ static void BehaviorResolver_ApplyOverride(
     }
     BehaviorResolver_ApplyMask(
         profile,
-        &overrideProfile->profile,
-        mask3 & ~(OW_WILD_BEHAVIOR_OVERRIDE3_SPAWN_DESTINATION_MASK
+        overrideProfile,
+        mask3 & ~(OW_WILD_BEHAVIOR_OVERRIDE3_HOP_ALLOW_VERTICAL_OBSTACLES
+            | OW_WILD_BEHAVIOR_OVERRIDE3_CHAIN_REPOSITION_DUST
+            | OW_WILD_BEHAVIOR_OVERRIDE3_SPAWN_DESTINATION_MASK
             | OW_WILD_BEHAVIOR_OVERRIDE3_SPAWN_DESTINATION_OVERRIDE_MASK),
-        overrideProfile->relativeMask3,
-        overrideProfile->atLeastMask3,
-        overrideProfile->atMostMask3,
-        &overrideProfile->compoundBoundProfile,
         42);
+    if (mask2 & OW_WILD_BEHAVIOR_OVERRIDE2_ATTACKING) {
+        profile->attacking = overrideProfile->profile.attacking;
+    }
+    knockbackMask = (((mask2 >> 20) & 1u) * 0x03)
+        | ((((mask2 >> 19) & 0x04) | ((mask2 >> 17) & 0x20)) * 7);
+    OverworldBehaviorPackedOptions_Apply(profile, overrideProfile, knockbackMask);
+    for (throwField = 1; throwField < 4; throwField++, throwMask >>= 1) {
+        if ((throwMask & 1u) != 0) {
+            (&profile->onReachAction)[throwField] =
+                (&overrideProfile->profile.onReachAction)[throwField];
+        }
+    }
     if (mask3 & OW_WILD_BEHAVIOR_OVERRIDE3_SPAWN_DESTINATION_OVERRIDE_MASK) {
         explicitDestinationMask =
             overrideProfile->profile.spawnDestinationOverrideMask
@@ -460,8 +552,15 @@ static void BehaviorResolver_ApplyOverride(
     }
 }
 
-static u8 BehaviorResolver_ClampWalkTime(u8 value)
+static inline __attribute__((always_inline)) u32 BehaviorResolver_ClampWalkTime(u32 value)
 {
+#if defined(__arm__)
+    /* Keep the exact unsigned 1..32 clamp local in the fixed native slot. */
+    __asm__(".syntax unified\ncmp %0,#0\nbne 1f\nmovs %0,#1\n"
+        "1:\ncmp %0,#32\nbls 2f\nmovs %0,#32\n2:\n.syntax divided\n"
+        : "+l"(value) : : "cc");
+    return value;
+#else
     if (value < RESOLVER_WALK_TIME_MIN) {
         return RESOLVER_WALK_TIME_MIN;
     }
@@ -469,26 +568,73 @@ static u8 BehaviorResolver_ClampWalkTime(u8 value)
         return RESOLVER_WALK_TIME_MAX;
     }
     return value;
+#endif
 }
 
-static void BehaviorResolver_NormalizeLane(
+static __attribute__((optimize("Os,tree-forwprop,tree-dominator-opts,expensive-optimizations,if-conversion")))
+void BehaviorResolver_NormalizeLane(
     OverworldWildBehaviorProfileData *profile,
     u8 invalidState)
 {
-    profile->chillSpeed = BehaviorResolver_ClampWalkTime(profile->chillSpeed);
-    profile->maxWalkSpeed = BehaviorResolver_ClampWalkTime(profile->maxWalkSpeed);
-    if (profile->maxWalkSpeed > profile->chillSpeed) {
-        profile->maxWalkSpeed = profile->chillSpeed;
+    u32 speed = BehaviorResolver_ClampWalkTime(profile->chillSpeed);
+    u32 maximum = BehaviorResolver_ClampWalkTime(profile->maxWalkSpeed);
+
+    if (maximum > speed) {
+        maximum = speed;
     }
+    profile->chillSpeed = (u8)speed;
+    profile->maxWalkSpeed = (u8)maximum;
     profile->chainRepositionSpeed = BehaviorResolver_ClampWalkTime(
         profile->chainRepositionSpeed);
+    {
+        u32 counts = profile->chainRepositionJumpCount;
+#if defined(__arm__)
+        u32 low;
+
+        /* Preserve both independent slices with one bounded byte update. */
+        __asm__(".syntax unified\nmovs %1,#15\nands %1,%0\nbne 1f\n"
+            "adds %0,#1\nb 2f\n"
+            "1:\ncmp %1,#8\nbls 2f\nmovs %1,#15\nbics %0,%1\nadds %0,#8\n"
+            "2:\nmovs %1,#48\nands %1,%0\ncmp %1,#48\nbne 3f\nsubs %0,#16\n3:\n.syntax divided\n"
+            : "+l"(counts), "=&l"(low) : : "cc");
+#else
+        u32 reposition = OW_WILD_BEHAVIOR_CHAIN_REPOSITION_JUMP_COUNT(counts);
+
+        if (reposition == 0) {
+            counts |= 1u;
+        } else if (reposition > OW_WILD_BEHAVIOR_CHAIN_REPOSITION_JUMPS_MAX) {
+            counts = (counts & ~15u) | OW_WILD_BEHAVIOR_CHAIN_REPOSITION_JUMPS_MAX;
+        }
+        if ((counts & 0x30u) == 0x30u) {
+            counts ^= 0x10u;
+        }
+#endif
+        profile->chainRepositionJumpCount = (u8)counts;
+    }
+#if defined(__arm__)
+    {
+        u32 options = profile->avoidPreviousTile;
+
+        /* LSRS retains the independent low bit in carry for the 100 clamp. */
+        __asm__(".syntax unified\ncmp %0,#201\nbls 1f\nlsrs %0,#1\n"
+            "movs %0,#100\nadcs %0,%0\n1:\n.syntax divided\n"
+            : "+l"(options) : : "cc");
+        profile->avoidPreviousTile = (u8)options;
+    }
+#else
+    if (OW_WILD_BEHAVIOR_CHAIN_HOP_IN_PLACE_EXTRA_CHANCE(
+            profile->avoidPreviousTile) > 100) {
+        OW_WILD_BEHAVIOR_SET_CHAIN_HOP_IN_PLACE_EXTRA_CHANCE(
+            profile->avoidPreviousTile, 100);
+    }
+#endif
     if (profile->chaseBoostSpeed > RESOLVER_WALK_TIME_MAX) {
         profile->chaseBoostSpeed = RESOLVER_WALK_TIME_MAX;
     }
     if (profile->walkStompTime > RESOLVER_WALK_TIME_MAX) {
         profile->walkStompTime = RESOLVER_WALK_TIME_MAX;
     }
-    if (profile->walkAccelerationStep > RESOLVER_WALK_ACCELERATION_DIVIDE_BY_2) {
+    if (profile->walkAccelerationStep > RESOLVER_WALK_ACCELERATION_LINEAR_SPEED) {
         profile->walkAccelerationStep = RESOLVER_WALK_ACCELERATION_DIVIDE_BY_2;
     }
     if (profile->chillState > RESOLVER_BEHAVIOR_KIND_MAX) {
@@ -528,7 +674,8 @@ static void BehaviorResolver_NormalizeLane(
     if (profile->tilesToAccelerate == 0) {
         profile->tilesToAccelerate =
             OW_WILD_BEHAVIOR_TILES_TO_ACCELERATE_DEFAULT;
-    } else if (profile->tilesToAccelerate > RESOLVER_MOVEMENT_RANGE) {
+    } else if (profile->walkAccelerationStep != RESOLVER_WALK_ACCELERATION_LINEAR_SPEED
+        && profile->tilesToAccelerate > RESOLVER_MOVEMENT_RANGE) {
         profile->tilesToAccelerate = RESOLVER_MOVEMENT_RANGE;
     }
     if (profile->chainPauseAction
@@ -543,6 +690,40 @@ static void BehaviorResolver_NormalizeLane(
     if (profile->battleTrigger > RESOLVER_BATTLE_TRIGGER_MAX) {
         profile->battleTrigger = RESOLVER_TARGET_NONE;
     }
+    profile->attacking = profile->attacking == 1;
+#if defined(__arm__)
+    {
+        u32 options = profile->knockbackOptions;
+        u32 slice;
+
+        /* Type 3 becomes None; distance 0 becomes 1, preserving other bits. */
+        __asm__(".syntax unified\nmovs %1,#3\nands %1,%0\ncmp %1,#3\n"
+            "bne 1f\nbics %0,%1\n1:\nmovs %1,#28\ntst %0,%1\n"
+            "bne 2f\nadds %0,#4\n2:\n.syntax divided\n"
+            : "+l"(options), "=&l"(slice) : : "cc");
+        profile->knockbackOptions = (u8)options;
+    }
+#else
+    if (OW_WILD_BEHAVIOR_KNOCKBACK_TYPE(profile->knockbackOptions)
+            > OW_WILD_BEHAVIOR_KNOCKBACK_JUMP) {
+        OW_WILD_BEHAVIOR_SET_KNOCKBACK_TYPE(
+            profile->knockbackOptions, OW_WILD_BEHAVIOR_KNOCKBACK_NONE);
+    }
+    if (OW_WILD_BEHAVIOR_KNOCKBACK_DISTANCE(profile->knockbackOptions) < 1) {
+        OW_WILD_BEHAVIOR_SET_KNOCKBACK_DISTANCE(profile->knockbackOptions, 1);
+    } else if (OW_WILD_BEHAVIOR_KNOCKBACK_DISTANCE(profile->knockbackOptions) > 7) {
+        OW_WILD_BEHAVIOR_SET_KNOCKBACK_DISTANCE(profile->knockbackOptions, 7);
+    }
+#endif
+    if (profile->collisionDamage > 50) {
+        profile->collisionDamage = 50;
+    }
+    if ((profile->onReachAction & 0x3Eu) != 0) {
+        profile->onReachAction &= 0xC0u;
+    }
+    if (profile->throwMaxRange > 8) {
+        profile->throwMaxRange = 8;
+    }
 }
 
 static void BehaviorResolver_NormalizeProfile(
@@ -551,7 +732,7 @@ static void BehaviorResolver_NormalizeProfile(
     BehaviorResolver_NormalizeLane(&profile->owner, RESOLVER_BEHAVIOR_KIND_IDLE);
     BehaviorResolver_NormalizeLane(&profile->tired, RESOLVER_BEHAVIOR_KIND_NONE);
 
-    if (profile->alertSpecialAction > RESOLVER_ALERT_SPECIAL_PICKUP_THROW) {
+    if (profile->alertSpecialAction > RESOLVER_ALERT_SPECIAL_CALL_FOR_HELP) {
         profile->alertSpecialAction = RESOLVER_ALERT_SPECIAL_NONE;
     }
     if (profile->overworldLimit > RESOLVER_MAX_OVERWORLD_ACTORS) {
@@ -621,7 +802,10 @@ static void BehaviorResolver_NormalizePrimitive(
     if (behaviorKind < RESOLVER_BEHAVIOR_KIND_WANDER
         || behaviorKind > RESOLVER_BEHAVIOR_KIND_HEADBUTT_TREE_HOP) {
         *locomotion = RESOLVER_LOCOMOTION_NONE;
-        *target = RESOLVER_TARGET_NONE;
+        /* Release consumes its explicit target without carrier locomotion. */
+        if (behaviorKind != RESOLVER_BEHAVIOR_KIND_THROW_HELD_ACTOR) {
+            *target = RESOLVER_TARGET_NONE;
+        }
     } else if (*target == RESOLVER_TARGET_NONE) {
         *target = sDefaultTarget[behaviorKind];
     }
@@ -665,72 +849,73 @@ static void BehaviorResolver_ResolvePrimitives(
     }
 }
 
+static const OverworldWildBehaviorDataBlobHeader sExpectedBlobHeader = {
+    .magic = OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC,
+    .version = OVERWORLD_WILD_BEHAVIOR_DATA_VERSION,
+    .headerSize = sizeof(OverworldWildBehaviorDataBlobHeader),
+    .blobSize = sizeof(OverworldWildBehaviorDataBlob),
+    .classProfilesOffset =
+        __builtin_offsetof(OverworldWildBehaviorDataBlob, classProfiles),
+    .classProfileCount = OWBD_CLASS_PROFILE_COUNT,
+    .classProfileSize = sizeof(OverworldWildBehaviorProfileData),
+    .classRulesOffset =
+        __builtin_offsetof(OverworldWildBehaviorDataBlob, classRules),
+    .classRuleCount = OWBD_CLASS_RULE_COUNT,
+    .classRuleSize = sizeof(OverworldWildBehaviorClassRule),
+    .speciesClassRulesOffset =
+        __builtin_offsetof(OverworldWildBehaviorDataBlob, speciesClassRules),
+    .speciesClassRuleCount = OWBD_SPECIES_CLASS_RULE_COUNT,
+    .speciesClassRuleSize = sizeof(OverworldWildBehaviorSpeciesClassRule),
+    .overrideProfilesOffset =
+        __builtin_offsetof(OverworldWildBehaviorDataBlob, overrideProfiles),
+    .overrideProfileCount = OWBD_OVERRIDE_PROFILE_COUNT,
+    .overrideProfileSize = sizeof(OverworldWildBehaviorOverrideProfile),
+    .overrideMembersOffset =
+        __builtin_offsetof(OverworldWildBehaviorDataBlob, overrideMembers),
+    .overrideMemberCount = OWBD_OVERRIDE_MEMBER_COUNT,
+    .overrideMemberSize = sizeof(u16),
+    .conditionEntriesOffset =
+        __builtin_offsetof(OverworldWildBehaviorDataBlob, conditionEntries),
+    .conditionEntryCount = OWBD_CONDITION_ENTRY_COUNT,
+    .conditionEntrySize = sizeof(OverworldWildBehaviorConditionEntry),
+    .surfaceModelsOffset =
+        __builtin_offsetof(OverworldWildBehaviorDataBlob, surfaceModels),
+    .surfaceModelCount = OWBD_SURFACE_MODEL_COUNT,
+    .surfaceModelSize = sizeof(OverworldWildSurfaceModelDirectoryEntry),
+    .surfaceInstancesOffset =
+        __builtin_offsetof(OverworldWildBehaviorDataBlob, surfaceInstances),
+    .surfaceInstanceCount = OWBD_SURFACE_INSTANCE_COUNT,
+    .surfaceInstanceSize = sizeof(OverworldWildSurfaceInstance),
+    .surfaceTemplatesOffset =
+        __builtin_offsetof(OverworldWildBehaviorDataBlob, surfaceTemplates),
+    .surfaceTemplateCount = OWBD_SURFACE_TEMPLATE_COUNT,
+    .surfaceTemplateSize = sizeof(OverworldWildSurfaceTemplate),
+};
+
 static BOOL BehaviorResolver_BlobValid(
     const OverworldWildBehaviorDataBlob *blob,
     u32 blobSize)
 {
-    const OverworldWildBehaviorDataBlobHeader *header;
+    const u8 *actual;
+    const u8 *expected = (const u8 *)&sExpectedBlobHeader;
+    u8 i;
 
     if (blob == NULL
-        || blobSize < sizeof(OverworldWildBehaviorDataBlobHeader)) {
+        || blobSize < sizeof(*blob)) {
         return FALSE;
     }
-    header = &blob->header;
-    return header->magic == OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC
-        && header->version == OVERWORLD_WILD_BEHAVIOR_DATA_VERSION
-        && header->headerSize == sizeof(*header)
-        && header->blobSize == sizeof(*blob)
-        && header->blobSize <= blobSize
-        && header->classProfilesOffset
-            == __builtin_offsetof(OverworldWildBehaviorDataBlob, classProfiles)
-        && header->classProfileCount == OWBD_CLASS_PROFILE_COUNT
-        && header->classProfileSize == sizeof(OverworldWildBehaviorProfileData)
-        && header->classRulesOffset
-            == __builtin_offsetof(OverworldWildBehaviorDataBlob, classRules)
-        && header->classRuleCount == OWBD_CLASS_RULE_COUNT
-        && header->classRuleSize == sizeof(OverworldWildBehaviorClassRule)
-        && header->speciesClassRulesOffset
-            == __builtin_offsetof(
-                OverworldWildBehaviorDataBlob,
-                speciesClassRules)
-        && header->speciesClassRuleCount == OWBD_SPECIES_CLASS_RULE_COUNT
-        && header->speciesClassRuleSize
-            == sizeof(OverworldWildBehaviorSpeciesClassRule)
-        && header->overrideProfilesOffset
-            == __builtin_offsetof(
-                OverworldWildBehaviorDataBlob,
-                overrideProfiles)
-        && header->overrideProfileCount == OWBD_OVERRIDE_PROFILE_COUNT
-        && header->overrideProfileSize
-            == sizeof(OverworldWildBehaviorOverrideProfile)
-        && header->overrideMembersOffset
-            == __builtin_offsetof(OverworldWildBehaviorDataBlob, overrideMembers)
-        && header->overrideMemberCount == OWBD_OVERRIDE_MEMBER_COUNT
-        && header->overrideMemberSize == sizeof(u16)
-        && header->conditionEntriesOffset
-            == __builtin_offsetof(
-                OverworldWildBehaviorDataBlob,
-                conditionEntries)
-        && header->conditionEntryCount == OWBD_CONDITION_ENTRY_COUNT
-        && header->conditionEntrySize
-            == sizeof(OverworldWildBehaviorConditionEntry)
-        && header->surfaceModelsOffset
-            == __builtin_offsetof(OverworldWildBehaviorDataBlob, surfaceModels)
-        && header->surfaceModelCount == OWBD_SURFACE_MODEL_COUNT
-        && header->surfaceModelSize
-            == sizeof(OverworldWildSurfaceModelDirectoryEntry)
-        && header->surfaceInstancesOffset
-            == __builtin_offsetof(
-                OverworldWildBehaviorDataBlob,
-                surfaceInstances)
-        && header->surfaceInstanceCount == OWBD_SURFACE_INSTANCE_COUNT
-        && header->surfaceInstanceSize == sizeof(OverworldWildSurfaceInstance)
-        && header->surfaceTemplatesOffset
-            == __builtin_offsetof(
-                OverworldWildBehaviorDataBlob,
-                surfaceTemplates)
-        && header->surfaceTemplateCount == OWBD_SURFACE_TEMPLATE_COUNT
-        && header->surfaceTemplateSize == sizeof(OverworldWildSurfaceTemplate);
+    actual = (const u8 *)&blob->header;
+    for (i = 0; i < sizeof(sExpectedBlobHeader); i++) {
+        if (actual[i] != expected[i]) {
+            return FALSE;
+        }
+    }
+    /* Every bank row is bounded; no global profile is hidden because its
+     * ordinal exceeds the width of one subject's public mask. */
+    if (blob->applicationBankDirectory[
+            OWBD_APPLICATION_BANK_DIRECTORY_COUNT - 1].species != 0xFFFF)
+        return FALSE;
+    return TRUE;
 }
 
 static u8 BehaviorResolver_SelectClassInternal(
@@ -797,7 +982,7 @@ static u8 BehaviorResolver_SelectClassInternal(
 #ifndef OVERWORLD_BEHAVIOR_RESOLVER_EXTERNAL_VALIDATOR
 static BOOL BehaviorResolver_ConditionMatches(
     const OverworldWildBehaviorDataBlob *blob,
-    u8 application,
+    u16 application,
     u16 conditionId,
     u8 targetKind,
     BOOL checkTargetKind)
@@ -827,18 +1012,22 @@ static BOOL BehaviorResolver_ConditionMatches(
 
 static BOOL BehaviorResolver_RequestValid(
     const OverworldWildBehaviorDataBlob *blob,
-    const BehaviorResolveRequest *request)
+    const BehaviorResolveRequest *request,
+    OverworldApplicationBank *validatedBank)
 {
     u32 validOverrideMask;
     u8 winningApplication = BEHAVIOR_RESOLVER_NO_APPLICATION;
+    OverworldApplicationBank selectedBank;
+    const OverworldApplicationBank *bank = &selectedBank;
     u16 i;
 
-    if (request == NULL) {
+    if (request == NULL || validatedBank == NULL) {
         return FALSE;
     }
-    validOverrideMask = blob->header.overrideProfileCount == 32
-        ? 0xFFFFFFFFu
-        : ((1u << blob->header.overrideProfileCount) - 1u);
+    if (!OverworldApplicationBank_Select(blob, request->context.species, &selectedBank))
+        return FALSE;
+    validOverrideMask = bank->count == OWBD_MASKABLE_APPLICATION_COUNT
+        ? 0xFFFFFFFFu : ((1u << bank->count) - 1u);
     if ((request->forcedOverrideMask & ~validOverrideMask) != 0
         || request->context.level > 100
         || request->context.terrain > OW_WILD_SPAWN_TERRAIN_FISHING
@@ -851,11 +1040,11 @@ static BOOL BehaviorResolver_RequestValid(
             > BEHAVIOR_RESOLVE_TARGET_ACTOR) {
         return FALSE;
     }
-    for (i = 0; i < blob->header.overrideProfileCount; i++) {
+    for (i = 0; i < bank->count; i++) {
         u32 bit = 1u << i;
 
         if ((request->activeConditionalMask & bit) != 0
-            && blob->overrideProfiles[i].profileKind
+            && OverworldApplicationBank_Profile(blob, bank, i)->profileKind
                 != OW_WILD_BEHAVIOR_PROFILE_KIND_CONDITIONAL) {
             return FALSE;
         }
@@ -863,7 +1052,7 @@ static BOOL BehaviorResolver_RequestValid(
             winningApplication = (u8)i;
         }
         if ((request->forcedOverrideMask & bit) != 0
-            && blob->overrideProfiles[i].profileKind
+            && OverworldApplicationBank_Profile(blob, bank, i)->profileKind
                 == OW_WILD_BEHAVIOR_PROFILE_KIND_CONDITIONAL) {
             return FALSE;
         }
@@ -874,7 +1063,7 @@ static BOOL BehaviorResolver_RequestValid(
         }
     } else if (!BehaviorResolver_ConditionMatches(
                    blob,
-                   winningApplication,
+                   OverworldApplicationBank_Global(bank, winningApplication),
                    request->winningConditionId,
                    0,
                    FALSE)) {
@@ -882,40 +1071,63 @@ static BOOL BehaviorResolver_RequestValid(
     }
     if (request->resolvedTarget.kind
             == BEHAVIOR_RESOLVE_TARGET_NONE) {
-        return request->targetSourceApplication
+        if (request->targetSourceApplication
                 == BEHAVIOR_RESOLVER_NO_APPLICATION
             && request->resolvedTargetConditionId
-                == BEHAVIOR_RESOLVER_NO_CONDITION;
+                == BEHAVIOR_RESOLVER_NO_CONDITION) {
+            *validatedBank = selectedBank;
+            return TRUE;
+        }
+        return FALSE;
     }
-    if (request->targetSourceApplication
-            >= blob->header.overrideProfileCount
+    if (request->targetSourceApplication >= bank->count
         || request->resolvedTargetConditionId
             == BEHAVIOR_RESOLVER_NO_CONDITION
         || (request->activeConditionalMask
             & (1u << request->targetSourceApplication)) == 0) {
         return FALSE;
     }
-    return BehaviorResolver_ConditionMatches(
+    if (!BehaviorResolver_ConditionMatches(
         blob,
-        request->targetSourceApplication,
+        OverworldApplicationBank_Global(bank, request->targetSourceApplication),
         request->resolvedTargetConditionId,
         request->resolvedTarget.kind,
-        TRUE);
+        TRUE))
+        return FALSE;
+    *validatedBank = selectedBank;
+    return TRUE;
 }
 #else
 static BOOL BehaviorResolver_RequestValid(
     const OverworldWildBehaviorDataBlob *blob,
-    const BehaviorResolveRequest *request)
+    const BehaviorResolveRequest *request,
+    OverworldApplicationBank *validatedBank)
 {
     const OverworldBehaviorConditionServiceEntry *service =
         OVERWORLD_BEHAVIOR_CONDITION_SERVICE_ENTRY;
 
+
     return service->magic == OVERWORLD_BEHAVIOR_CONDITION_SERVICE_MAGIC
         && service->version == OVERWORLD_BEHAVIOR_CONDITION_RUNTIME_VERSION
         && service->size == sizeof(*service)
-        && service->validateResolveRequest(blob, request);
+        && service->validateResolveRequest(blob, request, validatedBank);
 }
 #endif
+
+BehaviorResolveStatus OverworldBehaviorResolver_ValidateRequest(
+    const void *blobBytes, u32 blobSize, const BehaviorResolveRequest *request,
+    OverworldApplicationBank *bank)
+{
+    const OverworldWildBehaviorDataBlob *blob = blobBytes;
+    if (request == NULL || bank == NULL)
+        return BEHAVIOR_RESOLVE_INVALID_ARGUMENT;
+    if (!BehaviorResolver_BlobValid(blob, blobSize))
+        return BEHAVIOR_RESOLVE_INVALID_BLOB;
+    if (request->requestVersion != BEHAVIOR_RESOLVE_REQUEST_VERSION)
+        return BEHAVIOR_RESOLVE_UNSUPPORTED_REQUEST_VERSION;
+    return BehaviorResolver_RequestValid(blob, request, bank)
+        ? BEHAVIOR_RESOLVE_OK : BEHAVIOR_RESOLVE_INVALID_CONTEXT;
+}
 
 BehaviorResolveStatus BehaviorResolver_InspectClass(
     const void *blobBytes,
@@ -927,6 +1139,7 @@ BehaviorResolveStatus BehaviorResolver_InspectClass(
     const OverworldWildBehaviorDataBlob *blob =
         (const OverworldWildBehaviorDataBlob *)blobBytes;
     OverworldWildBehaviorContext context;
+    OverworldApplicationBank validatedBank;
 
     if (request == NULL || selection == NULL) {
         return BEHAVIOR_RESOLVE_INVALID_ARGUMENT;
@@ -943,7 +1156,7 @@ BehaviorResolveStatus BehaviorResolver_InspectClass(
     if (request->requestVersion != BEHAVIOR_RESOLVE_REQUEST_VERSION) {
         return BEHAVIOR_RESOLVE_UNSUPPORTED_REQUEST_VERSION;
     }
-    if (!BehaviorResolver_RequestValid(blob, request)) {
+    if (!BehaviorResolver_RequestValid(blob, request, &validatedBank)) {
         return BEHAVIOR_RESOLVE_INVALID_CONTEXT;
     }
 
@@ -972,7 +1185,12 @@ static __attribute__((noinline)) void BehaviorResolver_ApplyRecorded(
     BehaviorResolutionTrace *trace)
 {
     BehaviorResolver_ApplyOverride(profile, overrideProfile);
-    result->appliedOverrideMask |= 1u << index;
+    /* Linked Tired rows can follow the 32 maskable applications. Their
+     * physical byte index remains available in the trace, not in a mask. */
+    if (kind != BEHAVIOR_RESOLUTION_STEP_LANE_REFERENCE
+        && index < OWBD_MASKABLE_APPLICATION_COUNT) {
+        result->appliedOverrideMask |= 1u << index;
+    }
     BehaviorResolver_Trace(
         trace,
         lane,
@@ -1017,13 +1235,14 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
     const OverworldWildBehaviorDataBlob *blob =
         (const OverworldWildBehaviorDataBlob *)blobBytes;
     OverworldWildBehaviorContext context;
-    OverworldWildBehaviorProfileData owner;
-    OverworldWildBehaviorProfileData tired;
+    OverworldWildBehaviorProfileData *owner;
+    OverworldWildBehaviorProfileData *tired;
     BehaviorClassSelection classSelection;
+    OverworldApplicationBank bank;
     u32 applicableMask = 0;
     u32 conditionalMask = 0;
     u8 behaviorClass;
-    u8 tiredIndex;
+    u16 tiredIndex;
     u16 i;
     u32 hash;
 
@@ -1031,6 +1250,8 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
         return BEHAVIOR_RESOLVE_INVALID_ARGUMENT;
     }
     memset(result, 0, sizeof(*result));
+    owner = &result->profile.owner;
+    tired = &result->profile.tired;
     result->winningConditionId = BEHAVIOR_RESOLVER_NO_CONDITION;
     result->resolvedTargetConditionId = BEHAVIOR_RESOLVER_NO_CONDITION;
     result->targetSourceApplication = BEHAVIOR_RESOLVER_NO_APPLICATION;
@@ -1045,12 +1266,12 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
     if (request->requestVersion != BEHAVIOR_RESOLVE_REQUEST_VERSION) {
         return BEHAVIOR_RESOLVE_UNSUPPORTED_REQUEST_VERSION;
     }
-    if (!BehaviorResolver_RequestValid(blob, request)) {
+    if (!BehaviorResolver_RequestValid(blob, request, &bank)) {
         return BEHAVIOR_RESOLVE_INVALID_CONTEXT;
     }
 
     context = request->context;
-    memset(&classSelection, 0, sizeof(classSelection));
+    classSelection.matchedClassRuleMask = 0;
     behaviorClass = BehaviorResolver_SelectClassInternal(
         blob,
         &context,
@@ -1062,22 +1283,26 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
     result->matchedClassRuleMask = classSelection.matchedClassRuleMask;
     result->speciesClassRuleIndex = classSelection.speciesClassRuleIndex;
     result->forcedOverrideMask = request->forcedOverrideMask;
+    tiredIndex = blob->tiredClassGlobalIds[behaviorClass];
 
-    memcpy(&owner, &blob->classProfiles[behaviorClass], sizeof(owner));
-    BehaviorResolver_ResolveInheritedPolicies(&owner);
+    memcpy(owner, &blob->classProfiles[behaviorClass], sizeof(*owner));
+    BehaviorResolver_ResolveInheritedPolicies(owner);
+    memcpy(tired, owner, sizeof(*tired));
     BehaviorResolver_Trace(
         trace,
         BEHAVIOR_RESOLUTION_LANE_OWNER,
         BEHAVIOR_RESOLUTION_STEP_BASE,
         behaviorClass,
         BEHAVIOR_RESOLUTION_STEP_APPLIED,
-        &owner);
+        owner);
 
-    for (i = 0; i < blob->header.overrideProfileCount; i++) {
+    /* Blob validation proved the exact compiled table count. Only this
+     * compiled prefix can match, activate, or enter a mask. */
+    for (i = 0; i < bank.count; i++) {
         u32 bit = 1u << i;
         BOOL matched = BehaviorResolver_OverrideTargetsContext(
             &context,
-            &blob->overrideProfiles[i],
+            OverworldApplicationBank_Profile(blob, &bank, i),
             blob->overrideMembers,
             blob->header.overrideMemberCount);
 
@@ -1090,9 +1315,9 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
     }
 
     conditionalMask = request->activeConditionalMask;
-    for (i = 0; i < blob->header.overrideProfileCount; i++) {
+    for (i = 0; i < bank.count; i++) {
         const OverworldWildBehaviorOverrideProfile *overrideProfile =
-            &blob->overrideProfiles[i];
+            OverworldApplicationBank_Profile(blob, &bank, i);
         u32 bit = 1u << i;
         BOOL conditional = overrideProfile->profileKind
             == OW_WILD_BEHAVIOR_PROFILE_KIND_CONDITIONAL;
@@ -1112,7 +1337,7 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
             flags |= BEHAVIOR_RESOLUTION_STEP_CONDITIONAL;
         }
         BehaviorResolver_ApplyRecorded(
-            &owner,
+            owner,
             overrideProfile,
             i,
             BEHAVIOR_RESOLUTION_LANE_OWNER,
@@ -1122,10 +1347,13 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
             flags,
             result,
             trace);
+        if (overrideProfile->mask3 & OW_WILD_BEHAVIOR_OVERRIDE3_TIRED_PROFILE)
+            tiredIndex = blob->tiredOverrideGlobalIds[
+                OverworldApplicationBank_Global(&bank, i)];
         if (overrideProfile->mask
             & OW_WILD_BEHAVIOR_OVERRIDE_OVERWORLD_LIMIT) {
-            result->behaviorLimitKey =
-                (u8)(RESOLVER_OVERRIDE_LIMIT_KEY_BASE + i);
+            result->behaviorLimitKey = blob->applicationLimitKeys[
+                OverworldApplicationBank_Global(&bank, i)];
         }
     }
     result->conditionalOverrideMask = conditionalMask;
@@ -1143,27 +1371,24 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
             request->targetSourceApplication;
     }
 
-    tiredIndex = owner.tiredProfile;
     if (tiredIndex >= blob->header.overrideProfileCount) {
         tiredIndex = OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_REST;
     }
 
-    memcpy(&tired, &blob->classProfiles[behaviorClass], sizeof(tired));
-    BehaviorResolver_ResolveInheritedPolicies(&tired);
     BehaviorResolver_Trace(
         trace,
         BEHAVIOR_RESOLUTION_LANE_TIRED,
         BEHAVIOR_RESOLUTION_STEP_BASE,
         behaviorClass,
         BEHAVIOR_RESOLUTION_STEP_APPLIED,
-        &tired);
+        tired);
 
-    for (i = 0; i < blob->header.overrideProfileCount; i++) {
+    for (i = 0; i < bank.count; i++) {
         u32 bit = 1u << i;
         u8 flags;
 
         if ((applicableMask & bit) == 0
-            || blob->overrideProfiles[i].profileKind
+            || OverworldApplicationBank_Profile(blob, &bank, i)->profileKind
                 != OW_WILD_BEHAVIOR_PROFILE_KIND_NORMAL) {
             continue;
         }
@@ -1173,10 +1398,10 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
         if (request->forcedOverrideMask & bit) {
             flags |= BEHAVIOR_RESOLUTION_STEP_FORCED;
         }
-        if (i != tiredIndex) {
+        if (OverworldApplicationBank_Global(&bank, i) != tiredIndex) {
             BehaviorResolver_ApplyRecorded(
-                &tired,
-                &blob->overrideProfiles[i],
+                tired,
+                OverworldApplicationBank_Profile(blob, &bank, i),
                 i,
                 BEHAVIOR_RESOLUTION_LANE_TIRED,
                 BEHAVIOR_RESOLUTION_STEP_NORMAL_OVERRIDE,
@@ -1186,7 +1411,7 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
         }
     }
     BehaviorResolver_ApplyRecorded(
-        &tired,
+        tired,
         &blob->overrideProfiles[tiredIndex],
         tiredIndex,
         BEHAVIOR_RESOLUTION_LANE_TIRED,
@@ -1194,16 +1419,16 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
         0,
         result,
         trace);
-    for (i = 0; i < blob->header.overrideProfileCount; i++) {
+    for (i = 0; i < bank.count; i++) {
         u32 bit = 1u << i;
 
         if ((conditionalMask & bit) == 0) {
             continue;
         }
-        if (i != tiredIndex) {
+        if (OverworldApplicationBank_Global(&bank, i) != tiredIndex) {
             BehaviorResolver_ApplyRecorded(
-                &tired,
-                &blob->overrideProfiles[i],
+                tired,
+                OverworldApplicationBank_Profile(blob, &bank, i),
                 i,
                 BEHAVIOR_RESOLUTION_LANE_TIRED,
                 BEHAVIOR_RESOLUTION_STEP_CONDITIONAL_OVERRIDE,
@@ -1213,9 +1438,6 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
         }
     }
 
-    memset(&result->profile, 0, sizeof(result->profile));
-    memcpy(&result->profile.owner, &owner, sizeof(owner));
-    memcpy(&result->profile.tired, &tired, sizeof(tired));
     BehaviorResolver_NormalizeProfile(&result->profile);
     BehaviorResolver_Trace(
         trace,
@@ -1243,6 +1465,8 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
         sizeof(result->behaviorClass));
     hash = BehaviorResolver_FingerprintU32(hash, applicableMask);
     hash = BehaviorResolver_FingerprintU32(hash, conditionalMask);
+    hash = BehaviorResolver_FingerprintBytes(hash, bank.globalIds,
+        (u32)bank.count * sizeof(bank.globalIds[0]));
     hash = BehaviorResolver_FingerprintBytes(
         hash,
         &request->requestVersion,
@@ -1272,6 +1496,15 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
         &result->primitives,
         sizeof(result->primitives));
     result->fingerprint = hash;
+    if (trace != NULL) {
+        for (i = 0; i < trace->count; ++i) {
+            BehaviorResolutionStep *step = &trace->steps[i];
+            if ((step->kind == BEHAVIOR_RESOLUTION_STEP_NORMAL_OVERRIDE
+                    || step->kind == BEHAVIOR_RESOLUTION_STEP_CONDITIONAL_OVERRIDE)
+                && step->sourceIndex < bank.count)
+                step->sourceIndex = bank.globalIds[step->sourceIndex];
+        }
+    }
 
     return trace != NULL && trace->dropped != 0
         ? BEHAVIOR_RESOLVE_TRACE_TRUNCATED

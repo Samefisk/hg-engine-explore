@@ -31,7 +31,7 @@ def fixture():
         bit = {101:2048,103:2048,105:4,107:16}.get(frame,0)
         s["selector"].update(rawHeld=bit,rawNew=bit,newKeys=bit,heldKeys=bit)
         if frame == 107:
-            a.update(motionPhase="MOVING",motionKind="HOP",motionDuration=3)
+            a.update(motionPhase="MOVING",motionKind="WALK",motionDuration=3)
         if frame >= 108:
             a.update(commitSequence=1,logical=[2,1])
         snapshots.append(s)
@@ -42,8 +42,8 @@ def fixture():
         events.append(e)
     handle=initial["actors"][0]["handle"]
     for seq,(frame,name,a,b) in enumerate([(106,"ACTOR_REBOUND",2,3),(106,"CONTROL_REBOUND",0,1),
-            (107,"MOTION_STARTED",2,3),(108,"LOGICAL_COMMIT",1,2),
-            (109,"MOTION_FINISHED",1,2),(110,"CONTROL_RETURNED",1,1)],1):
+            (107,"MOTION_STARTED",1,3),(108,"LOGICAL_COMMIT",1,1),
+            (109,"MOTION_FINISHED",1,1),(110,"CONTROL_RETURNED",1,1)],1):
         events.append(dict(frame=frame,kind="native",data=dict(event=name,reason="OK",valueA=a,valueB=b,
             traceStream=1,sequence=seq,actorHandle=handle["value"],actor={k:v for k,v in handle.items() if k!="value"})))
     return [dict(boundarySnapshot=snapshots[0]),dict(samples=snapshots[1:],events=events,completedGameFrames=11)]
@@ -63,10 +63,10 @@ class MountBeginMeasurementTests(unittest.TestCase):
         self.assertEqual(registration["recorderControlRequirement"],"shared.owner-reader-control-v1")
         rows=fixture();chunk=rows.pop()
         actions={101:"open-y-menu",102:"release-y",103:"confirm-current-follower",104:"wait-current-slot",
-                 105:"press-select",106:"wait-current-mount",107:"request-one-hop"}
+                 105:"press-select-during-run",106:"wait-current-mount",107:"request-one-step"}
         for sample in chunk["samples"]:
             frame=sample["frame"]
-            rows.append(dict(phase="observe",action=actions.get(frame,"wait-hop-terminal"),samples=[sample],
+            rows.append(dict(phase="observe",action=actions.get(frame,"wait-step-terminal"),samples=[sample],
                              completedGameFrames=1,events=[e for e in chunk["events"] if e["frame"]==frame]))
         result=control._shared_mount_begin(test,rows,dict(sessionId="session-host",
             sessionCleanup=dict(sessionId="session-host",closed=True,errors=[])),root)

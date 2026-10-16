@@ -61,7 +61,7 @@ class BridgeFixture:
         self.native_bridge_active = False
         self.native_trampoline_in_use = False
         self.native_heap_generation = 0
-        self.memory.update({0x02001000 + index: value for index, value in enumerate(bytes.fromhex("244b254a"))})
+        self.memory.update({0x02001000 + index: value for index, value in enumerate(bytes.fromhex("254b264a"))})
         self.write(0x027E3FFC, struct.pack("<I", 0x01FF8000))
         self.started, self.closed, self.steps, self.invocations = False, False, 0, []
         self.thread = {"pointer": 0x021E1000, "id": 0, "state": 1,
@@ -546,6 +546,68 @@ continuation:
             with self.assertRaisesRegex(DevtoolsFailure, "not unique"):
                 _elf_function_extent(path, "Absent")
 
+    def test_create_box_checkpoint_layout_keeps_full_identity_and_exact_sites(self):
+        address = 0x023DBFA0
+        offsets = (("init", 0x18), ("fast-mode", 0x20), ("personality-override", 0x2E),
+                   ("species-name", 0xBE), ("level-exp", 0xC8),
+                   ("personal-data", 0xDE), ("moveset", 0x1B0))
+        body = bytearray(612)
+        for _name, offset in offsets:
+            struct.pack_into("<HH", body, offset, 0xF000, 0xF800)
+        body = bytes(body)
+        stock = bytearray(0x71400)
+        struct.pack_into("<I", stock, 0x940, 0x02002000)
+        struct.pack_into("<3I", stock, 0x2000, 0x02003000, 0x0200300C, 0x02004000)
+        struct.pack_into("<3I", stock, 0x3000, 0x01FF8000, 0x1AC, 0)
+        struct.pack_into("<I", stock, 0x41A8, 0x021E16A0)
+        struct.pack_into("<I", stock, 0x713C, 0x02008000)
+        itcm = bytes(stock[0x4000:0x41AC])
+        module = "tools.overworld.devtools_runtime."
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "base").mkdir()
+            (root / "base/arm9.bin").write_bytes(stock)
+
+            def observe(live_body=body, packaged_body=body, linked_body=body):
+                session = DevtoolsSession.__new__(DevtoolsSession)
+                session.emu = object()
+                regions = [(0x02000000, bytes(stock)), (0x01FF8000, itcm),
+                           (address, live_body), (0x027E3FFC, struct.pack("<I", 0x01FF8000))]
+                def read(at, size):
+                    return next((data[at-base:at-base+size] for base, data in regions
+                                 if base <= at and at + size <= base + len(data)), bytes(size))
+                session.read = read
+                session.code_regions = [(0x02000000, bytes(stock)), (address, packaged_body)]
+                session.rt = SimpleNamespace(REPO=root, MOUNT_SYMBOLS={"CreateBoxMonData": address+1},
+                    linked_symbol=lambda symbols, name: symbols[name],
+                    actor_memory_read=lambda _emu, at, size: read(at, size))
+                with patch(module+"_elf_function_extent", return_value=(address, len(linked_body))), \
+                        patch(module+"_elf_code", return_value=linked_body):
+                    points = session._native_checkpoint_points()
+                return points, session.native_dependency_checks
+
+            points, identity = observe()
+            expected = [("create-box-mon-entry", address)]
+            for name, offset in offsets:
+                expected.extend(((f"create-box-internal-{name}-call", address+offset),
+                                 (f"create-box-internal-{name}-return", address+offset+4)))
+            self.assertEqual([point for point in points if point[0].startswith("create-box")], expected)
+            self.assertEqual(identity["createBoxMonData"]["size"], 612)
+            self.assertTrue(identity["createBoxMonData"]["liveMatchesLinkedAndRom"])
+            with self.assertRaisesRegex(DevtoolsFailure, "internal observation layout differs"):
+                observe(body[:584], body[:584], body[:584])
+            for name, offset in offsets:
+                with self.subTest(name=name):
+                    mutant = bytearray(body)
+                    mutant[offset:offset+4] = bytes(4)
+                    with self.assertRaisesRegex(DevtoolsFailure, name+" is not a Thumb BL"):
+                        observe(bytes(mutant), bytes(mutant), bytes(mutant))
+            mutant = bytearray(body); mutant[-1] = 1
+            with self.assertRaisesRegex(DevtoolsFailure, "checkpoint differs"):
+                observe(linked_body=bytes(mutant))
+            with self.assertRaisesRegex(DevtoolsFailure, "differs from ROM"):
+                observe(live_body=bytes(mutant))
+
     def test_irq_return_records_saved_resume_and_spsr_without_changing_frame(self):
         fixture = BridgeFixture()
         fixture.regs.__class__ = SignedRegisters
@@ -861,7 +923,7 @@ continuation:
 
     def test_unreviewed_return_instruction_rejected_before_dispatch(self):
         fixture = BridgeFixture()
-        fixture.memory[0x02001000] = 0
+        fixture.memory[0x02001001] = 0
         def recipe(_scratch):
             yield Call("set_mon", (1, 2, 3))
         with self.assertRaisesRegex(DevtoolsFailure, "literal-load seam"):
@@ -984,6 +1046,8 @@ class FreshObservationTests(unittest.TestCase):
             ACTOR_DESCRIPTOR={"state": {"address": 0x02300000}},
             player_ptr=lambda _emu: 123, object_state=lambda *_args: {"x": 12, "y": 13},
             loaded_terrain_cell=lambda *_args: None, loaded_warp_events=lambda _emu: [],
+            loaded_events_digest=lambda _emu: {"known": False, "reason": "fixture"},
+            loaded_land_models=lambda _emu: {"known": False, "reason": "fixture"},
             loaded_surface_cell=lambda *_args: None,
             field_map_id=lambda _emu: 33, unsigned=lambda _emu, _address, _size: 2)
         value = session.terrain(0)["terrain"]
@@ -1003,6 +1067,8 @@ class FreshObservationTests(unittest.TestCase):
         session.rt = SimpleNamespace(EXECUTED_FRAME_COUNT=83,
             ACTOR_DESCRIPTOR={"state": {"address": 0x02300000}},
             loaded_terrain_cell=read_cell, loaded_warp_events=lambda _emu: [],
+            loaded_events_digest=lambda _emu: {"known": False, "reason": "fixture"},
+            loaded_land_models=lambda _emu: {"known": False, "reason": "fixture"},
             loaded_surface_cell=lambda *_args: None,
             field_map_id=lambda _emu: 34, unsigned=lambda _emu, _address, _size: 2)
         value = session.terrain(0, x=558, z=373)["terrain"]
@@ -1208,19 +1274,23 @@ class SelectorInputTests(unittest.TestCase):
                 observation["rawHeld"], observation["rawNew"] = current, current & ~old
                 if not current:
                     observation["flags"] = 0
-                if observation["newKeys"] and not missing_press:
+                pressed = 0 if missing_press else observation["newKeys"]
+                if pressed:
                     edges.append(current)
-                    if current == 1:
-                        observation["state"] = 2 if observation["state"] == 0 else 0
-                        if observation["state"] == 0:
-                            observation["queue"] = {"request": 0x80 | observation["highlight"], "count": 0}
-                            observation["flags"] = 0x80
-                    elif current == 2:
-                        observation["highlight"] = (observation["highlight"] + 1) % 6
-                    elif current == 4:
-                        observation["state"] = 0
-                        observation["queue"] = {"request": 0xC0 | observation["highlight"], "count": 0}
-                        observation["flags"] = 0x80
+                # Hold Y opens; releasing Y confirms; R cycles and Select
+                # mounts while the menu is open.
+                if pressed & 1 and observation["state"] == 0:
+                    observation["state"] = 2
+                elif observation["state"] == 2 and pressed & 4:
+                    observation["state"] = 0
+                    observation["queue"] = {"request": 0xC0 | observation["highlight"], "count": 0}
+                    observation["flags"] = 0x80
+                elif observation["state"] == 2 and old & 1 and not current & 1:
+                    observation["state"] = 0
+                    observation["queue"] = {"request": 0x80 | observation["highlight"], "count": 0}
+                    observation["flags"] = 0x80
+                elif observation["state"] == 2 and pressed & 2:
+                    observation["highlight"] = (observation["highlight"] + 1) % 6
             if cycles[0] % 2 == 0:
                 session.completed_frames += 1
                 session.latest_frame["frame"] = session.completed_frames
@@ -1232,7 +1302,8 @@ class SelectorInputTests(unittest.TestCase):
         result = session._select_party_subject(0, "FOLLOWER")
         self.assertTrue(result["passed"])
         self.assertEqual(result["selections"], [2, 3, 4, 5, 0])
-        self.assertEqual(edges, [1, 2, 2, 2, 2, 1])
+        # R presses happen with Y still held; the Y release confirms.
+        self.assertEqual(edges, [1, 3, 3, 3, 3])
         self.assertEqual(result["confirmation"]["queue"]["request"], 0x80)
         self.assertEqual(masks[-1], 0)
         self.assertGreater(result["inputs"][1]["nativeCycles"], 3)
@@ -1246,7 +1317,7 @@ class SelectorInputTests(unittest.TestCase):
         session, _, edges, _ = self.fixture()
         result = session._select_party_subject(2, "MOUNTED")
         self.assertTrue(result["passed"])
-        self.assertEqual(edges, [1, 4])
+        self.assertEqual(edges, [1, 5])
         self.assertEqual(result["confirmation"]["queue"]["request"], 0xC2)
 
     def test_unconsumed_key_fails_bounded_and_always_releases(self):
@@ -1261,7 +1332,9 @@ class SelectorInputTests(unittest.TestCase):
         session, masks, edges, _ = self.fixture(stuck_release=True)
         result = session._select_party_subject(0, "FOLLOWER")
         self.assertFalse(result["passed"])
-        self.assertEqual(edges, [1])
+        # The confirming Y release never reaches native input.
+        self.assertEqual(result["reason"], "selector-input-timeout")
+        self.assertEqual(edges, [1, 3, 3, 3, 3])
         self.assertEqual(masks[-1], 0)
 
     def test_confirmed_release_is_not_blocked_only_by_retained_task_poll_gate(self):
@@ -1311,6 +1384,78 @@ class SelectorInputTests(unittest.TestCase):
         self.assertIsNone(before())
         after(context)
         self.assertIsNone(session.selected_follower_observation)
+
+
+class NativeWildPreparedSpawnAbiTests(unittest.TestCase):
+    def test_current_arm_prepared_spawn_layout(self):
+        cc = shutil.which("arm-none-eabi-gcc")
+        if not cc:
+            self.skipTest("ARM header compiler unavailable")
+        root = Path(__file__).resolve().parents[2]
+        source = '#include "overworld_wild_helper.h"\n'
+        source += '_Static_assert(sizeof(void *)==4,"ARM pointers");\n'
+        source += '_Static_assert(sizeof(OverworldWildPreparedSpawn)==260,"prepared size");\n'
+        for name, offset in (("position", 0), ("encounter", 12), ("startup", 20),
+                             ("behaviorResolution", 36), ("savedShinySlot", 252),
+                             ("shiny", 256), ("playerBallCatchValue", 257)):
+            source += (f'_Static_assert(__builtin_offsetof(OverworldWildPreparedSpawn,{name})'
+                       f'=={offset},"{name}");\n')
+        result = subprocess.run([cc, "-std=c11", "-mthumb", "-mcpu=arm946e-s",
+                                 "-I" + str(root / "include"), "-x", "c", "-fsyntax-only", "-"],
+                                input=source, capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr[-2000:])
+
+    def test_production_wild_setup_passes_current_struct_to_both_native_calls(self):
+        fixture = BridgeFixture()
+        session = DevtoolsSession.__new__(DevtoolsSession)
+        session.emu, session.completed_frames = fixture.emu, 10
+        session.rt = SimpleNamespace(WILD_STATE=0x023DF960,
+            player_ptr=lambda _emu: 0x02110000,
+            object_state=lambda *_args: {"x": 572, "y": 410},
+            loaded_terrain_cell=lambda *_args: {"loaded": True},
+            wild_spawn=lambda _emu, slot: {"active": slot == 0})
+        session._prepared_personality = lambda _args: 123
+        session.field_pointer = fixture.field_pointer
+        session.read = fixture.read
+        writes, callees = [], []
+        def write(address, data):
+            writes.append((address, bytes(data)))
+            fixture.write(address, data)
+        session.write = write
+        def native_callee():
+            scratch = struct.unpack("<I", fixture.read(fixture.regs.sp, 4))[0]
+            callees.append(scratch)
+            self.assertEqual(struct.unpack("<ii", fixture.read(scratch, 8)), (570, 404))
+            self.assertEqual(struct.unpack("<i", fixture.read(scratch + 252, 4))[0], -1,
+                             "prepared spawn must not consume saved-shiny slot zero")
+            self.assertEqual(fixture.read(scratch + 256, 4), bytes(4))
+            if len(callees) == 1:
+                self.assertEqual(struct.unpack("<IHBB", fixture.read(scratch + 12, 8)),
+                                 (123, 143, 0, 5))
+                fixture.write(scratch + 12, struct.pack("<I", 321))
+            else:
+                self.assertEqual(struct.unpack("<I", fixture.read(scratch + 12, 4))[0], 321)
+        fixture.on_callee = native_callee
+        session.bridge = SimpleNamespace(run=lambda recipe: FieldReturnBridge(fixture).run(recipe))
+        snapshot = {"actors": [{"identityVerified": True, "role": "WILD",
+            "handle": {"slot": 1}, "subjectIdentity": 321, "species": 143}]}
+        def wait(_frame, predicate, **_options):
+            self.assertTrue(predicate(snapshot))
+            return snapshot
+        session._wait_new_frame = wait
+        session._prepared_result_boundary = lambda receipt: receipt
+        result = session.spawn({"role": "wild", "species": 143, "level": 5, "x": 570, "z": 404})
+        self.assertEqual(len(writes), 1)
+        self.assertEqual(len(writes[0][1]), 260)
+        self.assertEqual(callees, [writes[0][0], writes[0][0]])
+        self.assertEqual([call["routine"] for call in result["calls"]],
+                         ["finalize_spawn", "spawn_encounter"])
+        for call in result["calls"]:
+            self.assertEqual(call["entryArguments"],
+                             [0x023DF960, fixture.field_pointer(), 0, 1, writes[0][0]])
+        self.assertEqual(result["value"], {"slot": 1, "species": 143,
+                         "personality": 321, "requestedPersonality": 123})
+        self.assertFalse(fixture.closed)
 
 
 class NativeFollowerSetupTests(unittest.TestCase):
@@ -1647,6 +1792,68 @@ class PartyAllocationTests(unittest.TestCase):
 
 
 class ValueTests(unittest.TestCase):
+    def packaged_code_session(self):
+        session = DevtoolsSession.__new__(DevtoolsSession)
+        session.emu = object()
+        code = bytes(range(214))
+        session.code_regions = [(0x01FFF980, code), (0x02301000, code)]
+        memory = {base+i: value for base, data in session.code_regions
+                  for i, value in enumerate(data)}
+        native_reads, guarded_reads = [], []
+        def native_read(_emu, address, size):
+            native_reads.append((address, size))
+            return bytes(memory.get(address+i, 0) for i in range(size))
+        def guarded_read(address, size):
+            guarded_reads.append((address, size))
+            return DevtoolsSession.read(session, address, size)
+        session.rt = SimpleNamespace(actor_memory_read=native_read)
+        session.read = guarded_read
+        return session, code, memory, native_reads, guarded_reads
+
+    def test_packaged_code_reads_exact_itcm_capsule_and_keeps_mainram_read_path(self):
+        session, code, _, native_reads, guarded_reads = self.packaged_code_session()
+        self.assertEqual(session.packaged_code(0x01FFF980, 214), code)
+        self.assertEqual(guarded_reads, [])
+        self.assertEqual(native_reads, [(0x01FFF980, 214)])
+        self.assertEqual(session.packaged_code(0x02301000, 214), code)
+        self.assertEqual(guarded_reads, [(0x02301000, 214)])
+        self.assertEqual(native_reads, [(0x01FFF980, 214), (0x02301000, 214)])
+
+    def test_packaged_code_rejects_changed_live_package_and_unmatched_spans(self):
+        for address in (0x01FFF980, 0x02301000):
+            for fault in ('live', 'package', 'missing', 'overrun'):
+                with self.subTest(address=address, fault=fault):
+                    session, code, memory, native_reads, _ = self.packaged_code_session()
+                    size = len(code)
+                    if fault == 'live': memory[address+213] ^= 1
+                    elif fault == 'package':
+                        session.code_regions = [(address, code[:-1]+b'!')]
+                    elif fault == 'missing': session.code_regions = []
+                    else: size += 1
+                    with self.assertRaisesRegex(DevtoolsFailure,
+                            'outside packaged code' if fault in ('missing', 'overrun') else 'differs from ROM'):
+                        session.packaged_code(address, size)
+                    if fault in ('missing', 'overrun'):
+                        self.assertEqual(native_reads, [])
+
+    def test_packaged_itcm_code_does_not_expand_data_bounds_or_read_closed_session(self):
+        session, code, _, native_reads, guarded_reads = self.packaged_code_session()
+        with self.assertRaisesRegex(DevtoolsFailure, 'outside main RAM/public stack'):
+            session.read(0x01FFF980, len(code))
+        self.assertEqual(native_reads, [])
+        # A package candidate outside ITCM/Main RAM must still go through the
+        # unchanged general guard, not gain arbitrary-address native access.
+        session.code_regions.append((0x01000000, code))
+        with self.assertRaisesRegex(DevtoolsFailure, 'outside main RAM/public stack'):
+            session.packaged_code(0x01000000, len(code))
+        self.assertIn((0x01000000, len(code)), guarded_reads)
+        self.assertEqual(native_reads, [])
+        session.emu = None
+        with self.assertRaisesRegex(DevtoolsFailure, 'session is closed') as caught:
+            session.packaged_code(0x01FFF980, len(code))
+        self.assertEqual(caught.exception.code, 'closed')
+        self.assertEqual(native_reads, [])
+
     def test_empty_transport_never_calls_pydesmume(self):
         session = DevtoolsSession.__new__(DevtoolsSession)
         session.emu, session.prepared = object(), True
@@ -2227,6 +2434,7 @@ class TraceAndClockTests(unittest.TestCase):
             original_cycle(frames)
         session.cycle = cycle
         started = session.record_start(60)
+        self.assertFalse(session._throw_interactions_window)
         self.assertTrue(started["recording"])
         self.assertFalse(session.prepared)
         self.assertIn("window-started", notices(started["events"]))
@@ -2242,6 +2450,32 @@ class TraceAndClockTests(unittest.TestCase):
         self.assertFalse(session.prepared)
         self.assertIn("window-ended", notices(stopped["events"]))
         self.assertEqual(ring.values()[13], 0)
+
+    def test_throw_interaction_reads_are_limited_to_the_requested_record_window(self):
+        session, _ = self.fixture()
+        session.native_observation = SimpleNamespace(drain=lambda: [])
+        with patch("tools.overworld.devtools_query_observer.NativeQueryObserver") as reader:
+            session.record_start(60, throw_interactions=True)
+        self.assertTrue(session._throw_interactions_window)
+        with self.assertRaisesRegex(DevtoolsFailure, "already active"):
+            session.record_start(60, throw_interactions=True)
+        session.record_stop()
+        self.assertFalse(session._throw_interactions_window)
+        reader.return_value.close.assert_called_once()
+
+    def test_throw_interaction_failed_start_does_not_leave_reader_enabled(self):
+        session, _ = self.fixture()
+        def failed_start(*args):
+            raise DevtoolsFailure("test-start", "start failed")
+        session._record_control = failed_start
+        session.native_observation = SimpleNamespace(drain=lambda: [])
+        with patch("tools.overworld.devtools_query_observer.NativeQueryObserver") as reader:
+            with self.assertRaisesRegex(DevtoolsFailure, "start failed"):
+                session.record_start(60, throw_interactions=True)
+        reader.return_value.close.assert_called_once()
+        self.assertFalse(session._throw_interactions_window)
+        with self.assertRaisesRegex(DevtoolsFailure, "must be boolean"):
+            session.record_start(60, throw_interactions=1)
 
     def test_instrumentation_transport_rejects_other_addresses_and_nonzero_ring(self):
         session, ring = self.fixture()

@@ -68,15 +68,25 @@ A stable ordered use of one profile. A normal application owns its Pokémon
 target. A conditional application has no normal assignment; its condition
 entries own their subject pools. System applications are linked by their
 runtime owner and cannot be assigned as normal Pokémon layers.
+An application can be disabled in authoring. Its saved identity, profile and
+order stay intact, but it contributes no runtime row or condition. Runtime
+bindings and Tired links must keep their referenced applications enabled.
 _Avoid as a synonym_: Profile, per-Pokémon copy
 
 **Profile classification**:
 The profile's place in composition order. The saved classifications are
-Routine, Placement, Capability, Attitude, Modifier, System, and Utility, in
-that order. Conditional is independent of classification. An archetype is only
+Moods, Routine, Style, Placement, Follower, Capability, Attacks, Attitude,
+Follower/Mount, and Modifier, in that order. Follower's early position lets an active Capability
+replace normal following. Conditional is independent of classification. An archetype is only
 informal shorthand for a complete composition; it is not a saved
 classification.
 _Avoid as a synonym_: Profile kind, condition type
+
+**Mood**:
+A reusable early behavior building block. Moods compose before Routines. A
+classification alone changes no behavior; Angry starts with no fields,
+conditions or assigned Pokémon.
+_Avoid as a synonym_: Attitude, condition
 
 **Routine**:
 The actor's ordinary movement language and rhythm, such as Meander, Sprint, or
@@ -84,18 +94,26 @@ Small Bird Hop.
 _Avoid as a synonym_: Archetype, root profile
 
 **Placement**:
-A reusable spawn or world-placement rule, such as Fly In, Canopy Access, or
+A reusable spawn or world-placement rule, such as Fly In, Canopy Access, Rooftop
+Access, or
 Flower Bed. It does not state the actor's ordinary intent.
 _Avoid as a synonym_: Routine, encounter terrain
 
 **Capability**:
-One reusable ability or permission, such as Teleport, Long Hop, Throw, or Ram.
+One reusable ability or permission, such as Teleport, Long Hop, Heavy Stomp,
+or the non-damaging Find Throw Cargo and Find Throw Position stages.
 A conditional Capability owns the condition that makes the ability apply.
 _Avoid as a synonym_: Routine, attitude
 
+**Attack**:
+A behavior building block that can enable collision damage. Attacks compose
+immediately after Capabilities. The tag alone does not grant damage: the
+resolved attacking flag, contact, damage and impact-speed rules still apply.
+_Avoid as a synonym_: Damage category, combat engine
+
 **Attitude**:
 One reusable response or relationship to a target or world fact, such as
-Playful, Startled, Ambush, or Skittish.
+Playful, Startled, or Skittish.
 _Avoid as a synonym_: Personality value, controller state
 
 **Modifier**:
@@ -105,9 +123,11 @@ _Avoid as a synonym_: Capability, controller state
 
 **System profile**:
 A runtime-owned role adaptation, such as Follower or Mounted. It is linked by
-its runtime owner and cannot be assigned as a normal Pokémon layer. Mounted is
-an empty override, so the selected Pokémon's resolved behavior stays inherited
-during a mount session.
+its runtime owner and cannot be assigned as a normal Pokémon layer. Follower
+uses the early Follower classification; Mounted uses Follower/Mount. Mounted
+sets Movement Chain to Off through its visible profile settings. Its speed
+settings also apply; fields without local overrides stay inherited from the
+selected Pokémon during a mount session.
 _Avoid as a synonym_: Role, mount session
 
 **Utility**:
@@ -150,6 +170,21 @@ The one player or generation-safe actor selected when an entry activates. A
 target-required entry cannot activate without one. A stale captured target ends
 that activation.
 _Avoid as a synonym_: Object pointer, target slot
+
+**Object of interest**:
+The full identity captured by the condition that starts a shared reaction.
+Throw stages read this identity's current position. A profile may use it as
+the aim or select it as Cargo to throw away from the player. Selecting Cargo
+cannot replace it. The stored `trigger` key remains for compatibility.
+_Avoid as a synonym_: Cargo, player position
+
+**Cargo**:
+The full identity selected for pickup and Throw. An explicit profile selector
+may choose Object of Interest itself. Selection does not
+stop its profiles or accepted motion. Legal pickup changes it to held actor control.
+An unheld pickup claim identifies a pursuit; it does not restrict the target's
+normal conditions, actions or movement.
+_Avoid as a synonym_: idle target
 
 **Duration**:
 The number of actor-system frames that a timed condition remains active after
@@ -202,6 +237,13 @@ descends to one prevalidated destination surface, lands at that surface's exact
 height, and then hands control to the normal Routine.
 _Avoid as a synonym_: Long Hop, Hop From Off Screen
 
+**Jump**:
+A profile ability: a forward Hop of 2-8 tiles whose reach follows the current
+nominal Walk speed and whose arc clears only obstacles below a capped height. The rider
+starts it with B; Wild and Follower actors start it only when the arc clears.
+A mounted Jump that cannot reach lands short and crashes.
+_Avoid as a synonym_: obstacle Hop, Long Hop
+
 ## Motion and world state
 
 **Intent**:
@@ -251,6 +293,31 @@ _Avoid as a synonym_: Map ID check
 **Rebind**:
 Attach an existing logical actor to replacement engine presentation objects after a field-context change.
 _Avoid as a synonym_: Respawn, reload
+
+**Trainer HP**:
+The player's separate health value outside battle. A wild Pokémon contact can
+lower it; Pokémon party HP remains under the game's existing owner.
+_Avoid as a synonym_: Pokémon HP, actor health
+
+**Attacking**:
+A resolved behavior profile switch that permits a wild Pokémon collision with
+the player to deal its profile's `collisionDamage`, if the impact meets the
+optional `minImpactSpeed`. A Ram or Throw movement label alone grants no damage.
+For a ground Walk, impact speed is the last completed tile step, not the next
+planned step. With no speed gate, a collision can deal damage from rest.
+An ordinary wild Hop follows the same profile rule. A player step blocked by
+an attacking wild actor is contact; merely standing beside it is not.
+_Avoid as a synonym_: Ram state, Throw state, battle trigger
+
+**Healing point**:
+The last place where a Pokémon Center or home rest finished healing the
+trainer. A trainer blackout returns there. A map entry alone does not change it.
+_Avoid as a synonym_: Stock battle-blackout spawn, current map
+
+**Trainer protection**:
+The one-second interval after an accepted trainer hit that rejects further
+attack damage and attack-driven movement. It uses eligible field frames.
+_Avoid as a synonym_: Pokémon invulnerability, actor cooldown
 
 ## Proof and diagnosis
 

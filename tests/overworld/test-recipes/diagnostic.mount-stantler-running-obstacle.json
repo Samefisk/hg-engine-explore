@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "id": "diagnostic.mount-stantler-running-obstacle",
+  "title": "Mounted Sprint approaches a one-tile obstacle at speed",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "data/overworld_behavior_profiles.json",
+  "requirements": [],
+  "budgets": {
+    "maxSeconds": 120,
+    "maxFrames": 240,
+    "noProgressFrames": 120,
+    "minObservedFrames": 96
+  },
+  "subjects": [
+    {
+      "id": "stantler",
+      "species": 234,
+      "role": "MOUNTED",
+      "acquire": "existing"
+    }
+  ],
+  "setup": [
+    {
+      "id": "blocked-sprint-front",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 576,
+        "z": 397,
+        "facing": 3
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "own-stantler",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 234,
+        "level": 50,
+        "hp": 1,
+        "status": 0
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "mount-own-stantler",
+      "op": "spawn",
+      "args": {
+        "species": 234,
+        "form": 0,
+        "role": "mounted",
+        "slot": 0,
+        "level": 5
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 180,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-stantler",
+      "op": "bind",
+      "args": {
+        "subject": "stantler"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "hold-right-through-running-hop",
+      "op": "step",
+      "args": {
+        "frames": 96,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 50,
+        "maxFrames": 96,
+        "noProgressFrames": 96
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "actor-field",
+      "subject": "stantler",
+      "path": "identityVerified",
+      "operator": "eq",
+      "value": true,
+      "when": "always"
+    },
+    {
+      "kind": "actor-field",
+      "subject": "stantler",
+      "path": "presentationAttached",
+      "operator": "eq",
+      "value": true,
+      "when": "always"
+    },
+    {
+      "kind": "frame-count",
+      "operator": "gte",
+      "value": 96,
+      "when": "final"
+    }
+  ]
+}

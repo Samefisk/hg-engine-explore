@@ -21,6 +21,8 @@ typedef enum OverworldMountActionOperation {
     OVERWORLD_MOUNT_ACTION_CANCEL_CHAIN = 4,
     OVERWORLD_MOUNT_ACTION_CHAIN_FORWARD_TARGET = 5,
     OVERWORLD_MOUNT_ACTION_PLAN_HOP_TRAJECTORY = 6,
+    /* trajectory points to the shared forced-motion plan for this call. */
+    OVERWORLD_MOUNT_ACTION_START_KNOCKBACK = 7,
 } OverworldMountActionOperation;
 
 typedef enum OverworldMountActionResult {
@@ -33,6 +35,7 @@ typedef struct OverworldMountActionCall {
     u16 version;
     u16 size;
     u8 operation;
+    /* WALK_CORRIDOR starts at 1; clears after its first open step. */
     u8 action;
     u8 direction;
     u8 result;
@@ -47,7 +50,9 @@ typedef u8 (*OverworldMountActionAdapterDispatchFunc)(
 typedef const BehaviorResolveRequest *
 (*OverworldMountConditionalAdmissionFunc)(
     const OverworldWildBehaviorConditionRuntime *conditions,
-    const OverworldWildBehaviorContext *context);
+    const OverworldWildBehaviorContext *context,
+    /* Authenticated subject-bank one-bit Mounted mask, never a global ID. */
+    u32 mountedMask);
 
 #define OVERWORLD_MOUNT_ACTION_ADAPTER_DISPATCH \
     ((OverworldMountActionAdapterDispatchFunc) \

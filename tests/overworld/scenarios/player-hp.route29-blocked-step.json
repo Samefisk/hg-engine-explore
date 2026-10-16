@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.route29-blocked-step",
+  "title": "Blocked Route 29 Walk stays live with the saved Mankey follower",
+  "status": "active",
+  "capabilities": ["player.health"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "normal-play",
+    "expectationSource": "tests/overworld/scenarios/player-hp.route29-blocked-step.json",
+    "actor": "The unchanged save's current FOLLOWER Mankey (species 56) on Route 29, map 67.",
+    "trigger": "Continue from unchanged test.sav at (564,392), hold LEFT for 120 game frames until the player reaches the blocked tile (538,392), then hold LEFT for 240 more game frames.",
+    "observable": "The same current Mankey remains bound and presented; the player reaches and remains at (538,392); 360 completed game frames advance without an ARM9 abort or main-loop stall.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {"phase": "before-observation", "target": "fixture", "change": "The shared worker copies test.nds and unchanged test.sav. No teleport, party edit, spawn, population edit, or state repair."}
+    ],
+    "limits": [
+      "This is the measured Route 29 blocked-step abort trigger. It does not prove all collision directions or other saves.",
+      "A setup mismatch, missing current Mankey, missing completed frame, ARM9 fault, or change from the blocked player tile fails."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "mankey", "species": 56, "role": "FOLLOWER", "acquisition": "follower", "minimum": 1, "maximum": 1, "motionActor": false, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Check the saved Route 29 start and bind the current Mankey follower."},
+    {"at": 1, "kind": "input", "value": "Hold LEFT for 120 completed frames and check the blocked tile."},
+    {"at": 2, "kind": "input", "value": "Keep LEFT held for 240 more completed frames; retain every main-loop sample."}
+  ],
+  "stop": {"frameBudget": 380, "condition": "360 completed held-left frames at the blocked tile, or the first identity, player position, ARM9, or main-loop fault."},
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": ["CONTEXT_CHANGED", "ACTOR_DETACHED"],
+    "invariants": [
+      "The same source-checked FOLLOWER Mankey stays current and attached throughout the 360-frame run",
+      "The saved player starts at Route 29 (564,392), reaches (538,392) within 120 LEFT frames, then stays there through 240 further LEFT frames",
+      "Every completed main-loop frame advances with no ARM9 abort or stalled queue"
+    ]
+  },
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "player-hp.route29-blocked-step",
+    "claims": ["live-actor-identity", "natural-input", "frame-pacing"], "minimumFrames": 360}
+}

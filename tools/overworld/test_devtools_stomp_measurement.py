@@ -25,7 +25,7 @@ def fixture(keys=('RIGHT','RIGHT')):
                     for obj in (s['player'],s['actors'][0]['engineObject']):obj['pos_x']-=131072
             c['terminal']=c['poses'][-1]
         cases[1]['initial']=deepcopy(cases[0]['terminal'])
-    start=cases[0]['initial']['frame'];previous=deepcopy(cases[0]['initial']);profile=bytearray(72);profile[12]=1
+    start=cases[0]['initial']['frame'];previous=deepcopy(cases[0]['initial']);profile=bytearray(80);profile[12]=1
     def enrich(s,mask):
         s=deepcopy(s);s['selector']=dict(heldKeys=mask,rawHeld=mask,newKeys=mask,rawNew=mask,simulatedKeys=0)
         s['observationBoundary']='main-task-queue-completion'
@@ -46,14 +46,14 @@ def fixture(keys=('RIGHT','RIGHT')):
         return s
     previous=enrich(previous,0)
     for index,c in enumerate(cases):
-        duration=c['case']['duration'];before=bytearray(184);before[8:80]=profile
+        duration=c['case']['duration'];before=bytearray(192);before[8:88]=profile
         for k,v in ((7,duration),(19,0),(50,0),(51,duration),(70,2)):profile[k]=v
-        after=bytearray(before);after[8:80]=profile
+        after=bytearray(before);after[8:88]=profile
         clock={k:previous[k] for k in ('frame','nativeCycle')}
-        meta=dict(readiness=dict(actor=previous['actors'][0]),clock=clock,bindingHex=bytes(after[80:96]).hex(),sessionGeneration=1)
+        meta=dict(readiness=dict(actor=previous['actors'][0]),clock=clock,bindingHex=bytes(after[88:104]).hex(),sessionGeneration=1)
         q=dict(completed=True,prepared=True,acceptedProof=False,guestAdvanced=False,scope='prepared-idle-mounted-walk-fixture',
             subject=subject,directionMode=0,travelTime=duration,stompTime=2,changedOffsets=[7,19,50,51,70],
-            before=dict(meta,mountStateHex=bytes(before).hex(),profileHex=bytes(before[8:80]).hex()),
+            before=dict(meta,mountStateHex=bytes(before).hex(),profileHex=bytes(before[8:88]).hex()),
             after=dict(meta,mountStateHex=bytes(after).hex(),profileHex=bytes(profile).hex()),expectedStateHex=bytes(after).hex())
         rows.append(dict(op='configure',receipt=q,snapshot=deepcopy(previous)))
         if index==0:rows.append(dict(op='arm',subject=subject,snapshot=deepcopy(previous),receipt=deepcopy(previous['stompFeedback'])))
@@ -246,7 +246,7 @@ class StompMeasurementTests(unittest.TestCase):
             elif fault=='counts':sample['snapshot']['stompFeedback']['counts']['policy']+=1
             elif fault=='pending':sample['snapshot']['stompFeedback']['pending']=1
             elif fault=='input':sample['snapshot']['selector']['rawHeld']=0
-            elif fault=='profile':sample['events'][0]['data']['laneHex']='00'*72
+            elif fault=='profile':sample['events'][0]['data']['laneHex']='00'*80
             elif fault=='clock':sample['events'][0]['data']['returnNativeCycle']+=100
             else:
                 sample=next(r for r in rows if r['op']=='observe' and any(e['data'].get('kind')=='playerStep' for e in r['events']))

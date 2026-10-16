@@ -12,14 +12,14 @@
     "kind": "observer-control",
     "expectationSource": "documentation/overworld-system/verification.md#scenario-contract",
     "actor": "WILD Ledyba (165) by current live handle in one disposable emulator process.",
-    "trigger": "A correct live identity and one complete rendered spawn Hop precede separate missing-object and frozen-render faults; the whole chain need not pass first.",
+    "trigger": "A correct natural live identity, complete rendered144-frame Fly In and three full four-skid chains precede separate frozen-render and missing-object faults. Both unchanged readers must detect their actual fault.",
     "observable": "The same collector rejects live identity loss and missing Ledyba render progress. Each fault records its boundary and exact classifier result. No captured evidence is edited.",
     "setupAudit": "complete",
     "setupMutations": [
       {
         "phase": "before-observation",
         "target": "fixture",
-        "change": "Import unchanged raw test.sav into one disposable emulator and boot with normal input. Require map33 (585,406), then use the same reviewed Route29-to-Route30 setup through Cherrygrove as the normal Ledyba case: at most 67 one-cardinal-tile inputs. Stop new steps when live Ledyba is acquired and finish only the current player tile. Require its real spawn and completed rendered Hop. Do not create a second emulator core in this process."
+        "change": "From unchanged test.sav at Cherrygrove map67 (564,392), use44 exact normal player tiles: Right1 to (565,392), Down5 to (565,397), Left4 to (561,397), Up2 to (561,395), Left11 to (550,395), Up19 to Route30 (550,376), Right2 to (552,376). Stop new input on natural Ledyba acquisition and finish only the current admitted tile. No teleport, party, profile, RNG or save writes. Keep the native recorder active before boot in one disposable emulator."
       },
       {
         "phase": "during-observation",
@@ -39,8 +39,8 @@
     ],
     "limits": [
       "Executed only by the registered shared Workshop/owctl job. Active and ported mean executable, not accepted; the final controller must independently replay the current ROM/save/source and exact recipe.",
-      "Use the unchanged test.sav and the reviewed 67-tile normal-input Route29–Cherrygrove–Route30 route. Stop new input when the actual natural WILD Ledyba is acquired; finish the current player step. Blocked routes, absent actors and stale identity fail. No prepared teleport, party edit, forced spawn, RNG/time override or profile/counter reset.",
-      "Each Pokémon uses its own native selected spawn location. Bind this prepared encounter's species/personality, origin and landing target to its own current source object and full generation-safe handle. Do not borrow another species' tree, rooftop, flower-bed or ground destination.",
+      "From unchanged test.sav at Cherrygrove map67 (564,392), use44 exact normal player tiles: Right1 to (565,392), Down5 to (565,397), Left4 to (561,397), Up2 to (561,395), Left11 to (550,395), Up19 to Route30 (550,376), Right2 to (552,376). Stop new input on natural Ledyba acquisition and finish only the current admitted tile. No teleport, party, profile, RNG or save writes.",
+      "Each Pok\u00e9mon uses its own native selected spawn location. Bind this prepared encounter's species/personality, origin and landing target to its own current source object and full generation-safe handle. Do not borrow another species' tree, rooftop, flower-bed or ground destination.",
       "Read-only native spawn/resolver/policy/RNG observations start before boot. Frame snapshots and actual render pose share the authenticated main-task-queue completion. Public trace records are drained at authenticated writer return before the small ring wraps, then published at completed-frame boundaries. Missing sequences or frames fail.",
       "The checked recipe caps the whole job at6000 completed game frames/300 seconds with per-action bounds and240 no-progress frames. Setup frames do not count toward the bound subject floor. Native cycles and completed game frames remain separate.",
       "Preserve source saves and the user's emulator. Retain each run's first failure, current subject, stream and images. Stop only the disposable session owned by this job.",
@@ -79,7 +79,7 @@
     {
       "at": 0,
       "kind": "setup",
-      "value": "From unchanged raw test.sav at map33 (585,406), use the reviewed normal-input route through Cherrygrove to Route30 map34, at most 67 player tiles. Stop issuing tiles upon Ledyba acquisition while keeping the live spawn recorder active; require a complete rendered spawn baseline."
+      "value": "From unchanged test.sav at Cherrygrove map67 (564,392), use44 exact normal player tiles: Right1 to (565,392), Down5 to (565,397), Left4 to (561,397), Up2 to (561,395), Left11 to (550,395), Up19 to Route30 (550,376), Right2 to (552,376). Stop new input on natural Ledyba acquisition and finish only the current admitted tile. No teleport, party, profile, RNG or save writes."
     },
     {
       "at": 1,

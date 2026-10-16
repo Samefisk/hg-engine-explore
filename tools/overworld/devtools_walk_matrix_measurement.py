@@ -57,13 +57,13 @@ class WalkMatrixMeasurement:
             and q.get('changedOffsets')==[7,19,50,51],'matrix configure contract differs')
         before,after=q['before'],q['after']
         original=bytes.fromhex(before['mountStateHex']);actual=bytes.fromhex(after['mountStateHex'])
-        require(len(original)==len(actual)==184,'matrix configure bytes missing')
+        require(len(original)==len(actual)==192,'matrix configure bytes missing')
         expected=bytearray(original)
         for offset,value in ((7,case['duration']),(19,case['mode']),(50,0),(51,case['duration'])):expected[8+offset]=value
         require(actual==bytes(expected) and q['expectedStateHex']==actual.hex()
-            and before['profileHex']==original[8:80].hex() and after['profileHex']==actual[8:80].hex()
+            and before['profileHex']==original[8:88].hex() and after['profileHex']==actual[8:88].hex()
             and before['readiness']==after['readiness'] and before['clock']==after['clock']
-            and before['bindingHex']==after['bindingHex']==actual[80:96].hex()
+            and before['bindingHex']==after['bindingHex']==actual[88:104].hex()
             and before['sessionGeneration']==after['sessionGeneration'],'matrix configure changed unrelated state')
         require(actual[20]==1 and actual[58]==0 and actual[15]==actual[59]==case['duration'],
                 'matrix configured Walk timing differs')
@@ -77,7 +77,7 @@ class WalkMatrixMeasurement:
             self._actor(snapshot)
             require(snapshot['frame']==self.last['frame'],'matrix configure advanced field')
             previous=bytes.fromhex(self.configurations[-1]['profileHex'])
-            require(original[8:80]==previous,'matrix profile changed between cases')
+            require(original[8:88]==previous,'matrix profile changed between cases')
         self.pending_config=deepcopy(q)
         self.configurations.append(dict(caseIndex=case['index'],profileHex=after['profileHex'],
             beforeProfileHex=before['profileHex'],changedOffsets=q['changedOffsets'],bindingHex=after['bindingHex'],
@@ -96,13 +96,15 @@ class WalkMatrixMeasurement:
         if self.reader_layout is None:
             self.reader_layout=deepcopy(r['layout']);self.motion_pointer=r['motionPointer']
             layout=self.reader_layout
-            current=(layout.get('actorStride')==172 and layout.get('policyOffset')==140
-                and layout.get('policyBytes')==32)
+            current=(layout.get('actorStride')==176 and layout.get('policyOffset')==140
+                and layout.get('policyBytes')==36)
+            retained_policy_fixture=(layout.get('actorStride')==172
+                and layout.get('policyOffset')==140 and layout.get('policyBytes')==32)
             retained_host_fixture=(layout.get('actorStride')==140
                 and 'policyOffset' not in layout and 'policyBytes' not in layout)
             require(layout.get('actorsOffset')==68 and layout.get('snapshotBytes')==88
                 and layout.get('motionBytes')==52 and layout.get('capacity')==10
-                and (current or retained_host_fixture)
+                and (current or retained_policy_fixture or retained_host_fixture)
                 and self.motion_pointer==layout['stateAddress']+68
                     +self.subject['handle']['slot']*layout['actorStride']+88,
                 'matrix reader layout differs')

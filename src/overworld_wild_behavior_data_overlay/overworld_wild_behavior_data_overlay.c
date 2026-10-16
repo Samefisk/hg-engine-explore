@@ -261,9 +261,7 @@ static BOOL OverworldWildBehavior_TryResolveOverlap(
         || state->movementFieldSystem == NULL) {
         return FALSE;
     }
-    excludedMask = state->captureTargetMask
-        | throwState->targetMask
-        | throwState->carrierMask;
+    excludedMask = state->captureTargetMask | throwState->carrierMask;
 
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         LocalMapObject *object = state->spawns[i].object;
@@ -275,6 +273,9 @@ static BOOL OverworldWildBehavior_TryResolveOverlap(
         if (!state->spawns[i].active
             || object == NULL
             || (excludedMask & (1u << i)) != 0
+            || state->movementActorControlModes[i] == OW_WILD_ACTOR_CONTROL_HELD
+            || state->pendingSlot == i
+            || state->movementQueuedBattleSlot == i
             || state->movementEmoteTimers[i] != 0
             || state->movementTeleportVisiblePause[i]
             || !queryTarget(
@@ -291,7 +292,10 @@ static BOOL OverworldWildBehavior_TryResolveOverlap(
         occupied = i != OW_WILD_FOLLOWER_SLOT
             && state->movementFieldSystem->playerAvatar != NULL
             && objectX == GetPlayerXCoord(state->movementFieldSystem->playerAvatar)
-            && objectY == GetPlayerYCoord(state->movementFieldSystem->playerAvatar);
+            && objectY == GetPlayerYCoord(state->movementFieldSystem->playerAvatar)
+            && state->movementFieldSystem->playerAvatar->mapObject != NULL
+            && object->posVec[1]
+                == state->movementFieldSystem->playerAvatar->mapObject->posVec[1];
         for (j = 0; !occupied && j < OW_WILD_MAX_SPAWNS; j++) {
             LocalMapObject *other = state->spawns[j].object;
 
@@ -299,7 +303,8 @@ static BOOL OverworldWildBehavior_TryResolveOverlap(
                 && state->spawns[j].active
                 && other != NULL
                 && MapObject_GetCurrentX(other) == objectX
-                && MapObject_GetCurrentY(other) == objectY;
+                && MapObject_GetCurrentY(other) == objectY
+                && other->posVec[1] == object->posVec[1];
         }
         if (occupied
             && startMovement(

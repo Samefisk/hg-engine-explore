@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.ram.brief-notice",
+  "title": "Brief Ram activation survives a moving Onix and player leaving the row",
+  "status": "active",
+  "capabilities": [
+    "profile.composition",
+    "walk.exact"
+  ],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "One current native Wild Onix at (602,402), passive Cyndaquil follower, player at (606,403) on Route 29.",
+    "trigger": "Wait for a normal horizontal Onix Walk from (602,402). Move the player up into row 402 for six completed frames, then down to row 403 before the Walk ends.",
+    "observable": "The condition becomes active with Until Crash and pending presentation during the brief sighting. The exact ordinary Walk token, phase and facing stay unchanged, and active Ram survives after sight is lost. The next legal intent clears pending presentation without restarting its timer and starts a real East Ram Walk toward the current off-axis player.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Checked teleport, native party/follower setup, Wild Onix spawn and exact subject bind."
+      },
+      {
+        "phase": "during-observation",
+        "target": "observation",
+        "change": "Only normal Up+B, neutral, Down+B and neutral input. No guest state writes."
+      }
+    ],
+    "limits": [
+      "Prepared Onix placement is not natural population-spawn proof.",
+      "This bounded leaf proves first charge admission and one complete charge tile, not a full Crash lifetime.",
+      "Memory and native receipts prove motion and condition state; no screenshot or audible claim."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "onix",
+      "species": 95,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Bind current Wild Onix at (602,402) with player at (606,403) and passive Cyndaquil."
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "During its accepted ordinary horizontal Walk, cross briefly into row 402 and leave before it ends."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Observe active Ram with pending presentation, unchanged ordinary completion and real next-intent East Ram."
+    }
+  ],
+  "stop": {
+    "frameBudget": 300,
+    "condition": "First complete Ram charge tile or first failed owner, active state, pending presentation, ordinary token, terrain, or heading receipt."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "One current Wild Onix owns the ordinary Walk and Ram.",
+      "The player leaves row 402 before ordinary completion.",
+      "Active Until Crash and pending presentation survive until the next legal intent."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "profile.ram.brief-notice",
+    "claims": [
+      "live-actor-identity",
+      "terrain-selection",
+      "profile-resolution",
+      "engine-boundary",
+      "logical-commit",
+      "rendered-motion",
+      "frame-pacing"
+    ],
+    "minimumFrames": 25
+  }
+}

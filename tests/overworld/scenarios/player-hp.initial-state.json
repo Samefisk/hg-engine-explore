@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.initial-state",
+  "title": "Old save initializes player HP and healing checkpoint",
+  "status": "active",
+  "capabilities": ["player.health"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "normal-play",
+    "expectationSource": "documentation/overworld-system/player-hp-implementation-plan.md",
+    "actor": "Player field runtime loaded from the unchanged old HeartGold save.",
+    "trigger": "Load the saved game normally, then read the HP record at one completed field boundary.",
+    "observable": "The ROM and live overlay identities match, current and saved HP are 100, and the healing checkpoint is a valid spawn ID.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {"phase": "before-observation", "target": "fixture", "change": "Copy the unchanged test.nds and test.sav into a private shared session. No player HP, actor, party, or map writes."}
+    ],
+    "limits": [
+      "This proves old-save initialization at one completed field boundary. It does not prove damage, rest timing, movement reset, or blackout.",
+      "A missing descriptor, wrong ROM overlay, stale field/save owner, or invalid save record fails the read."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Load the unchanged old save."},
+    {"at": 1, "kind": "lifecycle", "value": "Read the checked player HP state."}
+  ],
+  "stop": {"frameBudget": 120, "condition": "One checked player HP receipt or first failure."},
+  "expect": {"requiredEvents": [], "forbiddenEvents": [],
+             "invariants": ["HP and saved HP are 100", "Healing spawn is 1 through 30", "Overlay and field/save ownership match"]},
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "player-hp.initial-state",
+              "claims": ["engine-boundary"], "minimumFrames": 1}
+}

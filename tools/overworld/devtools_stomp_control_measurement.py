@@ -45,15 +45,15 @@ def validate_control(control, policy, terminal, subject):
             'worldContext','playerPointer','mountPointer','avatarPointer')),
         'lacks matching native policy call')
     raw=bytes.fromhex(clean['mountStateHex']);address=control.get('stateAddress')
-    require(type(address) is int and address==0x023BC744 and control.get('stateBytes')==184
+    require(type(address) is int and address==0x023BC744 and control.get('stateBytes')==192
         and control.get('changedAddress')==address+THRESHOLD_OFFSET and control.get('changedOffset')==THRESHOLD_OFFSET
         and control.get('profileOffset')==70 and control.get('changedHex')=='ff','address differs')
-    require(len(raw)==184 and raw[8:80].hex()==profile['profileHex']==policy['profileHex']
+    require(len(raw)==192 and raw[8:88].hex()==profile['profileHex']==policy['profileHex']
         and type(profile.get('stompTime')) is int and raw[78]==profile['stompTime']==policy['stompTime']<=32
         and control.get('originalHex')==raw[78:79].hex(),'original profile differs')
-    binding=clean['mountBinding'];native_binding=struct.unpack_from('<IHHHHBBBB',raw,80)
-    require(binding==policy['mountBinding'] and binding['bindingHex']==raw[80:96].hex()
-        and binding['sessionGeneration']==struct.unpack_from('<I',raw,96)[0]>0
+    binding=clean['mountBinding'];native_binding=struct.unpack_from('<IHHHHBBBB',raw,88)
+    require(binding==policy['mountBinding'] and binding['bindingHex']==raw[88:104].hex()
+        and binding['sessionGeneration']==struct.unpack_from('<I',raw,104)[0]>0
         and struct.unpack_from('<II',raw)==(binding['fieldPointer'],binding['surfacePointer'])
         and binding['fieldPointer']==current['worldContext']['fieldPointer']
         and native_binding[:7]==(current['sourceIdentity']['personality'],actor['species'],current['worldContext']['mapId'],

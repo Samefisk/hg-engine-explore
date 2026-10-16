@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.bar",
+  "title": "Full and injured HP bar native submission after Ram",
+  "status": "active",
+  "capabilities": ["player.health"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/player-hp-implementation-plan.md",
+    "actor": "One current WILD Onix (species 95) at map 33 tile (585,412), with the player at (585,407).",
+    "trigger": "Teleport directly to Route 29, spawn and bind Onix five tiles south, read the full bar, then let its natural Ram hit once.",
+    "observable": "Native bar submission has fill 44 at 100 HP and fill 30 at 67 HP after one real Ram.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {"phase": "before-observation", "target": "fixture", "change": "Use the checked Route 29 teleport, native Wild Onix spawn, and exact live identity bind. Do not change HP, Ram policy, or bar state."},
+      {"phase": "during-observation", "target": "fixture", "change": "No state mutation; the player stands still while Onix chooses its normal Ram."}
+    ],
+    "limits": [
+      "Prepared Onix placement tests real Ram contact and HP damage, not natural population spawn selection.",
+      "The full native bar receipt is read after the same direct teleport and spawn used by the Ram/rest test.",
+      "Native OAM submission and resource selection are measured; final LCD pixels, color appearance, and hardware application are not proven.",
+      "START-menu suppression/rebind and amber danger warning need separate live samples; this scenario does not claim them.",
+      "Missing Onix, wrong HP or fill, battle, or an incomplete native receipt fails."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [{"id": "onix", "species": 95, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Place and bind Onix five tiles south of the player, then read the full native bar."},
+    {"at": 1, "kind": "lifecycle", "value": "Observe normal Ram damage and proportional native bar fill."}
+  ],
+  "stop": {"frameBudget": 180, "condition": "Full and injured native submission are checked after one Ram, or the first invalid HP, actor, or field observation."},
+  "expect": {"requiredEvents": [], "forbiddenEvents": [],
+    "invariants": ["One current Wild Onix owns Ram damage", "HP and saved HP agree", "No battle occurs"]},
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "player-hp.bar",
+    "claims": ["live-actor-identity", "engine-boundary", "natural-input", "control-release"],
+    "minimumFrames": 105}
+}

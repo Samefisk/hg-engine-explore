@@ -14,10 +14,10 @@ typedef int32_t s32;
 #endif
 
 #define OVERWORLD_ACTOR_SYSTEM_OVERLAY_ID 158
-#define OVERWORLD_ACTOR_SYSTEM_OVERLAY_LOAD_ADDR 0x023B65A0
+#define OVERWORLD_ACTOR_SYSTEM_OVERLAY_LOAD_ADDR 0x023B65C0
 #define OVERWORLD_ACTOR_SYSTEM_OVERLAY_BASE 0x023B6B00
 #define OVERWORLD_ACTOR_SYSTEM_OVERLAY_END 0x023BAB00
-#define OVERWORLD_ACTOR_SYSTEM_OVERLAY_SIZE 0x4560
+#define OVERWORLD_ACTOR_SYSTEM_OVERLAY_SIZE 0x4540
 #define OVERWORLD_ACTOR_SYSTEM_ENTRY_ADDR OVERWORLD_ACTOR_SYSTEM_OVERLAY_BASE
 #define OVERWORLD_ACTOR_SYSTEM_COMPAT_ENTRY_ADDR \
     (OVERWORLD_ACTOR_SYSTEM_OVERLAY_BASE + 0x18)
@@ -425,6 +425,16 @@ typedef struct OverworldActorSystemEntry {
 
 #define OVERWORLD_ACTOR_SYSTEM_ENTRY \
     ((const OverworldActorSystemEntry *)OVERWORLD_ACTOR_SYSTEM_ENTRY_ADDR)
+
+static inline u8 OverworldActorSystem_IsReady(void)
+{
+    const OverworldActorSystemEntry *entry = OVERWORLD_ACTOR_SYSTEM_ENTRY;
+
+    /* The boot-resident Actor image is not in the SDK overlay load list. */
+    return entry->magic == OVERWORLD_ACTOR_SYSTEM_MAGIC
+        && entry->version == OVERWORLD_ACTOR_SYSTEM_ABI_VERSION
+        && entry->size == sizeof(*entry);
+}
 
 typedef char OverworldActorHandleSizeMustRemain12Bytes[
     sizeof(OverworldActorHandle) == 12 ? 1 : -1];

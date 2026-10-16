@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "id": "walk.follower.stop-facing",
+  "title": "Stantler follower keeps its final Walk facing when it stops",
+  "status": "active",
+  "capabilities": [
+    "walk",
+    "walk.exact",
+    "profile.composition"
+  ],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md#5-motion-module-policy",
+    "actor": "One current Stantler (species 234, level 10) in the FOLLOWER role, selected by its full handle and party personality",
+    "trigger": "After native follower setup and 24 neutral frames, hold Right for 32 completed frames then release input for 96 frames. Let ordinary Follower AI choose and finish its own Walks.",
+    "observable": "At least one genuine native Walk start commits its own target once and returns control. After the last Walk, retain the facing observed at that boundary for at least 32 contiguous idle frames. An empty NONE/IGNORED/CLEAR policy reply has no step or facing direction.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use checked Route 29 teleport at (584,403) facing East, native party slot 0 Stantler preparation, native follower creation, 24 neutral frames and full-identity bind. Setup does not change profiles, AI timers, RNG, collision or movement policy. No guest writes occur during observation."
+      }
+    ],
+    "limits": [
+      "This proves a normal follower stop after prepared party/follower setup. It does not prove natural party selection or spawning.",
+      "An already-running setup Walk earns no commit/control credit. The final facing comes from the accepted Walk boundary, not a fixed East expectation.",
+      "A stock explicit FACE command may start a new stable interval. It cannot excuse an empty stop reply requesting North."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "stantler",
+      "species": 234,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Prepare, settle and bind the current Stantler follower at Route 29."
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Right for 32 completed frames, then neutral for 96 frames."
+    }
+  ],
+  "stop": {
+    "frameBudget": 600,
+    "condition": "The input script ends with a genuine Walk commit/control pair, 32 stable idle frames and a direction-free native stop reply, or the first identity, reply, facing, control or stream failure"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "ACTOR_REBOUND",
+      "CONTEXT_CHANGED"
+    ],
+    "invariants": [
+      "The same full current identity remains species 234 in the Follower role with attached presentation.",
+      "The measured Walk commits its own target once and returns control.",
+      "At least 32 continuous idle frames keep one facing, tile and commit sequence.",
+      "A NONE/IGNORED/CLEAR reply carries stepDirection NONE and facingDirection NONE."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "walk.follower.stop-facing",
+    "claims": [
+      "live-actor-identity",
+      "logical-commit",
+      "control-release",
+      "rendered-motion",
+      "engine-boundary",
+      "frame-pacing"
+    ],
+    "minimumFrames": 128
+  }
+}

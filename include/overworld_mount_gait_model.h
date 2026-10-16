@@ -29,6 +29,11 @@ typedef struct OverworldMountGaitState {
     u8 reserved[3];
 } OverworldMountGaitState;
 
+/* Existing boot-resident presentation capsule, sealed by the Chain linker. */
+#define OVERWORLD_MOUNT_GAIT_STATE_ADDRESS 0x01FFA500
+#define OVERWORLD_MOUNT_GAIT_STATE \
+    ((OverworldMountGaitState *)OVERWORLD_MOUNT_GAIT_STATE_ADDRESS)
+
 typedef struct OverworldMountGaitInput {
     s32 x, z;
     u32 stamp, session, owner;

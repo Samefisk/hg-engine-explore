@@ -85,6 +85,8 @@ class WorkshopAuthoringTests(unittest.TestCase):
         self.assertEqual(
             [application["id"] for application in self.catalog["applications"]],
             [
+                # Moods.
+                "apply-angry",
                 # Routines.
                 "apply-scavenger",
                 "apply-sprint",
@@ -97,28 +99,38 @@ class WorkshopAuthoringTests(unittest.TestCase):
                 "apply-drowsy-wander",
                 "apply-perch",
                 "apply-rest",
+                # Style, immediately after Routine.
+                "apply-waddle",
                 # Placements.
                 "apply-fly-in",
                 "apply-canopy-access",
                 "apply-flower-bed",
+                "apply-swim",
+                # Follower base, before capabilities.
+                "apply-follower",
                 # Capabilities.
-                "apply-notice-player",
                 "apply-teleport",
                 "apply-stalker",
                 "apply-long-hop",
                 "apply-canopy-hop",
                 "apply-throw",
-                "apply-ram",
+                "apply-throw-find-position",
                 "apply-heavy-stomp",
+                "apply-water-runner",
+                # Attacks.
+                "apply-throw-release",
+                "apply-ram",
+                "apply-basic-attack",
+                "apply-ambush",
+                "apply-stomp-slam",
+                "apply-throw-away",
                 # Attitudes.
                 "apply-startled",
-                "apply-ambush",
+                "apply-find-playmate",
                 "apply-playful",
                 "apply-skittish",
-                # Style.
-                "apply-waddle",
+                "apply-seek-safety",
                 # Follower/Mount.
-                "apply-follower",
                 "apply-mounted",
                 # Modifiers.
                 "apply-asleep",
@@ -133,12 +145,15 @@ class WorkshopAuthoringTests(unittest.TestCase):
         ]
         self.assertEqual(
             classifications,
-            ["routine"] * 11
-            + ["placement"] * 3
-            + ["capability"] * 8
-            + ["attitude"] * 4
+            ["mood"]
+            + ["routine"] * 11
             + ["style"]
-            + ["follower-mount"] * 2
+            + ["placement"] * 4
+            + ["follower"]
+            + ["capability"] * 8
+            + ["attack"] * 6
+            + ["attitude"] * 5
+            + ["follower-mount"]
             + ["modifier"],
         )
         VIEWER.validate_behavior_catalog(self.catalog)
@@ -146,6 +161,41 @@ class WorkshopAuthoringTests(unittest.TestCase):
         invalid["profiles"][4]["classification"] = "behavior"
         with self.assertRaisesRegex(VIEWER.ParseError, "classification is not supported"):
             VIEWER.validate_behavior_catalog(invalid)
+
+    def test_native_style_composes_after_routine_before_placement(self) -> None:
+        changed = copy.deepcopy(self.catalog)
+        profiles = {profile["id"]: profile for profile in changed["profiles"]}
+        for profile_id, value in (("meander", 2), ("waddle", 4), ("flower-bed", 6)):
+            profiles[profile_id]["fields"]["walkSwayWidth"] = {
+                "operator": "replace", "value": value,
+            }
+        # All three belong to Sunflora's bank, but require force at level1.
+        for application in changed["applications"]:
+            if application["id"] in ("apply-meander", "apply-waddle", "apply-flower-bed"):
+                application["target"]["match"]["minLevel"] = "99"
+        catalog_path = self.temp / "style-order-catalog.json"
+        catalog_path.write_text(json.dumps(changed, indent=2) + "\n")
+        executable = native_resolver.build(
+            REPO, catalog=catalog_path, output=self.temp / "resolver-style-order",
+        )
+        runtime = VIEWER._runtime_source_behavior_catalog(changed)
+        indexes = {application["id"]: index for index, application in enumerate(runtime["applications"])}
+        bank = VIEWER.compile_bank(runtime, REPO / "include/constants/species.h")
+        _, first, count = next(row for row in bank["rows"] if row[0] == 192)
+        local_ids = bank["indexes"][first:first + count]
+        mask = 0
+        for application_id, value in (("apply-meander", 2), ("apply-waddle", 4), ("apply-flower-bed", 6)):
+            mask |= 1 << local_ids.index(indexes[application_id])
+            result = native_resolver.resolve(None, {**REQUEST, "species": 192, "forcedOverrideMask": mask},
+                root=REPO, executable=executable)
+            self.assertEqual(result["status"], 0)
+            self.assertEqual(resolved_lane_field(result, "walkSwayWidth", 0), value)
+            applied = [step["sourceIndex"] for step in result["trace"]
+                if step["lane"] == 0 and step["kind"] == 3]
+            self.assertEqual(applied, [indexes[name] for name in
+                ("apply-meander", "apply-waddle", "apply-flower-bed") if mask & (1 << local_ids.index(indexes[name]))])
+        neighbour = native_resolver.resolve(None, REQUEST, root=REPO, executable=executable)
+        self.assertEqual(neighbour, self.baseline)
 
     def test_checked_in_positional_profile_edits_do_not_change_resolution(self) -> None:
         source = VIEWER.BEHAVIOR_DATA_SOURCE.read_text()
@@ -201,22 +251,25 @@ class WorkshopAuthoringTests(unittest.TestCase):
         actual = native_resolver.resolve(
             None, REQUEST, root=REPO, executable=executable
         )
-        baseline_profile = bytes.fromhex(self.baseline["profileHex"])
-        actual_profile = bytes.fromhex(actual["profileHex"])
-        for lane_offset in (71, 143):
-            self.assertEqual(baseline_profile[lane_offset], original_value)
-            self.assertEqual(actual_profile[lane_offset], changed_value)
+        for lane in (0, 1):
+            self.assertEqual(resolved_lane_field(self.baseline, "walkAccelerationStep", lane), original_value)
+            self.assertEqual(resolved_lane_field(actual, "walkAccelerationStep", lane), changed_value)
         self.assertNotEqual(actual["fingerprint"], self.baseline["fingerprint"])
 
     def test_mount_gait_fields_inherit_and_override_independently(self) -> None:
         defaults = {"mountBounce": 2, "mountStride": 2, "mountSettle": 1, "mountLean": 1}
         mounted_index = next(
-            index for index, application in enumerate(self.catalog["applications"])
+            index for index, application in enumerate(
+                VIEWER._runtime_source_behavior_catalog(self.catalog)["applications"])
             if application["id"] == self.catalog["runtimeBindings"]["mountedApplication"]
         )
         mounted_profile = next(profile for profile in self.catalog["profiles"] if profile["id"] == "mounted")
         self.assertFalse(set(defaults) & set(mounted_profile["fields"]))
-        request = {**REQUEST, "species": 234, "forcedOverrideMask": 1 << mounted_index}
+        bank = VIEWER.compile_bank(VIEWER._runtime_source_behavior_catalog(self.catalog),
+                                  REPO / "include/constants/species.h")
+        _, first, count = next(row for row in bank["rows"] if row[0] == 234)
+        mounted_slot = bank["indexes"][first:first + count].index(mounted_index)
+        request = {**REQUEST, "species": 234, "forcedOverrideMask": 1 << mounted_slot}
         baseline = native_resolver.resolve(None, request, root=REPO, executable=self.baseline_executable)
         for field, expected in defaults.items():
             for lane in (0, 1):
@@ -236,9 +289,11 @@ class WorkshopAuthoringTests(unittest.TestCase):
                         self.assertEqual(resolved_lane_field(actual, sibling, lane), 3 if sibling == field else expected)
                 before = bytes.fromhex(baseline["profileHex"])
                 after = bytes.fromhex(actual["profileHex"])
-                self.assertEqual(len(after), 144)
-                self.assertEqual([value for index, value in enumerate(after) if index not in (16, 88)],
-                                 [value for index, value in enumerate(before) if index not in (16, 88)])
+                lane_size = json.loads((REPO / "tools/overworld/behavior_schema.json").read_text())["compactSize"]
+                self.assertEqual(len(after), 2 * lane_size)
+                changed_bytes = (16, 16 + lane_size)
+                self.assertEqual([value for index, value in enumerate(after) if index not in changed_bytes],
+                                 [value for index, value in enumerate(before) if index not in changed_bytes])
                 neighbour = native_resolver.resolve(None, REQUEST, root=REPO, executable=executable)
                 self.assertEqual(neighbour["profileHex"], self.baseline["profileHex"])
                 self.assertEqual(neighbour["fingerprint"], self.baseline["fingerprint"])
@@ -264,10 +319,13 @@ class WorkshopAuthoringTests(unittest.TestCase):
     def test_sprint_is_applied_to_stantler_and_is_default_off(self) -> None:
         sprint_index = next(
             index
-            for index, application in enumerate(self.catalog["applications"])
+            for index, application in enumerate(VIEWER._runtime_source_behavior_catalog(self.catalog)["applications"])
             if application["id"] == "apply-sprint"
         )
-        sprint_bit = 1 << sprint_index
+        bank = VIEWER.compile_bank(VIEWER._runtime_source_behavior_catalog(self.catalog),
+                                  REPO / "include/constants/species.h")
+        _, first, count = next(row for row in bank["rows"] if row[0] == 234)
+        sprint_bit = 1 << bank["indexes"][first:first + count].index(sprint_index)
         stantler_request = {**REQUEST, "species": 234}
         sprint = native_resolver.resolve(
             None,
@@ -308,8 +366,9 @@ class WorkshopAuthoringTests(unittest.TestCase):
             executable=executable,
         )
         self.assertEqual(default_off["status"], 0)
-        self.assertFalse(default_off["matchedOverrideMask"] & sprint_bit)
-        self.assertFalse(default_off["appliedOverrideMask"] & sprint_bit)
+        self.assertFalse(any(step["sourceIndex"] == sprint_index and step["lane"] == 0
+                             and step["kind"] == 3 and step["flags"] & 2
+                             for step in default_off["trace"]))
         for lane in range(2):
             with self.subTest(mode="default-off", lane=lane):
                 self.assertEqual(
@@ -464,7 +523,7 @@ class WorkshopAuthoringTests(unittest.TestCase):
         VIEWER.validate_override_profile_source()
         self.assertEqual(
             len(legacy["variableOverrides"]),
-            len(self.catalog["applications"]),
+            len(VIEWER._runtime_source_behavior_catalog(self.catalog)["applications"]),
         )
         self.assertEqual(v2["apiVersion"], 2)
         self.assertEqual(v2["selectedProfile"]["id"], self.catalog["rootProfile"])
@@ -510,24 +569,22 @@ class WorkshopAuthoringTests(unittest.TestCase):
             & VIEWER.spawn_metadata.GROUP_BABY
         )
 
-    def test_move_from_off_screen_is_the_only_state_one_editor_choice(self) -> None:
+    def test_move_from_off_screen_is_not_an_authorable_spawn_state(self) -> None:
         data = VIEWER.build_data(
             include_routes=False,
             include_spawn_settings=False,
         )
         options = data["editOptions"]["spawnState"]
-        state_one = [option for option in options if option["value"] == 1]
         self.assertEqual(
-            state_one,
-            [{
-                "raw": "OW_WILD_BEHAVIOR_SPAWN_STATE_MOVE_FROM_OFF_SCREEN",
-                "label": "Move From Off Screen",
-                "value": 1,
-            }],
+            [option["value"] for option in options],
+            [0, 2, 3, 4],
+            "state 1 was retired; its number must stay unused",
         )
         self.assertFalse(
-            any("RUN_FROM_OFF_SCREEN" in option["raw"] for option in options)
+            any("MOVE_FROM_OFF_SCREEN" in option["raw"] for option in options)
         )
+        catalog = (REPO / "data/overworld_behavior_profiles.json").read_text()
+        self.assertNotIn("SPAWN_STATE_MOVE_FROM_OFF_SCREEN", catalog)
 
     def test_v2_shell_uses_lazy_deck_endpoints_and_one_profile_domain(self) -> None:
         shell = (V2_STATIC / "v2.js").read_text()
@@ -570,6 +627,13 @@ import {{
 }} from {json.dumps(module.as_uri())};
 
 const source = JSON.parse(fs.readFileSync({json.dumps(str(catalog_path))}, 'utf8'));
+assert.equal(source.applications.length, 39);
+assert.equal(source.applications.find(item => item.id === 'apply-basic-attack').enabled, false);
+assert.equal(source.applications.filter(item => item.enabled !== false).length, 38);
+assert.deepEqual(canonicalCatalogStructuralErrors(source).filter((error) => error.includes('applications')), []);
+const activeTiredLink = structuredClone(source);
+activeTiredLink.applications.find((item) => item.id === activeTiredLink.runtimeBindings.defaultTiredApplication).target = {{ mode: 'all', match: {{}}, members: [] }};
+assert.deepEqual(canonicalCatalogStructuralErrors(activeTiredLink).filter((error) => error.includes('applications')), []);
 const classProfiles = new Set(source.runtimeBindings.classOrder.map((item) => item.profile));
 const conditionalParents = new Set(source.profiles.filter((item) => item.kind === 'conditional').map((item) => item.parent));
 const application = source.applications.find((item) => {{
@@ -587,7 +651,7 @@ const originalClassification = source.profiles.find((item) => item.id === applic
 const classified = setProfileClassification(source, application.id, 'capability');
 assert.equal(classified.profiles.find((item) => item.id === application.profile).classification, 'capability');
 assert.equal(source.profiles.find((item) => item.id === application.profile).classification, originalClassification);
-const classificationRanks = new Map(['routine', 'placement', 'capability', 'attitude', 'style', 'follower-mount', 'modifier'].map((value, index) => [value, index]));
+const classificationRanks = new Map(['mood', 'routine', 'style', 'placement', 'follower', 'capability', 'attack', 'attitude', 'follower-mount', 'modifier'].map((value, index) => [value, index]));
 const classifiedProfiles = new Map(classified.profiles.map((item) => [item.id, item]));
 const appliedRanks = classified.applications.map((item) => {{
   const value = classifiedProfiles.get(item.profile).classification;
@@ -726,7 +790,7 @@ expanded.conditions = Array.from({{ length: 32 }}, (_, index) => ({{
   ...JSON.parse(JSON.stringify(expanded.conditions[0])),
   id: `condition-limit-${{index + 1}}`,
 }}));
-assert.ok(canonicalCatalogStructuralErrors(tooMany).some((error) => /at most 32 condition entries/.test(error)));
+assert.deepEqual(canonicalCatalogStructuralErrors(tooMany).filter((error) => /condition entries/.test(error)), []);
 
 const invalidFacts = JSON.parse(JSON.stringify(authored));
 const invalidCondition = invalidFacts.profiles.find((item) => item.id === application.profile).conditions[0];
@@ -796,7 +860,7 @@ assert.throws(() => removeConditionalProfileCondition(setConditionalProfileKind(
         self.assertNotIn('"atten' + 'tiveState"', profile_editor)
         self.assertNotIn('conditional' + 'States', profile_editor)
         self.assertIn(
-            "if (resetConditionState) ui.conditionPreview.nextState = [];",
+            "ui.conditionPreview.nextState = [];",
             profile_editor,
         )
         self.assertIn(

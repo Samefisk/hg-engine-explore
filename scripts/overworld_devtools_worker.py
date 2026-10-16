@@ -71,11 +71,23 @@ def main():
                     result = session.step(args.get("frames", 1), args.get("keys", []),
                                           release_at_end=args.get("releaseAtEnd", True),
                                           diagnostic_details=args.get("diagnosticDetails", True))
+                elif operation == "save.wait":
+                    result = session.save_wait(args.get("maxNativeCycles", 2000))
                 elif operation == "release":
                     session.rt.h.set_key_mask(session.emu, 0)
                     result = {"released": True}
                 elif operation == "diagnostics":
                     result = session.diagnostics()
+                elif operation == "player-health.observe":
+                    result = session.player_health_observe(args)
+                elif operation == "cartridge-save.export":
+                    if set(args) != {"path"}:
+                        raise ValueError("cartridge-save.export needs one private output path")
+                    result = session.export_cartridge_save(args["path"])
+                elif operation == "cartridge-save.fingerprint":
+                    if args:
+                        raise ValueError("cartridge-save.fingerprint takes no arguments")
+                    result = session.cartridge_save_fingerprint()
                 elif operation == "snapshot.probe":
                     from tools.overworld.devtools_snapshot_probe import probe_snapshot
                     result = probe_snapshot(session, args)
@@ -98,11 +110,13 @@ def main():
                 elif operation == "record.start":
                     result = session.record_start(args.get("maxFrames", 1800),
                                                   args.get("bindingContext", False),
-                                                  role_profile=args.get("roleProfile", False))
+                                                  role_profile=args.get("roleProfile", False),
+                                                  appearance_palette=args.get("appearancePalette", False),
+                                                  throw_interactions=args.get("throwInteractions", False))
                 elif operation == "observation.prepare":
-                    if args:
-                        raise ValueError("observation.prepare takes no arguments")
-                    result = session.prepare_observation()
+                    if set(args) - {"appearanceSubject"}:
+                        raise ValueError("observation.prepare has unknown arguments")
+                    result = session.prepare_observation(appearance_subject=args.get("appearanceSubject"))
                 elif operation == "record.stop":
                     result = session.record_stop()
                 elif operation == "observer-control.arm":
@@ -123,6 +137,10 @@ def main():
                     result = session.resolver_probe(args)
                 elif operation == "condition.probe":
                     result = session.condition_probe(args)
+                elif operation == "emote-three.arm":
+                    result = session.emote_three_arm(args)
+                elif operation == "emote-three.close":
+                    result = session.emote_three_close(args)
                 elif operation == "actor-inspect.probe":
                     result = session.actor_inspect_probe(args)
                 elif operation == "walk-policy.reset":

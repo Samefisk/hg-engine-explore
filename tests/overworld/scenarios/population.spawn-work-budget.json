@@ -14,8 +14,8 @@
     "kind": "normal-play",
     "expectationSource": "documentation/overworld-system/verification.md#spawn-work-budget-and-proof-freshness",
     "actor": "One ordinary automatic Wild population attempt using its current resolved profile and explicit destination mask; any successful spawn remains bound to its own encounter identity and site.",
-    "trigger": "Load the unchanged Route 30 save, cross into Cherrygrove through normal input, then keep moving through the first natural explicit destination scan.",
-    "observable": "The player keeps changing exact sub-tile position while the first scan runs. The scan resolves and prepares its profile, metadata, and class exactly once. It starts with zero terrain-matcher queries, then completes 20 resumed batches with at most 12 observed terrain-matcher queries each. The next update creates the prepared encounter actor at A between 1 and 16 cardinal tiles from B, with A at least four tiles beyond the player-relative camera extent. Its normal Fly In moves its logical and rendered positions toward B. Every measured main loop stays at the normal two-cycle pace.",
+    "trigger": "Load the unchanged Cherrygrove save, reach map 33 at (585,406) with the measured 35-step normal-key warm-up, cross into Cherrygrove through normal input, then keep moving through the first natural explicit destination scan. The exact 36-frame neutral action before LEFT keeps pre-crossing scans in the same field; their authenticated terminal and next-update retirement remain uncredited.",
+    "observable": "The player keeps changing exact sub-tile position while the first scan runs. The scan resolves and prepares its profile, metadata, and class exactly once. It starts with zero terrain-matcher queries, then completes 60 resumed batches with at most 4 observed terrain-matcher queries each. The next update creates the prepared encounter actor at A between 1 and 16 cardinal tiles from B, with A at least four tiles beyond the player-relative camera extent. Its normal Fly In moves its logical and rendered positions toward B. Every measured main loop stays at the normal two-cycle pace.",
     "setupAudit": "complete",
     "setupMutations": [
       {
@@ -28,11 +28,13 @@
       "This is the short current-ROM gate. It does not replace the full intermittent unmounted cadence failure window.",
       "A population count, idle route, helper-only attempt, or host wall-clock sample cannot pass this claim. The run must observe one real helper-to-explicit-scanner handoff and the complete explicit scan.",
       "The route must include at least 120 in-transit samples. One unchanged exact player position during an admitted movement fails.",
-      "Known-bad controls with 13 candidate queries in one update, repeated profile/metadata/class preparation, an over-budget resumed finalizer, one late main loop, or a missing post-spawn pacing sample must fail for the matching reason before this scenario can become active.",
+      "Known-bad controls with 5 and 9 candidate queries in one update, repeated profile/metadata/class preparation, an over-budget resumed finalizer, one late main loop, or a missing post-spawn pacing sample must fail for the matching reason before this scenario can become active.",
       "A known-bad control that changes the authored spawn locomotion path must fail before this scenario can become active.",
       "A known-bad control that moves A onto the screen must fail before this scenario can become active.",
       "Zero late loops is the only pacing pass. One three-VBlank loop fails even if spawn budgets and population counts pass.",
-      "The extracted-C host checks keep exact masks 8, 448, 512, and 15, row-major reservoir selection, RNG parity, failure output, and the legacy Pool scanner in scope. Repeating that matrix in a random live wait is redundant."
+      "The extracted-C host checks keep exact masks 8, 448, 512, and 15, row-major reservoir selection, RNG parity, failure output, and the legacy Pool scanner in scope. Repeating that matrix in a random live wait is redundant.",
+      "The uncredited warm-up uses RIGHT+B for 1 tile, DOWN+B for 6 tiles, RIGHT+B for 20 tiles and DOWN+B for 8 tiles, with exact native admissions and settled endpoints. It retains the saved Mankey, changes no source save or game setup, and arms at absolute native step 35. Measured step thresholds add 35 without changing the measured route or its frame limits.",
+      "After the same normal route, the final action allows at most 256 completed game frames and 60 seconds for a later natural queue, its 61-update scan, startup, and normal Fly In commit. Fly In keeps its logical origin until the accepted 144-frame move ends, so logical progress needs that commit. The overall frame limit is 720; the measured frame allowance is 720 minus the actual dense completed setup frames; the overall 180-second limit stays fixed. The wait keeps all pacing, identity and rendered-motion checks active."
     ]
   },
   "fixture": {
@@ -59,7 +61,7 @@
     {
       "at": 0,
       "kind": "setup",
-      "value": "Load the unchanged Route 30 save, use normal input to cross into Cherrygrove, then keep moving while ordinary automatic population refill runs."
+      "value": "Load the unchanged Cherrygrove save, use the measured 35-step normal-key warm-up to map 33 at (585,406), then wait for and bind the same saved Mankey. Warm-up earns no measured proof."
     },
     {
       "at": 1,
@@ -69,12 +71,12 @@
     {
       "at": 2,
       "kind": "lifecycle",
-      "value": "Require at most 12 candidate queries per resumed update, no repeated profile preparation, then bind the created encounter actor and observe its normal Fly In progress from A toward B."
+      "value": "Require at most 4 candidate queries per resumed update, no repeated profile preparation, then bind the created encounter actor and observe its normal Fly In progress from A toward B."
     }
   ],
   "stop": {
-    "frameBudget": 360,
-    "condition": "At least 120 in-transit updates and one natural 21-update explicit destination scan complete; its exact prepared encounter actor then proves normal Fly In progress from A toward B; or the first budget, identity, progress, or observation failure ends the run."
+    "frameBudget": 720,
+    "condition": "At least 120 in-transit updates and one natural 61-update explicit destination scan complete; its exact prepared encounter actor then proves normal Fly In progress from A toward B; or the first budget, identity, progress, or observation failure ends the run."
   },
   "expect": {
     "requiredEvents": [],
@@ -82,10 +84,10 @@
       "MOTION_CANCELED"
     ],
     "invariants": [
-      "All automatic destination scanners together perform at most 12 expensive candidate terrain queries in one completed game update",
+      "All automatic destination scanners together perform at most 4 expensive candidate terrain queries in one completed game update",
       "One automatic spawn attempt resolves its profile and prepares metadata and class exactly once",
       "Every resumed finalizer stays within the registered guest-work limit",
-      "The explicit scan performs zero terrain-matcher queries at initialization and at most 12 on each of the next 20 completed updates",
+      "The explicit scan performs zero terrain-matcher queries at initialization and at most 4 on each of the next 60 completed updates",
       "The update after the scan creates the prepared Wild actor without repeating profile work",
       "Observed spawn work belongs to the current resolved profile, destination mask, field epoch and encounter",
       "The successful scan creates its prepared Wild actor",

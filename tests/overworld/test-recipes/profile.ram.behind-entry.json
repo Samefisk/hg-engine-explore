@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.ram.behind-entry",
+  "title": "Onix begins Ram with the player behind, locks North, and crashes",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.ram-behind-entry"
+  ],
+  "budgets": {
+    "maxSeconds": 300,
+    "maxFrames": 850,
+    "noProgressFrames": 480,
+    "minObservedFrames": 115
+  },
+  "subjects": [
+    {
+      "id": "onix",
+      "species": 95,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "ram-behind-entry-v1",
+      "subject": "onix"
+    }
+  ],
+  "setup": [
+    {
+      "id": "route29-origin",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 594,
+        "z": 399,
+        "facing": 2
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-passive-follower",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "create-passive-follower",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-onix",
+      "op": "spawn",
+      "args": {
+        "species": 95,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 594,
+        "z": 404
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-onix",
+      "op": "bind",
+      "args": {
+        "subject": "onix"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "wait-charge-start",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "ram-behind-entry-v1",
+          "stage": "charge-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "dodge-off-axis",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "charge-crash-cooldown",
+      "op": "step",
+      "args": {
+        "frames": 480,
+        "keys": [],
+        "until": {
+          "kind": "measurement-complete",
+          "measurement": "ram-behind-entry-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 480,
+        "noProgressFrames": 480
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "ram-behind-entry-v1",
+      "when": "final"
+    }
+  ]
+}

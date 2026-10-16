@@ -38,6 +38,11 @@ memset:
     pop {pc}
     .size memset, . - memset
 
+    .section .overworld_actor_teleport_planner_tail, "ax", %progbits
+    .global OverworldTask6PrivateMultiplyBridge
+    .type OverworldTask6PrivateMultiplyBridge, %function
+    .thumb_func
+OverworldTask6PrivateMultiplyBridge:
     .global __aeabi_lmul
     .thumb_func
     .type __aeabi_lmul, %function
@@ -46,6 +51,8 @@ __aeabi_lmul:
     blx 0x020F2948
     pop {pc}
     .size __aeabi_lmul, . - __aeabi_lmul
+    .size OverworldTask6PrivateMultiplyBridge, . - OverworldTask6PrivateMultiplyBridge
+    .text
 
     .global __aeabi_ldivmod
     .thumb_func

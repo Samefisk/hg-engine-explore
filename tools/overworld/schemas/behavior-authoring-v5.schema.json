@@ -17,32 +17,48 @@
     "runtimeBindings"
   ],
   "properties": {
-    "catalogVersion": { "const": 5 },
+    "catalogVersion": {
+      "const": 5
+    },
     "schema": {
       "const": "../tools/overworld/schemas/behavior-authoring-v5.schema.json"
     },
-    "fieldSchema": { "const": "../tools/overworld/behavior_schema.json" },
-    "generatedCompatibilityOutput": { "const": "OverworldWildBehaviorData.c" },
-    "rootProfile": { "$ref": "#/$defs/id" },
+    "fieldSchema": {
+      "const": "../tools/overworld/behavior_schema.json"
+    },
+    "generatedCompatibilityOutput": {
+      "const": "OverworldWildBehaviorData.c"
+    },
+    "rootProfile": {
+      "$ref": "#/$defs/id"
+    },
     "profiles": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/profile" }
+      "items": {
+        "$ref": "#/$defs/profile"
+      }
     },
     "selectors": {
       "type": "array",
       "maxItems": 65535,
-      "items": { "$ref": "behavior-authoring-v4.schema.json#/$defs/selector" }
+      "items": {
+        "$ref": "behavior-authoring-v4.schema.json#/$defs/selector"
+      }
     },
     "pools": {
       "type": "array",
-      "items": { "$ref": "#/$defs/namedPool" }
+      "items": {
+        "$ref": "#/$defs/namedPool"
+      }
     },
     "applications": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 32,
-      "items": { "$ref": "#/$defs/application" }
+      "maxItems": 65534,
+      "items": {
+        "$ref": "#/$defs/application"
+      }
     },
     "runtimeBindings": {
       "$ref": "#/$defs/runtimeBindings"
@@ -55,11 +71,14 @@
     },
     "profileClassification": {
       "enum": [
+        "mood",
         "routine",
-        "placement",
-        "capability",
-        "attitude",
         "style",
+        "placement",
+        "follower",
+        "capability",
+        "attack",
+        "attitude",
         "follower-mount",
         "modifier"
       ]
@@ -67,34 +86,132 @@
     "normalProfile": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "parent", "kind", "fields"],
+      "required": [
+        "id",
+        "name",
+        "parent",
+        "kind",
+        "fields"
+      ],
       "allOf": [
         {
           "if": {
-            "properties": { "parent": { "$ref": "#/$defs/id" } },
-            "required": ["parent"]
+            "properties": {
+              "parent": {
+                "$ref": "#/$defs/id"
+              }
+            },
+            "required": [
+              "parent"
+            ]
           },
-          "then": { "required": ["classification"] }
+          "then": {
+            "required": [
+              "classification"
+            ]
+          }
         }
       ],
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "name": { "type": "string", "minLength": 1 },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
         "parent": {
           "oneOf": [
-            { "$ref": "#/$defs/id" },
-            { "type": "null" }
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
-        "kind": { "const": "normal" },
-        "classification": { "$ref": "#/$defs/profileClassification" },
+        "kind": {
+          "const": "normal"
+        },
+        "classification": {
+          "$ref": "#/$defs/profileClassification"
+        },
         "fields": {
           "type": "object",
           "additionalProperties": {
-            "$ref": "behavior-authoring-v4.schema.json#/$defs/operatorValue"
+            "$ref": "#/$defs/operatorValue"
+          },
+          "properties": {
+            "returnAfterMove": {
+              "$ref": "#/$defs/returnAfterMove"
+            },
+            "cargoTargetCheckInterval": {
+              "$ref": "#/$defs/cargoTargetCheckInterval"
+            },
+            "cargoTargetSwitchAdvantage": {
+              "$ref": "#/$defs/cargoTargetSwitchAdvantage"
+            },
+            "chainHopInPlaceExtraHops": {
+              "$ref": "#/$defs/chainHopInPlaceExtraHops"
+            },
+            "chainHopInPlaceExtraChance": {
+              "$ref": "#/$defs/chainHopInPlaceExtraChance"
+            }
           }
         }
       }
+    },
+    "hopArc": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "shape"
+          ],
+          "properties": {
+            "shape": {
+              "const": "none"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "shape",
+            "riseFrames",
+            "hangFrames",
+            "dropFrames",
+            "peakQ4"
+          ],
+          "properties": {
+            "shape": {
+              "const": "slam"
+            },
+            "riseFrames": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 255
+            },
+            "hangFrames": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "dropFrames": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 255
+            },
+            "peakQ4": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 255
+            }
+          }
+        }
+      ]
     },
     "conditionalProfile": {
       "type": "object",
@@ -109,38 +226,90 @@
         "fields"
       ],
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "name": { "type": "string", "minLength": 1 },
-        "parent": { "$ref": "#/$defs/id" },
-        "kind": { "const": "conditional" },
-        "classification": { "$ref": "#/$defs/profileClassification" },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parent": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "conditional"
+        },
+        "showRestTintDuringCooldown": {
+          "type": "boolean",
+          "default": false
+        },
+        "hopArc": {
+          "$ref": "#/$defs/hopArc"
+        },
+        "classification": {
+          "$ref": "#/$defs/profileClassification"
+        },
         "conditions": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 32,
-          "items": { "$ref": "#/$defs/condition" }
+          "maxItems": 65535,
+          "items": {
+            "$ref": "#/$defs/condition"
+          }
         },
         "fields": {
           "type": "object",
           "additionalProperties": {
-            "$ref": "behavior-authoring-v4.schema.json#/$defs/operatorValue"
+            "$ref": "#/$defs/operatorValue"
+          },
+          "properties": {
+            "returnAfterMove": {
+              "$ref": "#/$defs/returnAfterMove"
+            },
+            "cargoTargetCheckInterval": {
+              "$ref": "#/$defs/cargoTargetCheckInterval"
+            },
+            "cargoTargetSwitchAdvantage": {
+              "$ref": "#/$defs/cargoTargetSwitchAdvantage"
+            },
+            "chainHopInPlaceExtraHops": {
+              "$ref": "#/$defs/chainHopInPlaceExtraHops"
+            },
+            "chainHopInPlaceExtraChance": {
+              "$ref": "#/$defs/chainHopInPlaceExtraChance"
+            }
           }
         }
       }
     },
     "profile": {
       "oneOf": [
-        { "$ref": "#/$defs/normalProfile" },
-        { "$ref": "#/$defs/conditionalProfile" }
+        {
+          "$ref": "#/$defs/normalProfile"
+        },
+        {
+          "$ref": "#/$defs/conditionalProfile"
+        }
       ]
     },
     "inlinePool": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["mode", "match", "members"],
+      "required": [
+        "mode",
+        "match",
+        "members"
+      ],
       "properties": {
-        "mode": { "enum": ["members", "all"] },
-        "match": { "$ref": "behavior-authoring-v4.schema.json#/$defs/match" },
+        "mode": {
+          "enum": [
+            "members",
+            "all"
+          ]
+        },
+        "match": {
+          "$ref": "behavior-authoring-v4.schema.json#/$defs/match"
+        },
         "members": {
           "type": "array",
           "uniqueItems": true,
@@ -153,12 +322,30 @@
     "namedPool": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "mode", "match", "members"],
+      "required": [
+        "id",
+        "name",
+        "mode",
+        "match",
+        "members"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "name": { "type": "string", "minLength": 1 },
-        "mode": { "enum": ["members", "all"] },
-        "match": { "$ref": "behavior-authoring-v4.schema.json#/$defs/match" },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "enum": [
+            "members",
+            "all"
+          ]
+        },
+        "match": {
+          "$ref": "behavior-authoring-v4.schema.json#/$defs/match"
+        },
         "members": {
           "type": "array",
           "uniqueItems": true,
@@ -171,79 +358,266 @@
     "poolReference": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["pool"],
-      "properties": { "pool": { "$ref": "#/$defs/id" } }
+      "required": [
+        "pool"
+      ],
+      "properties": {
+        "pool": {
+          "$ref": "#/$defs/id"
+        }
+      }
     },
     "poolSelection": {
       "oneOf": [
-        { "$ref": "#/$defs/inlinePool" },
-        { "$ref": "#/$defs/poolReference" }
+        {
+          "$ref": "#/$defs/inlinePool"
+        },
+        {
+          "$ref": "#/$defs/poolReference"
+        }
       ]
     },
     "actorPoolTarget": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "roles", "selection", "pool"],
+      "required": [
+        "kind",
+        "roles",
+        "selection",
+        "pool"
+      ],
       "properties": {
-        "kind": { "const": "actor" },
+        "kind": {
+          "const": "actor"
+        },
         "roles": {
           "type": "array",
           "minItems": 1,
           "maxItems": 2,
           "uniqueItems": true,
-          "items": { "enum": ["wild", "follower"] }
+          "items": {
+            "enum": [
+              "wild",
+              "follower"
+            ]
+          }
         },
-        "selection": { "const": "nearest" },
-        "pool": { "$ref": "#/$defs/id" }
+        "selection": {
+          "const": "nearest"
+        },
+        "pool": {
+          "$ref": "#/$defs/id"
+        },
+        "mustBeReachableForPickup": {
+          "type": "boolean"
+        },
+        "pickupReach": {
+          "$ref": "#/$defs/pickupReach"
+        }
       }
     },
     "conditionTarget": {
       "oneOf": [
-        { "$ref": "behavior-authoring-v4.schema.json#/$defs/conditionTarget" },
-        { "$ref": "#/$defs/actorPoolTarget" }
+        {
+          "$ref": "behavior-authoring-v4.schema.json#/$defs/conditionTarget"
+        },
+        {
+          "$ref": "#/$defs/actorPoolTarget"
+        }
       ]
     },
     "currentVision": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["mode"],
-      "properties": { "mode": { "const": "current" } }
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "const": "current"
+        }
+      }
     },
     "customVision": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["mode", "range", "cone", "adjacentAwareness"],
+      "required": [
+        "mode",
+        "range",
+        "cone",
+        "adjacentAwareness"
+      ],
       "properties": {
-        "mode": { "const": "custom" },
-        "range": { "type": "integer", "minimum": 1, "maximum": 32 },
-        "cone": { "const": "forward-90" },
-        "adjacentAwareness": { "type": "boolean" }
+        "mode": {
+          "const": "custom"
+        },
+        "range": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        },
+        "cone": {
+          "enum": [
+            "forward-90",
+            "forward-line",
+            "cardinal-lines"
+          ]
+        },
+        "adjacentAwareness": {
+          "type": "boolean"
+        },
+        "sameTileAwareness": {
+          "type": "boolean",
+          "default": false
+        }
       }
     },
     "visionSelection": {
       "oneOf": [
-        { "$ref": "#/$defs/currentVision" },
-        { "$ref": "#/$defs/customVision" }
+        {
+          "$ref": "#/$defs/currentVision"
+        },
+        {
+          "$ref": "#/$defs/customVision"
+        }
       ]
     },
     "noticeTargetCondition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "vision", "chancePercent"],
+      "required": [
+        "kind",
+        "vision",
+        "chancePercent"
+      ],
       "properties": {
-        "kind": { "const": "notice-target" },
-        "vision": { "$ref": "#/$defs/visionSelection" },
-        "chancePercent": { "type": "integer", "minimum": 0, "maximum": 100 }
+        "kind": {
+          "const": "notice-target"
+        },
+        "vision": {
+          "$ref": "#/$defs/visionSelection"
+        },
+        "chancePercent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "facts": {
+          "$ref": "#/$defs/actorFacts"
+        }
       }
     },
     "targetCannotSeeSubjectCondition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "vision", "chancePercent"],
+      "required": [
+        "kind",
+        "vision",
+        "chancePercent"
+      ],
       "properties": {
-        "kind": { "const": "target-cannot-see-subject" },
-        "vision": { "$ref": "#/$defs/visionSelection" },
-        "chancePercent": { "type": "integer", "minimum": 0, "maximum": 100 }
+        "kind": {
+          "const": "target-cannot-see-subject"
+        },
+        "vision": {
+          "$ref": "#/$defs/visionSelection"
+        },
+        "chancePercent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    },
+    "actorFact": {
+      "enum": [
+        "reserved",
+        "held",
+        "throw-line-valid",
+        "recovering",
+        "trigger-valid",
+        "targeted-for-pickup"
+      ]
+    },
+    "actorFacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "all",
+        "none"
+      ],
+      "properties": {
+        "all": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/actorFact"
+          }
+        },
+        "none": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/actorFact"
+          }
+        }
+      },
+      "anyOf": [
+        {
+          "properties": {
+            "all": {
+              "minItems": 1
+            }
+          }
+        },
+        {
+          "properties": {
+            "none": {
+              "minItems": 1
+            }
+          }
+        }
+      ]
+    },
+    "noticePlayerCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "vision",
+        "chancePercent"
+      ],
+      "properties": {
+        "kind": {
+          "const": "notice-player"
+        },
+        "vision": {
+          "$ref": "#/$defs/visionSelection"
+        },
+        "chancePercent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "facts": {
+          "$ref": "#/$defs/actorFacts"
+        }
+      }
+    },
+    "actorFactsCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "facts"
+      ],
+      "properties": {
+        "kind": {
+          "const": "actor-facts"
+        },
+        "facts": {
+          "$ref": "#/$defs/actorFacts"
+        }
       }
     },
     "conditionWhen": {
@@ -254,47 +628,209 @@
         {
           "$ref": "behavior-authoring-v4.schema.json#/$defs/noticeTargetCondition"
         },
-        { "$ref": "#/$defs/noticeTargetCondition" },
-        { "$ref": "#/$defs/targetCannotSeeSubjectCondition" }
+        {
+          "$ref": "#/$defs/noticeTargetCondition"
+        },
+        {
+          "$ref": "#/$defs/targetCannotSeeSubjectCondition"
+        },
+        {
+          "$ref": "#/$defs/noticePlayerCondition"
+        },
+        {
+          "$ref": "#/$defs/actorFactsCondition"
+        },
+        {
+          "$ref": "#/$defs/playerDamagedCondition"
+        },
+        {
+          "$ref": "#/$defs/boundTargetDistanceCondition"
+        },
+        {
+          "$ref": "#/$defs/subjectDamagedCondition"
+        }
       ]
     },
     "condition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "subjects", "when", "activation", "target"],
+      "required": [
+        "id",
+        "subjects",
+        "when",
+        "activation",
+        "target"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "subjects": { "$ref": "#/$defs/poolSelection" },
-        "when": { "$ref": "#/$defs/conditionWhen" },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "subjects": {
+          "$ref": "#/$defs/poolSelection"
+        },
+        "when": {
+          "$ref": "#/$defs/conditionWhen"
+        },
         "activation": {
           "$ref": "behavior-authoring-v4.schema.json#/$defs/conditionActivation"
         },
-        "target": { "$ref": "#/$defs/conditionTarget" }
-      }
+        "target": {
+          "$ref": "#/$defs/conditionTarget"
+        },
+        "subjectRoles": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "wild",
+              "follower",
+              "mounted"
+            ]
+          }
+        },
+        "binding": {
+          "$ref": "#/$defs/conditionBinding"
+        },
+        "usesBinding": {
+          "enum": [
+            "trigger",
+            "cargo",
+            "object-of-interest-itself"
+          ]
+        },
+        "failure": {
+          "$ref": "#/$defs/conditionFailure"
+        },
+        "requiresAppliedProfile": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "when": {
+                "properties": {
+                  "kind": {
+                    "const": "player-damaged"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "target": {
+                "properties": {
+                  "kind": {
+                    "const": "actor"
+                  }
+                }
+              },
+              "activation": {
+                "properties": {
+                  "mode": {
+                    "const": "while-true"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "usesBinding"
+            ],
+            "properties": {
+              "usesBinding": {
+                "const": "object-of-interest-itself"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "binding"
+            ],
+            "properties": {
+              "binding": {
+                "properties": {
+                  "name": {
+                    "const": "cargo"
+                  }
+                }
+              },
+              "target": {
+                "properties": {
+                  "kind": {
+                    "const": "actor"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
     },
     "targetedApplication": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "profile", "target"],
+      "required": [
+        "id",
+        "profile",
+        "target"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "profile": { "$ref": "#/$defs/id" },
-        "target": { "$ref": "#/$defs/poolSelection" }
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "profile": {
+          "$ref": "#/$defs/id"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "target": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/poolSelection"
+            },
+            {
+              "$ref": "#/$defs/unassignedTarget"
+            }
+          ]
+        }
       }
     },
     "linkedApplication": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "profile"],
+      "required": [
+        "id",
+        "profile"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "profile": { "$ref": "#/$defs/id" }
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "profile": {
+          "$ref": "#/$defs/id"
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        }
       }
     },
     "application": {
       "oneOf": [
-        { "$ref": "#/$defs/targetedApplication" },
-        { "$ref": "#/$defs/linkedApplication" }
+        {
+          "$ref": "#/$defs/targetedApplication"
+        },
+        {
+          "$ref": "#/$defs/linkedApplication"
+        }
       ]
     },
     "runtimeBindings": {
@@ -317,9 +853,14 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["profile", "symbol"],
+            "required": [
+              "profile",
+              "symbol"
+            ],
             "properties": {
-              "profile": { "$ref": "#/$defs/id" },
+              "profile": {
+                "$ref": "#/$defs/id"
+              },
               "symbol": {
                 "type": "string",
                 "pattern": "^OW_WILD_BEHAVIOR_CLASS_[A-Za-z0-9_]+$"
@@ -330,14 +871,447 @@
         "speciesSelectors": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "$ref": "#/$defs/id" }
+          "items": {
+            "$ref": "#/$defs/id"
+          }
         },
-        "followerApplication": { "$ref": "#/$defs/id" },
-        "mountedApplication": { "$ref": "#/$defs/id" },
-        "defaultTiredApplication": { "$ref": "#/$defs/id" },
-        "forcedAsleepApplication": { "$ref": "#/$defs/id" },
+        "followerApplication": {
+          "$ref": "#/$defs/id"
+        },
+        "mountedApplication": {
+          "$ref": "#/$defs/id"
+        },
+        "defaultTiredApplication": {
+          "$ref": "#/$defs/id"
+        },
+        "forcedAsleepApplication": {
+          "$ref": "#/$defs/id"
+        },
         "forcedAsleepClassToken": {
           "$ref": "behavior-authoring-v4.schema.json#/$defs/expression"
+        }
+      }
+    },
+    "pickupReach": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tiles",
+        "heightUnits"
+      ],
+      "properties": {
+        "tiles": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "heightUnits": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        }
+      }
+    },
+    "conditionBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "lifetime",
+        "contributeProfile"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "trigger",
+            "cargo"
+          ]
+        },
+        "lifetime": {
+          "enum": [
+            "until-clear",
+            "frames"
+          ]
+        },
+        "contributeProfile": {
+          "type": "boolean"
+        },
+        "durationFrames": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      }
+    },
+    "conditionFailure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "response",
+        "retryFrames"
+      ],
+      "properties": {
+        "response": {
+          "const": "drop-and-clear"
+        },
+        "retryFrames": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        }
+      }
+    },
+    "operatorValue": {
+      "oneOf": [
+        {
+          "$ref": "behavior-authoring-v4.schema.json#/$defs/operatorValue"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operator",
+            "value"
+          ],
+          "properties": {
+            "operator": {
+              "const": "divide"
+            },
+            "value": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 127
+            }
+          }
+        }
+      ]
+    },
+    "playerDamagedCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "const": "player-damaged"
+        },
+        "facts": {
+          "$ref": "#/$defs/actorFacts"
+        }
+      }
+    },
+    "returnAfterMove": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operator",
+        "value"
+      ],
+      "properties": {
+        "operator": {
+          "const": "replace"
+        },
+        "value": {
+          "enum": [
+            0,
+            1,
+            "0",
+            "1",
+            "OW_WILD_BEHAVIOR_BOOL_NO",
+            "OW_WILD_BEHAVIOR_BOOL_YES"
+          ]
+        }
+      }
+    },
+    "cargoTargetCheckInterval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operator",
+        "value"
+      ],
+      "properties": {
+        "operator": {
+          "const": "replace"
+        },
+        "value": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 15
+            },
+            {
+              "type": "string",
+              "enum": [
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+                "10",
+                "11",
+                "12",
+                "13",
+                "14",
+                "15"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "cargoTargetSwitchAdvantage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operator",
+        "value"
+      ],
+      "properties": {
+        "operator": {
+          "const": "replace"
+        },
+        "value": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3
+            },
+            {
+              "type": "string",
+              "enum": [
+                "0",
+                "1",
+                "2",
+                "3"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "chainHopInPlaceExtraHops": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operator",
+        "value"
+      ],
+      "properties": {
+        "operator": {
+          "const": "replace"
+        },
+        "value": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2
+            },
+            {
+              "type": "string",
+              "enum": [
+                "0",
+                "1",
+                "2"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "chainHopInPlaceExtraChance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operator",
+        "value"
+      ],
+      "properties": {
+        "operator": {
+          "const": "replace"
+        },
+        "value": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            {
+              "type": "string",
+              "enum": [
+                "0",
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+                "10",
+                "11",
+                "12",
+                "13",
+                "14",
+                "15",
+                "16",
+                "17",
+                "18",
+                "19",
+                "20",
+                "21",
+                "22",
+                "23",
+                "24",
+                "25",
+                "26",
+                "27",
+                "28",
+                "29",
+                "30",
+                "31",
+                "32",
+                "33",
+                "34",
+                "35",
+                "36",
+                "37",
+                "38",
+                "39",
+                "40",
+                "41",
+                "42",
+                "43",
+                "44",
+                "45",
+                "46",
+                "47",
+                "48",
+                "49",
+                "50",
+                "51",
+                "52",
+                "53",
+                "54",
+                "55",
+                "56",
+                "57",
+                "58",
+                "59",
+                "60",
+                "61",
+                "62",
+                "63",
+                "64",
+                "65",
+                "66",
+                "67",
+                "68",
+                "69",
+                "70",
+                "71",
+                "72",
+                "73",
+                "74",
+                "75",
+                "76",
+                "77",
+                "78",
+                "79",
+                "80",
+                "81",
+                "82",
+                "83",
+                "84",
+                "85",
+                "86",
+                "87",
+                "88",
+                "89",
+                "90",
+                "91",
+                "92",
+                "93",
+                "94",
+                "95",
+                "96",
+                "97",
+                "98",
+                "99",
+                "100"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "boundTargetDistanceCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "minTiles",
+        "maxTiles"
+      ],
+      "properties": {
+        "kind": {
+          "const": "bound-target-distance"
+        },
+        "minTiles": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 32
+        },
+        "maxTiles": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        }
+      }
+    },
+    "subjectDamagedCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "const": "subject-damaged"
+        },
+        "facts": {
+          "$ref": "#/$defs/actorFacts"
+        }
+      }
+    },
+    "unassignedTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "match",
+        "members"
+      ],
+      "properties": {
+        "mode": {
+          "const": "disabled"
+        },
+        "match": {
+          "$ref": "behavior-authoring-v4.schema.json#/$defs/match"
+        },
+        "members": {
+          "type": "array",
+          "maxItems": 0
         }
       }
     }

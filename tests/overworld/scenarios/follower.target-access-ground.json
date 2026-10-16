@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "id": "follower.target-access-ground",
+  "title": "Mankey still captures an accessible ground Pok\u00e9mon",
+  "status": "active",
+  "capabilities": [
+    "condition.evaluation"
+  ],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "Current FOLLOWER Mankey56 and one current WILD Snorlax143, bound by full native identity.",
+    "trigger": "Prepare a passive Cyndaquil and walk the player normally to580398. Wait for the passive follower to settle, then prepare, create and bind Mankey. Create and bind the native ground target, check its landing and read its terrain immediately before the measured condition window. Use normal input for that window.",
+    "observable": "A real current Snorlax on clear loaded Route29 ground581398 is adjacent to Mankey. Native Notice12365 must be active and its full current target must match the Trigger binding and current Throw application. No pickup or launch claim is made.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Checked Route29 teleport585402, party0 passive Cyndaquil20 and ordinary follower creation; normal Left/Up input and a typed passive follower settle wait; then party0 Mankey20 and ordinary follower creation and bind before one authored Wild ground target spawn, bind, landing check and native terrain read. Subject binds and terrain are read-only. No profile, target state, HP, timer, motion or result is forced."
+      }
+    ],
+    "limits": [
+      "Prepared placement does not prove natural population or every terrain arrangement.",
+      "The shared production-C controls cover physical surface precedence, missing support, stale identities and current moving support. This native case uses the stated settled target.",
+      "The Notice has authored adjacent awareness. An adjacent target has no intermediate occlusion tile. This case makes no claim about distant Vision."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "target",
+      "species": 143,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Finish the ordinary player approach and Mankey follower setup before creating and binding the ground target; check its landing and read its actual native terrain immediately before observation."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "A real current Snorlax on clear loaded Route29 ground581398 is adjacent to Mankey. Native Notice12365 must be active and its full current target must match the Trigger binding and current Throw application. No pickup or launch claim is made."
+    }
+  ],
+  "stop": {
+    "frameBudget": 650,
+    "condition": "Complete the stated access proof, or stop at the first invalid native actor, surface, binding, profile, motion or field boundary."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "A real current Snorlax on clear loaded Route29 ground581398 is adjacent to Mankey. Native Notice12365 must be active and its full current target must match the Trigger binding and current Throw application. No pickup or launch claim is made.",
+      "All state comes from the same current ROM and native field. No copied profile or predicate writes."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "follower.target-access-ground",
+    "claims": [
+      "live-actor-identity",
+      "terrain-selection",
+      "profile-resolution",
+      "natural-input"
+    ],
+    "minimumFrames": 8
+  }
+}

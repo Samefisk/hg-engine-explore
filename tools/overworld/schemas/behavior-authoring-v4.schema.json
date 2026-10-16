@@ -16,30 +16,46 @@
     "runtimeBindings"
   ],
   "properties": {
-    "catalogVersion": { "const": 4 },
+    "catalogVersion": {
+      "const": 4
+    },
     "schema": {
       "const": "../tools/overworld/schemas/behavior-authoring-v4.schema.json"
     },
-    "fieldSchema": { "const": "../tools/overworld/behavior_schema.json" },
-    "generatedCompatibilityOutput": { "const": "OverworldWildBehaviorData.c" },
-    "rootProfile": { "$ref": "#/$defs/id" },
+    "fieldSchema": {
+      "const": "../tools/overworld/behavior_schema.json"
+    },
+    "generatedCompatibilityOutput": {
+      "const": "OverworldWildBehaviorData.c"
+    },
+    "rootProfile": {
+      "$ref": "#/$defs/id"
+    },
     "profiles": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/profile" }
+      "items": {
+        "$ref": "#/$defs/profile"
+      }
     },
     "selectors": {
       "type": "array",
       "maxItems": 65535,
-      "items": { "$ref": "#/$defs/selector" }
+      "items": {
+        "$ref": "#/$defs/selector"
+      }
     },
     "applications": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 32,
-      "items": { "$ref": "#/$defs/application" }
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/application"
+      }
     },
-    "runtimeBindings": { "$ref": "#/$defs/runtimeBindings" }
+    "runtimeBindings": {
+      "$ref": "#/$defs/runtimeBindings"
+    }
   },
   "$defs": {
     "id": {
@@ -48,13 +64,22 @@
     },
     "expression": {
       "oneOf": [
-        { "type": "integer" },
-        { "type": "string", "minLength": 1 }
+        {
+          "type": "integer"
+        },
+        {
+          "type": "string",
+          "minLength": 1
+        }
       ]
     },
     "terrainExpression": {
       "oneOf": [
-        { "type": "integer", "minimum": 0, "maximum": 1023 },
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1023
+        },
         {
           "type": "string",
           "pattern": "^(0|OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_[A-Z_]+(?:\\s*\\|\\s*OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_[A-Z_]+)*)$"
@@ -64,7 +89,10 @@
     "operatorValue": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["operator", "value"],
+      "required": [
+        "operator",
+        "value"
+      ],
       "properties": {
         "operator": {
           "enum": [
@@ -76,81 +104,166 @@
             "relativeThenAtMost"
           ]
         },
-        "value": { "$ref": "#/$defs/expression" },
-        "threshold": { "type": "integer" }
+        "value": {
+          "$ref": "#/$defs/expression"
+        },
+        "threshold": {
+          "type": "integer"
+        }
       },
       "allOf": [
         {
           "if": {
             "properties": {
               "operator": {
-                "enum": ["relativeThenAtLeast", "relativeThenAtMost"]
+                "enum": [
+                  "relativeThenAtLeast",
+                  "relativeThenAtMost"
+                ]
               }
             }
           },
           "then": {
-            "required": ["threshold"],
-            "properties": { "value": { "type": "integer" } }
+            "required": [
+              "threshold"
+            ],
+            "properties": {
+              "value": {
+                "type": "integer"
+              }
+            }
           },
-          "else": { "not": { "required": ["threshold"] } }
+          "else": {
+            "not": {
+              "required": [
+                "threshold"
+              ]
+            }
+          }
         },
         {
           "if": {
             "properties": {
-              "operator": { "enum": ["relative", "atLeast", "atMost"] }
+              "operator": {
+                "enum": [
+                  "relative",
+                  "atLeast",
+                  "atMost"
+                ]
+              }
             }
           },
-          "then": { "properties": { "value": { "type": "integer" } } }
+          "then": {
+            "properties": {
+              "value": {
+                "type": "integer"
+              }
+            }
+          }
         }
       ]
     },
     "normalProfile": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "parent", "kind", "fields"],
+      "required": [
+        "id",
+        "name",
+        "parent",
+        "kind",
+        "fields"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "name": { "type": "string", "minLength": 1 },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
         "parent": {
           "oneOf": [
-            { "$ref": "#/$defs/id" },
-            { "type": "null" }
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
-        "kind": { "const": "normal" },
-        "classification": { "$ref": "#/$defs/profileClassification" },
+        "kind": {
+          "const": "normal"
+        },
+        "classification": {
+          "$ref": "#/$defs/profileClassification"
+        },
         "fields": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/operatorValue" }
+          "additionalProperties": {
+            "$ref": "#/$defs/operatorValue"
+          }
         }
       }
     },
     "conditionalProfile": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "parent", "kind", "conditions", "fields"],
+      "required": [
+        "id",
+        "name",
+        "parent",
+        "kind",
+        "conditions",
+        "fields"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "name": { "type": "string", "minLength": 1 },
-        "parent": { "$ref": "#/$defs/id" },
-        "kind": { "const": "conditional" },
-        "classification": { "$ref": "#/$defs/profileClassification" },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parent": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "conditional"
+        },
+        "showRestTintDuringCooldown": {
+          "type": "boolean",
+          "default": false
+        },
+        "classification": {
+          "$ref": "#/$defs/profileClassification"
+        },
         "conditions": {
           "type": "array",
           "minItems": 1,
           "maxItems": 32,
-          "items": { "$ref": "#/$defs/condition" }
+          "items": {
+            "$ref": "#/$defs/condition"
+          }
         },
         "fields": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/operatorValue" }
+          "additionalProperties": {
+            "$ref": "#/$defs/operatorValue"
+          }
+        },
+        "hopArc": {
+          "$ref": "#/$defs/hopArc"
         }
       }
     },
     "profile": {
       "oneOf": [
-        { "$ref": "#/$defs/normalProfile" },
-        { "$ref": "#/$defs/conditionalProfile" }
+        {
+          "$ref": "#/$defs/normalProfile"
+        },
+        {
+          "$ref": "#/$defs/conditionalProfile"
+        }
       ]
     },
     "profileClassification": {
@@ -176,40 +289,81 @@
         "behaviorClass"
       ],
       "properties": {
-        "groupMask": { "$ref": "#/$defs/expression" },
-        "species": { "$ref": "#/$defs/expression" },
-        "terrain": { "$ref": "#/$defs/expression" },
-        "minLevel": { "$ref": "#/$defs/expression" },
-        "maxLevel": { "$ref": "#/$defs/expression" },
-        "shiny": { "$ref": "#/$defs/expression" },
-        "behaviorClass": { "$ref": "#/$defs/expression" }
+        "groupMask": {
+          "$ref": "#/$defs/expression"
+        },
+        "species": {
+          "$ref": "#/$defs/expression"
+        },
+        "terrain": {
+          "$ref": "#/$defs/expression"
+        },
+        "minLevel": {
+          "$ref": "#/$defs/expression"
+        },
+        "maxLevel": {
+          "$ref": "#/$defs/expression"
+        },
+        "shiny": {
+          "$ref": "#/$defs/expression"
+        },
+        "behaviorClass": {
+          "$ref": "#/$defs/expression"
+        }
       }
     },
     "applicationTarget": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["mode", "match", "members"],
+      "required": [
+        "mode",
+        "match",
+        "members"
+      ],
       "properties": {
-        "mode": { "enum": ["disabled", "members", "all"] },
-        "match": { "$ref": "#/$defs/match" },
+        "mode": {
+          "enum": [
+            "disabled",
+            "members",
+            "all"
+          ]
+        },
+        "match": {
+          "$ref": "#/$defs/match"
+        },
         "members": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "$ref": "#/$defs/expression" }
+          "items": {
+            "$ref": "#/$defs/expression"
+          }
         }
       }
     },
     "inlineSubjectPool": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["mode", "match", "members"],
+      "required": [
+        "mode",
+        "match",
+        "members"
+      ],
       "properties": {
-        "mode": { "enum": ["members", "all"] },
-        "match": { "$ref": "#/$defs/match" },
+        "mode": {
+          "enum": [
+            "members",
+            "all"
+          ]
+        },
+        "match": {
+          "$ref": "#/$defs/match"
+        },
         "members": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "$ref": "#/$defs/expression" }
+          "items": {
+            "$ref": "#/$defs/expression"
+          }
         }
       }
     },
@@ -218,10 +372,18 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["application"],
-          "properties": { "application": { "$ref": "#/$defs/id" } }
+          "required": [
+            "application"
+          ],
+          "properties": {
+            "application": {
+              "$ref": "#/$defs/id"
+            }
+          }
         },
-        { "$ref": "#/$defs/inlineSubjectPool" }
+        {
+          "$ref": "#/$defs/inlineSubjectPool"
+        }
       ]
     },
     "terrainMotionCondition": {
@@ -235,11 +397,25 @@
         "maxMovementSpeed"
       ],
       "properties": {
-        "kind": { "const": "terrain-motion" },
-        "terrainMask": { "$ref": "#/$defs/terrainExpression" },
-        "terrainOverrideMask": { "$ref": "#/$defs/terrainExpression" },
-        "minMovementSpeed": { "type": "integer", "minimum": 0, "maximum": 32 },
-        "maxMovementSpeed": { "type": "integer", "minimum": 0, "maximum": 32 }
+        "kind": {
+          "const": "terrain-motion"
+        },
+        "terrainMask": {
+          "$ref": "#/$defs/terrainExpression"
+        },
+        "terrainOverrideMask": {
+          "$ref": "#/$defs/terrainExpression"
+        },
+        "minMovementSpeed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 32
+        },
+        "maxMovementSpeed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 32
+        }
       }
     },
     "noticeTargetCondition": {
@@ -252,10 +428,16 @@
         "chancePercent"
       ],
       "properties": {
-        "kind": { "const": "notice-target" },
+        "kind": {
+          "const": "notice-target"
+        },
         "rangeKind": {
           "oneOf": [
-            { "type": "integer", "minimum": 1, "maximum": 4 },
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
+            },
             {
               "enum": [
                 "OW_WILD_BEHAVIOR_ALERT_RANGE_FACING_LINE",
@@ -266,36 +448,81 @@
             }
           ]
         },
-        "rangeLength": { "type": "integer", "minimum": 0, "maximum": 255 },
-        "chancePercent": { "type": "integer", "minimum": 0, "maximum": 100 }
+        "rangeLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "chancePercent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        }
       }
     },
     "conditionWhen": {
       "oneOf": [
-        { "$ref": "#/$defs/terrainMotionCondition" },
-        { "$ref": "#/$defs/noticeTargetCondition" }
+        {
+          "$ref": "#/$defs/terrainMotionCondition"
+        },
+        {
+          "$ref": "#/$defs/noticeTargetCondition"
+        },
+        {
+          "$ref": "#/$defs/actorFactsCondition"
+        },
+        {
+          "$ref": "#/$defs/playerDamagedCondition"
+        }
       ]
     },
     "whileTrueActivation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["mode"],
-      "properties": { "mode": { "const": "while-true" } }
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "const": "while-true"
+        }
+      }
     },
     "timedActivation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["mode", "durationFrames", "cooldownFrames"],
+      "required": [
+        "mode",
+        "durationFrames",
+        "cooldownFrames"
+      ],
       "properties": {
-        "mode": { "const": "timed" },
-        "durationFrames": { "type": "integer", "minimum": 1, "maximum": 65535 },
-        "cooldownFrames": { "type": "integer", "minimum": 0, "maximum": 65535 }
+        "mode": {
+          "const": "timed"
+        },
+        "durationFrames": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "cooldownFrames": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        }
       }
     },
     "conditionActivation": {
       "oneOf": [
-        { "$ref": "#/$defs/whileTrueActivation" },
-        { "$ref": "#/$defs/timedActivation" }
+        {
+          "$ref": "#/$defs/whileTrueActivation"
+        },
+        {
+          "$ref": "#/$defs/timedActivation"
+        },
+        {
+          "$ref": "#/$defs/untilCrashActivation"
+        }
       ]
     },
     "conditionTarget": {
@@ -303,34 +530,65 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind"],
-          "properties": { "kind": { "const": "none" } }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["kind"],
-          "properties": { "kind": { "const": "player" } }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["kind", "roles", "selection", "groupMask", "members"],
+          "required": [
+            "kind"
+          ],
           "properties": {
-            "kind": { "const": "actor" },
+            "kind": {
+              "const": "none"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "player"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "roles",
+            "selection",
+            "groupMask",
+            "members"
+          ],
+          "properties": {
+            "kind": {
+              "const": "actor"
+            },
             "roles": {
               "type": "array",
               "minItems": 1,
               "maxItems": 2,
               "uniqueItems": true,
-              "items": { "enum": ["wild", "follower"] }
+              "items": {
+                "enum": [
+                  "wild",
+                  "follower"
+                ]
+              }
             },
-            "selection": { "const": "nearest" },
-            "groupMask": { "$ref": "#/$defs/expression" },
+            "selection": {
+              "const": "nearest"
+            },
+            "groupMask": {
+              "$ref": "#/$defs/expression"
+            },
             "members": {
               "type": "array",
               "uniqueItems": true,
-              "items": { "$ref": "#/$defs/expression" }
+              "items": {
+                "$ref": "#/$defs/expression"
+              }
             }
           }
         }
@@ -339,21 +597,67 @@
     "condition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "subjects", "when", "activation", "target"],
+      "required": [
+        "id",
+        "subjects",
+        "when",
+        "activation",
+        "target"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "subjects": { "$ref": "#/$defs/conditionSubjects" },
-        "when": { "$ref": "#/$defs/conditionWhen" },
-        "activation": { "$ref": "#/$defs/conditionActivation" },
-        "target": { "$ref": "#/$defs/conditionTarget" }
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "subjects": {
+          "$ref": "#/$defs/conditionSubjects"
+        },
+        "when": {
+          "$ref": "#/$defs/conditionWhen"
+        },
+        "activation": {
+          "$ref": "#/$defs/conditionActivation"
+        },
+        "target": {
+          "$ref": "#/$defs/conditionTarget"
+        },
+        "subjectRoles": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "wild",
+              "follower",
+              "mounted"
+            ]
+          }
+        },
+        "binding": {
+          "$ref": "#/$defs/conditionBinding"
+        },
+        "usesBinding": {
+          "enum": [
+            "trigger",
+            "cargo",
+            "object-of-interest-itself"
+          ]
+        },
+        "failure": {
+          "$ref": "#/$defs/conditionFailure"
+        }
       },
       "allOf": [
         {
           "if": {
             "properties": {
               "when": {
-                "properties": { "kind": { "const": "notice-target" } },
-                "required": ["kind"]
+                "properties": {
+                  "kind": {
+                    "const": "notice-target"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
               }
             }
           },
@@ -361,8 +665,14 @@
             "properties": {
               "target": {
                 "not": {
-                  "properties": { "kind": { "const": "none" } },
-                  "required": ["kind"]
+                  "properties": {
+                    "kind": {
+                      "const": "none"
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ]
                 }
               }
             }
@@ -372,16 +682,92 @@
           "if": {
             "properties": {
               "when": {
-                "properties": { "kind": { "const": "terrain-motion" } },
-                "required": ["kind"]
+                "properties": {
+                  "kind": {
+                    "const": "terrain-motion"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
               }
             }
           },
           "then": {
             "properties": {
               "target": {
-                "properties": { "kind": { "const": "none" } },
-                "required": ["kind"]
+                "properties": {
+                  "kind": {
+                    "const": "none"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "when": {
+                "properties": {
+                  "kind": {
+                    "const": "player-damaged"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "target": {
+                "properties": {
+                  "kind": {
+                    "const": "actor"
+                  }
+                }
+              },
+              "activation": {
+                "properties": {
+                  "mode": {
+                    "const": "while-true"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "usesBinding"
+            ],
+            "properties": {
+              "usesBinding": {
+                "const": "object-of-interest-itself"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "binding"
+            ],
+            "properties": {
+              "binding": {
+                "properties": {
+                  "name": {
+                    "const": "cargo"
+                  }
+                }
+              },
+              "target": {
+                "properties": {
+                  "kind": {
+                    "const": "actor"
+                  }
+                }
               }
             }
           }
@@ -391,21 +777,41 @@
     "selector": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "match", "profile"],
+      "required": [
+        "id",
+        "match",
+        "profile"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "match": { "$ref": "#/$defs/match" },
-        "profile": { "$ref": "#/$defs/id" }
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "match": {
+          "$ref": "#/$defs/match"
+        },
+        "profile": {
+          "$ref": "#/$defs/id"
+        }
       }
     },
     "application": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "profile", "target"],
+      "required": [
+        "id",
+        "profile",
+        "target"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/id" },
-        "profile": { "$ref": "#/$defs/id" },
-        "target": { "$ref": "#/$defs/applicationTarget" }
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "profile": {
+          "$ref": "#/$defs/id"
+        },
+        "target": {
+          "$ref": "#/$defs/applicationTarget"
+        }
       }
     },
     "runtimeBindings": {
@@ -428,9 +834,14 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["profile", "symbol"],
+            "required": [
+              "profile",
+              "symbol"
+            ],
             "properties": {
-              "profile": { "$ref": "#/$defs/id" },
+              "profile": {
+                "$ref": "#/$defs/id"
+              },
               "symbol": {
                 "type": "string",
                 "pattern": "^OW_WILD_BEHAVIOR_CLASS_[A-Za-z0-9_]+$"
@@ -441,15 +852,179 @@
         "speciesSelectors": {
           "type": "array",
           "uniqueItems": true,
-          "items": { "$ref": "#/$defs/id" }
+          "items": {
+            "$ref": "#/$defs/id"
+          }
         },
-        "pickedUpProfile": { "$ref": "#/$defs/id" },
-        "followerApplication": { "$ref": "#/$defs/id" },
-        "mountedApplication": { "$ref": "#/$defs/id" },
-        "defaultTiredApplication": { "$ref": "#/$defs/id" },
-        "forcedAsleepApplication": { "$ref": "#/$defs/id" },
-        "forcedAsleepClassToken": { "$ref": "#/$defs/expression" }
+        "pickedUpProfile": {
+          "$ref": "#/$defs/id"
+        },
+        "followerApplication": {
+          "$ref": "#/$defs/id"
+        },
+        "mountedApplication": {
+          "$ref": "#/$defs/id"
+        },
+        "defaultTiredApplication": {
+          "$ref": "#/$defs/id"
+        },
+        "forcedAsleepApplication": {
+          "$ref": "#/$defs/id"
+        },
+        "forcedAsleepClassToken": {
+          "$ref": "#/$defs/expression"
+        }
       }
+    },
+    "conditionBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "lifetime",
+        "contributeProfile"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "trigger",
+            "cargo"
+          ]
+        },
+        "lifetime": {
+          "enum": [
+            "until-clear",
+            "frames"
+          ]
+        },
+        "contributeProfile": {
+          "type": "boolean"
+        },
+        "durationFrames": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      }
+    },
+    "conditionFailure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "response",
+        "retryFrames"
+      ],
+      "properties": {
+        "response": {
+          "const": "drop-and-clear"
+        },
+        "retryFrames": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        }
+      }
+    },
+    "actorFactsCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "facts"
+      ],
+      "properties": {
+        "kind": {
+          "const": "actor-facts"
+        },
+        "facts": {
+          "$ref": "#/$defs/actorFacts"
+        }
+      }
+    },
+    "playerDamagedCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "const": "player-damaged"
+        },
+        "facts": {
+          "$ref": "#/$defs/actorFacts"
+        }
+      }
+    },
+    "untilCrashActivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "cooldownFrames"
+      ],
+      "properties": {
+        "mode": {
+          "const": "until-crash"
+        },
+        "cooldownFrames": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        }
+      }
+    },
+    "hopArc": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "shape"
+          ],
+          "properties": {
+            "shape": {
+              "const": "none"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "shape",
+            "riseFrames",
+            "hangFrames",
+            "dropFrames",
+            "peakQ4"
+          ],
+          "properties": {
+            "shape": {
+              "const": "slam"
+            },
+            "riseFrames": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 255
+            },
+            "hangFrames": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "dropFrames": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 255
+            },
+            "peakQ4": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 255
+            }
+          }
+        }
+      ]
     }
   }
 }

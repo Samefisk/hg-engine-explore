@@ -229,6 +229,13 @@ def summarize_response(response: dict[str, Any]) -> dict[str, Any]:
     result = {key: project(value, key) if key == "result" else
               project_session(value) if key == "session" else value
               for key, value in response.items()}
+    if isinstance(response.get("session"), dict) and response["session"].get("state") in {"stopped", "failed"} \
+            and isinstance(result.get("result"), dict) and "playing" in result["result"]:
+        cached = result["result"]
+        keep = {"playing", "recording", "frame", "lastError"}
+        note("result", fields=set(cached) - keep)
+        result["result"] = {key: value for key, value in cached.items() if key in keep}
+        result["result"]["snapshotScope"] = "last closed session; cached game data omitted"
     result["outputView"] = {
         "kind": "summary", "complete": False, "scope": "display only; not behavior proof",
         "fullResponse": "omit --summary", "omitted": omitted,
@@ -332,8 +339,20 @@ def _run(args: argparse.Namespace) -> int:
     if args.request_id:
         payload["requestId"] = args.request_id
     try:
-        result = ({"ok": False, "error": {"code": "invalid_arguments", "message": argument_error}}
-                  if argument_error else request(args.url, payload, args.timeout))
+        if argument_error:
+            result = {"ok": False, "error": {"code": "invalid_arguments", "message": argument_error}}
+        elif operation == "test.validate" and getattr(args, "offline", False):
+            from .devtools_test_contract import validate_test
+            from .devtools_test_efficiency import setup_efficiency_report
+            try:
+                test = validate_test(values["test"])
+                result = {"ok": True, "result": {"valid": True, "test": test,
+                          "setupEfficiency": setup_efficiency_report(test), "acceptedProof": False,
+                          "validationScope": "local checkout; no service or session used"}}
+            except ValueError as error:
+                result = {"ok": False, "error": {"code": "invalid_arguments", "message": str(error)}}
+        else:
+            result = request(args.url, payload, args.timeout)
     except ValueError as error:
         result = {"ok": False, "error": {"code": "transport_error", "message": str(error)}}
     if args.summary:
@@ -457,6 +476,9 @@ def register(commands: Any) -> None:
         parser = tests.add_parser(name, help=description, description=description)
         _transport_options(parser)
         parser.set_defaults(handler=_run, dev_operation="test." + name, dev_fields=())
+        if name == "validate":
+            parser.add_argument("--offline", action="store_true",
+                                help="validate with this checkout, without a service or live session")
         if name in ("validate", "save"):
             parser.add_argument("--file", dest="test_file", required=True,
                                 help="UTF-8 JSON object, at most 256 KiB; sent unchanged for service validation")

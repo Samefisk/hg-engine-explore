@@ -16,10 +16,10 @@ static u32 OverworldVision_Abs(s32 value)
 u8 OverworldVision_IsValidSpec(const OverworldVisionSpec *spec)
 {
     return spec != 0
-        && spec->range != 0
-        && spec->range <= OVERWORLD_VISION_MAX_RANGE
-        && (spec->options == OVERWORLD_VISION_CONE_FORWARD_90
-            || spec->options == OVERWORLD_VISION_DEFAULT_OPTIONS);
+        && (u32)spec->range - 1u < OVERWORLD_VISION_MAX_RANGE
+        /* Cone 1/2/3, optionally adjacent bit4 and same-tile bit8. */
+        && spec->options <= OVERWORLD_VISION_OPTIONS_MASK
+        && (spec->options & OVERWORLD_VISION_CONE_MASK) != 0;
 }
 
 u8 OverworldVision_IsInView(
@@ -49,12 +49,20 @@ u8 OverworldVision_IsInView(
     yDistance = OverworldVision_Abs(dy);
     distance = xDistance > yDistance ? xDistance : yDistance;
 
-    if (distance == 0 || distance > spec->range) {
+    if (distance == 0) {
+        return (spec->options & OVERWORLD_VISION_SAME_TILE_AWARENESS) != 0;
+    }
+    if (distance > spec->range) {
         return 0;
     }
     if (distance == 1
         && (spec->options & OVERWORLD_VISION_ADJACENT_AWARENESS) != 0) {
         return 1;
+    }
+
+    if ((spec->options & OVERWORLD_VISION_CONE_MASK)
+            == OVERWORLD_VISION_CONE_CARDINAL_LINES) {
+        return dx == 0 || dy == 0;
     }
 
     if ((observerFacing & 2) != 0) {
@@ -67,7 +75,10 @@ u8 OverworldVision_IsInView(
     if ((observerFacing & 1) == 0) {
         forward = -forward;
     }
-    return forward > 0 && lateral <= (u32)forward;
+    return forward > 0
+        && ((spec->options & OVERWORLD_VISION_CONE_MASK)
+                == OVERWORLD_VISION_CONE_FORWARD_LINE
+            ? lateral == 0 : lateral <= (u32)forward);
 }
 
 #if !defined(OVERWORLD_BEHAVIOR_CONDITION_COMBINED_RUNTIME)

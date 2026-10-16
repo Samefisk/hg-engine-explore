@@ -86,7 +86,7 @@ class CornerControlTests(unittest.TestCase):
                 def read(current):
                     value = original(current)
                     if value["profile19"] == 0:
-                        value["profileHex"] = "00"*72
+                        value["profileHex"] = "00"*80
                     return value
                 r._read_policy = read
             with self.subTest(fault=fault),self.assertRaises(CornerControlError):

@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.damage-flee",
+  "title": "A real hit to a Skittish Wild Pokémon starts Flee away from Player",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "TICKETS.md#tkt-0063--non-follower-pokémon-flee-when-they-take-damage",
+  "requirements": [
+    "current.wild-self-damage-flee"
+  ],
+  "budgets": {
+    "maxSeconds": 300,
+    "maxFrames": 600,
+    "noProgressFrames": 420,
+    "minObservedFrames": 2
+  },
+  "subjects": [
+    {
+      "id": "cleffa",
+      "species": 173,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "threat",
+      "species": 70,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "passive",
+      "species": 155,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "wild-damaged-flee-v1",
+      "subject": "cleffa"
+    }
+  ],
+  "setup": [
+    {
+      "id": "damage-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 407,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-passive-party",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "create-passive-follower",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-passive",
+      "op": "bind",
+      "args": {
+        "subject": "passive"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-cleffa",
+      "op": "spawn",
+      "args": {
+        "species": 173,
+        "form": 0,
+        "role": "wild",
+        "level": 50,
+        "x": 585,
+        "z": 405
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-cleffa",
+      "op": "bind",
+      "args": {
+        "subject": "cleffa"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-threat",
+      "op": "spawn",
+      "args": {
+        "species": 70,
+        "form": 0,
+        "role": "wild",
+        "level": 10,
+        "x": 585,
+        "z": 404
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-threat",
+      "op": "bind",
+      "args": {
+        "subject": "threat"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "observe-damage-flee",
+      "op": "step",
+      "args": {
+        "frames": 420,
+        "keys": [],
+        "until": {
+          "kind": "measurement-complete",
+          "measurement": "wild-damaged-flee-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 240,
+        "maxFrames": 420,
+        "noProgressFrames": 420
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "wild-damaged-flee-v1",
+      "when": "final"
+    }
+  ]
+}

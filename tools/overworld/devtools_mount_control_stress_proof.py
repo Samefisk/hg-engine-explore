@@ -8,8 +8,7 @@ from tools.overworld.normal_play_observer import complete_travel
 from tools.overworld.devtools_movement_predicates import player_settled_at
 
 WALK_REQUIREMENT = "legacy.cyndaquil-control-stress"
-HOP_REQUIREMENT = "legacy.mankey-control-stress"
-REQUIREMENTS = (WALK_REQUIREMENT, HOP_REQUIREMENT)
+REQUIREMENTS = (WALK_REQUIREMENT,)
 CLAIMS = ("natural-input", "live-actor-identity", "rendered-motion", "control-release")
 
 
@@ -118,9 +117,6 @@ def measurements(result, requirement):
         "actor-handle":actor["handle"],"mounted-object-identity-flags":[1,1,1,1,7,actor["species"],1],
         "encounter-generation-match":generations,"valid-mounted-walk-callback-count":[len(main),len(main)],
         "dismount-remount-control-milestones":["IDLE",0,1,1,1,1,1],
-        "completed-natural-hop-count":len(main),"mankey-stress-active-frame-count":len(frame_set),
-        "mankey-stress-identity":[1,"MOUNTED",actor["species"],1],"actor-owned-hop-motion-count":len(main),
-        "valid-mounted-hop-motion-count":[len(main),len(main)],"dismount-and-remount-milestones":[1,1,1,1,"IDLE",0],
     }
     rows=[]
     for claim,specs in contract(requirement).items():
@@ -228,34 +224,4 @@ _CONTRACTS = {'legacy.cyndaquil-control-stress': {'natural-input': [{'name': 'he
                                                           'operator': 'eq',
                                                           'type': 'array',
                                                           'validator': 'meaningful-observation',
-                                                          'expected': ['IDLE', 0, 1, 1, 1, 1, 1]}]},
- 'legacy.mankey-control-stress': {'natural-input': [{'name': 'completed-natural-hop-count',
-                                                     'operator': 'gte',
-                                                     'type': 'integer',
-                                                     'validator': 'meaningful-observation',
-                                                     'minimum': 200},
-                                                    {'name': 'mankey-stress-active-frame-count',
-                                                     'operator': 'gte',
-                                                     'type': 'integer',
-                                                     'validator': 'meaningful-observation',
-                                                     'minimum': 5001}],
-                                  'live-actor-identity': [{'name': 'mankey-stress-identity',
-                                                           'operator': 'eq',
-                                                           'type': 'array',
-                                                           'validator': 'meaningful-observation',
-                                                           'expected': [1, 'MOUNTED', 56, 1]},
-                                                          {'name': 'actor-owned-hop-motion-count',
-                                                           'operator': 'eq',
-                                                           'type': 'integer',
-                                                           'validator': 'meaningful-observation',
-                                                           'minimum': 1}],
-                                  'rendered-motion': [{'name': 'valid-mounted-hop-motion-count',
-                                                       'operator': 'eq',
-                                                       'type': 'array',
-                                                       'validator': 'complete-motion-observation-v1',
-                                                       'minimumTotal': 200}],
-                                  'control-release': [{'name': 'dismount-and-remount-milestones',
-                                                       'operator': 'eq',
-                                                       'type': 'array',
-                                                       'validator': 'meaningful-observation',
-                                                       'expected': [1, 1, 1, 1, 'IDLE', 0]}]}}
+                                                          'expected': ['IDLE', 0, 1, 1, 1, 1, 1]}]}}

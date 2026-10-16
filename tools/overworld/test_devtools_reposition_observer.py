@@ -378,7 +378,7 @@ class RepositionObserverTests(unittest.TestCase):
         f.read = unexpected
         for label in ('chain-landing', 'chain-motion-request', 'chain-hop-plan',
                       'chain-landing-surface', 'chain-landing-terrain', 'chain-landing-objects',
-                      'chain-landing-nonplayer', 'chain-landing-surface-occupancy'):
+                      'chain-landing-nonplayer'):
             f.enter(label)
         self.assertIsNone(f.hooks.error)
         self.assertEqual(f.observer.calls['chain-landing']['entered'], 0)
@@ -672,10 +672,7 @@ class RepositionObserverTests(unittest.TestCase):
              ['fieldSystem', 'x', 'y'], 'BOOL (*)(FieldSystem *, int, int)'),
             ('OverworldWildSpawns_IsTileOccupiedByNonPlayerObject', wild, 'BOOL',
              ['fieldSystem', 'ignoredObject', 'x', 'y'],
-             'BOOL (*)(FieldSystem *, LocalMapObject *, int, int)'),
-            ('OverworldWildSpawns_IsTileOccupiedOnSurface', wild, 'BOOL',
-             ['fieldSystem', 'ignoredObject', 'includePlayer', 'x', 'y', 'targetBaseY'],
-             'BOOL (*)(FieldSystem *, LocalMapObject *, BOOL, int, int, s32)'))
+             'BOOL (*)(FieldSystem *, LocalMapObject *, int, int)'))
         program = '#include "overworld_wild_helper.h"\n#include "overworld_wild_runtime.h"\n#include "overworld_actor_system_internal.h"\n#include "map_events_internal.h"\n#include <stddef.h>\n' + result[0] + '\n'
         for name, source, returns, names, signature in specs:
             match = re.search(r'static\s+' + returns + r'\s+[^;{}]*?\b' + name + r'\(([^;{}]+)\)\s*\{', source)

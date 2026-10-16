@@ -6,7 +6,11 @@ from pathlib import Path
 from types import SimpleNamespace
 import unittest
 
-from tools.overworld.devtools_test_contract import HEIGHT_CONTROL, TestEvaluator, validate_test
+from tools.overworld.devtools_test_contract import (
+    HEIGHT_CONTROL, SPAWN_WORK_BUDGET, TestEvaluator, validate_test,
+    _d1_warmup_initial, _d1_warmup_observe, _d1_warmup_arm,
+    _d1_spawn_remaining_frames,
+)
 
 
 def recipe():
@@ -38,6 +42,258 @@ def event(frame=1, name="MOTION_FINISHED", sequence=1):
     return {"frame": frame, "kind": "native", "data": {"traceStream": 1, "sequence": sequence,
         "actorHandle": handle["value"], "actor": {k: v for k, v in handle.items() if k != "value"},
         "event": name}}
+
+
+class D1WarmupTests(unittest.TestCase):
+    root = Path(__file__).resolve().parents[2]
+    names = ("population.spawn-work-budget", "world.unmounted.spawn-zero-stutter")
+
+    def load(self, name):
+        return json.loads((self.root / "tests/overworld/test-recipes" / (name + ".json")).read_text())
+
+    def warmup(self):
+        subject = {"active": True, "species": 56, "role": "FOLLOWER",
+                   "subjectIdentity": 123, "identityVerified": True}
+        current = {"frame": 1, "prepared": False, "fieldAvailable": True,
+            "observationBoundary": "main-task-queue-completion",
+            "fieldControl": {"taskPointer": 0}, "context": {"mapId": 67},
+            "actors": [subject], "party": [{"species": 56, "personality": 123,
+                "identityVerified": True, "hp": 15}],
+            "nativeObservation": {"playerStepCount": 0, "coverageComplete": True,
+                "error": None, "eventsDropped": 0}, "selector": {"physicalPressed": 0},
+            "player": {"x": 564, "y": 392}}
+        initial = deepcopy(current)
+        rows = []
+        for dx, dy, tiles, direction in ((1, 0, 1, 3), (0, 1, 6, 1),
+                                         (1, 0, 20, 3), (0, 1, 8, 1)):
+            for _ in range(tiles):
+                origin = [current["player"]["x"], current["player"]["y"]]
+                target = [origin[0] + dx, origin[1] + dy]
+                count = len(rows) + 1
+                data = {"observation": "player-step-admitted", "setupMode": "normal",
+                    "stepIndex": count, "mapId": 67 if origin[0] < 576 else 33,
+                    "direction": direction, "origin": origin, "target": target,
+                    "objectBefore": dict(x=origin[0], y=origin[1]),
+                    "objectAfter": dict(x=target[0], y=target[1]),
+                    "objectPointer": 100, "returnValue": 100}
+                current["frame"] += 1
+                current["context"]["mapId"] = 67 if target[0] < 576 else 33
+                current["player"].update(x=target[0], y=target[1])
+                current["nativeObservation"]["playerStepCount"] = count
+                rows.append((deepcopy(current), [{"kind": "native-observation", "data": data}]))
+        current["player"].update(x_prev=585, y_prev=406, flags=1, movement_cmd=1,
+            pos_x=585 * 65536 + 32768, pos_z=406 * 65536 + 32768, unk88_y=0)
+        return initial, rows, current, subject
+
+    def replay(self, initial, rows):
+        state = _d1_warmup_initial(initial)
+        for current, events in rows:
+            _d1_warmup_observe(state, current, events)
+        return state
+
+    def test_both_recipe_routes_release_at_admission_then_require_exact_ground(self):
+        registry = json.loads((self.root / "tools/overworld/runtime_proof_registry.json").read_text())["sharedTests"]
+        for name in self.names:
+            with self.subTest(name=name):
+                data = self.load(name); value = validate_test(data)
+                prefix = [a["args"]["until"]["value"] for a in value["setup"] if a["op"] == "step" and "until" in a["args"]]
+                self.assertEqual(prefix, [1, 7, 27, 35])
+                stops = [a["args"]["until"] for a in value["actions"] if "until" in a["args"]]
+                settles = [a for a in value["actions"] if a["id"].endswith("-settle")]
+                endpoints = [a["args"]["predicate"] for a in settles]
+                self.assertTrue(all(p["kind"] == "player-field" for p in stops))
+                self.assertEqual([(p["path"], p["value"]) for p in stops[:5]],
+                                 [("y", 398), ("x", 565), ("y", 393), ("x", 543), ("y", 402)])
+                self.assertEqual([(p["map"], p["x"], p["z"]) for p in endpoints[:5]],
+                    [(33, 585, 398), (67, 565, 398), (67, 565, 393),
+                     (67, 543, 393), (67, 543, 402)])
+                self.assertEqual(len(stops), len(endpoints))
+                self.assertTrue(all(a["budget"] == {"maxSeconds": 10, "maxFrames": 16,
+                                                   "noProgressFrames": 8} for a in settles))
+                for move, point in zip((a for a in value["actions"] if "until" in a["args"]), endpoints):
+                    axis = "y" if move["args"]["keys"][0] in ("UP", "DOWN") else "x"
+                    self.assertEqual(move["args"]["until"], {"kind": "player-field", "path": axis,
+                        "operator": "eq", "value": point["z" if axis == "y" else "x"], "when": "final"})
+                if name == self.names[0]:
+                    self.assertEqual(len(stops), 5)
+                    self.assertEqual([a["args"]["frames"] for a in value["actions"] if "until" in a["args"]],
+                                     [64, 128, 64, 128, 64])
+                else:
+                    self.assertEqual(len(stops), 63)
+                    self.assertEqual(endpoints[-1], {"kind": "player-settled-at", "map": 67,
+                                                    "x": 555, "z": 393, "when": "final"})
+                    self.assertTrue(all(a["args"]["frames"] == 256 for a in value["actions"]
+                                        if "until" in a["args"]))
+                path = self.root / "tests/overworld/test-recipes" / (name + ".json")
+                self.assertEqual(registry[name]["recipeSha256"], hashlib.sha256(path.read_bytes()).hexdigest())
+
+    def test_wrong_prefix_and_changed_ground_stops_are_rejected(self):
+        for name in self.names:
+            for fault in ("direction", "prefix-count", "settle", "skip", "endpoint", "old-counter-stop", "missing-finish"):
+                data = self.load(name)
+                if fault == "direction": data["setup"][1]["args"]["keys"] = ["LEFT", "B"]
+                elif fault == "prefix-count": data["setup"][1]["args"]["until"]["value"] = 2
+                elif fault == "settle": data["setup"][2]["args"]["predicate"]["x"] = 566
+                elif fault == "skip": data["setup"][1]["skipIf"] = {"kind": "player-settled-at", "map": 67, "x": 565, "z": 392}
+                elif fault == "endpoint": data["actions"][1]["args"]["predicate"]["z"] = 399
+                elif fault == "missing-finish": del data["actions"][1]
+                else: data["actions"][0]["args"]["until"] = {
+                    "kind": "player-step-count", "operator": "eq", "value": 43}
+                with self.subTest(name=name, fault=fault), self.assertRaises(ValueError): validate_test(data)
+
+    def test_measured_admission_releases_before_completed_held_key_repeats(self):
+        evaluator = TestEvaluator(self.load(self.names[0]))
+        move, settle = evaluator.test["actions"][:2]
+        # Copied native states from test-af6fd...: UP admission934, finish937,
+        # then stale heldUP admission938 despite the new physical LEFT key.
+        admitted = {"frame": 934, "observationBoundary": "main-task-queue-completion",
+            "context": {"mapId": 33}, "fieldControl": {"taskPointer": 0},
+            "player": dict(x=585, y=398, x_prev=585, y_prev=399, pos_x=38371328,
+                pos_z=26165248, unk88_y=0, movement_cmd=88, flags=0x2000E411)}
+        finished = deepcopy(admitted)
+        finished["frame"] = 937
+        finished["player"].update(y_prev=398, pos_z=26116096, flags=0x2000E431)
+        overshot = deepcopy(admitted)
+        overshot["frame"] = 938
+        overshot["player"].update(y=397, y_prev=398, pos_z=26099712)
+        self.assertTrue(evaluator.check(move["args"]["until"], admitted))
+        self.assertFalse(evaluator.check(settle["args"]["predicate"], admitted))
+        self.assertTrue(evaluator.check(settle["args"]["predicate"], finished))
+        self.assertFalse(evaluator.check(move["args"]["until"], overshot))
+        self.assertFalse(evaluator.check(settle["args"]["predicate"], overshot))
+
+    def test_spawn_final_wait_keeps_exact_entry_stop_and_bounds(self):
+        data = self.load(self.names[0])
+        value = validate_test(data)
+        self.assertEqual(value["actions"][-1], {
+            "id": "finish-natural-entry", "op": "wait",
+            "args": {"predicate": {"kind": "measurement-stage",
+                "measurement": SPAWN_WORK_BUDGET, "stage": "complete",
+                "when": "final"}},
+            "budget": {"maxSeconds": 60, "maxFrames": 256,
+                       "noProgressFrames": 32},
+        })
+        self.assertEqual(value["budgets"], {"maxSeconds": 180, "maxFrames": 720,
+            "noProgressFrames": 320, "minObservedFrames": 120})
+        for fault in ("frames", "stall", "seconds", "predicate", "name",
+                      "order", "missing", "duplicate", "skip", "global"):
+            changed = deepcopy(data)
+            wait = changed["actions"][-1]
+            if fault == "frames": wait["budget"]["maxFrames"] = 257
+            elif fault == "stall": wait["budget"]["noProgressFrames"] = 31
+            elif fault == "seconds": wait["budget"]["maxSeconds"] = 61
+            elif fault == "predicate": wait["args"]["predicate"] = {
+                "kind": "measurement-complete", "measurement": SPAWN_WORK_BUDGET}
+            elif fault == "name": wait["id"] = "unchecked-entry-wait"
+            elif fault == "order": changed["actions"][-2:] = changed["actions"][-2:][::-1]
+            elif fault == "missing": changed["actions"].pop()
+            elif fault == "duplicate": changed["actions"].append(deepcopy(wait))
+            elif fault == "skip": wait["skipIf"] = {
+                "kind": "actor-present", "subject": "mankey"}
+            else: changed["budgets"]["maxFrames"] = 721
+            with self.subTest(fault=fault), self.assertRaises(ValueError):
+                validate_test(changed)
+
+    def test_spawn_pre_crossing_idle_keeps_exact_neutral_input(self):
+        data = self.load(self.names[0])
+        value = validate_test(data)
+        self.assertEqual(value["actions"][2], {
+            "id": "route-up-scan-idle", "op": "step",
+            "args": {"frames": 36, "keys": []},
+            "budget": {"maxSeconds": 10, "maxFrames": 36,
+                       "noProgressFrames": 36}})
+        for fault in ("keys", "frames"):
+            changed = deepcopy(data)
+            if fault == "keys": changed["actions"][2]["args"]["keys"] = ["UP"]
+            else: changed["actions"][2]["args"]["frames"] = 35
+            with self.subTest(fault=fault), self.assertRaisesRegex(
+                    ValueError, "spawn-work pre-crossing idle differs"):
+                validate_test(changed)
+
+    def test_spawn_actual_setup_frames_keep_the_same_overall_bound(self):
+        evaluator = TestEvaluator(self.load(self.names[0]))
+        evaluator.install_measurements({SPAWN_WORK_BUDGET: {"schema": {}, "sourceSha256": "a" * 64}})
+        self.assertEqual(evaluator.test["budgets"]["maxFrames"], 720)
+        self.assertEqual(evaluator.measurements[SPAWN_WORK_BUDGET].max_frames, 720)
+        initial, rows, terminal, subject = self.warmup()
+        state = self.replay(initial, rows)
+        for frame in range(rows[-1][0]["frame"] + 1, 165):
+            terminal["frame"] = frame
+            _d1_warmup_observe(state, terminal, [])
+        _d1_warmup_arm(state, terminal, subject)
+        remaining = _d1_spawn_remaining_frames(state, terminal, 163, 720)
+        self.assertEqual(remaining, 557)
+        # Retained3577: setup163 + observed481 =644, not the old720 cap.
+        self.assertEqual(163 + 481, 644)
+        self.assertEqual(remaining - 481, 76)
+        self.assertEqual(163 + remaining, 720)
+        for used in (0, 240, 719):
+            current = {"frame": initial["frame"] + used}
+            self.assertEqual(_d1_spawn_remaining_frames(state, current, used, 720), 720 - used)
+
+    def test_spawn_setup_accounting_rejects_missing_duplicate_or_changed_boundaries(self):
+        initial, rows, terminal, _ = self.warmup()
+        state = self.replay(initial, rows)
+        terminal["frame"] = initial["frame"] + 163
+        for count in (162, 164, True, None, -1, 720):
+            with self.subTest(count=count), self.assertRaisesRegex(ValueError, "completed-frame accounting"):
+                _d1_spawn_remaining_frames(state, terminal, count, 720)
+        for fault in ("missing-initial", "missing-terminal", "backward", "grown-cap"):
+            copied_state, copied = deepcopy(state), deepcopy(terminal)
+            if fault == "missing-initial": copied_state.pop("initialFrame")
+            elif fault == "missing-terminal": copied.pop("frame")
+            elif fault == "backward": copied["frame"] = initial["frame"] - 1
+            with self.subTest(fault=fault), self.assertRaisesRegex(ValueError, "completed-frame accounting"):
+                _d1_spawn_remaining_frames(copied_state, copied, 163, 721 if fault == "grown-cap" else 720)
+
+    def test_native_route_reaches_exact_arm_without_preparation(self):
+        initial, rows, terminal, subject = self.warmup()
+        state = self.replay(initial, rows)
+        _d1_warmup_arm(state, terminal, subject)
+        self.assertEqual(state["count"], 35)
+
+    def test_moving_follower_at873_can_bind_but_moving_player_at879_cannot(self):
+        initial, rows, terminal, subject = self.warmup()
+        state = self.replay(initial, rows)
+        # Public pose values retained from the real failed zero-stutter run.
+        terminal["frame"] = 873
+        terminal["player"].update(flags=537977905, movement_cmd=1,
+            pos_x=38371328, pos_z=26640384)
+        terminal["actors"][0]["motionPhase"] = "MOVING"
+        _d1_warmup_arm(state, terminal, subject)
+        data = self.load(self.names[1])
+        self.assertEqual(validate_test(data)["setup"][-2]["args"]["predicate"],
+            {"kind": "actor-present", "subject": "mankey", "when": "final"})
+        copied = deepcopy(terminal)
+        copied["frame"] = 879
+        copied["actors"][0]["motionPhase"] = "IDLE"
+        copied["player"].update(flags=537977873, movement_cmd=62, pos_x=38376369)
+        with self.assertRaisesRegex(ValueError, "did not finish the exact normal35-step route"):
+            _d1_warmup_arm(state, copied, subject)
+
+    def test_counter_cannot_replace_a_missing_native_step(self):
+        initial, rows, _, _ = self.warmup()
+        rows[0] = (rows[0][0], [])
+        with self.assertRaisesRegex(ValueError, "counter lacks its exact native admissions"):
+            self.replay(initial, rows)
+
+    def test_wrong_native_direction_and_counter_reset_are_rejected(self):
+        for fault in ("direction", "counter"):
+            initial, rows, _, _ = self.warmup()
+            if fault == "direction": rows[0][1][0]["data"]["direction"] = 2
+            else: rows[0][0]["nativeObservation"]["playerStepCount"] = 0
+            with self.subTest(fault=fault), self.assertRaisesRegex(ValueError, "native admission"):
+                self.replay(initial, rows)
+
+    def test_preparation_identity_change_and_false_terminal_are_rejected(self):
+        for fault in ("prepared", "identity", "terminal"):
+            initial, rows, terminal, subject = self.warmup()
+            if fault == "prepared": rows[0][0]["prepared"] = True
+            elif fault == "identity": rows[0][0]["actors"][0]["subjectIdentity"] = 456
+            else: terminal["player"]["pos_z"] -= 32768
+            with self.subTest(fault=fault), self.assertRaises(ValueError):
+                state = self.replay(initial, rows)
+                _d1_warmup_arm(state, terminal, subject)
 
 
 class ContractTests(unittest.TestCase):
@@ -98,12 +354,15 @@ class ContractTests(unittest.TestCase):
         value = recipe()
         value.update(mode="prepared", spawnObserverCost="baseline")
         self.assertEqual(validate_test(value)["spawnObserverCost"], "baseline")
-        for change in ({"mode": "normal"}, {"requirements": ["anything"]},
+        normal = {**value, "mode": "normal"}
+        self.assertEqual(validate_test(normal)["spawnObserverCost"], "baseline")
+        for change in ({"mode": "observer-control"}, {"requirements": ["anything"]},
+                       {"mode": "normal", "spawnObserverCost": "omit-spawn-details"},
                        {"spawnObserverCost": "arbitrary"}):
             with self.assertRaises(ValueError):
                 validate_test({**value, **change})
         from tools.overworld.control import finalize_shared_test
-        for test, record in ((value, {"passed": True}),
+        for test, record in ((value, {"passed": True}), (normal, {"passed": True}),
                              (recipe(), {"passed": True, "observationSetup": {"spawnObserverCost": {}}})):
             self.assertFalse(finalize_shared_test(test, record)["acceptedProof"])
 
@@ -346,6 +605,304 @@ class EvaluatorTests(unittest.TestCase):
         self.assertEqual(evaluator.subjects, {})
         current = snapshot(); current["actors"][0]["identityVerified"] = False
         with self.assertRaises(ValueError): evaluator.check(predicate, current)
+
+
+class RamLedgeAuxiliaryFollowerTests(unittest.TestCase):
+    def test_ledge_fault_uses_typed_leaf_guard_not_outer_failure_keys(self):
+        from tools.overworld.devtools_ram_ledge_proof import validate_negative_result
+        kind = "ram-ledge-continuity-v1"
+        guards = {
+            "stale-owner": "selected handle must name exactly one current active actor",
+            "early-end": "Ram ended across a successful ledge",
+            "reset": "Ram reset momentum before Crash",
+            "turned-hop": "Ram ledge did not keep its South heading",
+            "missing-commit": "profile feature did not complete",
+            "crash": "Ram ledge canceled or published Crash",
+        }
+        for name, message in guards.items():
+            with self.subTest(fault=name):
+                result = {"passed": False,
+                    "failures": [{"code": "measurement-failed", "message": kind}],
+                    "measurements": {kind: {"passed": False, "failures": [message]}}}
+                validate_negative_result(result, kind + ":" + name)
+                wrong = deepcopy(result)
+                wrong["measurements"][kind]["failures"] = ["a different guard"]
+                with self.assertRaises(ValueError):
+                    validate_negative_result(wrong, kind + ":" + name)
+                absent = deepcopy(result)
+                absent["measurements"] = {}
+                with self.assertRaises(ValueError):
+                    validate_negative_result(absent, kind + ":" + name)
+
+    def fixture(self, kind='ram-ledge-continuity-v1'):
+        root=Path(__file__).resolve().parents[2]
+        case='profile.ram.behind-entry' if kind=='ram-behind-entry-v1' else 'profile.ram.ledge-continuity'
+        data=json.loads((root/'tests/overworld/test-recipes'/f'{case}.json').read_text())
+        action=next(a for a in data['setup'] if a['op']=='spawn' and a['args']['role']=='follower')
+        level=action['args']['level']
+        evaluator=TestEvaluator(data);evaluator.install_measurements({kind:{'contractVersion':1}})
+        initial=snapshot(1);initial.update(prepared=True,nativeCycle=1,fieldAvailable=True,
+            observationBoundary='main-task-queue-completion',fieldControl={'fieldPointer':100,'taskPointer':0})
+        initial['actors']=[];evaluator.latest=deepcopy(initial)
+        current=deepcopy(initial);current.update(frame=2,nativeCycle=2)
+        follower=deepcopy(snapshot()['actors'][0]);follower.update(species=155,role='FOLLOWER',form=0,level=level,
+            motionPhase='IDLE',reservationId=0)
+        follower['handle'].update(slot=7,value=65543);current['actors']=[follower]
+        current['selector']={'activeFollowerPartySlot':0,'followerReleaseState':0,'captureTargetMask':0,'queue':{'count':0,'request':0}}
+        receipt={'lifecycle':'prepared-native-follower-lifecycle','preparedOnly':True,'snapshot':current,
+            'requestedSubject':{'slot':0,'role':'FOLLOWER','species':155,'personality':123,'form':0,'level':level},
+            'events':[],'setupBoundary':{'eventsDrained':True,'traceSequences':{},'frame':2,'nativeCycle':2,'endpointNativeCycle':2}}
+        return evaluator,{'phase':'setup','action':action['id'],'command':'spawn','receipt':receipt,'snapshot':current}
+
+    def test_behind_follower_is_a_separate_setup_owner_with_no_ram_credit(self):
+        kind='ram-behind-entry-v1'
+        for fault in (None,'species','personality','moving','stale','queue','wrong-action'):
+            evaluator,row=self.fixture(kind);a=row['snapshot']['actors'][0]
+            if fault=='species':a['species']=56
+            elif fault=='personality':a['subjectIdentity']+=1
+            elif fault=='moving':a['motionPhase']='MOVING'
+            elif fault=='stale':a['handle']['fieldEpoch']+=1
+            elif fault=='queue':row['snapshot']['selector']['queue']['count']=1
+            elif fault=='wrong-action':row['action']='spawn-onix'
+            result=evaluator.observe_prepared_command(row)
+            with self.subTest(fault=fault):
+                if fault:self.assertEqual(result['state'],'failed',result)
+                else:
+                    self.assertNotEqual(result['state'],'failed',result)
+                    self.assertEqual(evaluator.subjects,{})
+                    self.assertEqual(evaluator.sampled_frames,0)
+                    self.assertEqual(evaluator.measurements[kind].prepared,[])
+                    self.assertEqual(len(evaluator._prepared_attached),1)
+
+    def test_current_auxiliary_follower_is_setup_only_not_onix_credit(self):
+        evaluator,row=self.fixture();result=evaluator.observe_prepared_command(row)
+        self.assertNotEqual(result['state'],'failed',result['failures'])
+        self.assertEqual(evaluator.latest,row['snapshot']);self.assertEqual(evaluator.subjects,{})
+        self.assertEqual(evaluator.sampled_frames,0)
+        self.assertEqual(evaluator.measurements['ram-ledge-continuity-v1'].prepared,[])
+        self.assertFalse(evaluator.measurements['ram-ledge-continuity-v1'].ready)
+        self.assertEqual(len(evaluator._prepared_attached),1)
+        self.assertEqual(evaluator.observe_prepared_command(row)['state'],'failed')
+
+    def test_wrong_current_follower_and_unsettled_or_reordered_endpoint_reject(self):
+        for fault in ('species','personality','slot','level','role','stale-context','unverified','duplicate','moving','reserved','release','queue','clock','lifecycle'):
+            evaluator,row=self.fixture();r=row['receipt'];s=row['snapshot'];a=s['actors'][0]
+            if fault in ('species','personality','slot','level'):r['requestedSubject'][fault]+=1
+            elif fault=='role':r['requestedSubject']['role']='WILD'
+            elif fault=='stale-context':a['handle']['fieldEpoch']+=1
+            elif fault=='unverified':a['identityVerified']=False
+            elif fault=='duplicate':s['actors'].append(deepcopy(a))
+            elif fault=='moving':a['motionPhase']='MOVING'
+            elif fault=='reserved':a['reservationId']=3
+            elif fault=='release':s['selector']['followerReleaseState']=1
+            elif fault=='queue':s['selector']['queue']['count']=1
+            elif fault=='clock':r['setupBoundary']['frame']=1
+            else:r['lifecycle']='spawn-prepared'
+            with self.subTest(fault=fault):self.assertEqual(evaluator.observe_prepared_command(row)['state'],'failed')
+
+    def test_onix_still_requires_exact_wild_prepared_receipt(self):
+        evaluator,row=self.fixture();row['action']='spawn-onix'
+        self.assertEqual(evaluator.observe_prepared_command(row)['state'],'failed')
+        self.assertEqual(evaluator.measurements['ram-ledge-continuity-v1'].prepared,[])
+
+
+
+class FollowerTransitionRangeTests(unittest.TestCase):
+    """Copied data controls; native acceptance still needs the registered run."""
+    root = Path(__file__).resolve().parents[2]
+
+    def case(self):
+        return json.loads((self.root / 'tests/overworld/test-recipes/world.transition.follower-rebind.json').read_text())
+
+    @staticmethod
+    def sample(frame, *, rebound=False, elapsed=None, terminal=False):
+        current = snapshot(frame)
+        epoch = 3 if rebound else 2
+        map_id = 67 if rebound else 33
+        current.update(nativeCycle=frame * 2, fieldAvailable=True,
+                       observationBoundary='main-task-queue-completion',
+                       context={'fieldEpoch': epoch, 'mapGeneration': epoch, 'mapId': map_id},
+                       fieldControl={'fieldPointer': 36377180, 'taskPointer': 0})
+        px, pz = ((574, 400) if rebound else (585, 406))
+        current['player'] = dict(x=px, y=pz, x_prev=px, y_prev=pz,
+            pos_x=(px << 16)+0x8000, pos_z=(pz << 16)+0x8000,
+            unk88_y=0, flags=1, movement_cmd=0, facing=1)
+        actor = current['actors'][0]
+        actor.update(handle={'value': 131079, 'slot': 7, 'generation': 2,
+                             'fieldEpoch': epoch, 'mapGeneration': epoch, 'encounterGeneration': 2},
+                     role='FOLLOWER', species=155, behaviorFingerprint=4023481721,
+                     motionKind='NONE', motionPhase='IDLE', motionElapsed=2, motionDuration=2,
+                     reservationId=0, commitSequence=5 if rebound else 4,
+                     logical={'x': 574 if terminal else 575 if rebound else 585,
+                              'y': 401 if rebound else 407},
+                     origin={'x': 575 if rebound else 585, 'y': 401 if rebound else 408},
+                     target={'x': 574 if rebound else 585, 'y': 401 if rebound else 407},
+                     sourceIdentity={'active': 1, 'species': 155, 'personality': 123, 'map_id': map_id},
+                     engineIdentity={'active': True, 'in_manager': True, 'pointer': 36387156,
+                                     'current_map_id': map_id, 'object_map_id': map_id})
+        x, z = actor['logical'].values()
+        actor['engineObject'] = dict(x_range=-1, y_range=-1, flags=1, facing=2,
+            pos_x=(x << 16)+0x8000, pos_y=65536, pos_z=(z << 16)+0x8000, unk88_y=0)
+        if elapsed is not None:
+            actor.update(motionKind='WALK', motionPhase='MOVING', motionElapsed=elapsed,
+                         reservationId=8, commitSequence=5,
+                         logical={'x': 575, 'y': 401})
+            actor['engineObject']['pos_x']=(575 << 16)+0x8000-elapsed*0x8000
+        if terminal:
+            actor['commitSequence']=6
+        return current
+
+    @staticmethod
+    def native(sample, name, sequence, *, value_a=0, value_b=0, reason='OK'):
+        handle = sample['actors'][0]['handle']
+        return {'kind': 'native', 'frame': sample['frame'], 'data': {
+            'traceStream': 1, 'sequence': sequence, 'actorHandle': handle['value'],
+            'actor': {key: value for key, value in handle.items() if key != 'value'},
+            'event': name, 'reason': reason, 'valueA': value_a, 'valueB': value_b}}
+
+    def route_row(self):
+        current = self.sample(2)
+        return {'phase': 'setup', 'action': 'route-start', 'command': 'teleport',
+                'snapshot': current, 'receipt': {'preparedOnly': True, 'snapshot': deepcopy(current),
+                 'value': {'mapId': 33, 'x': 585, 'z': 406, 'facing': 1,
+                           'constructor': {'boundary': 'native-task-factory-return'},
+                           'environmentOwnership': 'transferred-to-native-Task_ScriptWarp',
+                           'environmentBytes': 24},
+                 'events': [], 'setupBoundary': {'eventsDrained': True, 'frame': 2,
+                    'nativeCycle': 4, 'endpointNativeCycle': 4, 'traceSequences': {'1': 0}}}}
+
+    def bound(self):
+        from tools.overworld.devtools_follower_transition_measurement import FollowerTransitionMeasurement
+        from tools.overworld.devtools_records import select_current_actor
+        meter = FollowerTransitionMeasurement(validate_test(self.case()), max_frames=840)
+        initial = self.sample(1); initial['context'].update(mapId=67, fieldEpoch=1, mapGeneration=1)
+        meter.observe_record({'initialSnapshot': initial})
+        meter.observe_record(self.route_row())
+        for frame, command, action in ((3, 'party', 'prepare-cyndaquil'), (4, 'spawn', 'spawn-cyndaquil-follower')):
+            current = self.sample(frame)
+            meter.observe_record({'phase':'setup', 'action':action, 'command':command, 'snapshot':current,
+                                  'receipt':{'preparedOnly':True, 'setupBoundary':{'traceSequences':{'1':0}}}})
+        current = self.sample(4)
+        meter.observe_record({'phase':'setup', 'action':'bind-cyndaquil-follower', 'command':'bind',
+                              'snapshot':current, 'receipt':select_current_actor(current,current['actors'][0])})
+        self.assertEqual(meter.failures, [])
+        return meter
+
+    def rows(self):
+        rows=[]
+        for frame, name in zip(range(5,9), ('MOTION_STARTED','LOGICAL_COMMIT','MOTION_FINISHED','CONTROL_RETURNED')):
+            s=self.sample(frame)
+            rows.append((s,[self.native(s,name,frame-4,value_a=1 if frame==5 else 0)]))
+        s=self.sample(9,rebound=True)
+        old=self.sample(9)
+        rows.append((s,[self.native(old,'CONTEXT_CHANGED',5,value_a=2,value_b=3,reason='CONTEXT_LOST'),
+                        self.native(s,'ACTOR_REBOUND',6,value_a=33,value_b=67)]))
+        s=self.sample(10,rebound=True,elapsed=0)
+        rows.append((s,[self.native(s,'MOTION_STARTED',7,value_a=1)]))
+        rows.append((self.sample(11,rebound=True,elapsed=1),[]))
+        s=self.sample(12,rebound=True,terminal=True)
+        rows.append((s,[self.native(s,'LOGICAL_COMMIT',8),self.native(s,'MOTION_FINISHED',9),
+                        self.native(s,'CONTROL_RETURNED',10)]))
+        return rows
+
+    def run_rows(self, rows):
+        meter=self.bound()
+        for current,events in rows:
+            meter.observe(current,events)
+            if meter.failures: break
+        return meter.finish()
+
+    def test_exact_route_setup_and_validator_reject_wrong_map_or_extra_warp(self):
+        from tools.overworld.devtools_follower_transition_measurement import FollowerTransitionMeasurement
+        self.assertEqual(self.case()['setup'][0]['args']['facing'], 1)
+        for fault in ('map','facing','missing','extra'):
+            case=self.case()
+            if fault in ('map','facing'):case['setup'][0]['args'][fault] = 0 if fault == 'facing' else case['setup'][0]['args'][fault]+1
+            elif fault=='missing':case['setup'].pop(0)
+            else:case['setup'].insert(1,deepcopy(case['setup'][0]));case['setup'][1]['id']='extra-warp'
+            with self.subTest(fault=fault),self.assertRaises(ValueError):validate_test(case)
+        for fault in ('map','reserved','clock','drain','context','owner','repeat'):
+            meter=FollowerTransitionMeasurement(validate_test(self.case()),max_frames=840)
+            meter.observe_record({'initialSnapshot':self.sample(1)})
+            row=self.route_row()
+            if fault=='map':row['snapshot']['context']['mapId']=67
+            elif fault=='reserved':row['snapshot']['player']['pos_x']-=1
+            elif fault=='clock':row['receipt']['setupBoundary']['nativeCycle']=3
+            elif fault=='drain':row['receipt']['setupBoundary']['eventsDrained']=False
+            elif fault=='context':row['snapshot']['context']['fieldEpoch']=0
+            elif fault=='owner':row['snapshot']['fieldControl']['fieldPointer']=0
+            else:meter.observe_record(deepcopy(row))
+            if fault!='repeat':row['receipt']['snapshot']=deepcopy(row['snapshot'])
+            with self.subTest(fault=fault):self.assertTrue(meter.observe_record(row)['failures'])
+
+    def test_shared_raw_admission_is_setup_only_and_no_motion_credit(self):
+        evaluator=TestEvaluator(self.case())
+        evaluator.install_measurements({'follower-transition-rebind-v1':{'contractVersion':1}})
+        initial=self.sample(1);initial['actors']=[]
+        evaluator.observe_record({'initialSnapshot':initial})
+        row=self.route_row();row['receipt']['setupBoundary']['traceSequences']={}
+        result=evaluator.observe_record(row)
+        self.assertEqual(result['failures'],[])
+        meter=evaluator.measurements['follower-transition-rebind-v1']
+        self.assertEqual(evaluator.subjects,{})
+        self.assertEqual(meter.lifecycle,[])
+        self.assertFalse(meter.ready)
+        self.assertEqual(evaluator.sampled_frames,0)
+        self.assertEqual(evaluator.observe_record(self.route_row())['state'],'failed')
+
+    def test_restored_current_ranges_and_fresh_walk_commit_required(self):
+        from tools.overworld.devtools_follower_transition_proof import KIND, measurements
+        result=self.run_rows(self.rows())
+        self.assertTrue(result['passed'],result['failures'])
+        self.assertTrue(result['restoredRanges'])
+        self.assertEqual(result['postRebindMotion']['commitAfter'],6)
+        replay={'passed':True,'failures':[],'measurements':{KIND:result}}
+        record={'sessionId':'copied','sessionCleanup':{'sessionId':'copied','closed':True,'errors':[]}}
+        self.assertEqual(len(measurements(replay,record)),6)
+        for fault in ('range','post-motion'):
+            copied=deepcopy(replay);m=copied['measurements'][KIND]
+            if fault=='range':m['terminal']['actors'][0]['engineObject']['x_range']=255
+            else:m['postRebindMotion']=None
+            with self.subTest(fault=fault),self.assertRaisesRegex(ValueError,'restored signed ranges'):
+                measurements(copied,record)
+
+    def test_missing_context_control_keeps_the_context_failure(self):
+        from tools.overworld.devtools_follower_transition_proof import (
+            FollowerTransitionNegative, KIND, validate_negative_result,
+        )
+        fault = "wild-transition-missing-context"
+        control = FollowerTransitionNegative(fault)
+        meter = self.bound()
+        for sample, events in self.rows():
+            row = control.mutate({"phase": "observe", "samples": [sample],
+                                  "events": events}, {"cyndaquil": meter.subject})
+            meter.observe(row["samples"][0], row["events"])
+        failed = meter.finish()
+        self.assertTrue(control.applied)
+        self.assertEqual([event["data"]["event"] for event in failed["transitionEvents"]],
+                         ["ACTOR_REBOUND"])
+        self.assertEqual(failed["failures"],
+                         ["Wild transition did not complete context rebind and restore player control"])
+        validate_negative_result({"passed": False, "failures": [],
+                                  "measurements": {KIND: failed}}, fault)
+        with self.assertRaisesRegex(ValueError, "unrelated reason"):
+            validate_negative_result({"passed": False, "failures": ["other failure"]}, fault)
+        rows = self.rows()[:5]
+        self.assertEqual(self.run_rows(rows)["failures"],
+                         ["Follower transition lacks signed -1/-1 and a fresh committed rebound Walk, or did not restore player control"])
+
+    def test_wrong_range_stale_owner_missing_rebind_or_fresh_walk_rejected(self):
+        for fault in ('range','stale-owner','missing-rebind','no-fresh-walk','missing-commit','wrong-start','wrong-frame'):
+            rows=self.rows()
+            if fault=='range':rows[4][0]['actors'][0]['engineObject']['y_range']=255
+            elif fault=='stale-owner':rows[4][0]['actors'][0]['handle']['mapGeneration']=2
+            elif fault=='missing-rebind':rows[4][1].pop()
+            elif fault=='no-fresh-walk':rows=rows[:5]
+            elif fault=='missing-commit':rows[-1][0]['actors'][0]['commitSequence']=5
+            elif fault=='wrong-start':rows[5][1][0]['data']['valueA']=2
+            else:rows[5][1][0]['frame']=9
+            result=self.run_rows(rows)
+            with self.subTest(fault=fault):self.assertFalse(result['passed']);self.assertTrue(result['failures'])
 
 
 if __name__ == "__main__": unittest.main()

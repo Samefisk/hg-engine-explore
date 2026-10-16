@@ -7,7 +7,7 @@ import unittest
 from tools.overworld.devtools_mount_speed_slew_measurement import (
     MountedSpeedSlewMeasurement, walk_step_fx32, require_one_frame_callbacks,
     require_continuous_one_frame_cadence, keyed_walk_duration,
-    stop_skid_tail, variance_width,
+    stop_skid_tail, variance_width, linear_walk_reference, validate_linear_walks, linear_tuning,
 )
 from tools.overworld.devtools_mount_speed_slew_proof import (
     KIND, REQUIREMENT, FAULTS, MountedSpeedNegative, contract, measurements,
@@ -24,12 +24,12 @@ PERSISTENT_VARIANCE = (6, 6, 5, 5, 3, 3, 3, 3, 4, 2, 2, 2, 4)
 ZERO_VARIANCE = (6, 5, 4, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2)
 
 
-def ease_copied_pair(rows, durations):
+def ease_copied_pair(rows, durations, first_commit=2):
     previous = None
     previous_ground = None
     for snapshot, events in rows:
         actor = snapshot["actors"][0]
-        index = actor["commitSequence"] - 2
+        index = actor["commitSequence"] - first_commit
         pair = snapshot["mountPacing"]["latestCompletedPose"]
         if actor["motionKind"] in ("WALK", "SKID") and 0 <= index < len(durations):
             prior = durations[index - 1] if index and actor["motionKind"] == "WALK" else 0
@@ -93,16 +93,23 @@ def ease_copied_pair(rows, durations):
                     player=deepcopy(pair["player"]), mount=deepcopy(pair["mount"]))
 
 
-def replay(durations=GOOD, fault=None, tail_fault=None):
+def replay(durations=GOOD, fault=None, tail_fault=None, *, linear=False, linear_ramp=12, policy_fault=None):
+    first_commit = 4 if linear else 2
+    reference = linear_walk_reference(55, 1, first_commit, linear_ramp) if linear else None
+    if linear:
+        durations = tuple(row["duration"] for row in reference)
+
     count, skid_duration = stop_skid_tail(durations[-1])
     durations = durations + (skid_duration,) * (count + int(tail_fault == "extra"))
     baseline, subject, receipt, rows = pacing_fixture(
-        durations, species=234, initial_commit=2)
+        durations, species=234, initial_commit=first_commit)
+    if linear:
+        shift_linear_fixture(baseline, rows)
     for snapshot, events in rows:
         actor = snapshot["actors"][0]
         pair = snapshot["mountPacing"]["latestCompletedPose"]
-        pair["input"] = dict(heldKeys=16 if actor["origin"]["x"] < 12 else 0, newKeys=0)
-        if actor["origin"]["x"] >= 13:
+        pair["input"] = dict(heldKeys=16 if actor["origin"]["x"] < (597 if linear else 12) else 0, newKeys=0)
+        if actor["origin"]["x"] >= (598 if linear else 13):
             if actor["motionKind"] == "WALK":
                 actor["motionKind"] = "WALK" if tail_fault == "walk" else "SKID"
             pair["publicSubject"] = deepcopy(actor)
@@ -122,8 +129,10 @@ def replay(durations=GOOD, fault=None, tail_fault=None):
         pose = snapshot["mountPacing"]["latestCompletedPose"]
         pose.update(frame=snapshot["frame"], nativeCycle=snapshot["nativeCycle"])
         rows.append((snapshot, []))
-    ease_copied_pair(rows, durations)
-    meter = MountedSpeedSlewMeasurement(220)
+    ease_copied_pair(rows, durations, first_commit)
+    if linear:
+        add_linear_policy_receipts(baseline, rows, reference, first_commit, policy_fault, linear_ramp)
+    meter = MountedSpeedSlewMeasurement(220, linear_ramp=linear_ramp if linear else None)
     meter.arm(subject, baseline, receipt)
     negative = MountedSpeedNegative(fault) if fault else None
     for snapshot, events in rows:
@@ -142,7 +151,264 @@ def replay(durations=GOOD, fault=None, tail_fault=None):
     return dict(passed=value["passed"], failures=[], measurements={KIND: value})
 
 
+def shift_linear_fixture(baseline, rows):
+    """Place copied poses on the recipe lane; this is host data, never guest setup."""
+    def actor_pose(actor):
+        for key in ("logical", "origin", "target"):
+            actor[key]["x"] += 585
+            actor[key]["y"] += 402
+        object_pose(actor["engineObject"])
+    def object_pose(obj):
+        obj["pos_x"] += 585 << 16
+        obj["pos_z"] += 402 << 16
+        obj["x"] += 585
+        obj["y"] += 402
+    actor_pose(baseline["actors"][0])
+    object_pose(baseline["player"])
+    for snapshot, events in rows:
+        actor_pose(snapshot["actors"][0]); object_pose(snapshot["player"])
+        pair = snapshot["mountPacing"]["latestCompletedPose"]
+        actor_pose(pair["publicSubject"])
+        for obj in (pair["player"], pair["mount"]): object_pose(obj)
+        for event in events:
+            if event["kind"] == "native-observation":
+                data = event["data"]
+                actor_pose(data["publicSubject"])
+                for obj in (data["player"], data["mount"]): object_pose(obj)
+
+
+def add_linear_policy_receipts(baseline, rows, reference, first_commit, fault=None, ramp=12):
+    from tools.overworld.devtools_acceleration_measurement import POLICY_FIELDS, LINEAR_POLICY_FIELDS
+    fields = {**POLICY_FIELDS, **LINEAR_POLICY_FIELDS}
+    base, fastest = linear_tuning(ramp)
+    sequence = baseline["nativeObservation"]["sequence"]
+    changed = False
+    for snapshot, events in rows:
+        actor = snapshot["actors"][0]
+        beginning = actor["motionKind"] == "WALK" and actor["motionElapsed"] == 0
+        committing = actor["motionKind"] == "NONE" and any(e.get("data", {}).get("event") == "LOGICAL_COMMIT" and e["data"]["valueB"] == 1 for e in events)
+        index = actor["commitSequence"] - first_commit - int(committing)
+        for op in ((1, 2) if beginning else (3,) if committing else ()):
+            if not 0 <= index < 13:
+                continue
+            expected = reference[index]
+            subject = deepcopy(actor); subject["commitSequence"] = first_commit + index
+            request = bytearray(28); request[:4] = b"\x01\x00\x1c\x00"
+            request[4:8] = (0x023BC74C).to_bytes(4, "little")
+            request[8:12] = bytes((7, op, 0 if op == 2 else 3, int(op == 3)))
+            request[14] = 4 if op == 3 else 16 if op == 2 else 9
+            if op == 2:
+                request[15] = 1
+                request[17:20] = bytes((3, 3, expected["duration"]))
+                request[20] = 1
+                request[24:27] = bytes((expected["nominal"], expected["nextCarry"], expected["elapsed"]))
+            response = bytearray(request)
+            if op == 1:
+                response[16:20] = bytes((2, 3, 3, expected["duration"]))
+                response[20] = 1
+                response[24:27] = bytes((expected["nominal"], expected["nextCarry"], expected["elapsed"]))
+            else:
+                response[16] = 1
+            before = bytearray(36); before[0] = 3; before[3] = base; before[22] = 2 if op == 3 else 0
+            before[32:35] = bytes((expected["elapsed"], expected["nextCarry"] if op == 3 else expected["carry"], int(index != 0 or op == 3)))
+            after = bytearray(before)
+            after[22] = 0 if op == 3 else 1
+            after[32:35] = bytes((expected["nextElapsed"] if op == 3 else expected["elapsed"], expected["nextCarry"] if op == 3 else expected["carry"], 1))
+            lane = bytearray(80)
+            for offset,value in ((7,base),(50,ramp),(51,fastest),(64,4),(71,34)): lane[offset]=value
+            data = dict(observation="walk-policy", slot=7, operation=op, returnValue=1,
+                publicSubject=subject, publicSubjectAfter=deepcopy(subject), requestHex=request.hex(),
+                responseHex=response.hex(),
+                entryActorFrame=snapshot["actorFrame"], returnActorFrame=snapshot["actorFrame"],
+                entryNativeCycle=snapshot["nativeCycle"], returnNativeCycle=snapshot["nativeCycle"])
+            if op != 2:
+                data.update(laneHex=lane.hex(), policyBeforeHex=before.hex(), policyAfterHex=after.hex(),
+                    policyBefore={key:before[offset] for key,offset in fields.items()},
+                    policyAfter={key:after[offset] for key,offset in fields.items()})
+            target_op = 2 if fault in ("missing-start", "rejected-start") else 1 if fault == "post-deadline-jitter" else 3
+            eligible = expected["elapsed"] == ramp if fault == "post-deadline-jitter" else True
+            if not changed and fault and op == target_op and eligible:
+                if fault == "frozen-elapsed":
+                    after[32] = expected["elapsed"]
+                elif fault == "early-full":
+                    after[32] = ramp
+                elif fault == "stale-owner":
+                    data["publicSubject"]["handle"]["fieldEpoch"] += 1
+                elif fault == "wrong-width":
+                    lane[64] = 6; data["laneHex"] = lane.hex()
+                elif fault in ("missing-commit", "missing-start"):
+                    op = None
+                elif fault == "failed-call":
+                    data["returnValue"] = 0
+                elif fault == "rejected-start":
+                    request[15] = 2; data["requestHex"] = request.hex()
+                elif fault == "post-deadline-jitter":
+                    response[19] += 1
+                changed = True
+                data["responseHex"] = response.hex()
+                if op != 2 and "policyAfterHex" in data:
+                    data.update(policyAfterHex=after.hex(), policyAfter={key:after[offset] for key,offset in fields.items()})
+            if op:
+                events.append(dict(kind="native-observation", frame=snapshot["frame"], data=data))
+        for event in events:
+            if event["kind"] == "native-observation":
+                sequence += 1; event["data"]["sequence"] = sequence
+        snapshot["nativeObservation"]["sequence"] = sequence
+
+
+
 class MountedSpeedSlewTests(unittest.TestCase):
+
+    def test_linear12_idle_configuration_receipt_and_faults(self):
+        import struct
+        from tools.overworld.devtools_records import select_current_actor
+        snapshot, subject, _, _ = pacing_fixture(species=234)
+        subject = select_current_actor(snapshot, subject)
+        actor = snapshot["actors"][0]
+        actor["movementPolicy"] = dict(pending=0)
+        raw = bytearray(192)
+        raw[8:88] = bytes(range(80))
+        struct.pack_into("<IHHHHBBBB", raw, 88, actor["subjectIdentity"], actor["species"],
+            snapshot["context"]["mapId"], actor["handle"]["mapGeneration"],
+            actor["handle"]["encounterGeneration"], actor["form"], actor["level"], 0, 0)
+        struct.pack_into("<IBBBB", raw, 104, 1, 3, 0, 0, 0)
+        raw[122] = 1
+        actual = bytearray(raw)
+        for offset, value in ((7, 6), (19, 0), (50, 12), (51, 2), (64, 4), (71, 34)):
+            actual[8 + offset] = value
+        ready = dict(subject=deepcopy(subject), actor=deepcopy(actor), snapshot={k: deepcopy(snapshot.get(k))
+            for k in ("frame", "nativeCycle", "actorFrame", "context", "player")})
+        def state(data):
+            return dict(mountStateHex=data.hex(), profileHex=data[8:88].hex(), bindingHex=data[88:104].hex(),
+                sessionGeneration=1, clock={k:snapshot[k] for k in ("frame", "nativeCycle")}, readiness=deepcopy(ready))
+        receipt = dict(completed=True, prepared=True, acceptedProof=False, guestAdvanced=False,
+            scope="prepared-idle-mounted-walk-fixture", subject=deepcopy(subject), directionMode=0,
+            travelTime=6, fastestTime=2, timeToFullSpeed=12, timeVariance=2,
+            changedOffsets=[7,19,50,51,64,71], before=state(raw), after=state(actual), expectedStateHex=actual.hex())
+        meter = MountedSpeedSlewMeasurement(300, linear_ramp=12)
+        meter.configure(receipt, snapshot, subject)
+        with self.assertRaises(ValueError): meter.configure(receipt, snapshot, subject)
+        for fault in ("knob", "clock", "owner", "unrelated-byte", "readiness", "binding", "advanced"):
+            changed = deepcopy(receipt)
+            if fault == "knob": changed["timeToFullSpeed"] = 120
+            elif fault == "clock": changed["after"]["clock"]["nativeCycle"] += 1
+            elif fault == "owner": changed["subject"]["handle"]["generation"] += 1
+            elif fault in ("unrelated-byte", "binding"):
+                data = bytearray(actual); data[150 if fault == "unrelated-byte" else 88] ^= 1
+                changed["after"].update(state(data)); changed["expectedStateHex"] = data.hex()
+            elif fault == "readiness": changed["after"]["readiness"]["actor"]["commitSequence"] += 1
+            else: changed["guestAdvanced"] = True
+            with self.subTest(fault=fault), self.assertRaises(ValueError):
+                MountedSpeedSlewMeasurement(300, linear_ramp=12).configure(changed, snapshot, subject)
+        with self.assertRaises(ValueError):
+            MountedSpeedSlewMeasurement(300).configure(receipt, snapshot, subject)
+
+    def test_sprint60_reaches_one_full_speed_deadline(self):
+        result = replay(linear=True, linear_ramp=60)
+        meter = result["measurements"][KIND]
+        self.assertTrue(result["passed"], meter["failures"])
+        record = dict(sessionId="host", sessionCleanup=dict(sessionId="host", closed=True, errors=[]))
+        self.assertEqual(len(measurements(result, record)), 16)
+        actor = meter["initial"]["actors"][0]
+        reference = validate_linear_walks(actor, meter["windows"][0]["motions"], meter["linearPolicies"], 60)
+        first = next(i for i, row in enumerate(reference) if row["elapsed"] >= 60)
+        self.assertEqual((reference[first]["nominal"], reference[first]["width"], reference[first]["duration"]), (4, 0, 4))
+        self.assertGreaterEqual(len(reference) - first, 2)
+        self.assertEqual(sorted(set(row["width"] for row in reference)), [0, 1, 2])
+        self.assertEqual({op:sum(e["data"]["operation"] == op for e in meter["linearPolicies"]) for op in (1,2,3)}, {1:13,2:13,3:13})
+        # Same ramp and native receipt checks reject the old second fade clock.
+        for fault, reason in (("post-deadline-jitter", "ramp deadline"),
+                              ("missing-start", "real accepted and committed"),
+                              ("rejected-start", "normal Walk admission")):
+            with self.subTest(fault=fault):
+                failed = replay(linear=True, linear_ramp=60, policy_fault=fault)["measurements"][KIND]
+                self.assertFalse(failed["passed"])
+                self.assertTrue(any(reason in message for message in failed["failures"]), failed["failures"])
+        failed = replay(linear=True, linear_ramp=60, fault="mounted-speed-persistent-variance")
+        validate_negative_result(failed, "mounted-speed-persistent-variance")
+
+    def test_sprint60_exact_idle_recipe_and_registration(self):
+        import hashlib
+        from tools.overworld.control import _shared_test_registration
+        from tools.overworld.devtools_test_contract import TestEvaluator
+        from tools.overworld.validation import ValidationFailure
+        root = Path(__file__).resolve().parents[2]
+        path = root / "tests/overworld/test-recipes/mount.stantler-sprint-full-speed.json"
+        recipe = json.loads(path.read_text())
+        self.assertEqual(validate_test(recipe)["id"], "mount.stantler-sprint-full-speed")
+        value = TestEvaluator(recipe); value.install_measurements({KIND:{"contractVersion":1}})
+        self.assertEqual(value.measurements[KIND].linear_ramp, 60)
+        registry = json.loads((root / "tools/overworld/runtime_proof_registry.json").read_text())
+        self.assertEqual(registry["sharedTests"][recipe["id"]]["measurementContract"], contract())
+        self.assertEqual(_shared_test_registration(recipe, root)[1], hashlib.sha256(path.read_bytes()).hexdigest())
+        for key, wrong in (("travelTime",6),("fastestTime",2),("timeToFullSpeed",12),("timeVariance",0)):
+            changed = deepcopy(recipe); changed["setup"][-1]["args"][key] = wrong
+            with self.subTest(key=key), self.assertRaises(ValueError): validate_test(changed)
+        changed = deepcopy(recipe); changed["measurements"][0]["linearRamp"] = 12
+        with self.assertRaises(ValueError): validate_test(changed)
+        changed["setup"][-1]["args"].update(travelTime=6,fastestTime=2,timeToFullSpeed=12)
+        with self.assertRaises(ValidationFailure): _shared_test_registration(changed, root)
+
+    def test_linear12_real_policy_boundaries_and_independent_replay(self):
+        result = replay(linear=True)
+        meter = result["measurements"][KIND]
+        self.assertTrue(result["passed"], meter["failures"])
+        record = dict(sessionId="host", sessionCleanup=dict(sessionId="host", closed=True, errors=[]))
+        self.assertEqual(len(measurements(result, record)), 16)
+        actor = meter["initial"]["actors"][0]
+        reference = validate_linear_walks(actor, meter["windows"][0]["motions"], meter["linearPolicies"])
+        self.assertEqual(sorted(set(row["width"] for row in reference)), [0,1,2])
+        self.assertEqual(reference[-1]["elapsed"], 12)
+        self.assertGreaterEqual(sum(row["width"] == 0 and row["duration"] == 2 for row in reference), 2)
+        # Dynamic starting commit is deliberately4, rather than the old fixture's2.
+        self.assertEqual(actor["commitSequence"], 4)
+
+    def test_linear12_rejects_real_counter_lane_and_owner_faults(self):
+        for fault,reason in (("frozen-elapsed","shared clock"),("early-full","shared clock"),
+                             ("stale-owner","subject differs"),("wrong-width","native lane"),
+                             ("missing-commit","real accepted and committed"),("failed-call","policy ABI")):
+            with self.subTest(fault=fault):
+                value = replay(linear=True, policy_fault=fault)["measurements"][KIND]
+                self.assertFalse(value["passed"])
+                self.assertTrue(any(reason in error for error in value["failures"]), value["failures"])
+        copied = replay(linear=True)
+        copied["measurements"][KIND]["linearPolicies"].pop()
+        record = dict(sessionId="host", sessionCleanup=dict(sessionId="host", closed=True, errors=[]))
+        with self.assertRaises(ValueError): measurements(copied, record)
+
+    def test_linear12_existing_persistent_variance_control(self):
+        result = replay(linear=True, fault="mounted-speed-persistent-variance")
+        value = result["measurements"][KIND]
+        self.assertFalse(value["passed"])
+        self.assertIn("mounted Linear did not reach full speed and zero variance at its ramp deadline", value["failures"])
+        validate_negative_result(result, "mounted-speed-persistent-variance")
+
+    def test_linear12_recipe_and_exact_idle_setup(self):
+        import hashlib
+        root = Path(__file__).resolve().parents[2]
+        path = root / "tests/overworld/test-recipes/mount.stantler-linear-variance.json"
+        recipe = json.loads(path.read_text())
+        self.assertEqual(validate_test(recipe)["id"], "mount.stantler-linear-variance")
+        from tools.overworld.devtools_test_contract import TestEvaluator
+        value = TestEvaluator(recipe)
+        value.install_measurements({KIND: {"contractVersion": 1}})
+        self.assertEqual(value.measurements[KIND].linear_ramp, 12)
+        registry = json.loads((root / "tools/overworld/runtime_proof_registry.json").read_text())
+        self.assertEqual(registry["sharedTests"][recipe["id"]]["recipeSha256"], hashlib.sha256(path.read_bytes()).hexdigest())
+        self.assertEqual(registry["sharedTests"][recipe["id"]]["measurementContract"], contract())
+        from tools.overworld.control import _shared_test_registration
+        from tools.overworld.validation import ValidationFailure
+        self.assertEqual(_shared_test_registration(recipe, root)[1], registry["sharedTests"][recipe["id"]]["recipeSha256"])
+        wrong_variant = deepcopy(recipe)
+        wrong_variant["measurements"][0].pop("linearRamp")
+        wrong_variant["setup"].pop()
+        with self.assertRaises(ValidationFailure): _shared_test_registration(wrong_variant, root)
+        for key,value in (("timeToFullSpeed",120),("timeVariance",0),("travelTime",5)):
+            changed = deepcopy(recipe); changed["setup"][-1]["args"][key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError): validate_test(changed)
+        changed = deepcopy(recipe);changed["measurements"][0]["linearRamp"]=True
+        with self.assertRaises(ValueError):validate_test(changed)
+
     def test_camera_fault_waits_for_two_real_graphics_samples(self):
         negative = MountedSpeedNegative("mounted-gait-camera-bob")
         empty = dict(phase="observe", action="arm-reader")

@@ -42,7 +42,8 @@ to a test-owned session or stop another owner's worker.
 
 Use `scripts/owctl scenario history <scenario-id> --json` for recorded attempts,
 or `scripts/owctl progress --json` when resuming roadmap work. These read saved
-results without launching tests or granting new acceptance. Reuse needs the
+results without launching tests or granting new acceptance. Named history checks
+only that scenario's proof inputs. Reuse needs the
 controller's current-input checks. After a checker-only change, follow
 [retained proof recheck](#recheck-retained-proof). Workshop follows the current
 job; history inspection cannot cancel a different current job.
@@ -502,6 +503,21 @@ only after independent replay and all required negatives pass. Older manifests
 without these scopes still require their original full source identity; never
 invent previous hashes or rewrite old evidence to give it new scopes.
 
+An in-repository directory alias binds its raw link and exact canonical
+directory. Eligible target files are hashed once under their canonical paths,
+including files reached through an otherwise Git-ignored directory. Existing
+input exclusions still apply. The inventory rejects external targets,
+recursive aliases, non-file entries, changed links or directories, and scans
+above64 directory levels or65536 entries. An alias does not drop target content
+from the proof scope.
+
+The reviewed Wild moving setup change moves Geodude from (582, 402) to
+(583, 403). Its two old/new SHA-256 pairs are pinned together in
+`_WILD_MOVING_FIXTURE_SHA_PAIRS` in `tools/overworld/control.py`. Only captures
+that do not select `wild-throw-moving-candidate-v1` can reuse those exact
+bytes. A later byte change or a selected or mixed Wild moving test needs fresh
+memory data; the ROM, save, actions, and inventory checks still apply.
+
 Repeated acceptance within one process uses a bounded32-entry cache. Its key
 binds the artifact bytes, ROM/save/debug data, linked objects, current checker
 and recipe, plus the reader dependency's current recipe and registry. It keeps
@@ -553,6 +569,15 @@ assert, bind, teleport, spawn and party operations. A step's optional `until`
 predicate stops at the first matching completed frame and releases input.
 Use it for a measured target or motion boundary, not a guessed key duration.
 Unknown fields, missing observations and stale actor identities fail closed.
+
+For a diagnostic save and reload, use one subjectless `save.reload` action
+after normal `step` actions that open the menu with `X` or `START` and confirm
+the save with `A`. The action rejects unchanged cartridge bytes. It records
+the exported save hash, starts a new private session from that exact save, and
+checks the loaded cartridge hash. Later actions run in the new session. Read
+`saveReloads` in the job result and the saved observation stream for the
+boundary and post-load observations. This action alone does not assert that a
+specific gameplay value survived the reload.
 
 For normal walking routes, use `player-step-count` to stop held input at an
 observed stock tile admission, then `player-settled-at` to wait for the exact
@@ -935,7 +960,17 @@ exact setup and first87legs through that window; it is diagnostic only.
 `world.unmounted.spawn-zero-stutter` replaces the old
 `diagnostic.unmounted.spawn-loop-prefix`. It loads the current `test.sav`
 without changes, binds the existing Follower Mankey, and follows the sealed
-Route30-to-Cherrygrove route. The strict window starts after the map seam. The
+map33-to-Cherrygrove route. The current save boots in Cherrygrove at(564,392).
+Both D1 recipes reach the reviewed map33 start at(585,406) with normal Run
+input: one tile East, six South, twenty East, then eight South. Every one of
+these35 native step admissions must match its direction, endpoints, map and
+unchanged player pointer. Source Mankey identity and normal field control must
+remain valid. The counter is not reset; measured route thresholds add35 and
+keep their original deltas. Setup earns no measured frames or pacing credit.
+After releasing input, binding requires the exact centered, ready player pose.
+The existing verified Mankey can still be moving; a follower-IDLE wait is not
+part of the pacing claim. No party, follower, spawn or population preparation
+is permitted. The strict window starts after the return map seam. The
 main-loop reader samples the mandatory VBlank-wait return at `0x02000E22` on
 every strict update. One interval above two frame times fails immediately. A
 complete pass also needs a joined normal search/finalizer pair with matching
@@ -957,6 +992,36 @@ separate the measured work from the frame waits without changing game code.
 Use the saved marks for cause finding. The registered zero-stutter scenario is
 the acceptance rule; the stage marks remain diagnostic and are not a fix.
 
+The accepted main-loop reader also hooks the authenticated mandatory-wait
+entry (`0x02000E1E`, the call that returns at `0x02000E22`) with the same code
+identity checks and no guest writes. When that entry is seen, the loop row adds
+`waitArm9Ticks` (return clock minus entry clock, the loop's idle headroom),
+`waitEntryArm9Timestamp`, `waitEntrySite` and `waitScope`. A row whose entry
+was not observed keeps its earlier shape. An entry without its return, a
+second entry or an entry after the return fails the reader. The conditional
+wait at `0x02000DFE` is not this entry.
+
+`population.route30.saturated-headroom` (`population-headroom-v1`) uses these
+rows. Its prepared setup teleports to map 34 (557,361), requests six level 5
+Wild spawns and binds the saved Mankey; none of it earns credit. If a natural
+spawn owns the native queue, the spawn is refused with code `busy`; natural
+spawn work can also take the queued Entry (`spawn-rejected`, "queued Entry
+ended without adopting an actor") or the native finalize cannot find a startup
+(`spawn-rejected`, "native profile/terrain/startup rejected this spawn"). The
+job retains any of the four refusals (including a Mankey that is mid-Hop, `busy`,
+"follower/mount motion is active") (a startup rejection that persists past
+four tries is skipped, since prepared spawns only top up the population) with its
+events and a fresh completed boundary, runs exactly eight neutral frames, and
+asks again (at most forty refusals per spawn); any other failure ends the job.
+The neutral chunk after a refusal rebases only its native-cycle origin (at most
+32 cycles past the snapshot); frames must continue exactly. The 768 credited loops then use the
+fixed UP x16, DOWN x16 (twenty-four pairs, no run key) and a final neutral 16.
+Natural refill, caps, profiles and timers stay untouched. Floors on the minimum,
+1st and 5th percentile of `waitArm9Ticks` and the six-actor share are
+constants in `devtools_population_headroom_measurement.py`; their comment cites
+the pre-fix and fixed pond-bank runs. The prepared spawn tiles are a first
+choice and need live calibration.
+
 ### Cheap spawn-work gate
 
 Spawn, population, destination-mask, profile, or generated-profile changes use
@@ -968,7 +1033,7 @@ batching error:
 3. Stop if either extracted-C check finds more than one costly candidate query
    in one update. Fix the production scanner before starting melonDS.
 4. Run `population.spawn-work-budget` on the current ROM. Its fixed route
-   crosses from Route 30 into Cherrygrove, then starts the strict window on the
+   crosses from map33 into Cherrygrove, then starts the strict window on the
    first completed post-seam update. The player must keep moving during the
    scan. Require exactly one profile resolution and one metadata/class
    preparation for the complete automatic attempt. Later scan updates must
@@ -1002,6 +1067,13 @@ Native receipt counters and cached profiles belong to their completed-frame
 watermark. A later paused native endpoint must not replace that watermark.
 Missing, reordered or unframed receipts fail the measurement rather than being
 discarded to make a route pass.
+
+An automatic scan can start during the normal input warmup. Retain its exact
+native start, prepared pointer, field and attempt identity. Drain that known
+scan through its bounded updates and retirement without scan, preparation,
+movement or pacing credit. Then measure a fresh automatic attempt in full.
+An unknown setup scan, a lost update, changed ownership or repeated work fails;
+the overall frame and time limits do not increase.
 
 Checked stepping keeps every complete native sample and event but does not
 request an extra paused-end terrain grid or party reread for each chunk.
@@ -1051,7 +1123,9 @@ Source recipes are executable; registration is a separate proof decision.
 ## Register an acceptance scenario
 
 1. Put the typed recipe in `tests/overworld/test-recipes/`. Use
-   `scripts/owctl dev test validate --file <recipe.json> --json`; use direct `dev test start`
+   `scripts/owctl dev test validate --file <recipe.json> --offline --json` to
+   use this checkout without a service or session. Omit `--offline` to check
+   with the selected Workshop service; use direct `dev test start`
    for recipe diagnosis only. Per-action and overall wall/frame/no-progress
    limits are required.
 2. Put its reviewed scenario in `tests/overworld/scenarios/`, following
@@ -1164,6 +1238,24 @@ avatar offsets. The reader never repairs a mismatched pair or edits guest state.
 At each completed main queue it also reads the final pair and actual held keys,
 retaining only `latestCompletedPose`. This detects a later overwrite after sync.
 Callback gaps use native return cycles; dense motion checks use completed frames.
+
+Verified mounted snapshots also retain `mountedPair` at the same completed
+queue boundary without arming hooks. The shared gait collector copies the
+snapshot's real player/mount poses and reads the72-byte state at `0x01FFA500`.
+It seals both resident gait/presentation code spans against linked, packaged
+and loaded bytes. Its cache belongs to that session, emulator object and ROM.
+Current Mount input uses session+`0x68`, mode+`0x6F` and bounce+`0x18`; a guard
+checks the exact GCC10 load instructions before those reads.
+
+Blocked-skid proof binds this pair to the verified anchor/mount pointers and
+every raw field in the same snapshot. It requires the exact gait model before
+removing only its lean and bounce for the shared seat/height check. Missing
+native data, wrong owner/stamp/pose, or a wrong raw seat/height must fail.
+The two-key case proves idle Crash at the last clear tile before one
+native-admitted ordinary West Walk from still-held input. That recovery must
+remain continuous for the rest of the measured window. A final held-input
+frame need not be idle. Wall, skid commit, input and cancellation checks stay
+exact; old data without gait require a new capture.
 
 `mount-pacing.calibrate` is an explicit observer control, not a movement test.
 In a paused private session it reads a valid pair, changes only the mount's

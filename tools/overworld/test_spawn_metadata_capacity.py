@@ -204,7 +204,7 @@ class SpawnMetadataCapacityTests(unittest.TestCase):
         from scripts.verify_overworld_spawn_profile_lifecycle import production_function
         header = (ROOT / "include/overworld_wild_behavior_data.h").read_text()
         self.assertRegex(header,
-            r"#define\s+OVERWORLD_WILD_BEHAVIOR_DATA_HEAP_ID\s+HEAPID_WORLD")
+            r"#define\s+OVERWORLD_WILD_BEHAVIOR_DATA_HEAP_ID\s+4\b")
         self.assertRegex(header,
             r"#define\s+OVERWORLD_WILD_SPAWN_METADATA_HEAP_ID\s+HEAPID_DEFAULT")
         metadata_loader = production_function(SOURCE.read_text(),

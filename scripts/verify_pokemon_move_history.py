@@ -14,11 +14,13 @@ if __package__:
         elf_bytes_at, elf_section_layout, layout_symbols, thumb_bl_target, verify_overlay153_spawn_tail_packaging,
     )
     from .verify_overworld_walk_frame_timing import verify_compiled_thumb_acceleration
+    from .verify_overworld_query_code_addon import verify_package as verify_query_code_addon_package
 else:
     from verify_pokemon_move_history_capture import (
         elf_bytes_at, elf_section_layout, layout_symbols, thumb_bl_target, verify_overlay153_spawn_tail_packaging,
     )
     from verify_overworld_walk_frame_timing import verify_compiled_thumb_acceleration
+    from verify_overworld_query_code_addon import verify_package as verify_query_code_addon_package
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -69,12 +71,15 @@ MOUNT_OVERLAY_ID = 157
 MOUNT_OVERLAY_BASE = 0x023BAB00
 MOUNT_OVERLAY_LIMIT = 0x023BC800
 ACTOR_OVERLAY_ID = 158
-ACTOR_OVERLAY_LOAD_BASE = 0x023B65A0
+ACTOR_OVERLAY_LOAD_BASE = 0x023B65C0
 ACTOR_OVERLAY_BASE = 0x023B6B00
 ACTOR_OVERLAY_LIMIT = 0x023BAB00
 MOUNT_CHAIN_OVERLAY_ID = 159
 MOUNT_CHAIN_OVERLAY_BASE = 0x01FF9800
 MOUNT_CHAIN_OVERLAY_LIMIT = 0x01FFA580
+PLAYER_HEALTH_OVERLAY_BASE = 0x01FFA580
+PLAYER_HEALTH_OVERLAY_LIMIT = 0x02000000
+PLAYER_HEALTH_OVERLAY_ID = 161
 MOUNT_GAIT_ENTRY = 0x01FF9D00
 MOUNT_PRESENTATION_ENTRY = 0x01FFA100
 MOUNT_GAIT_STATE = 0x01FFA500
@@ -90,7 +95,7 @@ MOUNT_ARCHIVE_GUARD = 0xC00
 MAIN_RAM_START = 0x02000000
 MAIN_ARENA_HIGH = 0x023E0000
 ITCM_STATIC_END = 0x01FF8620
-ITCM_ARENA_LOW = 0x01FFA580
+ITCM_ARENA_LOW = PLAYER_HEALTH_OVERLAY_LIMIT
 ITCM_END = 0x02000000
 DTCM_START = 0x027E0000
 DTCM_END = DTCM_START + 0x4000
@@ -1260,21 +1265,26 @@ def main() -> None:
     )
     a028_entries = sorted(path.name for path in (REPO / "build/a028").iterdir())
     require(
-        len(a028_entries) == 21
+        a028_entries == [f"8_{index}" for index in range(7)]
+            + [f"9_{index:02d}" for index in range(7, 22)]
         and all((REPO / "build/a028" / name).is_file() for name in a028_entries),
-        "build/a028 is not the exact 21-file sorted packaging source",
+        "build/a028 is not the exact 22-file sorted packaging source",
     )
-    for index, name in ((14, "9_14"), (15, "9_15"), (20, "9_20")):
+    for index, name in ((14, "9_14"), (15, "9_15"), (20, "9_20"), (21, "9_21")):
         require(
             a028_entries[index] == name,
             f"a028 sorted member {index} is {a028_entries[index]!r}, not {name!r}",
         )
     a028_members = narc_members(packaged_a028, "final ROM a/0/2/8")
-    require(len(a028_members) == 21, "final ROM a/0/2/8 does not have 21 members")
+    require(len(a028_members) == 22, "final ROM a/0/2/8 does not have 22 members")
+    for index, name in enumerate(a028_entries):
+        require(a028_members[index] == (REPO / "build/a028" / name).read_bytes(),
+                f"final a028 member {index} differs from its exact sorted source {name}")
     for index, staged_name, generated_path in (
         (14, "9_14", REPO / "build/MachineMoveLearnsets.bin"),
         (15, "9_15", REPO / "build/TutorMoveLearnsets.bin"),
         (20, "9_20", REPO / "build/move_relearn/MoveRelearnParents.bin"),
+        (21, "9_21", REPO / "build/overworld_query_code_addon/query.bin"),
     ):
         staged_member = (REPO / "build/a028" / staged_name).read_bytes()
         generated_member = generated_path.read_bytes()
@@ -1282,6 +1292,7 @@ def main() -> None:
             a028_members[index] == staged_member == generated_member,
             f"final a028 member {index} differs from staged/generated {staged_name}",
         )
+    verify_query_code_addon_package(REPO / "build", rom, a028_members[21])
 
     a229_id, packaged_a229 = nitrofs_file(rom, fnt, fat, "a/2/2/9")
     staged_a229 = (REPO / "base/root/a/2/2/9").read_bytes()
@@ -1370,6 +1381,72 @@ def main() -> None:
     require(
         MOUNT_ACTION_OVERLAY_ID < len(rows),
         "final y9 has no overlay 160 row",
+    )
+    require(
+        PLAYER_HEALTH_OVERLAY_ID < len(rows),
+        "final y9 has no player-health overlay 161 row",
+    )
+
+    health_row = rows[PLAYER_HEALTH_OVERLAY_ID]
+    health_overlay = final_overlay(rom, fat, health_row)
+    health_built = (
+        REPO / "build/output_player_health_overlay.bin"
+    ).read_bytes()
+    require(
+        health_overlay == health_built
+        and health_row == (
+            PLAYER_HEALTH_OVERLAY_ID,
+            PLAYER_HEALTH_OVERLAY_BASE,
+            len(health_overlay),
+            0, 0, 0, PLAYER_HEALTH_OVERLAY_ID, 0,
+        )
+        and 0x34 <= len(health_overlay)
+        <= PLAYER_HEALTH_OVERLAY_LIMIT - PLAYER_HEALTH_OVERLAY_BASE,
+        "final player-health overlay has wrong bytes, metadata, or size",
+    )
+    magic, version, api_size = struct.unpack_from("<IHH", health_overlay, 0)
+    require(
+        magic == 0x484C5048
+        and version == 2
+        and api_size == 0x34,
+        "resident player-health API version or size differs",
+    )
+    for (callback,) in struct.iter_unpack("<I", health_overlay[8:api_size]):
+        require(
+            callback & 1
+            and PLAYER_HEALTH_OVERLAY_BASE + api_size
+                <= (callback & ~1)
+                < PLAYER_HEALTH_OVERLAY_BASE + len(health_overlay),
+            "player-health API callback is outside its resident overlay",
+        )
+    health_symbols = layout_symbols(
+        REPO / "build/player_health_overlay_linked.o",
+        "arm-none-eabi-objdump",
+    )
+    health_entry = health_symbols.get("gPlayerHealthOverlayEntry")
+    require(
+        health_entry is not None
+        and health_entry[0] == PLAYER_HEALTH_OVERLAY_BASE
+        and health_entry[2] == ".text",
+        "player-health entry table moved from its resident address",
+    )
+    core_helpers = layout_symbols(REPO / "build/linked.o",
+                                  "arm-none-eabi-objdump")
+    for helper in ("__aeabi_idiv", "__aeabi_idivmod",
+                   "__aeabi_uidiv", "__aeabi_uidivmod"):
+        imported = health_symbols.get(helper)
+        resident = core_helpers.get(helper)
+        require(
+            imported is not None and resident is not None
+            and imported[0] == resident[0]
+            and imported[2] == "*ABS*" and imported[3] == "F"
+            and resident[2] == ".text" and resident[3] == "F",
+            f"player-health division helper is not linked as resident Thumb code: {helper}",
+        )
+    require(
+        not any(name.startswith("____aeabi_") and name.endswith("_from_thumb")
+                for name in health_symbols),
+        "player-health division call uses an ARM-state veneer",
     )
 
     action_row = rows[MOUNT_ACTION_OVERLAY_ID]
@@ -1656,6 +1733,7 @@ def main() -> None:
             ACTOR_OVERLAY_ID,
             MOUNT_CHAIN_OVERLAY_ID,
             MOUNT_ACTION_OVERLAY_ID,
+            PLAYER_HEALTH_OVERLAY_ID,
         ) or other_size == 0:
             continue
         other_start = other[1]
@@ -1756,7 +1834,8 @@ def main() -> None:
     require(
         ITCM_STATIC_END <= MOUNT_ACTION_OVERLAY_BASE
         and MOUNT_ACTION_OVERLAY_LIMIT == MOUNT_CHAIN_OVERLAY_BASE
-        and MOUNT_CHAIN_OVERLAY_LIMIT == ITCM_ARENA_LOW
+        and MOUNT_CHAIN_OVERLAY_LIMIT == PLAYER_HEALTH_OVERLAY_BASE
+        and PLAYER_HEALTH_OVERLAY_LIMIT == ITCM_ARENA_LOW
         and ITCM_ARENA_LOW <= ITCM_END,
         "mounted ITCM adapters overlap static code or unreserved ITCM arena",
     )
@@ -1815,8 +1894,8 @@ def main() -> None:
     startup = (REPO / "armips/asm/syntheticoverlay.s").read_text()
     require(
         "ResidentOverlayIds:" in startup
-        and ".byte 158, 157, 159, 160, 155, 153, 156" in startup
-        and "mov r5, #7" in startup
+        and ".byte 158, 157, 159, 160, 155, 153, 156, 161" in startup
+        and "mov r5, #8" in startup
         and "bl LoadResidentOverlay" in startup,
         "startup does not load resident overlays 158, 157, 159, 160, 155, 153, and 156 in order",
     )
@@ -1825,6 +1904,7 @@ def main() -> None:
     require(
         "cmp r1, #159" in startup
         and "cmp r1, #160" in startup
+        and "cmp r1, #161" in startup
         and "0x02006FF8|1" in startup,
         "mounted ITCM overlays are not loaded through the DMA-safe wrapper",
     )
@@ -2104,7 +2184,7 @@ def main() -> None:
         f"a011=file#{a011_id}/0x{len(packaged_a011):X}/"
         f"{learnset_dimensions['move_records']} "
         f"a033=file#{a033_id}/0x{len(packaged_a033):X}/1 "
-        f"a028=file#{a028_id}/0x{len(packaged_a028):X}/21 "
+        f"a028=file#{a028_id}/0x{len(packaged_a028):X}/22 "
         f"a229=file#{a229_id}/0x{len(packaged_a229):X}/1 "
         f"archive=0x{archive_start:08X}..0x{archive_end:08X} "
         f"fnt-cache=0x{cached_fnt_start:08X}.."

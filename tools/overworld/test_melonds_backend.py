@@ -533,6 +533,13 @@ class MelonDSBoundaryTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "closed"):
             self.core.memory.register_arm9.cpsr
 
+    def test_private_cartridge_read_matches_exported_bytes(self):
+        self.assertEqual(self.core.backup.read_bytes(), b"save")
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "private.sav"
+            self.assertTrue(self.core.backup.export_file(target))
+            self.assertEqual(target.read_bytes(), self.core.backup.read_bytes())
+
     def test_missing_melonds_library_has_no_alternate_core_fallback(self):
         error = FileNotFoundError("authenticated melonDS library is absent")
         with patch.object(backend, "load_library", side_effect=error) as load:

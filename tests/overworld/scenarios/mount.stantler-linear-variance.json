@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.stantler-linear-variance",
+  "title": "Mounted Stantler Linear speed and variance share one ramp clock",
+  "status": "active",
+  "capabilities": [
+    "walk.acceleration",
+    "mount.presentation",
+    "mount.lifecycle"
+  ],
+  "proofLevel": "S4",
+  "costTier": 4,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld_walk_frame_timing_spec.md",
+    "actor": "MOUNTED species 234 (Stantler), live bound actor and rider/mount presentation pair",
+    "trigger": "Prepare current mounted Stantler at585402 map33; configure base6/fastest2/Linear ramp12/variance2 while idle; hold Right until thirteen normal Walk starts",
+    "observable": "Thirteen real completed Right Walks retain one full current Subject and native INPUT, accepted START_RESULT and COMMIT calls. The committed displayed Walk time advances the same Linear clock that drives reciprocal nominal speed and variance width. The first legal admission at elapsed12 uses nominal2, zero variance and exactly2 display frames, with at least two steady full-speed Walks. Keep existing eased ground, rider/mount, camera, shadow, gait and terminal checks. Input release permits only the exact authored stop-skid tail, ending at600402.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Disposable save; checked map33 teleport585402, own Stantler mount. Public mount-walk.configure changes only idle Owner tuning to6\u21922/Linear12/variance2; no motion, counters, phase, RNG or timer writes. Setup earns no gameplay credit."
+      }
+    ],
+    "limits": [
+      "Prepared fixture data does not prove natural mounting, selection or spawning.",
+      "One prepared6\u21922 Linear12/variance2 held-Right run. Non-Linear cap-step behavior has separate unchanged tests; this case makes no native Wild Linear claim.",
+      "S4 acceptance needs the current packaged ROM, native mount callback reader, paired completed-frame poses and its independent observer control. Registration alone is not game proof."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "stantler",
+      "species": 234,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "input",
+      "value": "Hold Right through thirteen natural Walk starts"
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Read rider and mount absolute poses every completed frame and native presentation callback"
+    }
+  ],
+  "stop": {
+    "frameBudget": 240,
+    "condition": "Thirteen Right Walks finish, mounted input releases, and gait settles to zero"
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED"
+    ],
+    "invariants": [
+      "Each accepted motion has exactly one terminal result",
+      "No logical commit occurs after motion cancellation",
+      "Control returns after the selected motion finishes or cancels",
+      "No active actors share a nonzero target reservation",
+      "Every active actor handle uses the current field epoch",
+      "Every active actor has an attached presentation"
+    ],
+    "orderedEvents": [
+      {
+        "id": "start",
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "commit",
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "finish",
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        }
+      },
+      {
+        "id": "control",
+        "event": "CONTROL_RETURNED",
+        "reason": "OK"
+      }
+    ],
+    "eventCounts": [
+      {
+        "event": "MOTION_STARTED",
+        "reason": "OK",
+        "valueA": {
+          "equals": 1
+        },
+        "minimum": 13,
+        "maximum": 13
+      },
+      {
+        "event": "LOGICAL_COMMIT",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 13,
+        "maximum": 13
+      },
+      {
+        "event": "MOTION_FINISHED",
+        "reason": "OK",
+        "valueB": {
+          "equals": 1
+        },
+        "minimum": 13,
+        "maximum": 13
+      },
+      {
+        "event": "CONTROL_RETURNED",
+        "reason": "OK",
+        "minimum": 13,
+        "maximum": 13
+      }
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "mount.stantler-linear-variance",
+    "claims": [
+      "natural-input",
+      "live-actor-identity",
+      "rendered-motion",
+      "frame-pacing",
+      "engine-boundary",
+      "control-release"
+    ],
+    "minimumFrames": 13
+  }
+}

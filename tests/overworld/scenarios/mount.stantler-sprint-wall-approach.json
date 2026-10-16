@@ -9,14 +9,14 @@
   "verification": {
     "kind": "controlled-case",
     "expectationSource": "documentation/overworld-system/architecture.md#5-motion-module-policy",
-    "actor": "One prepared current Mounted Stantler (species 234, party slot 0) at the copied save's Route 29 map 33 tile (585,406)",
+    "actor": "One prepared current Mounted Stantler (species 234, party slot 0) at checked Route 29 map 33 tile (585,406) in a disposable prepared session",
     "trigger": "Hold Right for 120 completed game frames along the clear lane toward the solid wall at (590,406), then press Up to leave from the last open tile (589,406) and release it through the terminal commit",
     "observable": "The same mounted Stantler completes the cardinal Walk from (588,406) to the last open tile (589,406), never enters or targets the blocked wall, remains under rider control, and completes a normal Up Walk to (589,405).",
     "setupAudit": "complete",
     "setupMutations": [{
       "phase": "before-observation",
       "target": "fixture",
-      "change": "Use the disposable copy of test.sav at (585,406); assert the saved start, prepare party slot 0 Stantler, spawn native Mounted role, and bind its exact actor. Do not teleport or edit movement state, profile, speed, Hop target, timers or input during observation."
+      "change": "Use a disposable copy of test.sav; teleport it to (585,406), assert that settled start, prepare party slot 0 Stantler, spawn native Mounted role, and bind its exact actor. Do not teleport or edit movement state, profile, speed, Hop target, timers or input during observation."
     }],
     "limits": [
       "The copied save and prepared party do not prove natural capture, selection or spawning; they preserve the normal mounted movement trigger.",
@@ -29,12 +29,12 @@
   "subjects": [{"id": "stantler", "species": 234, "role": "MOUNTED", "acquisition": "mount",
     "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}],
   "events": [
-    {"at": 0, "kind": "setup", "value": "Assert the copied save's Route 29 start, prepare and mount own Stantler, then bind the live actor"},
+    {"at": 0, "kind": "setup", "value": "Teleport the disposable session to the checked Route 29 start and assert it, prepare and mount own Stantler, then bind the live actor"},
     {"at": 1, "kind": "input", "value": "Hold Right for 120 completed frames toward the wall without letting the planner stop one tile early"},
-    {"at": 2, "kind": "input", "value": "Press Up until the player reaches (589,405)"},
+    {"at": 2, "kind": "input", "value": "Press Up until the first Walk reaches COMMIT_PENDING at (589,405), then release before another Walk starts"},
     {"at": 3, "kind": "input", "value": "Release Up and observe the actor's terminal commit and idle control return"}
   ],
-  "stop": {"frameBudget": 220, "condition": "The last open east tile and one safe Up tile have each been committed by the same mounted actor"},
+  "stop": {"frameBudget": 340, "condition": "The last open east tile and one safe Up tile have each been committed by the same mounted actor"},
   "expect": {
     "requiredEvents": ["MOTION_STARTED", "LOGICAL_COMMIT", "MOTION_FINISHED", "CONTROL_RETURNED"],
     "forbiddenEvents": ["MOTION_CANCELED", "CONTEXT_CHANGED", "ACTOR_REBOUND", "CONTROL_REBOUND"],

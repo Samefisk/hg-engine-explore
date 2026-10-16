@@ -1,12 +1,16 @@
 """Synthetic memory controls for the real read-only dialogue decoder."""
 import struct
 import unittest
+from types import SimpleNamespace
 
 from tools.overworld import devtools_dialogue as d
+from tools.overworld.devtools_runtime import DevtoolsSession
 
 
 class Memory:
     field, task, env, ctx = 0x02210000, 0x02211000, 0x02212000, 0x02213000
+    blackout_stock, blackout_root = 0x02211064, 0x022110C8
+    blackout_stock_callback, blackout_root_callback = 0x01FFAED9, 0x01FFAE51
     printer_task, printer = 0x02214000, 0x02215000
     parent, parent_env, child, menu = 0x02216000, 0x02217000, 0x02218000, 0x02219000
 
@@ -42,7 +46,24 @@ class Memory:
 
     def observe(self, **kwargs):
         return d.observe_dialogue(self.read, self.authenticate, self.field,
-                                  kwargs.get("frame", 100), kwargs.get("native_cycle", 200), self.overlays)
+                                  kwargs.get("frame", 100), kwargs.get("native_cycle", 200), self.overlays,
+                                  blackout_parents=kwargs.get("blackout_parents"))
+
+    def blackout(self):
+        self.put(self.task, self.blackout_stock)
+        for address, previous, callback, state in (
+                (self.blackout_stock, self.blackout_root, self.blackout_stock_callback, 6),
+                (self.blackout_root, 0, self.blackout_root_callback, 2)):
+            self.put(address, previous)
+            self.put(address + 4, callback)
+            self.put(address + 8, state)
+            self.put(address + 24, self.field)
+        self.put(self.env + 10, 2013, 2)
+        return self
+
+    def blackout_parents(self):
+        return ((self.blackout_stock, self.blackout_stock_callback, 6, 0),
+                (self.blackout_root, self.blackout_root_callback, 2, 0))
 
     def page(self, state=2):
         self.put(self.ctx + 4, d.MESSAGE_WAIT | 1)
@@ -105,6 +126,52 @@ class Memory:
 
 
 class DialogueTests(unittest.TestCase):
+    def test_runtime_passes_only_current_zero_load_parent_receipt(self):
+        mem = Memory().page().blackout()
+        table = 0x0221A000
+        mem.put(0x0200713C, table)
+        mem.put(table, 1)
+        mem.put(table + 4, 1)
+        session = SimpleNamespace(
+            read=mem.read, _authenticate_field_reader_code=mem.authenticate,
+            completed_frames=1657, rt=SimpleNamespace(EXECUTED_FRAME_COUNT=3782),
+            zero_load_trace=SimpleNamespace(stock=mem.blackout_stock_callback,
+                                            root=mem.blackout_root_callback),
+            zero_load_latest={"frame": 1657, "nativeCycle": 3782, "field": mem.field,
+                              "stock": {"pointer": mem.blackout_stock, "state": 6},
+                              "root": {"pointer": mem.blackout_root, "state": 2}})
+        value = DevtoolsSession._dialogue_observation(session, mem.field)
+        self.assertEqual(value["state"], "page-wait")
+        session.zero_load_latest["nativeCycle"] -= 1
+        self.assertEqual(DevtoolsSession._dialogue_observation(session, mem.field)["reason"],
+                         "task-callback-unknown")
+
+    def test_stock_blackout_arrival_page_requires_exact_checked_parent_chain(self):
+        # The callback numbers, script 2013 and printer state 2 are copied
+        # from the retained ROM3423 zero-load failure at frame 1657.
+        mem = Memory().page().blackout()
+        mem.put(d.TEXT_FLAGS, 1, 1)
+        self.assertEqual(mem.observe()["reason"], "task-callback-unknown")
+        value = mem.observe(blackout_parents=mem.blackout_parents())
+        self.assertEqual((value["known"], value["state"]), (True, "page-wait"))
+        self.assertEqual(value["script"]["scriptNumber"], 2013)
+        self.assertEqual(len(value["tasks"]), 3)
+        self.assertIsNotNone(value["waitIdentity"])
+        for address, new, size in (
+                (mem.blackout_stock + 4, 0x01FFAEDB, 4),
+                (mem.blackout_stock + 8, 5, 4),
+                (mem.blackout_stock + 12, mem.env, 4),
+                (mem.blackout_stock + 24, mem.field + 4, 4),
+                (mem.blackout_root + 4, 0x01FFAE53, 4),
+                (mem.blackout_root + 8, 1, 4),
+                (mem.env + 10, 2002, 2)):
+            with self.subTest(address=address):
+                changed = Memory().page().blackout()
+                changed.put(address, new, size)
+                result = changed.observe(blackout_parents=changed.blackout_parents())
+                self.assertFalse(result["known"])
+                self.assertIsNone(result["waitIdentity"])
+
     def test_nested_callstd_button_and_page_ready(self):
         for count in (2, 3):
             for page in (False, True):

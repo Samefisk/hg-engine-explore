@@ -6,6 +6,7 @@
 #define OVERWORLD_WALK_TIMING_MIN 1
 #define OVERWORLD_WALK_TIMING_MAX 32
 #define OVERWORLD_WALK_ACCELERATION_DIVIDE_BY_2 33
+#define OVERWORLD_WALK_ACCELERATION_LINEAR_SPEED 34
 #define OVERWORLD_WALK_TIMING_INLINE \
     static inline __attribute__((always_inline))
 
@@ -19,6 +20,69 @@ OverworldWalkTimingPolicy_Clamp(u8 travelTime)
         return OVERWORLD_WALK_TIMING_MAX;
     }
     return travelTime;
+}
+
+/* Q8 tile time is the reciprocal of speed interpolated over moving frames.
+ * Keep the fraction until admission; rejected proposals never consume it. */
+OVERWORLD_WALK_TIMING_INLINE u16 OverworldWalkTimingPolicy_LinearTimeQ8(
+    u8 baseTime, u8 fastestTime, u8 rampFrames, u8 movingFrames)
+{
+    u32 denominator;
+
+    baseTime = OverworldWalkTimingPolicy_Clamp(baseTime);
+    fastestTime = OverworldWalkTimingPolicy_Clamp(fastestTime);
+    if (fastestTime >= baseTime) {
+        return (u16)baseTime << 8;
+    }
+    if (rampFrames == 0 || movingFrames >= rampFrames) {
+        return (u16)fastestTime << 8;
+    }
+    denominator = (u32)fastestTime * rampFrames
+        + (u32)(baseTime - fastestTime) * movingFrames;
+#if defined(__arm__)
+    /* The resident unsigned divide entry is Thumb. A named function pointer
+     * avoids redefining compiler-helper symbols supplied by the overlay link. */
+    return ((u32 (*)(u32, u32))0x023DEE4D)(
+        (u32)baseTime * fastestTime * rampFrames << 8, denominator);
+#else
+    return ((u32)baseTime * fastestTime * rampFrames << 8) / denominator;
+#endif
+}
+
+OVERWORLD_WALK_TIMING_INLINE u8 OverworldWalkTimingPolicy_LinearDuration(
+    u16 timeQ8, u8 carry, u8 *nextCarry)
+{
+    u16 accumulated = timeQ8 + carry;
+
+    *nextCarry = (u8)accumulated;
+    return OverworldWalkTimingPolicy_Clamp((u8)(accumulated >> 8));
+}
+
+/* Translate the visible tile time into a new linear-speed curve. A profile
+ * entry changes tuning, not the actor's current direction or skid. */
+OVERWORLD_WALK_TIMING_INLINE u8 OverworldWalkTimingPolicy_LinearElapsedForTime(
+    u8 baseTime, u8 fastestTime, u8 rampFrames, u8 visibleTime)
+{
+    u32 numerator;
+    u32 denominator;
+
+    baseTime = OverworldWalkTimingPolicy_Clamp(baseTime);
+    fastestTime = OverworldWalkTimingPolicy_Clamp(fastestTime);
+    visibleTime = OverworldWalkTimingPolicy_Clamp(visibleTime);
+    if (visibleTime >= baseTime || fastestTime >= baseTime) {
+        return 0;
+    }
+    if (visibleTime <= fastestTime) {
+        return rampFrames;
+    }
+    numerator = (u32)fastestTime * rampFrames * (baseTime - visibleTime);
+    denominator = (u32)visibleTime * (baseTime - fastestTime);
+#if defined(__arm__)
+    return ((u32 (*)(u32, u32))0x023DEE4D)(
+        numerator + denominator - 1u, denominator);
+#else
+    return (numerator + denominator - 1u) / denominator;
+#endif
 }
 
 OVERWORLD_WALK_TIMING_INLINE u8 OverworldWalkTimingPolicy_Accelerate(
@@ -92,6 +156,25 @@ OverworldWalkTimingPolicy_SkidTiles(u8 travelTime)
     return 0;
 }
 
+/* A selected two-tile skid retains the legacy four tiles at time1. A
+ * one-turn-only selection stays one tile. Stop uses its own admission limit
+ * and preserves the legacy count at time4/time1 after admission. */
+OVERWORLD_WALK_TIMING_INLINE u8
+OverworldWalkTimingPolicy_ProfileSkidTiles(
+    u8 travelTime, u8 oneTurnTime, u8 twoTurnTime, u8 stopTime, BOOL stop)
+{
+    /* A zero time wraps to255, above every authored 0..127 threshold. */
+    u8 elapsed = travelTime - 1u;
+    if (stop) {
+        if (elapsed >= stopTime) return 0;
+        return travelTime <= 1 ? 4 : travelTime <= 4 ? 2 : 1;
+    }
+    if (elapsed < twoTurnTime) {
+        return travelTime <= 1 ? 4 : 2;
+    }
+    return elapsed < oneTurnTime;
+}
+
 OVERWORLD_WALK_TIMING_INLINE u8
 OverworldWalkTimingPolicy_SkidTime(u8 travelTime)
 {
@@ -136,7 +219,7 @@ OverworldWalkTimingPolicy_ValidateExactOverrideValue(
         return value <= OVERWORLD_WALK_TIMING_MAX;
     }
     if (fieldIndex == 67) {
-        return value <= OVERWORLD_WALK_ACCELERATION_DIVIDE_BY_2;
+        return value <= OVERWORLD_WALK_ACCELERATION_LINEAR_SPEED;
     }
     return TRUE;
 }

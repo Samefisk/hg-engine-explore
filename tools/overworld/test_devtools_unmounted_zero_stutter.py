@@ -11,6 +11,7 @@ from tools.overworld.devtools_main_loop_probe import (
 from tools.overworld.devtools_unmounted_zero_stutter_measurement import (
     KIND,
     MINIMUM_FRAMES,
+    MAX_DESTINATION_SCAN_FRAME_SPAN,
     UnmountedZeroStutterMeasurement,
 )
 from tools.overworld.devtools_unmounted_zero_stutter_proof import (
@@ -20,6 +21,7 @@ from tools.overworld.devtools_unmounted_zero_stutter_proof import (
     validate_negative_result,
 )
 from tools.overworld.test_spawn_spatial import extract_function
+from tools.overworld.test_devtools_spawn_priority import creation_fixture
 
 
 HANDLE = {
@@ -32,17 +34,17 @@ MATCHED_MASK = 32
 ROOT = Path(__file__).resolve().parents[2]
 SPAWNER_SOURCE = ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
 SCHEMA = {
-    "compactSize": 72,
+    "compactSize": 80,
     "fields": [
         {"key": "hopMaxDistance", "cType": "u8", "offset": 21},
         {"key": "hopPause", "cType": "u8", "offset": 22},
     ],
 }
-PROFILE = bytearray(200)
+PROFILE = bytearray(216)
 PROFILE[21] = 6
 PROFILE[22] = 5
-PROFILE[172:176] = MATCHED_MASK.to_bytes(4, "little")
-PROFILE[176:180] = FINGERPRINT.to_bytes(4, "little")
+PROFILE[188:192] = MATCHED_MASK.to_bytes(4, "little")
+PROFILE[192:196] = FINGERPRINT.to_bytes(4, "little")
 REQUEST = bytearray(44)
 REQUEST[:2] = (56).to_bytes(2, "little")
 REQUEST[38] = 2
@@ -50,21 +52,21 @@ PROFILE_RECEIPT = {
     "requestHex": REQUEST.hex(), "resultHex": PROFILE.hex(),
     "resolved": True, "fingerprint": FINGERPRINT,
     "sourceSha256": SOURCE,
-    "lanes": [PROFILE[offset:offset + 72].hex() for offset in (0, 72)],
+    "lanes": [PROFILE[offset:offset + 80].hex() for offset in (0, 80)],
     "appliedOverrides": MATCHED_MASK,
 }
 
 
 def profile_receipt(fingerprint, mask):
     profile = bytearray(PROFILE)
-    profile[172:176] = mask.to_bytes(4, "little")
-    profile[176:180] = fingerprint.to_bytes(4, "little")
+    profile[188:192] = mask.to_bytes(4, "little")
+    profile[192:196] = fingerprint.to_bytes(4, "little")
     return {
         "requestHex": REQUEST.hex(), "resultHex": profile.hex(),
         "resolved": True, "fingerprint": fingerprint,
         "sourceSha256": SOURCE,
-        "lanes": [profile[offset:offset + 72].hex()
-                  for offset in (0, 72)],
+        "lanes": [profile[offset:offset + 80].hex()
+                  for offset in (0, 80)],
         "appliedOverrides": mask,
     }
 SUBJECT = {
@@ -87,12 +89,16 @@ def recipe():
     }
 
 
+BIRTH_ACTOR = creation_fixture()[0]["actors"][-1]
+NEXT_REFILL_FRAME = 300 + MAX_DESTINATION_SCAN_FRAME_SPAN - 1 + 70
+
+
 def snapshot(frame, *, anchor=False):
     offset = max(0, frame - 101)
     hop_index = offset // 10
     x = 565 if anchor else 566 + offset // 4
     previous = x if anchor else x - 1
-    return {
+    result = {
         "frame": frame,
         "nativeCycle": frame * 2,
         "actorFrame": frame,
@@ -105,7 +111,7 @@ def snapshot(frame, *, anchor=False):
         },
         "observationBoundary": "main-task-queue-completion",
         "fieldAvailable": True,
-        "fieldControl": {"taskPointer": 0},
+        "fieldControl": {"taskPointer": 0, "fieldPointer": 0x2200000},
         "nativeObservation": {
             "sequence": frame, "coverageComplete": True,
             "error": None, "eventsDropped": 0,
@@ -124,8 +130,12 @@ def snapshot(frame, *, anchor=False):
             "motionElapsed": min(offset % 10, 5),
         }] + ([{
             "active": True, "species": 19, "role": "WILD",
-        }] if frame < 300 or frame >= 321 else []),
+        }] if frame < 300 or frame >= 300 + MAX_DESTINATION_SCAN_FRAME_SPAN else []),
     }
+
+    if frame >= 300 + MAX_DESTINATION_SCAN_FRAME_SPAN - 1:
+        result["actors"] = [a for a in result["actors"] if a.get("role") != "WILD"] + [deepcopy(BIRTH_ACTOR)]
+    return result
 
 
 def pacing_event(frame):
@@ -145,6 +155,19 @@ def pacing_event(frame):
     }}
 
 
+def refill_event(frame, attempt, *, queued=False):
+    return {"frame": frame, "kind": "native-observation", "data": {
+        "observation": "spawn-queued", "setupMode": "normal",
+        "spawnAttemptId": attempt, "sequence": frame * 10, "terrain": 0,
+        "slot": 1, "entryActorFrame": frame, "returnActorFrame": frame,
+        "entryNativeCycle": frame * 2, "returnNativeCycle": frame * 2,
+        "returnValue": int(queued), "queued": queued,
+        **({"finalizationId": attempt, "pendingDestination": True} if queued else {}),
+        "worldContext": {"fieldEpoch": 2, "mapGeneration": 2, "mapId": 67,
+                         "fieldPointer": 0x2200000, "statePointer": 0x2300000},
+    }}
+
+
 def run(fault=None):
     meter = UnmountedZeroStutterMeasurement(
         recipe(), {"schema": SCHEMA, "sourceSha256": SOURCE}, max_frames=4000)
@@ -156,8 +179,8 @@ def run(fault=None):
     for frame in range(101, 102 + MINIMUM_FRAMES):
         sample = snapshot(frame, anchor=frame == 101)
         events = [pacing_event(frame)]
-        if 300 <= frame <= 321:
-            attempt_id = 1 if frame <= 320 else 2
+        if 300 <= frame <= 300 + MAX_DESTINATION_SCAN_FRAME_SPAN:
+            attempt_id = 1 if frame < 300 + MAX_DESTINATION_SCAN_FRAME_SPAN else 2
             identity = {
                 "setupMode": "normal", "spawnAttemptId": attempt_id,
                 "finalizationId": frame - 299, "slot": 1,
@@ -172,6 +195,13 @@ def run(fault=None):
                 {"frame": frame, "kind": "native-observation", "data": {
                     "observation": "spawn-finalized", **identity}},
             ])
+        scan_end = 300 + MAX_DESTINATION_SCAN_FRAME_SPAN - 1
+        if frame in (scan_end, NEXT_REFILL_FRAME, NEXT_REFILL_FRAME + 1):
+            events.append(refill_event(frame, {scan_end: 1, NEXT_REFILL_FRAME: 2, NEXT_REFILL_FRAME + 1: 3}[frame],
+                                       queued=frame == scan_end))
+        if frame == scan_end:
+            sample, birth_events = creation_fixture(frame, sample=sample)
+            events.extend(birth_events)
         row = {"phase": "observe", "samples": [sample], "events": events}
         if negative:
             row = negative.mutate(row, {"mankey": SUBJECT})
@@ -233,8 +263,8 @@ class UnmountedZeroStutterTests(unittest.TestCase):
         receipt = {
             **PROFILE_RECEIPT,
             "resultHex": profile.hex(),
-            "lanes": [profile[offset:offset + 72].hex()
-                      for offset in (0, 72)],
+            "lanes": [profile[offset:offset + 80].hex()
+                      for offset in (0, 80)],
         }
         initial["nativeObservation"]["resolvedProfiles"] = [receipt]
         with self.assertRaisesRegex(ValueError, "resolved Mankey profile changed"):
@@ -343,7 +373,7 @@ class UnmountedZeroStutterTests(unittest.TestCase):
                 "sessionId": "test", "closed": True, "errors": [],
             }},
         )
-        self.assertEqual([row["passed"] for row in rows], [True] * 11)
+        self.assertEqual([row["passed"] for row in rows], [True] * 13)
 
     def test_conditional_final_profile_still_accepts_bound_base_profile(self):
         result = run()
@@ -355,7 +385,7 @@ class UnmountedZeroStutterTests(unittest.TestCase):
                 "sessionId": "test", "closed": True, "errors": [],
             }},
         )
-        self.assertEqual([row["passed"] for row in rows], [True] * 11)
+        self.assertEqual([row["passed"] for row in rows], [True] * 13)
 
     def test_each_copied_fault_fails_for_its_named_reason(self):
         for fault in FAULTS:
@@ -367,6 +397,101 @@ class UnmountedZeroStutterTests(unittest.TestCase):
                      "measurements": {KIND: result}},
                     fault,
                 )
+
+    def test_refill_counts_next_batch_not_resumed_scan_or_later_terrain(self):
+        meter = UnmountedZeroStutterMeasurement(
+            recipe(), {"schema": SCHEMA, "sourceSha256": SOURCE}, max_frames=4000)
+        meter._observe_refill_interval(snapshot(320), [refill_event(320, 1, queued=True)])
+        self.assertEqual(meter.result()["refillIntervals"]["count"], 0)
+        birth_sample, birth_events = creation_fixture(320, sample=snapshot(320))
+        meter._observe_refill_interval(birth_sample, birth_events)
+        # Pending finalizers keep their original attempt and do not admit a batch.
+        meter._observe_refill_interval(snapshot(321), [{
+            "frame": 321, "kind": "native-observation", "data": {
+                "observation": "spawn-finalized", "spawnAttemptId": 1}}])
+        meter._observe_refill_interval(snapshot(380), [refill_event(380, 2)])
+        # A failed next terrain group can continue one frame later in this batch.
+        meter._observe_refill_interval(snapshot(381), [refill_event(381, 3)])
+        self.assertEqual(meter.result()["refillIntervals"]["count"], 1)
+        self.assertEqual(meter.result()["refillIntervals"]["minimumActorFrames"], 60)
+        optional = refill_event(382, 4, queued=True)
+        optional["data"].update(terrain=2, slot=6)
+        meter._observe_refill_interval(snapshot(382), [optional])
+        birth_sample, birth_events = creation_fixture(382, attempt=4, sample=snapshot(382))
+        meter._observe_refill_interval(birth_sample, birth_events)
+        meter._observe_refill_interval(snapshot(442), [refill_event(442, 5)])
+        self.assertEqual(meter.result()["refillIntervals"]["count"], 2)
+        self.assertIn("#define OW_WILD_REFILL_BASE_INTERVAL_FRAMES 60", SPAWNER_SOURCE.read_text())
+
+    def test_refill_accepts_native_terrain_slot_pairs(self):
+        pairs = [(terrain, slot) for terrain in (0, 1) for slot in range(6)]
+        pairs += [(2, 6), (3, 8), (3, 9)]
+        for terrain, slot in pairs:
+            with self.subTest(terrain=terrain, slot=slot):
+                meter = UnmountedZeroStutterMeasurement(
+                    recipe(), {"schema": SCHEMA, "sourceSha256": SOURCE}, max_frames=4000)
+                event = refill_event(380, 1)
+                event["data"].update(terrain=terrain, slot=slot)
+                meter._observe_refill_interval(snapshot(380), [event])
+                self.assertEqual(meter.refill_last_attempt, 1)
+                # A valid failed attempt is still not a real constructor.
+                self.assertEqual(meter.result()["refillIntervals"]["count"], 0)
+
+    def test_refill_rejects_follower_and_wrong_terrain_slots(self):
+        valid = {(terrain, slot) for terrain in (0, 1) for slot in range(6)}
+        valid.update({(2, 6), (3, 8), (3, 9)})
+        pairs = [(terrain, slot) for terrain in range(5) for slot in range(-1, 11)
+                 if (terrain, slot) not in valid]
+        pairs += [(3, True), (True, 8)]
+        for terrain, slot in pairs:
+            with self.subTest(terrain=terrain, slot=slot):
+                meter = UnmountedZeroStutterMeasurement(
+                    recipe(), {"schema": SCHEMA, "sourceSha256": SOURCE}, max_frames=4000)
+                event = refill_event(380, 1)
+                event["data"].update(terrain=terrain, slot=slot)
+                with self.assertRaisesRegex(ValueError, "refill interval receipt is invalid"):
+                    meter._observe_refill_interval(snapshot(380), [event])
+
+    def test_fishing_refill_keeps_owner_clock_and_reply_guards(self):
+        faults = {
+            "field": lambda d: d["worldContext"].update(fieldPointer=0x2200004),
+            "state": lambda d: d["worldContext"].update(statePointer=0x2300004),
+            "epoch": lambda d: d["worldContext"].update(fieldEpoch=3),
+            "map-generation": lambda d: d["worldContext"].update(mapGeneration=3),
+            "map": lambda d: d["worldContext"].update(mapId=34),
+            "actor-clock": lambda d: d.update(returnActorFrame=381),
+            "native-clock": lambda d: d.update(entryNativeCycle=761),
+            "queue-type": lambda d: d.update(queued=0),
+            "reply": lambda d: d.update(returnValue=1),
+            "attempt": lambda d: d.update(spawnAttemptId=1),
+            "sequence": lambda d: d.update(sequence=3790),
+        }
+        for name, mutate in faults.items():
+            with self.subTest(fault=name):
+                meter = UnmountedZeroStutterMeasurement(
+                    recipe(), {"schema": SCHEMA, "sourceSha256": SOURCE}, max_frames=4000)
+                previous = refill_event(379, 1)
+                previous["data"].update(terrain=3, slot=8)
+                meter._observe_refill_interval(snapshot(379), [previous])
+                event = refill_event(380, 2)
+                event["data"].update(terrain=3, slot=8)
+                mutate(event["data"])
+                reason = ("stale Field owner" if name in
+                          ("field", "state", "epoch", "map-generation", "map")
+                          else "refill interval receipt is invalid")
+                with self.assertRaisesRegex(ValueError, reason):
+                    meter._observe_refill_interval(snapshot(380), [event])
+
+    def test_refill_rejects_missing_success_or_stale_state_pointer(self):
+        meter = UnmountedZeroStutterMeasurement(
+            recipe(), {"schema": SCHEMA, "sourceSha256": SOURCE}, max_frames=4000)
+        meter._observe_refill_interval(snapshot(320), [refill_event(320, 1)])
+        meter._observe_refill_interval(snapshot(380), [refill_event(380, 2)])
+        self.assertEqual(meter.result()["refillIntervals"]["count"], 0)
+        bad = refill_event(381, 3)
+        bad["data"]["worldContext"]["statePointer"] += 4
+        with self.assertRaisesRegex(ValueError, "stale Field owner"):
+            meter._observe_refill_interval(snapshot(381), [bad])
 
     def test_copied_live_hitch_is_five_frame_times(self):
         result = run("zero-stutter-extra-game-frame")

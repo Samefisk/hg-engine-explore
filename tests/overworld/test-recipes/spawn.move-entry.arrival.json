@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "id": "spawn.move-entry.arrival",
+  "title": "Prepared Rattata follows its native Move entry route",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/verification.md",
+  "requirements": [
+    "current.move-entry-arrival"
+  ],
+  "budgets": {
+    "maxSeconds": 240,
+    "maxFrames": 720,
+    "noProgressFrames": 240,
+    "minObservedFrames": 240
+  },
+  "subjects": [
+    {
+      "id": "rattata",
+      "species": 19,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [],
+  "setup": [
+    {
+      "id": "route30-shore",
+      "op": "teleport",
+      "args": {
+        "map": 34,
+        "x": 565,
+        "z": 369,
+        "facing": 0
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-route30",
+      "op": "step",
+      "args": {
+        "frames": 60,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "request-rattata",
+      "op": "spawn",
+      "args": {
+        "species": 19,
+        "role": "wild",
+        "level": 4,
+        "x": 560,
+        "z": 375
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "bind-rattata",
+      "op": "bind",
+      "args": {
+        "subject": "rattata"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "travel",
+      "op": "step",
+      "args": {
+        "frames": 240,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "event-count",
+      "subject": "rattata",
+      "event": "MOTION_STARTED",
+      "operator": "gte",
+      "value": 1
+    },
+    {
+      "kind": "event-count",
+      "subject": "rattata",
+      "event": "MOTION_FINISHED",
+      "operator": "gte",
+      "value": 1
+    }
+  ]
+}

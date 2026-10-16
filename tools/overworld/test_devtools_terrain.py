@@ -9,6 +9,7 @@ import inspect
 from pathlib import Path
 import re
 import shutil
+import struct
 import subprocess
 import tempfile
 import unittest
@@ -288,6 +289,89 @@ class TerrainPointTests(unittest.TestCase):
                 namespace.update(G_FIELD_SYS_PTR=GLOBAL, unsigned=f.memory.read)
                 actual_loaded = namespace["loaded_terrain_cell"](None, x, y) is not None
                 self.assertNotEqual(actual_loaded, expected_loaded, "known-bad reader escaped its control")
+
+
+class SurfaceCatalogPointTests(unittest.TestCase):
+    def fixture(self, version=engine.BEHAVIOR_DATA_VERSION):
+        memory = Memory()
+        pointer, blob = 0x02004000, 0x02218000
+        memory.region(pointer, 4)
+        memory.region(blob, 100)
+        memory.put(pointer, blob)
+        header = bytearray(84)
+        struct.pack_into("<IHHI", header, 0, 0x4F574244, version, 84, 100)
+        for at, values in ((60, (84, 1, 6)), (68, (90, 1, 8)), (76, (98, 1, 2))):
+            struct.pack_into("<IHH", header, at, *values)
+        for at, value in enumerate(header):
+            memory.put(blob + at, value, 1)
+        memory.put(blob + 84, 7, 2)
+        memory.put(blob + 88, 1, 1)
+        # One 2x2 native-ground Flower Bed at local (3,4).
+        for at, value in ((90, 3), (91, 4), (96, (3 << 5) | 31), (98, 2), (99, 2)):
+            memory.put(blob + at, value, 1)
+        cell = {"provenance": {"landDataId": 7}}
+        return memory, pointer, blob, cell
+
+    def read(self, fixture):
+        memory, pointer, _blob, cell = fixture
+        with patch.object(engine, "WILD_SYMBOLS", {"sOverworldWildBehaviorDataBlob": pointer}), \
+                patch.object(engine, "unsigned", memory.read):
+            return engine.loaded_surface_cell(None, 35, 36, cell)
+
+    def test_current_flower_surface_decodes_the_packed_catalog(self):
+        value = self.read(self.fixture())
+        self.assertTrue(value["known"])
+        self.assertTrue(value["present"])
+        self.assertEqual((value["type"], value["typeId"], value["nodeId"]), ("flowerbed", 3, 0))
+        self.assertEqual(value["rectangle"], {"minX": 3, "minZ": 4, "width": 2, "height": 2})
+        self.assertEqual((value["heightMode"], value["heightOffsetFx32"]), ("native-ground", 0))
+        self.assertFalse(value["finalHeightKnown"])
+
+    def test_stale_versions_remain_unknown_before_catalog_reads(self):
+        for version in (81, 84, engine.BEHAVIOR_DATA_VERSION - 1):
+            with self.subTest(version=version):
+                fixture = self.fixture(version)
+                value = self.read(fixture)
+                self.assertEqual(value, {"known": False, "present": None,
+                                         "reason": "surface-catalog-read-incoherent",
+                                         "detail": "behavior data header differs"})
+                self.assertTrue(all(address < fixture[2] + 84 or address == fixture[1]
+                                    for address, _size in fixture[0].reads))
+
+    def test_named_catalog_failure_stays_unknown_without_raw_data(self):
+        fixture = self.fixture()
+        fixture[0].put(fixture[2] + 89, 1, 1)
+        self.assertEqual(self.read(fixture), {
+            "known": False, "present": None, "reason": "surface-catalog-read-incoherent",
+            "detail": "surface model directory differs"})
+
+    def test_current_header_and_generated_blob_match_reader_offsets(self):
+        cc = shutil.which("arm-none-eabi-gcc")
+        if not cc:
+            self.skipTest("ARM header compiler unavailable")
+        blob = (ROOT / "build/OverworldWildBehaviorData.bin").read_bytes()
+        magic, version, header_size, blob_size = struct.unpack_from("<IHHI", blob)
+        self.assertEqual((magic, version, header_size, blob_size),
+                         (engine.BEHAVIOR_DATA_MAGIC, engine.BEHAVIOR_DATA_VERSION,
+                          engine.BEHAVIOR_DATA_HEADER_SIZE, len(blob)))
+        source = '#include "overworld_wild_behavior_data.h"\n'
+        source += f'_Static_assert(OVERWORLD_WILD_BEHAVIOR_DATA_VERSION=={version},"version");\n'
+        source += f'_Static_assert(sizeof(OverworldWildBehaviorDataBlobHeader)=={header_size},"header");\n'
+        source += f'_Static_assert(sizeof(OverworldWildBehaviorDataBlob)=={blob_size},"blob");\n'
+        records = (("surfaceModels", "OverworldWildSurfaceModelDirectoryEntry", 60, 6),
+                   ("surfaceInstances", "OverworldWildSurfaceInstance", 68, 8),
+                   ("surfaceTemplates", "OverworldWildSurfaceTemplate", 76, 2))
+        for name, ctype, at, expected_size in records:
+            offset, count, size = struct.unpack_from("<IHH", blob, at)
+            self.assertEqual(size, expected_size)
+            self.assertLessEqual(offset + count * size, len(blob))
+            source += (f'_Static_assert(__builtin_offsetof(OverworldWildBehaviorDataBlobHeader,{name}Offset)=={at},"directory");\n'
+                       f'_Static_assert(__builtin_offsetof(OverworldWildBehaviorDataBlob,{name})=={offset},"payload");\n'
+                       f'_Static_assert(sizeof({ctype})=={size},"record");\n')
+        result = subprocess.run([cc, "-std=c11", "-mthumb", "-mcpu=arm946e-s",
+                                 "-I" + str(ROOT / "include"), "-x", "c", "-fsyntax-only", "-"],
+                                input=source, capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr[-2000:])
 
 
 class StockTerrainAnchors(unittest.TestCase):

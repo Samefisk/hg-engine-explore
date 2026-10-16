@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.stantler-newest-held-direction",
+  "title": "New Up held with Left wins after two West skid tiles on mounted Stantler",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md#8-path-advance-commit-and-reactions and data/overworld_behavior_profiles.json:sprint",
+  "requirements": [
+    "current.mounted-stantler-newest-held-direction"
+  ],
+  "budgets": {
+    "maxSeconds": 120,
+    "maxFrames": 240,
+    "noProgressFrames": 64,
+    "minObservedFrames": 43
+  },
+  "subjects": [
+    {
+      "id": "stantler",
+      "species": 234,
+      "role": "MOUNTED",
+      "acquire": "existing"
+    }
+  ],
+  "setup": [
+    {
+      "id": "clear-west-skid-lane",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 593,
+        "z": 402,
+        "facing": 2
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "own-stantler",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 234,
+        "level": 10,
+        "hp": 1,
+        "status": 0
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "mount-stantler",
+      "op": "spawn",
+      "args": {
+        "species": 234,
+        "role": "mounted",
+        "slot": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 180,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-mount",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "bind-stantler",
+      "op": "bind",
+      "args": {
+        "subject": "stantler"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "run-left",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "actor-field",
+          "subject": "stantler",
+          "path": "target.x",
+          "operator": "eq",
+          "value": 588,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "new-up-while-left-held",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "LEFT",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "actor-field",
+      "subject": "stantler",
+      "path": "identityVerified",
+      "operator": "eq",
+      "value": true,
+      "when": "always"
+    },
+    {
+      "kind": "actor-field",
+      "subject": "stantler",
+      "path": "presentationAttached",
+      "operator": "eq",
+      "value": true,
+      "when": "always"
+    },
+    {
+      "kind": "frame-count",
+      "operator": "gte",
+      "value": 43,
+      "when": "final"
+    }
+  ]
+}

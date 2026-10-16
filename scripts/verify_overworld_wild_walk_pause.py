@@ -75,14 +75,14 @@ def main() -> int:
     )
 
     for required in (
-        "#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 81",
+        "#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 85",
         "u8 walkPause;",
         "#define OW_WILD_BEHAVIOR_OVERRIDE3_WALK_PAUSE (1u << 22)",
         "#define OW_WILD_BEHAVIOR_OVERRIDE3_WALK_PAUSE_VARIANCE (1u << 27)",
         "OW_WILD_BEHAVIOR_WALK_PAUSE_VARIANCE",
         "OW_WILD_BEHAVIOR_CHAIN_REPOSITION_CARDINAL_OPTIONS",
-        "OverworldWildBehaviorProfileDataSizeMustRemain72Bytes",
-        "OverworldWildBehaviorOverrideProfileSizeMustRemain212Bytes",
+        "OverworldWildBehaviorProfileDataSizeMustRemain80Bytes",
+        "OverworldWildBehaviorOverrideProfileSizeMustRemain228Bytes",
     ):
         if required not in header:
             raise SystemExit(f"Walk pause schema is incomplete: {required}")
@@ -150,14 +150,14 @@ def main() -> int:
         raise SystemExit("Follower Pokemon does not preserve its zero Walk wait")
 
     for source, required in (
-        (header, "OverworldWildBehaviorProfileDataSizeMustRemain72Bytes"),
-        (generated_schema, "#define OW_BEHAVIOR_SCHEMA_FIELD_COUNT 72"),
+        (header, "OverworldWildBehaviorProfileDataSizeMustRemain80Bytes"),
+        (generated_schema, "#define OW_BEHAVIOR_SCHEMA_FIELD_COUNT 83"),
         (backend, '"walkPause"'),
         (backend, '"walkPauseVariance"'),
         (viewer, "walkPause"),
         (viewer, "walkPauseVariance"),
-        (validator, "OWBD_PROFILE_SIZE = 72"),
-        (validator, "OWBD_OVERRIDE_PROFILE_SIZE = 212"),
+        (validator, "OWBD_PROFILE_SIZE = 80"),
+        (validator, "OWBD_OVERRIDE_PROFILE_SIZE = 228"),
     ):
         if required not in source:
             raise SystemExit(f"Walk pause consumer is missing: {required}")

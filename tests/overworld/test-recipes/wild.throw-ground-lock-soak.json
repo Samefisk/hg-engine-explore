@@ -1,0 +1,3685 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.throw-ground-lock-soak",
+  "title": "Three Wild Geodudes keep Throw control through one continuous soak",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/verification.md#intermittent-reports",
+  "requirements": [
+    "current.wild-throw-ground-lock-soak"
+  ],
+  "budgets": {
+    "maxSeconds": 1800,
+    "maxFrames": 6800,
+    "noProgressFrames": 600,
+    "minObservedFrames": 5000
+  },
+  "subjects": [
+    {
+      "id": "geodude-a",
+      "species": 74,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "geodude-b",
+      "species": 74,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "geodude-c",
+      "species": 74,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "cargo",
+      "species": 70,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "passive",
+      "species": 155,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "wild-throw-ground-lock-soak-v1",
+      "subject": "geodude-a"
+    }
+  ],
+  "setup": [
+    {
+      "id": "throw-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 584,
+        "z": 407,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-passive",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 100
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 2,
+        "noProgressFrames": 2
+      }
+    },
+    {
+      "id": "create-passive",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 100
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-passive",
+      "op": "bind",
+      "args": {
+        "subject": "passive"
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-cargo",
+      "op": "spawn",
+      "args": {
+        "species": 70,
+        "form": 0,
+        "role": "wild",
+        "level": 100,
+        "x": 591,
+        "z": 391
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-cargo",
+      "op": "bind",
+      "args": {
+        "subject": "cargo"
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-geodude-a",
+      "op": "spawn",
+      "args": {
+        "species": 74,
+        "form": 0,
+        "role": "wild",
+        "level": 100,
+        "x": 583,
+        "z": 409
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-geodude-a",
+      "op": "bind",
+      "args": {
+        "subject": "geodude-a"
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-geodude-b",
+      "op": "spawn",
+      "args": {
+        "species": 74,
+        "form": 0,
+        "role": "wild",
+        "level": 100,
+        "x": 584,
+        "z": 409
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-geodude-b",
+      "op": "bind",
+      "args": {
+        "subject": "geodude-b"
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-geodude-c",
+      "op": "spawn",
+      "args": {
+        "species": 74,
+        "form": 0,
+        "role": "wild",
+        "level": 100,
+        "x": 585,
+        "z": 409
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-geodude-c",
+      "op": "bind",
+      "args": {
+        "subject": "geodude-c"
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "settle-fixture",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "before-soak",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "soak-001",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-002",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-003",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-004",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-005",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-006",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-007",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-008",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-009",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-010",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-011",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-012",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-013",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-014",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-015",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-016",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-017",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-018",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-019",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-020",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-021",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-022",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-023",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-024",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-025",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-026",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-027",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-028",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-029",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-030",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-031",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-032",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-033",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-034",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-035",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-036",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-037",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-038",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-039",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-040",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "health-check-040",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "soak-041",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-042",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-043",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-044",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-045",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-046",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-047",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-048",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-049",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-050",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-051",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-052",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-053",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-054",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-055",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-056",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-057",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-058",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-059",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-060",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-061",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-062",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-063",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-064",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-065",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-066",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-067",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-068",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-069",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-070",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-071",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-072",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-073",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-074",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-075",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-076",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-077",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-078",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-079",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-080",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "health-check-080",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "soak-081",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-082",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-083",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-084",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-085",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-086",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-087",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-088",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-089",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-090",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-091",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-092",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-093",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-094",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-095",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-096",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-097",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-098",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-099",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-100",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-101",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-102",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-103",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-104",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-105",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-106",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-107",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-108",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-109",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-110",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-111",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-112",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-113",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-114",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-115",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-116",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-117",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-118",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-119",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-120",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "health-check-120",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "soak-121",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-122",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-123",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-124",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-125",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-126",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-127",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-128",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-129",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-130",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-131",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-132",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-133",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-134",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-135",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-136",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-137",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-138",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-139",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-140",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-141",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-142",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-143",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-144",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-145",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-146",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-147",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-148",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-149",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-150",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-151",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-152",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-153",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-154",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-155",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-156",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-157",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-158",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-159",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-160",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "health-check-160",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "soak-161",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-162",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-163",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-164",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-165",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-166",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-167",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-168",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-169",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-170",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-171",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-172",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-173",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-174",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-175",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-176",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-177",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-178",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-179",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-180",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-181",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-182",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-183",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-184",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-185",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-186",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-187",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-188",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-189",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-190",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-191",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-192",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-193",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-194",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-195",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-196",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-197",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-198",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-199",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-200",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "health-check-200",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "soak-201",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-202",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-203",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-204",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-205",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-206",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "soak-207",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-208",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "B",
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "soak-209",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "soak-210",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "B",
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "after-soak",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "wild-throw-ground-lock-soak-v1",
+      "when": "final"
+    }
+  ]
+}

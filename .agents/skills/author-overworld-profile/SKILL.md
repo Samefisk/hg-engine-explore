@@ -32,7 +32,7 @@ Selectors choose the initial materialized profile. Applications contribute
 only their profile's local operators. Later matching applications consume the
 earlier result. A parent supplies inherited authoring values; it does not turn
 one profile into a second profile type. Classifications set composition order:
-Routine, Placement, Capability, Attitude, Modifier, System, then Utility.
+Moods, Routine, Style, Placement, Follower, Capability, Attacks, Attitude, Follower/Mount, then Modifier.
 
 A profile can be normal or conditional. Conditional is independent of its
 classification. A conditional profile owns one or more independent condition
@@ -78,14 +78,23 @@ Preserve these rules:
   composition is intended.
 - Put normal matches and members in selectors or normal applications. Put
   conditional membership only in each condition's subject pool.
-- Keep applications in classification order: Routine, Placement, Capability,
-  Attitude, Modifier, System, then Utility. Preserve manual order inside each
+- Keep applications in classification order: Moods, Routine, Style, Placement,
+  Follower, Capability, Attacks, Attitude, Follower/Mount, then Modifier. Preserve manual order inside each
   classification. The resolver uses application order, not profile definition
-  order. At most 32 applications can reach the current runtime mask.
+  order. The full catalog uses global application IDs. Each species has a
+  small compiled candidate bank, in the same order. Keep each bank within 32
+  candidate applications and 32 condition entries; compilation rejects excess
+  entries without dropping them. Read the current
+  [catalog capacity contract](../../../documentation/overworld-system/authoring-debugging.md#catalog-capacity)
+  before changing these limits.
 - Keep runtime-owned Follower, Mounted, Asleep, and Default Tired bindings
-  valid. Mounted is an empty override and inherits all fields from the selected
-  Pokémon profiles. Pickup, carry, throw, drop, cancel, and release use internal
+  valid. Mounted sets Movement Chain to Off and applies its authored speed
+  settings. Other fields stay inherited from the selected Pokémon profiles.
+  Pickup, carry, throw, drop, cancel, and release use internal
   held actor control; do not create or restore a Picked Up profile.
+- An unassigned normal profile uses an empty disabled target. Empty Angry has
+  no local fields or conditions. Attacks is an order tag; it does not turn on
+  attacking or grant damage.
 - Give each conditional profile at least one valid condition. Keep its target,
   activation mode, duration, cooldown, and subject pool explicit. Timed
   conditions restart duration only when they retrigger after cooldown.

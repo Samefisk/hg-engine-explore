@@ -51,6 +51,7 @@ def engine_constants() -> str:
             "OW_WILD_SPAWNER_SPOT_STATE_EMOTING", "OW_WILD_SPAWNER_SPOT_STATE_RESERVED",
             "OW_WILD_SPAWNER_SPOT_STATE_TIRED"),
         "include/map_events_internal.h": ("BIT_VANISH",),
+        "include/overworld_mount.h": ("OVERWORLD_MOUNT_ACTIVE_FLAG",),
     }
     resolver = (ROOT / "include/overworld_behavior_resolver.h").read_text()
     enums = re.findall(r"typedef enum BehaviorResolutionLane\s*\{[^}]+\}\s*BehaviorResolutionLane;", resolver)

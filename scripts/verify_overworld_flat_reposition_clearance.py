@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from scripts import verify_overworld_hop_elevation_arc as arc
 from scripts import verify_overworld_motion_start_transaction as start
+from tools.overworld import test_hop_spawn_entry_flag as hop_fixture
 
 FIXTURE = ROOT / "tools/overworld/fixtures/flat_reposition_clearance_harness.c"
 PLANNER = ROOT / "src/pokemon_move_history_task6_overlay/overworld_actor_hop_planner.c"
@@ -32,7 +33,7 @@ def harness_source():
     source = replace_once(source,
         "typedef struct OverworldWildBehaviorProfileData { u8 walkOptions, walkSwayWidth, hopSwayWidth, spawnHopSwayWidth, spawnHopTime; } OverworldWildBehaviorProfileData;",
         "typedef struct OverworldWildBehaviorProfileData { u8 walkOptions, walkSwayWidth, hopSwayWidth, spawnHopSwayWidth, spawnHopTime; "
-        "u8 hopTime, hopElevationTimeScale, hopElevationArcScale, hopAllowVerticalObstacles; } OverworldWildBehaviorProfileData;")
+        "u8 hopTime, hopElevationTimeScale, hopElevationArcScale, hopAllowVerticalObstacles, chillSpeed; } OverworldWildBehaviorProfileData;")
     source = replace_once(source,
         "{ static const OverworldWildBehaviorDataBlob blob = {0}; return &blob; }",
         "{ static OverworldWildSurfaceCatalog catalog; "
@@ -51,25 +52,36 @@ def harness_source():
         if len(matches) != 1:
             raise ValueError("expected one production planning value: " + name)
         shapes += matches
+    geometry_header = (PLANNER.parent / "overworld_actor_hop_geometry.h").read_text()
+    geometry_type = re.search(r"typedef struct OverworldActorHopGeometry\s*\{.*?\}\s*OverworldActorHopGeometry;", geometry_header, re.S)
+    if geometry_type is None:
+        raise ValueError("missing production crossed-cell value")
+    shapes += [geometry_type.group(0), hop_fixture.function(
+        (ROOT / "src/pokemon_move_history_overlay/overworld_hop_geometry.c").read_text(),
+        "OverworldActorHopGeometry_NextCell", "void")]
     definitions = []
     for path, names in (
         (ROOT / "include/types.h", ("FX32_SHIFT",)),
         (ROOT / "include/overworld_wild_behavior_data.h", ("OW_WILD_BEHAVIOR_JUMP_ARC_HEIGHT_MIN_Q4", "OW_WILD_SURFACE_ID_NATIVE_GROUND", "OW_WILD_SURFACE_ID_NATIVE_CANOPY")),
         (PLANNER, ("OVERWORLD_HOP_OBSTACLE_CLEARANCE_FX32",)),
-        (ROOT / "include/overworld_actor_system_internal.h", ("OVERWORLD_ACTOR_HOP_PLAN_FLAG_SPAWN_ENTRY",)),
-        (WILD, ("OW_WILD_SPAWNER_CHAIN_REPOSITION_SKID", "OW_WILD_SPAWNER_CHAIN_REPOSITION_STEP")),
+        (ROOT / "include/overworld_actor_system_internal.h", ("OVERWORLD_ACTOR_HOP_PLAN_FLAG_SPAWN_ENTRY", "OVERWORLD_ACTOR_HOP_PLAN_FLAG_STRICT_HEIGHT")),
+        (WILD, ("OW_WILD_SPAWNER_CHAIN_REPOSITION_SKID", "OW_WILD_SPAWNER_CHAIN_REPOSITION_STEP", "OW_WILD_SPAWNER_CUSTOM_MOTION_THROW_FLAG")),
     ):
         for name in names:
             matches = re.findall(r"^#define " + name + r"\s+[^\n]+$", path.read_text(), re.M)
             if len(matches) != 1:
                 raise ValueError("expected one production constant: " + name)
             definitions += matches
+    packed_macro = re.findall(r"^#define OW_WILD_BEHAVIOR_SKID_BOOLEAN\([^\n]+$", (ROOT / "include/overworld_wild_behavior_data.h").read_text(), re.M)
+    if len(packed_macro) != 1:
+        raise ValueError("expected current packed obstacle macro")
+    definitions += packed_macro
     production = PLANNER.read_text()
     substitutions = {
         "/* @TYPES@ */": "\n".join(shapes + definitions),
         "/* @TRAJECTORY@ */": arc.extract_function(arc.SOURCE.read_text(), "OverworldWildBehavior_CalculateJumpTrajectory", "u32"),
         "/* @ARC@ */": arc.extract_function(arc.SOURCE.read_text(), "OverworldWildBehavior_CalculateJumpArc", "s32"),
-        "/* @LERP@ */": arc.extract_function(production, "OverworldActorHopPlanner_LerpFx32", "s32"),
+        "/* @LERP@ */": arc.extract_function((ROOT / "src/pokemon_move_history_overlay/overworld_hop_lerp.c").read_text(), "OverworldActorHopPlanner_LerpFx32", "s32"),
         "/* @PLAN@ */": arc.extract_function(production, "OverworldActorHopPlanner_PlanTrajectory", "OverworldMotionDecision"),
         "/* @DISPATCH@ */": arc.extract_function(production, "OverworldActorHopPlanner_PlanImpl", "OverworldMotionDecision"),
         "/* @WRAPPER@ */": arc.extract_function(WILD.read_text(), "OverworldWildSpawns_ResolveHopTrajectory", "OverworldMotionDecision"),

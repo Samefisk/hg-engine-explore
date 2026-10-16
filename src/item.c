@@ -469,6 +469,19 @@ u16 GetItemIndex(u16 item, u16 type)
     return 0;
 }
 
+static void * LONG_CALL __attribute__((noinline, noclone, section(".item_data_none")))
+Item_LoadData(u32 archive, u32 member, u32 heap_id)
+{
+    if (archive == ARC_ITEM_DATA && member == ITEM_NONE)
+    {
+        ITEMDATA *data = sys_AllocMemory(heap_id, sizeof(ITEMDATA));
+        if (data != NULL)
+            memset(data, 0, sizeof(ITEMDATA));
+        return data;
+    }
+    return ArchiveDataLoadMalloc(archive, member, heap_id);
+}
+
 void *GetItemArcData(u16 item, u16 type, u32 heap_id)
 {
     int dataid, picid,palid;
@@ -480,11 +493,11 @@ void *GetItemArcData(u16 item, u16 type, u32 heap_id)
     switch (type)
     {
     case ITEM_GET_DATA:
-        return ArchiveDataLoadMalloc(ARC_ITEM_DATA, dataid, heap_id);
+        return Item_LoadData(ARC_ITEM_DATA, dataid, heap_id);
     case ITEM_GET_ICON_CGX:
-        return ArchiveDataLoadMalloc(ARC_ITEM_GFX_DATA, picid, heap_id);
+        return Item_LoadData(ARC_ITEM_GFX_DATA, picid, heap_id);
     case ITEM_GET_ICON_PAL:
-        return ArchiveDataLoadMalloc(ARC_ITEM_GFX_DATA, palid, heap_id);
+        return Item_LoadData(ARC_ITEM_GFX_DATA, palid, heap_id);
     }
     return NULL;
 }

@@ -84,7 +84,7 @@ def calibrate_stomp_policy(reader):
                 and prior["stompTime"] == clean["profile"]["stompTime"],
                 "stomp calibration lacks matching native policy evidence")
         original = bytes.fromhex(clean["mountStateHex"])
-        require(len(original) == STATE_BYTES and original[8:80].hex() == clean["profile"]["profileHex"]
+        require(len(original) == STATE_BYTES and original[8:88].hex() == clean["profile"]["profileHex"]
                 and original[THRESHOLD_OFFSET] == clean["profile"]["stompTime"] <= 32,
                 "stomp full state differs from native profile reader")
         address = reader.mount_state + THRESHOLD_OFFSET

@@ -26,6 +26,16 @@ static int sOverworldWildPerfTargetScansThisFrame;
 static int GetPlayerXCoord(PlayerAvatar *player) { return player->x; }
 static int GetPlayerYCoord(PlayerAvatar *player) { return player->y; }
 /* @ACTUAL_C@ */
+/* The Wild overlay no longer packages a surface wrapper: the Query add-on
+ * calls the shared query directly. Keep its surface modes covered here. */
+static BOOL OverworldWildSpawns_IsTileOccupiedOnSurface(FieldSystem *fieldSystem,
+    LocalMapObject *ignoredObject, BOOL includePlayer, int x, int y, s32 targetBaseY)
+{
+    return OverworldWildOccupancy_Query(fieldSystem, ignoredObject,
+        sOverworldWildCollisionIgnoredObject, x, y, targetBaseY,
+        includePlayer ? OVERWORLD_WILD_OCCUPANCY_SURFACE_PLAYER
+                      : OVERWORLD_WILD_OCCUPANCY_SURFACE);
+}
 static int checks;
 #define CHECK(expr) do { assert(expr); checks++; } while (0)
 int main(void) {

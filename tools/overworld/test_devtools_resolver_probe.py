@@ -23,6 +23,9 @@ class Session:
         self.emu = object(); self.native_heap_generation = 1; self.completed_frames = 20
         self.field = 0x02010000; self.native_allocations = {}; self.memory = {}; self.writes = []
         self.blob = b"native-blob" * 20; self.put(0x02020000, self.blob)
+        self.query_state = 0x023C2308
+        self.query_owner = bytes.fromhex("00" * 28)
+        self.put(self.query_state, self.query_owner)
 
     def field_pointer(self): return self.field
     def put(self, address, data): self.memory.update({address + i: value for i, value in enumerate(data)})
@@ -34,7 +37,10 @@ class ResolverProbeTests(unittest.TestCase):
     def fixture(self):
         session = Session()
         probe = ResolverProbe(session, blob_address=0x02020000, blob_bytes=session.blob,
-                              service_identity={"callerAuthenticated": True})
+                              service_identity={"callerAuthenticated": True},
+                              query_owner=dict(stateAddress=session.query_state,
+                                  rawHex=session.query_owner.hex(), entry=0x02080040,
+                                  fieldEpoch=1, mapGeneration=1))
         return session, probe
 
     def run_recipe(self, session, probe, fault=None):
@@ -56,7 +62,7 @@ class ResolverProbeTests(unittest.TestCase):
             self.assertEqual(args, (0x02020000, len(session.blob),
                                     pointer + REQUEST, pointer + RESULT, pointer + TRACE))
             session.put(pointer + TRACE + 6, struct.pack("<H", 1))
-            session.put(pointer + STEPS, struct.pack("<HBBB3x", 1, 0, 2, 3) + bytes(72))
+            session.put(pointer + STEPS, struct.pack("<HBBB3x", 1, 0, 2, 3) + bytes(80))
             if fault == "guard": session.put(pointer, b"!")
             if fault == "end-guard":
                 session.put(pointer + BUFFER_BYTES - 1, b"!")
@@ -69,6 +75,7 @@ class ResolverProbeTests(unittest.TestCase):
             if fault == "reserved": session.put(pointer + STEPS + 5, b"!")
             if fault == "blob": session.put(0x02020000, b"!")
             if fault == "owner": session.native_heap_generation += 1
+            if fault == "query-owner": session.put(session.query_state, b"!")
             session.rt.EXECUTED_FRAME_COUNT += 1
             pending = generator.send(0)
 
@@ -103,6 +110,10 @@ class ResolverProbeTests(unittest.TestCase):
         with self.assertRaises(RuntimeError): self.run_recipe(session, probe, "free")
         self.assertFalse(probe.result()["completed"])
         self.assertIn(0x02040000, session.native_allocations)
+        session, probe = self.fixture()
+        with self.assertRaises(ResolverProbeError) as error: self.run_recipe(session, probe, "query-owner")
+        self.assertTrue(error.exception.fatal)
+        self.assertFalse(probe.released)
 
     def test_allocation_failure_never_writes_or_frees(self):
         session, probe = self.fixture()
@@ -121,5 +132,5 @@ class ResolverProbeTests(unittest.TestCase):
         step = header.split("typedef struct BehaviorResolutionStep {", 1)[1].split("} BehaviorResolutionStep;", 1)[0]
         fields = ("u16 sourceIndex;", "u8 lane;", "u8 kind;", "u8 flags;", "u8 reserved[3];", "OverworldWildBehaviorProfileData profile;")
         self.assertEqual([step.index(field) for field in fields], sorted(step.index(field) for field in fields))
-        self.assertLessEqual(STEPS + CAPACITY * 80,
+        self.assertLessEqual(STEPS + CAPACITY * 84,
                              BUFFER_BYTES - len(b"ResolverGuard-v1"))

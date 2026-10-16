@@ -1,0 +1,49 @@
+---
+import '../styles/global.css';
+
+interface Props { title?: string; description?: string }
+const { title, description = 'Tester hub for Pokémon Wild at Heart Version, a HeartGold hack.' } = Astro.props;
+const full = title ? `${title} · Wild at Heart` : 'Pokémon Wild at Heart Version';
+const path = Astro.url.pathname.replace(/\/$/, '') || '/';
+const links = [
+  ['/', 'Home'],
+  ['/overview', 'Overview'],
+  ['/testing', "What's being tested"],
+  ['/updates', 'Updates'],
+  ['/access', 'Get access'],
+  ['/report', 'Report a bug'],
+];
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#203d32" />
+    <title>{full}</title>
+    <link rel="icon" href="/logo.png" />
+  </head>
+  <body>
+    <header class="site">
+      <div class="wrap">
+        <a class="brand" href="/"><img src="/logo.png" alt="" /><span>Wild at Heart</span></a>
+        <nav aria-label="Main">
+          <ul>
+            {links.map(([href, label]) => (
+              <li><a href={href} aria-current={path === href || (href !== '/' && path.startsWith(href)) ? 'page' : undefined}>{label}</a></li>
+            ))}
+          </ul>
+        </nav>
+      </div>
+    </header>
+    <main><slot /></main>
+    <footer class="site">
+      <div class="wrap">
+        <p>Pokémon Wild at Heart Version is an unofficial, non-commercial fan project built on hg-engine. It is not affiliated with or endorsed by Nintendo, Game Freak, Creatures or The Pokémon Company.</p>
+        <p>Pokémon and all related names are trademarks of their owners. This site hosts no game files, ROMs or patches.</p>
+      </div>
+    </footer>
+  </body>
+</html>

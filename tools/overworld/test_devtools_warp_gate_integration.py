@@ -62,7 +62,7 @@ class WarpIntegrationTests(unittest.TestCase):
 
     def test_exact_original_restore_and_changed_neighbor_rejected(self):
         with patch('tools.overworld.devtools_mount_walk_fixture.authenticate_mount',return_value={'stateAddress':STATE_ADDRESS}),patch('tools.overworld.devtools_mount_teleport_fixture.authenticate_mount',return_value={'stateAddress':STATE_ADDRESS}):
-            s=session();original=s.read(STATE_ADDRESS,STATE_BYTES);profile=original[8:80]
+            s=session();original=s.read(STATE_ADDRESS,STATE_BYTES);profile=original[8:88]
             MountTeleportFixture(s,s.subject,9,7,0).run()
             receipt=MountTeleportRestoreFixture(s,s.subject,profile).run()
             self.assertEqual(s.read(STATE_ADDRESS,STATE_BYTES),original)
@@ -76,7 +76,7 @@ class WarpIntegrationTests(unittest.TestCase):
         from tools.overworld.devtools_records import select_current_actor
         result=sample();subject=select_current_actor(result['initial'],result['subject'])
         self.assertEqual(validate_command('mount-teleport.restore',dict(subject=subject))['subject'],subject)
-        with self.assertRaises(ValueError):validate_command('mount-teleport.restore',dict(subject=subject,profileHex='00'*72))
+        with self.assertRaises(ValueError):validate_command('mount-teleport.restore',dict(subject=subject,profileHex='00'*80))
 
     def test_raw_copied_control_mutates_real_teleport_sample(self):
         result=sample();snapshot=next(row['snapshot'] for row in result['journal'] if row['op']=='observe' and row['snapshot']['actors'][0]['motionKind']=='TELEPORT')

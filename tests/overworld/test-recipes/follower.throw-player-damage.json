@@ -1,0 +1,303 @@
+{
+  "schemaVersion": 1,
+  "id": "follower.throw-player-damage",
+  "title": "Mankey throws away the actual source of accepted Player damage",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "data/overworld_behavior_profiles.json#condition-throw-player-damaged",
+  "requirements": [
+    "current.follower-throw-player-damage"
+  ],
+  "budgets": {
+    "maxSeconds": 480,
+    "maxFrames": 1400,
+    "noProgressFrames": 600,
+    "minObservedFrames": 2
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    },
+    {
+      "id": "source",
+      "species": 70,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "follower-throw-player-damage-v1",
+      "subject": "mankey"
+    }
+  ],
+  "setup": [
+    {
+      "id": "damage-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 586,
+        "z": 407,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-mankey",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 56,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "create-follower",
+      "op": "spawn",
+      "args": {
+        "species": 56,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-mankey",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "step-left-to-lane",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "x",
+          "operator": "eq",
+          "value": 585,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "settle-player-at-lane",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [],
+        "until": {
+          "kind": "player-settled-at",
+          "map": 33,
+          "x": 585,
+          "z": 407,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "settle-follower-at-lane",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [],
+        "until": {
+          "kind": "follower-settled",
+          "species": 56,
+          "partySlot": 0,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "spawn-source",
+      "op": "spawn",
+      "args": {
+        "species": 70,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 585,
+        "z": 400
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-source",
+      "op": "bind",
+      "args": {
+        "subject": "source"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "before-hit",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "run-to-hit",
+      "op": "step",
+      "args": {
+        "frames": 300,
+        "keys": [
+          "UP",
+          "B"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "follower-throw-player-damage-v1",
+          "stage": "physical-hit",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 240,
+        "maxFrames": 300,
+        "noProgressFrames": 300
+      }
+    },
+    {
+      "id": "accepted-hit",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "natural-damage-throw",
+      "op": "step",
+      "args": {
+        "frames": 600,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "follower-throw-player-damage-v1",
+          "stage": "landed",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 240,
+        "maxFrames": 600,
+        "noProgressFrames": 600
+      }
+    },
+    {
+      "id": "move-player-right",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "normal-follow-return",
+      "op": "step",
+      "args": {
+        "frames": 240,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "follower-throw-player-damage-v1",
+          "stage": "resumed",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "after-return",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "follower-throw-player-damage-v1",
+      "when": "final"
+    }
+  ]
+}

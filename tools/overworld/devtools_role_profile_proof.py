@@ -70,14 +70,14 @@ def inspect_reader_control(events):
         require(c["acceptedProof"] is False and c["guestAdvanced"] is False and c["rejected"] is True
                 and type(c["writes"]) is int and c["writes"]==2, "calibration flags/writes differ")
         require(c["reason"]=="role profile: mounted Owner snapshot differs from Begin inputs", "wrong calibration rejection")
-        before=raw_hex(c["beforeSnapshotHex"],104)
-        fault=raw_hex(c["faultSnapshotHex"],104)
-        restored=raw_hex(c["restoredSnapshotHex"],104)
+        before=raw_hex(c["beforeSnapshotHex"],112)
+        fault=raw_hex(c["faultSnapshotHex"],112)
+        restored=raw_hex(c["restoredSnapshotHex"],112)
         expected=bytearray(before);expected[8]^=1
         require(fault==bytes(expected) and restored==before, "calibration bytes/restoration differ")
         require(raw_hex(c["beforeHex"],1)==before[8:9] and raw_hex(c["faultHex"],1)==fault[8:9]
                 and raw_hex(c["restoredHex"],1)==before[8:9], "calibration byte receipt differs")
-        address=number(c["address"],0x02000008,0x02400000-96)
+        address=number(c["address"],0x02000008,0x02400000-104)
         require(address%4==0, "invalid calibration address")
         # Stable public mount runtime address in overworld_mount_internal.h;
         # owner starts after its two native pointer fields.
@@ -85,9 +85,9 @@ def inspect_reader_control(events):
         field,surface=struct.unpack_from("<II",before)
         require(field==mount["owner"]["fieldPointer"]==mount["ownerAfter"]["fieldPointer"]
                 and surface==mount["surfacePointer"], "calibration native pointers differ")
-        require(before[8:80]==raw_hex(mount["ownerHex"],72)==raw_hex(mount["profileHex"],144)[:72]
-                and before[80:96]==raw_hex(mount["bindingHex"],16), "calibration Begin bytes differ")
-        generation,phase,cancel,motion,reserved=struct.unpack_from("<IBBBB",before,96)
+        require(before[8:88]==raw_hex(mount["ownerHex"],80)==raw_hex(mount["profileHex"],160)[:80]
+                and before[88:104]==raw_hex(mount["bindingHex"],16), "calibration Begin bytes differ")
+        generation,phase,cancel,motion,reserved=struct.unpack_from("<IBBBB",before,104)
         require(generation==number(mount["sessionGeneration"],1) and phase==mount["mountPhase"]==1
                 and (cancel,motion,reserved)==(0,0,0), "calibration mount state differs")
         start,end=c["beforeClock"],c["afterClock"]
@@ -155,8 +155,8 @@ def _inspect(events, initial, final, witness):
             require(initial["actorFrame"] <= d["entryActorFrame"] <= d["returnActorFrame"] <= final["actorFrame"],
                     "event actor clock outside endpoints")
         previous_sequence,previous_frame,previous_cycle=sequence,frame,returned
-        raw_hex(d["profileHex"],144)
-        pointers = [("profilePointer",144)]
+        raw_hex(d["profileHex"],160)
+        pointers = [("profilePointer",160)]
         if name == "role-profile-getter":
             has_primitives = "primitivesHex" in d or "primitivesPointer" in d
             require(has_primitives is ("primitivesHex" in d and "primitivesPointer" in d),
@@ -197,7 +197,7 @@ def _inspect(events, initial, final, witness):
     require(number(mount["mountedPolicyFingerprint"],1) == after["behaviorFingerprint"]
             and number(mount["mountedPolicyMatchedLayerMask"]) == after["matchedLayerMask"],
             "Mounted policy identity differs")
-    require(raw_hex(mount["ownerHex"],72) == raw_hex(mount["profileHex"],144)[:72], "stored Mounted Owner bytes differ")
+    require(raw_hex(mount["ownerHex"],80) == raw_hex(mount["profileHex"],160)[:80], "stored Mounted Owner bytes differ")
     pid,species,map_id,map_gen,encounter,form,level,party,behavior = struct.unpack("<IHHHHBBBB",raw_hex(mount["bindingHex"],16))
     require((pid,species,form,level,party,map_id,map_gen,encounter)==(
         witness["subjectIdentity"],witness["species"],witness["form"],witness["level"],PARTY_SLOT,

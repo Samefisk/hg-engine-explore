@@ -1,0 +1,208 @@
+{
+  "schemaVersion": 1,
+  "id": "follower.throw-away-non45",
+  "title": "Mankey throws its noticed moving Pokemon on a non-45 outward line",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md#2-role-controllers",
+  "requirements": [
+    "current.follower-throw-away-non45"
+  ],
+  "budgets": {
+    "maxSeconds": 360,
+    "maxFrames": 1100,
+    "noProgressFrames": 600,
+    "minObservedFrames": 2
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    },
+    {
+      "id": "trigger",
+      "species": 69,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "cargo",
+      "species": 69,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "follower-throw-away-non45-v1",
+      "subject": "mankey"
+    }
+  ],
+  "setup": [
+    {
+      "id": "throw-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 586,
+        "z": 407,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-mankey",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 56,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "create-follower",
+      "op": "spawn",
+      "args": {
+        "species": 56,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-mankey",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-trigger",
+      "op": "spawn",
+      "args": {
+        "species": 69,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 585,
+        "z": 403
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-trigger",
+      "op": "bind",
+      "args": {
+        "subject": "trigger"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "bind-cargo",
+      "op": "bind",
+      "args": {
+        "subject": "cargo"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "natural-pickup-and-launch",
+      "op": "step",
+      "args": {
+        "frames": 600,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "follower-throw-away-non45-v1",
+          "stage": "launched",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 240,
+        "maxFrames": 600,
+        "noProgressFrames": 600
+      }
+    },
+    {
+      "id": "walk-player-right",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "normal-follow-return",
+      "op": "step",
+      "args": {
+        "frames": 240,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "follower-throw-away-non45-v1",
+          "stage": "resumed",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "follower-throw-away-non45-v1",
+      "when": "final"
+    }
+  ]
+}

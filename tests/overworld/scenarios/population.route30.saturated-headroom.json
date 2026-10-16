@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "id": "population.route30.saturated-headroom",
+  "title": "Saturated Route30 pond bank keeps game-loop headroom while walking",
+  "status": "active",
+  "capabilities": [
+    "actor.system",
+    "spawn",
+    "population"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "TICKETS.md",
+    "actor": "The unchanged saved Follower Mankey56 and six prepared Wild actors (Pidgey16 x2, Poliwag60 x2, Hoothoot163, Spinarak167) at level5.",
+    "trigger": "Exact retained prepared Route30 setup, then the fixed UP/DOWN 16-frame input; no party/follower/profile/condition/timer/population override.",
+    "observable": "After the prepared Route30 teleport to map34 (557,361) facing0, 16 uncredited neutral frames, and six prepared native Wild spawns (level5 species 16,16,60,60,163,167; a busy native queue or a queued Entry lost to natural spawn work is answered by 8 neutral frames and a repeated request, at most 40 times each), 16 more uncredited neutral frames and a bind of the unchanged saved Mankey56 PID2920357538, arm the existing native main-loop reader for 768 returns. Walk the exact fixed input UP x16 frames, DOWN x16 frames, repeated twenty-four times with no run key (the Player stays near the pond bank), then 16 neutral frames. Natural refill, population caps, profiles and timers stay untouched. Every one of the 768 credited loops must carry its mandatory-wait idle ticks (waitArm9Ticks = return clock minus mandatory-entry clock). Fail on any loop above 2 native cycles or 2 frame sequences or 2800950 ARM9 ticks, any render stall, any loop below 30000 idle ticks, a 1st percentile below 175000, a 5th percentile below 275000, fewer than six active actors (saved Mankey plus five Wild) in more than ten percent of credited loops, no Player step, a Player that does not end settled on map34, or any missing sample.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Teleport only to map34 (557,361) facing0, then retain 16 neutral setup frames. Retain the unchanged saved Mankey and bind it after the Wild actors exist."
+      },
+      {
+        "phase": "before-observation",
+        "target": "actors",
+        "change": "Request six native Wild spawns (one per tile, level5). Retain actual chosen PID/full ADOPT for each; a busy native spawn queue, a queued Entry lost to natural spawn work, or a startup rejection (skipped after four tries), is retained as a refusal plus 8 neutral frames and asked again (at most 40 times each). These actors fill the regular Wild slots; natural refill is not overridden."
+      }
+    ],
+    "limits": [
+      "Prepared setup (teleport, six Wild spawns, neutral frames) establishes the saturated fixture only. It earns no pacing, movement or spawn-cadence credit and does not prove natural encounter selection or natural refill.",
+      "The measured window is 768 credited loops, not the 600 minimum; natural creation during the window is recorded as informational and is not required. The share of loops with all seven actors is also informational; at least six active actors (saved Mankey plus five Wild) are required in at least ninety percent of loops because natural distance despawn briefly lowers the count.",
+      "Idle floors are measured, not derived: Route30 pond bank, ARM9 scheduler ticks; the old-ROM and test3588 figures used 120-frame UP/DOWN steps, no run key. Old-ROM diagnostic at 7 actors: min 14k, p1 150k, p5 231k, median 412k (6 late loops of 955). Accepted-mode run on fixed ROM test3588: min 43k, p1 204k, p5 318k, median 483k (0 late of 720, 5 to 7 actors). Floors 30000/175000/275000 lie between the two. Percentiles are the sorted samples at index len//100 and len//20.",
+      "Idle headroom is the mandatory VBlank wait return clock minus its entry clock from the existing authenticated wait site, read with no guest writes. It is a melonDS scheduler-tick measurement; screenshots, host CPU time and human judgement are not proof.",
+      "Copied-data controls (late loop, low-idle loop, thin low tail, missing wait ticks, six actors, short window, wrong map, wrong saved Mankey) prove the checker only, not the live recorder. A changed reader or product source needs a fresh run on the current test.nds and unchanged Continue save.",
+      "This case does not replace world.unmounted.spawn-zero-stutter (the player-visible Cherrygrove gate) and cannot close D1 by itself."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Prepared Route30 pond-bank teleport and six native Wild spawns, then the saved Mankey bind and the pacing arm. These earn no measured credit."
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "twenty-four pairs of UP16 then DOWN16, neutral16. No run key; every native return and its idle ticks is retained."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Natural spawn, population and profile work continues; 768 credited loops stay on time with measured idle headroom."
+    }
+  ],
+  "stop": {
+    "frameBudget": 9000,
+    "condition": "The exact bounded actions finish with 768 continuous credited loops, every wait sample present, zero late loops, the idle floors met, at least six active actors in at least ninety percent of loops, and the Player settled on map34, or the first missing or changed fact."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "The population is saturated when the window arms (at least six active actors) and holds at least six active actors in at least ninety percent of credited loops",
+      "Every credited loop is within two native cycles and carries its mandatory-wait idle ticks",
+      "Minimum, 1st percentile and 5th percentile idle ticks stay above 30000, 175000 and 275000",
+      "The unchanged saved Mankey Follower stays current and the Player ends settled on map34"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "population.route30.saturated-headroom",
+    "claims": [
+      "live-actor-identity",
+      "natural-input",
+      "population-bounds",
+      "frame-pacing"
+    ],
+    "minimumFrames": 600
+  }
+}

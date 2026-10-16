@@ -137,6 +137,90 @@ class ProofContentIdentityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationFailure, "leaves repository"):
             runs.source_record(self.repo)
 
+    def test_directory_alias_binds_target_once_and_link_metadata(self) -> None:
+        target = self.write(".agents/skills/example/check.py", "value = 1\n")
+        alias = self.repo / ".claude/skills/example"
+        alias.parent.mkdir(parents=True)
+        alias.symlink_to("../../.agents/skills/example", target_is_directory=True)
+        (alias.parent / "also").symlink_to("../../.agents/skills/example",
+                                          target_is_directory=True)
+        before = runs.source_record(self.repo)
+        paths = runs._input_paths(self.repo)
+        self.assertEqual(paths.count(Path(".agents/skills/example/check.py")), 1)
+        self.assertNotIn(Path(".claude/skills/example/check.py"), paths)
+        self.assertEqual(runs._input_record(self.repo, alias.relative_to(self.repo))["kind"],
+                         "directory-alias")
+        target.write_text("value = 2\n")
+        self.assertNotEqual(runs.source_record(self.repo), before)
+        changed = runs.source_record(self.repo)
+        alias.unlink()
+        alias.symlink_to("../../.agents/skills/./example", target_is_directory=True)
+        self.assertNotEqual(runs.source_record(self.repo), changed)
+
+    def test_directory_alias_binds_ignored_target_contents(self) -> None:
+        self.write(".gitignore", "build/\nresources/\n")
+        target = self.write("resources/check.py", "value = 1\n")
+        (self.repo / "alias").symlink_to("resources", target_is_directory=True)
+        before = runs.source_record(self.repo)
+        self.assertIn(Path("resources/check.py"), runs._input_paths(self.repo))
+        target.write_text("value = 2\n")
+        self.assertNotEqual(runs.source_record(self.repo), before)
+
+    def test_directory_alias_cycle_and_external_target_fail_closed(self) -> None:
+        target = self.repo / "resources"
+        target.mkdir()
+        (target / "loop").symlink_to(".", target_is_directory=True)
+        (self.repo / "alias").symlink_to("resources", target_is_directory=True)
+        with self.assertRaisesRegex(ValidationFailure, "cycle"):
+            runs.source_record(self.repo)
+        (target / "loop").unlink()
+        (target / "external").symlink_to("/tmp", target_is_directory=True)
+        with self.assertRaisesRegex(ValidationFailure, "leaves repository"):
+            runs.source_record(self.repo)
+
+    def test_directory_alias_retarget_during_record_fails_closed(self) -> None:
+        self.write("resources/a/check.py", "value = 1\n")
+        self.write("resources/b/check.py", "value = 1\n")
+        alias = self.repo / "alias"
+        alias.symlink_to("resources/a", target_is_directory=True)
+        original = runs.os.readlink
+        def retarget(path):
+            result = original(path)
+            if Path(path) == alias:
+                alias.unlink()
+                alias.symlink_to("resources/b", target_is_directory=True)
+            return result
+        with mock.patch.object(runs.os, "readlink", side_effect=retarget):
+            with self.assertRaisesRegex(ValidationFailure, "changed during scan"):
+                runs._input_record(self.repo, Path("alias"))
+
+    def test_directory_alias_keeps_exclusions_and_regular_file_guards(self) -> None:
+        self.write("resources/notes.md", "excluded prose\n")
+        target = self.write("resources/source.py", "value = 1\n")
+        (self.repo / "alias").symlink_to("resources", target_is_directory=True)
+        before = runs.source_record(self.repo)
+        self.write("resources/notes.md", "changed excluded prose\n")
+        self.assertEqual(runs.source_record(self.repo), before)
+        with self.assertRaisesRegex(ValidationFailure, "not a regular file"):
+            runs._input_record(self.repo, Path("resources"))
+        target.unlink()
+        target.symlink_to("source.py")
+        with self.assertRaises(ValidationFailure):
+            runs.source_record(self.repo)
+
+    def test_directory_alias_target_added_during_inventory_fails_closed(self) -> None:
+        target = self.write("resources/source.py", "value = 1\n").parent
+        (self.repo / "alias").symlink_to("resources", target_is_directory=True)
+        original = Path.iterdir
+        def changed(directory):
+            entries = list(original(directory))
+            if directory == target.resolve():
+                self.write("resources/late.py", "late = 1\n")
+            return iter(entries)
+        with mock.patch.object(Path, "iterdir", changed):
+            with self.assertRaisesRegex(ValidationFailure, "changed during scan"):
+                runs._input_paths(self.repo)
+
     def test_submodule_worktree_content_not_commit_is_bound(self) -> None:
         nested = self.repo / "tools/source/example"
         nested.mkdir(parents=True)

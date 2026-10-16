@@ -13,6 +13,8 @@
 #include "../../include/overworld_walk_direction_policy.h"
 #include "../../include/overworld_walk_timing_policy.h"
 
+__asm__(".thumb\n.thumb_func\n.thumb_set Walk_MountSaveProposal, 0x01FFF400\n");
+
 #define WALK_DIRECTION_NONE 0xFF
 #define WALK_DIRECTION_NORTH 0
 #define WALK_DIRECTION_SOUTH 1
@@ -91,7 +93,10 @@ OverworldBehaviorConditionTrace_Record(
             | ((u16)result->resolvedTarget.kind << 10)
             | entryStateBits,
         result->winningConditionId
-            | ((u32)result->resolvedTarget.actor.slot << 16),
+            | ((u32)result->resolvedTarget.actor.slot << 16)
+            | ((entryState->flags
+                    & OVERWORLD_BEHAVIOR_CONDITION_STATE_UNTIL_CRASH) != 0
+                ? 1u << 31 : 0),
         (u16)entryState->activeUntil
             | ((u32)(u16)entryState->cooldownUntil << 16));
 }
@@ -353,18 +358,22 @@ static BOOL WALK_PRIVATE_CODE __attribute__((noinline)) Walk_ValidateDiagonalLan
         targetX, targetY, targetX, targetY);
 }
 
+/* This fixed entry is 2 mod 4. Use a literal-free eight-byte Thumb stub so
+ * its input section stays halfword-aligned. The mounted body is within BL's
+ * +/-4 MiB range and returns through this stub to the original caller. */
 __asm__(".section .overworld_walk_strict_diagonal_allowed,\"ax\",%progbits\n"
         ".balign 2\n.thumb\n.global OverworldWalk_StrictDiagonalAllowed\n"
         ".type OverworldWalk_StrictDiagonalAllowed,%function\n.thumb_func\n"
         "OverworldWalk_StrictDiagonalAllowed:\n"
-        "b OverworldWalk_StrictDiagonalAllowedBody\n"
+        "push {lr}\n"
+        "bl OverworldMount_StrictDiagonalAllowedBody\n"
+        "pop {pc}\n"
         ".size OverworldWalk_StrictDiagonalAllowed,.-OverworldWalk_StrictDiagonalAllowed\n"
-        ".previous\n");
+        ".previous\n"
+        ".thumb_func\n"
+        ".thumb_set OverworldMount_StrictDiagonalAllowedBody, 0x01FFA0F0\n");
 
-BOOL OverworldWalk_StrictDiagonalAllowed(
-    OverworldMountRuntimeState *state, FIELD_PLAYER_AVATAR *avatar,
-    u8 direction) __asm__("OverworldWalk_StrictDiagonalAllowedBody");
-static u16 WALK_PUBLIC_CODE(".overworld_walk_strict_diagonal_allowed_body")
+u16 WALK_PUBLIC_CODE(".overworld_walk_strict_diagonal_allowed_body")
 Walk_DiagonalRejection(
     OverworldMountRuntimeState *state,
     FIELD_PLAYER_AVATAR *avatar,
@@ -385,19 +394,11 @@ Walk_DiagonalRejection(
         || !Walk_CanCardinal(avatar, horizontal)) {
         return OVERWORLD_MOTION_CANDIDATE_SIDE_BLOCKED;
     }
-    return targetX < 0 || targetY < 0
-            || !Walk_ValidateDiagonalLanding(state, targetX, targetY)
-        ? OVERWORLD_MOTION_CANDIDATE_BAD_TERRAIN
-        : 0;
-}
-
-BOOL WALK_PUBLIC_CODE(".overworld_walk_strict_diagonal_allowed_body")
-OverworldWalk_StrictDiagonalAllowed(
-    OverworldMountRuntimeState *state,
-    FIELD_PLAYER_AVATAR *avatar,
-    u8 direction)
-{
-    return Walk_DiagonalRejection(state, avatar, direction) == 0;
+    /* The landing service rejects negative coordinates before map lookup. */
+    if (!Walk_ValidateDiagonalLanding(state, targetX, targetY)) {
+        return OVERWORLD_MOTION_CANDIDATE_BAD_TERRAIN;
+    }
+    return 0;
 }
 
 u8 WALK_PUBLIC_CODE(".overworld_walk_diagonal_facing")
@@ -421,7 +422,7 @@ OverworldWalk_DiagonalFacing(
 /* Code host only: this private adapter uses the spare, explicitly bounded
  * boot-resident range after Field terrain code. Actor Motion owns the reason
  * trace and never acquires a reservation for this rejected candidate. */
-static u16 WALK_PUBLIC_CODE(".overworld_walk_candidate_rejection")
+u16 WALK_PUBLIC_CODE(".overworld_walk_candidate_rejection")
 Walk_RejectDiagonalCandidate(
     OverworldMountRuntimeState *state,
     FIELD_PLAYER_AVATAR *avatar,
@@ -462,56 +463,53 @@ Walk_RejectDiagonalCandidate(
     return rejectionFlags;
 }
 
-u16 WALK_PUBLIC_CODE(".overworld_walk_resolve_mounted_diagonal")
+/* Keep the public Walk ABI in this fixed slot. Overlay 159 owns the private
+ * body beside its mounted contact filter. The tail jump preserves LR and all
+ * four arguments. */
+u16 __attribute__((naked, noinline, used,
+    section(".overworld_walk_resolve_mounted_diagonal")))
 OverworldWalk_ResolveMountedDiagonal(
     OverworldMountRuntimeState *state,
     FIELD_PLAYER_AVATAR *avatar,
     u32 *newKeys,
     u32 *heldKeys)
 {
-    u8 direction = OverworldWalk_DirectionFromKeys(*newKeys | *heldKeys);
-    u8 vertical;
-    u8 horizontal;
-    u8 first;
-    u16 rejectionFlags;
+    __asm__(
+        "push {r3}\n"
+        "ldr r3, 1f\n"
+        "mov r12, r3\n"
+        "pop {r3}\n"
+        "bx r12\n"
+        ".align 2\n"
+        "1: .word 0x01FFA001");
+}
 
-    if (direction < 4 || direction > 7) {
-        return 0;
+void __attribute__((noinline, used,
+    section(".overworld_walk_newest_mounted_input")))
+OverworldWalk_SelectNewestMountedInput(
+    OverworldMountRuntimeState *state,
+    u32 *newKeys,
+    u32 *heldKeys)
+{
+    u8 held = (u8)((*newKeys | *heldKeys) & PAD_PLUS_KEY_MASK);
+    u8 added = held & ~(state->directionInputHeld & PAD_PLUS_KEY_MASK);
+    u8 selected = state->directionInputHeld & 0x0F;
+    u32 key;
+
+    if (added != 0) {
+        selected = (added & (added - 1)) == 0
+            ? OverworldWalk_DirectionFromKeys(added) + 1 : 0;
     }
-    if (OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_DIAGONAL(
-            state->snapshot.profile.hopAllowNonCardinal)) {
-        /* Keep rejected input distinct from a genuine NONE/stop request.
-         * The mount adapter submits this candidate to Actor Motion, then
-         * consumes the input before it can reach Walk momentum policy. */
-        rejectionFlags = Walk_DiagonalRejection(state, avatar, direction);
-        if (rejectionFlags != 0) {
-            return Walk_RejectDiagonalCandidate(
-                state, avatar, direction, rejectionFlags);
-        }
-        return 0;
+    key = selected != 0
+        ? OverworldWalk_DirectionKey(selected - 1) : 0;
+    if ((held & key) == 0) {
+        selected = 0;
     }
-    if (!OW_WILD_BEHAVIOR_MOVEMENT_ALLOWS_CARDINAL(
-            state->snapshot.profile.hopAllowNonCardinal)) {
-        *newKeys &= ~PAD_PLUS_KEY_MASK;
-        *heldKeys &= ~PAD_PLUS_KEY_MASK;
-        return 0;
+    state->directionInputHeld = held | selected;
+    if (selected != 0 && (held & (held - 1)) != 0) {
+        *newKeys = (*newKeys & ~PAD_PLUS_KEY_MASK) | (*newKeys & key);
+        *heldKeys = (*heldKeys & ~PAD_PLUS_KEY_MASK) | key;
     }
-    Walk_GetComponents(direction, &vertical, &horizontal);
-    first = avatar->mapObject->curFacing == vertical
-            || avatar->mapObject->curFacing == horizontal
-        ? (u8)avatar->mapObject->curFacing
-        : OverworldWalk_DiagonalFacing(avatar->mapObject, direction, *newKeys);
-    if (!Walk_CanCardinal(avatar, first)) {
-        first = first == vertical ? horizontal : vertical;
-        if (!Walk_CanCardinal(avatar, first)) {
-            first = WALK_DIRECTION_NONE;
-        }
-    }
-    *newKeys = (*newKeys & ~PAD_PLUS_KEY_MASK)
-        | OverworldWalk_DirectionKey(first);
-    *heldKeys = (*heldKeys & ~PAD_PLUS_KEY_MASK)
-        | OverworldWalk_DirectionKey(first);
-    return 0;
 }
 
 static BOOL WALK_PRIVATE_CODE Walk_MountCanControl(
@@ -539,7 +537,7 @@ Walk_MountForceDirection(
     *heldKeys = (*heldKeys & ~PAD_PLUS_KEY_MASK) | key;
 }
 
-static void Walk_MountSaveProposal(
+void Walk_MountSaveProposal(
     OverworldMountRuntimeState *state,
     const OverworldActorWalkPolicyCall *policyCall);
 
@@ -679,7 +677,9 @@ OverworldWalk_StartMountedFlat(
     }
     player = avatar->mapObject;
     if (direction < WALK_DIRECTION_NORTH_WEST
-        && !Walk_CanCardinal(avatar, direction)) {
+        && !OVERWORLD_MOUNT_PLAYER_CONTACT_ENTRY(
+            avatar, direction, OVERWORLD_MOUNT_CONTACT_CARDINAL,
+            state)) {
         return FALSE;
     }
     targetX = player->xCurr + OverworldWalk_DeltaX(direction);
@@ -729,29 +729,6 @@ OverworldWalk_StartMountedFlat(
     return TRUE;
 }
 
-static void WALK_PUBLIC_CODE(".overworld_walk_start_mounted_flat")
-Walk_MountSaveProposal(
-    OverworldMountRuntimeState *state,
-    const OverworldActorWalkPolicyCall *policyCall)
-{
-    if (policyCall->decision != OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP) {
-        return;
-    }
-    state->reservedPolicyState[OVERWORLD_MOUNT_WALK_STEP_FLAGS_INDEX] =
-        policyCall->stepFlags;
-    state->motionFlicker = policyCall->reserved[3];
-    state->reservedPolicyProfile[
-        OVERWORLD_MOUNT_WALK_SKID_PATH_TILES_INDEX] =
-            policyCall->reserved[
-                OVERWORLD_ACTOR_WALK_POLICY_SKID_PATH_TILES_INDEX];
-    state->reservedPolicyState[OVERWORLD_MOUNT_WALK_STEP_DIRECTION_INDEX] =
-        policyCall->stepDirection;
-    state->reservedPolicyState[
-        OVERWORLD_MOUNT_WALK_FACING_DIRECTION_INDEX] =
-            policyCall->facingDirection;
-    state->reservedPolicyState[OVERWORLD_MOUNT_WALK_TRAVEL_TIME_INDEX] =
-        policyCall->travelTime;
-}
 
 /* Keep canceled custom motion on a complete tile. The mount state stores the
  * two start coordinates directly before the two target coordinates, followed

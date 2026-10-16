@@ -42,13 +42,13 @@ def fixture():
         worldContext=deepcopy(baseline["context"]))
     clock = dict(nativeCycle=baseline["nativeCycle"]+2, actorFrame=baseline.get("actorFrame", 0)+1)
     child = dict(direction=1, normalReturn=True, rawMask=1, returnValue=1, before=deepcopy(current),
-        profileHex=raw[8:80].hex(), input=dict(heldKeys=160, rawHeld=160, simulatedKeys=0),
+        profileHex=raw[8:88].hex(), input=dict(heldKeys=160, rawHeld=160, simulatedKeys=0),
         entryClock=clock, returnClock=clock)
     strict = dict(observation="walk-corner-strict", sequence=1, before=current,
         completedFrame=baseline["frame"], entryNativeCycle=clock["nativeCycle"], returnNativeCycle=clock["nativeCycle"],
         direction=6, origin=dict(x=588,y=406), target=dict(x=587,y=407), normalReturn=True, returnValue=0,
-        input=deepcopy(child["input"]), profileHex=raw[8:80].hex(), profile19=1,
-        mountBinding=dict(bindingHex=raw[80:96].hex(), sessionGeneration=1,
+        input=deepcopy(child["input"]), profileHex=raw[8:88].hex(), profile19=1,
+        mountBinding=dict(bindingHex=raw[88:104].hex(), sessionGeneration=1,
                           fieldPointer=0x02010000, surfacePointer=0x02020000),
         avatarPointer=before["avatar"], playerPointer=before["player"], collisions=[child], landings=[],
         entryClock=clock, returnClock=clock)

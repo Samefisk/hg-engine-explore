@@ -10,6 +10,8 @@
   "subjects": [{"id": "cyndaquil", "species": 155, "role": "FOLLOWER", "acquire": "existing"}],
   "measurements": [{"kind": "follower-transition-rebind-v1", "subject": "cyndaquil"}],
   "setup": [
+    {"id": "route-start", "op": "teleport", "args": {"map": 33, "x": 585, "z": 406, "facing": 1},
+      "budget": {"maxSeconds": 20, "maxFrames": 120, "noProgressFrames": 120}},
     {"id": "prepare-cyndaquil", "op": "party", "args": {"slot": 1, "hp": 21, "status": 0},
       "budget": {"maxSeconds": 15, "maxFrames": 30, "noProgressFrames": 30}},
     {"id": "spawn-cyndaquil-follower", "op": "spawn", "args": {"species": 155, "role": "follower", "slot": 1},
@@ -39,7 +41,9 @@
     {"id": "recovery-step", "op": "step", "args": {"frames": 16, "keys": ["LEFT"], "until": {"kind": "player-step-count", "operator": "eq", "value": 17}},
       "budget": {"maxSeconds": 20, "maxFrames": 16, "noProgressFrames": 16}},
     {"id": "recovery-settle", "op": "wait", "args": {"predicate": {"kind": "player-settled-at", "map": 67, "x": 574, "z": 400}},
-      "budget": {"maxSeconds": 20, "maxFrames": 24, "noProgressFrames": 24}}
+      "budget": {"maxSeconds": 20, "maxFrames": 24, "noProgressFrames": 24}},
+    {"id": "rebound-follower-walk", "op": "wait", "args": {"predicate": {"kind": "measurement-complete", "measurement": "follower-transition-rebind-v1", "when": "final"}},
+      "budget": {"maxSeconds": 20, "maxFrames": 64, "noProgressFrames": 64}}
   ],
   "assertions": [
     {"kind": "measurement-complete", "measurement": "follower-transition-rebind-v1", "when": "final"},

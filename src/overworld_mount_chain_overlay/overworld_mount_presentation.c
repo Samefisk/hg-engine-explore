@@ -1,9 +1,11 @@
 #include "../../include/map_teleport.h"
 #include "../../include/map_events_internal.h"
 #include "../../include/overworld_mount_internal.h"
+#include "../../include/overworld_mount_action_adapter.h"
 #include "../../include/overworld_walk_direction_policy.h"
 #include "../../include/overworld_walk_module.h"
 #include "../../include/overworld_wild_spawns_internal.h"
+#include "../../include/player_health.h"
 
 __asm__(
     ".thumb\n"
@@ -16,6 +18,52 @@ __asm__(
 #define OVERWORLD_FIELD_MOUNT_RIDER_HEIGHT_FX32 0x8000
 #define OVERWORLD_FIELD_MOUNT_RIDER_SOUTH_BACK_FX32 0xA000
 #define OVERWORLD_FIELD_MOUNT_IDLE_COOLDOWN 0xFF
+
+/* The mount caller checks only the attempted next tile. A blocked skid
+ * continuation reports that same real contact as its first step. */
+BOOL __attribute__((noinline, used, optimize("Os"),
+    section(".overworld_mount_player_contact")))
+OverworldMount_ReportBlockedPlayerStep(
+    FIELD_PLAYER_AVATAR *avatar, u8 direction, u8 mode,
+    OverworldMountRuntimeState *state)
+{
+    OverworldMountActionCall actionCall = { 0 };
+    int (*collision)(FIELD_PLAYER_AVATAR *, LocalMapObject *, int) =
+        (int (*)(FIELD_PLAYER_AVATAR *, LocalMapObject *, int))0x0205DA35;
+
+    if (avatar == NULL || avatar->mapObject == NULL || direction > 7) {
+        return FALSE;
+    }
+    if (mode == OVERWORLD_MOUNT_CONTACT_CARDINAL
+        && collision(avatar, avatar->mapObject, direction) == 0) {
+        return TRUE;
+    }
+    if (mode == OVERWORLD_MOUNT_CONTACT_CORRIDOR) {
+        actionCall.version = OVERWORLD_MOUNT_ACTION_ADAPTER_VERSION;
+        actionCall.size = sizeof(actionCall);
+        actionCall.operation = OVERWORLD_MOUNT_ACTION_WALK_CORRIDOR;
+        actionCall.action = 1;
+        actionCall.direction = direction;
+        actionCall.state = state;
+        actionCall.avatar = avatar;
+        if (OVERWORLD_MOUNT_ACTION_ADAPTER_DISPATCH(&actionCall)) {
+            return TRUE;
+        }
+    } else {
+        actionCall.action = 1;
+    }
+    if (!actionCall.action || !PlayerHealthOverlay_IsReady()) {
+        return FALSE;
+    }
+    if (direction >= 4
+        && (collision(avatar, avatar->mapObject, direction >= 6 ? 1 : 0)
+            || collision(avatar, avatar->mapObject,
+                (direction & 1u) ? 3 : 2))) {
+        return FALSE;
+    }
+    PlayerHealthContact_ReportBlockedStepEntry(avatar, direction);
+    return FALSE;
+}
 
 BOOL __attribute__((section(".overworld_mount_presentation_entry"), used,
     noinline, optimize("Os"))) OverworldFieldService_SyncMountedPresentation(
@@ -34,7 +82,8 @@ BOOL __attribute__((section(".overworld_mount_presentation_entry"), used,
         if (player->faceVec[1] != mount->lastAppliedPlayerFaceY) {
             mount->playerBaseFaceY = player->faceVec[1];
         }
-        if (player->unk88[1] != mount->lastAppliedPlayerUnk88Y) {
+        if (player->unk88[1]
+            != OVERWORLD_MOUNT_LAST_APPLIED_UNK88_Y(mount)) {
             mount->playerBaseUnk88Y = player->unk88[1];
         }
     }
@@ -81,7 +130,7 @@ BOOL __attribute__((section(".overworld_mount_presentation_entry"), used,
     OverworldMountGait_Apply(mount, player, follower);
     OverworldWalk_RefreshMountedGraphics(player, follower);
     mount->lastAppliedPlayerFaceY = player->faceVec[1];
-    mount->lastAppliedPlayerUnk88Y = player->unk88[1];
+    OVERWORLD_MOUNT_LAST_APPLIED_UNK88_Y(mount) = player->unk88[1];
     player->flags |= MAPOBJECTFLAG_UNK20;
     call->wild->movementCooldowns[OW_WILD_FOLLOWER_SLOT] =
         OVERWORLD_FIELD_MOUNT_IDLE_COOLDOWN;

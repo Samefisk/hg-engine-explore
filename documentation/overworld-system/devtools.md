@@ -24,6 +24,9 @@ Read `scripts/owctl dev status --json --summary` and
 resetting or stopping a session. One coordinator owns live control. A checked
 job owns its private session; use its run ID for job control, never manual input.
 
+A retained session ID with state `stopped` or `failed` is closed. It does not
+block a no-live-session preflight; check the state, not only the ID.
+
 Status has no human/agent owner field. Establish ownership from this task's
 start receipt or the coordinator's explicit handoff of that session ID. Record
 that ID in the active work item. Readiness, port and species do not prove
@@ -96,10 +99,17 @@ scripts/owctl dev inspect --json
 Images are off by default. Setup, stepping, play, polling and checked tests do
 not capture a screen. Only the user's manual Capture click or an explicit
 request to capture an image should use `scripts/owctl dev capture --json`.
-For live spawn-cost diagnosis, pause a prepared session and use
+For live spawn-cost diagnosis, pause your owned session and use
 `scripts/owctl dev command spawn-cost.probe --args '{"mode":"baseline"}' --json`.
 Then collect bounded memory data with normal input. This read-only mode records
 refill, complete attempt, helper, archive, finalizer and creation guest costs.
+Baseline can use an unchanged Continue session without a setup mutation. It
+keeps the normal/prepared state flag unchanged and forbids acceptance. Omitting
+spawn details still requires prepared setup. A diagnostic recipe with no
+requirements can use Baseline with either normal or prepared boot; omission
+remains prepared-only. Baseline also splits candidate, Query admission,
+surface and Land costs inside a destination search. The optional directed-Hop span
+is included in the movement cost; do not add it a second time.
 Native archive costs include raw caller and argument registers even outside
 a spawn call, so later sprite/model loading is visible. Join observed NARC
 open/close handles to read calls; do not infer archive IDs from pointers or
@@ -111,7 +121,8 @@ The completed3110–3112 L-button split is historical evidence only. Its
 temporary gates are removed from normal ROMs and from the observer. Do not
 restore or use them as an acceptance test. It isolated the legacy Land/Surf
 position scan as sufficient to cause the reported stutter. The production scan
-now resumes at most16 candidates per game update. That limit alone is not proof: use
+now resumes at most12 explicit profile destinations per game update. The separate
+legacy position helper keeps its16-candidate attempt. A cap alone is not proof: use
 `spawn-helper-cost` memory data to require one profile/metadata/class preparation
 for the whole attempt, no repeated preparation on resumed updates, and the later
 prepare/create path.
@@ -122,6 +133,19 @@ scripts/owctl dev command cpu-work.start --args '{"maxNativeFrames":600}' --json
 # Apply the bounded normal input being investigated, then read the result:
 scripts/owctl dev command cpu-work.read --json
 ```
+The CPU-work artifact also keeps `allBins` (up to 4096 raw 64-byte bins), the
+`monDataReaders` caller counts, and bounded per-caller counts for a fixed list
+of stock entries in `objectLookupCallers` (map-object ID lookup, bit set/clear,
+GfxID, party `GetMonData` helpers, `AcquireMonLock`/`ReleaseMonLock`, the
+Pokémon decrypt loop and the Wild memset/memcpy wrappers). Each row names the
+entry `function`, its caller and the call count. `frameCallers` repeats the
+counts for each native frame so a loop's burst can be tied to its caller. Resolve
+addresses with `arm-none-eabi-nm -S` on the linked overlay objects and
+`rom.ld`; bins and callers identify code, not elapsed time.
+`spawn-cost.probe` baseline recordings also carry per-actor movement spans
+(`tick-profile-cost`, `tick-conditions-cost`, `tick-intent-boundary-cost`,
+`tick-issue-idle-cost`, `tick-queued-combat-cost`) inside
+`population-movement-cost`. They nest, so never add them to the parent.
 
 This optional native counter is off by default and stops after its declared
 1..1200 native frames. It keeps aggregate instruction counts and the top16
@@ -204,6 +228,12 @@ scripts/owctl dev inspect --handle 131072 --json
 scripts/owctl dev play --json
 scripts/owctl dev pause --json
 ```
+
+`save.reload` is a checked test action for a normal in-game save. After menu
+input and save confirmation, it exports the current private cartridge save,
+closes that session, and starts a new private session from the exported bytes.
+The receipt keeps the old and new session IDs and the export and loaded save
+hashes. The original source save and the old session's evidence remain intact.
 
 Use a handle from the **current** inspection, not the example above. A missing
 actor is an error. Check species, role, full handle, current field/map context,
@@ -323,6 +353,9 @@ instead of saved handles. See [acceleration setup](devtools-tests.md#acceleratio
 Pass the full current `subject`, required `directionMode` (0 cardinal, 1 both,
 2 diagonal only), optional `travelTime` (1–32), and optional `stompTime` (0–32).
 Optional `turning` is `free` or `locked`; `crashSound` is `none` or `wall-hit`.
+Optional `timeVariance` is 0–32; zero fixes the displayed Walk time for an exact
+timing fixture. It preserves the packed diagonal bit. Omission keeps the
+current variance, so `travelTime` alone does not guarantee that displayed time.
 Those fields change only their own bits in the idle Owner lane's Walk options.
 They neither force a crash nor change other options. Omitted fields also keep
 the previous receipt shape, so existing fixed recipes are unchanged.
@@ -437,7 +470,10 @@ Wild setup uses the real prepared-encounter lifecycle. Follower and mounted
 setup use fixed native selection and mount calls. They select an exact party
 slot and wait for its release to finish; mounted setup uses that current
 follower and the normal profile resolver. They do not automate the Y menu.
-Use `step` with Y in a fresh normal session to test the menu itself.
+Use `step` with Y in a fresh normal session to test the menu itself. Holding
+Y opens the menu and releasing Y confirms the highlight; Select while holding
+Y mounts. `step` releases its keys at the end, so one `step` with Y opens and
+then confirms. Navigating with L/R needs Y held across steps.
 Follower/mounted setup defaults to read-only IRQ-code write guards without
 the expensive instruction-by-instruction IRQ trace. Normal CPU/main-queue
 health checks remain active. For an unresolved interrupt fault only, request
@@ -554,6 +590,17 @@ scripts/owctl dev scenario-draft ledyba-pause \
 The recorder retains a bounded recent window and reports dropped frames and
 events. Export retains the original session identity, mode, actual subjects,
 inputs, native observations, and command failures. Missing samples remain gaps.
+`record.start` can take `throwInteractions: true` for a bounded Throw diagnosis.
+It adds current Object of interest/Cargo identities and claim state to `pokemonCombat.interactions`
+at completed queues. The extra reads end with `record.stop` and stay off by default.
+Each current interaction row can also include `returnMove`: the raw144-byte
+return record, captured full actor, accepted plan, phase, retry frame and current
+owner inputs. These reads use the same field/actor admission, coherent rereads
+and existing interaction read limit. `returnMoveDiagnostics` reports an optional
+budget skip. These rows are diagnostic-only and grant no movement proof.
+The same command accepts `appearancePalette: true` to retain actual palette use
+and every prepared condition's activity and cooldown. It uses the existing
+checked-test reader and also ends with `record.stop`.
 Spawn finalization, destination search, object creation, startup motion and
 landing-height receipts include `guestTiming`: authenticated ARM9 entry/return
 scheduler ticks and their difference. Search receipts identify the exact parent

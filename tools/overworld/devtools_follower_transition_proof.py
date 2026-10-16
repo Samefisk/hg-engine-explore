@@ -9,6 +9,7 @@ from tools.overworld.devtools_wild_transition_proof import (
     WildTransitionNegative,
 )
 from tools.overworld.spawn_identity import live_spawn_flags
+from tools.overworld.normal_play_observer import complete_travel
 
 
 CLAIMS = ("natural-input", "live-actor-identity", "world-transition", "control-release")
@@ -152,6 +153,23 @@ def measurements(replay, record):
             and terminal.get("player", {}).get("x") == 574
             and terminal.get("player", {}).get("y") == 400,
             "Follower transition did not restore player control")
+    post, motion = meter.get("postRebindLifecycle", []), meter.get("postRebindMotion")
+    require(meter.get("restoredRanges") is True
+            and all(type(actor.get("engineObject", {}).get(axis)) is int
+                    and actor["engineObject"][axis] == -1
+                    for actor in (before, after) for axis in ("x_range", "y_range"))
+            and isinstance(motion, dict) and motion.get("kind") == "WALK"
+            and motion.get("handle") == current and complete_travel(motion)
+            and motion.get("commitAfter") == ((motion.get("commitBefore", -2) + 1) & 0xFFFFFFFF)
+            and [event.get("data", {}).get("event") for event in post] == list(LIFECYCLE)
+            and all(event["data"].get("actorHandle") == current["value"]
+                    and event["data"].get("actor") == {key: value for key, value in current.items() if key != "value"}
+                    and event["data"].get("reason") == "OK" for event in post)
+            and post[0]["data"].get("valueA") == 1
+            and post[0]["data"].get("sequence", 0) > transition[-1]["data"]["sequence"]
+            and post[0]["frame"] == motion.get("startFrame")
+            and post[-1]["frame"] <= motion.get("finishFrame", -1),
+            "Follower transition lacks restored signed ranges and a fresh native rebound Walk")
     identity = [1, before["role"], before["species"],
                 int(before.get("identityVerified") is True),
                 int(before.get("presentationAttached") is True),

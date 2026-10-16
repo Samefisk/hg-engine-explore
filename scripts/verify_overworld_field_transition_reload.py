@@ -55,7 +55,11 @@ static OverworldActorTransitionState actor;
 static u32 residentContext;
 static OverworldActorTransitionCall lastCall;
 static int failWorkOnce, failed, advanceCount;
+static int failRebindOnce;
 static u16 lastReason;
+#define PlayerHealthOverlay_IsReady() FALSE
+static const struct { void (*stop)(FieldSystem *); } healthEntry = {NULL};
+#define PLAYER_HEALTH_OVERLAY_ENTRY (&healthEntry)
 static u32 getContext(void) { return residentContext; }
 static OverworldActorResult transition(OverworldActorTransitionCall *call) {
     u8 effects;
@@ -80,6 +84,9 @@ static BOOL OverworldFieldService_ApplyTransitionWork(
     FieldSystem *field, OverworldWildSpawnState *state,
     const OverworldActorTransitionCall *call) {
     (void)field; (void)state; (void)call;
+    if (failRebindOnce && call->work == OVERWORLD_ACTOR_TRANSITION_WORK_REBIND) {
+        failRebindOnce = 0; return FALSE;
+    }
     if (failWorkOnce) { failWorkOnce = 0; return FALSE; }
     return TRUE;
 }
@@ -101,7 +108,7 @@ static void check(int ok, const char *label) {
 }
 static void fresh(u32 context) {
     reload(); OverworldActorTransition_Reset(&actor);
-    residentContext = context; failWorkOnce = 0; advanceCount = 0;
+    residentContext = context; failWorkOnce = failRebindOnce = 0; advanceCount = 0;
 }
 static int move(u16 previous, u16 current, int retry) {
     int object;
@@ -148,6 +155,21 @@ int main(void) {
     reload();
     check(move(69, 67, 1), "post-wrap transition with retry completes");
     check(residentContext == 0x00020002, "post-wrap context is exact");
+    /* The existing BOOL adapter contract uses DISCARD when a preserved
+     * REBIND preflight fails. This check does not claim pending-query retry. */
+    fresh(0x00020002); failRebindOnce=1;
+    int object; MapObjectMan manager={&object}; Location location={33};
+    FieldSystem field={&location,&object,&manager};
+    OverworldWildSpawnState wild={67,&manager,&object};
+    OverworldFieldMapHeaderChangeResult result=OverworldFieldService_OnMapHeaderChangedImpl(
+        &field,&wild,67,33);
+    if(result==OVERWORLD_FIELD_MAP_HEADER_CHANGE_UNAVAILABLE)
+        result=OverworldFieldService_OnMapHeaderChangedImpl(&field,&wild,67,33);
+    check(result==OVERWORLD_FIELD_MAP_HEADER_CHANGE_CLEARED
+        && actor.disposition==OVERWORLD_ACTOR_TRANSITION_DISPOSITION_DISCARD,
+        "failed preserved REBIND keeps the existing DISCARD fallback");
+    check(advanceCount==1 && residentContext==0x00030003,
+        "failed REBIND fallback still advances context once");
     if (failed) return 1;
     puts("field transition reload, retry and context-wrap checks passed");
     return 0;

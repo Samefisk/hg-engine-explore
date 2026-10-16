@@ -1,0 +1,53 @@
+---
+import Base from '../layouts/Base.astro';
+import { getCollection } from 'astro:content';
+import { currentBuild } from '../data/testing';
+
+const latest = (await getCollection('updates')).sort((a, b) => +b.data.date - +a.data.date).slice(0, 3);
+const fmt = (d: Date) => d.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+---
+<Base>
+  <div class="wrap">
+    <section class="hero">
+      <img src="/logo.png" alt="Pokémon Wild at Heart Version" />
+      <p class="lead">A HeartGold hack where the overworld is alive: wild Pokémon that notice you, react, and fight back, and partners that act on their own.</p>
+      <div class="btns">
+        <a class="btn" href="/testing">What's being tested</a>
+        <a class="btn ghost" href="/overview">Project overview</a>
+      </div>
+    </section>
+
+    <div class="notice">
+      <strong>Closed testing.</strong> This site has no downloads. Testers get the patch directly from the developer, or from someone who received it from them. See <a href="/access">Get access</a>.
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Current build</h3>
+        <p><strong>{currentBuild.label}</strong><br /><span class="meta">{currentBuild.date}</span></p>
+        <p>{currentBuild.note}</p>
+      </div>
+      <div class="card">
+        <h3>New here?</h3>
+        <p>Read the <a href="/overview">overview</a> to see what the hack is, then check <a href="/testing">what's being tested</a> to know where feedback helps most.</p>
+      </div>
+      <div class="card">
+        <h3>Found something?</h3>
+        <p>Tell me what happened, where, and which build. The <a href="/report">bug report guide</a> shows what helps.</p>
+      </div>
+    </div>
+
+    <h2>Latest updates</h2>
+    <div class="grid">
+      {latest.map((p) => (
+        <a class="card post" href={`/updates/${p.id}`}>
+          <p class="meta">{fmt(p.data.date)}{p.data.build ? ` · ${p.data.build}` : ''}</p>
+          <h3>{p.data.title}</h3>
+          <p>{p.data.summary}</p>
+        </a>
+      ))}
+    </div>
+    <p style="margin-top:1rem"><a href="/updates">All updates →</a></p>
+    <div style="height:3rem"></div>
+  </div>
+</Base>

@@ -4,6 +4,28 @@
 #include "overworld_mount.h"
 
 #define OVERWORLD_MOUNT_RUNTIME_STATE_ADDR 0x023BC744
+/* The resident overlay reserves one word immediately before the state. Keep
+ * the last rendered unk88 value there so the enlarged owner lane still fits
+ * without moving the fixed Select latch or motion fields. */
+#define OVERWORLD_MOUNT_LAST_APPLIED_UNK88_Y(state) \
+    (*(u32 *)(void *)((u8 *)(void *)(state) - sizeof(u32)))
+#define OVERWORLD_MOUNT_PLAYER_CONTACT_ENTRY_ADDR 0x01FFA400
+/* The fixed mount state is full. Two proposal-only bytes use an explicit
+ * loaded capsule in the shared Walk code host; every TRY_STEP overwrites it. */
+#define OVERWORLD_MOUNT_WALK_PROPOSAL_RESERVED_ADDR 0x01FFF57C
+#define OVERWORLD_MOUNT_WALK_PROPOSAL_RESERVED \
+    ((u8 *)OVERWORLD_MOUNT_WALK_PROPOSAL_RESERVED_ADDR)
+void OverworldMountWalkProposal_SaveReserved(
+    const OverworldActorWalkPolicyCall *call);
+void OverworldMountWalkProposal_RestoreReserved(
+    OverworldActorWalkPolicyCall *call);
+struct OverworldMountRuntimeState;
+BOOL OverworldMountWalkProposal_Finish(
+    const struct OverworldMountRuntimeState *state, BOOL started,
+    BOOL crashOnBlocked, OverworldActorWalkPolicyCall *output);
+#define OVERWORLD_MOUNT_CONTACT_CORRIDOR 0
+#define OVERWORLD_MOUNT_CONTACT_DIAGONAL_REJECT 1
+#define OVERWORLD_MOUNT_CONTACT_CARDINAL 2
 
 #define OVERWORLD_MOUNT_FIELD_INPUT_END_MOVEMENT (1u << 1)
 #define OVERWORLD_MOUNT_FIELD_INPUT_SIGN (1u << 5)
@@ -30,8 +52,8 @@ typedef struct OverworldMountFieldInput {
 
 
 /* Stable Thumb entry in resident overlay 129. The package verifier checks
- * this address against the mount bridge literal on every ROM build. */
-#define OVERWORLD_WILD_PLAYER_STEP_HANDLER_ADDR 0x023D9B69
+ * this address against the linked resident symbol and bridge literal. */
+#define OVERWORLD_WILD_PLAYER_STEP_HANDLER_ADDR 0x023D9B0D
 
 typedef struct OverworldMountRuntimeState {
     FieldSystem *fieldSystem;
@@ -39,10 +61,9 @@ typedef struct OverworldMountRuntimeState {
     OverworldMountSnapshot snapshot;
     u32 playerBaseFaceY;
     u32 playerBaseUnk88Y;
-    u32 lastAppliedPlayerFaceY;
-    u32 lastAppliedPlayerUnk88Y;
-    /* Current physical D-pad state, sampled by the mount frame task. It stops
-     * a completed step from reusing an old proposal after input is released. */
+    /* High nibble: current physical D-pad keys. Low nibble: newest cardinal
+     * direction plus one, or zero for an unordered chord. The control hook
+     * and later frame task share this one key-order cache. */
     u8 directionInputHeld;
     u8 savedPlayerShadowSuppressed;
     u8 presentationAttached;
@@ -65,6 +86,10 @@ typedef struct OverworldMountRuntimeState {
     u8 motionDirection;
     u8 motionArcHeightQ4;
     u8 motionFlicker;
+    /* Mounted release grace in the former padding byte. High nibble: the
+     * D-pad keys last held during a Walk step. Low nibble: the stock
+     * vblank counter, modulo 16, until which a blank frame keeps them. */
+    u8 directionReleaseGrace;
     u16 motionFrameCount;
     u16 motionElapsed;
     u16 motionCooldown;
@@ -88,7 +113,23 @@ typedef struct OverworldMountRuntimeState {
     u8 savedFollowerShadowSuppressed;
     u8 motionLandingPauseStarted;
     u8 preserveTransitionPrepared;
+    /* Keep the fixed Select latch and motion offsets after the owner profile
+     * grew by one word. The other presentation cache uses the BSS prefix. */
+    u32 lastAppliedPlayerFaceY;
 } OverworldMountRuntimeState;
+
+/* Resident overlay 159 owns the mounted Walk corridor/contact gate. */
+#define OVERWORLD_MOUNT_PLAYER_CONTACT_ENTRY \
+    ((BOOL (*)(FIELD_PLAYER_AVATAR *, u8, u8, \
+        OverworldMountRuntimeState *)) \
+        (OVERWORLD_MOUNT_PLAYER_CONTACT_ENTRY_ADDR | 1))
+
+/* A blank D-pad frame within this many control frames of a held direction
+ * on a fast Walk keeps it, so a rolled turn or brief release mid-sprint does
+ * not stop. */
+#define OVERWORLD_MOUNT_RELEASE_GRACE_FRAMES 4
+/* Grace arms only on Walk steps this fast (frames per tile) or faster. */
+#define OVERWORLD_MOUNT_RELEASE_GRACE_MAX_TIME 4
 
 #define OVERWORLD_MOUNT_BOUNDARY_FLAGS_INDEX 0
 #define OVERWORLD_MOUNT_BOUNDARY_APPLIED_LO_INDEX 1
@@ -108,6 +149,10 @@ typedef struct OverworldMountRuntimeState {
 #define OVERWORLD_MOUNT_BOUNDARY_ENGINE_END_SEEN (1u << 2)
 #define OVERWORLD_MOUNT_BOUNDARY_FINALIZE_PENDING (1u << 3)
 
+typedef char OverworldMountReleaseGraceMustUsePaddingByte[
+    offsetof(OverworldMountRuntimeState, directionReleaseGrace) == 0x8F
+        && offsetof(OverworldMountRuntimeState, motionFrameCount) == 0x90
+        ? 1 : -1];
 typedef char OverworldMountMotionStartXOffsetMustRemain98[
     offsetof(OverworldMountRuntimeState, motionStartX) == 0x98 ? 1 : -1];
 typedef char OverworldMountMotionTargetXOffsetMustRemain9C[
@@ -124,6 +169,12 @@ typedef char OverworldMountPriorFollowerMaskMustFollowFingerprint[
 typedef char OverworldMountReleaseHandoffMustFollowPhase[
     offsetof(OverworldMountSnapshot, reserved)
         == offsetof(OverworldMountSnapshot, phase) + 1
+        ? 1 : -1];
+typedef char OverworldMountEndSessionOffsetsMustMatchAssembly[
+    offsetof(OverworldMountRuntimeState, snapshot.phase) == 0x6C
+        && offsetof(OverworldMountRuntimeState, snapshot.lastCancelReason)
+            == 0x6E
+        && offsetof(OverworldMountRuntimeState, motionIdentity) == 0x7E
         ? 1 : -1];
 typedef char OverworldMountTogglePendingOffsetMustRemain96[
     offsetof(OverworldMountRuntimeState, bufferedTogglePending) == 0x96

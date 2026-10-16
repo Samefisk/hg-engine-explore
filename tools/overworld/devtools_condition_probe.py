@@ -86,7 +86,7 @@ def buffer_layout(blob_size):
 def _profile(blob, header, index, *, kind, condition_start, condition_count,
              target_mode=0):
     offset, count, stride = header["overrideProfiles"]
-    require(0 <= index < count and stride == 212,
+    require(0 <= index < count and stride == 228,
             "condition profile layout differs")
     start = offset + index * stride
     require(start + stride <= len(blob), "condition profile is outside blob")
@@ -123,7 +123,7 @@ def _blob_header(blob):
     require(isinstance(blob, (bytes, bytearray)) and len(blob) >= 84,
             "condition source blob is truncated")
     magic, version, header_size, blob_size = struct.unpack_from("<IHHI", blob)
-    require(magic == 0x4F574244 and version == 81 and header_size == 84
+    require(magic == 0x4F574244 and version == 85 and header_size == 84
             and blob_size == len(blob), "condition source blob header differs")
     sections = {}
     for name, offset in (("overrideProfiles", 36), ("overrideMembers", 44),
@@ -134,7 +134,7 @@ def _blob_header(blob):
                 "condition source blob section differs")
         sections[name] = (section, count, stride)
     require(sections["overrideProfiles"][1] >= 4
-            and sections["overrideProfiles"][2] == 212
+            and sections["overrideProfiles"][2] == 228
             and sections["overrideMembers"][2] == 2
             and sections["conditionEntries"][1] >= 4
             and sections["conditionEntries"][2] == 48,
@@ -180,7 +180,7 @@ def fixture_patch_plan(source, test_blob=None):
     condition_offset = header["conditionEntries"][0]
     ranges = (
         (56, 2, "condition-count"),
-        (profile_offset, 4 * 212, "profiles-0-3"),
+        (profile_offset, 4 * 228, "profiles-0-3"),
         (condition_offset, 4 * 48, "conditions-0-3"),
     )
     patched = bytearray(source)

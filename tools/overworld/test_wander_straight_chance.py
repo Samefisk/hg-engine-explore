@@ -13,9 +13,6 @@ SOURCE = ROOT / "src/overworld_wild_helper_overlay/overworld_wild_helper_overlay
 FUNCTIONS = (
     ("OverworldWildHelper_Abs", "int"),
     ("OverworldWildHelper_Max", "int"),
-    ("OverworldWildHelper_BuildDirections", "int"),
-    ("OverworldWildHelper_IsHopVectorShape", "BOOL"),
-    ("OverworldWildHelper_TryGetHopVector", "BOOL"),
     ("OverworldWildHelper_SetHopResult", "BOOL"),
     ("OverworldWildHelper_PickRandomBehaviorHop", "BOOL"),
 )
@@ -26,6 +23,7 @@ PRELUDE = r'''
 #include <string.h>
 typedef int BOOL;
 typedef uint8_t u8;
+typedef int8_t s8;
 typedef uint32_t u32;
 #define TRUE 1
 #define FALSE 0

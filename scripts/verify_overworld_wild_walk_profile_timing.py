@@ -35,7 +35,7 @@ def main() -> None:
     viewer_source = VIEWER_PATH.read_text()
     v2_editor = V2_PROFILE_EDITOR_PATH.read_text()
 
-    require(viewer.PROFILE_FIELDS[-1] == "planTurnSkidPath", "Turn-skid path planning is not stored separately")
+    require("planTurnSkidPath" in viewer.PROFILE_FIELDS, "Turn-skid path planning is not stored separately")
     require("walkAccelerationStep" in viewer.PROFILE_FIELDS, "Walk acceleration amount is not stored separately")
     require(viewer.NUMERIC_PROFILE_FIELD_OPTION_MIN["chillSpeed"] == 1, "Walk time accepts zero")
     require(viewer.NUMERIC_PROFILE_FIELD_OPTION_MAX["chillSpeed"] == 32, "Walk time does not accept 1..32")
@@ -43,7 +43,7 @@ def main() -> None:
     require(viewer.NUMERIC_PROFILE_FIELD_OPTION_MAX["chainRepositionSpeed"] == 32, "Reposition Walk time does not accept 1..32")
     require(viewer.NUMERIC_PROFILE_FIELD_OPTION_MAX["walkStompTime"] == 32, "Stomp threshold does not accept 0/off or 1..32")
     require(viewer.NUMERIC_PROFILE_FIELD_OPTION_MIN["walkAccelerationStep"] == 0, "Acceleration amount does not accept none")
-    require(viewer.NUMERIC_PROFILE_FIELD_OPTION_MAX["walkAccelerationStep"] == 33, "Acceleration amount does not accept none, 1..32 frame removals, and /2")
+    require(viewer.NUMERIC_PROFILE_FIELD_OPTION_MAX["walkAccelerationStep"] == 34, "Acceleration mode does not accept Linear speed alongside the existing rules")
     require(viewer.NUMERIC_PROFILE_FIELD_OPTION_MIN["walkTimeVariance"] == 0, "Walk variance cannot be disabled")
     require(viewer.NUMERIC_PROFILE_FIELD_OPTION_MAX["walkTimeVariance"] == 32, "Walk variance does not accept 0..32 frames")
     require(viewer.NUMERIC_PROFILE_FIELD_OPTION_MIN["walkPauseVariance"] == 0, "Walk pause variance cannot be disabled")
@@ -224,6 +224,8 @@ def main() -> None:
 
     data = viewer.build_data(include_routes=False, include_spawn_settings=False)
     acceleration_options = data["editOptions"]["walkAccelerationStep"]
+    require(any(option["raw"] == "34" and option["label"] == "Linear speed"
+                for option in acceleration_options), "Linear speed is missing from editor choices")
     require(
         [option["raw"] for option in acceleration_options[:3]] == ["0", "33", "1"],
         "editor acceleration choices do not start with none, /2, then fixed steps",
@@ -338,7 +340,7 @@ def main() -> None:
         and changed_reparsed["stopSkid"]["raw"] == "OW_WILD_BEHAVIOR_BOOL_YES",
         "packed turn-skid options did not round-trip independently",
     )
-    require("OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 81" in header, "behavior blob version is not current")
+    require("OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 85" in header, "behavior blob version is not current")
     require("u8 walkStompTime;" in header, "profile ABI lacks separate stomp time")
     require("OW_WILD_BEHAVIOR_OVERRIDE3_WALK_STOMP_TIME" in header, "stomp time cannot be overridden")
     require("u8 walkAccelerationStep;" in header, "profile ABI lacks acceleration amount")

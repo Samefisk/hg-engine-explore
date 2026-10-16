@@ -19,6 +19,16 @@ class InsightTests(unittest.TestCase):
         for actors in ([], [{"handle": {"value": 1}}] * 2):
             with self.assertRaises(ValueError): explain_actor({"actors": actors}, 1)
 
+    def test_packed_profile_fields_have_separate_values(self):
+        snapshot = {"actors": [{"handle": {"value": 1}, "behaviorFingerprint": 7}],
+                    "nativeObservation": {"resolvedProfiles": [{"fingerprint": 7, "lanes": ["8b"]}]}}
+        result = explain_actor(snapshot, 1, {"compactSize": 1, "fields": [
+            {"key": "dust", "offset": 0, "cType": "u8", "unit": "boolean", "bitOffset": 0, "bitWidth": 1},
+            {"key": "stopSkidTime", "offset": 0, "cType": "u8", "unit": "frames", "bitOffset": 1, "bitWidth": 7}]})
+        values = result["resolvedProfile"]["decodedLanes"]["owner"]
+        self.assertEqual(values["dust"]["value"], 1)
+        self.assertEqual(values["stopSkidTime"]["value"], 69)
+
     def test_first_difference_keeps_missing_distinct_from_null(self):
         value = first_difference({"frames": [{"x": None}]}, {"frames": [{}]})
         self.assertEqual(value["firstDifference"]["path"], ["frames", 0, "x"])

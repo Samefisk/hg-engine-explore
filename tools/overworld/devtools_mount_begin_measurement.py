@@ -160,20 +160,20 @@ class MountBeginMeasurement:
                     self.control = deepcopy(event)
             elif name in HOP and self.mounted is not None:
                 require(self.role is not None and self.control is not None and len(self.hop) < 4
-                        and name == HOP[len(self.hop)] and d.get("reason") == "OK", "Hop lifecycle is missing or out of order")
+                        and name == HOP[len(self.hop)] and d.get("reason") == "OK", "mounted Walk lifecycle is missing or out of order")
                 actor = self._actor(snapshot, "MOUNTED")
                 if not self.hop:
-                    require(d.get("valueA") == 2 and d.get("valueB", 0) > 0
-                            and actor.get("motionKind") == "HOP" and actor.get("origin") != actor.get("target"), "wrong Hop start")
-                    require(any(self._edge(snapshot, bit) for bit in (16,32,64,128)), "Hop lacks native direction input")
-                    require(actor.get("motionDuration") == d["valueB"], "Hop duration differs from its actor")
+                    require(d.get("valueA") == 1 and d.get("valueB", 0) > 0
+                            and actor.get("motionKind") == "WALK" and actor.get("origin") != actor.get("target"), "wrong mounted Walk start")
+                    require(any(self._edge(snapshot, bit) for bit in (16,32,64,128)), "mounted Walk lacks native direction input")
+                    require(actor.get("motionDuration") == d["valueB"], "mounted Walk duration differs from its actor")
                     self.start = deepcopy(actor)
                 else:
                     commit = self.start["commitSequence"] + 1
                     require((d.get("valueA"), d.get("valueB")) ==
-                            ((1, commit) if name == "CONTROL_RETURNED" else (commit, 2)), "wrong Hop terminal")
+                            ((1, commit) if name == "CONTROL_RETURNED" else (commit, 1)), "wrong mounted Walk terminal")
                     if name == "CONTROL_RETURNED":
-                        require(actor["commitSequence"] == commit and actor["logical"] == self.start["target"], "Hop did not commit its destination")
+                        require(actor["commitSequence"] == commit and actor["logical"] == self.start["target"], "mounted Walk did not commit its destination")
                 self.hop.append(deepcopy(event))
         self.latest = deepcopy(snapshot)
         self.last_keys = selector.get("rawHeld", 0)
@@ -207,7 +207,7 @@ class MountBeginMeasurement:
         if not self.failures:
             try:
                 require(len(self.milestones) == 3 and self.role and self.control and len(self.hop) == 4,
-                        "incomplete Select/rebind/Hop lifecycle")
+                        "incomplete Select/rebind/mounted Walk lifecycle")
                 actor = self._actor(self.latest, "MOUNTED")
                 require(self.latest["selector"]["state"] == 0 and actor.get("reservationId") == 0
                         and actor.get("motionPhase") == "IDLE"

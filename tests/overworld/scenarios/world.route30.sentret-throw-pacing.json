@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "id": "world.route30.sentret-throw-pacing",
+  "title": "Three Sentret and saved Mankey Throw share one600-loop Route30 window",
+  "status": "active",
+  "capabilities": [
+    "condition.evaluation",
+    "chase",
+    "population"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "TICKETS.md",
+    "actor": "Three full current Wild Sentret161, the unchanged saved Follower Mankey56, and one actual Wild Bellsprout69 Cargo.",
+    "trigger": "Exact retained public setup and input; no party/follower/profile/condition/timer or HP override.",
+    "observable": "After the normal Route30 warp, retain exactly16 neutral setup frames before the first native spawn so normal Field/Query admission can settle. These frames earn no pacing, movement or Throw credit. The same prepared Route30 fixture retains three actual Wild Sentret161 level3 at their returned full handles before arm; a refused third request fails. The unchanged Continue save retains its party2 Mankey56 PID2920357538 and current full Follower. At the post-ADOPT boundary arm the existing native main-loop reader for the first600 returns and CPUWorkProbe for1200 native frames. Use exact LEFT120, DOWN120, neutral16, one normal Bellsprout69 level5 spawn at564375, then neutral348. That spawn must return actual ADOPT/current object, not READY; its asynchronous interval earns only real retained native return/event credit. Within the same600-return window all three Sentret remain current, and normal Mankey sight/Cargo conditions12365/26783 bind that same actual Bell through native HELD/windup and an outward shared eight-tile Hop launch. Require600 distinct ordered current main-loop returns,599 exact guest-clock intervals, at most2 native cycles/frame-sequence and2800950 ARM9 ticks, zero late loops, zero normal-input render stalls, full raw completed input samples, and zero native/semantic loss. No actor pose is invented for the asynchronous spawn wait; no throw before creation or outside the armed window earns credit. CPU instruction counts remain diagnostic.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Teleport only to map34(565,369) facing2, then retain16 neutral setup frames before the first spawn; request the three native Sentret targets563370/564370/565371. Retain actual chosen PID/full ADOPT; bind only after creation. Arm read-only native probes after all three current actors and the saved Mankey are bound."
+      },
+      {
+        "phase": "during-observation",
+        "target": "fixture",
+        "change": "After exact LEFT120/DOWN120/neutral16 reaches Player565376 and Mankey565375, request one native Bell at verified loaded noncollision behavior0 tile564375. Require full actual ADOPT. This declared Cargo fixture does not replace the natural sight/Cargo/HELD/Throw trigger."
+      }
+    ],
+    "limits": [
+      "After the normal Route30 warp, retain exactly16 neutral setup frames before the first native spawn so normal Field/Query admission can settle. These frames earn no pacing, movement or Throw credit. The same prepared Route30 fixture retains three actual Wild Sentret161 level3 at their returned full handles before arm; a refused third request fails. The unchanged Continue save retains its party2 Mankey56 PID2920357538 and current full Follower. At the post-ADOPT boundary arm the existing native main-loop reader for the first600 returns and CPUWorkProbe for1200 native frames. Use exact LEFT120, DOWN120, neutral16, one normal Bellsprout69 level5 spawn at564375, then neutral348. That spawn must return actual ADOPT/current object, not READY; its asynchronous interval earns only real retained native return/event credit. Within the same600-return window all three Sentret remain current, and normal Mankey sight/Cargo conditions12365/26783 bind that same actual Bell through native HELD/windup and an outward shared eight-tile Hop launch. Require600 distinct ordered current main-loop returns,599 exact guest-clock intervals, at most2 native cycles/frame-sequence and2800950 ARM9 ticks, zero late loops, zero normal-input render stalls, full raw completed input samples, and zero native/semantic loss. No actor pose is invented for the asynchronous spawn wait; no throw before creation or outside the armed window earns credit. CPU instruction counts remain diagnostic.",
+      "Prepared population does not prove natural encounter selection. This case does not replace unchanged-Continue D1 or complete Throw flight/control-return coverage. Raw TestJobs chunks, not the4000-event display ring, own continuity; any missing raw or native/semantic event is a failure. No image or host-clock pacing claim."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "sentret-a",
+      "species": 161,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "sentret-b",
+      "species": 161,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "sentret-c",
+      "species": 161,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "cargo",
+      "species": 69,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "After the normal Route30 warp and16 uncredited neutral setup frames, admit three actual full-handle Sentret and retain the same saved Mankey before the timed window."
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "LEFT120/DOWN120/neutral16, one actual native Bell fixture, neutral348; retain every native return during all commands."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Same current Bell becomes native HELD then launches outward while all three original Sentret remain current;600 same-window native returns remain on time."
+    }
+  ],
+  "stop": {
+    "frameBudget": 1100,
+    "condition": "Exact bounded actions finish with all subjects, actual HELD/Throw and600 continuous zero-late native returns, or first missing/changed fact."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "After the normal Route30 warp, retain exactly16 neutral setup frames before the first native spawn so normal Field/Query admission can settle. These frames earn no pacing, movement or Throw credit. The same prepared Route30 fixture retains three actual Wild Sentret161 level3 at their returned full handles before arm; a refused third request fails. The unchanged Continue save retains its party2 Mankey56 PID2920357538 and current full Follower. At the post-ADOPT boundary arm the existing native main-loop reader for the first600 returns and CPUWorkProbe for1200 native frames. Use exact LEFT120, DOWN120, neutral16, one normal Bellsprout69 level5 spawn at564375, then neutral348. That spawn must return actual ADOPT/current object, not READY; its asynchronous interval earns only real retained native return/event credit. Within the same600-return window all three Sentret remain current, and normal Mankey sight/Cargo conditions12365/26783 bind that same actual Bell through native HELD/windup and an outward shared eight-tile Hop launch. Require600 distinct ordered current main-loop returns,599 exact guest-clock intervals, at most2 native cycles/frame-sequence and2800950 ARM9 ticks, zero late loops, zero normal-input render stalls, full raw completed input samples, and zero native/semantic loss. No actor pose is invented for the asynchronous spawn wait; no throw before creation or outside the armed window earns credit. CPU instruction counts remain diagnostic."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "world.route30.sentret-throw-pacing",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "rendered-motion",
+      "frame-pacing"
+    ],
+    "minimumFrames": 600
+  }
+}

@@ -39,8 +39,8 @@ def fixture():
         inputEncounter=deepcopy(receipt["inputEncounter"]))
     profile = receipt["resolverReceipts"][0]
     raw = bytearray.fromhex(profile["resultHex"])
-    struct.pack_into("<I", raw, 160, 1)
-    raw[146] = raw[150] = 0
+    struct.pack_into("<I", raw, 176, 1)
+    raw[154] = raw[158] = 0
     profile["resultHex"] = raw.hex()
     spawn["finalization"] = {"status": "matched", "receipt": receipt}
     return spawn
@@ -53,7 +53,7 @@ def check(spawn, source=AUTHORED):
 def landing_stream(*, replaced=False):
     stream = Stream()
     raw = bytearray.fromhex(stream.profile["resultHex"])
-    struct.pack_into("<I", raw, 160, 1)
+    struct.pack_into("<I", raw, 176, 1)
     stream.profile["resultHex"] = raw.hex()
     stream.items[0][0]["nativeObservation"]["resolvedProfiles"] = [deepcopy(stream.profile)]
     stream.motion("HOP", (16, 0), pause=2, spawn=True)
@@ -77,6 +77,74 @@ def landing_stream(*, replaced=False):
                 data["finalization"] = {"status": "matched", "receipt": deepcopy(receipt)}
     stream.items[1][1].insert(0, {"kind": "native-observation", "frame": stream.items[1][0]["frame"],
                                "data": receipt})
+    return stream
+
+
+def fly_authored():
+    import json
+    return json.loads((Path(__file__).resolve().parents[2] / "data/overworld_behavior_profiles.json").read_text())
+
+
+def fly_stream(*, first_elapsed=1):
+    """Independent literal Fly144 samples and native constructor/START/END."""
+    stream = Stream()
+    raw = bytearray.fromhex(stream.profile["resultHex"])
+    struct.pack_into("<I", raw, 176, 3)  # local Erratic Flutter + Fly In Owners
+    stream.profile["resultHex"] = raw.hex()
+    stream.items[0][0]["nativeObservation"]["resolvedProfiles"] = [deepcopy(stream.profile)]
+    origin, target, base_y = [0, 0], [16, 0], 65536
+    actor = stream.actor
+    actor["engineIdentity"]["id_lookup"] = {"eligible_count": 1, "pointer_matches": True}
+    actor.update(motionKind="FLY_IN", motionPhase="MOVING", motionDuration=144, reservationId=1,
+                 origin={"x": 0, "y": 0}, target={"x": 16, "y": 0})
+    startup = {"origin": origin, "target": target, "locomotion": 9, "hopDirection": 3, "targetBaseY": base_y}
+    startup_hex = struct.pack("<4hBB2xi", *target, *origin, 9, 3, base_y).hex()
+    encounter = {"personality": actor["subjectIdentity"], "species": 165, "form": 0, "level": 5}
+    prefix = struct.pack("<iiB3xIHBB4hBB", *target, 0, encounter["personality"], 165, 0, 5, *target, *origin, 9, 3)
+    context = {"mapId": 34, "fieldEpoch": 2, "mapGeneration": 4,
+               "statePointer": 0x023B0000, "fieldPointer": 0x02230000}
+    cell = {"x": 16, "y": 0, "loaded": True, "attribute": 2, "behavior": 2, "collision": False,
+        "terrain_class": 0, "matrix_index": 0, "block": 0,
+        "provenance": {"fieldPointer": context["fieldPointer"], "landDataIdentity": "current-map-matrix",
+            "store": "full-terrain-attributes", "landDataId": 5, "attributeAddress": 0x02050000,
+            "rawWord": 2, "matrixWidth": 2, "matrixHeight": 2},
+        "surface": {"known": True, "present": False, "catalogPointer": 0x02060000,
+                    "landDataId": 5, "localX": 16, "localZ": 0}}
+    final = None
+    for elapsed in range(first_elapsed, 144):
+        actor["motionElapsed"] = elapsed
+        actor["engineObject"].update(pos_x=0x8000 + (16 * 65536 // 144) * elapsed,
+            pos_z=0x8000, pos_y=base_y, unk88_y=6 * 65536 - 6 * 65536 * elapsed // 144)
+        actor["render"] = {"x": actor["engineObject"]["pos_x"] >> 16, "y": 0}
+        events = []
+        if elapsed == first_elapsed:
+            final = stream.native("spawn-finalized", finalizationId=1, slot=0, terrain=0,
+                preparedPointer=0x02240000, statePointer=context["statePointer"], fieldPointer=context["fieldPointer"],
+                worldContext=deepcopy(context), returnWorldContext=deepcopy(context), pairEligible=True,
+                inputPrefixHex=prefix[:20].hex(), inputEncounter=deepcopy(encounter), inputPosition=target,
+                preparedPrefixHex=prefix.hex(), preparedEncounter=deepcopy(encounter), position=target,
+                startup=deepcopy(startup), startupHex=startup_hex,
+                resolverReceipts=[{**deepcopy(stream.profile), "finalizationId": 1, "inputEncounter": deepcopy(encounter)}])
+            jump = {"returnValue": 1, "slot": 0, "sourceIdentity": deepcopy(actor["sourceIdentity"]),
+                "publicSubject": stream.public(), "origin": origin, "target": target,
+                "playerAtEntry": {"pointer": 0x02210000, "mapId": 34, "tile": target},
+                "landingHeight": {"status": "not-observed", "surfaceLegality": "unknown"}}
+            events = [stream.trace("MOTION_STARTED", 6, 144), final,
+                stream.native("spawn-object-create", slot=0,
+                    arguments=[actor["engineIdentity"]["current_manager"], *origin, 1], returnValue=actor["sourceIdentity"]["object"]),
+                stream.native("spawn-motion", **jump),
+                stream.native("spawn-prepared", slot=0, terrain=0, preparedPointer=0x02240000,
+                    statePointer=context["statePointer"], fieldPointer=context["fieldPointer"], worldContext=deepcopy(context),
+                    preparedPrefixHex=prefix.hex(), preparedEncounter=deepcopy(encounter), startup=deepcopy(startup),
+                    startupHex=startup_hex, position=target, publicSubject=stream.public(), jumpReceipts=[jump],
+                    resolverReceipts=[], finalization={"status": "matched", "receipt": deepcopy(final["data"])})]
+        stream.append(events)
+        stream.items[-1][0]["terrain"] = {"cells": [deepcopy(cell)]}
+    actor.update(motionElapsed=144, motionKind="NONE", motionPhase="IDLE", reservationId=0,
+        commitSequence=1, logical={"x": 16, "y": 0}, render={"x": 16, "y": 0})
+    actor["engineObject"].update(pos_x=16 * 65536 + 0x8000, pos_y=base_y, pos_z=0x8000, unk88_y=0, x=16, y=0)
+    stream.append([stream.trace("LOGICAL_COMMIT", 1, 6), stream.trace("MOTION_FINISHED", 1, 6), stream.trace("CONTROL_RETURNED", 0, 1)])
+    stream.items[-1][0]["terrain"] = {"cells": [deepcopy(cell)]}
     return stream
 
 
@@ -145,19 +213,19 @@ class PoolSpawnReceiptTests(unittest.TestCase):
         self.assertIsNotNone(compiler, "missing ARM compiler is not an ABI pass")
         program = '''#include "overworld_behavior_resolver.h"
 #include <stddef.h>
-_Static_assert(sizeof(BehaviorResolveResult) == 200, "result size");
-_Static_assert(offsetof(BehaviorResolveResult, matchedOverrideMask) == 160, "Owner matches");
-_Static_assert(offsetof(BehaviorResolveResult, forcedOverrideMask) == 164, "Owner forced");
-_Static_assert(offsetof(BehaviorResolveResult, conditionalOverrideMask) == 168, "Owner conditional");
-_Static_assert(offsetof(BehaviorResolveResult, appliedOverrideMask) == 172, "all applied");
-_Static_assert(offsetof(BehaviorResolveResult, primitives.chillTarget) == 146, "chill target");
-_Static_assert(offsetof(BehaviorResolveResult, primitives.tiredTarget) == 150, "tired target");
+_Static_assert(sizeof(BehaviorResolveResult) == 216, "result size");
+_Static_assert(offsetof(BehaviorResolveResult, matchedOverrideMask) == 176, "Owner matches");
+_Static_assert(offsetof(BehaviorResolveResult, forcedOverrideMask) == 180, "Owner forced");
+_Static_assert(offsetof(BehaviorResolveResult, conditionalOverrideMask) == 184, "Owner conditional");
+_Static_assert(offsetof(BehaviorResolveResult, appliedOverrideMask) == 188, "all applied");
+_Static_assert(offsetof(BehaviorResolveResult, primitives.chillTarget) == 162, "chill target");
+_Static_assert(offsetof(BehaviorResolveResult, primitives.tiredTarget) == 166, "tired target");
 '''
         command = [compiler, "-x", "c", "-std=c11", "-mthumb", "-mcpu=arm946e-s",
                    "-I" + str(root / "include"), "-fsyntax-only", "-"]
         correct = subprocess.run(command, input=program, text=True, capture_output=True, timeout=20)
         self.assertEqual(correct.returncode, 0, correct.stderr[-3000:])
-        wrong = subprocess.run(command, input=program.replace("== 160", "== 172"),
+        wrong = subprocess.run(command, input=program.replace("== 176", "== 188"),
                                text=True, capture_output=True, timeout=20)
         self.assertNotEqual(wrong.returncode, 0, "combined applied mask is not Owner provenance")
 
@@ -177,9 +245,9 @@ _Static_assert(offsetof(BehaviorResolveResult, primitives.tiredTarget) == 150, "
         # not our expected destination. The output still belongs to this PID.
         profile = receipt["resolverReceipts"][0]
         raw = bytearray.fromhex(profile["resultHex"])
-        for offset in (0, 72):
+        for offset in (0, 80):
             struct.pack_into("<HH", raw, offset + 52, 15, 1023)
-        profile.update(resultHex=raw.hex(), lanes=[raw[n:n + 72].hex() for n in (0, 72)])
+        profile.update(resultHex=raw.hex(), lanes=[raw[n:n + 80].hex() for n in (0, 80)])
         result = check(spawn)
         self.assertFalse(result["passed"])
         self.assertEqual(result["reason"], "pool-destination-replaced")
@@ -226,7 +294,7 @@ _Static_assert(offsetof(BehaviorResolveResult, primitives.tiredTarget) == 150, "
                 elif fault == "input-species": r["inputEncounter"]["species"] = 56
                 elif fault == "profile-source": r["resolverReceipts"][0]["sourceSha256"] = "b" * 64
                 elif fault == "profile-request": r["resolverReceipts"][0]["requestHex"] = "00" * 44
-                elif fault == "profile-bytes": r["resolverReceipts"][0]["lanes"] = ["00" * 72] * 2
+                elif fault == "profile-bytes": r["resolverReceipts"][0]["lanes"] = ["00" * 80] * 2
                 elif fault == "headbutt": spawn["terrain"] = r["terrain"] = 2
                 elif fault == "short-input": r["inputPrefixHex"] = r["inputPrefixHex"][:-2]
                 elif fault == "pair-ineligible": r["pairEligible"] = False
@@ -244,7 +312,7 @@ _Static_assert(offsetof(BehaviorResolveResult, primitives.tiredTarget) == 150, "
                 spawn = fixture()
                 profile = spawn["finalization"]["receipt"]["resolverReceipts"][0]
                 raw = bytearray.fromhex(profile["resultHex"])
-                struct.pack_into("<I", raw, 160, 3)
+                struct.pack_into("<I", raw, 176, 3)
                 profile["resultHex"] = raw.hex()
                 with self.assertRaises(ValueError): check(spawn, source)
 
@@ -255,12 +323,12 @@ _Static_assert(offsetof(BehaviorResolveResult, primitives.tiredTarget) == 150, "
         self.assertTrue(check(fixture(), source)["passed"])
 
     def test_conditional_treetop_and_inconsistent_owner_masks_are_outside_witness(self):
-        for offset, value in ((168, 1), (164, 1), (160, 4), (146, 4), (150, 4)):
+        for offset, value in ((184, 1), (180, 1), (176, 4), (162, 4), (166, 4)):
             with self.subTest(offset=offset):
                 spawn = fixture()
                 profile = spawn["finalization"]["receipt"]["resolverReceipts"][0]
                 raw = bytearray.fromhex(profile["resultHex"])
-                if offset >= 160:
+                if offset >= 168:
                     struct.pack_into("<I", raw, offset, value)
                 else:
                     raw[offset] = value

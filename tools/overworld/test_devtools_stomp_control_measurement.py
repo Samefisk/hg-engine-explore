@@ -90,10 +90,10 @@ def control_receipt_for(meter,binding_raw,binding):
     terminal=deepcopy(meter.last);actor=terminal['actors'][0]
     prior=deepcopy(meter.natural.cases[-1]['feedback']['calls'][-1])
     current=deepcopy(prior['before']);current['publicSubject']=deepcopy(actor)
-    state=bytearray(184);struct.pack_into('<II',state,0,binding['fieldPointer'],binding['surfacePointer'])
-    state[8:80]=bytes.fromhex(prior['profileHex']);state[80:96]=binding_raw
+    state=bytearray(192);struct.pack_into('<II',state,0,binding['fieldPointer'],binding['surfacePointer'])
+    state[8:88]=bytes.fromhex(prior['profileHex']);state[88:104]=binding_raw
     struct.pack_into('<I',state,96,1);state[100]=2
-    clean=dict(current=current,profile=dict(profileHex=state[8:80].hex(),stompTime=2),mountBinding=binding,
+    clean=dict(current=current,profile=dict(profileHex=state[8:88].hex(),stompTime=2),mountBinding=binding,
         mountStateHex=state.hex(),pose=dict(current,
             player=deepcopy(terminal['stompFeedback']['latestCompletedPose']['player']),
             mount=deepcopy(terminal['stompFeedback']['latestCompletedPose']['mount']),
@@ -105,7 +105,7 @@ def control_receipt_for(meter,binding_raw,binding):
     control=dict(state='complete',failure=None,cleanupPending=False,acceptedProof=False,terminal=True,
         readerClosed=True,readerFailure=BAD_THRESHOLD,guestInstructionAdvance=0,guestMemoryWrites=2,
         clean=clean,restored=deepcopy(clean),bad=dict(mountStateHex=bad.hex(),failure=BAD_THRESHOLD),policyReceipt=prior,
-        stateAddress=0x023BC744,stateBytes=184,changedAddress=0x023BC744+78,changedOffset=78,profileOffset=70,
+        stateAddress=0x023BC744,stateBytes=192,changedAddress=0x023BC744+78,changedOffset=78,profileOffset=70,
         originalHex='02',changedHex='ff',clock=clock,restoredClock=deepcopy(clock),
         registers=registers,restoredRegisters=deepcopy(registers))
     reader=dict(terminal['stompFeedback'],closed=True,failure=BAD_THRESHOLD,guestMemoryWrites=2,calibration=control)

@@ -1,0 +1,315 @@
+{
+  "schemaVersion": 1,
+  "id": "world.route30.sentret-throw-pacing",
+  "title": "Route30 three current Sentret and saved Mankey Throw in the same600 loops",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "tests/overworld/scenarios/world.route30.sentret-throw-pacing.json",
+  "requirements": [
+    "current.route30-sentret-throw-pacing"
+  ],
+  "budgets": {
+    "maxFrames": 1100,
+    "maxSeconds": 360,
+    "noProgressFrames": 600,
+    "minObservedFrames": 600
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    },
+    {
+      "id": "sentret-a",
+      "species": 161,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "sentret-b",
+      "species": 161,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "sentret-c",
+      "species": 161,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "cargo",
+      "species": 69,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "setup": [
+    {
+      "id": "route30",
+      "op": "teleport",
+      "args": {
+        "map": 34,
+        "x": 565,
+        "z": 369,
+        "facing": 2
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "route30-settle16",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "spawn-sentret-a",
+      "op": "spawn",
+      "args": {
+        "species": 161,
+        "form": 0,
+        "role": "wild",
+        "level": 3,
+        "x": 563,
+        "z": 370
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "bind-sentret-a",
+      "op": "bind",
+      "args": {
+        "subject": "sentret-a"
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-sentret-b",
+      "op": "spawn",
+      "args": {
+        "species": 161,
+        "form": 0,
+        "role": "wild",
+        "level": 3,
+        "x": 564,
+        "z": 370
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "bind-sentret-b",
+      "op": "bind",
+      "args": {
+        "subject": "sentret-b"
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-sentret-c",
+      "op": "spawn",
+      "args": {
+        "species": 161,
+        "form": 0,
+        "role": "wild",
+        "level": 3,
+        "x": 565,
+        "z": 371
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "bind-sentret-c",
+      "op": "bind",
+      "args": {
+        "subject": "sentret-c"
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "bind-mankey",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "arm600",
+      "op": "main-loop-pacing.arm",
+      "args": {
+        "maxFrames": 600
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "cpu1200",
+      "op": "cpu-work.start",
+      "args": {
+        "maxNativeFrames": 1200
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "left120",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "down120",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle16",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "spawn-cargo",
+      "op": "spawn",
+      "args": {
+        "species": 69,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 564,
+        "z": 375
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "bind-cargo",
+      "op": "bind",
+      "args": {
+        "subject": "cargo"
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "neutral348",
+      "op": "step",
+      "args": {
+        "frames": 348,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 348,
+        "noProgressFrames": 348
+      }
+    },
+    {
+      "id": "cpu-final",
+      "op": "cpu-work.read",
+      "args": {},
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "route30-sentret-throw-pacing-v1",
+      "subject": "mankey"
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "route30-sentret-throw-pacing-v1",
+      "when": "final"
+    }
+  ]
+}

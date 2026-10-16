@@ -10,9 +10,11 @@ from tools.overworld.devtools_resolver_probe import BUFFER_BYTES, REQUEST, RESUL
 class ResolverMeasurementTests(unittest.TestCase):
     def fixture(self):
         pointer = 0x02040000
-        cases = [dict(name=name, status=0, requestHex="00"*44, resultHex="00"*200,
-                      traceDropped=0, trace=[dict(sourceIndex=0, lane=0, kind=2, flags=3, profileHex="00"*72)],
-                      blobIdentity={"size":100}, serviceIdentity={"version":2},
+        owner = dict(stateAddress=0x023C2308, rawHex="00"*28,
+                     entry=0x02080040, fieldEpoch=1, mapGeneration=1)
+        cases = [dict(name=name, status=0, requestHex="00"*44, resultHex="00"*216,
+                      traceDropped=0, trace=[dict(sourceIndex=0, lane=0, kind=2, flags=3, profileHex="00"*80)],
+                      blobIdentity={"size":100}, serviceIdentity={"version":3}, queryOwner=deepcopy(owner),
                       dispatchClock={"frame":900,"nativeCycle":2000}, returnClock={"frame":900,"nativeCycle":2000})
                  for name in CASE_NAMES]
         calls = [dict(routine="allocate_work_memory",
@@ -25,7 +27,7 @@ class ResolverMeasurementTests(unittest.TestCase):
         snapshot = {"frame":901,"nativeCycle":2002}
         receipt = dict(snapshot=snapshot,events=[],setupBoundary=dict(frame=901,nativeCycle=2002,eventsDrained=True),
             boundary="native-field-command-trampoline",preparedOnly=True,calls=calls,value=dict(
-                completed=True,acceptedProof=False,receipts=cases,
+                completed=True,acceptedProof=False,receipts=cases,queryOwner=owner,
                 allocation=dict(pointer=pointer, heapId=11,
                                 bytes=BUFFER_BYTES, released=True)))
         return dict(command="resolver.probe",phase="observe",action="parity",receipt=receipt,snapshot=snapshot)
@@ -52,11 +54,12 @@ class ResolverMeasurementTests(unittest.TestCase):
         self.assertFalse(meter.observe_record(row)["passed"])
 
     def test_bad_case_free_status_clock_and_fatal_controls(self):
-        for fault in ("missing-case","status","short","drop","free","free-call","fatal","bridge",
+        for fault in ("missing-case","query-owner","status","short","drop","free","free-call","fatal","bridge",
                       "arguments","future","backwards","endpoint"):
             with self.subTest(fault=fault):
                 row=self.fixture(); receipt=row["receipt"]; bridge=receipt; probe=bridge["value"]
                 if fault=="missing-case":probe["receipts"].pop()
+                if fault=="query-owner":probe["receipts"][0]["queryOwner"]["entry"]+=4
                 if fault=="status":probe["receipts"][0]["status"]=1
                 if fault=="short":probe["receipts"][0]["resultHex"]="00"
                 if fault=="drop":probe["receipts"][0]["traceDropped"]=1

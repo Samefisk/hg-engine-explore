@@ -38,7 +38,7 @@ def validate_control(control,strict,terminal,subject):
         'corner control lacks original strict policy read')
     state=bytes.fromhex(clean['mountStateHex']);profile=bytes.fromhex(policy['profileHex'])
     require(control.get('stateBytes')==STATE_BYTES and len(state)==STATE_BYTES
-        and len(profile)==72 and state[8:80]==profile and (profile[19]&0x03)==1,
+        and len(profile)==80 and state[8:88]==profile and (profile[19]&0x03)==1,
         'corner control native policy bytes differ')
     expected=deepcopy(clean);changed_state=bytearray(state);changed_state[27]=0
     changed_profile=bytearray(profile);changed_profile[19]&=~0x03

@@ -17,7 +17,8 @@ MINIMUM_FRAMES = 2600
 MINIMUM_MOVING_FRAMES = 1800
 MANKEY_PROFILE_HOP_PAUSE_FRAMES = 5
 MANKEY_PROFILE_HOP_MAX_DISTANCE = 6
-MAX_DESTINATION_SCAN_FRAME_SPAN = 21
+MAX_DESTINATION_SCAN_FRAME_SPAN = 61
+BASE_REFILL_INTERVAL_FRAMES = 60
 
 
 def require(value, reason):
@@ -73,6 +74,11 @@ class UnmountedZeroStutterMeasurement:
         self.spawn_work_frames = set()
         self.spawn_attempt_frames = {}
         self.maximum_spawn_attempt_frame_span = 0
+        self.refill_owner = None
+        self.refill_success = None
+        self.refill_last_attempt = 0
+        self.refill_last_sequence = 0
+        self.refill_intervals = []
         self.profile = None
         self.failures = []
         self.closed = False
@@ -172,6 +178,84 @@ class UnmountedZeroStutterMeasurement:
                     "zero-stutter follower changed instead of rebinding to the next field")
         self.current_subject = deepcopy(candidate)
 
+    def _observe_refill_interval(self, snapshot, events):
+        # READY is pending metadata. Only same-call COMMIT SUCCESS plus its
+        # actual constructor can start the ordinary density wait.
+        from tools.overworld.devtools_spawn_outcome_records import creation_delay_anchor
+        for event in events:
+            data = event.get("data", {})
+            birth = creation_delay_anchor(snapshot, event, events)
+            if birth is not None:
+                require(self.refill_owner is None or birth["worldContext"] == self.refill_owner,
+                        "zero-stutter refill interval has a stale Field owner")
+                self.refill_owner = deepcopy(birth["worldContext"])
+                self.refill_success = birth
+                continue
+            if event.get("kind") != "native-observation" or data.get(
+                    "observation") != "spawn-queued":
+                continue
+            owner = data.get("worldContext")
+            require(isinstance(owner, dict)
+                    and owner.get("mapId") == snapshot["context"]["mapId"]
+                    and owner.get("fieldEpoch") == snapshot["context"]["fieldEpoch"]
+                    and owner.get("mapGeneration") == snapshot["context"]["mapGeneration"]
+                    and owner.get("fieldPointer") == snapshot.get(
+                        "fieldControl", {}).get("fieldPointer")
+                    and type(owner.get("statePointer")) is int
+                    and owner["statePointer"] > 0
+                    and type(owner.get("fieldPointer")) is int
+                    and owner["fieldPointer"] > 0
+                    and (self.refill_owner is None or owner == self.refill_owner),
+                    "zero-stutter refill interval has a stale Field owner")
+            require(event.get("frame") == snapshot["frame"]
+                    and data.get("setupMode") == "normal"
+                    and type(data.get("spawnAttemptId")) is int
+                    and data["spawnAttemptId"] > self.refill_last_attempt
+                    and type(data.get("sequence")) is int
+                    and data["sequence"] > self.refill_last_sequence
+                    and type(data.get("slot")) is int
+                    and type(data.get("terrain")) is int
+                    # NativeOrdinaryRefill excludes follower slot 7: Land/Surf
+                    # use 0..5, Headbutt uses 6, Fishing uses 8..9.
+                    and ((data["terrain"] in (0, 1) and 0 <= data["slot"] < 6)
+                         or (data["terrain"] == 2 and data["slot"] == 6)
+                         or (data["terrain"] == 3 and data["slot"] in (8, 9)))
+                    and type(snapshot.get("actorFrame")) is int
+                    and data.get("entryActorFrame") == data.get("returnActorFrame")
+                        == snapshot["actorFrame"]
+                    and type(data.get("entryNativeCycle")) is int
+                    and type(data.get("returnNativeCycle")) is int
+                    and data["entryNativeCycle"] <= data["returnNativeCycle"]
+                        <= snapshot["nativeCycle"]
+                    and type(data.get("queued")) is bool
+                    and data.get("returnValue") == int(data["queued"]),
+                    "zero-stutter refill interval receipt is invalid")
+            self.refill_owner = deepcopy(owner)
+            self.refill_last_attempt = data["spawnAttemptId"]
+            self.refill_last_sequence = data["sequence"]
+            if self.refill_success is not None:
+                previous = self.refill_success
+                gap = data["entryActorFrame"] - previous["returnActorFrame"]
+                require(gap >= max(BASE_REFILL_INTERVAL_FRAMES, previous["refillDelay"]),
+                        "zero-stutter new refill batch bypassed its base interval")
+                self.refill_intervals.append({
+                    "previousAttemptId": previous["spawnAttemptId"],
+                    "nextAttemptId": data["spawnAttemptId"],
+                    "createdActorFrame": previous["returnActorFrame"],
+                    "constructorSequence": previous["constructorSequence"],
+                    "handle": deepcopy(previous["handle"]),
+                    "querySerial": previous["querySerial"],
+                    "nextEntryActorFrame": data["entryActorFrame"],
+                    "actorFrames": gap, "worldContext": deepcopy(owner),
+                })
+                # Later failed terrain groups belong to this admitted batch.
+                self.refill_success = None
+            if data["queued"]:
+                require(type(data.get("finalizationId")) is int
+                        and data["finalizationId"] > 0
+                        and type(data.get("pendingDestination")) is bool,
+                        "zero-stutter successful refill lacks its finalizer receipt")
+
     def _observe_spawn_work(self, snapshot, events):
         observed = []
         for event in events:
@@ -237,7 +321,7 @@ class UnmountedZeroStutterMeasurement:
         fields = {item.get("key"): item
                   for item in self.schema.get("fields", [])}
         compact_size = self.schema.get("compactSize")
-        require(compact_size == 72
+        require(compact_size == 80
                 and fields.get("hopPause", {}).get("cType") == "u8"
                 and fields.get("hopMaxDistance", {}).get("cType") == "u8",
                 "zero-stutter behavior schema changed")
@@ -259,12 +343,12 @@ class UnmountedZeroStutterMeasurement:
                     and receipt.get("sourceSha256") == self.source_sha256
                     and receipt.get("fingerprint") == fingerprint
                     and receipt.get("appliedOverrides") == mask
-                    and len(raw) == 200
+                    and len(raw) == 216
                     and len(request) == 44
                     and int.from_bytes(request[:2], "little") == 56
                     and receipt.get("lanes") == lanes
-                    and int.from_bytes(raw[172:176], "little") == mask
-                    and int.from_bytes(raw[176:180], "little") == fingerprint):
+                    and int.from_bytes(raw[188:192], "little") == mask
+                    and int.from_bytes(raw[192:196], "little") == fingerprint):
                 matches.append(raw[:compact_size])
         if not matches:
             return
@@ -384,6 +468,7 @@ class UnmountedZeroStutterMeasurement:
                     and snapshot.get("context", {}).get("mapId") == START["mapId"],
                     "zero-stutter steady-state route left Cherrygrove")
             self._check_subject(snapshot)
+            self._observe_refill_interval(snapshot, events)
             self._observe_spawn_work(snapshot, events)
             self._observe_profile(snapshot)
             self._observe_pacing(snapshot, events)
@@ -402,6 +487,7 @@ class UnmountedZeroStutterMeasurement:
                 and self.frames >= MINIMUM_FRAMES
                 and self.moving_frames >= MINIMUM_MOVING_FRAMES
                 and self.spawn_work_witnesses >= 1
+                and len(self.refill_intervals) >= 1
                 and self.maximum_spawn_attempt_frame_span
                     <= MAX_DESTINATION_SCAN_FRAME_SPAN
                 and self.pacing_intervals == self.frames
@@ -441,6 +527,14 @@ class UnmountedZeroStutterMeasurement:
                 "joinedWitnessCount": self.spawn_work_witnesses,
                 "lastFrame": self.last_spawn_work_frame,
                 "maximumAttemptFrameSpan": self.maximum_spawn_attempt_frame_span,
+            },
+            "refillIntervals": {
+                "scope": "successful ordinary enqueue to first next distinct ordinary attempt",
+                "clock": "Actor frame; no timer-word claim",
+                "baseFrames": BASE_REFILL_INTERVAL_FRAMES,
+                "count": len(self.refill_intervals),
+                "minimumActorFrames": min((row["actorFrames"] for row in self.refill_intervals), default=0),
+                "witnesses": deepcopy(self.refill_intervals),
             },
             "hopRhythm": {
                 "profileFingerprint": (self.profile or {}).get("fingerprint"),

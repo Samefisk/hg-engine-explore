@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "id": "world.transition.wild-roof-height",
+  "title": "Retained rooftop height survives a natural field handoff",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "TICKETS.md#tkt-0012 and documentation/overworld-system/architecture.md#field-transition-protocol",
+  "requirements": [
+    "current.retained-roof-height"
+  ],
+  "budgets": {
+    "maxSeconds": 180,
+    "maxFrames": 420,
+    "noProgressFrames": 180,
+    "minObservedFrames": 4
+  },
+  "subjects": [
+    {
+      "id": "hoothoot",
+      "species": 163,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "wild-roof-rebind-height-v1",
+      "subject": "hoothoot"
+    }
+  ],
+  "setup": [
+    {
+      "id": "surface-range",
+      "op": "teleport",
+      "args": {
+        "map": 67,
+        "x": 575,
+        "z": 400,
+        "facing": 3
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-surface-bird",
+      "op": "spawn",
+      "args": {
+        "species": 163,
+        "role": "wild",
+        "level": 5,
+        "x": 566,
+        "z": 403
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 80,
+        "noProgressFrames": 80
+      }
+    },
+    {
+      "id": "bind-real-bird",
+      "op": "bind",
+      "args": {
+        "subject": "hoothoot"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "read-actual-target-surface",
+      "op": "terrain",
+      "args": {
+        "x": 568,
+        "z": 404,
+        "radius": 2
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "cross-one-normal-step",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 1
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "retain-surface-and-control",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-complete",
+          "measurement": "wild-roof-rebind-height-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "wild-roof-rebind-height-v1",
+      "when": "final"
+    }
+  ]
+}

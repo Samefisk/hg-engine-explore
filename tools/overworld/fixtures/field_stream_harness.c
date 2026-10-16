@@ -1,4 +1,4 @@
-/* Actual service/header/wrapper code is injected by verify_overworld_field_stream.py.
+/* Actual service/empty-axis leaf/header/wrapper code is injected by verify_overworld_field_stream.py.
  * Engine memory here is a host fixture. ARM pointer sizes/offsets remain S2 work.
  */
 #include <stdio.h>
@@ -19,6 +19,14 @@ typedef struct __attribute__((packed)) FieldSystem {
     PlayerAvatar *playerAvatar;
 } FieldSystem;
 
+/* New axis fields alone use spare host storage: native E0/E4 pointers are
+ * four bytes, while the existing DC watcher occupies eight bytes here.
+ * This does not prove the ARM field layout; the ROM diagnostic checks it. */
+#define HOST_AXIS_HIGH_OFFSET 0x100
+#define HOST_AXIS_LOW_OFFSET 0x108
+#define HOST_AXIS_ACTIVE_OFFSET 0x110
+#define HOST_AXIS_DIRECTION_OFFSET 0x114
+
 /* @CALL_TYPES@ */
 /* @RUNTIME_TYPE@ */
 /* @COMPATIBILITY_TYPES@ */
@@ -38,12 +46,13 @@ void ov01_021F62E8(VecFx32 *position, void *manager)
     memcpy((u8 *)manager + 0xD0, position, sizeof(*position));
 }
 
+/* @PRODUCT_EMPTY_AXIS@ */
 /* @PRODUCT_SERVICE@ */
 
 static OverworldFieldTerrainStreamRuntime sOverworldFieldTerrainStream;
 /* @FIELD_WRAPPER@ */
 
-typedef union Manager { u64 alignment; u8 bytes[0x100]; } Manager;
+typedef union Manager { u64 alignment; u8 bytes[0x120]; } Manager;
 static Manager manager;
 static FieldSystem field, otherField;
 static PlayerAvatar avatar;
@@ -360,6 +369,94 @@ static void RetargetAndRebindCases(void)
     Clear();
 }
 
+static void SetEmptyAxis(u8 direction, unsigned reversed)
+{
+    const unsigned axis = direction & 1 ? 0 : 2;
+    s32 *sample = (s32 *)(manager.bytes + 0xD0);
+    s32 *high = reversed ? &player.posVec[axis] : &sample[axis];
+    s32 *low = reversed ? &sample[axis] : &player.posVec[axis];
+    const u32 active = 1;
+    memcpy(manager.bytes + HOST_AXIS_HIGH_OFFSET, &high, sizeof(high));
+    memcpy(manager.bytes + HOST_AXIS_LOW_OFFSET, &low, sizeof(low));
+    memcpy(manager.bytes + HOST_AXIS_ACTIVE_OFFSET, &active, sizeof(active));
+    manager.bytes[HOST_AXIS_DIRECTION_OFFSET] = direction;
+    /* Unrelated native loader words must survive the interrupted step. */
+    memset(manager.bytes + 0x80, 0x5A, 0x20);
+    memset(manager.bytes + 0xB4, 0xA5, 0x1C);
+}
+
+static void EmptyAxisInterruptionCases(void)
+{
+    for (u8 direction = 1; direction <= 4; direction++) {
+        for (unsigned reversed = 0; reversed < 2; reversed++) {
+            Reset();
+            SetEmptyAxis(direction, reversed);
+            const LocalMapObject beforePlayer = player;
+            Manager expected = manager;
+            OverworldFieldTerrainStreamCall call = Call(
+                OVERWORLD_FIELD_TERRAIN_STREAM_BEGIN, -1, 0);
+            CHECK(OverworldFieldService_TerrainStream(&call)
+                == OVERWORLD_FIELD_TERRAIN_STREAM_WAITING);
+            VecFx32 *watcher = &sOverworldFieldTerrainStream.watchedAnchor;
+            s32 *nullAxis = NULL;
+            const u32 inactive = 0;
+            memcpy(expected.bytes + 0xDC, &watcher, sizeof(watcher));
+            memcpy(expected.bytes + HOST_AXIS_HIGH_OFFSET, &nullAxis, sizeof(nullAxis));
+            memcpy(expected.bytes + HOST_AXIS_LOW_OFFSET, &nullAxis, sizeof(nullAxis));
+            memcpy(expected.bytes + HOST_AXIS_ACTIVE_OFFSET, &inactive, sizeof(inactive));
+            /* Exact manager comparison permits only watcher and three old
+             * axis fields to change, including no sampled VecFx32 writes. */
+            CHECK(memcmp(&manager, &expected, sizeof(manager)) == 0);
+            CHECK(memcmp(&player, &beforePlayer, sizeof(player)) == 0);
+            CHECK(memcmp(manager.bytes + 0xD0, player.posVec, sizeof(VecFx32)) == 0);
+            CHECK(sOverworldFieldTerrainStream.active == TRUE);
+            call.operation = OVERWORLD_FIELD_TERRAIN_STREAM_POLL;
+            CHECK(OverworldFieldService_TerrainStream(&call)
+                == OVERWORLD_FIELD_TERRAIN_STREAM_WAITING);
+            CHECK(sOverworldFieldTerrainStream.watchedAnchor.x == Center(2));
+            CHECK(*(s32 *)(manager.bytes + 0xD0) == Center(3));
+            Unchanged(&call, OVERWORLD_FIELD_TERRAIN_STREAM_WAITING);
+            Sample();
+            CHECK(OverworldFieldService_TerrainStream(&call)
+                == OVERWORLD_FIELD_TERRAIN_STREAM_READY);
+        }
+    }
+    for (unsigned guard = 0; guard < 10; guard++) {
+        Reset();
+        SetEmptyAxis(4, 0);
+        s32 *wrong = &player.posVec[1];
+        u32 active = 0;
+        switch (guard) {
+        case 0: manager.bytes[0xA0] = 1; break;
+        case 1: player.posVec[0]++; break;
+        case 2: player.posVec[2]++; break;
+        case 3: memcpy(manager.bytes + HOST_AXIS_HIGH_OFFSET, &wrong, sizeof(wrong)); break;
+        case 4: memcpy(manager.bytes + HOST_AXIS_LOW_OFFSET, &wrong, sizeof(wrong)); break;
+        case 5: manager.bytes[HOST_AXIS_DIRECTION_OFFSET] = 0; break;
+        case 6: manager.bytes[HOST_AXIS_DIRECTION_OFFSET] = 5; break;
+        case 7: memcpy(manager.bytes + HOST_AXIS_ACTIVE_OFFSET, &active, sizeof(active)); break;
+        case 8:
+            active = 2;
+            memcpy(manager.bytes + HOST_AXIS_ACTIVE_OFFSET, &active, sizeof(active));
+            break;
+        case 9: manager.bytes[HOST_AXIS_DIRECTION_OFFSET] = 1; break;
+        }
+        const Manager before = manager;
+        const LocalMapObject beforePlayer = player;
+        OverworldFieldTerrainStreamCall call = Call(
+            OVERWORLD_FIELD_TERRAIN_STREAM_BEGIN, -1, 0);
+        if (guard == 0) {
+            Unchanged(&call, OVERWORLD_FIELD_TERRAIN_STREAM_RETRY_BUSY);
+            Clear();
+        } else {
+            CHECK(OverworldFieldService_TerrainStream(&call)
+                == OVERWORLD_FIELD_TERRAIN_STREAM_WAITING);
+            OnlyWatcherChanged(&before, &sOverworldFieldTerrainStream.watchedAnchor);
+            CHECK(memcmp(&player, &beforePlayer, sizeof(player)) == 0);
+        }
+    }
+}
+
 int main(void)
 {
     ValidationCases();
@@ -372,6 +469,7 @@ int main(void)
     CancelAndRestoreCases();
     OneTileLagCase();
     RetargetAndRebindCases();
+    EmptyAxisInterruptionCases();
     printf("PASS actual Field stream service/wrapper: %u paths, %u sampled tile advances, %u assertions\n",
         pathCases, advances, checks);
     return 0;

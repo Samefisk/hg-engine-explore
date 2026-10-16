@@ -2,6 +2,7 @@
 from copy import deepcopy
 import json
 from pathlib import Path
+import struct
 import unittest
 
 from tools.overworld.devtools_resolver_proof import resolver_measurements, negative_controls, NAMES
@@ -17,8 +18,13 @@ class ResolverProofTests(unittest.TestCase):
             serviceIdentity=identities["service_identity"], callAddresses=dict(
                 allocate_work_memory=0x0201AA8C, resolve_behavior=0x023B0000, free=0x0201AB0C))
         work, source, trampoline, sp = 0x02210000, 0x02200000, 0x02220000, 0x027E0000
+        query = dict(stateAddress=0x023C2308, entry=0x02080040,
+                     fieldEpoch=1, mapGeneration=1)
+        query["rawHex"] = struct.pack("<4I2HIB3s", 0x02080000, 0x2000,
+            query["entry"], 0x02230000, 1, 1, 21, 1, bytes(3)).hex()
         for n in natives:
-            n.update(dispatchClock=dict(frame=10,nativeCycle=25), returnClock=dict(frame=10,nativeCycle=25))
+            n.update(queryOwner=deepcopy(query), dispatchClock=dict(frame=10,nativeCycle=25),
+                     returnClock=dict(frame=10,nativeCycle=25))
         calls=[]
         for name,args,result in [("allocate_work_memory",[11,BUFFER_BYTES],work)]+[
                 ("resolve_behavior",[source,100,work+REQUEST,work+RESULT,work+TRACE],0)
@@ -28,7 +34,7 @@ class ResolverProofTests(unittest.TestCase):
                 entryBoundary="native-trampoline-BLX-entry",returnValue=result))
         receipt=dict(preparedOnly=True,acceptedProof=False,boundary="native-field-command-trampoline",
             firstBadCheckpoint=None,firstInvalidThreadSwitch=None,nativeHeapAdaptation=[],calls=calls,
-            value=dict(completed=True,acceptedProof=False,receipts=natives,
+            value=dict(completed=True,acceptedProof=False,receipts=natives,queryOwner=query,
                 allocation=dict(released=True,heapId=11,bytes=BUFFER_BYTES,pointer=work)),
             naturalDiscovery=dict(blobAddress=source,blobSize=100,fieldPointer=0x02230000,heapGeneration=0,
                 status=0,requestHex=bytes(44).hex(),entryNativeCycle=20,returnNativeCycle=20),
@@ -56,10 +62,12 @@ class ResolverProofTests(unittest.TestCase):
         self.assertEqual((t,r,o),before)
 
     def test_damaged_native_evidence_cannot_authorize_parity(self):
-        for fault in ("service","blob","return","count","trace","request","free","unreleased",
+        for fault in ("service","query-package","query-owner","blob","return","count","trace","request","free","unreleased",
                       "entry","stack","owner","clock","boundary","discovery","unknown","duplicate"):
             t,r,o=self.fixture();p=r[1]["receipt"];v=p["value"];n=v["receipts"][0]
             if fault=="service": n["serviceIdentity"]["entrySha256"]="d"*64
+            if fault=="query-package": n["serviceIdentity"]["queryPackageSha256"]="0"*64
+            if fault=="query-owner": n["queryOwner"]["rawHex"]="0"*56
             if fault=="blob": n["blobIdentity"]["sha256"]="d"*64
             if fault=="return": p["calls"][1]["returnValue"]=1
             if fault=="count": v["receipts"].pop()
@@ -86,15 +94,20 @@ class ResolverProofTests(unittest.TestCase):
         path=root/"build/overworld-devtools/session-5k6z3obo/event-details-55e1848812a0.json"
         executable=root/"build/overworld_behavior_resolver_host"
         if not path.is_file() or not executable.is_file(): self.skipTest("retained native receipt/host absent")
+        if "queryOwner" not in json.loads(path.read_text())["receipt"].get("value", {}):
+            self.skipTest("retained receipt predates loaded Query resolver")
         t,r,o=self.fixture();p=json.loads(path.read_text())["receipt"]
         descriptor=json.loads((root/"build/overworld-system.debug.json").read_text())
         service=next(s for s in descriptor["privateServices"] if s["name"]=="resolver")
         address=service["callbacks"]["resolve"] & ~1
         blob=(root/"build/OverworldWildBehaviorData.bin").read_bytes()
         o["blobIdentity"]=dict(size=len(blob),sha256=hashlib.sha256(blob).hexdigest())
+        from tools.overworld.devtools_resolver_parity import packaged_query_identity
+        query_identity, _, _ = packaged_query_identity(root, root/"test.nds")
         o["serviceIdentity"]=dict(magic=0x5250574F,version=service["version"],size=service["size"],
             resolveAddress=address|1,entrySha256=hashlib.sha256(_elf_code(
-                root/"build/overworld_actor_system_overlay_linked.o",address,32)).hexdigest())
+                root/"build/overworld_actor_system_overlay_linked.o",address,32)).hexdigest(),
+                **query_identity)
         o["callAddresses"]["resolve_behavior"]=address
         spec=importlib.util.spec_from_file_location("resolver_proof_host",root/"tools/overworld-viewer-v2/native_resolver.py")
         adapter=importlib.util.module_from_spec(spec);spec.loader.exec_module(adapter)
@@ -125,10 +138,10 @@ class ResolverProofTests(unittest.TestCase):
             if fault=="trace-capacity": p["value"]["receipts"][0]["trace"] *= 49
             with self.subTest(fault=fault),self.assertRaises(ValueError):self.check(t,r,o)
 
-    def test_seven_copied_data_controls_use_exact_reasons_and_preserve_source(self):
+    def test_nine_copied_data_controls_use_exact_reasons_and_preserve_source(self):
         t,r,o=self.fixture();original=deepcopy((t,r,o))
         result=negative_controls(t,iter(r),{},Path(__file__).resolve().parents[2],oracle=o)
-        self.assertEqual(len(result["controls"]),7)
+        self.assertEqual(len(result["controls"]),9)
         self.assertTrue(all(c["rejected"] for c in result["controls"].values()))
         self.assertIn("not live observer faults",result["scope"])
         self.assertEqual((t,r,o),original)

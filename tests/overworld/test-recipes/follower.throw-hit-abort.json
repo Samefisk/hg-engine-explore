@@ -1,0 +1,174 @@
+{
+  "schemaVersion": 1,
+  "id": "follower.throw-hit-abort",
+  "title": "A real Ram hit clears Mankey\u2019s pre-Cargo Trigger capture",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.follower-throw-hit-abort"
+  ],
+  "budgets": {
+    "maxSeconds": 240,
+    "maxFrames": 500,
+    "noProgressFrames": 420,
+    "minObservedFrames": 32
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    },
+    {
+      "id": "onix",
+      "species": 95,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "follower-throw-hit-abort-v1",
+      "subject": "mankey"
+    }
+  ],
+  "setup": [
+    {
+      "id": "ram-line",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 607,
+        "z": 402,
+        "facing": 2
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-mankey",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 56,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "create-mankey",
+      "op": "spawn",
+      "args": {
+        "species": 56,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-mankey",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [],
+        "until": {
+          "kind": "follower-settled",
+          "species": 56,
+          "partySlot": 0,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "spawn-onix",
+      "op": "spawn",
+      "args": {
+        "species": 95,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 602,
+        "z": 402
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-mankey",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "bind-onix",
+      "op": "bind",
+      "args": {
+        "subject": "onix"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "natural-ram-interception",
+      "op": "step",
+      "args": {
+        "frames": 420,
+        "keys": [],
+        "until": {
+          "kind": "measurement-complete",
+          "measurement": "follower-throw-hit-abort-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 420,
+        "noProgressFrames": 420
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "follower-throw-hit-abort-v1",
+      "when": "final"
+    }
+  ]
+}

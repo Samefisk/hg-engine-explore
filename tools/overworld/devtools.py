@@ -108,7 +108,7 @@ class Worker:
         try:
             self.process.stdin.write(json.dumps(request) + "\n")
             self.process.stdin.flush()
-            timeout = 120 if op in {"open", "teleport"} else max(55, request["args"].get("frames", 1) * 0.1)
+            timeout = 120 if op in {"open", "teleport", "save.wait"} else max(55, request["args"].get("frames", 1) * 0.1)
             deadline = getattr(self, "job_deadline", None)
             if deadline is None:
                 response = self.responses.get(timeout=timeout)
@@ -463,6 +463,49 @@ class Service:
             raise DevtoolsError("no-recording", "Start a recording first.")
         return self.recording.export(self.session["identity"], self.session["mode"])
 
+    def _reload_saved_cartridge(self):
+        """Reboot from the owned cartridge bytes written by normal game input."""
+        self._require_session()
+        if self.playing or self.recording_active:
+            raise DevtoolsError("save-reload-busy", "Pause play and stop manual recording before save reload.")
+        old = deepcopy(self.session)
+        original_rom = Path(old["identity"]["rom"]["path"])
+        original_save = Path(old["identity"]["save"]["path"])
+        if (_digest(original_rom) != old["identity"]["rom"]["sha256"]
+                or _digest(original_save) != old["identity"]["save"]["sha256"]):
+            raise DevtoolsError("input-changed", "The source ROM or save changed before reload.")
+        output = self.directory / ("cartridge-reload-" + uuid.uuid4().hex[:12] + ".sav")
+        export = self.worker.call("cartridge-save.export", {"path": str(output)})
+        if (export.get("path") != str(output) or not output.is_file()
+                or output.stat().st_nlink != 1 or export.get("size") != output.stat().st_size
+                or export.get("sha256") != _digest(output)
+                or export["sha256"] == old["identity"]["save"]["sha256"]):
+            raise DevtoolsError("save-export-invalid", "The private cartridge save is missing, changed, or still equals its input.")
+        boundary = {"sourceSessionId": old["id"], "sourceRomSha256": old["identity"]["rom"]["sha256"],
+                    "sourceSaveSha256": old["identity"]["save"]["sha256"], "export": export,
+                    "sourceFrame": self.snapshot.get("frame"), "state": "exported"}
+        self.session["saveReload"] = deepcopy(boundary)
+        self._persist()
+        closed = self._stop()
+        if not closed["closed"]:
+            raise DevtoolsError("save-reload-close-failed", "The old private core did not close cleanly.", closed)
+        self._start({"rom": str(original_rom), "save": str(output), "mode": old["mode"]})
+        loaded = self.worker.call("cartridge-save.fingerprint")
+        identity = self.session["identity"]
+        if (identity["rom"]["sha256"] != boundary["sourceRomSha256"]
+                or identity["save"]["path"] != str(output)
+                or identity["save"]["sha256"] != export["sha256"]
+                or self.snapshot.get("sourceSaveSha256") != export["sha256"]
+                or loaded.get("sha256") != export["sha256"]
+                or loaded.get("size") != export["size"]):
+            self._stop()
+            raise DevtoolsError("save-reload-identity", "The new core did not load the exact exported cartridge bytes.")
+        boundary.update(state="loaded", newSessionId=self.session["id"],
+                        loaded=loaded, loadedSaveSha256=identity["save"]["sha256"])
+        self.session["reloadedFrom"] = deepcopy(boundary)
+        self._persist()
+        return {"saveReload": boundary, "snapshot": deepcopy(self.snapshot)}
+
     def _remember_action(self, action, *, succeeded):
         """Compact only the recipe view; raw command events remain unchanged.
 
@@ -586,6 +629,8 @@ class Service:
             start = deepcopy(self.start_args)
             self._stop()
             return self._start(start)
+        if op == "save.reload":
+            return self._reload_saved_cartridge()
         if op not in {"recording.export", "scenario.draft", "record.stop", "recipe.save"}:
             self._require_session()
         elif not self.session:
@@ -636,6 +681,18 @@ class Service:
         if op == "diagnostics":
             result = self.worker.call("diagnostics")
             return {"diagnostics": result, "artifact": self._artifact("diagnostics", result)}
+        if op == "player-health.observe":
+            if self.playing:
+                raise DevtoolsError("session-playing", "Pause the session before reading player HP.")
+            result = self.worker.call("player-health.observe", args)
+            return {"playerHealth": result,
+                    "artifact": self._artifact("player-health", result)}
+        if op == "save.wait":
+            if self.playing:
+                raise DevtoolsError("session-playing", "Pause the session before waiting for the stock Save write.")
+            result = self.worker.call("save.wait", args)
+            self._observe(result)
+            return result
         if op == "snapshot.probe":
             if self.playing:
                 raise DevtoolsError("session-playing", "Pause the session before measuring snapshot cost.")
@@ -706,7 +763,11 @@ class Service:
         if op == "record.start":
             if self.recording_active:
                 raise DevtoolsError("already-recording", "Stop the current recording before starting another.")
-            result = self.worker.call("record.start", {"maxFrames": args["maxFrames"]})
+            record_args = {"maxFrames": args["maxFrames"]}
+            for option in ("throwInteractions", "appearancePalette"):
+                if option in args:
+                    record_args[option] = args[option]
+            result = self.worker.call("record.start", record_args)
             # The worker keeps the complete semantic trace window. Diagnostic
             # snapshots stay on the existing 1,800-frame memory cap; checked
             # jobs retain every evaluated frame in their compressed stream.

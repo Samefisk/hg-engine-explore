@@ -26,6 +26,7 @@ def source_paths(root):
 
 KEYS = ("A", "B", "X", "Y", "START", "SELECT", "UP", "DOWN", "LEFT", "RIGHT", "L", "R")
 PREPARED_OPS = frozenset({"teleport", "spawn", "party", "resolver.probe", "condition.probe", "actor-inspect.probe", "walk-policy.reset", "mount-walk.configure", "mount-teleport.configure", "walk-corner.probe", "walk-corner.arm", "walk-corner.close", "walk-corner.calibrate", "walk-matrix.arm", "walk-matrix.close", "walk-matrix.calibrate", "walk-intent.arm", "walk-intent.close", "walk-policy-control.arm", "walk-policy-control.close", "mount-pacing.arm", "mount-pacing.close", "mount-pacing.calibrate", "wild-walk.arm", "wild-walk.close", "wild-walk.calibrate"})
+PREPARED_OPS = PREPARED_OPS | {"emote-three.arm", "emote-three.close"}
 PREPARED_OPS = PREPARED_OPS | {"stomp.arm", "stomp.close", "stomp.calibrate"}
 PREPARED_OPS = PREPARED_OPS | {"crash.arm", "crash.close", "crash.calibrate"}
 PREPARED_OPS = PREPARED_OPS | {"hop-candidate.probe", "hop-arc.arm", "hop-arc.close"}
@@ -61,6 +62,7 @@ def string(default=None, required=False, enum=None):
 
 OPERATIONS = {
     "help": {}, "status": {}, "stop": {}, "reset": {}, "play": {}, "pause": {},
+    "save.reload": {}, "save.wait": {"maxNativeCycles": integer(1, 2000, 2000)},
     "catalog": {"kind": string(required=True, enum=["species", "maps", "moves"]),
                 "query": string(), "limit": integer(1, 100, 30)},
     "start": {"rom": string("test.nds"), "save": string("test.sav"),
@@ -70,7 +72,7 @@ OPERATIONS = {
     "checkpoint": {}, "compare": {"left": string(required=True), "right": string(required=True)},
     "events": {"handle": integer(1, 0xffffffff), "limit": integer(1, 120, 30)},
     "step": {"frames": integer(1, 600, 1), "keys": {"type": "array", "items": "key", "default": []}},
-    "capture": {}, "diagnostics": {},
+    "capture": {}, "diagnostics": {}, "player-health.observe": {},
     "snapshot.probe": {"iterations": integer(1, 256, 128)},
     "spawn-cost.probe": {"mode": string("baseline", enum=["baseline"])},
     "main-loop-pacing.arm": {"maxFrames": integer(2, 5000, required=True)},
@@ -78,11 +80,16 @@ OPERATIONS = {
     "cpu-work.read": {},
     "resolver.probe": {},
     "condition.probe": {},
+    "emote-three.arm": {name: integer(1, 0xffffffff, required=True) for name in "abcd"},
+    "emote-three.close": {},
     "actor-inspect.probe": {"handle": integer(1, 0xffffffff, required=True)},
     "walk-policy.reset": {"subject": {"type": "object", "required": True}},
     "mount-walk.configure": {"subject": {"type": "object", "required": True},
                              "directionMode": integer(0, 2, required=True),
                              "travelTime": integer(1, 32),
+                             "timeVariance": integer(0, 32),
+                             "fastestTime": integer(1, 32),
+                             "timeToFullSpeed": integer(1, 255),
                              "stompTime": integer(0, 32),
                              "turning": string(enum=["free", "locked"]),
                              "crashSound": string(enum=["none", "wall-hit"])},
@@ -144,7 +151,7 @@ OPERATIONS = {
     "test.start": {"name": string(required=True)},
     "test.status": {"runId": string()}, "test.cancel": {"runId": string(required=True)},
     "test.export": {"runId": string(required=True)},
-    "teleport": {"map": integer(0, 539, required=True),
+    "teleport": {"map": integer(0, 599, required=True),  # MAP_HEADER_COUNT - 1
                  "x": integer(0, 32767, required=True), "z": integer(0, 32767, required=True),
                  "facing": integer(0, 3, 1)},
     "spawn": {"species": integer(1, 1075, required=True), "form": integer(0, 31, 0),
@@ -158,7 +165,9 @@ OPERATIONS = {
               "personality": integer(1, 0xFFFFFFFF),
               "moves": {"type": "array", "items": "move", "itemMinimum": 0, "itemMaximum": 922,
                         "minItems": 4, "maxItems": 4}},
-    "record.start": {"maxFrames": integer(60, 65535, 1800), "maxEvents": integer(100, 4000, 4000)},
+    "record.start": {"maxFrames": integer(60, 65535, 1800), "maxEvents": integer(100, 4000, 4000),
+                     "throwInteractions": {"type": "boolean"},
+                     "appearancePalette": {"type": "boolean"}},
     "record.stop": {}, "recording.export": {},
     "scenario.draft": {"name": string(required=True), "expectation": string(required=True),
                        "subject": {"type": "object"}},
@@ -193,6 +202,9 @@ def validate_command(op, args=None):
         if kind == "integer":
             if type(value) is not int or not spec["minimum"] <= value <= spec["maximum"]:
                 raise ValueError(f"{name} must be an integer in {spec['minimum']}..{spec['maximum']}")
+        elif kind == "boolean":
+            if type(value) is not bool:
+                raise ValueError(f"{name} must be boolean")
         elif kind == "string":
             if not isinstance(value, str) or not value.strip() or len(value) > spec["maxLength"]:
                 raise ValueError(f"{name} must be nonempty text, at most {spec['maxLength']} characters")
@@ -212,6 +224,12 @@ def validate_command(op, args=None):
         elif not isinstance(value, dict):
             raise ValueError(f"{name} must be an object")
         result[name] = value
+    if op == "mount-walk.configure":
+        has_fastest, has_ramp = "fastestTime" in result, "timeToFullSpeed" in result
+        if has_fastest != has_ramp:
+            raise ValueError("fastestTime and timeToFullSpeed must be supplied together")
+        if has_fastest and ("travelTime" not in result or result["fastestTime"] > result["travelTime"]):
+            raise ValueError("Linear acceleration requires travelTime and fastestTime <= travelTime")
     if "name" in result and (not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,63}", result["name"])
                              or ".." in result["name"]):
         raise ValueError("name must use 1..64 lowercase letters, digits, dot, dash or underscore; no double dots")

@@ -117,29 +117,34 @@ def main() -> None:
                                         "CallActorMotionBoundary", "AcknowledgeSharedMotion")) for name in linked_symbols):
         fail("the linker generated an interworking veneer for a fixed target")
 
-    # Resolve the C input section from its real functions, not an assumed
-    # linker prefix. Each recorded relocation must still be one direct BL.
-    origins = {linked_symbols[name][0] - symbol[0]
-               for name, symbol in source_symbols.items()
-               if symbol[2:] == (".text", "F") and symbol[1] > 0 and name in linked_symbols}
-    if len(origins) != 1:
-        fail("cannot bind the C object's call offsets to its linked input section")
-    origin = origins.pop()
-    relocations = run("arm-none-eabi-objdump", "-r", "-j", ".text", str(SOURCE_OBJECT))
     targets = {target & ~1: name for name, target in FIXED_TARGETS.items()}
     counts = dict.fromkeys(targets, 0)
-    for offset, kind, symbol in re.findall(
-            r"^([0-9a-fA-F]+)\s+(R_ARM_\w+)\s+(\S+)", relocations, re.M):
-        if not symbol.startswith("*ABS*0x"):
-            continue
-        target = int(symbol[7:], 16)
-        if target not in targets:
-            continue
-        if kind != "R_ARM_THM_CALL":
-            fail(f"{targets[target]} no longer uses a direct Thumb call")
-        address = origin + int(offset, 16)
-        direct_call_contract(elf_bytes_at(OBJECT, address, 4), address, target)
-        counts[target] += 1
+    # The unchanged Walk-output helper now belongs to loaded Field1. Bind
+    # each owned input section independently; its source offsets no longer
+    # share the resident .text origin.
+    for section in (".text", ".overworld_field_wild_walk_output",
+                    ".overworld_field_wild_policy_init"):
+        origins = {linked_symbols[name][0] - symbol[0]
+                   for name, symbol in source_symbols.items()
+                   if symbol[2:] == (section, "F") and symbol[1] > 0
+                   and name in linked_symbols}
+        if len(origins) != 1:
+            fail(f"cannot bind the C object's call offsets for {section}")
+        origin = origins.pop()
+        relocations = run("arm-none-eabi-objdump", "-r", "-j", section,
+                          str(SOURCE_OBJECT))
+        for offset, kind, symbol in re.findall(
+                r"^([0-9a-fA-F]+)\s+(R_ARM_\w+)\s+(\S+)", relocations, re.M):
+            if not symbol.startswith("*ABS*0x"):
+                continue
+            target = int(symbol[7:], 16)
+            if target not in targets:
+                continue
+            if kind != "R_ARM_THM_CALL":
+                fail(f"{targets[target]} no longer uses a direct Thumb call")
+            address = origin + int(offset, 16)
+            direct_call_contract(elf_bytes_at(OBJECT, address, 4), address, target)
+            counts[target] += 1
     if not all(counts.values()):
         fail(f"a fixed target has no verified compiled callers: {counts}")
     print(f"Wild direct Thumb calls verified: {sum(counts.values())} calls, {len(FIXED_TARGETS)} fixed targets, no local bridges")

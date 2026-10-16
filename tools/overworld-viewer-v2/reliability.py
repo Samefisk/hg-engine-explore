@@ -292,27 +292,31 @@ def start_build_job(legacy: ModuleType, root: Path, open_after: bool = False) ->
 
     if not legacy.BUILD_LOCK.acquire(blocking=False):
         raise RuntimeError("Build already running")
-    legacy.update_build_state(
-        running=True,
-        startedAt=time.time(),
-        endedAt=None,
-        command=legacy.BUILD_COMMAND,
-        output=f"Starting Docker build via {legacy.BUILD_COMMAND}...\n",
-        latestLine="Starting Docker build...",
-        ok=None,
-        code=None,
-        error=None,
-        open=None,
-        openError=None,
-        testNdsExists=legacy.TEST_NDS.exists(),
-        testNdsPath=str(legacy.TEST_NDS),
-    )
-    thread = threading.Thread(
-        target=_run_build_job_guarded,
-        args=(legacy, root, open_after),
-        daemon=True,
-    )
-    thread.start()
+    try:
+        legacy.update_build_state(
+            running=True,
+            startedAt=time.time(),
+            endedAt=None,
+            command=legacy.BUILD_COMMAND,
+            output=f"Starting Docker build via {legacy.BUILD_COMMAND}...\n",
+            latestLine="Starting Docker build...",
+            ok=None,
+            code=None,
+            error=None,
+            open=None,
+            openError=None,
+            testNdsExists=legacy.TEST_NDS.exists(),
+            testNdsPath=str(legacy.TEST_NDS),
+        )
+        thread = threading.Thread(
+            target=_run_build_job_guarded,
+            args=(legacy, root, open_after),
+            daemon=True,
+        )
+        thread.start()
+    except Exception:
+        legacy.BUILD_LOCK.release()
+        raise
     return legacy.build_status_payload()
 
 
@@ -748,6 +752,16 @@ def _parse_bool(value: str | None) -> int:
     return 1 if str(value or "").strip().lower() in {"1", "true", "yes", "shiny"} else 0
 
 
+def _application_slots(legacy: ModuleType, catalog: dict, species: int) -> dict[int, int]:
+    """Use the compiler's bank, without adding another matching policy."""
+    runtime = legacy._runtime_source_behavior_catalog(catalog)
+    bank = legacy.compile_bank(runtime, legacy.SPECIES_HEADER)
+    row = next((row for row in bank["rows"] if row[0] == species), bank["rows"][-1])
+    _, first, count = row
+    return {global_id: local for local, global_id in
+        enumerate(bank["indexes"][first:first + count])}
+
+
 def resolve_context(
     legacy: ModuleType,
     species_symbol: str,
@@ -763,7 +777,7 @@ def resolve_context(
     profiles_by_id = {
         profile["id"]: profile for profile in canonical_catalog["profiles"]
     }
-    applications = canonical_catalog["applications"]
+    applications = legacy._runtime_source_behavior_catalog(canonical_catalog)["applications"]
     expressions, species_order = legacy.parse_define_expressions(legacy.DEFINE_SOURCE_FILES)
     macros = legacy.evaluate_defines(expressions)
     macros.update(legacy.evaluate_armips_equ([legacy.ARMIPS_CONFIG, legacy.ARMIPS_CONSTANTS]))
@@ -901,15 +915,16 @@ def resolve_context(
     )
     matched_mask = int(canonical.get("matchedOverrideMask", 0))
     applied_mask = int(canonical.get("appliedOverrideMask", 0))
+    slots = _application_slots(legacy, canonical_catalog, context["species"])
     matched_application_ids = [
         applications[index]["id"]
         for index in range(len(applications))
-        if matched_mask & (1 << index)
+        if index in slots and matched_mask & (1 << slots[index])
     ]
     applied_application_ids = [
         applications[index]["id"]
         for index in range(len(applications))
-        if applied_mask & (1 << index)
+        if index in slots and applied_mask & (1 << slots[index])
     ]
 
     runtime_layers: list[dict[str, Any]] = []
@@ -968,8 +983,8 @@ def resolve_context(
     for source_index, application in enumerate(applications):
         profile_order = source_index + 1
         profile_source = profiles_by_id[application["profile"]]
-        matched = bool(matched_mask & (1 << source_index))
-        applied = bool(applied_mask & (1 << source_index))
+        matched = source_index in slots and bool(matched_mask & (1 << slots[source_index]))
+        applied = source_index in slots and bool(applied_mask & (1 << slots[source_index]))
         target = application.get("target") or {}
         members = target.get("members") or []
         matched_member = symbol if matched and symbol in members else ""
@@ -1078,6 +1093,8 @@ def resolve_conditional_preview(legacy: ModuleType, payload: dict[str, Any]) -> 
     legacy.validate_behavior_catalog(catalog)
     if catalog.get("catalogVersion") not in {4, 5}:
         raise ValueError("condition preview needs a V4 or V5 profile catalog")
+    # Global catalog order and subject-local mask slots have separate identities.
+    runtime_applications = legacy._runtime_source_behavior_catalog(catalog)["applications"]
 
     subject_input = payload.get("subject")
     observation = payload.get("observation")
@@ -1140,6 +1157,20 @@ def resolve_conditional_preview(legacy: ModuleType, payload: dict[str, Any]) -> 
             raise ValueError(f"{label} must be from 0 to {maximum}")
         return value
 
+    role_masks = {"wild": 1, "follower": 2, "mounted": 4}
+    subject_role = str(subject_input.get("role", "wild"))
+    if subject_role not in role_masks:
+        raise ValueError("subject role must be wild, follower, or mounted")
+
+    def handle_value(raw: object, default_slot: int, label: str) -> dict[str, int]:
+        if raw is None:
+            raw = {}
+        if not isinstance(raw, dict):
+            raise ValueError(f"{label} handle must be an object")
+        return {key: bounded(raw.get(key, default_slot if key == "slot" else 1),
+            f"{label} {key}", 0 if key == "slot" else 1, 9 if key == "slot" else 65535)
+            for key in ("slot", "generation", "fieldEpoch", "mapGeneration", "encounterGeneration")}
+
     subject_species = species_entry(subject_input.get("species"), "subject")
     requested_class = subject_input.get("behaviorClass", "auto")
     behavior_class = 0xFF if str(requested_class).lower() == "auto" else expression(requested_class, "behavior class", 0xFF)
@@ -1150,8 +1181,11 @@ def resolve_conditional_preview(legacy: ModuleType, payload: dict[str, Any]) -> 
         "shiny": _parse_bool(str(subject_input.get("shiny", False))),
         "groupFlags": legacy.canonical_spawn_group_flags(subject_species, canonical_types),
         "behaviorClass": behavior_class,
-        "handle": {"slot": 0, "generation": 1, "fieldEpoch": 1, "mapGeneration": 1, "encounterGeneration": 1},
+        "handle": handle_value(subject_input.get("handle"), 0, "subject"),
+        "roleMask": role_masks[subject_role],
     }
+    slots = _application_slots(legacy, catalog, subject["species"])
+    global_by_slot = {local: global_id for global_id, local in slots.items()}
     native_observation = {
         "frame": bounded(observation.get("frame", 0), "current frame", 0, 0xFFFFFFFF),
         "x": signed(observation.get("x", 10), "subject x"),
@@ -1185,8 +1219,8 @@ def resolve_conditional_preview(legacy: ModuleType, payload: dict[str, Any]) -> 
         candidate_ids.append(candidate_id)
         entry = species_entry(candidate_input.get("species"), f"candidate {candidate_id}")
         role = str(candidate_input.get("role", "wild"))
-        if role not in {"wild", "follower"}:
-            raise ValueError(f"candidate {candidate_id} role must be wild or follower")
+        if role not in role_masks:
+            raise ValueError(f"candidate {candidate_id} role must be wild, follower, or mounted")
         candidates.append({
             "species": entry["value"],
             "level": bounded(candidate_input.get("level", subject["level"]), f"candidate {candidate_id} level", 1, 100),
@@ -1194,8 +1228,8 @@ def resolve_conditional_preview(legacy: ModuleType, payload: dict[str, Any]) -> 
             "shiny": _parse_bool(str(candidate_input.get("shiny", False))),
             "groupFlags": legacy.canonical_spawn_group_flags(entry, canonical_types),
             "behaviorClass": 0xFF,
-            "roleMask": 1 if role == "wild" else 2,
-            "handle": {"slot": index + 1, "generation": 1, "fieldEpoch": 1, "mapGeneration": 1, "encounterGeneration": 1},
+            "roleMask": role_masks[role],
+            "handle": handle_value(candidate_input.get("handle"), index + 1, f"candidate {candidate_id}"),
             "x": signed(candidate_input.get("x", 12 + index), f"candidate {candidate_id} x"),
             "y": signed(candidate_input.get("y", 10), f"candidate {candidate_id} y"),
             "valid": _parse_bool(str(candidate_input.get("valid", True))),
@@ -1206,11 +1240,35 @@ def resolve_conditional_preview(legacy: ModuleType, payload: dict[str, Any]) -> 
             ),
         })
 
+    if len({tuple(candidate["handle"].values()) for candidate in candidates}) != len(candidates):
+        raise ValueError("condition preview candidate identities must be unique")
+    if len({candidate["handle"]["slot"] for candidate in candidates}) != len(candidates):
+        raise ValueError("condition preview candidate slots must be unique")
+    if any(candidate["handle"]["slot"] == subject["handle"]["slot"]
+            and candidate["handle"] != subject["handle"] for candidate in candidates):
+        raise ValueError("condition preview subject slot has a different current identity")
+    if len(candidates) == 10 and not any(candidate["handle"] == subject["handle"] for candidate in candidates):
+        raise ValueError("condition preview supports nine other actors and the subject")
+    fact_names = {"reserved": 1, "held": 2, "throw-line-valid": 4,
+        "recovering": 8, "trigger-valid": 16, "targeted-for-pickup": 32}
+    facts = observation.get("actorFacts", [])
+    if not isinstance(facts, list) or any(fact not in fact_names for fact in facts) or len(set(facts)) != len(facts):
+        raise ValueError("actorFacts must contain unique known facts")
+    native_observation["actorFacts"] = sum(fact_names[fact] for fact in facts)
+    for source, destination in (("pickupEligible", "pickupEligibleMask"), ("incomingClaimants", "incomingClaimMask")):
+        ids = observation.get(source, [])
+        if not isinstance(ids, list) or len(set(ids)) != len(ids) or any(actor_id not in candidate_ids for actor_id in ids):
+            raise ValueError(f"{source} must contain unique current candidate IDs")
+        mask = 0
+        for actor_id in ids:
+            mask |= 1 << candidates[candidate_ids.index(actor_id)]["handle"]["slot"]
+        native_observation[destination] = mask
+
     profiles_by_id = {profile["id"]: profile for profile in catalog["profiles"]}
     condition_records: list[dict[str, Any]] = []
     condition_by_authored: dict[tuple[str, str], dict[str, Any]] = {}
     condition_by_numeric: dict[tuple[int, int], dict[str, Any]] = {}
-    for application_index, application in enumerate(catalog["applications"]):
+    for application_index, application in enumerate(runtime_applications):
         profile = profiles_by_id[application["profile"]]
         for condition in profile.get("conditions", []):
             numeric_id = legacy._stable_condition_id(profile["id"], condition["id"])
@@ -1252,11 +1310,56 @@ def resolve_conditional_preview(legacy: ModuleType, payload: dict[str, Any]) -> 
             "targetCandidateIndex": candidate_ids.index(candidate_id) if target_kind_name == "actor" and candidate_id in candidate_ids else -1,
         })
 
+    binding_inputs = payload.get("bindings", {})
+    if not isinstance(binding_inputs, dict) or set(binding_inputs) - {"trigger", "cargo"}:
+        raise ValueError("bindings must name Trigger and Cargo only")
+    binding_owner_input = payload.get("bindingOwner", subject["handle"])
+    identity_keys = {"slot", "generation", "fieldEpoch", "mapGeneration", "encounterGeneration"}
+    if not isinstance(binding_owner_input, dict) or not identity_keys.issubset(binding_owner_input):
+        raise ValueError("binding owner needs a full actor identity")
+    binding_owner = handle_value(binding_owner_input, 0, "binding owner")
+    native_bindings = []
+    for name, binding in binding_inputs.items():
+        if not isinstance(binding, dict):
+            raise ValueError(f"{name} binding must be an object")
+        target = binding.get("target", {"kind": "none"})
+        if not isinstance(target, dict) or target.get("kind", "none") not in {"none", "player", "actor"}:
+            raise ValueError(f"{name} binding target is invalid")
+        kind = target.get("kind", "none")
+        target_handle = {}
+        if kind == "actor":
+            actor_id = target.get("candidateId")
+            raw_handle = target.get("handle")
+            if raw_handle is None:
+                if actor_id not in candidate_ids:
+                    raise ValueError(f"{name} binding needs a full actor identity or current candidate ID")
+                raw_handle = candidates[candidate_ids.index(actor_id)]["handle"]
+            if not isinstance(raw_handle, dict) or not identity_keys.issubset(raw_handle):
+                raise ValueError(f"{name} binding needs a full actor identity")
+            target_handle = handle_value(raw_handle, 0, f"{name} binding")
+        source = binding.get("source", {})
+        record = condition_by_authored.get((str(source.get("profileId", "")), str(source.get("conditionId", "")))) if isinstance(source, dict) else None
+        lifetime = binding.get("lifetime", "until-clear")
+        if lifetime not in {"until-clear", "frames"}:
+            raise ValueError(f"{name} binding lifetime is invalid")
+        native_bindings.append({
+            "name": 0 if name == "trigger" else 1,
+            "target": {"kind": {"none": 0, "player": 1, "actor": 2}[kind], "handle": target_handle},
+            "sourceConditionId": record["numericConditionId"] if record else bounded(binding.get("sourceConditionId", 65535), f"{name} source condition", 0, 65535),
+            "sourceApplication": slots.get(record["applicationIndex"], 255) if record else bounded(binding.get("sourceApplication", 255), f"{name} source application", 0, 255),
+            "lifetime": int(lifetime == "frames"),
+            "expiresAt": bounded(binding.get("expiresAt", 0), f"{name} expiry", 0, 0xFFFFFFFF),
+            "bound": _parse_bool(str(binding.get("bound", kind != "none"))),
+            "reason": bounded(binding.get("reason", 0), f"{name} reason", 0, 255),
+        })
+
     native_request = {
         "subject": subject,
         "observation": native_observation,
         "candidates": candidates,
         "conditionState": native_states,
+        "bindings": native_bindings,
+        "bindingOwner": binding_owner,
         "chanceSeed": bounded(payload.get("chanceSeed", native_observation["frame"]), "chance seed", 0, 0xFFFFFFFF),
     }
     with tempfile.TemporaryDirectory(prefix="workshop-condition-preview-") as directory:
@@ -1319,9 +1422,9 @@ def resolve_conditional_preview(legacy: ModuleType, payload: dict[str, Any]) -> 
         "summary": "Selected profile",
         "changes": [],
     }]
-    for index, application in enumerate(catalog["applications"]):
+    for index, application in enumerate(runtime_applications):
         profile = profiles_by_id[application["profile"]]
-        bit = 1 << index
+        bit = 1 << slots[index] if index in slots else 0
         resolver_layers.append({
             "id": application["id"],
             "profileId": profile["id"],
@@ -1340,13 +1443,18 @@ def resolve_conditional_preview(legacy: ModuleType, payload: dict[str, Any]) -> 
             "changes": changes_by_application.get(index, []),
         })
 
-    def target_view(target: dict[str, Any]) -> dict[str, Any]:
+    def target_view(target: dict[str, Any], *, full_identity: bool = False) -> dict[str, Any]:
         kind = {0: "none", 1: "player", 2: "actor"}.get(int(target.get("kind", 0)), "none")
         result = {"kind": kind}
         if kind == "actor":
-            slot = int(target.get("actorSlot", 0))
-            if 1 <= slot <= len(candidate_ids):
-                result["candidateId"] = candidate_ids[slot - 1]
+            handle = {key: int(target.get("actorSlot" if key == "slot" else "actorGeneration" if key == "generation" else key, 0))
+                for key in ("slot", "generation", "fieldEpoch", "mapGeneration", "encounterGeneration")}
+            for index, candidate in enumerate(candidates):
+                if candidate["handle"] == handle:
+                    result["candidateId"] = candidate_ids[index]
+                    break
+            if full_identity:
+                result["handle"] = handle
         return result
 
     native_entries = {(int(entry["applicationIndex"]), int(entry["conditionId"])): entry for entry in native.get("entries", [])}
@@ -1375,10 +1483,22 @@ def resolve_conditional_preview(legacy: ModuleType, payload: dict[str, Any]) -> 
                 "target": target_view(entry.get("target", {})),
             })
 
-    winner_record = condition_by_numeric.get((int(native.get("winningConditionSourceApplication", 0xFF)), int(native.get("winningConditionId", 0xFFFF))))
-    target_record = condition_by_numeric.get((int(native.get("resolvedTargetSourceApplication", 0xFF)), int(native.get("resolvedTargetConditionId", 0xFFFF))))
-    active_ids = [application["id"] for index, application in enumerate(catalog["applications"]) if int(native.get("activeApplicationMask", 0)) & (1 << index)]
-    triggered_ids = [application["id"] for index, application in enumerate(catalog["applications"]) if int(native.get("triggeredApplicationMask", 0)) & (1 << index)]
+    winner_record = condition_by_numeric.get((global_by_slot.get(int(native.get("winningConditionSourceApplication", 0xFF)), -1), int(native.get("winningConditionId", 0xFFFF))))
+    target_record = condition_by_numeric.get((global_by_slot.get(int(native.get("resolvedTargetSourceApplication", 0xFF)), -1), int(native.get("resolvedTargetConditionId", 0xFFFF))))
+    active_ids = [application["id"] for index, application in enumerate(runtime_applications) if index in slots and int(native.get("activeApplicationMask", 0)) & (1 << slots[index])]
+    triggered_ids = [application["id"] for index, application in enumerate(runtime_applications) if index in slots and int(native.get("triggeredApplicationMask", 0)) & (1 << slots[index])]
+    binding_views = {}
+    for binding in native.get("bindings", []):
+        source = condition_by_numeric.get((global_by_slot.get(int(binding["sourceApplication"]), -1), int(binding["sourceConditionId"])))
+        binding_views["trigger" if int(binding["name"]) == 0 else "cargo"] = {
+            "bound": bool(binding["bound"]), "reason": int(binding["reason"]),
+            "lifetime": "frames" if int(binding["lifetime"]) else "until-clear",
+            "expiresAt": int(binding["expiresAt"]),
+            "sourceConditionId": int(binding["sourceConditionId"]),
+            "sourceApplication": int(binding["sourceApplication"]),
+            "source": {key: source[key] for key in ("profileId", "applicationId", "conditionId")} if source else None,
+            "target": target_view(binding["target"], full_identity=True),
+        }
     condition_evaluation = {
         "entries": evaluation_entries,
         "activeApplicationIds": active_ids,
@@ -1389,6 +1509,9 @@ def resolve_conditional_preview(legacy: ModuleType, payload: dict[str, Any]) -> 
             "target": target_view(native.get("resolvedTarget", {})),
         } if target_record else None),
         "nextState": next_state,
+        "bindings": binding_views,
+        "bindingOwner": native["bindingOwner"],
+        "subjectRole": subject_role,
     }
     return {
         "apiVersion": 2,
@@ -1401,8 +1524,8 @@ def resolve_conditional_preview(legacy: ModuleType, payload: dict[str, Any]) -> 
         "resolvedProfile": legacy.profile_numeric_view(resolved_values),
         "resolvedPrimitives": legacy.decode_native_primitives(macros, resolver["primitivesHex"]),
         "resolverLayers": resolver_layers,
-        "matchedApplicationIds": [application["id"] for index, application in enumerate(catalog["applications"]) if matched_mask & (1 << index)],
-        "appliedApplicationIds": [application["id"] for index, application in enumerate(catalog["applications"]) if applied_mask & (1 << index)],
+        "matchedApplicationIds": [application["id"] for index, application in enumerate(runtime_applications) if index in slots and matched_mask & (1 << slots[index])],
+        "appliedApplicationIds": [application["id"] for index, application in enumerate(runtime_applications) if index in slots and applied_mask & (1 << slots[index])],
         "runtimeLayers": runtime_layers,
         "conditionEvaluation": condition_evaluation,
     }

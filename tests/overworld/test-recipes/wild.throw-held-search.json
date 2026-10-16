@@ -1,0 +1,249 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.throw-held-search",
+  "title": "Held Cargo keeps searching until a normal line opens",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.held-throw-search"
+  ],
+  "budgets": {
+    "maxSeconds": 480,
+    "maxFrames": 1000,
+    "noProgressFrames": 300,
+    "minObservedFrames": 202
+  },
+  "subjects": [
+    {
+      "id": "geodude",
+      "species": 74,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "mareep",
+      "species": 179,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "stantler",
+      "species": 234,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "held-throw-search-v1",
+      "subject": "geodude"
+    }
+  ],
+  "setup": [
+    {
+      "id": "prepare-stantler",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 234,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "garden-tile",
+      "op": "teleport",
+      "args": {
+        "map": 67,
+        "x": 572,
+        "z": 394,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "create-passive-follower",
+      "op": "spawn",
+      "args": {
+        "species": 234,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-stantler",
+      "op": "bind",
+      "args": {
+        "subject": "stantler"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-geodude",
+      "op": "spawn",
+      "args": {
+        "species": 74,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 573,
+        "z": 394
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-geodude",
+      "op": "bind",
+      "args": {
+        "subject": "geodude"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "normal-pocket-exit",
+      "op": "held-throw-pocket.prepare",
+      "args": {},
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 400,
+        "noProgressFrames": 400
+      }
+    },
+    {
+      "id": "spawn-mareep",
+      "op": "spawn",
+      "args": {
+        "species": 179,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 572,
+        "z": 395
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-mareep",
+      "op": "bind",
+      "args": {
+        "subject": "mareep"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "natural-pickup",
+      "op": "step",
+      "args": {
+        "frames": 300,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "held-throw-search-v1",
+          "stage": "carried",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 300,
+        "noProgressFrames": 300
+      }
+    },
+    {
+      "id": "hold-without-line",
+      "op": "step",
+      "args": {
+        "frames": 201,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "held-throw-search-v1",
+          "stage": "held201",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 201,
+        "noProgressFrames": 201
+      }
+    },
+    {
+      "id": "open-current-line",
+      "op": "held-throw-line.prepare",
+      "args": {},
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "normal-windup-and-release",
+      "op": "step",
+      "args": {
+        "frames": 80,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "held-throw-search-v1",
+          "stage": "launched",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 80,
+        "noProgressFrames": 80
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "held-throw-search-v1",
+      "when": "final"
+    }
+  ]
+}

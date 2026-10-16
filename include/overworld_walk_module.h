@@ -84,6 +84,16 @@ u16 OverworldWalk_ResolveMountedDiagonal(
     struct FIELD_PLAYER_AVATAR *avatar,
     u32 *newKeys,
     u32 *heldKeys);
+/* Mounted release grace: a blank D-pad shortly after a held direction
+ * mid-Walk keeps that direction (OVERWORLD_MOUNT_RELEASE_GRACE_FRAMES). */
+void OverworldWalk_ApplyReleaseGrace(
+    struct OverworldMountRuntimeState *state, u32 *heldKeys);
+/* Keep the newest single cardinal press while several D-pad keys are held.
+ * Simultaneous fresh chords retain the profile's existing direction mode. */
+void OverworldWalk_SelectNewestMountedInput(
+    struct OverworldMountRuntimeState *state,
+    u32 *newKeys,
+    u32 *heldKeys);
 BOOL OverworldWalk_StartMountedFlat(
     struct OverworldMountRuntimeState *state,
     struct FIELD_PLAYER_AVATAR *avatar,

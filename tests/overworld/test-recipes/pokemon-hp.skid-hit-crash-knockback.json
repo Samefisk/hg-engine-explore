@@ -1,0 +1,341 @@
+{
+  "schemaVersion": 1,
+  "id": "pokemon-hp.skid-hit-crash-knockback",
+  "title": "A natural Ambush hit stops mounted skid with Crash before shared Jump1",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.pokemon-skid-hit"
+  ],
+  "budgets": {
+    "maxSeconds": 300,
+    "maxFrames": 900,
+    "noProgressFrames": 120,
+    "minObservedFrames": 64
+  },
+  "subjects": [
+    {
+      "id": "stantler",
+      "species": 234,
+      "role": "MOUNTED",
+      "acquire": "existing"
+    },
+    {
+      "id": "weepinbell",
+      "species": 70,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "pokemon-skid-hit-v1",
+      "subject": "stantler"
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "pokemon-skid-hit-v1",
+      "when": "final"
+    }
+  ],
+  "setup": [
+    {
+      "id": "attack-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 586,
+        "z": 407,
+        "facing": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-stantler",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 234,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "mount-stantler",
+      "op": "spawn",
+      "args": {
+        "species": 234,
+        "form": 0,
+        "role": "mounted",
+        "slot": 0,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-mount",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "bind-stantler",
+      "op": "bind",
+      "args": {
+        "subject": "stantler"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "configure-mount",
+      "op": "mount-walk.configure",
+      "args": {
+        "subject": "stantler",
+        "directionMode": 0,
+        "travelTime": 4,
+        "turning": "free",
+        "crashSound": "wall-hit",
+        "timeVariance": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-filler-69",
+      "op": "spawn",
+      "args": {
+        "species": 69,
+        "form": 0,
+        "role": "wild",
+        "level": 10,
+        "x": 583,
+        "z": 401
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-filler-43",
+      "op": "spawn",
+      "args": {
+        "species": 43,
+        "form": 0,
+        "role": "wild",
+        "level": 10,
+        "x": 583,
+        "z": 402
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-filler-44",
+      "op": "spawn",
+      "args": {
+        "species": 44,
+        "form": 0,
+        "role": "wild",
+        "level": 10,
+        "x": 583,
+        "z": 403
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-filler-45",
+      "op": "spawn",
+      "args": {
+        "species": 45,
+        "form": 0,
+        "role": "wild",
+        "level": 10,
+        "x": 583,
+        "z": 404
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-filler-182",
+      "op": "spawn",
+      "args": {
+        "species": 182,
+        "form": 0,
+        "role": "wild",
+        "level": 10,
+        "x": 583,
+        "z": 405
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-weepinbell",
+      "op": "spawn",
+      "args": {
+        "species": 70,
+        "form": 0,
+        "role": "wild",
+        "level": 10,
+        "x": 586,
+        "z": 402
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-attacker",
+      "op": "step",
+      "args": {
+        "frames": 50,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 50,
+        "noProgressFrames": 50
+      }
+    },
+    {
+      "id": "bind-weepinbell",
+      "op": "bind",
+      "args": {
+        "subject": "weepinbell"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "arm-contact",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "before-contact",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "run-up",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "turn",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "settle-knockback",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "after-contact",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ]
+}

@@ -27,12 +27,12 @@ SUBJECT_ROLE = "WILD"
 TARGET_ROLE = "FOLLOWER"
 
 PROFILE_ID = "ambush"
-PROFILE_BYTES = 212
+PROFILE_BYTES = 228
 PROFILE_DATA_OFFSET = 32
 
 CONDITION_ID = 49529
 CONDITION_NAME = "condition-ambush-notices-player"
-CONDITION_APPLICATION = 21
+CONDITION_APPLICATION = 25
 CONDITION_SUBJECT_APPLICATION = 0xFF
 CONDITION_DURATION = 36
 CONDITION_COOLDOWN = 126
@@ -61,7 +61,7 @@ PREPARED_STATE_BYTES = 16
 PREPARED_STATE_POINTER_OFFSET = 12
 PREPARED_SOURCE_INDICES_OFFSET = 16
 TARGET_GENERATION_IN_STATE = 10
-RUNTIME_ACTIVE_MASKS_OFFSET = 1948
+RUNTIME_ACTIVE_MASKS_OFFSET = 1964
 
 
 def require(value, reason):
@@ -78,7 +78,7 @@ def _blob_sections(blob):
             "behavior blob is truncated")
     magic, version, header_size, blob_size = struct.unpack_from("<IHHI", blob)
     require((magic, version, header_size, blob_size)
-            == (0x4F574244, 80, 84, len(blob)),
+            == (0x4F574244, 83, 84, len(blob)),
             "behavior blob header differs")
     sections = {}
     for name, header_offset, expected_stride in (
@@ -114,7 +114,7 @@ def _profile_contract(blob, sections):
             "Ambush Plant conditional profile ownership differs")
     mask = struct.unpack_from("<I", raw, 20)[0]
     required_mask = (1 << 0) | (1 << 12) | (1 << 13)
-    profile = raw[PROFILE_DATA_OFFSET:PROFILE_DATA_OFFSET + 68]
+    profile = raw[PROFILE_DATA_OFFSET:PROFILE_DATA_OFFSET + 80]
     require(mask & required_mask == required_mask
             and profile[0] == BEHAVIOR_CHASE
             and profile[12] == LOCOMOTION_HOP
@@ -252,7 +252,7 @@ def decode_profile(profile_hex):
         raw = bytes.fromhex(profile_hex)
     except (TypeError, ValueError) as error:
         raise ValueError("condition controller: invalid profile bytes") from error
-    require(len(raw) == 144, "resolved profile size differs")
+    require(len(raw) == 160, "resolved profile size differs")
     return {
         "chillState": raw[0],
         "chillSpeed": raw[7],

@@ -1,0 +1,245 @@
+{
+  "schemaVersion": 1,
+  "id": "follower.ram-pokemon",
+  "title": "Follower Onix rams its captured Wild Pok\u00e9mon target",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.follower-ram-pokemon"
+  ],
+  "budgets": {
+    "maxSeconds": 300,
+    "maxFrames": 600,
+    "noProgressFrames": 240,
+    "minObservedFrames": 35
+  },
+  "subjects": [
+    {
+      "id": "onix",
+      "species": 95,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    },
+    {
+      "id": "snorlax",
+      "species": 143,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "follower-ram-pokemon-v1",
+      "subject": "onix"
+    }
+  ],
+  "setup": [
+    {
+      "id": "charge-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 594,
+        "z": 399,
+        "facing": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-onix",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 95,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "spawn-onix",
+      "op": "spawn",
+      "args": {
+        "species": 95,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-snorlax",
+      "op": "spawn",
+      "args": {
+        "species": 143,
+        "form": 0,
+        "role": "wild",
+        "level": 50,
+        "x": 595,
+        "z": 396
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-fixture",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "bind-onix",
+      "op": "bind",
+      "args": {
+        "subject": "onix"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "bind-snorlax",
+      "op": "bind",
+      "args": {
+        "subject": "snorlax"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "before-contact",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "enter-line",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "capture-target",
+      "op": "step",
+      "args": {
+        "frames": 4,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 4,
+        "noProgressFrames": 4
+      }
+    },
+    {
+      "id": "retreat-player",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "observe-charge",
+      "op": "step",
+      "args": {
+        "frames": 240,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "follower-ram-pokemon-v1",
+          "stage": "landed",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "finish-knockback",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "after-contact",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "follower-ram-pokemon-v1",
+      "when": "final"
+    }
+  ]
+}

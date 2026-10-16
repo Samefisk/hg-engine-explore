@@ -11,7 +11,7 @@
     "expectationSource": "data/overworld_behavior_profiles.json",
     "actor": "One prepared WILD Clefairy (species 35) as the Playful subject and one prepared WILD Clefable (species 36) as a compatible actor target, both current and presentation-attached.",
     "trigger": "Run one idle-boundary case with only Clefable visible, then move the player into Vision for the later player-target case; keep the selected target stationary until Clefairy stops at its non-collision boundary.",
-    "observable": "Requirement current.playful-target-and-collision: condition-playful-notices-compatible-actor captures the nearest compatible Clefable when the player case is false, and condition-playful-notices-player captures PLAYER when its later entry is active. In both cases Clefairy approaches or circles the captured target, completes motion, and never commits onto the target's occupied tile.",
+    "observable": "Requirement current.playful-target-and-collision: condition-find-playmate-notices-compatible-actor captures the nearest compatible Clefable when the player case is false, and condition-find-playmate-notices-player captures PLAYER in a later fresh Find Playmate cycle when its Player entry wins. In both cases Clefairy uses Find Playmate to approach and adjacent Playful to circle the same captured target, completes motion, and never commits onto the target's occupied tile.",
     "setupAudit": "complete",
     "setupMutations": [
       {

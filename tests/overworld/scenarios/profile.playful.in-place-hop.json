@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.playful.in-place-hop",
+  "title": "Wild Playful Clefairy makes one or two natural in-place hops",
+  "status": "active",
+  "capabilities": [
+    "condition.evaluation",
+    "chase"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "One exact current Wild Clefairy with a current Player target and one checked passive Cyndaquil follower.",
+    "trigger": "Normal neutral frames first admit Find Playmate toward the captured Player, then while-true Playful only at distance0..1 with that parent applied. Native Walk policy uses its normal random draws.",
+    "observable": "The same Clefairy completes one-hop and two-hop stock sequences. Each count shows and skips both heart and own cry in accepted sequences, with positive vertical arcs at unchanged position and stock control release.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Only public teleport, party/follower preparation, Wild spawns, and current identity binds."
+      }
+    ],
+    "limits": [
+      "The bounded run needs both natural counts, visible effect outcomes, and a declined 60 percent admission; no RNG or timer is written.",
+      "This case proves Wild Playful only; mounted chain behavior is separate."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "clefairy",
+      "species": 35,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "passive",
+      "species": 155,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": false,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Prepare current Route29 actors."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Observe both natural in-place hop counts, independent heart and cry outcomes, an admission skip, and stock control release."
+    }
+  ],
+  "stop": {
+    "frameBudget": 3600,
+    "condition": "All exact natural hop, chance, and effect outcomes or first stale boundary."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Exact current Clefairy, timed Find Playmate, same Player target, and adjacent while-true Playful with applied Find Playmate",
+      "Natural 60 percent admission, 50 percent extra hop, and independent 50 percent effect draws",
+      "One and two full stock Hop sequences with unchanged position",
+      "Visible heart and own cry shown and skipped at the accepted JUMP",
+      "Control release after each sequence"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "profile.playful.in-place-hop",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "rendered-motion",
+      "control-release",
+      "feedback-effect"
+    ],
+    "minimumFrames": 2
+  }
+}

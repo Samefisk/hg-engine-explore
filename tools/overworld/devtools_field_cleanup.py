@@ -2,7 +2,7 @@
 import struct
 
 ACTOR_ELF = "overworld_actor_system_overlay_linked.o"
-ACTOR_REGION = (0x023B65A0, 0x023BAB00)
+ACTOR_REGION = (0x023B65C0, 0x023BAB00)
 ACTOR_STATE_ADDRESS = 0x023BA170
 
 DATA = (
@@ -10,7 +10,7 @@ DATA = (
     ("readyTaskMapId", "linked.o", "sFieldReadyTaskMapId", ".text", 2),
     ("selectorState", "field_linked.o", "gOverworldFollowerSelectorStateStorage", ".text", 1),
     ("wildFlags", "overworld_wild_spawns_overlay_linked.o", "sOverworldWildFlags", ".bss", 6),
-    ("actorState", "overworld_actor_system_overlay_linked.o", "gOverworldActorSystemState", ".bss", 2448),
+    ("actorState", "overworld_actor_system_overlay_linked.o", "gOverworldActorSystemState", ".bss", None),
 )
 CODE = (
     ("linked.o", "OverworldFieldService_ShutdownTransientServices"),
@@ -69,7 +69,7 @@ def symbol(image, name, kind, section_name=None, expected_size=None):
     return matches[0]
 
 
-def observe_field_cleanup(read, authenticate, load_elf, loaded_overlays, frame, native_cycle):
+def observe_field_cleanup(read, authenticate, load_elf, loaded_overlays, frame, native_cycle, *, actor_descriptor=None):
     result = {"known": False, "reason": "unread", "diagnosticOnly": True,
               "acceptedProof": False, "boundary": "paused-native-cycle-end",
               "frame": frame, "nativeCycle": native_cycle, "readBytes": 0}
@@ -82,6 +82,12 @@ def observe_field_cleanup(read, authenticate, load_elf, loaded_overlays, frame, 
         bindings = {key: symbol(images[file], name, 1, section, size)
                     for key, file, name, section, size in DATA}
         actor_address, actor_size, _ = bindings["actorState"]
+        if actor_descriptor is not None:
+            state = actor_descriptor["state"]
+            capacity = state["capacity"]
+            if (state["address"] != actor_address or state["size"] != actor_size
+                    or type(capacity) is not int or not actor_size <= capacity <= ACTOR_REGION[1] - actor_address):
+                raise ValueError("actor-state-descriptor-layout-mismatch")
         if actor_address != ACTOR_STATE_ADDRESS or actor_address + actor_size > ACTOR_REGION[1]:
             raise ValueError("actor-state-outside-resident-region")
         for file, name in CODE:

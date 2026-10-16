@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+from tools.overworld.normal_play_observer import complete_travel
 from tools.overworld.devtools_profile_feature_measurement import (
-    BLOCKED_FACING, BLOCKED_FACING_FRAMES, FEATURES, FLY_IN, HELD, NOTICE,
+    ambush_exit_evidence, AMBUSH, BLOCKED_FACING, BLOCKED_FACING_FRAMES, FEATURES, FLY_IN, HELD,
     FLOATY_BOUNCE, PLAYFUL, STALKER, STARTLED, WADDLE,
 )
 
@@ -29,14 +30,6 @@ def _spec(name, expected=None, *, minimum=None, operator="eq", value_type=None):
 
 
 CONTRACTS = {
-    NOTICE: {
-        "live-actor-identity": [_spec("notice-player-mareep-identity", [1, "WILD", 179, 1, 1])],
-        "profile-resolution": [_spec("notice-player-condition-contract", ["notice-player", "condition-notice-player", "timed", 960, 970, "PLAYER", "current-vision"])],
-        "feedback-effect": [_spec("notice-player-exclamation-count", 1)],
-        "rendered-motion": [_spec("notice-player-faced-captured-target-count", 1)],
-        "frame-pacing": [_spec("notice-player-presentation-pause-frames", 10)],
-        "control-release": [_spec("notice-player-post-pause-routine-and-repeat-counts", [1, 0])],
-    },
     STALKER: {
         "live-actor-identity": [_spec("stalker-gastly-identity", [1, "WILD", 92, 1, 1])],
         "profile-resolution": [_spec("stalker-condition-contract", ["stalker", "condition-stalker-unseen-by-player", "while-true", "PLAYER", "current-vision", "BEHIND"])],
@@ -46,7 +39,7 @@ CONTRACTS = {
     },
     PLAYFUL: {
         "live-actor-identity": [_spec("playful-clefairy-clefable-identities", [1, "WILD", 35, 1, 1, "WILD", 36, 1])],
-        "profile-resolution": [_spec("playful-captured-target-cases", ["condition-playful-notices-compatible-actor", "WILD:36", "condition-playful-notices-player", "PLAYER"])],
+        "profile-resolution": [_spec("playful-captured-target-cases", ["condition-find-playmate-notices-compatible-actor", "WILD:36", "condition-find-playmate-notices-player", "PLAYER"])],
         "collision-decision": [_spec("playful-target-tile-rejection-counts", [1, 1])],
         "logical-commit": [_spec("playful-noncolliding-terminal-commit-count", 2)],
         "rendered-motion": [_spec("playful-target-relative-motion-count", minimum=2)],
@@ -59,6 +52,15 @@ CONTRACTS = {
         "rendered-motion": [_spec("startled-away-displacement-and-locomotion", [1, 1])],
         "frame-pacing": [_spec("startled-active-frame-count", 44)],
         "control-release": [_spec("startled-post-expiry-routine-resume-count", 1)],
+    },
+    AMBUSH: {
+        "live-actor-identity": [_spec("ambush-weepinbell-identity", [1, "WILD", 70, 1, 1])],
+        "profile-resolution": [_spec("ambush-active-player-condition-and-layer", [FEATURES[AMBUSH]["application"], 49529, 1, 1])],
+        "engine-boundary": [_spec("ambush-directed-hop-intent-and-start", [1, 1])],
+        "logical-commit": [_spec("ambush-exact-player-tile-commit", [1, 585, 408])],
+        "rendered-motion": [_spec("ambush-complete-player-tile-hop", [1, 1])],
+        "control-release": [_spec("ambush-finish-and-control-return", [1, 1]),
+                            _spec("ambush-shared-legal-exit-and-profile-resume", [1, 1])],
     },
     FLY_IN: {
         "live-actor-identity": [_spec("fly-in-pidgey-identity", [1, "WILD", 16, 1, 1])],
@@ -127,6 +129,11 @@ def requirement(kind):
 
 
 def faults(kind):
+    if kind == AMBUSH:
+        return (kind + ":absent-subject", kind + ":missing-condition",
+                kind + ":wrong-player-tile", kind + ":missing-commit",
+                kind + ":missing-control", kind + ":missing-exit",
+                kind + ":wrong-exit-actor", kind + ":blocked-exit")
     return (kind + ":absent-subject",
             kind + (":facing-change" if kind == BLOCKED_FACING
                     else ":missing-feature-evidence"))
@@ -189,25 +196,6 @@ def values(kind, meter):
          and meter.get("requirements") == [requirement(kind)],
          "closed independent replay is missing")
     motions = _motion_values(meter)
-    if kind == NOTICE:
-        trigger = next(row for row in meter["conditions"] if row["triggered"])
-        starts = _native(meter, "MOTION_STARTED", after=trigger["frame"])
-        returns = _native(meter, "CONTROL_RETURNED", after=trigger["frame"])
-        repeats = sum(row["triggered"] for row in meter["conditions"]) - 1
-        need(trigger["targetKind"] == 1 and trigger["timed"]
-             and _condition_duration(trigger) == 960
-             and _condition_cooldown(trigger) == 970, "Notice timer or target differs")
-        # Trigger and motion-start frames are event boundaries. The authored
-        # pause is the complete frames strictly between those two boundaries.
-        pause = starts[0]["frame"] - trigger["frame"] - 1 if starts else 0
-        return {
-            "notice-player-mareep-identity": _identity(meter, "mareep"),
-            "notice-player-condition-contract": ["notice-player", "condition-notice-player", "timed", 960, 970, "PLAYER", "current-vision"],
-            "notice-player-exclamation-count": 1,
-            "notice-player-faced-captured-target-count": int(bool(starts)),
-            "notice-player-presentation-pause-frames": pause,
-            "notice-player-post-pause-routine-and-repeat-counts": [int(bool(returns)), repeats],
-        }
     if kind == STALKER:
         active = next(row for row in meter["conditions"] if row["active"])
         active_motion = next(motion for motion in motions
@@ -246,8 +234,8 @@ def values(kind, meter):
             "stalker-seen-routine-resume-count": 1,
         }
     if kind == PLAYFUL:
-        actor_case = next(row for row in meter["conditions"] if row["triggered"] and row["conditionId"] == 31250)
-        player_case = next(row for row in meter["conditions"] if row["triggered"] and row["conditionId"] == 38737)
+        actor_case = next(row for row in meter["conditions"] if row["triggered"] and row["conditionId"] == 34198)
+        player_case = next(row for row in meter["conditions"] if row["triggered"] and row["conditionId"] == 58853)
         need(actor_case["targetKind"] == 2 and player_case["targetKind"] == 1,
              "Playful targets differ")
         primary = meter["subjects"]["clefairy"]["handle"]["value"]
@@ -255,7 +243,7 @@ def values(kind, meter):
         returns = _native(meter, "CONTROL_RETURNED", handle=primary)
         return {
             "playful-clefairy-clefable-identities": _paired_identity(meter, "clefairy", "clefable"),
-            "playful-captured-target-cases": ["condition-playful-notices-compatible-actor", "WILD:36", "condition-playful-notices-player", "PLAYER"],
+            "playful-captured-target-cases": ["condition-find-playmate-notices-compatible-actor", "WILD:36", "condition-find-playmate-notices-player", "PLAYER"],
             "playful-target-tile-rejection-counts": [1, 1],
             "playful-noncolliding-terminal-commit-count": min(2, len(commits)),
             "playful-target-relative-motion-count": len(motions),
@@ -280,6 +268,56 @@ def values(kind, meter):
             "startled-away-displacement-and-locomotion": [int(away), int(locomotion)],
             "startled-active-frame-count": _condition_duration(trigger),
             "startled-post-expiry-routine-resume-count": int(routine),
+        }
+    if kind == AMBUSH:
+        handle = meter["subjects"]["weepinbell"]["handle"]["value"]
+        candidates = [motion for motion in motions
+                      if motion["kind"] == "HOP"
+                      and motion["target"] == [585, 408]
+                      and motion["terminalLogical"] == [585, 408]]
+        need(len(candidates) >= 1, "exact player-tile Hop is missing")
+        hop = candidates[0]
+        need(hop["handle"]["value"] == handle and complete_travel(hop),
+             "Ambush actor or complete Hop travel differs")
+        active = [row for row in meter["conditions"]
+                  if row["application"] == FEATURES[AMBUSH]["application"] and row["conditionId"] == 49529
+                  and row["targetSourceApplication"] == FEATURES[AMBUSH]["application"]
+                  and row["targetKind"] == 1 and row["active"] and row["timed"]
+                  and 0 <= hop["startFrame"] - row["frame"] <= 1]
+        need(bool(active), "Ambush player condition is not active at Hop intent")
+        sample = next((row for row in meter["samples"]
+                       if row["frame"] == hop["startFrame"]
+                       and row["behaviorFingerprint"] == hop["fingerprint"]
+                       and row["matchedLayerMask"] & (1 << FEATURES[AMBUSH]["application"])), None)
+        need(sample is not None and sample["player"]["tile"] == [585, 408],
+             "Ambush layer or fixed player tile differs")
+        names = ("INTENT_CREATED", "MOTION_STARTED", "LOGICAL_COMMIT",
+                 "MOTION_FINISHED", "CONTROL_RETURNED")
+        events = []
+        for name in names:
+            match = next((event for event in _native(meter, name, handle=handle)
+                          if hop["startFrame"] <= event["frame"] <= hop["finishFrame"]
+                          and (not events or event["data"]["sequence"]
+                               > events[-1]["data"]["sequence"])), None)
+            need(match is not None, "Ambush lacks ordered " + name)
+            events.append(match)
+        need(hop["commitAfter"] == hop["commitBefore"] + 1,
+             "Ambush player-tile Hop has no single commit")
+        recovery = ambush_exit_evidence(meter, hop["finishFrame"])
+        need(recovery is not None, "Ambush lacks same-actor legal shared exit and next profile START")
+        render = hop["terminalRender"]
+        center = [(585 << 16) + 0x8000, (408 << 16) + 0x8000]
+        return {
+            "ambush-weepinbell-identity": _identity(meter, "weepinbell"),
+            "ambush-active-player-condition-and-layer": [FEATURES[AMBUSH]["application"], 49529, 1, 1],
+            "ambush-directed-hop-intent-and-start": [1, 1],
+            "ambush-exact-player-tile-commit": [1, *hop["terminalLogical"]],
+            "ambush-complete-player-tile-hop": [
+                int(hop["travelEnd"] is not None),
+                int([render[0], render[2]] == center),
+            ],
+            "ambush-finish-and-control-return": [1, 1],
+            "ambush-shared-legal-exit-and-profile-resume": [1, 1],
         }
     if kind == FLY_IN:
         receipt = _prepared(meter, 16)
@@ -475,6 +513,32 @@ class ProfileFeatureNegative:
                     sample["actors"].remove(actor)
                     self.applied = True
                     return changed
+        if self.kind == AMBUSH and self.fault.rsplit(":", 1)[-1] in (
+                "missing-exit", "wrong-exit-actor", "blocked-exit"):
+            target = subjects.get("weepinbell", {}).get("handle")
+            if not isinstance(target, dict) or not all(key in target for key in (
+                    "value", "slot", "generation", "fieldEpoch", "mapGeneration", "encounterGeneration")):
+                return row  # Setup has not bound the complete current subject.
+            for sample in changed.get("samples", []):
+                actor = next((item for item in sample.get("actors", [])
+                              if item.get("handle") == target
+                              and item.get("engineObject", {}).get("movement_cmd") in (52, 53, 54, 55)), None)
+                if actor is None:
+                    continue
+                if self.fault.endswith(":wrong-exit-actor"):
+                    actor["subjectIdentity"] += 1
+                elif self.fault.endswith(":blocked-exit"):
+                    actor["engineObject"]["flags"] &= ~2
+                else:
+                    actor["engineObject"]["movement_cmd"] = 255
+                self.applied = True
+                return changed
+        if self.kind == AMBUSH and self.fault.endswith(":wrong-player-tile"):
+            for sample in changed.get("samples", []):
+                if sample.get("player", {}).get("x") == 585:
+                    sample["player"]["x"] = 586
+                    self.applied = True
+                    return changed
         if self.kind == BLOCKED_FACING and self.fault.endswith(":facing-change"):
             handle = subjects.get("exeggcute", {}).get("handle", {}).get("value")
             for sample in changed.get("samples", []):
@@ -489,15 +553,20 @@ class ProfileFeatureNegative:
         for event in changed.get("events", []):
             data = event.get("data", {})
             wanted = ("MOTION_STARTED" if self.kind == HELD else
+                      "LOGICAL_COMMIT" if self.kind == AMBUSH
+                          and self.fault.endswith(":missing-commit") else
+                      "CONTROL_RETURNED" if self.kind == AMBUSH
+                          and self.fault.endswith(":missing-control") else
                       "CONDITIONAL_RESOLVED" if self.kind in
-                      (NOTICE, STALKER, PLAYFUL, STARTLED) else
+                      (STALKER, PLAYFUL, STARTLED, AMBUSH) else
                       "CONTROL_RETURNED" if self.kind == FLOATY_BOUNCE else
                       "LOGICAL_COMMIT")
             target = subjects.get(
-                "mankey" if self.kind == HELD else "jigglypuff", {}
+                "mankey" if self.kind == HELD else
+                "weepinbell" if self.kind == AMBUSH else "jigglypuff", {}
             ).get("handle", {}).get("value")
             if event.get("kind") == "native" and data.get("event") == wanted \
-                    and (self.kind not in (HELD, FLOATY_BOUNCE)
+                    and (self.kind not in (HELD, FLOATY_BOUNCE, AMBUSH)
                          or data.get("actorHandle") == target):
                 data["event"] = "WORLD_EFFECT"
                 data["eventId"] = 14

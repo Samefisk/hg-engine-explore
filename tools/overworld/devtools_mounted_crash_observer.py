@@ -6,8 +6,8 @@ from tools.overworld.devtools_mount_pacing_observer import NativeMountedPacingOb
 from tools.overworld.devtools_corner_observer import NativeCornerObserver
 from tools.overworld.devtools_observer import public_bytes
 
-STATE_ADDRESS, STATE_BYTES = 0x023BC744, 184
-MODE_OFFSET, DURATION_OFFSET, ELAPSED_OFFSET = 102, 144, 146
+STATE_ADDRESS, STATE_BYTES = 0x023BC744, 188
+MODE_OFFSET, DURATION_OFFSET, ELAPSED_OFFSET = 111, 144, 146
 SYMBOLS = dict(start='OverworldMount_StartWalkCrash', update='OverworldMount_UpdateCustomMotion',
     presentation='OverworldMount_ApplyCrashPresentation', finish='OverworldMount_FinishCustomMotion',
     crashSound='OverworldMount_PlayCrashSound')

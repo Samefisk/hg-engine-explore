@@ -1,0 +1,688 @@
+{
+  "schemaVersion": 1,
+  "id": "pokemon-appearance.damage-palette",
+  "title": "Real collision HP loss changes mounted and wild palettes; normal nurse healing clears follower tint",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.pokemon-damage-palette"
+  ],
+  "budgets": {
+    "maxSeconds": 900,
+    "maxFrames": 6000,
+    "noProgressFrames": 1200,
+    "minObservedFrames": 60
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquire": "existing"
+    },
+    {
+      "id": "snorlax",
+      "species": 143,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "weepinbell",
+      "species": 70,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "healed-cyndaquil",
+      "species": 155,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "pokemon-damage-palette-v1",
+      "subject": "cyndaquil"
+    }
+  ],
+  "setup": [
+    {
+      "id": "attack-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 407,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-cyndaquil",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "mount-cyndaquil",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "mounted",
+        "slot": 0,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-mount",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "bind-cyndaquil",
+      "op": "bind",
+      "args": {
+        "subject": "cyndaquil"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-snorlax",
+      "op": "spawn",
+      "args": {
+        "species": 143,
+        "form": 0,
+        "role": "wild",
+        "level": 50,
+        "x": 585,
+        "z": 405
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-snorlax",
+      "op": "bind",
+      "args": {
+        "subject": "snorlax"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-weepinbell",
+      "op": "spawn",
+      "args": {
+        "species": 70,
+        "form": 0,
+        "role": "wild",
+        "level": 10,
+        "x": 585,
+        "z": 404
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-weepinbell",
+      "op": "bind",
+      "args": {
+        "subject": "weepinbell"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "two-real-hits",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "pokemon-damage-palette-v1",
+          "stage": "two-red-hits",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 300,
+        "maxFrames": 900,
+        "noProgressFrames": 900
+      }
+    },
+    {
+      "id": "settle-last-hit",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "pokemon-damage-palette-v1",
+          "stage": "hits-settled",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "normal-center",
+      "op": "teleport",
+      "args": {
+        "map": 69,
+        "x": 8,
+        "z": 13,
+        "facing": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "nurse-idle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "dialogue-state",
+          "state": "idle"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "nurse-start-ready",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "dialogue-state",
+          "state": "idle"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "nurse-start-a",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "A"
+        ],
+        "until": {
+          "kind": "selector-field",
+          "path": "newKeys",
+          "operator": "eq",
+          "value": 1
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "nurse-start-consumed",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "dialogue-state",
+          "state": "printing"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "greeting-page-one-ready",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "dialogue-state",
+          "state": "page-wait"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "greeting-page-one-a",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "A"
+        ],
+        "until": {
+          "kind": "selector-field",
+          "path": "newKeys",
+          "operator": "eq",
+          "value": 1
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "greeting-page-one-consumed",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "dialogue-state",
+          "state": "printing"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "greeting-page-two-ready",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "dialogue-state",
+          "state": "page-wait"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "greeting-page-two-a",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "A"
+        ],
+        "until": {
+          "kind": "selector-field",
+          "path": "newKeys",
+          "operator": "eq",
+          "value": 1
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "greeting-page-two-consumed",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "dialogue-state",
+          "state": "printing"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "nurse-yes-ready",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "dialogue-state",
+          "state": "yes-no-ready"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "nurse-yes-a",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "A"
+        ],
+        "until": {
+          "kind": "selector-field",
+          "path": "newKeys",
+          "operator": "eq",
+          "value": 1
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "nurse-yes-consumed",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "dialogue-state",
+          "state": "busy"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "healed-page-one-ready",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "dialogue-state",
+          "state": "page-wait"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 600,
+        "noProgressFrames": 600
+      }
+    },
+    {
+      "id": "healed-page-one-a",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "A"
+        ],
+        "until": {
+          "kind": "selector-field",
+          "path": "newKeys",
+          "operator": "eq",
+          "value": 1
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "healed-page-one-consumed",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "dialogue-state",
+          "state": "printing"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "healed-page-two-ready",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "dialogue-state",
+          "state": "page-wait"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "healed-page-two-a",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "A"
+        ],
+        "until": {
+          "kind": "selector-field",
+          "path": "newKeys",
+          "operator": "eq",
+          "value": 1
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "healed-page-two-consumed",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "dialogue-state",
+          "state": "busy"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "nurse-final-ready",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "dialogue-state",
+          "state": "script-button-wait"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "nurse-final-a",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "A"
+        ],
+        "until": {
+          "kind": "selector-field",
+          "path": "newKeys",
+          "operator": "eq",
+          "value": 1
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "nurse-final-consumed",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "dialogue-state",
+          "state": "busy"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "nurse-finished",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "dialogue-state",
+          "state": "idle"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "normal-outdoor",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 407,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "same-party-follower",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-healed-cyndaquil",
+      "op": "bind",
+      "args": {
+        "subject": "healed-cyndaquil"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "full-hp-draw",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [],
+        "until": {
+          "kind": "measurement-complete",
+          "measurement": "pokemon-damage-palette-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "pokemon-damage-palette-v1",
+      "when": "final"
+    }
+  ]
+}

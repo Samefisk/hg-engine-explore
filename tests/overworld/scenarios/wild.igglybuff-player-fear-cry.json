@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.igglybuff-player-fear-cry",
+  "title": "Wild Igglybuff shows Cry before its normal Player fear Hop",
+  "status": "active",
+  "capabilities": [
+    "condition.evaluation",
+    "alert",
+    "chase",
+    "hop"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "TICKETS.md",
+    "actor": "One full-current Wild Igglybuff174, its actual native Floaty Bounce offscreen Hop and captured Player.",
+    "trigger": "Prepared public placement, then five completed queues holding RIGHT, 32 holding UP and at most180 neutral. The first RIGHT queue may precede its key poll; five queues reproduce the measured baseline's four consumed RIGHT inputs. No condition or motion state is written.",
+    "observable": "True Player notice admits Skittish960/970. The exact current body calls stock SAD3 with an admitted return before one normal fear Hop away from Player, logical commit and control return.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Checked Route29 teleport, party slot 0 Cyndaquil and public follower spawn replace the saved Mankey; only ordinary Wild spawns and current identity binds follow."
+      }
+    ],
+    "limits": [
+      "Cry is the stock SAD face bubble3; a sound or Question bubble7 does not satisfy it.",
+      "Native Hop From Off Screen starts exactly eight cardinal tiles from its immutable authored destination; actual direction and terrain are not inferred.",
+      "One completed fear Hop proves a response, not full timed expiration or simultaneous bubble concurrency."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "baby",
+      "species": 174,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "passive",
+      "species": 155,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": false,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Use only the typed prepared fixture and bind current actor identities."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Observe true timed Player notice, resolved Cry and Floaty Bounce, admitted stock bubble and one normal fear Hop away."
+    }
+  ],
+  "stop": {
+    "frameBudget": 600,
+    "condition": "One full matched fear Hop with admitted Cry, or first stale boundary."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Exact full-current subject and fear source",
+      "Exact timed condition and resolved profile source",
+      "Completed native response with intent, commit and control return",
+      "Admitted stock Cry3 belongs to the same full-current Wild174 body before its fear Hop"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "wild.igglybuff-player-fear-cry",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "rendered-motion",
+      "control-release",
+      "feedback-effect"
+    ],
+    "minimumFrames": 2
+  }
+}

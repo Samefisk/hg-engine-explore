@@ -1,0 +1,58 @@
+{
+ "bgs": [
+  {
+   "scriptId": 2,
+   "type": 1,
+   "x": 7,
+   "z": 15,
+   "y": 0,
+   "dir": 4,
+   "dirPadding": 0
+  },
+  {
+   "scriptId": 3,
+   "type": 1,
+   "x": 31,
+   "z": 4,
+   "y": 0,
+   "dir": 4,
+   "dirPadding": 0
+  }
+ ],
+ "objects": [
+  {
+   "id": 0,
+   "spriteId": 262,
+   "movement": 0,
+   "type": 0,
+   "eventFlag": 0,
+   "scriptId": 2800,
+   "facingDirection": 0,
+   "param0": 22,
+   "param1": 0,
+   "param2": 0,
+   "xRange": 0,
+   "yRange": 0,
+   "x": 55,
+   "z": 21,
+   "y": 0
+  }
+ ],
+ "coords": [],
+ "warps": [
+  {
+   "x": 5,
+   "z": 16,
+   "header": 67,
+   "anchor": 8,
+   "y": 0
+  },
+  {
+   "x": 5,
+   "z": 17,
+   "header": 67,
+   "anchor": 8,
+   "y": 0
+  }
+ ]
+}

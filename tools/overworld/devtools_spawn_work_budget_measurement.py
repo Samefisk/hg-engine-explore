@@ -14,7 +14,7 @@ KIND = "spawn-work-budget-v1"
 REQUIREMENT = "shared.spawn-work-budget-v1"
 DESTINATION_MASKS = (8, 15, 448, 512)
 EXPECTED_SCAN_CANDIDATES = 240
-MAX_CANDIDATE_QUERIES_PER_UPDATE = 12
+MAX_CANDIDATE_QUERIES_PER_UPDATE = 4
 EXPECTED_DESTINATION_UPDATES = (
     1 + (EXPECTED_SCAN_CANDIDATES
          + MAX_CANDIDATE_QUERIES_PER_UPDATE - 1)
@@ -65,6 +65,12 @@ class SpawnWorkBudgetMeasurement:
                 and type(max_frames) is int and 240 <= max_frames <= 2400,
                 "spawn-work measurement requires one bounded current-profile fixture")
         self.max_frames = max_frames
+        self._setup_inputs = (test, source)
+        self.setup_scan = None
+        self.setup_unknown = None
+        self.setup_retired = None
+        self.setup_terminal_frame = None
+        self.setup_frames = 0
         self.source_sha256 = source["sourceSha256"]
         self.initial = None
         self.active_context = None
@@ -75,12 +81,15 @@ class SpawnWorkBudgetMeasurement:
         self.last_native_cycle = None
         self.last_actor_frame = None
         self.attempt = None
+        self.rejected_attempts = []
+        self.retirement_pending = None
         self.calls = []
         self.profile_receipts = 0
         self.metadata_receipts = 0
         self.class_selection_receipts = 0
         self.resumed_finalizer_ticks = []
         self.frames = 0
+        self.elapsed_frames = 0
         self.pacing_samples = 0
         self.pacing_intervals = 0
         self.max_main_loop_arm9_ticks = 0
@@ -102,6 +111,128 @@ class SpawnWorkBudgetMeasurement:
         if not self.failures:
             self.failures.append(str(reason))
 
+    def observe_setup(self, snapshot, events):
+        """Keep one authenticated pending scan; setup earns no proof credit."""
+        if self.setup_scan and snapshot.get("context") != self.setup_scan.active_context:
+            self.setup_scan = None
+            self.setup_terminal_frame = None
+        if self.setup_unknown and snapshot.get("context") != self.setup_unknown["context"]:
+            self.setup_unknown = None
+        self._observe_setup_scan(snapshot, events, before_arm=True)
+
+    def _observe_setup_scan(self, snapshot, events, *, before_arm=False):
+        destinations = [event.get("data", {}) for event in events
+                        if event.get("kind") == "native-observation"
+                        and event.get("data", {}).get("observation") == "spawn-destination-search"
+                        and event.get("data", {}).get("destinationMask") in DESTINATION_MASKS]
+        require(len(destinations) <= 1,
+                "spawn-work setup update contains more than one destination call")
+        if self.setup_scan is None:
+            if not before_arm or not destinations:
+                return False
+            destination = destinations[0]
+            if destination.get("candidateQueryCount") != 0:
+                self.setup_unknown = {
+                    "spawnAttemptId": destination.get("spawnAttemptId"),
+                    "context": deepcopy(snapshot["context"]),
+                }
+                return False
+            test, source = self._setup_inputs
+            self.setup_scan = SpawnWorkBudgetMeasurement(test, source, max_frames=self.max_frames)
+            self.setup_scan.active_context = deepcopy(snapshot["context"])
+            self.setup_unknown = None
+            self.setup_terminal_frame = None
+        scan = self.setup_scan
+        attempt = scan.attempt
+        if self.setup_terminal_frame is not None:
+            require(snapshot["frame"] == self.setup_terminal_frame + 1
+                    and not any(event.get("kind") == "native-observation"
+                        and event.get("data", {}).get("spawnAttemptId")
+                            == attempt["spawnAttemptId"] for event in events),
+                    "spawn-work setup attempt repeated after terminal work")
+            self.setup_retired = {
+                **deepcopy(attempt),
+                "terminalFrame": self.setup_terminal_frame,
+                "retiredFrame": snapshot["frame"],
+                "retired": True,
+                "credited": False,
+            }
+            self.setup_scan = None
+            self.setup_terminal_frame = None
+            if before_arm:
+                return self._observe_setup_scan(snapshot, events, before_arm=True)
+            return False
+        if attempt is not None:
+            require(snapshot["frame"] == scan.last_frame + 1
+                    and snapshot["actorFrame"] == scan.last_actor_frame + 1
+                    and snapshot["context"] == scan.active_context
+                    and len(scan.calls) <= EXPECTED_DESTINATION_UPDATES,
+                    "spawn-work setup scan lost its completed update or field")
+        if destinations:
+            require(attempt is None or not attempt.get("scanCompleted"),
+                    "spawn-work setup scan repeated after its complete reservoir")
+            destination = destinations[0]
+            finals = [event.get("data", {}) for event in events
+                      if event.get("kind") == "native-observation"
+                      and event.get("data", {}).get("observation") == "spawn-finalized"
+                      and event.get("data", {}).get("finalizationId") == destination["finalizationId"]]
+            require(len(finals) == 1
+                    and type(destination.get("positionPointer")) is int
+                    and 0 < destination["positionPointer"] <= 0xFFFFFFFF
+                    and destination.get("entryActorFrame") == snapshot["actorFrame"]
+                    and finals[0].get("setupMode") == "normal"
+                    and finals[0].get("preparedPointer") == destination["positionPointer"]
+                    and (attempt is None or destination["positionPointer"] == attempt["preparedPointer"]),
+                    "spawn-work setup scan changed its exact prepared value")
+            scan._observe_destination(snapshot, destination, events)
+            scan.attempt["preparedPointer"] = destination["positionPointer"]
+            if attempt is not None:
+                require(scan.calls[-1]["candidateQueries"]
+                        == MAX_CANDIDATE_QUERIES_PER_UPDATE,
+                        "spawn-work setup scan changed its bounded reservoir batch")
+            if len(scan.calls) == EXPECTED_DESTINATION_UPDATES:
+                require(sum(call["candidateQueries"] for call in scan.calls)
+                        == EXPECTED_SCAN_CANDIDATES,
+                        "spawn-work setup scan has an incomplete reservoir")
+                if not scan.attempt.get("scanCompleted"):
+                    scan.attempt.update(
+                        callCount=len(scan.calls),
+                        candidateQueryCount=EXPECTED_SCAN_CANDIDATES,
+                    )
+                    self.setup_terminal_frame = snapshot["frame"]
+        else:
+            require(attempt is not None and attempt.get("scanCompleted")
+                    and snapshot["frame"] == attempt["scanEndFrame"] + 1,
+                    "spawn-work setup queued scan skipped a completed game update")
+            finals = [event.get("data", {}) for event in events
+                      if event.get("kind") == "native-observation"
+                      and event.get("data", {}).get("observation") == "spawn-finalized"
+                      and event.get("data", {}).get("spawnAttemptId") == attempt["spawnAttemptId"]]
+            require(len(finals) == 1,
+                    "spawn-work setup startup lacks its exact finalizer")
+            final = finals[0]
+            owner = {**attempt, "finalizationId": final.get("finalizationId")}
+            encounter, receipts, ticks = scan._check_finalizer(final, owner)
+            require(encounter == attempt["encounter"] and receipts == 0
+                    and ticks <= MAX_RESUMED_FINALIZER_ARM9_TICKS
+                    and final.get("preparedPointer") == attempt["preparedPointer"]
+                    and final.get("setupMode") == "normal"
+                    and final.get("returnValue") in (0, 1)
+                    and not any(event.get("kind") == "native-observation"
+                        and ((event.get("data", {}).get("finalizationId") == final["finalizationId"]
+                            and event.get("data", {}).get("observation") in (
+                                "spawn-metadata", "spawn-class-selection"))
+                            or event.get("data", {}).get("spawnAttemptId") == attempt["spawnAttemptId"]
+                            and event.get("data", {}).get("observation") == "spawn-queued")
+                        for event in events),
+                    "spawn-work setup startup repeated preparation or exceeded its bound")
+            self.setup_terminal_frame = snapshot["frame"]
+        scan.last_frame = snapshot["frame"]
+        scan.last_actor_frame = snapshot["actorFrame"]
+        if not before_arm or self.initial is not None:
+            self.setup_frames += 1
+        return True
+
     def arm(self, subject, snapshot):
         require(self.initial is None
                 and snapshot.get("observationBoundary") == "main-task-queue-completion"
@@ -117,6 +248,12 @@ class SpawnWorkBudgetMeasurement:
                 and subject.get("role") == "FOLLOWER"
                 and subject.get("handle", {}).get("value"),
                 "spawn-work measurement requires the reviewed Route 30 boundary")
+        require(self.setup_unknown is None,
+                "spawn-work setup-origin scan lacks its exact native start")
+        if self.setup_scan is not None:
+            require(self.setup_scan.last_frame == snapshot["frame"]
+                    and self.setup_scan.active_context == snapshot["context"],
+                    "spawn-work setup-origin scan is not current at arm")
         self.initial = _boundary(snapshot)
         self.active_context = deepcopy(snapshot["context"])
         self.subject = deepcopy(subject)
@@ -411,6 +548,34 @@ class SpawnWorkBudgetMeasurement:
                                 == "spawn-class-selection"
                             and event.get("data", {}).get("finalizationId")
                                 == final["finalizationId"]]
+        if final.get("returnValue") == 0:
+            require(not self.rejected_attempts
+                    and self.retirement_pending is None
+                    and len(self.calls) == EXPECTED_DESTINATION_UPDATES
+                    and self.attempt.get("candidateQueryCount")
+                        == EXPECTED_SCAN_CANDIDATES
+                    and encounter == self.attempt["encounter"]
+                    and receipt_count == 0
+                    and not metadata and not class_selections
+                    and finalizer_ticks <= MAX_RESUMED_FINALIZER_ARM9_TICKS
+                    and not any(event.get("kind") == "native-observation"
+                        and event.get("data", {}).get("slot") == self.attempt["slot"]
+                        and event.get("data", {}).get("observation") in (
+                            "spawn-prepared", "spawn-object-create", "spawn-queued")
+                        for event in events),
+                    "spawn-work refused startup repeated preparation or exceeded its bound")
+            self.resumed_finalizer_ticks.append(finalizer_ticks)
+            self.retirement_pending = {
+                **deepcopy(self.attempt),
+                "refusalFrame": snapshot["frame"],
+                "finalizerCallCount": len(self.calls) + 1,
+                "maxResumedFinalizerArm9Ticks": max(self.resumed_finalizer_ticks),
+                "startupReturnValue": 0,
+                "preparedCount": 0,
+                "objectCreateCount": 0,
+                "destinationFrames": [call["frame"] for call in self.calls],
+            }
+            return
         prepared = [event.get("data", {}) for event in events
                     if event.get("kind") == "native-observation"
                     and event.get("data", {}).get("observation") == "spawn-prepared"
@@ -547,9 +712,44 @@ class SpawnWorkBudgetMeasurement:
             require(snapshot.get("context") == self.active_context,
                     "spawn-work completed frame or field context changed")
             self._check_subject(snapshot)
-            if self.context_transition is not None and not field_changed:
+            if self.context_transition is not None and not field_changed \
+                    and self.setup_scan is None:
                 self._observe_pacing(snapshot, events)
                 self._observe_player_render(snapshot)
+            travel_setup = self.context_transition is None
+            draining_setup = self._observe_setup_scan(
+                snapshot, events, before_arm=travel_setup)
+            require(not travel_setup or self.setup_unknown is None,
+                    "spawn-work setup-origin scan lacks its exact native start")
+            if self.setup_retired is not None:
+                require(not any(event.get("kind") == "native-observation"
+                    and event.get("data", {}).get("spawnAttemptId")
+                        == self.setup_retired["spawnAttemptId"] for event in events),
+                    "spawn-work setup attempt repeated after terminal work")
+            if self.retirement_pending is not None:
+                refused = self.retirement_pending
+                require(snapshot["frame"] == refused["refusalFrame"] + 1
+                        and not any(event.get("kind") == "native-observation"
+                            and event.get("data", {}).get("spawnAttemptId")
+                                == refused["spawnAttemptId"]
+                            for event in events),
+                        "spawn-work refused attempt repeated after terminal startup")
+                refused["retiredFrame"] = snapshot["frame"]
+                refused["retired"] = True
+                self.rejected_attempts.append(refused)
+                self.retirement_pending = None
+                self.attempt = None
+                self.calls = []
+                self.profile_receipts = 0
+                self.metadata_receipts = 0
+                self.class_selection_receipts = 0
+                self.resumed_finalizer_ticks = []
+            if self.rejected_attempts:
+                require(not any(event.get("kind") == "native-observation"
+                    and event.get("data", {}).get("spawnAttemptId")
+                        == self.rejected_attempts[0]["spawnAttemptId"]
+                    for event in events),
+                    "spawn-work refused attempt repeated after terminal startup")
             destinations = [event.get("data", {}) for event in events
                             if event.get("kind") == "native-observation"
                             and event.get("data", {}).get("observation") == "spawn-destination-search"
@@ -561,6 +761,8 @@ class SpawnWorkBudgetMeasurement:
                                          in DESTINATION_MASKS))]
             require(len(destinations) <= 1,
                     "spawn-work update contains more than one destination call")
+            if draining_setup or travel_setup:
+                destinations = []
             if destinations:
                 self._observe_destination(snapshot, destinations[0], events)
             elif self.attempt is not None and not self.attempt.get("completed"):
@@ -570,8 +772,9 @@ class SpawnWorkBudgetMeasurement:
                     raise ValueError("spawn-work queued scan skipped a completed game update")
             if self.entry is not None:
                 self._observe_spawn_entry(snapshot)
-            self.frames += 1
-            require(self.frames <= self.max_frames,
+            self.frames += not draining_setup
+            self.elapsed_frames += 1
+            require(self.elapsed_frames <= self.max_frames,
                     "spawn-work frame bound exceeded")
             self.last_frame = snapshot["frame"]
             self.last_native_cycle = snapshot["nativeCycle"]
@@ -583,6 +786,7 @@ class SpawnWorkBudgetMeasurement:
     @property
     def ready(self):
         return bool(self.attempt and self.attempt.get("completed")
+                    and self.retirement_pending is None
                     and self.entry
                     and self.context_transition
                     and self.entry["spawnMotionObserved"]
@@ -616,12 +820,18 @@ class SpawnWorkBudgetMeasurement:
             "acceptedProof": False,
             "failures": list(self.failures),
             "frames": self.frames,
+            "elapsedFrames": self.elapsed_frames,
             "initial": deepcopy(self.initial),
             "activeContext": deepcopy(self.active_context),
             "contextTransition": deepcopy(self.context_transition),
             "terminal": deepcopy(self.terminal),
             "subject": deepcopy(self.subject),
             "attempt": deepcopy(self.attempt),
+            "setupScan": deepcopy(self.setup_scan.attempt) if self.setup_scan else None,
+            "setupRetired": deepcopy(self.setup_retired),
+            "uncreditedSetupFrames": self.setup_frames,
+            "rejectedAttempts": deepcopy(self.rejected_attempts),
+            "retirementPending": deepcopy(self.retirement_pending),
             "entry": deepcopy(self.entry),
             "destinationFrames": [call["frame"] for call in self.calls],
             "pacing": {

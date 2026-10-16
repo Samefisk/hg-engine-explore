@@ -13,7 +13,7 @@ import tempfile
 
 
 OVERLAY_ID = 158
-OVERLAY_LOAD_ADDRESS = 0x023B65A0
+OVERLAY_LOAD_ADDRESS = 0x023B65C0
 OVERLAY_BASE = 0x023B6B00
 OVERLAY_END = 0x023BAB00
 STATE_ADDRESS = OVERLAY_BASE + 0x3670
@@ -23,7 +23,7 @@ COMPAT_ADDRESS = OVERLAY_BASE + 0x18
 DEBUG_ADDRESS = OVERLAY_BASE + 0x38
 SERVICE_DIRECTORY_ADDRESS = OVERLAY_BASE + 0x78
 SERVICE_ENTRY_SIZE = 0x10
-POLICY_STATE_SIZE = 32
+POLICY_STATE_SIZE = 36
 SERVICE_NAMES = ("resolver", "motion", "population", "movementPolicy")
 SERVICE_MAGICS = (0x5250574F, 0x534D574F, 0x5450574F, 0x504D574F)
 RESOLVER_CALLBACKS = (
@@ -193,7 +193,7 @@ def verify_binary(binary, packaged, symbols):
         raise RuntimeError("actor facade value-object sizes changed")
     if debug[23:27] != (0x78, SERVICE_ENTRY_SIZE, 4, 0x990):
         raise RuntimeError("actor private service directory layout changed")
-    if debug[27] != debug[14] + 52 + 32:
+    if debug[27] != debug[14] + 52 + POLICY_STATE_SIZE:
         raise RuntimeError("actor runtime slot layout changed")
     if debug[17] != symbols[STATE_SYMBOL]["size"]:
         raise RuntimeError("debug layout state size differs from linked state symbol")
@@ -201,7 +201,7 @@ def verify_binary(binary, packaged, symbols):
     services = []
     resolver = struct.unpack_from(
         "<IHHII", image, SERVICE_DIRECTORY_ADDRESS - OVERLAY_LOAD_ADDRESS)
-    if resolver[:3] != (SERVICE_MAGICS[0], 2, SERVICE_ENTRY_SIZE):
+    if resolver[:3] != (SERVICE_MAGICS[0], 3, SERVICE_ENTRY_SIZE):
         raise RuntimeError("resolver service entry header changed")
     for pointer, symbol in zip(resolver[3:], RESOLVER_CALLBACKS):
         verify_pointer(pointer, symbol, symbols)
@@ -209,7 +209,7 @@ def verify_binary(binary, packaged, symbols):
         "name": SERVICE_NAMES[0],
         "address": SERVICE_DIRECTORY_ADDRESS,
         "size": SERVICE_ENTRY_SIZE,
-        "version": 2,
+        "version": resolver[1],
         "status": "available",
         "callbacks": {
             name: symbols[symbol]["address"] | 1
@@ -429,7 +429,7 @@ def write_descriptor(
             "size": symbols[STATE_SYMBOL]["size"],
             "capacity": debug[26],
             "actorStride": debug[27],
-            "actorPolicyOffset": debug[27] - 32,
+            "actorPolicyOffset": debug[27] - POLICY_STATE_SIZE,
             "offsets": {
                 **context_offsets,
                 "fieldEpoch": debug[18],
@@ -460,7 +460,7 @@ def write_descriptor(
             "motionPlan": 40,
             "motionState": 52,
             "motionSample": 36,
-            "actorPolicyState": 32,
+            "actorPolicyState": POLICY_STATE_SIZE,
         },
         "publicLayouts": public_layouts,
         "generatorInputs": generator_inputs,

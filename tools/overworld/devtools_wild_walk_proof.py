@@ -2,7 +2,7 @@
 from copy import deepcopy
 
 from tools.overworld.devtools_records import select_current_actor, engine_binding_identity
-from tools.overworld.devtools_wild_walk_measurement import IDENTITY, LIFECYCLE
+from tools.overworld.devtools_wild_walk_measurement import IDENTITY, LIFECYCLE, validate_terminal_idle_noop
 from tools.overworld.devtools_wild_walk_observer import ENGINE, check_cleared_state
 from tools.overworld.normal_play_observer import complete_travel
 
@@ -36,6 +36,24 @@ def contract():
 
 def need(value,reason):
     if not value:raise ValueError(reason)
+
+
+def clear_count(meter):
+    return len(meter.get('clearReceipts',[]))+len(meter.get('idleNoopClears',[]))+sum(
+        len(p['clearReceipts'])+len(p['idleNoopClears']) for p in meter.get('prelude',[]))
+
+
+def validate_prelude(meter):
+    need(isinstance(meter.get('prelude',[]),list) and clear_count(meter)<=64,
+        'wild Walk prelude clear bound exceeded')
+    previous=meter['initial']
+    for prelude in meter.get('prelude',[]):
+        duration=prelude['motion']['duration']
+        need(type(duration) is int and 1<=duration<=255 and (duration!=4 or prelude.get('successorStart') is not None)
+            and prelude['initial']==previous, 'wild Walk prelude boundary differs')
+        _walk_rows(dict(prelude,subject=meter['subject']),duration,allow_successor=True)
+        previous=prelude['terminal']
+    need(meter.get('cycleInitial',meter['initial'])==previous,'wild Walk selected boundary differs')
 
 
 def measurements(replay,record):
@@ -73,10 +91,27 @@ def measurements(replay,record):
     need(isinstance(noops,list) and len(noops)<=64,'wild Walk idle clear bound differs')
     need(reader.get('armed') is True and reader.get('closed') is True and reader.get('failure') is None
         and reader.get('acceptedProof') is False and reader.get('guestMemoryWrites')==0
-        and reader.get('subject')==subject and reader.get('counts')=={'clear':1+len(noops)}
+        and reader.get('subject')==subject and reader.get('counts')=={'clear':clear_count(meter)}
         and reader.get('startFrame')==initial['frame'],'wild Walk reader cleanup differs')
+    validate_prelude(meter)
+    cycle=dict(meter,initial=meter.get('cycleInitial',initial))
+    return _walk_rows(cycle,4)
+
+
+def _walk_rows(meter, duration, allow_successor=False):
+    initial,subject=meter['initial'],meter['subject']
+    selected=select_current_actor(initial,subject)
+    actor=next(a for a in initial['actors'] if a['handle']==selected['handle'])
+    terminal=meter['terminal'];current=select_current_actor(terminal,subject)
+    end=next(a for a in terminal['actors'] if a['handle']==current['handle'])
+    successor=meter.get('successorStart') if allow_successor else None
+    idle=end['motionPhase']=='IDLE' and end['motionKind']=='NONE' and end['reservationId']==0
+    need(terminal['context']==initial['context'] and all(end.get(k)==actor.get(k) for k in (*IDENTITY,'sourceIdentity'))
+        and engine_binding_identity(end['engineIdentity'])==engine_binding_identity(actor['engineIdentity'])
+        and (idle or successor is not None), 'wild Walk terminal owner or idle state differs')
+    noops=meter.get('idleNoopClears',[])
     motion=meter['motion']
-    need(meter.get('completeMotions')==1 and motion['kind']=='WALK' and motion['duration']==4
+    need(meter.get('completeMotions')==1 and motion['kind']=='WALK' and motion['duration']==duration
         and motion['handle']==actor['handle'] and motion['fingerprint']==actor['behaviorFingerprint']
         and complete_travel(motion) and motion['commitAfter']==(motion['commitBefore']+1)&0xFFFFFFFF,
         'wild Walk lacks one complete four-frame motion')
@@ -86,17 +121,21 @@ def measurements(replay,record):
     positive=[s for s in samples if s['elapsed']>0]
     for sample in samples:
         elapsed=sample['elapsed']
-        need(type(elapsed) is int and 0<=elapsed<=4 and sample['jumpOffset']==0
-            and [sample['render'][0],sample['render'][2]]==[(motion['origin'][i]<<16)+0x8000+delta[i]*0x10000*elapsed//4 for i in (0,1)],
+        need(type(elapsed) is int and 0<=elapsed<=duration and sample['jumpOffset']==0
+            and [sample['render'][0],sample['render'][2]]==[(motion['origin'][i]<<16)+0x8000+(1 if delta[i]>=0 else -1)*(abs(delta[i])*0x10000*elapsed//duration) for i in (0,1)],
             'wild Walk rendered sample differs')
     # TravelEnd is a separately retained real sample, not a fabricated elapsed4.
-    if not positive or positive[-1]['elapsed']!=4:
+    if not positive or positive[-1]['elapsed']!=duration:
         finish=motion.get('travelEnd',{})
-        need(finish.get('elapsed')==4 and finish.get('render')==[(v<<16)+0x8000 for v in motion['target']]
-            and motion.get('travelEndRender')==motion.get('terminalRender'), 'wild Walk missing measured travel end')
+        need(finish.get('elapsed')==duration and finish.get('render')==[(v<<16)+0x8000 for v in motion['target']]
+            and (motion.get('travelEndRender')==motion.get('terminalRender')
+                 or (successor is not None and finish.get('observedBy')=='successor-origin'
+                     and finish.get('successorElapsed')==0
+                     and finish.get('frame')==terminal['frame']==motion['finishFrame'])),
+             'wild Walk missing measured travel end')
         positive.append(finish)
     elapsed=[s['elapsed'] for s in positive]
-    need(elapsed==[1,2,3,4] and len(positive)==4,'wild Walk elapsed schedule differs')
+    need(elapsed==list(range(1,duration+1)) and len(positive)==duration,'wild Walk elapsed schedule differs')
     positions=[[s['logical'][k] for k in ('x','y')] for s in meter['logicalSamples']]
     need(positions and positions[0]==motion['origin'] and positions[-1]==motion['target']
         and all(p in (motion['origin'],motion['target']) for p in positions)
@@ -104,7 +143,7 @@ def measurements(replay,record):
     need(end['logical']==dict(zip(('x','y'),motion['target'])) and end['commitSequence']==motion['commitAfter'],
          'wild Walk terminal target differs')
     traces=meter['traces']; native={}
-    expected=(('MOTION_STARTED','startFrame',1,4),('LOGICAL_COMMIT','commitFrame',motion['commitAfter'],1),
+    expected=(('MOTION_STARTED','startFrame',1,duration),('LOGICAL_COMMIT','commitFrame',motion['commitAfter'],1),
         ('MOTION_FINISHED','finishFrame',motion['commitAfter'],1),('CONTROL_RETURNED','finishFrame',0,motion['commitAfter']))
     for name,frame,a,b in expected:
         rows=[e for e in traces if e.get('data',{}).get('event')==name]
@@ -117,11 +156,25 @@ def measurements(replay,record):
     sequence=[native[name]['sequence'] for name in LIFECYCLE]
     need(sequence==sorted(set(sequence)) and not any(e['data'].get('event')=='MOTION_CANCELED' for e in traces),
          'wild Walk lifecycle order or cancellation differs')
-    noop_sequences=validate_idle_noop_clears(noops,subject,initial,motion,
-        next(e for e in traces if e['data'].get('event')=='MOTION_STARTED'))
+    if successor is not None:
+        data=successor['data']
+        need(successor.get('kind')=='native' and successor['frame']==terminal['frame']==motion['finishFrame']
+            and data.get('event')=='MOTION_STARTED' and data.get('reason')=='OK'
+            and data.get('actorHandle')==actor['handle']['value']
+            and data.get('actor')=={k:v for k,v in actor['handle'].items() if k!='value'}
+            and data['sequence']>native['CONTROL_RETURNED']['sequence']
+            and (data.get('valueA'),data.get('valueB'))==(1,end['motionDuration'])
+            and end['motionKind']=='WALK' and end['motionPhase']=='MOVING' and end['motionElapsed']==0
+            and end['reservationId']>0 and end['origin']==end['logical']==dict(zip(('x','y'),motion['target']))
+            and [end['engineObject'][k] for k in ('pos_x','pos_z')]==[(v<<16)+0x8000 for v in motion['target']]
+            and end['engineObject'].get('unk88_y',0)==0, 'wild Walk successor boundary differs')
     clears=meter['clearReceipts'];need(len(clears)==1,'missing native wild Walk clear')
     event=clears[0];clear=event['data']
-    need(all(sequence<clear['sequence'] for sequence in noop_sequences), 'wild Walk idle clear occurs after terminal clear')
+    noop_sequences=validate_idle_noop_clears(noops,subject,initial,motion,
+        next(e for e in traces if e['data'].get('event')=='MOTION_STARTED'),
+        terminal_clear=event if successor is not None else None, successor=end, terminal=terminal)
+    need(all(sequence<clear['sequence'] or successor is not None for sequence in noop_sequences),
+         'wild Walk idle clear occurs after terminal clear')
     need(event['kind']=='native-observation' and clear.get('observation')=='wild-walk-clear'
         and clear.get('subject')==subject,'wild Walk clear receipt differs')
     before,after=clear['before'],clear['after']
@@ -152,7 +205,7 @@ def measurements(replay,record):
         for (claim,name,operator),value in zip(RULES,values)]
 
 
-def validate_idle_noop_clears(noops,subject,initial,motion,start_trace):
+def validate_idle_noop_clears(noops,subject,initial,motion,start_trace, *, terminal_clear=None, successor=None, terminal=None):
     """Validate retained pre-motion calls; return their native receipt sequences."""
     bound=select_current_actor(initial,subject)
     actor=next(a for a in initial['actors'] if a['handle']==bound['handle'])
@@ -170,6 +223,11 @@ def validate_idle_noop_clears(noops,subject,initial,motion,start_trace):
             and type(before.get('mode')) is int and before['mode']==0,
             'wild Walk idle clear changed state')
         check_cleared_state(before)
+        if terminal_clear is not None and data['sequence'] > terminal_clear['data']['sequence']:
+            validate_terminal_idle_noop(event, terminal_clear, successor,
+                actor_frame=terminal["actorFrame"], native_cycle=terminal["nativeCycle"])
+            sequences.append(data['sequence'])
+            continue
         need(owner.get('subject')==subject and all(public.get(k)==actor.get(k) for k in IDENTITY)
             and public.get('motionPhase')=='IDLE' and public.get('motionKind')=='NONE'
             and public.get('commitSequence')==actor['commitSequence']

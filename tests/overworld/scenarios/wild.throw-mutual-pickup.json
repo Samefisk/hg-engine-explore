@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.throw-mutual-pickup",
+  "title": "Two Wild Geodude keep mutual Cargo claims until one normal pickup",
+  "status": "active",
+  "capabilities": [
+    "actor.system"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "Two current Wild Geodude on Route29 with a passive Cyndaquil follower.",
+    "trigger": "Place Player at586406 and Wild Geodude at584402 and588402. Let normal Player notices and Cargo queries run with neutral input.",
+    "observable": "Geodude A claims B during an accepted Walk. B then gets a fresh reachable query to A; both exact unheld claims stay live until one physically picks the other. One full HELD owner persists through a normal Cargo Hop launch. No claim, timer, profile, motion or control is injected.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Checked teleport Player586406; prepare native party0 Cyndaquil155Lv20 and Follower; spawn Wild Geodude74Lv20 A at584402 and B at588402. Observe 180 neutral-input completed frames. No claim, timer, profile, motion or control is written."
+      }
+    ],
+    "limits": [
+      "Prepared placement does not prove natural population selection.",
+      "Both actors are Wild; this case does not prove Follower ownership.",
+      "Stops after normal Cargo launch; landing and damage are outside this claim."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "geodude-a",
+      "species": 74,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "geodude-b",
+      "species": 74,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Both current Geodude receive normal Player notices on the four-tile row."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "A claims B, then B has a fresh reachable query and both unheld outgoing claims stay live."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "One Geodude physically picks the other; the loser claim clears, one HELD owner persists, and the Cargo launches normally."
+    }
+  ],
+  "stop": {
+    "frameBudget": 520,
+    "condition": "Same-pair normal Cargo launch or first failed current owner, claim, field or motion observation."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Both full Wild actor handles and native source identity stay current.",
+      "A normal accepted Walk claim precedes a fresh B-to-A reachable query.",
+      "Both outgoing unheld claims stay live until the first physical pickup.",
+      "The loser claim clears at pickup; exactly one HELD owner persists.",
+      "The same full Cargo launches by a normal Hop."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "wild.throw-mutual-pickup",
+    "claims": [
+      "live-actor-identity",
+      "natural-input",
+      "engine-boundary",
+      "control-release"
+    ],
+    "minimumFrames": 2
+  }
+}

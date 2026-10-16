@@ -42,7 +42,7 @@ class RoleProfileTests(unittest.TestCase):
         def linked(label,path,symbols,name,before,after,**kwargs):
             observer.tokens.append(hooks.add(0x02300000+(0x40 if label.endswith("mount") else 0),before))
         reader=RoleProfileObserver(observer,linked);reader.mount_state=0x023BC744
-        put(regs.r2,bytes(range(144)));put(regs.r3,bytes(range(8)))
+        put(regs.r2,bytes(range(160)));put(regs.r3,bytes(range(8)))
         return reader,s,actor,source,engine,regs,put,regs_calls
 
     def mount(self,f,surface=0x02213000):
@@ -55,7 +55,7 @@ class RoleProfileTests(unittest.TestCase):
         put(transaction,struct.pack("<IIII",3,4,0,0))
         before=reader.mount_before()
         put(transaction,struct.pack("<IIII",3,4,1,2))
-        put(reader.mount_state,struct.pack("<II",s.field_pointer(),surface)+bytes(range(72))+
+        put(reader.mount_state,struct.pack("<II",s.field_pointer(),surface)+bytes(range(80))+
             binding+struct.pack("<IBBBB",7,1,0,0,0))
         actor.update(behaviorFingerprint=3,matchedLayerMask=4)
         return before
@@ -63,7 +63,7 @@ class RoleProfileTests(unittest.TestCase):
     def test_getter_returns_exact_output_and_bound_subject(self):
         f=self.fixture();reader=f[0]
         before=reader.getter_before();result=reader.getter_after(before,{})
-        self.assertEqual(result["profileHex"],bytes(range(144)).hex())
+        self.assertEqual(result["profileHex"],bytes(range(160)).hex())
         self.assertEqual(result["primitivesHex"],bytes(range(8)).hex())
         self.assertEqual(result["ownerAfter"]["publicSubject"]["subjectIdentity"],123)
         self.assertIsNone(result["returnValue"])
@@ -123,14 +123,14 @@ class RoleProfileTests(unittest.TestCase):
         for fault in (None,"owner","binding","phase","generation","return","subject"):
             f=self.fixture();r=f[0];before=self.mount(f)
             if fault=="owner":f[6](r.mount_state+8,b"\xff")
-            if fault=="binding":f[6](r.mount_state+80,b"\xff")
-            if fault=="phase":f[6](r.mount_state+100,b"\x02")
-            if fault=="generation":f[6](r.mount_state+96,bytes(4))
+            if fault=="binding":f[6](r.mount_state+88,b"\xff")
+            if fault=="phase":f[6](r.mount_state+108,b"\x02")
+            if fault=="generation":f[6](r.mount_state+104,bytes(4))
             if fault=="subject":f[3]["personality"]+=1
             context={"returnValue":0 if fault=="return" else 1}
             if fault is None:
                 result=r.mount_after(before,context)
-                self.assertEqual(result["ownerHex"],bytes(range(72)).hex())
+                self.assertEqual(result["ownerHex"],bytes(range(80)).hex())
                 self.assertEqual(result["sessionGeneration"],7)
             else:
                 with self.subTest(fault=fault),self.assertRaises(NativeObservationError):r.mount_after(before,context)
@@ -220,7 +220,7 @@ class RoleProfileTests(unittest.TestCase):
         s.rt.actor_memory_write=lambda emu,p,b:(writes.append((p,bytes(b))),f[6](p,b))[-1]
         with r.capture(control=True):
             before=self.mount(f)
-            clean=s.read(r.mount_state,104)
+            clean=s.read(r.mount_state,108)
             result=r.mount_after(before,{"returnValue":1})
         proof=result["readerControl"]
         self.assertTrue(proof["rejected"])
@@ -228,7 +228,7 @@ class RoleProfileTests(unittest.TestCase):
         self.assertEqual(len(writes),2)
         self.assertEqual(writes[0],(r.mount_state+8,b"\x01"))
         self.assertEqual(writes[1],(r.mount_state+8,b"\x00"))
-        self.assertEqual(s.read(r.mount_state,104),clean)
+        self.assertEqual(s.read(r.mount_state,108),clean)
         self.assertEqual(proof["beforeClock"],proof["afterClock"])
 
     def test_default_control_has_no_writes(self):
@@ -257,9 +257,9 @@ class RoleProfileTests(unittest.TestCase):
                 r._check_mount_snapshot=lambda v,o,b:(b[8:],7,1)
             with self.subTest(fault=fault),self.assertRaises(Exception) as caught:
                 with r.capture(control=True):
-                    before=self.mount(f);clean=real_read(r.mount_state,104)
+                    before=self.mount(f);clean=real_read(r.mount_state,108)
                     r.mount_after(before,{"returnValue":1})
-            self.assertEqual(real_read(r.mount_state,104),clean)
+            self.assertEqual(real_read(r.mount_state,108),clean)
             self.assertEqual(len(writes),2)
             self.assertIn({"read":"changed read failed","missing-check":"accepted the changed",
                            "advance":"guest advanced"}[fault],str(caught.exception))
@@ -301,7 +301,7 @@ _Alignof(OverworldWildSurfaceCatalog)); }
             exe=str(Path(d)/"layout")
             subprocess.run(["cc","-DOVERWORLD_BEHAVIOR_HOST","-I",str(root/"include"),"-x","c","-","-o",exe],
                 input=code,text=True,capture_output=True,check=True)
-            self.assertEqual(subprocess.check_output([exe]).decode(),"144 8 16 96 72 88 2")
+            self.assertEqual(subprocess.check_output([exe]).decode(),"160 8 16 104 80 96 2")
         internal=(root/"include/overworld_mount_internal.h").read_text()
         prefix=internal.split("typedef struct OverworldMountRuntimeState {",1)[1].split("OverworldMountSnapshot snapshot;",1)[0]
         self.assertEqual(prefix.split(),["FieldSystem","*fieldSystem;","const","OverworldWildSurfaceCatalog","*surfaceCatalog;"])

@@ -33,8 +33,9 @@ description: Run registered hg-engine overworld tests and check accepted proof. 
    control, then use `population.spawn-work-budget` on the current ROM. Require
    exactly one profile/metadata/class preparation for the whole automatic
    attempt. Require the repeated-preparation and slow-resumed-finalizer controls
-   to fail. The current cap is16 candidate queries per update; the full explicit
-   scan must still preserve all240 queries across15 resumed batches. That cap
+   to fail. The explicit destination cap is4 candidate queries per update;
+   the full scan must still preserve all240 queries across60 resumed batches.
+   The separate legacy position helper keeps its16-candidate attempt. A cap
    alone cannot pass. A population count or legacy-helper-only pass cannot close D1. Run
    `world.unmounted.spawn-zero-stutter` from its unchanged Continue save and
    existing Mankey for the player-visible gate. Zero late loops is the only

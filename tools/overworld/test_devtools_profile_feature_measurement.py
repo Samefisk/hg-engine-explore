@@ -1,10 +1,12 @@
 """Focused contracts for PB9 feature-specific live observers."""
 
 from copy import deepcopy
+from pathlib import Path
 import unittest
 
+from tools.overworld.devtools_application_bank import canonical_bank, local_application
 from tools.overworld.devtools_profile_feature_measurement import (
-    BLOCKED_FACING, BLOCKED_FACING_FRAMES, FLY_IN, FLY_IN_DURATION_FRAMES,
+    AMBUSH, BLOCKED_FACING, BLOCKED_FACING_FRAMES, FLY_IN, FLY_IN_DURATION_FRAMES,
     HELD, PLAYFUL, STALKER, WADDLE,
     ProfileFeatureMeasurement,
 )
@@ -171,18 +173,18 @@ class PlayfulStageTests(unittest.TestCase):
 
     def test_actor_stage_closes_before_the_player_case_starts(self):
         meter = ProfileFeatureMeasurement(PLAYFUL)
-        meter.conditions = [{"conditionId": 31250, "triggered": True,
+        meter.conditions = [{"conditionId": 34198, "triggered": True,
                              "active": True, "frame": 100}]
         meter.motion.completed = [self.complete_motion(101)]
         self.assertTrue(meter.stage("actor-play-complete"))
 
-        meter.conditions.append({"conditionId": 38737, "triggered": True,
+        meter.conditions.append({"conditionId": 58853, "triggered": True,
                                  "active": True, "frame": 103})
         self.assertFalse(meter.stage("actor-play-complete"))
 
     def test_actor_stage_needs_its_completed_motion(self):
         meter = ProfileFeatureMeasurement(PLAYFUL)
-        meter.conditions = [{"conditionId": 31250, "triggered": True,
+        meter.conditions = [{"conditionId": 34198, "triggered": True,
                              "active": True, "frame": 100}]
         self.assertFalse(meter.stage("actor-play-complete"))
 
@@ -289,6 +291,69 @@ class BlockedFacingCompletionTests(unittest.TestCase):
         self.assertEqual(changed["samples"][0]["actors"][0]["engineObject"]["facing"], 2)
         self.assertEqual(changed["samples"][0]["actors"][1]["engineObject"]["facing"], 3)
         self.assertEqual(source["samples"][0]["actors"][0]["engineObject"]["facing"], 1)
+
+
+class AmbushApplicationTests(unittest.TestCase):
+    def fixture(self):
+        meter = ProfileFeatureMeasurement(AMBUSH)
+        application = meter.config["application"]
+        meter.local_application = local_application(
+            canonical_bank(Path(__file__).resolve().parents[2]), 70, application)
+        meter.subjects = {"weepinbell": {"handle": {"value": 7}}}
+        meter.conditions = [{"active": True, "timed": True, "conditionId": 49529,
+                             "application": application,
+                             "targetSourceApplication": application,
+                             "targetKind": 1, "frame": 100}]
+        motion = {"kind": "HOP", "target": [585, 408],
+                  "terminalLogical": [585, 408], "startFrame": 101,
+                  "finishFrame": 113, "fingerprint": 19,
+                  "commitBefore": 0, "commitAfter": 1}
+        meter.samples = [{"frame": 101, "behaviorFingerprint": 19,
+                          "matchedLayerMask": 1 << meter.local_application}]
+        names = ("INTENT_CREATED", "MOTION_STARTED", "LOGICAL_COMMIT",
+                 "MOTION_FINISHED", "CONTROL_RETURNED")
+        meter.events = [{"kind": "native", "frame": 101 + i,
+                         "data": {"event": name, "actorHandle": 7,
+                                  "sequence": i + 1}}
+                        for i, name in enumerate(names)]
+        return meter, motion
+
+    def test_current_catalog_ambush_landing_is_accepted(self):
+        meter, motion = self.fixture()
+        self.assertIsNotNone(meter._ambush_evidence([motion]))
+
+    def test_old_application_and_incomplete_landing_evidence_are_rejected(self):
+        for fault in ("old-all", "application", "source", "mask", "inactive", "routine",
+                      "target", "logical", "fingerprint", "commit", "event"):
+            with self.subTest(fault=fault):
+                meter, motion = self.fixture()
+                stale = (meter.config["application"] - 1) % 32
+                stale_local = (meter.local_application + 1) % 32
+                if fault == "old-all":
+                    meter.conditions[0].update(application=stale, targetSourceApplication=stale)
+                    meter.samples[0]["matchedLayerMask"] = 1 << stale_local
+                elif fault == "application":
+                    meter.conditions[0]["application"] = stale
+                elif fault == "source":
+                    meter.conditions[0]["targetSourceApplication"] = stale
+                elif fault == "mask":
+                    meter.samples[0]["matchedLayerMask"] = 1 << stale_local
+                elif fault == "inactive":
+                    meter.conditions[0]["active"] = False
+                elif fault == "routine":
+                    meter.conditions[0]["timed"] = False
+                elif fault == "target":
+                    motion["target"] = [585, 407]
+                elif fault == "logical":
+                    motion["terminalLogical"] = [585, 407]
+                elif fault == "fingerprint":
+                    meter.samples[0]["behaviorFingerprint"] = 20
+                elif fault == "commit":
+                    motion["commitAfter"] = 0
+                else:
+                    meter.events.pop()
+                self.assertIsNone(meter._ambush_evidence([motion]))
+
 
 class ProfileFeatureNegativeTests(unittest.TestCase):
     def test_missing_feature_evidence_removes_every_condition_record(self):

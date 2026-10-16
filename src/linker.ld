@@ -13,7 +13,23 @@ SECTIONS {
 
                 __text_start = . ;
                 *(.init)
-                *(.text)
+                *(EXCLUDE_FILE (build/thumb_help.o) .text)
+                /* Use existing filler without moving generic core exports. */
+                __item_data_start = .;
+                KEEP(*(.item_data_none))
+                __item_data_end = .;
+                ASSERT(__item_data_end - __item_data_start <= 64,
+                    "private no-item data loader exceeds its budget");
+                ASSERT(. <= 0x023DEDF0,
+                    "core code overlaps private Hop lease leaf");
+                . = ORIGIN(rom) + 0x67F0;
+                KEEP(*(.overworld_hop_lease))
+                ASSERT(ABSOLUTE(OverworldHopPresentation_Acquire) == 0x023DEDF0,
+                    "private Hop lease leaf moved");
+                ASSERT(. <= 0x023DEE44,
+                    "private Hop lease leaf exceeds existing 84-byte gap");
+                . = ORIGIN(rom) + 0x6844;
+                build/thumb_help.o(.text)
                 *(.ctors)
                 *(.dtors)
                 *(.rodata)
@@ -58,6 +74,15 @@ SECTIONS {
         ASSERT(ADDR(.overworld_effect_pool_capacity)
                     + SIZEOF(.overworld_effect_pool_capacity) <= 0x023DFFCC,
                 "effect guards overlap the Walk pause resolver")
+
+        .overworld_bubble_effect_guard : {
+                KEEP(*(.overworld_bubble_effect_guard))
+        } >rom = 0xff
+        ASSERT(SIZEOF(.overworld_bubble_effect_guard) <= 48,
+                "bubble model admission exceeds its 48-byte tail budget")
+        ASSERT(ADDR(.overworld_bubble_effect_guard)
+                    + SIZEOF(.overworld_bubble_effect_guard) <= 0x023DFFCC,
+                "bubble model admission overlaps the Walk pause resolver")
 
         /* Keep the Walk pause resolver out of the fixed-address core ABI. */
         .overworld_walk_pause_variance 0x023DFFCC : {

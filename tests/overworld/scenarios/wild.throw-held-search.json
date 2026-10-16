@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.throw-held-search",
+  "title": "Held Cargo keeps searching until a normal line opens",
+  "status": "active",
+  "capabilities": [
+    "condition.evaluation",
+    "chase"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "Current WILD Geodude74, WILD Mareep179 and same Stantler234 native Follower/Mounted identity during normal setup.",
+    "trigger": "Prepared placement only. Natural Vision, pickup and held Find Position continue for201 frames. Normal UP input opens the current saved Player line.",
+    "observable": "Exact native60-byte bindings and16-byte masks stay current across201 held frames; native resolver216 bytes prove Find Position. Current windup timer counts20 before current Cargo52-byte accepted native START and carrier recovery60.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Ordinary party, teleport and native spawns. Normal Select/foot input and one native fence Hop; no forced claim, profile, motion or timer."
+      }
+    ],
+    "limits": [
+      "This bounded201-frame witness does not prove infinity by itself; source lifetime controls own the absence of a timeout gate.",
+      "The run ends at authentic launch. Existing Throw flight/contact/return cases own later behavior.",
+      "Requested tiles earn no credit: actual returned full identities, support and lifecycle must match."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "geodude",
+      "species": 74,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "mareep",
+      "species": 179,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "stantler",
+      "species": 234,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Prepare current Stantler and Geodude in the loaded Cherrygrove pocket. Only normal Select, foot travel and one accepted mounted fence Hop leave the carrier confined. Spawn native Mareep beside it only after current Follower settles."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Natural pickup, 201 consecutive current held Find Position frames without a line, then normal UP input opens the saved Player line. Observe authored windup and accepted protected Cargo Throw START."
+    }
+  ],
+  "stop": {
+    "frameBudget": 1000,
+    "condition": "201 exact held frames and accepted current Cargo Throw START, or first invalid current identity, binding, terrain, motion or clock."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Full-current carrier, Cargo and Player Trigger",
+      "Normal fence Hop completes before Cargo placement",
+      "Loaded known clear pocket and native-ground Cargo support",
+      "No forced claim, timer, HP, profile or motion",
+      "201 continuous Find Position frames without a legal line",
+      "Authored windup20 and recovery60",
+      "Current Cargo START, binding clear and flight target protection"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "wild.throw-held-search",
+    "claims": [
+      "live-actor-identity",
+      "natural-input",
+      "engine-boundary"
+    ],
+    "minimumFrames": 202
+  }
+}

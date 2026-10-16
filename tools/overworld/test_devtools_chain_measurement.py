@@ -23,7 +23,7 @@ class Stream:
     def __init__(self, *, initial_commit=0):
         self.frame = self.sequence = self.trace_sequence = 0
         self.items = []
-        self.lane = bytearray(72)
+        self.lane = bytearray(80)
         values = {"ramAccelerationSteps": 8, "chainMovementVariance": 6, "chainPauseAction": 5,
                   "chainPauseActionChance": 60, "chainRepositionJumpCount": 4, "chainRepositionSpeed": 8,
                   "chainRepositionDistance": 2, "chainRepositionAllowCardinal": 0,
@@ -34,10 +34,10 @@ class Stream:
             self.lane[fields[key]["offset"]] = value
         tired_lane = bytearray(self.lane); tired_lane[0] = 19
         self.lanes = [bytes(self.lane).hex(), bytes(tired_lane).hex()]
-        resolved = bytearray(200)
-        for index, lane in enumerate(self.lanes): resolved[index * 72:(index + 1) * 72] = bytes.fromhex(lane)
-        resolved[172:176] = (3).to_bytes(4, "little")
-        resolved[176:180] = (12345).to_bytes(4, "little")
+        resolved = bytearray(216)
+        for index, lane in enumerate(self.lanes): resolved[index * 80:(index + 1) * 80] = bytes.fromhex(lane)
+        resolved[188:192] = (3).to_bytes(4, "little")
+        resolved[192:196] = (12345).to_bytes(4, "little")
         request = bytearray(44); request[:2] = (165).to_bytes(2, "little"); request[8] = 5; request[38] = 2
         self.profile = {"resolved": True, "requestHex": request.hex(), "resultHex": resolved.hex(),
                         "fingerprint": 12345, "sourceSha256": SOURCE, "lanes": self.lanes, "appliedOverrides": 3}
@@ -478,7 +478,7 @@ class ChainMeasurementTests(unittest.TestCase):
                 elif group == "observation": items[4][0]["nativeObservation"]["coverageComplete"] = False
                 else:
                     policy = next(e["data"] for _, events in items for e in events if e["data"].get("operation") == 4)
-                    policy["laneHex"] = "00" * 72
+                    policy["laneHex"] = "00" * 80
                 result = replay(items)[1]
                 self.assertFalse(result["passed"])
                 self.assertTrue(result[group + "Errors"], result)
@@ -498,7 +498,7 @@ class ChainMeasurementTests(unittest.TestCase):
             profile["requestHex"] = request.hex()
             profile["fingerprint"] = 3990395777
             result = bytearray.fromhex(profile["resultHex"])
-            result[176:180] = (3990395777).to_bytes(4, "little")
+            result[192:196] = (3990395777).to_bytes(4, "little")
             profile["resultHex"] = result.hex()
             items[0][0]["nativeObservation"]["resolvedProfiles"].append(profile)
         meter, result = replay(items)
@@ -534,7 +534,7 @@ class ChainMeasurementTests(unittest.TestCase):
                     elif fault == "source": profile["sourceSha256"] = "b" * 64
                     elif fault == "result":
                         other = deepcopy(profile)
-                        result = bytearray.fromhex(other["resultHex"]); result[144] ^= 1
+                        result = bytearray.fromhex(other["resultHex"]); result[160] ^= 1
                         other["resultHex"] = result.hex()
                         profiles.append(other)
                     for event in events:

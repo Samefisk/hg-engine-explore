@@ -37,8 +37,8 @@ RUNTIME_ACTORS_OFFSET = 0
 RUNTIME_SCRATCH_OFFSET = PREPARED_ACTOR_BYTES * 10
 RUNTIME_RESULT_OFFSET = RUNTIME_SCRATCH_OFFSET + 32
 RUNTIME_RESOLUTION_OFFSET = RUNTIME_RESULT_OFFSET + 540 + 44
-RUNTIME_FRAME_OFFSET = RUNTIME_RESOLUTION_OFFSET + 200 + 12
-RUNTIME_ACTOR_SNAPSHOT_OFFSET = RUNTIME_RESOLUTION_OFFSET + 200 + 20 + 396 + 20
+RUNTIME_FRAME_OFFSET = RUNTIME_RESOLUTION_OFFSET + 216 + 12
+RUNTIME_ACTOR_SNAPSHOT_OFFSET = RUNTIME_RESOLUTION_OFFSET + 216 + 20 + 396 + 20
 RUNTIME_TIMED_MASKS_OFFSET = RUNTIME_ACTIVE_MASKS_OFFSET + 40
 RUNTIME_TARGET_X_OFFSET = RUNTIME_TIMED_MASKS_OFFSET + 40
 RUNTIME_TARGET_Y_OFFSET = RUNTIME_TARGET_X_OFFSET + 20
@@ -336,7 +336,7 @@ class NativeConditionControllerObserver(NativeMountedPacingObserver):
             },
             "targetValid": target_valid,
             "profileHex": public_bytes(
-                session, runtime + RUNTIME_RESOLUTION_OFFSET, 144).hex(),
+                session, runtime + RUNTIME_RESOLUTION_OFFSET, 160).hex(),
         }
 
     def _before_wrapper(self):
@@ -352,7 +352,7 @@ class NativeConditionControllerObserver(NativeMountedPacingObserver):
         value = {
             "subject": deepcopy(self.subject),
             "slot": self.slot,
-            "profilePointer": _public_pointer(regs.r3, 144),
+            "profilePointer": _public_pointer(regs.r3, 160),
             "fieldPointer": regs.r1 & 0xFFFFFFFF,
             "motionAtEntry": {
                 "phase": self._current()["motionPhase"],
@@ -371,7 +371,7 @@ class NativeConditionControllerObserver(NativeMountedPacingObserver):
             result = context["returnValue"]
             flags = result & 0xFF
             direction = result >> 8
-            self._require(0 <= flags <= 7 and 0 <= direction <= 7,
+            self._require(flags & ~0x1F == 0 and 0 <= direction <= 7,
                           "Wild wrapper result flags differ")
             self._require(bool(self.adapter_records),
                           "Wild wrapper returned without an adapter call")
@@ -398,7 +398,7 @@ class NativeConditionControllerObserver(NativeMountedPacingObserver):
             }
             if (flags & 4) == 0:
                 receipt["profileHex"] = public_bytes(
-                    self.session, value["profilePointer"], 144).hex()
+                    self.session, value["profilePointer"], 160).hex()
                 self._require(receipt["profileHex"] == latest["profileHex"],
                               "Wild wrapper did not receive adapter profile")
             self.wrapper_records.append(deepcopy(receipt))

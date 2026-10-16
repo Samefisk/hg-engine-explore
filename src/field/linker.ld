@@ -86,6 +86,17 @@ SECTIONS {
                 *(.data)
         } >rom = 0xff
 
+        /* Fully linked read-only Wild observation; the Field parent owns
+         * its lifetime and the accepted movement remains in Wild. */
+        .overworld_field_wild_cargo_observation 0x023CCDC8 : {
+                KEEP(*(.overworld_field_wild_cargo_observation))
+                . = ALIGN(4);
+        } >rom = 0xff
+        ASSERT(ADDR(.data) + SIZEOF(.data) <= 0x023CCDC8,
+            "field data overlaps private Cargo observation")
+        ASSERT(SIZEOF(.overworld_field_wild_cargo_observation) == 0xD0,
+            "private Cargo observation reserve changed")
+
         .overworld_mount_field_input_host ORIGIN(rom) + 0x4E98 : {
                 KEEP(*(.overworld_mount_field_input_host))
                 . = ALIGN(4);

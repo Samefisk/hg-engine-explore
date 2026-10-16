@@ -5,6 +5,8 @@
 #include "../../include/map_events_internal.h"
 #include "../../include/constants/sndseq.h"
 
+__asm__(".thumb\n.thumb_func\n.thumb_set OverworldMountWalkProposal_SaveReserved, 0x01FFF480\n");
+
 /* Overlay 160 is boot-resident beside Mount. These helpers use Mount's one
  * fixed runtime state; they do not hold a second actor or motion state. */
 #define MOUNT_STATE \
@@ -81,6 +83,7 @@ OverworldMount_ApplyWalkPolicyOutput(
     OverworldMountRuntimeState *state = MOUNT_STATE;
 
     if (call->decision == OVERWORLD_ACTOR_WALK_POLICY_TRY_STEP) {
+        OverworldMountWalkProposal_SaveReserved(call);
         state->reservedPolicyProfile[
             OVERWORLD_MOUNT_WALK_NOMINAL_TIME_INDEX] = call->reserved[0];
         state->reservedPolicyState[
@@ -160,16 +163,40 @@ OverworldMount_ClearFollowerDecisionCooldown(void)
         "1: .word sOverworldWildSpawnState + 0xF4\n");
 }
 
-void __attribute__((noinline, used,
+typedef char OverworldMountPlayerBaseFaceOffsetMustRemain112[
+    offsetof(OverworldMountRuntimeState, playerBaseFaceY) == 112 ? 1 : -1];
+typedef char OverworldMountPlayerBaseUnk88OffsetMustRemain116[
+    offsetof(OverworldMountRuntimeState, playerBaseUnk88Y) == 116 ? 1 : -1];
+typedef char OverworldMountLastFaceOffsetMustRemain184[
+    offsetof(OverworldMountRuntimeState, lastAppliedPlayerFaceY) == 184 ? 1 : -1];
+typedef char OverworldMountRuntimeSizeMustRemain188[
+    sizeof(OverworldMountRuntimeState) == 188 ? 1 : -1];
+typedef char OverworldMountPlayerFaceInputOffsetMustRemain128[
+    offsetof(LocalMapObject, faceVec[1]) == 128 ? 1 : -1];
+typedef char OverworldMountPlayerUnk88InputOffsetMustRemain140[
+    offsetof(LocalMapObject, unk88[1]) == 140 ? 1 : -1];
+
+/* The state-base literal points 64 bytes into the fixed state, putting all
+ * four Y caches within Thumb's short load/store range. */
+void __attribute__((naked, noinline, used,
     section(".overworld_mount_player_base")))
 OverworldMount_UpdatePlayerBaseHeight(LocalMapObject *player)
 {
-    OverworldMountRuntimeState *state = MOUNT_STATE;
-
-    if (player->faceVec[1] != state->lastAppliedPlayerFaceY) {
-        state->playerBaseFaceY = player->faceVec[1];
-    }
-    if (player->unk88[1] != state->lastAppliedPlayerUnk88Y) {
-        state->playerBaseUnk88Y = player->unk88[1];
-    }
+    __asm__(
+        "add r0, #128\n"
+        "ldr r2, [r0, #0]\n"
+        "ldr r3, 1f\n"
+        "ldr r1, [r3, #124]\n"
+        "cmp r2, r1\n"
+        "beq 2f\n"
+        "str r2, [r3, #48]\n"
+        "2: add r0, #12\n"
+        "ldr r2, [r0, #0]\n"
+        "ldr r1, [r3, #120]\n"
+        "cmp r2, r1\n"
+        "beq 3f\n"
+        "str r2, [r3, #52]\n"
+        "3: bx lr\n"
+        ".align 2\n"
+        "1: .word 0x023BC784\n");
 }

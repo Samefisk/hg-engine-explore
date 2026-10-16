@@ -1,0 +1,137 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.rattata-walking-ledge",
+  "title": "Mounted Rattata crosses a permitted ledge from rest",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "TICKETS.md",
+  "requirements": [
+    "current.mounted-rattata-walking-ledge"
+  ],
+  "budgets": {
+    "maxSeconds": 180,
+    "maxFrames": 480,
+    "noProgressFrames": 120,
+    "minObservedFrames": 24
+  },
+  "subjects": [
+    {
+      "id": "rattata",
+      "species": 19,
+      "role": "MOUNTED",
+      "acquire": "existing"
+    }
+  ],
+  "setup": [
+    {
+      "id": "south-ledge-from-rest",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 590,
+        "z": 395,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "own-rattata",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 19,
+        "level": 20,
+        "status": 0
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "mount-own-rattata",
+      "op": "spawn",
+      "args": {
+        "species": 19,
+        "role": "mounted",
+        "slot": 0,
+        "form": 0,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 180,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-rattata",
+      "op": "bind",
+      "args": {
+        "subject": "rattata"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "down-into-permitted-ledge",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-rattata-walking-ledge-v1",
+          "stage": "started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "release-through-hop-terminal",
+      "op": "step",
+      "args": {
+        "frames": 48,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 48,
+        "noProgressFrames": 48
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "mounted-rattata-walking-ledge-v1",
+      "when": "final"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "mounted-rattata-walking-ledge-v1",
+      "subject": "rattata"
+    }
+  ]
+}

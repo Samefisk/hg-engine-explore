@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PRODUCT = ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
 SERVICE = ROOT / "src/pokemon_move_history_overlay/overworld_wild_occupancy.c"
 FIXTURE = ROOT / "tools/overworld/fixtures/wild_occupancy_harness.c"
-NAMES = ("IsTileOccupiedByObject", "IsTileOccupiedByNonPlayerObject", "IsTileOccupiedOnSurface")
+NAMES = ("IsTileOccupiedByObject", "IsTileOccupiedByNonPlayerObject")
 ENTRY = 0x023C0184
 SYMBOL = "OverworldWildOccupancy_Query"
 
@@ -103,7 +103,7 @@ def verify_package(rom_path):
             f"--start-address={address}", f"--stop-address={address + size}", str(wild)], text=True)
         calls = [call for call in direct_thumb_calls(assembly) if call[2] == ENTRY]
         checked(len(calls) == 1 and calls[0][1] == "bl", name + " must call typed native host once")
-    print(f"PASS S2 occupancy: 3 native wrappers, hosted Thumb body {service[1]} bytes")
+    print(f"PASS S2 occupancy: 2 native wrappers, hosted Thumb body {service[1]} bytes")
     # Ordinary spawn work crosses one queue now. Its guard and the unchanged
     # spatial predicates share existing resident tails, not another owner.
     groups = (

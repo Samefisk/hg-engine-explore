@@ -6,6 +6,7 @@ MEMORY {
 }
 
 SECTIONS {
+        /DISCARD/ : { *(.overworld_mount_private_inspect) }
         .text : {
                 KEEP(*(.overworld_mount_walk_ease))
                 ASSERT(OverworldWalk_EaseMountedWalk == ORIGIN(rom),
@@ -56,6 +57,11 @@ SECTIONS {
 
         .overworld_mount_walk_policy_output 0x01FF96C0 : {
                 KEEP(*(.overworld_mount_walk_policy_output))
+                ASSERT(ABSOLUTE(.) == 0x01FF9770,
+                    "mounted Walk output changed private idle filler");
+                KEEP(*(.overworld_mount_private_terrain_idle))
+                ASSERT(ABSOLUTE(.) == 0x01FF9780,
+                    "private terrain idle changed its Action filler");
         } >rom = 0xff
         ASSERT(OverworldMount_ApplyWalkPolicyOutput == 0x01FF96C0,
                 "mounted walk-output helper ABI moved")

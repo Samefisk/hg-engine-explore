@@ -14,9 +14,9 @@ class Session:
     def __init__(self, role="WILD"):
         self.rt = SimpleNamespace(ACTOR_DESCRIPTOR={
             "facade": dict(version=2),
-            "state": dict(address=0x02010000, size=2448, actorStride=172,
+            "state": dict(address=0x02010000, size=2488, actorStride=176,
                           actorPolicyOffset=140, offsets=dict(actors=68)),
-            "structures": dict(actorPolicyState=32),
+            "structures": dict(actorPolicyState=36),
             "capacities": dict(actors=10), "privateServices": [dict(name="movementPolicy", status="available",
                 version=5, size=16, conditionAdapter=0x02030300,
                 address=0x02030000, policy=0x02030100)]})
@@ -24,11 +24,11 @@ class Session:
         self.native_heap_generation = 1
         self.emu = object()
         self.memory, self.writes = {}, []
-        self.put(0x02010000, bytes(2448))
-        self.put(0x02010000, struct.pack("<IHH", 0x5353574F, 2, 2448))
+        self.put(0x02010000, bytes(2488))
+        self.put(0x02010000, struct.pack("<IHH", 0x5353574F, 2, 2488))
         self.slot = 7 if role == "MOUNTED" else 0
-        self.policy_address = 0x02010000 + 68 + self.slot * 172 + 140
-        policy = bytearray(range(32))
+        self.policy_address = 0x02010000 + 68 + self.slot * 176 + 140
+        policy = bytearray(range(36))
         policy[5] = policy[22] = policy[23] = 0
         self.put(self.policy_address, policy)
         self.pose = dict(flags=1, x=2, y=3, pos_x=(2 << 16) + 0x8000,
@@ -93,11 +93,13 @@ class WalkResetTests(unittest.TestCase):
         self.assertEqual(request, struct.pack("<HHI", 1, 28, 0) + bytes((session.slot, 0)) + bytes(18))
         if fault == "core":
             recipe.throw(RuntimeError("core failed"))
-        policy = bytearray(session.read(session.policy_address, 32))
+        policy = bytearray(session.read(session.policy_address, 36))
         policy[:8] = bytes((255, 0, 0, 0, 255, 0, 0, 0))
         policy[16:19] = bytes(3)
         policy[20:24] = bytes((255, 0, 0, 0))
+        policy[32:36] = bytes(4)
         if fault == "profile": policy[8] ^= 1
+        if fault == "linear": policy[32] = 1
         if fault != "ignored": session.put(session.policy_address, policy)
         if fault == "pose": session.actor["engineObject"]["pos_y"] += 1
         if fault == "anchor": session.pose["pos_y"] += 1
@@ -135,6 +137,14 @@ class WalkResetTests(unittest.TestCase):
                 elif fault == "object": s.actor["engineObject"]["flags"] |= 2
                 with self.assertRaises(ValueError): WalkPolicyReset(s, s.subject)
                 self.assertEqual(s.writes, [])
+
+    def test_old_policy_descriptor_is_rejected_before_any_write(self):
+        s = Session()
+        s.rt.ACTOR_DESCRIPTOR["structures"]["actorPolicyState"] = 32
+        s.rt.ACTOR_DESCRIPTOR["state"]["actorStride"] = 172
+        with self.assertRaisesRegex(WalkResetError, "layout"):
+            WalkPolicyReset(s, s.subject)
+        self.assertEqual(s.writes, [])
 
     def test_callback_authentication_and_reselection_at_bridge_boundary(self):
         s = Session()
@@ -178,7 +188,7 @@ class WalkResetTests(unittest.TestCase):
         self.assertEqual(s.writes, [])
 
     def test_failed_return_or_changed_state_never_completes_and_restores_scratch(self):
-        for fault in ("core", "return", "ignored", "profile", "pose", "anchor", "actor", "other-state"):
+        for fault in ("core", "return", "ignored", "profile", "linear", "pose", "anchor", "actor", "other-state"):
             with self.subTest(fault=fault):
                 s = Session()
                 with self.assertRaises((ValueError, RuntimeError)): self.drive(s, fault)
@@ -192,12 +202,15 @@ class WalkResetTests(unittest.TestCase):
         self.assertIn("sizeof(OverworldActorWalkPolicyCall) == 28", header)
         self.assertIn("#define OW_WILD_WALK_DIRECTION_NONE 0xFF", header)
         internal = (root / "include/overworld_actor_system_internal.h").read_text()
-        self.assertIn("sizeof(OverworldActorPolicyState) == 32", internal)
+        self.assertIn("sizeof(OverworldActorPolicyState) == 36", internal)
         self.assertIn("reduceWalk at byte offset 12", internal)
         source = (root / "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c").read_text()
         self.assertIn("OverworldActorWalkPolicy_ResetState(policy, FALSE, 0, 0);", source)
-        body = source.split("static void OverworldActorWalkPolicy_ResetState(", 1)[1].split("/* Several policy", 1)[0]
-        for field in ("chainStepsRemaining", "deferredChainPauseTicks", "deferredChainPauseAction"):
+        from scripts.verify_overworld_mount import function_body
+        input_policy = (root / "src/player_health_overlay/overworld_walk_input_policy.c").read_text()
+        body = function_body(input_policy, "OverworldActorWalkPolicy_ResetState")
+        for field in ("chainStepsRemaining", "deferredChainPauseTicks", "deferredChainPauseAction",
+                      "linearElapsed", "linearCarry", "linearCapFrames"):
             self.assertIn("policy->" + field + " = 0;", body)
 
 

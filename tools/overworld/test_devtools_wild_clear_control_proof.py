@@ -8,6 +8,12 @@ from tools.overworld.test_devtools_wild_clear_control_measurement import replay
 class WildClearControlProofTests(unittest.TestCase):
     def record(self):return dict(sessionId="host",sessionCleanup=dict(sessionId="host",closed=True,errors=[]))
 
+    def test_prelude_clear_cannot_replace_selected_clear(self):
+        result=replay(prelude=True)
+        self.assertEqual(len(measurements(result,self.record())),4)
+        result["measurements"][KIND]["natural"]["prelude"][0]["clearReceipts"][0]["data"]["after"]["active"]=1
+        with self.assertRaises(ValueError):measurements(result,self.record())
+
     def test_four_exact_rows(self):
         result=measurements(replay(),self.record())
         self.assertEqual(len(result),4)

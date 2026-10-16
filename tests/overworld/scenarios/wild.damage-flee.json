@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.damage-flee",
+  "title": "A real hit to a Skittish Wild Pok\u00e9mon starts Flee away from Player",
+  "status": "active",
+  "capabilities": [
+    "condition.evaluation",
+    "chase"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "TICKETS.md#tkt-0063--non-follower-pok\u00e9mon-flee-when-they-take-damage",
+    "actor": "One full-current Wild Cleffa173, Wild Weepinbell70 attacker and passive Cyndaquil155 Follower.",
+    "trigger": "Prepare party, placement and normal native spawns only. Neutral completed field frames let the authored Ambush hit this exact Wild subject. No HP, hit, condition, cooldown, claim or movement state is written.",
+    "observable": "The same living Wild Cleffa has a real resident HP loss and one accepted hit before condition-wild-subject-damaged admits apply-skittish. The condition captures Player with authored960-frame duration and970-frame cooldown. After pending knockback, one free native AUTO Flee motion goes away from Player and completes its logical commit and control return. Unrelated damage, forced knockback and an inherited old movement cannot pass.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Checked Route29 Player585407 South, ordinary party-slot0 Cyndaquil155Lv50 and native Follower spawn, then Wild Cleffa173Lv50 at585405 and Wild Weepinbell70Lv10 at585404. Bind exact returned current identities and read living pre-hit resident HP. Normal Follower setup replaces the saved Mankey."
+      }
+    ],
+    "limits": [
+      "One prepared Wild real-contact case; it does not prove every species, every attack type, natural encounter choice or pacing.",
+      "Shared real-C subject-damage checks prove unrelated actor and Player damage exclusion, stale identity rejection and follower role exclusion.",
+      "Only one completed free Flee motion is required. The exact admission receipt and authored catalog establish960/970 timing; this short run does not wait for expiration.",
+      "Only members of the authored baby-pokemon pool are eligible in the Wild role. This Flee condition does not include Follower or Mounted roles."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cleffa",
+      "species": 173,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "threat",
+      "species": 70,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "passive",
+      "species": 155,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": false,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Player585407 South, passive native Follower, Wild Cleffa585405 and Weepinbell585404. Bind current identities and real living HP."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Observe at most420 neutral frames for an accepted self-hit, exact Flee admission and one free completed Flee motion."
+    }
+  ],
+  "stop": {
+    "frameBudget": 600,
+    "condition": "One exact self-hit, timed Flee condition and completed free Flee motion, or the first identity, HP, condition, control or motion failure."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Full current Wild subject and attacker identities remain unchanged",
+      "The same subject loses real resident HP and accepts one ordinary collision hit before self-damage admission",
+      "Exact Wild self-damage condition, Player target and960 duration/970 cooldown",
+      "The full current Skittish result keeps Cry3 and alert time10 with no chain pause action",
+      "The response is native AUTO motion with no pending or forced knockback",
+      "Flee moves away from Player and completes native commit and control return"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "wild.damage-flee",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "rendered-motion",
+      "control-release",
+      "collision-decision"
+    ],
+    "minimumFrames": 2
+  }
+}

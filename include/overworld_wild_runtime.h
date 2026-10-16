@@ -14,7 +14,11 @@ struct OverworldWildSpawnState;
 #define OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY_ADDR 0x023BC800
 #define OVERWORLD_WILD_RUNTIME_OVERLAY_END_ADDR 0x023BD400
 #define OVERWORLD_WILD_RUNTIME_MAGIC 0x3152574F /* "OWR1" */
-#define OVERWORLD_WILD_RUNTIME_VERSION 17
+#define OVERWORLD_WILD_RUNTIME_VERSION 18
+
+/* The request adapter removes this bit before Actor Motion sees the kind.
+ * Forced motion has no lane: it uses zero pause, no chain and FORCED. */
+#define OW_WILD_RUNTIME_MOTION_REQUEST_FORCED 0x80
 
 typedef BOOL (*OverworldWildRuntimeValidateFunc)(void);
 typedef BOOL (*OverworldWildRuntimeQuerySurfaceFunc)(
@@ -29,6 +33,11 @@ typedef s32 (*OverworldWildRuntimeGetGroundBaseYFunc)(
     LocalMapObject *object,
     int x,
     int y);
+/* knownSurface==NULL means a completed query found no catalog support.
+ * FALSE means native support is not ready; output remains unchanged. */
+typedef BOOL (*OverworldWildRuntimeResolveBaseYAtFunc)(
+    FieldSystem *, const OverworldWildSurfaceHit *knownSurface,
+    s32 originBaseY, u32 objectFlags, int x, int y, s32 *output);
 typedef void (*OverworldWildRuntimeFillActorViewFunc)(
     FieldSystem *fieldSystem,
     struct OverworldWildSpawnState *state,
@@ -67,7 +76,7 @@ typedef struct OverworldWildRuntimeOverlayEntry {
     OverworldWildRuntimeQuerySurfaceFunc querySurface;
     OverworldWildRuntimeGetGroundBaseYFunc getGroundBaseY;
     OverworldWildRuntimeFillActorViewFunc fillActorView;
-    u32 reservedPopulationControl;
+    OverworldWildRuntimeResolveBaseYAtFunc resolveBaseYAt;
     OverworldWildRuntimeRequestMotionFunc requestMotion;
     OverworldWildRuntimeReduceRoleFunc reduceRole;
     u32 reservedAcknowledgeMotion;

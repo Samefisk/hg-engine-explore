@@ -7,6 +7,7 @@ owns ROM/source/session identity and core cleanup checks. No actor credit.
 from copy import deepcopy
 import hashlib
 import json
+import struct
 
 from tools.overworld.devtools_resolver_parity import (
     CASE_NAMES,
@@ -78,6 +79,8 @@ def negative_controls(test, rows, record, repo, *, oracle):
         "missing-free": "resolver proof: exact allocation/resolves/free required",
         "wrong-entry-argument": "resolver proof: native call or entry arguments differ",
         "wrong-service-hash": "resolver parity: native blob or service identity differs",
+        "wrong-query-package": "resolver parity: native blob or service identity differs",
+        "wrong-query-owner": "resolver proof: loaded Query owner differs between calls",
         "wrong-blob-hash": "resolver parity: native blob or service identity differs",
     }
     controls = {}
@@ -105,6 +108,12 @@ def negative_controls(test, rows, record, repo, *, oracle):
             receipt["calls"].pop()
         elif name == "wrong-entry-argument":
             receipt["calls"][1]["entryArguments"][0] ^= 4
+        elif name == "wrong-query-owner":
+            native["queryOwner"]["rawHex"] = "00" * 28
+        elif name == "wrong-query-package":
+            identity = native["serviceIdentity"]
+            raw = bytearray.fromhex(identity["queryPackageSha256"]); raw[0] ^= 1
+            identity["queryPackageSha256"] = raw.hex()
         else:
             identity = native["serviceIdentity" if name == "wrong-service-hash" else "blobIdentity"]
             field = "entrySha256" if name == "wrong-service-hash" else "sha256"
@@ -171,10 +180,29 @@ def _measure(test, rows, record, oracle):
             "owned allocation was not released")
     work = pointer(allocation["pointer"], BUFFER_BYTES)
     natural = receipt["naturalDiscovery"]
+    query = value.get("queryOwner")
+    require(isinstance(query, dict) and set(query) ==
+            {"stateAddress", "rawHex", "entry", "fieldEpoch", "mapGeneration"},
+            "loaded Query owner is missing")
+    pointer(query["stateAddress"], 28)
+    pointer(query["entry"], 196)
+    raw_hex(query["rawHex"], 28)
+    require(integer(query["fieldEpoch"], 1, 65535) > 0
+            and integer(query["mapGeneration"], 1, 65535) > 0
+            and all(item.get("queryOwner") == query for item in value["receipts"]),
+            "loaded Query owner differs between calls")
     blob = oracle["blobIdentity"]
     source = pointer(natural["blobAddress"], integer(blob["size"], 1, 1024*1024))
     require(natural.get("status") == 0 and type(natural.get("status")) is int
             and natural["blobSize"] == blob["size"], "natural resolver discovery differs")
+    query_raw = bytes.fromhex(query["rawHex"])
+    query_blob, query_size, query_entry, query_field, epoch, generation, member, phase, reserved = \
+        struct.unpack("<4I2HIB3s", query_raw)
+    require(query_entry == query["entry"] == query_blob + 64
+            and query_field == natural["fieldPointer"]
+            and (epoch, generation) == (query["fieldEpoch"], query["mapGeneration"])
+            and query_size > 64 and member == 21 and phase == 1 and reserved == bytes(3),
+            "loaded Query owner differs from natural Field")
     raw_hex(natural["requestHex"], 44)
     require(work + BUFFER_BYTES <= source or source + blob["size"] <= work,
             "source overlaps work buffer")

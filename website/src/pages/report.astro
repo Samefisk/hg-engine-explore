@@ -1,0 +1,27 @@
+---
+import Base from '../layouts/Base.astro';
+import { contact } from '../data/site';
+---
+<Base title="Report a bug" description="How to write a useful bug report.">
+  <div class="wrap narrow">
+    <h1>Report a bug</h1>
+    <p>A good report lets me reproduce the problem. Send it to {contact.name}{contact.discord ? <> on Discord (<strong>{contact.discord}</strong>)</> : ''}{contact.email ? <> or at <a href={`mailto:${contact.email}`}>{contact.email}</a></> : ''}.</p>
+
+    <h2>What to include</h2>
+    <ol class="steps">
+      <li><strong>Build.</strong> The build label you are playing, such as the one shown on <a href="/testing">What's being tested</a>.</li>
+      <li><strong>Where.</strong> Map or route, and roughly where you were standing.</li>
+      <li><strong>Which Pokémon.</strong> Species of any Pokémon involved, and whether it was wild, your follower, or while riding.</li>
+      <li><strong>What happened,</strong> and what you expected instead.</li>
+      <li><strong>Can you repeat it?</strong> Every time, sometimes, or once?</li>
+      <li><strong>Evidence.</strong> A short video or save state helps a lot, but is optional.</li>
+    </ol>
+
+    <h2>Example</h2>
+    <div class="card cream">
+      <p><strong>Build 3555. Route 29. Wild Geodude stands still after noticing me.</strong><br />
+      I walked up from the south and it stopped moving and stayed put for a minute. I expected it to react. Happened 3 of 5 times. Video attached.</p>
+    </div>
+    <div style="height:3rem"></div>
+  </div>
+</Base>

@@ -71,6 +71,9 @@ class ResolverMeasurement:
             require(isinstance(cases, list) and len(cases) == len(CASE_NAMES)
                     and tuple(case.get("name") for case in cases if isinstance(case, dict)) == CASE_NAMES,
                     "resolver cases missing or reordered")
+            owner = probe.get("queryOwner")
+            require(isinstance(owner, dict) and all(case.get("queryOwner") == owner for case in cases),
+                    "loaded Query owner missing or changed")
             calls = bridge.get("calls")
             require(isinstance(calls, list) and [c.get("routine") for c in calls] ==
                     ["allocate_work_memory"] + ["resolve_behavior"] * len(CASE_NAMES) + ["free"],
@@ -85,7 +88,7 @@ class ResolverMeasurement:
                         and type(call.get("returnValue")) is int and call["returnValue"] == 0,
                         "resolver status failed")
                 raw_hex(case.get("requestHex"), 44)
-                raw_hex(case.get("resultHex"), 200)
+                raw_hex(case.get("resultHex"), 216)
                 checked_trace(case)
                 require(isinstance(case.get("blobIdentity"), dict) and isinstance(case.get("serviceIdentity"), dict),
                         "native input identity missing")

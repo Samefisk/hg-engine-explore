@@ -47,7 +47,7 @@ def fixture():
         clock=dict(actorFrame=end['actorFrame'],nativeCycle=end['nativeCycle']-1)
         common=dict(before=current,entryClock=clock,returnClock=clock,completedFrame=end['frame']-1,
             caller=0x02300001,args=[0,0,0,0],normalReturn=True,returnValue=0)
-        profile=bytearray(72);profile[7]=duration;profile[70]=2
+        profile=bytearray(80);profile[7]=duration;profile[70]=2
         raw=bytearray(28);struct.pack_into('<HH',raw,0,1,28)
         raw[9]=3;raw[16]=1;raw[19]=0;raw[21]=int(case['index']==0)
         feedback={k:[] for k in ('dust','allocate','init','sound','soundStart')}

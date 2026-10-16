@@ -46,7 +46,7 @@ class RoleProfileProofTests(unittest.TestCase):
         follower_profile=bytearray.fromhex(g["profileHex"])
         follower_profile[11]^=1
         g["profileHex"]=follower_profile.hex()
-        mounted_profile=bytes(range(144))
+        mounted_profile=bytes(range(160))
         put(regs.r2,mounted_profile)
         regs.r0=s.field_pointer();regs.r1=0x02212000;regs.r3=0x02213000
         binding=struct.pack("<IHHHHBBBB",witness["subjectIdentity"],witness["species"],33,3,4,
@@ -56,7 +56,7 @@ class RoleProfileProofTests(unittest.TestCase):
         put(transaction,struct.pack("<IIII",3,4,0,0))
         before=r.mount_before()
         put(transaction,struct.pack("<IIII",3,4,1,2))
-        put(r.mount_state,struct.pack("<II",s.field_pointer(),0x02213000)+mounted_profile[:72]+binding+
+        put(r.mount_state,struct.pack("<II",s.field_pointer(),0x02213000)+mounted_profile[:80]+binding+
             struct.pack("<IBBBB",7,1,0,0,0))
         a.update(behaviorFingerprint=3,matchedLayerMask=4)
         m=r.mount_after(before,{"returnValue":1})
@@ -74,7 +74,7 @@ class RoleProfileProofTests(unittest.TestCase):
     def test_exact_transfer_is_detached_and_not_input_or_motion_acceptance(self):
         e,i,f=self.fixture();old=deepcopy((e,i,f));p=inspect_transfer(e,i,f)
         self.assertFalse(p["acceptedProof"])
-        self.assertEqual(p["ownerHex"],bytes(range(72)).hex())
+        self.assertEqual(p["ownerHex"],bytes(range(80)).hex())
         self.assertEqual(p["getterSequence"],194)
         self.assertEqual((e,i,f),old)
 

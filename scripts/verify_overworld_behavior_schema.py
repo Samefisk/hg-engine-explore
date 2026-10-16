@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove the generated v79 behavior schema matches C and Workshop contracts."""
+"""Prove the generated behavior schema matches C and Workshop contracts."""
 
 from __future__ import annotations
 
@@ -45,8 +45,8 @@ def parse_c_layout(text: str, c_type: str) -> list[tuple[str, str, int]]:
         offset += size
         max_alignment = max(max_alignment, size)
     total_size = (offset + max_alignment - 1) // max_alignment * max_alignment
-    if total_size != 72:
-        fail(f"C compact layout is {total_size} bytes, expected 72")
+    if total_size != 80:
+        fail(f"C compact layout is {total_size} bytes, expected 80")
     return layout
 
 
@@ -88,7 +88,8 @@ def main() -> int:
         if storage in seen_storage:
             continue
         seen_storage.add(storage)
-        expected_layout.append((field["key"], field["cType"], field["offset"]))
+        storage_name = {"knockbackType": "knockbackOptions", "turnSkidOneTime": "range"}.get(field["key"], field["key"])
+        expected_layout.append((storage_name, field["cType"], field["offset"]))
     if actual_layout != expected_layout:
         fail("generated field order or offsets do not match the compact C layout")
 
@@ -115,7 +116,7 @@ def main() -> int:
             fail(f"generated C metadata is incomplete for {field['key']}")
 
     validator = validator_metadata(schema)
-    for word, expected in {"1": 0x3FFFFFFF, "2": 0x00007FFF, "3": 0x3FFFFFFF}.items():
+    for word, expected in {"1": 0x3FFFFFFF, "2": 0x0FFFFFFF, "3": 0xFFFFFFFF}.items():
         if validator["allowedOverrideMasks"][word] != expected:
             fail(f"generated allowed mask {word} is wrong")
 
@@ -168,6 +169,27 @@ def main() -> int:
     )
     if any(fragment not in header_text for fragment in required_turn_skid_macros):
         fail("C header does not publish the packed turn-skid option contract")
+
+    required_controller_macros = (
+        "OW_WILD_BEHAVIOR_CONTROLLER_OPTIONS(continueWhenArrived, returnAfterMove)",
+        "OW_WILD_BEHAVIOR_CONTINUES_WHEN_ARRIVED(options)",
+        "OW_WILD_BEHAVIOR_RETURNS_AFTER_MOVE(options)",
+        "OW_WILD_BEHAVIOR_CARGO_TARGET_CHECK_INTERVAL(options)",
+        "OW_WILD_BEHAVIOR_CARGO_TARGET_SWITCH_ADVANTAGE(options)",
+        "OW_WILD_BEHAVIOR_CONTROLLER_CARGO_OPTIONS(continueWhenArrived, returnAfterMove, interval, advantage)",
+    )
+    if any(fragment not in header_text for fragment in required_controller_macros):
+        fail("C header does not publish the packed controller option contract")
+    fields_by_key = {field["key"]: field for field in fields}
+    for key, (expected, bounds) in {
+        "continueWhenArrived": ((42, 0, 1), (0, 1)),
+        "returnAfterMove": ((42, 1, 1), (0, 1)),
+        "cargoTargetCheckInterval": ((42, 2, 4), (1, 15)),
+        "cargoTargetSwitchAdvantage": ((42, 6, 2), (0, 3)),
+    }.items():
+        field = fields_by_key[key]
+        if (field["offset"], field["bitOffset"], field["bitWidth"]) != expected or field["bounds"] != {"min": bounds[0], "max": bounds[1]}:
+            fail(f"{key} does not use its strict controller-byte slice")
 
     print(f"behavior schema: {schema['compactSize']} bytes and {len(authoring_fields)} authoring fields match compact v{schema['blobVersion']} contracts")
     return 0

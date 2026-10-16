@@ -9,7 +9,16 @@ from tools.overworld.devtools_records import (
     Recording, load_recipe, recording_to_draft, save_recipe,
     select_current_actor, validate_recipe,
     engine_binding_identity,
+    stock_bubble_admitted,
 )
+
+
+class StockBubbleTests(unittest.TestCase):
+    def test_admission_is_a_real_effect_pointer_not_a_boolean(self):
+        self.assertTrue(stock_bubble_admitted(0x02337860))
+        for value in (0, 1, True, None, -1, 0x01FFFFFC, 0x02400000, 0x02337861):
+            with self.subTest(value=value):
+                self.assertFalse(stock_bubble_admitted(value))
 
 
 class EngineBindingTests(unittest.TestCase):
@@ -91,8 +100,8 @@ def large_snapshot(frame=1):
              "terrainAttributesPointer": None}}
         for x in range(15) for z in range(15)]}
     sample["nativeObservation"] = {"resolvedProfiles": [
-        {"fingerprint": profile, "lanes": ["00" * 72] * 2,
-         "requestHex": "00" * 44, "resultHex": "00" * 200,
+        {"fingerprint": profile, "lanes": ["00" * 80] * 2,
+         "requestHex": "00" * 44, "resultHex": "00" * 216,
          "sourceSha256": "a" * 64, "appliedOverrides": 0, "resolved": True}
         for profile in range(6)]}
     return sample

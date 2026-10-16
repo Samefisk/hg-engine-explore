@@ -1,4 +1,4 @@
-"""Canonical v81 behavior schema validation and deterministic code generation."""
+"""Canonical v92 behavior schema validation and deterministic code generation."""
 
 from __future__ import annotations
 
@@ -22,6 +22,8 @@ DISPLAY_UNITS = {
     "moves": "moves",
     "pokemon": "Pokémon",
     "strength": "level",
+    "tile256PerFrame": "1/256 tile/frame",
+    "hp": "HP",
 }
 FIELD_KEYS = {
     "id", "key", "path", "cType", "offset", "unit", "bounds", "lane",
@@ -31,7 +33,7 @@ PACKED_FIELD_KEYS = {"bitOffset", "bitWidth"}
 RESERVED_FIELD_KEYS = {"reserved"}
 TOP_LEVEL_KEYS = {
     "schemaVersion", "name", "blobVersion", "compactCType", "compactSize",
-    "tailPadding", "lanes", "operatorKinds", "featureIds", "fields",
+    "tailPadding", "lanes", "operatorKinds", "featureIds", "fields", "profileSettings",
 }
 
 
@@ -57,12 +59,22 @@ def validate_schema(schema: dict[str, Any]) -> None:
     _require(isinstance(schema, dict), "schema root must be an object")
     _require(set(schema) == TOP_LEVEL_KEYS, "schema root keys are not exact")
     _require(schema["schemaVersion"] == 2, "unsupported schemaVersion; expected 2")
-    _require(schema["blobVersion"] == 81, "schema must describe blob v81")
-    _require(schema["compactSize"] == 72, "compact layout must remain 72 bytes")
-    _require(schema["tailPadding"] == 0, "compact v81 must use all 72 bytes")
+    _require(schema["blobVersion"] == 92, "schema must describe blob v92")
+    _require(schema["compactSize"] == 80, "compact layout must remain 80 bytes")
+    _require(schema["tailPadding"] == 0, "compact v85 uses its final byte")
     _require(schema["compactCType"] == "OverworldWildBehaviorProfileData", "unexpected compact C type")
+    settings = schema["profileSettings"]
+    _require(isinstance(settings, list) and len(settings) == 1,
+             "schema must describe one local conditional-profile setting")
+    _require(isinstance(settings[0], dict)
+             and type(settings[0].get("default")) is bool and settings[0] == {
+        "key": "showRestTintDuringCooldown", "type": "boolean", "default": False,
+        "profileKind": "conditional", "inherited": False,
+        "blobTail": "restEnabledApplications", "introducedIn": 86,
+        "label": "Show rest tint during cooldown",
+    }, "cooldown tint must remain a local conditional-profile boolean")
     fields = schema["fields"]
-    _require(isinstance(fields, list) and len(fields) == 75, "schema must contain exactly 75 fields")
+    _require(isinstance(fields, list) and len(fields) == 94, "schema must contain exactly 94 fields")
     lanes = set(schema["lanes"])
     operators = set(schema["operatorKinds"])
     features = set(schema["featureIds"])
@@ -99,7 +111,7 @@ def validate_schema(schema: dict[str, Any]) -> None:
         storage_max = (1 << (8 * TYPE_SIZES[field["cType"]])) - 1
         _require(0 <= bounds["min"] <= bounds["max"] <= storage_max, f"{prefix}.bounds exceed {field['cType']}")
         _require(isinstance(field["editorNumeric"], bool), f"{prefix}.editorNumeric must be boolean")
-        _require(isinstance(field["introducedIn"], int) and field["introducedIn"] <= 81, f"{prefix}.introducedIn is invalid")
+        _require(isinstance(field["introducedIn"], int) and field["introducedIn"] <= 92, f"{prefix}.introducedIn is invalid")
         mask = field["mask"]
         _require(set(mask) == {"word", "bit", "symbol"}, f"{prefix}.mask keys are not exact")
         _require(mask["word"] in (1, 2, 3) and 0 <= mask["bit"] < 32, f"{prefix}.mask position is invalid")
@@ -141,8 +153,10 @@ def validate_schema(schema: dict[str, Any]) -> None:
         seen_paths.add(field["path"])
         seen_masks.add((mask["word"], mask["bit"]))
     expected_bits = set(range((schema["compactSize"] - schema["tailPadding"]) * 8))
-    _require(occupied_bits == expected_bits, "fields must cover bytes 0-71 exactly")
-    expected_mask_counts = {1: 30, 2: 15, 3: 30}
+    # Byte 75 bits 1..5 remain fixed zero storage, with no authored field.
+    expected_bits -= {75 * 8 + bit for bit in range(1, 6)}
+    _require(occupied_bits == expected_bits, "fields must cover the compact layout exactly")
+    expected_mask_counts = {1: 30, 2: 32, 3: 32}
     for word, count in expected_mask_counts.items():
         bits = sorted(bit for mask_word, bit in seen_masks if mask_word == word)
         _require(bits == list(range(count)), f"override mask word {word} must use contiguous bits 0-{count - 1}")
@@ -175,10 +189,12 @@ def editor_metadata(schema: dict[str, Any]) -> dict[str, Any]:
     return {
         "schemaVersion": schema["schemaVersion"],
         "blobVersion": schema["blobVersion"],
+        "profileSettings": schema["profileSettings"],
         "fields": fields,
         "overrideFieldKeys": [field["key"] for field in schema["fields"]],
         "numericProfileFieldKeys": [field["key"] for field in schema["fields"] if field["editorNumeric"]],
         "relativeOverrideFieldKeys": [field["key"] for field in schema["fields"] if "relative" in field["operators"]],
+        "divideOverrideFieldKeys": [field["key"] for field in schema["fields"] if "divide" in field["operators"]],
         "boundedOverrideOperatorFieldKeys": [field["key"] for field in schema["fields"] if "atLeast" in field["operators"] or "atMost" in field["operators"]],
     }
 
@@ -194,10 +210,11 @@ def validator_metadata(schema: dict[str, Any]) -> dict[str, Any]:
         masks[str(word)] = sum(1 << field["mask"]["bit"] for field in word_fields)
         operator_masks[str(word)] = {
             operator: sum(1 << field["mask"]["bit"] for field in word_fields if operator in field["operators"])
-            for operator in ("relative", "atLeast", "atMost")
+            for operator in ("relative", "divide", "atLeast", "atMost")
         }
     return {
         "compactCType": schema["compactCType"],
+        "profileSettings": schema["profileSettings"],
         "compactSize": schema["compactSize"],
         "tailPadding": schema["tailPadding"],
         "allowedOverrideMasks": masks,
@@ -231,6 +248,48 @@ def migration_metadata(schema: dict[str, Any]) -> dict[str, Any]:
             ],
         }, {
             "version": 81,
+            "fieldKeys": [
+                field["key"] for field in schema["fields"]
+                if not field.get("reserved") and field["introducedIn"] <= 81
+            ],
+        }, {
+            "version": 82,
+            "fieldKeys": [
+                field["key"] for field in schema["fields"]
+                if not field.get("reserved") and field["introducedIn"] <= 82
+            ],
+        }, {
+            "version": 83,
+            "fieldKeys": [
+                field["key"] for field in schema["fields"]
+                if not field.get("reserved") and field["introducedIn"] <= 83
+            ],
+        }, {
+            "version": 84,
+            "fieldKeys": [
+                field["key"] for field in schema["fields"]
+                if not field.get("reserved") and field["introducedIn"] <= 84
+            ] + ["knockback"],
+        }, {
+            "version": 85,
+            "fieldKeys": [field["key"] for field in schema["fields"] if field["introducedIn"] <= 85],
+        }, {
+            "version": 86,
+            "fieldKeys": [field["key"] for field in schema["fields"] if field["introducedIn"] <= 86],
+        }, {
+            "version": 87,
+            "fieldKeys": [field["key"] for field in schema["fields"] if field["introducedIn"] <= 87],
+        }, {
+            "version": 88,
+            "fieldKeys": [field["key"] for field in schema["fields"] if field["introducedIn"] <= 88],
+        }, {
+            "version": 89,
+            "fieldKeys": [field["key"] for field in schema["fields"] if field["introducedIn"] <= 89],
+        }, {
+            "version": 90,
+            "fieldKeys": [field["key"] for field in schema["fields"] if field["introducedIn"] <= 90],
+        }, {
+            "version": 91,
             "fieldKeys": [field["key"] for field in schema["fields"]],
         }],
         "v78ToV79": {
@@ -252,6 +311,66 @@ def migration_metadata(schema: dict[str, Any]) -> dict[str, Any]:
             "changes": [
                 "Reserved byte 16 stores four independent mounted Walk presentation controls.",
                 "All existing movement fields and offsets remain unchanged.",
+            ],
+        },
+        "v81ToV82": {
+            "preservesCompactSize": False,
+            "changes": [
+                "Three appended bytes hold collision attack enable, minimum impact speed, and damage.",
+                "The compact profile grows to 76 bytes, with one alignment byte.",
+            ],
+        },
+        "v82ToV83": {
+            "preservesCompactSize": False,
+            "changes": [
+                "Four appended bytes hold On reach and held-actor Throw tuning.",
+                "The compact profile grows to 80 bytes, with one alignment byte.",
+            ],
+        },
+        "v83ToV84": {
+            "preservesCompactSize": True,
+            "changes": [
+                "The final alignment byte becomes a profile-owned knockback switch.",
+                "The compact profile remains 80 bytes.",
+            ],
+        },
+        "v84ToV85": {
+            "preservesCompactSize": True,
+            "changes": [
+                "The knockback byte now packs motion type and tile distance.",
+                "The compact profile remains 80 bytes.",
+            ],
+        },
+        "v85ToV86": {
+            "preservesCompactSize": True,
+            "changes": [
+                "An optional local conditional-profile boolean enables cooldown rest tint.",
+                "A four-byte application mask follows the padded surface catalog; all existing blob offsets remain unchanged.",
+                "The compact profile remains 80 bytes and the blob header remains 84 bytes.",
+            ],
+        },
+        "v90ToV91": {
+            "preservesCompactSize": True,
+            "changes": [
+                "Byte 57 bits 4 and 5 hold extra Hop in place hops.",
+                "Byte 43 bits 1 through 7 hold their admission chance.",
+                "Reposition count and previous-tile permission keep their low bits; the compact lane remains 80 bytes.",
+            ],
+        },
+        "v89ToV90": {
+            "preservesCompactSize": True,
+            "changes": [
+                "Byte 42 bits 2 through 5 hold Cargo target check interval in frames.",
+                "Bits 6 and 7 hold the Cargo target switch advantage in tiles.",
+                "Continue and return retain bits 0 and 1; all sizes and offsets stay fixed.",
+            ],
+        },
+        "v88ToV89": {
+            "preservesCompactSize": True,
+            "changes": [
+                "Return after each move uses bit 1 of the existing controller options byte.",
+                "Continue when arrived keeps bit 0; bits 2 through 7 remain zero.",
+                "The compact profile remains 80 bytes and the blob header remains 84 bytes.",
             ],
         },
     }

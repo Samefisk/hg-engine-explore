@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.zero-load",
+  "title": "A valid zero-HP Continue starts one blackout and restores control",
+  "status": "planned",
+  "capabilities": [
+    "player.health"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/player-hp-implementation-plan.md",
+    "actor": "The player loaded from a private, checksum-valid zero-HP save; no wild actor is required.",
+    "trigger": "Continue the current ROM from a disposable copy containing the PH version-1 record, HP zero and the existing valid healing checkpoint.",
+    "observable": "The loaded save remains zero until one pending recovery starts. The stock return reaches the saved checkpoint, restores player and party HP, ends its task chain, and permits a normal player step; money and bag items remain unchanged.",
+    "setupAudit": "pending",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Prepare only a private copy of test.sav. Change the six owned HP record bytes in its selected normal save copy and recalculate the normal-slot footer checksum. Preserve the inactive copy, all unrelated bytes, source file hash and destination checkpoint. Record the exact changed-byte manifest. This is a controlled zero-load fixture, not a claim that normal Save is available at zero HP."
+      },
+      {
+        "phase": "during-observation",
+        "target": "fixture",
+        "change": "No direct writes. Continue and stock blackout/arrival dialogue use normal button input through the shared service on port 8767."
+      }
+    ],
+    "limits": [
+      "Draft only: boot now recognizes an authenticated pending blackout for a checksum-valid zero-HP Continue and returns control without extra A input. The private fixture builder and byte controls are tools/overworld/player_health_zero_load_fixture.py and its test. The retained zero-load recorder, measurement adapter and registry links remain required before moving this file into scenarios and activating it.",
+      "Require a bounded first-load receipt linking the exact fixture hash, decoded HP zero, live zero/recovery state and current ROM. A final full-HP reading alone cannot distinguish recovery from unwanted load-time healing.",
+      "Allow at most 3000 completed game updates after Continue and 180 seconds, excluding no time as an unnamed warmup. Release all inputs and stop only the owned session on completion or failure.",
+      "Copied-data controls must reject missing zero evidence, wrong loaded-save hash, direct zero-to-full initialization with no recovery, duplicate recovery, wrong checkpoint, changed money/bag and retained task ownership. These controls are evaluator checks, not live-recorder proof.",
+      "The bootstrap receipt exists; the exact live measurement adapter remains required. No original ROM/save is written; no screenshots are captured."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": null,
+    "seed": 0
+  },
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Create and authenticate a private checksum-valid zero-HP fixture with the existing healing checkpoint."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Continue reaches zero HP and exactly one pending recovery before any full-HP state."
+    },
+    {
+      "at": 2,
+      "kind": "input",
+      "value": "Use normal A releases/presses only at authenticated blackout and arrival waits."
+    },
+    {
+      "at": 3,
+      "kind": "lifecycle",
+      "value": "Check saved destination, restored HP, unchanged money/bag, empty task chain and one settled normal player step."
+    }
+  ],
+  "stop": {
+    "frameBudget": 3000,
+    "condition": "One completed zero-load recovery with preserved money/bag and free movement, or first invalid receipt, repeated recovery, or budget limit."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Valid zero is preserved at load and starts recovery",
+      "Only one recovery owns the field task",
+      "The saved healing checkpoint selects the return destination",
+      "Player and party HP are restored only through recovery",
+      "Money, bag items and original save bytes are preserved",
+      "Normal input works after the recovery task ends"
+    ]
+  },
+  "capture": "none",
+  "adapter": null
+}

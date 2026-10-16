@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.route29-blocked-step",
+  "title": "Route 29 blocked Walk keeps the main loop live",
+  "mode": "normal",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "tests/overworld/scenarios/player-hp.route29-blocked-step.json",
+  "requirements": ["current.route29-blocked-step-live"],
+  "budgets": {"maxSeconds": 120, "maxFrames": 380, "noProgressFrames": 240, "minObservedFrames": 360},
+  "subjects": [{"id": "mankey", "species": 56, "role": "FOLLOWER", "acquire": "existing"}],
+  "setup": [
+    {"id": "saved-route29-start", "op": "assert", "args": {"predicate": {"kind": "player-settled-at", "map": 67, "x": 564, "z": 392}},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "bind-saved-mankey", "op": "bind", "args": {"subject": "mankey"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "held-left-to-wall", "op": "step", "args": {"frames": 120, "keys": ["LEFT"]},
+      "budget": {"maxSeconds": 40, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "at-blocked-tile", "op": "assert", "args": {"predicate": {"kind": "player-field", "path": "x", "operator": "eq", "value": 538}},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "held-left-after-block", "op": "step", "args": {"frames": 240, "keys": ["LEFT"]},
+      "budget": {"maxSeconds": 70, "maxFrames": 240, "noProgressFrames": 240}}
+  ],
+  "assertions": [
+    {"kind": "actor-field", "subject": "mankey", "path": "identityVerified", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "actor-field", "subject": "mankey", "path": "presentationAttached", "operator": "eq", "value": true, "when": "always"},
+    {"kind": "player-field", "path": "x", "operator": "eq", "value": 538, "when": "final"},
+    {"kind": "player-field", "path": "y", "operator": "eq", "value": 392, "when": "final"},
+    {"kind": "frame-count", "operator": "gte", "value": 360}
+  ]
+}

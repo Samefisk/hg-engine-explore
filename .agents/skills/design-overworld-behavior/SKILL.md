@@ -43,8 +43,9 @@ composition needs a name.
 
 Conditional and System are badges, not classifications. Follower, Mounted,
 and Asleep are visible System profiles, but they cannot be assigned as ordinary
-Pokémon layers. Mounted is an empty override and inherits all fields from the
-selected Pokémon profiles. Being carried is internal held actor control; it is
+Pokémon layers. Mounted sets Movement Chain to Off and applies its authored
+speed settings. Other fields stay inherited from the selected Pokémon
+profiles. Being carried is internal held actor control; it is
 not a profile.
 
 ## Keep one visible idea per block

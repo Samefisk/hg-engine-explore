@@ -145,3 +145,131 @@ class PoolSpawnSurfaceIntegrationTests(unittest.TestCase):
                 else:
                     self.assertTrue(result["failures"], result)
                     self.assertFalse(meter.finish()["passed"])
+
+
+class PoolFlySurfaceIntegrationTests(unittest.TestCase):
+    def run_fly(self, stream):
+        from tools.overworld.test_devtools_spawn_measurement import fly_authored
+        meter = PoolSpawnSurfaceMeasurement(SCHEMA, SOURCE, authored_profiles=fly_authored(), max_frames=200)
+        for snapshot, events in stream.items:
+            result = meter.observe(snapshot, events)
+            if result["failures"] or result["ready"]:
+                break
+        return meter, result
+
+    def test_current_canonical_bank_and_complete_normal_fly_height(self):
+        from tools.overworld.test_devtools_spawn_measurement import fly_stream
+        for elapsed in (0, 1):
+            stream = fly_stream(first_elapsed=elapsed)
+            before = deepcopy(stream.items)
+            meter, result = self.run_fly(stream)
+            self.assertTrue(meter.finish()["passed"], result)
+            self.assertEqual(result["placement"]["startupKind"], 9)
+            self.assertEqual(result["surface"]["nativeLandingY"], 65536)
+            self.assertFalse(result["surface"]["nativeHeightRefreshRequired"])
+            self.assertEqual(stream.items, before)
+
+    def test_current_fly_cannot_replace_normal_source_surface_or_terminal_proof(self):
+        from tools.overworld.test_devtools_spawn_measurement import fly_stream
+        for fault in ("prepared", "missing-cell", "surface", "water", "collision", "base", "offset", "duration", "gap", "foreign", "missing-finish", "missing-control", "wrong-source"):
+            stream = fly_stream()
+            for snapshot, events in stream.items:
+                if fault == "prepared":
+                    snapshot["prepared"] = True
+                    for event in events:
+                        if event["kind"] == "native-observation": event["data"]["setupMode"] = "prepared"
+                if "terrain" in snapshot:
+                    cell = snapshot["terrain"]["cells"][0]
+                    if fault == "missing-cell": snapshot["terrain"]["cells"] = []
+                    if fault == "surface": cell["surface"]["present"] = True
+                    if fault == "water": cell.update(attribute=16, behavior=16);cell["provenance"]["rawWord"] = 16
+                    if fault == "collision": cell.update(attribute=0x8002, collision=True);cell["provenance"]["rawWord"] = 0x8002
+                for actor in snapshot["actors"]:
+                    if fault == "duration": actor["motionDuration"] = 143
+                    if fault == "foreign" and snapshot["frame"] > 20: actor["handle"]["generation"] += 1
+                    if actor["motionPhase"] == "IDLE":
+                        if fault == "base": actor["engineObject"]["pos_y"] += 1
+                        if fault == "offset": actor["engineObject"]["unk88_y"] = 1
+                for event in events:
+                    data = event["data"]
+                    if fault == "missing-finish" and data.get("event") == "MOTION_FINISHED": data["event"] = "WORLD_EFFECT"
+                    if fault == "missing-control" and data.get("event") == "CONTROL_RETURNED": data["event"] = "WORLD_EFFECT"
+                    if fault == "wrong-source" and data.get("observation") == "spawn-prepared":
+                        data["finalization"]["receipt"]["resolverReceipts"][0]["sourceSha256"] = "b" * 64
+            if fault == "gap": stream.items.pop(20)
+            with self.subTest(fault=fault):
+                meter, result = self.run_fly(stream)
+                self.assertFalse(meter.finish()["passed"], result)
+
+    @staticmethod
+    def collect_fly(stream, *, fault=None):
+        """Run the real hook-free collector; substitute only native memory reads."""
+        from types import SimpleNamespace
+        from tools.overworld.devtools_observer import NativeObservation
+        observer = NativeObservation.__new__(NativeObservation)
+        observer.pool_fly_terrain = {}
+        spawn = next(e['data'] for _, es in stream.items for e in es
+                     if e.get('data', {}).get('observation') == 'spawn-prepared')
+        world = deepcopy(spawn['worldContext'])
+        cell = deepcopy(stream.items[1][0]['terrain']['cells'][0])
+        calls = []
+        def terrain(emu, x, y):
+            calls.append(('terrain', x, y))
+            return None if fault == 'unloaded' else deepcopy(cell)
+        def surface(emu, x, y, value):
+            calls.append(('surface', x, y))
+            return deepcopy(cell['surface'])
+        observer.session = SimpleNamespace(emu=object(), rt=SimpleNamespace(
+            loaded_terrain_cell=terrain, loaded_surface_cell=surface))
+        observer._world_context = lambda: deepcopy(world)
+        for sample, events in stream.items:
+            observer.ready = events
+            observer._pool_fly_terrain_snapshot(sample)
+            sample.pop('terrain', None)  # normal sampler has no terrain radius
+        return observer, calls, spawn
+
+    def test_hook_free_collector_reads_only_admission_and_logical_terminal(self):
+        from tools.overworld.test_devtools_spawn_measurement import fly_stream
+        stream = fly_stream()
+        observer, calls, _ = self.collect_fly(stream)
+        self.assertEqual(calls, [('terrain', 16, 0), ('surface', 16, 0)] * 2)
+        rows = [(s['frame'], s['poolFlyTerrain'][0]['stage']) for s, _ in stream.items
+                if 'poolFlyTerrain' in s]
+        self.assertEqual(rows, [(stream.items[1][0]['frame'], 'admission'),
+                                (stream.items[-1][0]['frame'], 'terminal')])
+        self.assertEqual(observer.pool_fly_terrain, {})
+        meter, result = self.run_fly(stream)
+        self.assertTrue(meter.finish()['passed'], result)
+        # Render can finish one queue before logical commit. Do not spend the
+        # terminal read early or discard the saved full identity then.
+        stream = fly_stream()
+        old = deepcopy(stream.items[-1][0]); old['actors'][0]['logical'] = {'x': 0, 'y': 0}
+        stream.items.insert(-1, (old, []))
+        stream.items[-1][0]['frame'] += 1
+        observer, calls, _ = self.collect_fly(stream)
+        self.assertEqual(calls, [('terrain', 16, 0), ('surface', 16, 0)] * 2)
+        self.assertNotIn('poolFlyTerrain', stream.items[-2][0])
+        self.assertEqual(stream.items[-1][0]['poolFlyTerrain'][0]['stage'], 'terminal')
+
+    def test_collector_and_checker_reject_foreign_unknown_or_reused_cell(self):
+        from tools.overworld.test_devtools_spawn_measurement import fly_stream
+        from tools.overworld.devtools_observer import NativeObservationError
+        for fault in ('source', 'field', 'duration', 'duplicate', 'unloaded', 'stage'):
+            stream = fly_stream()
+            if fault == 'source': stream.items[1][0]['actors'][0]['sourceIdentity']['object'] += 4
+            if fault == 'field': stream.items[1][0]['context']['fieldEpoch'] += 1
+            if fault == 'duration': stream.items[1][0]['actors'][0]['motionDuration'] = 143
+            if fault == 'duplicate':
+                data = next(e for e in stream.items[1][1]
+                            if e.get('data', {}).get('observation') == 'spawn-prepared')
+                stream.items[1][1].append(deepcopy(data))
+            with self.subTest(fault=fault):
+                if fault in ('source', 'duration', 'duplicate'):
+                    with self.assertRaises(NativeObservationError): self.collect_fly(stream)
+                else:
+                    _, calls, _ = self.collect_fly(stream, fault=fault)
+                    if fault == 'field': self.assertEqual(calls, [])
+                    if fault == 'unloaded': self.assertEqual(calls, [('terrain', 16, 0)] * 2)
+                    if fault == 'stage': stream.items[-1][0]['poolFlyTerrain'][0]['stage'] = 'admission'
+                    meter, result = self.run_fly(stream)
+                    self.assertFalse(meter.finish()['passed'], result)

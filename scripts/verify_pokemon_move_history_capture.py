@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 if __package__:
+    from .verify_player_health_session_reset import verify_session_reset
     from .pokemon_move_history_build_manifest import (
         DEPENDENCY_FILES,
         FIXED_INPUTS,
@@ -36,6 +37,7 @@ if __package__:
         verify_manifest_document,
     )
 else:
+    from verify_player_health_session_reset import verify_session_reset
     from pokemon_move_history_build_manifest import (
         DEPENDENCY_FILES,
         FIXED_INPUTS,
@@ -113,10 +115,15 @@ OVERWORLD_CORE_THUMB_HELPERS = {
     "OverworldWildSpawns_ApplyFacePlayerFacing": 0x023D98F6,
 }
 OVERWORLD_CORE_HELPER_CLIENTS = {
-    158: ("overworld_actor_system_overlay", ("memcpy", "memset", "__aeabi_uidivmod", "__aeabi_lmul", "__aeabi_idiv", "__aeabi_uidiv", "__gnu_thumb1_case_uqi", "__aeabi_idivmod")),
-    152: ("overworld_follower_selector_overlay", ("__gnu_thumb1_case_uhi", "__aeabi_idivmod", "memcpy", "__aeabi_lmul", "__aeabi_idiv", "memset", "__aeabi_uidivmod", "__aeabi_uidiv", "__gnu_thumb1_case_uqi")),
+    # Resolver's long multiply now belongs to the Query package. Actor's
+    # remaining direct callers retain exact source-relocation ownership.
+    158: ("overworld_actor_system_overlay", ("memcpy", "memset", "__aeabi_uidivmod", "__aeabi_idiv", "__aeabi_uidiv", "__gnu_thumb1_case_uqi", "__aeabi_idivmod")),
+    # The pure Condition/Vision engine now belongs to the query addon; its
+    # exact long-call imports are checked with that package. These are all
+    # four remaining native Selector targets, measured from hosted objects.
+    152: ("overworld_follower_selector_overlay", ("memcpy", "__aeabi_lmul", "__aeabi_idiv", "memset")),
     149: ("overworld_wild_spawns_overlay", ("__aeabi_uidivmod", "memset", "__aeabi_idivmod", "__aeabi_idiv", "memcpy")),
-    153: ("pokemon_move_history_overlay", ("memset",)),
+    153: ("pokemon_move_history_overlay", ("memset", "__aeabi_idiv", "__aeabi_idivmod")),
     159: ("overworld_mount_chain_overlay", ("memcpy", "memset", "__aeabi_uidiv", "__aeabi_uidivmod")),
 }
 OVERWORLD_CORE_PRESERVED_BODIES = {
@@ -152,18 +159,20 @@ OVERLAY153_CORE_CALL_INVENTORY_SHA256 = (
 )
 OVERLAY155_BASE = 0x023BD400
 OVERLAY155_LIMIT = 0x1000
-OVERLAY155_CALL_INVENTORY_SHA256 = (
-    "1b22d45571ac8543e894ca4f1382dde7d23831b0fc407c5e45d0f1f4e910d087"
-)
 # The planner reserve contains the current Hop and Teleport calls, including
 # Teleport's ARM9 BLX classifier callback.
 # Its 82 outside calls (history/save/diagnostics, role reducer, and shadow)
 # retain the published call graph with the current resident-helper targets.
 # Keep their identity separate so a planner update cannot rebaseline them.
-OVERLAY155_PLANNER_CODE_START = OVERLAY155_BASE + 0x898
+# CurrentQuery's exact16-byte lease leaf precedes the old history bodies.
+# Their sites and resident helper targets move+16; normalize only that
+# reviewed placement below and retain the independent published core hash.
+OVERLAY155_CURRENT_QUERY = OVERLAY155_BASE + 0x25C
+OVERLAY155_HISTORY_RELOCATION = 16
+OVERLAY155_PLANNER_CODE_START = OVERLAY155_BASE + 0x8A8
 OVERLAY155_PLANNER_CODE_END = OVERLAY155_BASE + 0xE40
 OVERLAY155_CORE_CALL_INVENTORY_SHA256 = (
-    "aa0b06964767a905702781ec320d0b127c8c1a4c395daa645a2996fa6f9d159f"
+    "5e16e70bab1010a0a77ad14ee777dee7da90008088df451dbb60b1d9930cf8e9"
 )
 OVERLAY155_ACTOR_PLANNERS = (
     (0xF0, "OverworldActorHopPlanner_Plan", "OverworldActorHopPlanner_PlanImpl"),
@@ -179,7 +188,7 @@ OVERLAY155_RETIRED_HOP_SYMBOLS = {
     "OverworldWild_IsChainActionReady",
 }
 EXPECTED_MAKEFILE_SHA256 = (
-    "a49fe849e6b87a7f4599372975b4cc977e00758798eb19a9c22bc0b5ee11b655"
+    "892374f79d9300db34bac328b972fa2ddc6de949f51c83f48429f79c9141ff4b"
 )
 EXPECTED_BUILD_WRAPPER_SHA256 = (
     "96a807bb9033336361b2da6c57eb0b55a3dcc18e19b900007bdf416c11833e1c"
@@ -194,9 +203,9 @@ EXPECTED_INCLUDED_MAKE_SOURCES = {
     "data/itemdata/itemdata.mk":
         "5f6fb210d6106c88edca22ce74b9e4c8e93a9dc29d54ad9dd86bc281e010bf51",
     "narcs.mk":
-        "df964fe5b5822e230ab179e45eb53e23fbf9adab46afbe89167495b4f96e467a",
+        "5e6d2626a4266136f8be0343b1a192d05a5e1c34194c8ed7af7767d4b8c541db",
     "overlays.mk":
-        "0880c86b6bddb5e4914f0b1179ec68f6cc1452688f97af53b1177c6541b4bcf6",
+        "02fbe8246111540410fe1bff2c7957371526697f347ff83add4a2c0ee89f1406",
 }
 MANAGED_BUILD_PATH = (
     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -702,6 +711,7 @@ def effective_make_all_contract_matches(
                 "asm",
                 "data",
                 "include",
+                "lib",
                 "scripts",
                 "src",
                 "tools",
@@ -3232,6 +3242,8 @@ def source_contracts() -> None:
         "--package-only --rom $(BUILDROM).tmp",
         "$(PYTHON_NO_VENV) scripts/verify_overworld_wild_occupancy.py "
         "--package-only --rom $(BUILDROM).tmp",
+        "$(PYTHON_NO_VENV) scripts/verify_overworld_field_capsule.py "
+        "--package-only --rom $(BUILDROM).tmp",
         "$(VENV)/bin/python3 -I -S -B -X pycache_prefix=/dev/null "
         "scripts/pokemon_move_history_build_manifest.py "
         "--seal $(MOVE_HISTORY_CAPTURE_MANIFEST_TMP) "
@@ -3289,6 +3301,8 @@ def source_contracts() -> None:
         "$(NARCHIVE) extract $(FILESYS)/a/0/2/8 "
         "-o $(BUILD)/a028/ -nf",
         "$(PYTHON) scripts/make.py $(CFLAGS)",
+        "$(PYTHON) -B -m tools.maps --root $(FILESYS) "
+        "--arm9 $(BASE)/arm9.bin --overrides data/maps apply --in-place",
         "$(MAKE) move_narc",
         "$(ARMIPS) armips/global.s $(ARMIPS_FLAGS)",
         "$(NARCHIVE) create $(FILESYS)/a/0/2/8 "
@@ -3318,10 +3332,12 @@ def source_contracts() -> None:
     expected_makefile_sha256 = EXPECTED_MAKEFILE_SHA256
     expected_included_make_sources = EXPECTED_INCLUDED_MAKE_SOURCES
     expected_prerequisites_sha256 = (
-        "50282520e21aff95c193d0010c31506d03dae36b1db2c72b61855e4484f29b39"
+        "c4361c8d0cd095dc8c2316ae026821442217d3bb81fe647c235c7654328ed04d"
     )
     required_all_prerequisites = frozenset({
         "build/output_overworld_actor_system_overlay.bin",
+        "build/output_overworld_field_capsule.bin",
+        "build/output_player_health_overlay.bin",
     })
     require(
         make_publication_contract_matches(
@@ -5842,6 +5858,9 @@ def verify_field_terrain_packaging(
     terrain_object: Path,
     field: bytes,
     resident: bytes,
+    health_linked: Path,
+    empty_axis_object: Path,
+    health: bytes,
     objdump: str = "arm-none-eabi-objdump",
 ) -> None:
     verify_overlay153_spawn_tail_packaging(resident_linked, resident, objdump)
@@ -5859,6 +5878,29 @@ def verify_field_terrain_packaging(
          if symbol[3] == "F" and symbol[1] > 0},
         *bss[0],
     )
+    # This one stateless Field leaf occupies an existing HP code gap. Check
+    # both packaged bytes and the actual Thumb call, not just source pins.
+    leaf_name = "OverworldFieldTerrainStream_RetireEmptyAxis"
+    leaf = layout_symbols(health_linked, objdump).get(leaf_name)
+    require(leaf is not None and leaf[0] == 0x01FFD510
+            and 0 < leaf[1] <= 0x70 and leaf[2:] == (".text", "F"),
+            "Field empty-axis leaf moved or exceeds its resident gap")
+    offset = leaf[0] - 0x01FFA580
+    require(health[offset:offset + leaf[1]]
+            == elf_bytes_at(health_linked, leaf[0], leaf[1]),
+            "packaged Field empty-axis leaf differs from linked code")
+    require(not any(flags & 1 for _kind, flags, _address, _size
+                    in elf_section_layout(empty_axis_object)),
+            "Field empty-axis leaf gained mutable storage")
+    symbols = layout_symbols(resident_linked, objdump)
+    require(symbols.get(leaf_name) == (0x01FFD510, 0, "*ABS*", "F"),
+            "Field empty-axis import lost its fixed Thumb identity")
+    address, size, _section, _kind = symbols[FIELD_TERRAIN_APPLY]
+    calls = [(kind, target) for _site, kind, target in
+             packaged_thumb_calls(resident, OVERLAY_BASE, address, size)
+             if target == leaf[0]]
+    require(calls == [("bl", leaf[0])],
+            "Field BEGIN must directly Thumb-call its one empty-axis leaf")
 
 
 def field_core_helper_call_contract(field: bytes) -> None:
@@ -5920,6 +5962,47 @@ def overworld_core_import_contract(symbols, names) -> None:
                 f"overworld client import {name} lacks exact Thumb-function metadata")
 
 
+# Fully linked Wild leaves use existing resident filler; their public callers
+# remain Wild-owned and their exact import inventory follows the relocated body.
+OVERWORLD_CORE_PRIVATE_READS = (
+    (151, 0x023C4000, 0x4000, 0x023C7D34, 196, 184,
+     "OverworldWildSpawns_GetThrowBindingBody", ".overworld_wild_throw_height"),
+    (161, 0x01FFA580, 0x5A80, 0x01FFEF54, 172, 168,
+     "OverworldWildSpawns_ClassifyTeleportCandidate", ".overworld_wild_teleport_read"),
+    (161, 0x01FFA580, 0x5A80, 0x01FFEEFC, 88, 60,
+     "OverworldWildSpawns_RequestHopPlan", ".overworld_wild_cleanup_hop_request"),
+)
+
+
+def overworld_core_private_read_contract(spec, symbol, binding, sections, body, packaged) -> None:
+    _owner, _owner_base, _owner_size, address, capacity, size, name, section = spec
+    require(symbol == (address, size, section, "F")
+            and binding is not None and binding[:3] == (address | 1, size, "FUNC")
+            and binding[3].isdigit() and int(binding[3]) > 0
+            and sections == [(1, 6, address, size)] and size <= capacity,
+            f"Wild private read {name} lost its exact hosted Thumb body/slot")
+    require(len(body) == size and len(packaged) == capacity
+            and packaged == body + bytes(capacity - size),
+            f"Wild private read {name} differs from its padded resident owner")
+    overworld_core_helper_mode_contract(packaged, address)
+
+
+def overworld_core_private_read_ready_contract(source: str) -> None:
+    body = function_body(source, "OverworldWildSpawns_TryStartFrameDrivenOwnerMovementCommand")
+    require(re.search(
+        r"if \(\(throwTarget & OW_WILD_SPAWNER_THROW_TARGET_CARRIED_FLAG\) != 0\)\s*\{\s*"
+        r"if \(OverworldWildSpawns_GetHelperOverlayEntry\(\) == NULL\) return FALSE;", body) is not None,
+        "Wild private height read must admit loaded-ready Helper151 before entry")
+    ordered(body, ["if (OverworldWildSpawns_GetHelperOverlayEntry() == NULL) return FALSE;",
+                   "readEntry->throwHeld(&heldCall)"], "Wild private held intent admission")
+    require("OverworldWildSpawns_GetThrowBindingBody, MapObject_ClearSingleMovementActive" in source,
+            "shared held intent lost the native binding-body callback")
+    held = function_body((REPO / "lib/overworld/overworld_throw_held_wild.c").read_text(),
+                         "OverworldThrowHeldWild_Run")
+    ordered(held, ["ops->bindingBody(state, slot,", "!= read->targetObject", "ops->clearMovement", "ops->startJump"],
+            "shared held launch requires the native current Cargo body")
+
+
 def overworld_core_client_objects(client: str) -> list[Path]:
     # Match the sealed overlay recipe's source-derived list, not cached *.o:
     # retired objects can remain in build/ without participating in this link.
@@ -5931,9 +6014,17 @@ def overworld_core_client_objects(client: str) -> list[Path]:
             "overworld_motion_model",
             "overworld_actor_transition_model", "overworld_population_model"))
     if client == "overworld_follower_selector_overlay":
-        objects.add(
-            REPO / "build" / client / "overworld_behavior_condition_runtime.o"
-        )
+        objects.update(REPO / "build" / client / (name + ".o") for name in (
+            "overworld_vision", "overworld_query_code_addon",
+            "overworld_query_code_addon_cache", "overworld_query_code_addon_service",
+            "overworld_query_code_addon_field",
+            "overworld_throw_observation_native",
+            "overworld_query_code_addon_condition_delegate",
+            "overworld_query_code_addon_cache_imports",
+            "overworld_condition_publication_native",
+            "overworld_condition_publication_imports"))
+    if client == "overworld_mount_chain_overlay":
+        objects.add(REPO / "build" / client / "overworld_condition_publication_native.o")
     require(bool(sources) and all(path.is_file() for path in objects),
             f"overworld helper client {client} lacks current source/caller objects")
     return sorted(objects)
@@ -5975,8 +6066,127 @@ def verify_overworld_core_helper_packaging(rom: bytes, core: bytes, core_base: i
             linked_image = elf_bytes_at(linked, base, len(image))
         require(image == linked_image,
                 f"overworld helper client {client} differs from its linked image")
-        overworld_core_import_contract(elf_helper_bindings(linked, names), names)
+        regions = [(image, base)]
+        if overlay_id in (149, 158):
+            # These fully linked Wild leaves have distinct typed copies in
+            # Actor's existing front reserve. Wild still owns their calls.
+            if __package__:
+                from .pack_overworld_actor_slam_jump import (
+                    ADDRESS, SIZE, COPY, source_body,
+                    PICKUP_ADDRESS, PICKUP_SIZE, PICKUP_COPY, source_pickup_body,
+                )
+            else:
+                from pack_overworld_actor_slam_jump import (
+                    ADDRESS, SIZE, COPY, source_body,
+                    PICKUP_ADDRESS, PICKUP_SIZE, PICKUP_COPY, source_pickup_body,
+                )
+            actor = REPO / "build/overworld_actor_system_overlay_linked.o"
+            require((158 + 1) * 32 <= y9_size,
+                    "shared Wild leaves lack Actor package metadata")
+            actor_row = struct.unpack_from("<8I", rom, y9 + 158 * 32)
+            require(actor_row[0:4] == (158, 0x023B65C0, 0x3BB0, 0x988)
+                    and actor_row[7] == 0 and (actor_row[6] + 1) * 8 <= fat_size,
+                    "shared Hop admission Actor owner metadata differs")
+            actor_start, actor_end = struct.unpack_from("<2I", rom, fat + actor_row[6] * 8)
+            require(actor_start <= actor_end <= len(rom)
+                    and actor_end - actor_start == actor_row[2],
+                    "shared Wild leaves Actor package extent differs")
+            wild = REPO / "build/overworld_wild_spawns_overlay_linked.o"
+            for address, size, copy_name, read_body in (
+                (ADDRESS, SIZE, COPY, source_body),
+                (PICKUP_ADDRESS, PICKUP_SIZE, PICKUP_COPY, source_pickup_body),
+            ):
+                shared = read_body(wild)
+                copy_binding = elf_helper_bindings(actor, (copy_name,)).get(copy_name)
+                require(copy_binding is not None
+                        and copy_binding[:3] == (address | 1, size, "FUNC")
+                        and copy_binding[3] not in ("ABS", "UND"),
+                        f"{copy_name} lacks its typed Actor owner")
+                offset = address - actor_row[1]
+                require(0 <= offset and offset + size <= actor_row[2]
+                        and rom[actor_start + offset:actor_start + offset + size] == shared
+                        and elf_bytes_at(actor, address, size) == shared,
+                        f"{copy_name} Actor linked/packaged copy differs")
+                if overlay_id == 149:
+                    regions.append((shared, address))
+        # These unchanged private client leaves are packaged in stock Field1.
+        # Their helper calls remain part of this client's relocation inventory.
+        # Authenticate each exact linked span against its actual ROM owner.
+        field_leaves = {
+            149: ((0x02208400, 0x100), (0x022085D0, 0x30)),
+            153: ((0x02208360, 0xA0),),
+        }.get(overlay_id, ())
+        if field_leaves:
+            field_row = struct.unpack_from("<8I", rom, y9 + 32)
+            require(field_row == (1, 0x021E5900, 0x24260, 0x3C020,
+                                  0x02209810, 0x02209814, 1, 0),
+                    "private helper stock Field1 owner metadata changed")
+            field_start, field_end = struct.unpack_from(
+                "<2I", rom, fat + field_row[6] * 8)
+            require(field_start <= field_end <= len(rom)
+                    and field_end - field_start == field_row[2],
+                    "private helper stock Field1 package is invalid")
+            for leaf_base, capacity in field_leaves:
+                sizes = [size for kind, flags, address, size
+                         in elf_section_layout(linked)
+                         if kind == 1 and flags & 4 and address == leaf_base]
+                require(len(sizes) == 1 and 0 < sizes[0] <= capacity,
+                        f"{client} private Field helper layout differs")
+                offset = leaf_base - field_row[1]
+                require(0 <= offset and offset + sizes[0] <= field_row[2],
+                        "private helper span is outside stock Field1")
+                leaf_image = rom[field_start + offset:
+                                 field_start + offset + sizes[0]]
+                require(leaf_image == elf_bytes_at(linked, leaf_base, sizes[0]),
+                        f"{client} private Field helper differs from linked bytes")
+                overworld_core_helper_mode_contract(leaf_image, leaf_base)
+                regions.append((leaf_image, leaf_base))
+        capsule = {149: (0x01FFF580, 0x400),
+                   157: (0x01FFF980, 0x200)}.get(overlay_id)
+        if capsule is not None:
+            capsule_base, capacity = capsule
+            sizes = [size for kind, flags, address, size in elf_section_layout(linked)
+                     if kind == 1 and flags & 4 and address == capsule_base]
+            require(len(sizes) == 1 and 0 < sizes[0] <= capacity,
+                    f"{client} combat capsule layout differs")
+            health = struct.unpack_from("<8I", rom, y9 + 161 * 32)
+            health_start, health_end = struct.unpack_from(
+                "<2I", rom, fat + health[6] * 8)
+            offset = capsule_base - health[1]
+            require(health[1] == 0x01FFA580 and 0 <= offset
+                    and health_start + offset + sizes[0] <= health_end <= len(rom),
+                    f"{client} combat capsule is outside resident overlay161")
+            capsule_image = rom[health_start + offset:health_start + offset + sizes[0]]
+            require(capsule_image == elf_bytes_at(linked, capsule_base, sizes[0]),
+                    f"{client} combat capsule differs from linked bytes")
+            overworld_core_helper_mode_contract(capsule_image, capsule_base)
+            regions.append((capsule_image, capsule_base))
         symbols = layout_symbols(linked, "arm-none-eabi-objdump")
+        if overlay_id == 149:
+            overworld_core_private_read_ready_contract(
+                (REPO / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c").read_text())
+            private_bindings = elf_helper_bindings(
+                linked, {spec[6] for spec in OVERWORLD_CORE_PRIVATE_READS})
+            for spec in OVERWORLD_CORE_PRIVATE_READS:
+                owner, owner_base, owner_size, address, capacity, _size, name, _section = spec
+                require((owner + 1) * 32 <= y9_size, "Wild private read owner metadata missing")
+                owner_row = struct.unpack_from("<8I", rom, y9 + owner * 32)
+                require(owner_row[:4] == (owner, owner_base, owner_size, 0)
+                        and owner_row[7] == 0 and (owner_row[6] + 1) * 8 <= fat_size,
+                        "Wild private read owner base/size/BSS changed")
+                owner_start, owner_end = struct.unpack_from("<2I", rom, fat + owner_row[6] * 8)
+                offset = address - owner_base
+                require(owner_start <= owner_end <= len(rom)
+                        and owner_end - owner_start == owner_size
+                        and 0 <= offset and offset + capacity <= owner_size,
+                        "Wild private read is outside its exact resident owner")
+                leaf_image = rom[owner_start + offset:owner_start + offset + capacity]
+                overworld_core_private_read_contract(
+                    spec, symbols.get(name), private_bindings.get(name),
+                    [row for row in elf_section_layout(linked) if row[2] == address],
+                    elf_bytes_at(linked, address, _size), leaf_image)
+                regions.append((leaf_image, address))
+        overworld_core_import_contract(elf_helper_bindings(linked, names), names)
         targets = {OVERWORLD_CORE_THUMB_HELPERS[name] for name in names}
         verified = set()
         used_targets = set()
@@ -6005,13 +6215,25 @@ def verify_overworld_core_helper_packaging(rom: bytes, core: bytes, core_base: i
                 require(kind == "R_ARM_THM_CALL" and len(origins) == 1,
                         f"unverified overworld helper relocation {client}/{object_path.name}:{section}:{offset}")
                 address = next(iter(origins)) + int(offset, 16)
+                callers = [(part, origin) for part, origin in regions
+                           if origin <= address <= origin + len(part) - 4]
+                require(len(callers) == 1, "overworld helper caller is outside its package")
+                part, origin = callers[0]
                 field_core_helper_target_contract(elf_bytes_at(linked, address, 4),
-                    bytes_at(image, base, address, 4), address, target)
+                    bytes_at(part, origin, address, 4), address, target)
                 require(address not in verified, "overworld helper caller has duplicate ownership")
                 verified.add(address)
                 used_targets.add(target)
-        actual = {address for address, kind, target in packaged_thumb_calls(image, base, base, len(image))
+        actual = {address for part, origin in regions
+                  for address, kind, target in packaged_thumb_calls(part, origin, origin, len(part))
                   if kind in ("bl", "blx") and target in targets}
+        if overlay_id == 158:
+            # The source Wild object's exact relocation inventory owns this
+            # copied call; an incbin wrapper has no relocation of its own.
+            copied_calls = {address for address in actual if ADDRESS <= address < ADDRESS + SIZE}
+            require(copied_calls == {0x023B8A36},
+                    "shared Hop admission resident-helper call inventory differs")
+            actual -= copied_calls
         require(verified == actual and used_targets == targets,
                 f"overworld helper client {client} has missing or unverified direct callers")
 
@@ -6035,6 +6257,22 @@ def overworld_core_helper_mutation_fixtures() -> None:
         except SystemExit:
             return
         require(False, f"overworld helper negative control passed: {label}")
+
+    for spec in OVERWORLD_CORE_PRIVATE_READS:
+        _owner, _owner_base, _owner_size, address, capacity, size, name, section = spec
+        symbol = (address, size, section, "F")
+        binding = (address | 1, size, "FUNC", "1")
+        sections = [(1, 6, address, size)]
+        body = bytes(range(size))
+        packaged = body + bytes(capacity - size)
+        check = lambda **changes: overworld_core_private_read_contract(
+            spec, changes.get("symbol", symbol), changes.get("binding", binding),
+            changes.get("sections", sections), body, changes.get("packaged", packaged))
+        check()
+        reject(name + " ARM pointer", lambda: check(binding=(address, size, "FUNC", "1")))
+        reject(name + " wrong body", lambda: check(packaged=bytes([body[0] ^ 1]) + packaged[1:]))
+        reject(name + " wrong padding", lambda: check(packaged=packaged[:-1] + b"\x01"))
+        reject(name + " oversized slot", lambda: check(sections=[(1, 6, address, capacity + 1)]))
 
     veneer_address = 0x023BA0C0
     def veneer(target):
@@ -6304,116 +6542,365 @@ def field_terrain_layout_mutation_fixtures() -> None:
             require(False, f"mutated Field terrain layout passed: {label}")
 
 
+def task6_slam_owner_contracts(
+    owners: dict[int, tuple[bytes, dict, dict]],
+) -> None:
+    """Exact private resident bodies and typed imports; no new public ABI."""
+    bases = {153: OVERLAY_BASE, 155: OVERLAY155_BASE, 158: 0x023B65C0, 159: 0x01FF9800}
+    caps = {153: 0x1FF0, 155: OVERLAY155_LIMIT, 158: 0x3BB0, 159: 0xD48}
+    require(set(owners) == set(bases), "Slam private resident owners are missing or extra")
+    for owner, (image, _symbols, _bindings) in owners.items():
+        require(len(image) == caps[owner], f"Slam resident owner {owner} changed its fixed loaded extent")
+
+    def exact(owner, name, address, expected):
+        image, symbols, bindings = owners[owner]
+        symbol, binding = symbols.get(name), bindings.get(name)
+        require(symbol == (address, len(expected), ".text", "F")
+                or (owner == 159 and symbol == (address, len(expected), ".overworld_mount_presentation", "F"))
+                or (owner == 153 and symbol == (address, len(expected), ".walk_helpers", "F")),
+                f"Slam private {name} is not its exact resident code owner")
+        require(binding is not None and binding[:3] == (address | 1, len(expected), "FUNC")
+                and binding[3].isdigit() and int(binding[3]) > 0,
+                f"Slam private {name} lost its typed Thumb function owner")
+        require(bytes_at(image, bases[owner], address, len(expected)) == expected,
+                f"Slam private {name} changed body, guard, target or argument ABI")
+
+    phase = bytes.fromhex("022805d1002903d0002a01d09a4201db0020704701207047")
+    unit = bytes.fromhex("884202d3802040017047000310b5e4f3a7fc10bd")
+    init = bytes.fromhex("f0b50023ce5e0423cc5e0223cd5e0623ca5ea41b521be317e118d7175940d3194560066001257b40002c00dc023d01248560002a00dc023c012243615b1ac46001618261c2610362f0bd")
+    exact(153, "OverworldActorHopGeometry_NextCell", 0x023BFFA2, bytes.fromhex("70b502694369056a52005b00002d17dc8169046886684162a4190231eb188262046081610362002d09d14368c1685b184360c3690233c361036a9a1a026270bdc16983624162f0e7"))
+    exact(155, "OverworldSlam_PhaseCheckNative", 0x023BD4D8, phase)
+    exact(159, "OverworldSlam_UnitHeightNative", 0x01FFA4EC, unit)
+    exact(158, "OverworldMotion_SlamRiseUnitHeightNative", 0x023B8600,
+          bytes.fromhex("10b541f473ff020042434300100b181a10bd"))
+    exact(158, "OverworldActorHopGeometry_Init", 0x023B92D0, init)
+    for owner, (_image, symbols, bindings) in owners.items():
+        for name, symbol in symbols.items():
+            if owner != 155 or name not in {"OverworldActorHopPlanner_PlanVector", "OverworldActorHopPlanner_PlanTrajectory",
+                            "OverworldActorHopPlanner_CurrentQuery", "OverworldActorHopPlanner_Plan", "OverworldActorTeleportPlanner_Plan",
+                            "OverworldActorTeleportPlanner_PlanImpl"}:
+                continue
+            require(bindings.get(name) == (symbol[0] | 1, symbol[1], "FUNC", bindings.get(name, (None, None, None, None))[3])
+                    and bindings[name][3].isdigit() and int(bindings[name][3]) > 0,
+                    f"Slam planner {name} lost its typed resident Thumb owner")
+    exact(155, "OverworldTask6PrivateMultiplyBridge", 0x023BE3CC,
+          bytes.fromhex("00b534f5bcea00bd"))
+    require(owners[155][2].get("__aeabi_lmul") == (0x023DEEC7, 8, "FUNC", "ABS"),
+            "Slam private multiply changed its effective resident Thumb import")
+    bridge = bytes_at(owners[155][0], bases[155], 0x023BE3CC, 8)
+    require(packaged_thumb_calls(bridge, 0x023BE3CC, 0x023BE3CC, 8)
+            == [(0x023BE3CE, "blx", 0x020F2948)],
+            "Slam hosted multiply bridge changed its exact stock ARM target")
+    task_symbols = owners[155][1]
+    exact(155, "OverworldActorHopPlanner_CurrentQuery", 0x023BD65C,
+          bytes.fromhex("10b50c0021f0c6fb001b4342584110bd"))
+    exact(155, "OverworldActorHopPlanner_PlanVector", 0x023BDCA0, bytes.fromhex("f0b52423c25e2621435e151e00da55421c1e00da5c422900a54202d22100a5421cd3d21703320368002b29d0002927d006002f192d3636788f4203d0a54201d0740709d50424a643032e00d15033dc7c8f4206d1012c06d9072010e0da170132e1e7002cf8d01c7d8c4209d85b7d8b4206d303002f302e331a7001700020f0bd0820fce7"))
+    exact(155, "OverworldActorHopPlanner_PlanTrajectory", 0x023BDD24, bytes.fromhex("0300f0b52c331b78050093b0022b64d90369002b02d1082013b0f0bd1968304a9142f8d15b68002bf5d098680028f2d021f04cf804000120002cedd02268294b9a42e8d16268284b9a42e4d12700c0373b68002bdfd0254e254b32689a42dad17268244b9a42d6d10122b3681342d2d0190091430a0020495218c02109018a42c9d298470028c6d01c4bf068b1695a689b6802941a4c0c9303941a4b1a4c0d9304941a4b1a4c0e9305941a4b1a4c0f9306941a4b1a4c1b4e079400961a4c10931a4e1b4b09900a91019608940b926946119328003b6898479ee70300a5e7c04601005c00574f44510900c40000c83b024f575231120034000038c4fdf0303c025dd63b024dee3d02d1923b0245ee3d02a3ff3b02c148050211f83b021949050201863b024f484e43d9d43b020200480085013c02"))
+    vector = task_symbols.get("OverworldActorHopPlanner_PlanVector")
+    trajectory = task_symbols.get("OverworldActorHopPlanner_PlanTrajectory")
+    require(vector == (0x023BDCA0, 132, ".text", "F")
+            and trajectory == (0x023BDD24, 308, ".text", "F"),
+            "Slam private Task6 planner owners moved or exceeded reviewed bodies")
+    dispatch = bytes.fromhex("002809d02c21415c002903d0042903d8034b1847014b184708207047a1dc3b0225dd3b02")
+    require(struct.unpack_from("<II", dispatch, 28)
+            == (vector[0] | 1, trajectory[0] | 1),
+            "Slam private dispatch lost its exact current Task6 Thumb owners")
+    exact(158, "OverworldActorHopPlanner_DispatchNative", 0x023B9880, dispatch)
+    for name, address in (("Begin", 0x023B97EC), ("Suspend", 0x023B98A4),
+                          ("AcknowledgeCommit", 0x023B98C2), ("Tick", 0x023B990A),
+                          ("Cancel", 0x023B9A2E)):
+        symbol = owners[158][1].get("OverworldMotion_" + name)
+        binding = owners[158][2].get("OverworldMotion_" + name)
+        require(symbol is not None and symbol[0] == address and symbol[1] > 0
+                and symbol[2:] == (".text", "F") and binding is not None
+                and binding[:3] == (address | 1, symbol[1], "FUNC")
+                and binding[3].isdigit() and int(binding[3]) > 0,
+                f"Slam changed existing fixed Motion {name} owner/import")
+    imports = {
+        155: {"OverworldActorHopPlanner_PlanImpl": 0x023B9880,
+              "OverworldActorHopGeometry_Init": 0x023B92D0,
+              "OverworldMotion_SlamUnitArc": 0x023B8600,
+              "OverworldMotion_SlamPhaseCheck": 0x023BD4D8,
+              "OverworldActorHopGeometry_NextCell": 0x023BFFA2,
+              "OverworldActorHopPlanner_LerpFx32": 0x023BF810,
+              "OverworldHopPresentation_Acquire": 0x023DEDF0,
+              "OverworldWildOccupancy_Query": 0x023C0184},
+        158: {"OverworldActorHopGeometry_NextCell": 0x023BFFA2,
+              "OverworldActorHopPlanner_VectorOwner": 0x023BDCA0,
+              "OverworldActorHopPlanner_TrajectoryOwner": 0x023BDD24,
+              "OverworldMotion_SlamUnitHeight": 0x01FFA4EC,
+              "OverworldMotion_SlamRiseUnitHeight": 0x023B8600,
+              "OverworldMotion_SlamPhaseCheck": 0x023BD4D8},
+        159: {"OverworldMotion_SlamUDiv": 0x023DEE4C},
+    }
+    for owner, targets in imports.items():
+        for name, address in targets.items():
+            require(owners[owner][2].get(name) == (address | 1, 0, "FUNC", "ABS"),
+                    f"Slam client {owner} {name} is not the exact typed Thumb import")
+    # Ops72 is borrowed only for this current Query9/196 call. Bind the
+    # exact cursor1/92 admission and every typed static callback word before
+    # accepting the whole body above; runtime/surface callbacks retain their
+    # existing authenticated owners and complete argument transport.
+    literals = {0xE0: 0x005C0001, 0xE4: 0x51444F57, 0xE8: 0x00C40009,
+                0xEC: 0x023BC800, 0xF0: 0x3152574F, 0xF4: 0x00340012,
+                0xF8: 0xFDC43800, 0xFC: 0x023C30F0, 0x100: 0x023BD65D,
+                0x104: 0x023DEE4D, 0x108: 0x023B92D1, 0x10C: 0x023DEE45,
+                0x110: 0x023BFFA3, 0x114: 0x020548C1, 0x118: 0x023BF811,
+                0x11C: 0x02054919, 0x120: 0x023B8601, 0x124: 0x434E484F,
+                0x128: 0x023BD4D9, 0x12C: 0x00480002, 0x130: 0x023C0185}
+    for offset, value in literals.items():
+        require(bytes_at(owners[155][0], OVERLAY155_BASE,
+                         trajectory[0] + offset, 4) == struct.pack("<I", value),
+                f"Slam shared clearance ABI or borrowed callback word differs: {offset:X}")
+    for name, address in (("__aeabi_uidiv", 0x023DEE4D),
+                          ("__aeabi_idiv", 0x023DEE45)):
+        require(owners[155][2].get(name) == (address, 8, "FUNC", "ABS"),
+                f"Slam shared clearance {name} lost its exact typed resident import")
+    require(thumb_bl_target(owners[158][0], bases[158], 0x023B94B8) == 0x023B8600
+            and thumb_bl_target(owners[158][0], bases[158], 0x023B95B4) == 0x01FFA4EC,
+            "Slam Motion ascent/drop changed their exact private curve owners")
+
+
 def task6_actor_planner_contracts(
     overlay: bytes,
     symbols: dict[str, tuple[int, int, str, str]],
+    owners: dict[int, tuple[bytes, dict, dict]],
 ) -> None:
-    """Authenticate retired slots and both one-argument Actor planner entries.
+    """Two fixed Actor planners, plus named pure private Slam code owners.
 
-    Task6 is their physical host. The old Wild callback table is not an ABI
-    alias: its whole 24-byte reserve must stay zero and its symbols stay absent.
-    Each new entry is exactly LDR r3/BX r3 plus an odd resident function pointer;
-    this preserves the public call pointer in r0 and the caller's return/stack.
+    Task6 retains its retired callback symbols' absence. The former zero slot
+    holds exactly the phase-check leaf; a private dispatch shares Actor's own
+    Motion page. Public one-argument entries and all owner bounds stay fixed.
     """
     require(0x100 <= len(overlay) <= OVERLAY155_LIMIT,
             "packaged overlay 155 planner image is truncated or out of reserve")
-    require(overlay[0xD8:0xF0] == bytes(0x18),
-            "packaged overlay 155 restored retired Hop callback slots")
+    require(owners.get(155) is not None and owners[155][:2] == (overlay, symbols),
+            "Slam Task6 owner differs from the current planner package")
+    task6_slam_owner_contracts(owners)
     require(not (OVERLAY155_RETIRED_HOP_SYMBOLS & symbols.keys()),
             "packaged overlay 155 restored retired Hop service symbols")
     for offset, entry, implementation in OVERLAY155_ACTOR_PLANNERS:
         public = symbols.get(entry)
-        target = symbols.get(implementation)
-        require(public is not None and public[0] == OVERLAY155_BASE + offset
-                and public[1] == 8 and public[2] == ".text" and public[3] == "F",
+        require(public is not None and public == (OVERLAY155_BASE + offset, 8, ".text", "F"),
                 f"packaged overlay 155 Actor planner entry differs: {entry}")
-        require(target is not None and target[3] == "F" and target[2] == ".text"
-                and target[0] & 1 == 0 and target[1] > 0
-                and OVERLAY155_BASE + 0x100 <= target[0]
-                and target[0] + target[1] <= OVERLAY155_BASE + 0xE40
-                and target[0] + target[1] <= OVERLAY155_BASE + len(overlay),
-                f"packaged overlay 155 Actor planner implementation is missing or outside its code reserve: {implementation}")
+        if offset == 0xF0:
+            target = 0x023B9880
+        else:
+            implementation_symbol = symbols.get(implementation)
+            require(implementation_symbol is not None
+                    and implementation_symbol[2:] == (".text", "F")
+                    and implementation_symbol[0] & 1 == 0
+                    and implementation_symbol[1] > 0
+                    and OVERLAY155_BASE + 0x100 <= implementation_symbol[0]
+                    and implementation_symbol[0] + implementation_symbol[1] <= OVERLAY155_BASE + 0xE40
+                    and implementation_symbol[0] + implementation_symbol[1] <= OVERLAY155_BASE + len(overlay),
+                    f"packaged overlay 155 Actor planner implementation is missing or outside its code reserve: {implementation}")
+            target = implementation_symbol[0]
         require(overlay[offset:offset + 8]
-                == bytes.fromhex("00 4b 18 47") + struct.pack("<I", target[0] | 1),
+                == bytes.fromhex("00 4b 18 47") + struct.pack("<I", target | 1),
                 f"packaged overlay 155 Actor planner Thumb target or argument transport differs: {entry}")
 
 
 def task6_actor_planner_mutation_fixtures() -> None:
-    """Synthetic ABI-layout rejection controls; these are not gameplay proof."""
-    image = bytearray(OVERLAY155_LIMIT)
-    symbols = {}
-    for index, (offset, entry, implementation) in enumerate(OVERLAY155_ACTOR_PLANNERS):
-        target = OVERLAY155_BASE + 0x100 + index * 0x20
-        image[offset:offset + 8] = bytes.fromhex("00 4b 18 47") + struct.pack("<I", target | 1)
-        symbols[entry] = (OVERLAY155_BASE + offset, 8, ".text", "F")
-        symbols[implementation] = (target, 0x20, ".text", "F")
-    baseline = bytes(image), symbols
-    task6_actor_planner_contracts(*baseline)
-    mutations = []
-    for offset in range(0xD8, 0xF0, 4):
-        changed = bytearray(image)
-        struct.pack_into("<I", changed, offset, OVERLAY155_BASE + 0x101)
-        mutations.append((f"retired slot {offset:#x}", bytes(changed), symbols))
-    for name in OVERLAY155_RETIRED_HOP_SYMBOLS:
-        changed_symbols = dict(symbols)
-        changed_symbols[name] = (OVERLAY155_BASE + 0x200, 8, ".text", "F")
-        mutations.append((f"retired symbol {name}", bytes(image), changed_symbols))
+    """Synthetic exact-package controls; these are not gameplay proof."""
+    images = {153: bytearray(0x1FF0), 155: bytearray(OVERLAY155_LIMIT), 158: bytearray(0x3BB0), 159: bytearray(0xD48)}
+    symbols, bindings = {k: {} for k in images}, {k: {} for k in images}
+    bases = {153: OVERLAY_BASE, 155: OVERLAY155_BASE, 158: 0x023B65C0, 159: 0x01FF9800}
+
+    def put(owner, name, address, code, section=".text"):
+        images[owner][address - bases[owner]:address - bases[owner] + len(code)] = code
+        symbols[owner][name] = (address, len(code), section, "F")
+        bindings[owner][name] = (address | 1, len(code), "FUNC", "1")
+
+    put(153, "OverworldActorHopGeometry_NextCell", 0x023BFFA2, bytes.fromhex("70b502694369056a52005b00002d17dc8169046886684162a4190231eb188262046081610362002d09d14368c1685b184360c3690233c361036a9a1a026270bdc16983624162f0e7"), ".walk_helpers")
+    put(155, "OverworldSlam_PhaseCheckNative", 0x023BD4D8, bytes.fromhex("022805d1002903d0002a01d09a4201db0020704701207047"))
+    put(159, "OverworldSlam_UnitHeightNative", 0x01FFA4EC, bytes.fromhex("884202d3802040017047000310b5e4f3a7fc10bd"), ".overworld_mount_presentation")
+    put(158, "OverworldMotion_SlamRiseUnitHeightNative", 0x023B8600,
+        bytes.fromhex("10b541f473ff020042434300100b181a10bd"))
+    put(158, "OverworldActorHopGeometry_Init", 0x023B92D0, bytes.fromhex("f0b50023ce5e0423cc5e0223cd5e0623ca5ea41b521be317e118d7175940d3194560066001257b40002c00dc023d01248560002a00dc023c012243615b1ac46001618261c2610362f0bd"))
+    put(158, "OverworldActorHopPlanner_DispatchNative", 0x023B9880, bytes.fromhex("002809d02c21415c002903d0042903d8034b1847014b184708207047a1dc3b0225dd3b02"))
+    put(155, "OverworldActorHopPlanner_PlanVector", 0x023BDCA0, bytes.fromhex("f0b52423c25e2621435e151e00da55421c1e00da5c422900a54202d22100a5421cd3d21703320368002b29d0002927d006002f192d3636788f4203d0a54201d0740709d50424a643032e00d15033dc7c8f4206d1012c06d9072010e0da170132e1e7002cf8d01c7d8c4209d85b7d8b4206d303002f302e331a7001700020f0bd0820fce7"))
+    put(155, "OverworldActorHopPlanner_PlanTrajectory", 0x023BDD24, bytes.fromhex("0300f0b52c331b78050093b0022b64d90369002b02d1082013b0f0bd1968304a9142f8d15b68002bf5d098680028f2d021f04cf804000120002cedd02268294b9a42e8d16268284b9a42e4d12700c0373b68002bdfd0254e254b32689a42dad17268244b9a42d6d10122b3681342d2d0190091430a0020495218c02109018a42c9d298470028c6d01c4bf068b1695a689b6802941a4c0c9303941a4b1a4c0d9304941a4b1a4c0e9305941a4b1a4c0f9306941a4b1a4c1b4e079400961a4c10931a4e1b4b09900a91019608940b926946119328003b6898479ee70300a5e7c04601005c00574f44510900c40000c83b024f575231120034000038c4fdf0303c025dd63b024dee3d02d1923b0245ee3d02a3ff3b02c148050211f83b021949050201863b024f484e43d9d43b020200480085013c02"))
+    put(155, "OverworldActorHopPlanner_CurrentQuery", 0x023BD65C, bytes.fromhex("10b50c0021f0c6fb001b4342584110bd"))
+    put(155, "OverworldTask6PrivateMultiplyBridge", 0x023BE3CC, bytes.fromhex("00b534f5bcea00bd"))
+    bindings[155]["__aeabi_lmul"] = (0x023DEEC7, 8, "FUNC", "ABS")
+    bindings[155]["__aeabi_uidiv"] = (0x023DEE4D, 8, "FUNC", "ABS")
+    bindings[155]["__aeabi_idiv"] = (0x023DEE45, 8, "FUNC", "ABS")
+    images[158][0x2EF8:0x2EFC] = bytes.fromhex("fff7a2f8")
+    images[158][0x2FF4:0x2FF8] = bytes.fromhex("40f49aff")
     for offset, entry, implementation in OVERLAY155_ACTOR_PLANNERS:
-        target = symbols[implementation][0]
-        for label, at, value in (
-            ("r0 overwritten", offset, 0x4800),
-            ("wrong branch register", offset + 2, 0x4710),
-            ("Thumb bit cleared", offset + 4, target & 0xFFFF),
-            ("wrong function", offset + 4, (target + 5) & 0xFFFF),
-        ):
-            changed = bytearray(image)
-            struct.pack_into("<H", changed, at, value)
-            mutations.append((f"{entry}: {label}", bytes(changed), symbols))
-        for name, replacement, label in (
-            (entry, (OVERLAY155_BASE + offset + 4, 8, ".text", "F"), "entry moved"),
-            (entry, (OVERLAY155_BASE + offset, 12, ".text", "F"), "entry grew"),
-            (implementation, None, "missing implementation"),
-            (implementation, (target, 0x20, "*ABS*", "F"), "unhosted implementation"),
-            (implementation, (target, 0x20, ".text", "O"), "data instead of code"),
-            (implementation, (OVERLAY155_BASE + 0xE30, 0x20, ".text", "F"), "reserve overrun"),
-        ):
-            changed_symbols = dict(symbols)
-            if replacement is None:
-                del changed_symbols[name]
-            else:
-                changed_symbols[name] = replacement
-            mutations.append((f"{entry}: {label}", bytes(image), changed_symbols))
-    mutations.append(("truncated image", bytes(image[:0xFC]), symbols))
-    for label, candidate, candidate_symbols in mutations:
+        target = 0x023B9880 if offset == 0xF0 else OVERLAY155_BASE + 0x180
+        put(155, entry, OVERLAY155_BASE + offset, bytes.fromhex("00 4b 18 47") + struct.pack("<I", target | 1))
+        if offset == 0xF8:
+            put(155, implementation, target, bytes(32))
+    for name, address in (("Begin", 0x023B97EC), ("Suspend", 0x023B98A4), ("AcknowledgeCommit", 0x023B98C2),
+                          ("Tick", 0x023B990A), ("Cancel", 0x023B9A2E)):
+        put(158, "OverworldMotion_" + name, address, bytes(2))
+    for owner, name, address in (
+        (155, "OverworldActorHopPlanner_PlanImpl", 0x023B9880),
+        (155, "OverworldActorHopGeometry_Init", 0x023B92D0),
+        (155, "OverworldMotion_SlamUnitArc", 0x023B8600),
+        (155, "OverworldMotion_SlamPhaseCheck", 0x023BD4D8),
+        (155, "OverworldActorHopGeometry_NextCell", 0x023BFFA2),
+        (155, "OverworldActorHopPlanner_LerpFx32", 0x023BF810),
+        (155, "OverworldHopPresentation_Acquire", 0x023DEDF0),
+        (155, "OverworldWildOccupancy_Query", 0x023C0184),
+        (158, "OverworldActorHopGeometry_NextCell", 0x023BFFA2),
+        (158, "OverworldActorHopPlanner_VectorOwner", 0x023BDCA0),
+        (158, "OverworldActorHopPlanner_TrajectoryOwner", 0x023BDD24),
+        (158, "OverworldMotion_SlamUnitHeight", 0x01FFA4EC),
+        (158, "OverworldMotion_SlamRiseUnitHeight", 0x023B8600),
+        (158, "OverworldMotion_SlamPhaseCheck", 0x023BD4D8),
+        (159, "OverworldMotion_SlamUDiv", 0x023DEE4C),
+    ):
+        bindings[owner][name] = (address | 1, 0, "FUNC", "ABS")
+    baseline = {k: (bytes(images[k]), symbols[k], bindings[k]) for k in images}
+    task6_actor_planner_contracts(baseline[155][0], baseline[155][1], baseline)
+    checked = 0
+
+    def reject(label, changed):
+        nonlocal checked
         try:
-            task6_actor_planner_contracts(candidate, candidate_symbols)
+            task6_actor_planner_contracts(changed[155][0], changed[155][1], changed)
         except SystemExit:
-            pass
+            checked += 1
+            return
+        require(False, f"mutated Task6/Slam owner ABI passed: {label}")
+
+    for owner, address, size, label in ((153, 0x023BFFA2, 72, "existing geometry step"), (155, 0x023BD4D8, 24, "phase"), (159, 0x01FFA4EC, 20, "unit"),
+                                      (158, 0x023B8600, 18, "rise unit"),
+                                      (155, 0x023BE3CC, 8, "multiply bridge"), (158, 0x023B92D0, 74, "geometry"), (158, 0x023B9880, 36, "dispatch"),
+                                      (155, 0x023BDCA0, 132, "vector"),
+                                      (155, 0x023BDD24, 284, "shared clearance"),
+                                      (155, 0x023BD65C, 16, "current Query lease")):
+        for index in range(0, size, 2):
+            changed = copy.deepcopy(baseline); image = bytearray(changed[owner][0]); image[address - bases[owner] + index] ^= 1
+            changed[owner] = (bytes(image), *changed[owner][1:]); reject(f"{label} body+{index}", changed)
+    for owner in baseline:
+        for name, symbol in baseline[owner][1].items():
+            for label, value in (("missing", None), ("moved", (symbol[0] + 2, *symbol[1:])),
+                                 ("size", (symbol[0], symbol[1] + 2, *symbol[2:])),
+                                 ("data", (*symbol[:3], "O")), ("unhosted", (*symbol[:2], "*ABS*", "F"))):
+                changed = copy.deepcopy(baseline)
+                if value is None: del changed[owner][1][name]
+                else: changed[owner][1][name] = value
+                reject(f"{owner}/{name} {label}", changed)
+        for name, binding in baseline[owner][2].items():
+            for label, value in (("ARM", (binding[0] & ~1, *binding[1:])), ("untyped", (*binding[:2], "NOTYPE", binding[3])),
+                                 ("wrong owner", (binding[0] + 2, *binding[1:])), ("missing", None)):
+                changed = copy.deepcopy(baseline)
+                if value is None: del changed[owner][2][name]
+                else: changed[owner][2][name] = value
+                reject(f"{owner}/{name} {label}", changed)
+        changed = copy.deepcopy(baseline); changed[owner] = (changed[owner][0][:-2], *changed[owner][1:]); reject(f"owner{owner} truncated", changed)
+    for name in OVERLAY155_RETIRED_HOP_SYMBOLS:
+        changed = copy.deepcopy(baseline); changed[155][1][name] = (OVERLAY155_BASE + 0x200, 8, ".text", "F"); reject(name + " restored", changed)
+    for offset, entry, _implementation in OVERLAY155_ACTOR_PLANNERS:
+        for at in (offset, offset + 2, offset + 4, offset + 6):
+            changed = copy.deepcopy(baseline); image = bytearray(changed[155][0]); image[at] ^= 1
+            changed[155] = (bytes(image), *changed[155][1:]); reject(entry + f" byte{at}", changed)
+    for maximum in (2, 3, 5):
+        changed = copy.deepcopy(baseline); image = bytearray(changed[158][0])
+        image[0x023B9880 - bases[158] + 12] = maximum
+        changed[158] = (bytes(image), *changed[158][1:]); reject(f"dispatch maximum operation {maximum}", changed)
+    for offset in (0xF4, 0xFC, 0x100, 0x104, 0x108, 0x10C, 0x114, 0x118):
+        for delta in (1, 2):
+            changed = copy.deepcopy(baseline); image = bytearray(changed[155][0])
+            image[0x023BDD24 - bases[155] + offset] ^= delta
+            changed[155] = (bytes(image), *changed[155][1:]); reject(f"borrowed callback {offset:X} mode/owner {delta}", changed)
+    # Operations3/4 must use a complete current cursor before object access.
+    for offset in (0x02, 0x0C, 0x0E, 0x14, 0x1C, 0x20, 0xD4):
+        changed = copy.deepcopy(baseline); image = bytearray(changed[155][0])
+        image[0x023BDD24 - bases[155] + offset] ^= 1
+        changed[155] = (bytes(image), *changed[155][1:]); reject(f"clearance cursor admission {offset:X}", changed)
+    for offset in (0x2EF8, 0x2EFA, 0x2FF4, 0x2FF6):
+        changed = copy.deepcopy(baseline); image = bytearray(changed[158][0]); image[offset] ^= 1
+        changed[158] = (bytes(image), *changed[158][1:]); reject(f"Motion curve call+{offset:X}", changed)
+    return checked
+
+
+def task6_slam_packaged_owners(packaged_overlays):
+    """Bind each borrowed code owner to current ELF and exact ROM metadata."""
+    specs = {153: ("pokemon_move_history_overlay", OVERLAY_BASE, 0x1FF0, 0),
+             155: ("pokemon_move_history_task6_overlay", 0x023BD400, 0x1000, 0),
+             158: ("overworld_actor_system_overlay", 0x023B65C0, 0x3BB0, 0x988),
+             159: ("overworld_mount_chain_overlay", 0x01FF9800, 0xD48, 0)}
+    result = {}
+    names = {"OverworldActorHopGeometry_NextCell", "OverworldActorHopPlanner_VectorOwner",
+             "OverworldActorHopPlanner_TrajectoryOwner", "OverworldActorHopGeometry_Init", "OverworldActorHopPlanner_DispatchNative", "OverworldSlam_PhaseCheckNative",
+             "OverworldSlam_UnitHeightNative", "OverworldActorHopPlanner_PlanImpl", "OverworldMotion_SlamUnitArc",
+             "OverworldMotion_SlamPhaseCheck", "OverworldMotion_SlamUnitHeight", "OverworldMotion_SlamUDiv",
+             "OverworldMotion_SlamRiseUnitHeightNative", "OverworldMotion_SlamRiseUnitHeight"}
+    names.update({"OverworldActorHopPlanner_PlanVector", "OverworldActorHopPlanner_PlanTrajectory",
+                  "OverworldActorHopPlanner_CurrentQuery", "OverworldActorHopPlanner_LerpFx32",
+                  "OverworldHopPresentation_Acquire", "OverworldWildOccupancy_Query",
+                  "__aeabi_uidiv", "__aeabi_idiv",
+                  "OverworldActorHopPlanner_Plan", "OverworldActorTeleportPlanner_Plan",
+                  "OverworldActorTeleportPlanner_PlanImpl"})
+    names.update({"OverworldTask6PrivateMultiplyBridge", "__aeabi_lmul"})
+    names.update("OverworldMotion_" + n for n in ("Begin", "Suspend", "AcknowledgeCommit", "Tick", "Cancel"))
+    for owner, (module, base, capacity, bss) in specs.items():
+        component = packaged_overlays.get(owner)
+        require(component is not None and component.overlay_id == owner and component.ordinal == owner
+                and component.ram_address == base and component.ram_size == capacity
+                and component.bss_size == bss and component.file_id == owner and component.flags == 0
+                and component.static_init_start == component.static_init_end == 0
+                and len(component.data) == capacity,
+                f"Slam resident owner {owner} metadata/loaded range differs")
+        linked = REPO / f"build/{module}_linked.o"
+        if owner == 153:
+            linked_image = verify_overlay153_spawn_tail_packaging(linked, component.data)
+        elif owner == 159:
+            # Exact objcopy transport preserves the existing section gaps.
+            with tempfile.TemporaryDirectory(prefix="slam-chain-owner-") as directory:
+                binary = Path(directory) / "chain.bin"
+                subprocess.run(["arm-none-eabi-objcopy", "-O", "binary", str(linked), str(binary)],
+                               check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                linked_image = binary.read_bytes()
         else:
-            require(False, f"mutated Task6 Actor planner ABI passed: {label}")
-
-
-def task6_call_inventory_contracts(overlay: bytes) -> None:
+            linked_image = elf_bytes_at(linked, base, capacity)
+        require(component.data == linked_image,
+                f"Slam resident owner {owner} differs from its complete linked package")
+        result[owner] = (component.data, layout_symbols(linked, "arm-none-eabi-objdump"), elf_helper_bindings(linked, names))
+    return result
+def task6_call_inventory_contracts(overlay: bytes, linked_overlay: bytes) -> None:
     calls = packaged_thumb_calls(overlay, OVERLAY155_BASE, OVERLAY155_BASE, len(overlay))
+    lease_end = OVERLAY155_CURRENT_QUERY + OVERLAY155_HISTORY_RELOCATION
+    require(bytes_at(overlay, OVERLAY155_BASE, OVERLAY155_CURRENT_QUERY, 16)
+            == bytes.fromhex("10b50c0021f0c6fb001b4342584110bd")
+            and [call for call in calls
+                 if OVERLAY155_CURRENT_QUERY <= call[0] < lease_end]
+            == [(OVERLAY155_CURRENT_QUERY + 4, "bl", 0x023DEDF0)],
+            "overlay-155 current Query lease callback differs")
     core = [call for call in calls
-            if not OVERLAY155_PLANNER_CODE_START <= call[0] < OVERLAY155_PLANNER_CODE_END]
-    require(len(core) == 82
-            and sum(kind == "bl" for _address, kind, _target in core) == 70
-            and sum(kind == "blx" for _address, kind, _target in core) == 5
-            and sum(kind == "blx_reg" for _address, kind, _target in core) == 7
-            and call_inventory_sha256(core) == OVERLAY155_CORE_CALL_INVENTORY_SHA256,
+            if not OVERLAY155_PLANNER_CODE_START <= call[0] < OVERLAY155_PLANNER_CODE_END
+            and not OVERLAY155_CURRENT_QUERY <= call[0] < lease_end]
+    # This leaf inserts16 bytes in front of unchanged history/save/diagnostic
+    # bodies and their resident Thumb helpers. Keep the historical call-site,
+    # kind, target and order seal; do not include the new Hop lease call in it.
+    def historical(address):
+        return (address - OVERLAY155_HISTORY_RELOCATION
+                if lease_end <= address < OVERLAY155_PLANNER_CODE_START else address)
+    historical_core = [(historical(address), kind, historical(target))
+                       for address, kind, target in core]
+    require(len(historical_core) == 82
+            and sum(kind == "bl" for _address, kind, _target in historical_core) == 70
+            and sum(kind == "blx" for _address, kind, _target in historical_core) == 5
+            and sum(kind == "blx_reg" for _address, kind, _target in historical_core) == 7
+            and call_inventory_sha256(historical_core) == OVERLAY155_CORE_CALL_INVENTORY_SHA256,
             "overlay-155 non-planner core call-site inventory differs")
-    require(len(calls) == 103
-            and sum(kind == "bl" for _address, kind, _target in calls) == 86
-            and sum(kind == "blx" for _address, kind, _target in calls) == 5
-            and sum(kind == "blx_reg" for _address, kind, _target in calls) == 12
-            and call_inventory_sha256(calls) == OVERLAY155_CALL_INVENTORY_SHA256,
-            "complete overlay-155 call-site inventory differs")
+    # Planner implementation may change within its fixed entries and reserve.
+    # Bind its complete current graph to the independently linked executable;
+    # retain the old non-planner core seal above.
+    linked_calls = packaged_thumb_calls(linked_overlay, OVERLAY155_BASE,
+                                        OVERLAY155_BASE, len(linked_overlay))
+    require(len(overlay) == len(linked_overlay) and calls == linked_calls,
+            "complete overlay-155 call-site inventory differs from current linked output")
 
 
 def task6_call_inventory_mutation_fixtures(overlay: bytes) -> None:
     """Run the same inventory guard on changed copies of the actual package."""
-    task6_call_inventory_contracts(overlay)
+    task6_call_inventory_contracts(overlay, overlay)
     calls = packaged_thumb_calls(overlay, OVERLAY155_BASE, OVERLAY155_BASE, len(overlay))
     first_bl = next(address - OVERLAY155_BASE for address, kind, _target in calls if kind == "bl")
     added = bytearray(overlay)
@@ -6432,13 +6919,27 @@ def task6_call_inventory_mutation_fixtures(overlay: bytes) -> None:
     planner_wrong_kind = bytearray(overlay)
     second = struct.unpack_from("<H", planner_wrong_kind, planner_bl + 2)[0]
     struct.pack_into("<H", planner_wrong_kind, planner_bl + 2, second ^ 0x1000)
+    planner_added = bytearray(overlay)
+    struct.pack_into("<H", planner_added,
+                     OVERLAY155_PLANNER_CODE_START - OVERLAY155_BASE, 0x4798)
+    planner_moved = bytearray(overlay)
+    planner_moved[planner_bl:planner_bl + 4] = bytes.fromhex("c0 46 c0 46")
+    moved_address = OVERLAY155_BASE + planner_bl + 4
+    target = thumb_bl_target(overlay, OVERLAY155_BASE,
+                             OVERLAY155_BASE + planner_bl)
+    delta = target - (moved_address + 4)
+    struct.pack_into("<HH", planner_moved, planner_bl + 4,
+                     0xF000 | ((delta >> 12) & 0x7FF),
+                     0xF800 | ((delta >> 1) & 0x7FF))
     for label, changed in (("added core call", added), ("removed core call", removed),
                             ("changed core call target", wrong_target),
+                            ("added planner call", planner_added),
+                            ("moved planner call with same target", planner_moved),
                             ("removed planner call", planner_removed),
                             ("changed planner call target", planner_wrong_target),
                             ("changed planner call mode", planner_wrong_kind)):
         try:
-            task6_call_inventory_contracts(bytes(changed))
+            task6_call_inventory_contracts(bytes(changed), overlay)
         except SystemExit:
             pass
         else:
@@ -6902,7 +7403,9 @@ EXPECTED_OVERLAY_METADATA = {
     157: (
         0x023BAB00,
         0x1C40,
-        0xBC,
+        # The code ends four bytes before the fixed mount state at 0x023BC744;
+        # BSS includes that gap and still ends at 0x023BC800.
+        0xC0,
         0,
         0,
         157,
@@ -6910,13 +7413,13 @@ EXPECTED_OVERLAY_METADATA = {
     ),
 }
 OVERLAY129_THUNKS = {
-    0x023DA90E: bytes.fromhex("18 47"),
-    0x023DA914: bytes.fromhex("30 47"),
-    0x023DCBBC: bytes.fromhex("18 47"),
-    0x023DCBC0: bytes.fromhex("28 47"),
-    0x023DE132: bytes.fromhex("18 47"),
-    0x023DE134: bytes.fromhex("30 47"),
-    0x023DE136: bytes.fromhex("38 47"),
+    0x023DA82E: bytes.fromhex("18 47"),
+    0x023DA834: bytes.fromhex("30 47"),
+    0x023DCAF8: bytes.fromhex("18 47"),
+    0x023DCAFC: bytes.fromhex("28 47"),
+    0x023DE06E: bytes.fromhex("18 47"),
+    0x023DE070: bytes.fromhex("30 47"),
+    0x023DE072: bytes.fromhex("38 47"),
 }
 
 
@@ -7286,6 +7789,8 @@ def binary_contracts(
     )
     field_linked = REPO / "build/field_linked.o"
     field_binary = REPO / "build/output_field.bin"
+    health_linked = REPO / "build/player_health_overlay_linked.o"
+    health_binary = REPO / "build/output_player_health_overlay.bin"
     history_object = (
         REPO / "build/pokemon_move_history_overlay/pokemon_move_history.o"
     )
@@ -7329,6 +7834,8 @@ def binary_contracts(
         field_script_commands_object,
         field_linked,
         field_binary,
+        health_linked,
+        health_binary,
         history_object,
         relearn_object,
         walk_module_object,
@@ -7534,6 +8041,12 @@ def binary_contracts(
     arm9_base, packaged_arm9, packaged_overlays = (
         packaged_components_from_bytes(rom_bytes, field_metadata)
     )
+    if __package__:
+        from .pack_overworld_emote_slots import verify_packaged_emote_slots
+    else:
+        from pack_overworld_emote_slots import verify_packaged_emote_slots
+    verify_packaged_emote_slots(REPO / "build", arm9_base, packaged_arm9,
+                                 packaged_overlays)
     packaged_metadata_mutation_fixtures(rom_bytes)
     require(arm9_base == 0x02000000, "packaged ARM9 RAM base differs")
     ov1_component = packaged_overlays[1]
@@ -7548,6 +8061,15 @@ def binary_contracts(
     ov154_component = packaged_overlays[154]
     ov155_component = packaged_overlays[155]
     ov156_component = packaged_overlays[156]
+    ov161_component = packaged_overlays[161]
+    require(ov161_component.ram_address == 0x01FFA580
+            and ov161_component.data == health_binary.read_bytes(),
+            "packaged player HP overlay differs from the linked image")
+    try:
+        verify_session_reset(packaged_arm9, ov161_component.data,
+                             health_linked)
+    except AssertionError as error:
+        require(False, f"player HP save reset hook differs: {error}")
     ov1_base, packaged_ov1 = (
         ov1_component.ram_address,
         ov1_component.data,
@@ -7713,8 +8235,18 @@ def binary_contracts(
         == OVERLAY155_BASE + 0x78,
         "wireless/GTS packaged commit hooks differ",
     )
+    ready = layout_symbols(core_linked, "arm-none-eabi-objdump").get(
+        "OverworldWildSpawns_FieldReadyTask")
+    require(ready is not None and ready[1] > 0 and ready[3] == "F",
+            "field-ready poll owner is missing")
+    poll_calls = [address for address, kind, target in packaged_thumb_calls(
+        packaged_ov129, ov129_base, ready[0], ready[1])
+        if kind == "bl" and target == OVERLAY155_BASE + 0xA0]
+    require(len(poll_calls) == 1 and bytes_at(packaged_ov129, ov129_base,
+            poll_calls[0], 4) == elf_bytes_at(core_linked, poll_calls[0], 4),
+            "field-ready poll call differs from its linked owner")
     require(
-        thumb_bl_target(packaged_ov129, ov129_base, 0x023D9A90)
+        thumb_bl_target(packaged_ov129, ov129_base, poll_calls[0])
         == OVERLAY155_BASE + 0xA0
         and thumb_bl_target(packaged_ov112, ov112_base, 0x021EE65A)
         == OVERLAY155_BASE + 0x20
@@ -7803,6 +8335,9 @@ def binary_contracts(
         field_linked, linked,
         REPO / "build/pokemon_move_history_overlay/overworld_field_terrain_stream.o",
         packaged_ov131, packaged_ov153,
+        health_linked,
+        REPO / "build/player_health_overlay/overworld_field_empty_axis.o",
+        ov161_component.data,
     )
     require(
         packaged_ov154
@@ -7888,9 +8423,10 @@ def binary_contracts(
     )
     task6_actor_planner_contracts(
         packaged_ov155, layout_symbols(task6_linked, "arm-none-eabi-objdump"),
+        task6_slam_packaged_owners(packaged_overlays),
     )
     task6_actor_planner_mutation_fixtures()
-    task6_call_inventory_contracts(packaged_ov155)
+    task6_call_inventory_contracts(packaged_ov155, elf_bytes_at(task6_linked, ov155_base, len(packaged_ov155)))
     task6_call_inventory_mutation_fixtures(packaged_ov155)
     require(
         not any("_from_thumb" in name for name in task6_symbols),
@@ -8121,12 +8657,12 @@ def binary_contracts(
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DD764,
+            0x023DD6A0,
             0x38,
             "8ee6cdd5eb50b67c761849cd16b072f7fe3ece703325356f9d7166140146193b",
             [
-                (0x023DD77C, "bl", 0x023DE132),
-                (0x023DD784, "bl", 0x023DE132),
+                (0x023DD6B8, "bl", 0x023DE06E),
+                (0x023DD6C0, "bl", 0x023DE06E),
             ],
         ),
         (
@@ -8134,19 +8670,19 @@ def binary_contracts(
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DD930,
+            0x023DD86C,
             0xCC,
             "e60e2ba11d8ca92580ebab7f7826eb16da78132f4fc5a917acc793ae62442dbe",
             [
-                (0x023DD944, "bl", 0x023DE134),
-                (0x023DD952, "bl", 0x023DD884),
-                (0x023DD962, "bl", 0x023DE134),
-                (0x023DD974, "bl", 0x023DD884),
-                (0x023DD990, "bl", 0x023DE136),
-                (0x023DD9A8, "bl", 0x023DE136),
-                (0x023DD9B4, "bl", 0x023DE132),
-                (0x023DD9BC, "bl", 0x023DE132),
-                (0x023DD9C4, "bl", 0x023DE132),
+                (0x023DD880, "bl", 0x023DE070),
+                (0x023DD88E, "bl", 0x023DD7C0),
+                (0x023DD89E, "bl", 0x023DE070),
+                (0x023DD8B0, "bl", 0x023DD7C0),
+                (0x023DD8CC, "bl", 0x023DE072),
+                (0x023DD8E4, "bl", 0x023DE072),
+                (0x023DD8F0, "bl", 0x023DE06E),
+                (0x023DD8F8, "bl", 0x023DE06E),
+                (0x023DD900, "bl", 0x023DE06E),
             ],
         ),
         (
@@ -8154,14 +8690,14 @@ def binary_contracts(
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DDA78,
+            0x023DD9B4,
             0x58,
             "ba6633160f3ee1d2a9298e1ecfc750ccab0863d4dfea6191bb2f92adda88bba6",
             [
-                (0x023DDA80, "bl", 0x023DE132),
-                (0x023DDA88, "bl", 0x023DE132),
-                (0x023DDAAC, "bl", 0x023DE132),
-                (0x023DDAB4, "bl", 0x023DE132),
+                (0x023DD9BC, "bl", 0x023DE06E),
+                (0x023DD9C4, "bl", 0x023DE06E),
+                (0x023DD9E8, "bl", 0x023DE06E),
+                (0x023DD9F0, "bl", 0x023DE06E),
             ],
         ),
         (
@@ -8169,14 +8705,14 @@ def binary_contracts(
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DDAE4,
+            0x023DDA20,
             0x94,
             "fedbddba3476382a0571dff5b4bc467bc7e473b6f08b32f67048cf442d9f64ee",
             [
-                (0x023DDB0A, "bl", 0x023DE132),
-                (0x023DDB12, "bl", 0x023DE132),
-                (0x023DDB1A, "bl", 0x023DE132),
-                (0x023DDB2E, "bl", 0x023DE132),
+                (0x023DDA46, "bl", 0x023DE06E),
+                (0x023DDA4E, "bl", 0x023DE06E),
+                (0x023DDA56, "bl", 0x023DE06E),
+                (0x023DDA6A, "bl", 0x023DE06E),
             ],
         ),
         (
@@ -8184,23 +8720,23 @@ def binary_contracts(
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DDAD0,
+            0x023DDA0C,
             0x14,
             "1a870f9245779d7c51a37ec7e2c59ed6f83f3d3fbc70bd84eab5c1d028866f88",
-            [(0x023DDAD8, "bl", 0x023DDA78)],
+            [(0x023DDA14, "bl", 0x023DD9B4)],
         ),
         (
             "Save_WriteFileAsync",
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DE0A0,
+            0x023DDFDC,
             0x40,
             "37359978779b4e19d6cd8ba83c3b15d498eb80446e52c96e127cfb8275d22a66",
             [
-                (0x023DE0B2, "bl", 0x023DDF74),
-                (0x023DE0C2, "bl", 0x023DDAE4),
-                (0x023DE0CC, "bl", 0x023DE132),
+                (0x023DDFEE, "bl", 0x023DDEB0),
+                (0x023DDFFE, "bl", 0x023DDA20),
+                (0x023DE008, "bl", 0x023DE06E),
             ],
         ),
         (
@@ -8208,16 +8744,16 @@ def binary_contracts(
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DDB78,
+            0x023DDAB4,
             0x6C,
             "a82a8c41de36c005a4cac90d19231d3701935dc5ec80b72a935130ec8d8a20d8",
             [
-                (0x023DDB8C, "bl", 0x023DE132),
-                (0x023DDB96, "bl", 0x023DE132),
-                (0x023DDBA4, "bl", 0x023DE132),
-                (0x023DDBAC, "bl", 0x023DE132),
-                (0x023DDBB8, "bl", 0x023DE132),
-                (0x023DDBC0, "bl", 0x023DE132),
+                (0x023DDAC8, "bl", 0x023DE06E),
+                (0x023DDAD2, "bl", 0x023DE06E),
+                (0x023DDAE0, "bl", 0x023DE06E),
+                (0x023DDAE8, "bl", 0x023DE06E),
+                (0x023DDAF4, "bl", 0x023DE06E),
+                (0x023DDAFC, "bl", 0x023DE06E),
             ],
         ),
         (
@@ -8225,31 +8761,31 @@ def binary_contracts(
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DDBE4,
+            0x023DDB20,
             0x10,
             "b58e7ced034221bcc71a863e62fe4c97a82f88b9d35e8d6b89e162462fa017b5",
-            [(0x023DDBEA, "bl", 0x023DDB78)],
+            [(0x023DDB26, "bl", 0x023DDAB4)],
         ),
         (
             "SaveData_New",
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DDC74,
+            0x023DDBB0,
             0x118,
             "2b52b5184f237375b792a230a89f3973841546894c0af5394016cda3109c18db",
             [
-                (0x023DDC7C, "bl", 0x023DE132),
-                (0x023DDC8A, "bl", 0x023DE132),
-                (0x023DDC96, "bl", 0x023DE132),
-                (0x023DDC9C, "bl", 0x023DE132),
-                (0x023DDCBA, "bl", 0x023DE132),
-                (0x023DDCC4, "bl", 0x023DDBF4),
-                (0x023DDCCC, "bl", 0x023DE132),
-                (0x023DDCEC, "bl", 0x023DD764),
-                (0x023DDCF4, "bl", 0x023DD930),
-                (0x023DDD0E, "bl", 0x023DE132),
-                (0x023DDD34, "bl", 0x023DE132),
+                (0x023DDBB8, "bl", 0x023DE06E),
+                (0x023DDBC6, "bl", 0x023DE06E),
+                (0x023DDBD2, "bl", 0x023DE06E),
+                (0x023DDBD8, "bl", 0x023DE06E),
+                (0x023DDBF6, "bl", 0x023DE06E),
+                (0x023DDC00, "bl", 0x023DDB30),
+                (0x023DDC08, "bl", 0x023DE06E),
+                (0x023DDC28, "bl", 0x023DD6A0),
+                (0x023DDC30, "bl", 0x023DD86C),
+                (0x023DDC4A, "bl", 0x023DE06E),
+                (0x023DDC70, "bl", 0x023DE06E),
             ],
         ),
         (
@@ -8257,15 +8793,15 @@ def binary_contracts(
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DA1F4,
+            0x023DA114,
             0x6C,
             "fff8695ccb309e47286f0f4aeb8f67d1b1327c732a4b3896b3f91647e41f3357",
             [
-                (0x023DA204, "bl", 0x023DA90E),
-                (0x023DA220, "bl", 0x023DA914),
-                (0x023DA228, "bl", 0x023DA90E),
-                (0x023DA234, "bl", 0x023DA90E),
-                (0x023DA23E, "bl", 0x023DA90E),
+                (0x023DA124, "bl", 0x023DA82E),
+                (0x023DA140, "bl", 0x023DA834),
+                (0x023DA148, "bl", 0x023DA82E),
+                (0x023DA154, "bl", 0x023DA82E),
+                (0x023DA15E, "bl", 0x023DA82E),
             ],
         ),
         (
@@ -8273,21 +8809,21 @@ def binary_contracts(
             core_linked,
             packaged_ov129,
             ov129_base,
-            0x023DC7A4,
+            0x023DC6E0,
             0x158,
             "457614c6a8b8e13d158ca0dab84536a662443e233db5fd29570bf2df861d481c",
             [
-                (0x023DC7B8, "bl", 0x023DCBBC),
-                (0x023DC7C6, "bl", 0x023DCBC0),
-                (0x023DC7D2, "bl", 0x023DCBC0),
-                (0x023DC7DE, "bl", 0x023DCBC0),
-                (0x023DC7F0, "bl", 0x023DCBBC),
-                (0x023DC83E, "bl", 0x023DCBBC),
-                (0x023DC84C, "bl", 0x023DCBBC),
-                (0x023DC864, "bl", 0x023DCBBC),
-                (0x023DC8A6, "bl", 0x023DCBBC),
-                (0x023DC8BA, "bl", 0x023DCBBC),
-                (0x023DC8CA, "bl", 0x023DCBBC),
+                (0x023DC6F4, "bl", 0x023DCAF8),
+                (0x023DC702, "bl", 0x023DCAFC),
+                (0x023DC70E, "bl", 0x023DCAFC),
+                (0x023DC71A, "bl", 0x023DCAFC),
+                (0x023DC72C, "bl", 0x023DCAF8),
+                (0x023DC77A, "bl", 0x023DCAF8),
+                (0x023DC788, "bl", 0x023DCAF8),
+                (0x023DC7A0, "bl", 0x023DCAF8),
+                (0x023DC7E2, "bl", 0x023DCAF8),
+                (0x023DC7F6, "bl", 0x023DCAF8),
+                (0x023DC806, "bl", 0x023DCAF8),
             ],
         ),
         (
@@ -8482,7 +9018,7 @@ def binary_contracts(
             ov153_base,
             0x023BF248,
             0x50,
-            "1bd4e2778379ea9d0dce9b0317f101a23f793635685c735abd2da6f6820cb6e3",
+            "663f763b2e6a6242717dface1bd8025c1ba02cd4c152f60ab328773e9b741d66",
             [
                 (0x023BF254, "bl", 0x023BF314),
                 (0x023BF266, "bl", 0x023BF314),
@@ -8685,12 +9221,12 @@ def binary_contracts(
             f"lifecycle entry 0x{entry_offset:X} target/body differs",
         )
     for literal_address, expected_target in (
-        (0x023DD798, OVERLAY_BASE + 0x11),
-        (0x023DD9F8, OVERLAY_BASE + 0x49),
-        (0x023DDACC, OVERLAY_BASE + 0x51),
-        (0x023DDB54, OVERLAY_BASE + 0x59),
-        (0x023DDBDC, OVERLAY_BASE + 0x61),
-        (0x023DDD64, OVERLAY_BASE + 0x01),
+        (0x023DD6D4, OVERLAY_BASE + 0x11),
+        (0x023DD934, OVERLAY_BASE + 0x49),
+        (0x023DDA08, OVERLAY_BASE + 0x51),
+        (0x023DDA90, OVERLAY_BASE + 0x59),
+        (0x023DDB18, OVERLAY_BASE + 0x61),
+        (0x023DDCA0, OVERLAY_BASE + 0x01),
     ):
         require(
             struct.unpack_from(
@@ -8701,14 +9237,14 @@ def binary_contracts(
             f"save lifecycle literal 0x{literal_address:08X} differs",
         )
     for hook_address, expected_bytes in (
-        (0x020271B0, "00 48 00 47 75 dc 3d 02"),
-        (0x020274A8, "00 49 08 47 65 d7 3d 02"),
-        (0x02027550, "00 4a 10 47 d1 da 3d 02"),
-        (0x02027564, "00 49 08 47 a1 e0 3d 02"),
-        (0x020275A4, "00 49 08 47 e5 db 3d 02"),
-        (0x02027AD4, "00 49 08 47 31 d9 3d 02"),
-        (0x02027BDC, "00 4b 18 47 79 da 3d 02"),
-        (0x02027CEC, "00 4b 18 47 e5 da 3d 02"),
+        (0x020271B0, "00 48 00 47 b1 db 3d 02"),
+        (0x020274A8, "01 49 08 47 a1 d6 3d 02"),
+        (0x02027550, "00 4a 10 47 0d da 3d 02"),
+        (0x02027564, "00 49 08 47 dd df 3d 02"),
+        (0x020275A4, "00 49 08 47 21 db 3d 02"),
+        (0x02027AD4, "01 49 08 47 6d d8 3d 02"),
+        (0x02027BDC, "00 4b 18 47 b5 d9 3d 02"),
+        (0x02027CEC, "00 4b 18 47 21 da 3d 02"),
     ):
         require(
             bytes_at(packaged_arm9, arm9_base, hook_address, 8)
@@ -8729,13 +9265,13 @@ def binary_contracts(
             f"SeedParty accessor literal 0x{literal_address:08X} differs",
         )
 
-    party_body = bytes_at(packaged_ov129, ov129_base, 0x023DA1F4, 0x6C)
+    party_body = bytes_at(packaged_ov129, ov129_base, 0x023DA114, 0x6C)
     require(
         overlay129_thunks_match(packaged_ov129, ov129_base),
         "overlay-129 interworking thunk bodies/registers differ",
     )
     mutated_thunk = bytearray(packaged_ov129)
-    mutated_thunk[0x023DA90E - ov129_base] = 0x20
+    mutated_thunk[0x023DA82E - ov129_base] = 0x20
     require(
         not overlay129_thunks_match(bytes(mutated_thunk), ov129_base),
         "mutated overlay-129 thunk register passes exact authentication",
@@ -8751,7 +9287,7 @@ def binary_contracts(
             party_body.count(struct.pack("<I", target)) == 1,
             f"PartyMenu_LearnMoveToSlot target 0x{target:08X} differs",
         )
-    level_body = bytes_at(packaged_ov129, ov129_base, 0x023DC7A4, 0x158)
+    level_body = bytes_at(packaged_ov129, ov129_base, 0x023DC6E0, 0x158)
     for target in (
         0x0201AA8D,
         0x0206E541,

@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.stantler-running-ledge",
+  "title": "Running Stantler keeps momentum through two South ledges",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.mounted-stantler-running-ledge"
+  ],
+  "budgets": {
+    "maxSeconds": 120,
+    "maxFrames": 240,
+    "noProgressFrames": 96,
+    "minObservedFrames": 24
+  },
+  "subjects": [
+    {
+      "id": "stantler",
+      "species": 234,
+      "role": "MOUNTED",
+      "acquire": "existing"
+    }
+  ],
+  "setup": [
+    {
+      "id": "south-ledge-run-up",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 590,
+        "z": 392,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "own-stantler",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 234,
+        "level": 50,
+        "hp": 1,
+        "status": 0
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 30,
+        "noProgressFrames": 30
+      }
+    },
+    {
+      "id": "mount-own-stantler",
+      "op": "spawn",
+      "args": {
+        "species": 234,
+        "role": "mounted",
+        "slot": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 180,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-stantler",
+      "op": "bind",
+      "args": {
+        "subject": "stantler"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "down-through-running-ledge",
+      "op": "step",
+      "args": {
+        "frames": 96,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "actor-field",
+          "subject": "stantler",
+          "path": "origin.y",
+          "operator": "eq",
+          "value": 403
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 96,
+        "noProgressFrames": 96
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "actor-field",
+      "subject": "stantler",
+      "path": "identityVerified",
+      "operator": "eq",
+      "value": true,
+      "when": "always"
+    },
+    {
+      "kind": "actor-field",
+      "subject": "stantler",
+      "path": "presentationAttached",
+      "operator": "eq",
+      "value": true,
+      "when": "always"
+    },
+    {
+      "kind": "frame-count",
+      "operator": "gte",
+      "value": 24
+    }
+  ]
+}

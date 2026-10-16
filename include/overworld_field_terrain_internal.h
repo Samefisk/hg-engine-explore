@@ -17,4 +17,8 @@ OverworldFieldTerrainStreamResult OverworldFieldTerrainStream_Apply(
     const OverworldFieldTerrainStreamCall *call,
     OverworldFieldTerrainStreamRuntime *runtime);
 
+/* Stateless Field leaf, physically hosted in the resident HP code gap. */
+void OverworldFieldTerrainStream_RetireEmptyAxis(
+    void *manager, const s32 *position);
+
 #endif

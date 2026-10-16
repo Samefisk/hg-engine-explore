@@ -10,15 +10,13 @@
 #include "../include/map_teleport.h"
 #include "../include/overlay.h"
 #include "../include/overworld_follower_selector.h"
+#include "../include/overworld_combat.h"
 #include "../include/script.h"
 #include "../include/task.h"
 
-#define OW_WILD_BATTLE_OUTCOME_PLAYER_FLED 5
 #define OW_WILD_BATTLE_FLAG_SHINY_OVERRIDE 0x01
 #define OW_WILD_BATTLE_FLAG_PERSONALITY_OVERRIDE_ACTIVE 0x02
 #define OW_WILD_BATTLE_FLAG_HP_TRACKING_ACTIVE 0x04
-#define OW_WILD_BATTLE_FLAG_HP_APPLIED 0x08
-#define OW_WILD_BATTLE_FLAG_HP_RECORDED 0x10
 #define OW_WILD_HP_SLOT_COUNT 10
 #define OW_WILD_FIELD_READY_INITIAL_SPAWN 0
 #define OW_WILD_DISABLE_PLAYER_STEP_HOOK 0
@@ -63,15 +61,14 @@ static const OverworldWildSpawnsOverlayEntry *OverworldWildSpawns_GetOverlayEntr
 
 static void OverworldWildSpawns_CaptureMountToggle(FieldSystem *fieldSystem)
 {
-    u8 toggleDown = (reg_PAD_KEYINPUT & PAD_BUTTON_SELECT) == 0;
-    u8 toggleWasDown = OVERWORLD_MOUNT_TOGGLE_DOWN;
+    /* Match the Y selector's raw field-frame keys, before button remapping. */
+    u8 togglePressed = (*(vu32 *)0x021D1148 >> 2) & 1;
 
-    OVERWORLD_MOUNT_TOGGLE_DOWN = toggleDown;
-    if (fieldSystem->taskman == NULL
-        && toggleDown
-        && !toggleWasDown
+    OVERWORLD_MOUNT_TOGGLE_DOWN = (*(vu32 *)0x021D1144 >> 2) & 1;
+    if (togglePressed
         && !OverworldFollowerSelector_IsActiveFlagSet()) {
-        OVERWORLD_MOUNT_TOGGLE_PENDING = TRUE;
+        OVERWORLD_MOUNT_TOGGLE_PENDING =
+            OVERWORLD_MOUNT_TOGGLE_RETRY_FRAMES;
     }
 }
 
@@ -90,6 +87,8 @@ static void OverworldWildSpawns_FieldReadyTask(SysTask *task, void *data)
     /* This task can temporarily stop before the extension frame service runs.
      * Keep a short Select press from being lost in that gap after a Hop. */
     OverworldWildSpawns_CaptureMountToggle(fieldSystem);
+    /* Keep the packaged overlay-129 call at its fixed cross-overlay address. */
+    __asm__("nop\n nop\n nop\n nop\n");
 
     if (!sub_0203DF8C(fieldSystem)) {
         gOverworldWildFieldIdleRearmPending |=
@@ -204,8 +203,6 @@ BOOL OverworldWildSpawns_OnPlayerStep(FieldSystem *fieldSystem)
         || gOverworldWildFieldIdleRearmPending != 0) {
         return FALSE;
     }
-    /* Preserve the resident arithmetic-helper targets used by overlay 155. */
-    __asm__("nop\n" "nop\n");
     entry = OverworldWildSpawns_GetOverlayEntry(TRUE);
     if (entry == NULL) {
         return FALSE;
@@ -281,78 +278,6 @@ u32 OverworldWildSpawns_PopPendingBattle(FieldSystem *fieldSystem, LocalMapObjec
     return pendingBattle;
 }
 
-static int OverworldWildSpawns_FindSavedHpSlot(u32 personality)
-{
-    int i;
-
-    for (i = 0; i < OW_WILD_HP_SLOT_COUNT; i++) {
-        if (sOverworldWildSpawnState.spawns[i].active
-            && sOverworldWildSpawnState.spawns[i].personality == personality) {
-            return i;
-        }
-    }
-
-    return -1;
-}
-
-static void OverworldWildSpawns_SaveHp(u32 personality, u16 hp)
-{
-    int slot;
-
-    if (personality == 0 || hp == 0) {
-        return;
-    }
-
-    slot = OverworldWildSpawns_FindSavedHpSlot(personality);
-    if (slot < 0) {
-        return;
-    }
-
-    gOverworldWildSavedHp[slot] = hp;
-}
-
-static u16 OverworldWildSpawns_GetSavedHp(u32 personality)
-{
-    int slot = OverworldWildSpawns_FindSavedHpSlot(personality);
-
-    if (slot < 0) {
-        return 0;
-    }
-
-    return gOverworldWildSavedHp[slot];
-}
-
-static u16 OverworldWildSpawns_ClampBattleHp(const struct BattlePokemon *mon, u16 hp)
-{
-    if (mon == NULL || hp == 0 || mon->maxhp == 0) {
-        return 0;
-    }
-
-    if (hp > mon->maxhp) {
-        return (u16)mon->maxhp;
-    }
-
-    return hp;
-}
-
-static struct BattlePokemon * __attribute__((noinline)) OverworldWildSpawns_FindTrackedEnemy(
-    struct BattleSystem *bsys,
-    struct BattleStruct *ctx)
-{
-    struct BattlePokemon *mon = &ctx->battlemon[BATTLER_ENEMY];
-
-    if (BATTLER_ENEMY < bsys->maxBattlers
-        && mon->personal_rnd == sBattleHpPersonality) {
-        return mon;
-    }
-    mon += 2;
-    if (BATTLER_ENEMY + 2 < bsys->maxBattlers
-        && mon->personal_rnd == sBattleHpPersonality) {
-        return mon;
-    }
-    return NULL;
-}
-
 BOOL OverworldWildSpawns_ConsumeBattlePersonalityOverride(u32 *personality, BOOL *shiny)
 {
     if ((gOverworldWildBattleFlags
@@ -374,43 +299,9 @@ BOOL OverworldWildSpawns_ConsumeBattlePersonalityOverride(u32 *personality, BOOL
 
 void LONG_CALL OverworldWildSpawns_OnBattleContextUpdate(struct BattleSystem *bsys, struct BattleStruct *ctx, u8 battleOutcome)
 {
-    struct BattlePokemon *mon;
-    u16 hp;
-
-    if (bsys == NULL
-        || ctx == NULL
-        || (gOverworldWildBattleFlags
-            & OW_WILD_BATTLE_FLAG_HP_TRACKING_ACTIVE) == 0) {
-        return;
-    }
-
-    if ((gOverworldWildBattleFlags & OW_WILD_BATTLE_FLAG_HP_APPLIED) == 0
-        && ctx->server_seq_no >= CONTROLLER_COMMAND_SELECTION_SCREEN_INIT) {
-        hp = OverworldWildSpawns_GetSavedHp(sBattleHpPersonality);
-        if (hp == 0) {
-            gOverworldWildBattleFlags |= OW_WILD_BATTLE_FLAG_HP_APPLIED;
-        } else {
-            mon = OverworldWildSpawns_FindTrackedEnemy(bsys, ctx);
-            if (mon != NULL) {
-                hp = OverworldWildSpawns_ClampBattleHp(mon, hp);
-                if (hp != 0) {
-                    mon->hp = hp;
-                    gOverworldWildBattleFlags |= OW_WILD_BATTLE_FLAG_HP_APPLIED;
-                }
-            }
-        }
-    }
-
-    if ((gOverworldWildBattleFlags & OW_WILD_BATTLE_FLAG_HP_RECORDED) == 0
-        && battleOutcome == OW_WILD_BATTLE_OUTCOME_PLAYER_FLED) {
-        mon = OverworldWildSpawns_FindTrackedEnemy(bsys, ctx);
-        if (mon != NULL) {
-            hp = OverworldWildSpawns_ClampBattleHp(mon, (u16)mon->hp);
-            if (hp != 0) {
-                OverworldWildSpawns_SaveHp(sBattleHpPersonality, hp);
-                gOverworldWildBattleFlags |= OW_WILD_BATTLE_FLAG_HP_RECORDED;
-            }
-        }
+    if (OverworldCombat_IsReady()) {
+        OVERWORLD_COMBAT_ENTRY->battleUpdate(
+            bsys, ctx, battleOutcome, sBattleHpPersonality);
     }
 }
 

@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.ram.until-crash",
+  "title": "Onix keeps its charge until a real Crash",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.ram-until-crash"
+  ],
+  "budgets": {
+    "maxSeconds": 300,
+    "maxFrames": 850,
+    "noProgressFrames": 480,
+    "minObservedFrames": 115
+  },
+  "subjects": [
+    {
+      "id": "onix",
+      "species": 95,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "ram-until-crash-v1",
+      "subject": "onix"
+    }
+  ],
+  "setup": [
+    {
+      "id": "route29-origin",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 607,
+        "z": 402,
+        "facing": 2
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-onix",
+      "op": "spawn",
+      "args": {
+        "species": 95,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 602,
+        "z": 402
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-onix",
+      "op": "bind",
+      "args": {
+        "subject": "onix"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "wait-charge-start",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "ram-until-crash-v1",
+          "stage": "charge-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "dodge-off-axis",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "charge-crash-cooldown",
+      "op": "step",
+      "args": {
+        "frames": 480,
+        "keys": [],
+        "until": {
+          "kind": "measurement-complete",
+          "measurement": "ram-until-crash-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 480,
+        "noProgressFrames": 480
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "ram-until-crash-v1",
+      "when": "final"
+    }
+  ]
+}

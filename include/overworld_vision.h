@@ -20,10 +20,14 @@ typedef int16_t s16;
 #define OVERWORLD_VISION_MAX_RANGE 32
 
 #define OVERWORLD_VISION_CONE_FORWARD_90 1
+#define OVERWORLD_VISION_CONE_FORWARD_LINE 2
+#define OVERWORLD_VISION_CONE_CARDINAL_LINES 3
 #define OVERWORLD_VISION_CONE_MASK 0x03
 #define OVERWORLD_VISION_ADJACENT_AWARENESS (1u << 2)
+#define OVERWORLD_VISION_SAME_TILE_AWARENESS (1u << 3)
 #define OVERWORLD_VISION_OPTIONS_MASK \
-    (OVERWORLD_VISION_CONE_MASK | OVERWORLD_VISION_ADJACENT_AWARENESS)
+    (OVERWORLD_VISION_CONE_MASK | OVERWORLD_VISION_ADJACENT_AWARENESS \
+        | OVERWORLD_VISION_SAME_TILE_AWARENESS)
 #define OVERWORLD_VISION_DEFAULT_OPTIONS \
     (OVERWORLD_VISION_CONE_FORWARD_90 \
         | OVERWORLD_VISION_ADJACENT_AWARENESS)
@@ -48,9 +52,10 @@ u8 OverworldVision_IsValidSpec(const OverworldVisionSpec *spec);
 
 /*
  * Returns whether the target is inside the observer's geometric view.
- * The view is an inclusive 90-degree forward cone. Every one-tile neighbor
- * is visible regardless of facing. Observer and target must occupy different
- * tiles.
+ * The view is a 90-degree forward cone, a strict forward cardinal line,
+ * or all four cardinal lines independent of facing.
+ * Adjacent and same-tile awareness are independent optional permissions.
+ * The caller must exclude the observer's own actor identity from targets.
  */
 u8 OverworldVision_IsInView(
     const OverworldVisionSpec *spec,

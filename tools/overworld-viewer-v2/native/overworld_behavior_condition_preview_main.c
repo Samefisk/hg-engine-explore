@@ -1,10 +1,13 @@
 #include "../../../include/overworld_behavior_condition_runtime.h"
+#include "../../../include/overworld_target_bindings.h"
+#include "../../../include/overworld_application_bank.h"
 
 #include <stdio.h>
 #include <string.h>
 
 #define HOST_TRACE_CAPACITY 96
-#define PREVIEW_HEADER_VALUES 24
+#define PREVIEW_HEADER_VALUES 34
+#define PREVIEW_BINDING_VALUES 13
 #define PREVIEW_CANDIDATE_VALUES 16
 #define PREVIEW_STATE_VALUES 7
 #define HOST_REQUEST_VERSION 2
@@ -72,6 +75,7 @@ static int ResolveCurrentVision(
     const OverworldWildBehaviorContext *context,
     u32 activeConditionalMask,
     u16 winningConditionId,
+    u8 roleMask,
     u8 *range,
     u8 *options)
 {
@@ -83,6 +87,17 @@ static int ResolveCurrentVision(
     request.context = *context;
     request.behaviorClass = context->behaviorClass;
     request.activeConditionalMask = activeConditionalMask;
+    OverworldApplicationBank bank;
+    int forcedSlot = -1;
+    if (!OverworldApplicationBank_Select(blob, context->species, &bank))
+        return 0;
+    if (roleMask == 2)
+        forcedSlot = OverworldApplicationBank_Local(&bank,
+            OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER);
+    else if (roleMask == 4)
+        forcedSlot = OverworldApplicationBank_Local(&bank,
+            OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_MOUNTED);
+    request.forcedOverrideMask = forcedSlot >= 0 ? 1u << forcedSlot : 0;
     request.winningConditionId = winningConditionId;
     request.targetSourceApplication = BEHAVIOR_RESOLVER_NO_APPLICATION;
     request.resolvedTargetConditionId = BEHAVIOR_RESOLVER_NO_CONDITION;
@@ -210,6 +225,7 @@ int main(void)
     OverworldBehaviorConditionEntryState
         preparedStates[OVERWORLD_BEHAVIOR_CONDITION_MAX_ENTRIES];
     OverworldBehaviorConditionWorldView world;
+    OverworldTargetBindingsState bindings;
     OverworldBehaviorConditionCandidate candidates[OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS];
     OverworldBehaviorConditionScratch scratch;
     OverworldBehaviorConditionResult conditionResult;
@@ -222,8 +238,10 @@ int main(void)
     BehaviorResolveStatus resolveStatus;
     u8 candidateCount;
     u16 stateCount;
+    u8 bindingCount;
     u32 stableConditionalMask;
     u16 stableWinningConditionId;
+    int subjectIndex = -1;
     int i;
 
     if (!ReadValues(header, PREVIEW_HEADER_VALUES)) {
@@ -232,8 +250,10 @@ int main(void)
     }
     candidateCount = (u8)header[22];
     stateCount = (u16)header[23];
+    bindingCount = (u8)header[28];
     if (candidateCount > OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS
-        || stateCount > OVERWORLD_BEHAVIOR_CONDITION_MAX_ENTRIES) {
+        || stateCount > OVERWORLD_BEHAVIOR_CONDITION_MAX_ENTRIES
+        || bindingCount > OVERWORLD_TARGET_BINDING_COUNT) {
         fprintf(stderr, "condition preview exceeds runtime bounds\n");
         return 2;
     }
@@ -287,6 +307,21 @@ int main(void)
     world.playerVisionRange = OVERWORLD_VISION_DEFAULT_RANGE;
     world.playerVisionOptions = OVERWORLD_VISION_DEFAULT_OPTIONS;
     world.actorCount = candidateCount;
+    world.subjectRoleMask = (u8)header[24];
+    world.reserved[0] = (u8)header[25];
+    world.reserved[1] = (u8)header[26];
+    world.reserved[2] = (u8)(header[26] >> 8);
+    world.incomingClaimMask = (u16)header[27];
+    if (OverworldTargetBindings_Init(&bindings, &world.subject) != OVERWORLD_TARGET_BINDING_OK) {
+        fprintf(stderr, "invalid condition preview subject identity\n");
+        return 2;
+    }
+    bindings.subject.slot = (u16)header[29];
+    bindings.subject.generation = (u16)header[30];
+    bindings.subject.fieldEpoch = (u16)header[31];
+    bindings.subject.mapGeneration = (u16)header[32];
+    bindings.subject.encounterGeneration = (u16)header[33];
+    world.bindings = &bindings;
 
     memset(candidates, 0, sizeof(candidates));
     for (i = 0; i < candidateCount; i++) {
@@ -317,12 +352,32 @@ int main(void)
                 &candidates[i].context,
                 0,
                 BEHAVIOR_RESOLVER_NO_CONDITION,
+                candidates[i].roleMask,
                 &world.actors[i].visionRange,
                 &world.actors[i].visionOptions)) {
             fprintf(stderr, "condition preview candidate vision failed\n");
             return 1;
         }
+        if (memcmp(&world.actors[i].actor, &world.subject,
+                sizeof(world.subject)) == 0)
+            subjectIndex = i;
     }
+
+    /* The shared evaluator validates the current subject against its roster. */
+    if (subjectIndex < 0) {
+        if (candidateCount == OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS) {
+            fprintf(stderr, "condition preview needs a slot for the subject\n");
+            return 2;
+        }
+        subjectIndex = candidateCount++;
+    }
+    candidates[subjectIndex].context = subjectContext;
+    candidates[subjectIndex].roleMask = world.subjectRoleMask;
+    world.actors[subjectIndex].actor = world.subject;
+    world.actors[subjectIndex].x = world.subjectX;
+    world.actors[subjectIndex].y = world.subjectY;
+    world.actors[subjectIndex].valid = 1;
+    world.actorCount = candidateCount;
 
     memset(&prepared, 0, sizeof(prepared));
     prepared.states = preparedStates;
@@ -351,10 +406,15 @@ int main(void)
         entryState->flags = 0;
         if (values[1]) {
             entryState->flags |= OVERWORLD_BEHAVIOR_CONDITION_STATE_ACTIVE;
-            stableConditionalMask |= 1u
-                << blob->conditionEntries[
-                    prepared.catalogEntryIndexes[preparedIndex]
-                ].applicationIndex;
+            OverworldApplicationBank bank;
+            if (!OverworldApplicationBank_Select(blob, subjectContext.species, &bank))
+                return 1;
+            int localSlot = OverworldApplicationBank_Local(&bank,
+                blob->conditionGlobalApplications[
+                    prepared.catalogEntryIndexes[preparedIndex]]);
+            if (localSlot < 0)
+                return 1;
+            stableConditionalMask |= 1u << localSlot;
             stableWinningConditionId = (u16)values[0];
         }
         if (values[2]) {
@@ -373,16 +433,41 @@ int main(void)
                 world.actors[values[6]].actor.encounterGeneration;
         }
     }
+    for (i = 0; i < bindingCount; i++) {
+        long long values[PREVIEW_BINDING_VALUES];
+        OverworldTargetBinding *binding;
+        if (!ReadValues(values, PREVIEW_BINDING_VALUES) || values[0] < 0
+            || values[0] >= OVERWORLD_TARGET_BINDING_COUNT) {
+            fprintf(stderr, "invalid condition preview binding\n");
+            return 2;
+        }
+        binding = &bindings.bindings[values[0]];
+        binding->target.kind = (u8)values[1];
+        binding->target.actor.slot = (u16)values[2];
+        binding->target.actor.generation = (u16)values[3];
+        binding->target.actor.fieldEpoch = (u16)values[4];
+        binding->target.actor.mapGeneration = (u16)values[5];
+        binding->target.actor.encounterGeneration = (u16)values[6];
+        binding->sourceConditionId = (u16)values[7];
+        binding->sourceApplication = (u8)values[8];
+        binding->lifetime = (u8)values[9];
+        binding->expiresAt = (u32)values[10];
+        binding->flags = values[11] ? OVERWORLD_TARGET_BINDING_BOUND : 0;
+        binding->reason = (u8)values[12];
+    }
     if (!ResolveCurrentVision(
             blob,
             &subjectContext,
             stableConditionalMask,
             stableWinningConditionId,
+            world.subjectRoleMask,
             &world.subjectVisionRange,
             &world.subjectVisionOptions)) {
         fprintf(stderr, "condition preview subject vision failed\n");
         return 1;
     }
+    world.actors[subjectIndex].visionRange = world.subjectVisionRange;
+    world.actors[subjectIndex].visionOptions = world.subjectVisionOptions;
 
     conditionStatus = OverworldBehaviorCondition_EvaluatePrepared(
         blob,
@@ -405,6 +490,14 @@ int main(void)
     request.behaviorClass = selection.behaviorClass;
     request.requestVersion = HOST_REQUEST_VERSION;
     request.activeConditionalMask = conditionResult.activeApplicationMask;
+    OverworldApplicationBank bank;
+    if (!OverworldApplicationBank_Select(blob, subjectContext.species, &bank))
+        return 1;
+    int forcedSlot = world.subjectRoleMask == 2
+        ? OverworldApplicationBank_Local(&bank, OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER)
+        : world.subjectRoleMask == 4
+            ? OverworldApplicationBank_Local(&bank, OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_MOUNTED) : -1;
+    request.forcedOverrideMask = forcedSlot >= 0 ? 1u << forcedSlot : 0;
     request.winningConditionId = conditionResult.winningConditionId;
     request.targetSourceApplication = conditionResult.resolvedTargetSourceApplication;
     request.resolvedTargetConditionId = conditionResult.resolvedTargetConditionId;
@@ -440,6 +533,8 @@ int main(void)
         const OverworldBehaviorConditionEntryState *entryState = &prepared.states[i];
         OverworldBehaviorConditionTargetReference entryTarget;
         u8 entryFlags = scratch.entryFlags[i];
+        u16 globalApplication = blob->conditionGlobalApplications[sourceIndex];
+        int localSlot = OverworldApplicationBank_Local(&bank, globalApplication);
 
         TargetFromState(entryState, &world, &entryTarget);
 
@@ -451,7 +546,7 @@ int main(void)
                "\"cooldownUntil\":%u,\"hasTriggered\":%u,\"target\":",
             (unsigned)sourceIndex,
             (unsigned)entry->conditionId,
-            (unsigned)entry->applicationIndex,
+            (unsigned)globalApplication,
             (unsigned)((entryFlags
                 & OVERWORLD_BEHAVIOR_CONDITION_SCRATCH_TRUE) != 0),
             (unsigned)((entryFlags
@@ -460,7 +555,8 @@ int main(void)
                 & OVERWORLD_BEHAVIOR_CONDITION_SCRATCH_ACTIVE) != 0),
             (unsigned)((entryFlags
                     & OVERWORLD_BEHAVIOR_CONDITION_SCRATCH_ACTIVE) != 0
-                && conditionResult.winningConditionIds[entry->applicationIndex]
+                && localSlot >= 0
+                && conditionResult.winningConditionIds[localSlot]
                     == entry->conditionId),
             (unsigned)entryState->activeUntil,
             (unsigned)entryState->cooldownUntil,
@@ -469,7 +565,21 @@ int main(void)
         PrintTarget(&entryTarget);
         printf("}");
     }
-    printf("],\"resolver\":");
+    printf("],\"bindings\":[");
+    for (i = 0; i < OVERWORLD_TARGET_BINDING_COUNT; i++) {
+        const OverworldTargetBinding *binding = &bindings.bindings[i];
+        if (i) putchar(',');
+        printf("{\"name\":%u,\"sourceConditionId\":%u,\"sourceApplication\":%u,"
+            "\"lifetime\":%u,\"expiresAt\":%u,\"bound\":%u,\"reason\":%u,\"target\":",
+            i, binding->sourceConditionId, binding->sourceApplication,
+            binding->lifetime, (unsigned)binding->expiresAt,
+            (binding->flags & OVERWORLD_TARGET_BINDING_BOUND) != 0, binding->reason);
+        PrintTarget(&binding->target);
+        putchar('}');
+    }
+    printf("],\"bindingOwner\":{\"slot\":%u,\"generation\":%u,\"fieldEpoch\":%u,\"mapGeneration\":%u,\"encounterGeneration\":%u},\"resolver\":",
+        bindings.subject.slot, bindings.subject.generation, bindings.subject.fieldEpoch,
+        bindings.subject.mapGeneration, bindings.subject.encounterGeneration);
     PrintResolver(&resolveResult, resolveStatus, &trace);
     printf("}\n");
     return resolveStatus == BEHAVIOR_RESOLVE_OK

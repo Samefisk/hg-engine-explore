@@ -7,6 +7,7 @@ Importing this module alone does not open a core or load a ROM.
 from __future__ import annotations
 
 import os
+import re
 import hashlib
 import struct
 from functools import lru_cache
@@ -132,7 +133,12 @@ LAND_MANAGER_TILE_WIDTH_OFFSET = 0xCC
 LAND_CHUNK_MATRIX_INDEX_OFFSET = 0x860
 LAND_CHUNK_MODEL_LOADED_OFFSET = 0x864
 BEHAVIOR_DATA_MAGIC = 0x4F574244
-BEHAVIOR_DATA_VERSION = 81
+# Use the authored version, so a layout-preserving catalog revision cannot
+# silently disable surface observation. The ARM layout check still proves the
+# fixed directory offsets below against this same production header.
+BEHAVIOR_DATA_VERSION = int(re.search(
+    r"^#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION\s+(\d+)\s*$",
+    (REPO / "include/overworld_wild_behavior_data.h").read_text(), re.M).group(1))
 BEHAVIOR_DATA_HEADER_SIZE = 84
 SURFACE_TYPE_NAMES = ("rooftop", "signpost", "mailbox", "flowerbed", "canopy")
 SURFACE_HEIGHT_PAGE_NATIVE_GROUND = 0x1F
@@ -281,6 +287,86 @@ def loaded_warp_events(emu):
         }
         for index in range(count)
     ]
+
+
+MAP_EVENTS_DATA_OFFSET = 0x20
+MAP_EVENTS_DATA_SIZE = 0x800
+MAP_EVENT_RECORD_SIZES = (20, 32, WARP_EVENT_SIZE, 16)  # bg, object, warp, coord
+
+
+def loaded_events_digest(emu):
+    """Hash the zone-event file the game loaded into MapEvents.event_data.
+
+    Field_InitMapEvents reads the whole a/0/3/2 member into event_data, then
+    points the four arrays into it. The pointer check proves that layout
+    before hashing, so the digest equals the file's SHA-256 right after a map
+    load. Scripts that move objects later rewrite their records in place.
+    """
+    field_system = unsigned(emu, G_FIELD_SYS_PTR)
+    events = unsigned(emu, field_system + FIELD_MAP_EVENTS_OFFSET)
+    if events == 0:
+        return {"known": False, "reason": "no-map-events"}
+    counts = [unsigned(emu, events + 4 * index) for index in range(4)]
+    pointers = [unsigned(emu, events + 0x10 + 4 * index) for index in range(4)]
+    data = events + MAP_EVENTS_DATA_OFFSET
+    offset, expected = 0, []
+    for count, size in zip(counts, MAP_EVENT_RECORD_SIZES):
+        if count > MAP_EVENTS_DATA_SIZE // size or offset + 4 > MAP_EVENTS_DATA_SIZE:
+            return {"known": False, "reason": "count-out-of-range", "counts": counts}
+        if unsigned(emu, data + offset) != count:
+            return {"known": False, "reason": "embedded-count-mismatch", "counts": counts}
+        # MapEvents_ComputeRamHeader stores NULL for an empty array.
+        expected.append(data + offset + 4 if count else 0)
+        offset += 4 + count * size
+    if offset >= MAP_EVENTS_DATA_SIZE:
+        return {"known": False, "reason": "size-out-of-range", "counts": counts}
+    if pointers != expected:
+        return {"known": False, "reason": "pointer-layout-mismatch", "counts": counts}
+    raw = actor_memory_read(emu, data, offset)
+    return {"known": True, "size": offset, "counts": counts,
+            "sha256": hashlib.sha256(raw).hexdigest()}
+
+
+LAND_CHUNK_SIZE = 0xA74
+LAND_CHUNK_SCAN_START = TERRAIN_BLOCK_TILE_COUNT * 2  # after the 0x800 attributes
+MODEL_HEAD_BYTES = 0x80
+
+
+def loaded_land_models(emu):
+    """Report the NSBMD each loaded land chunk points at (read-only).
+
+    The rolling land manager keeps four chunk records (0xA74 bytes; matrix
+    index at +0x860, model-loaded flag at +0x864). The model file pointer is
+    found by scanning the record after its attributes for a main-RAM pointer
+    whose target starts with BMD0. Only the head bytes are returned: the game
+    binds textures in place, so a whole-file hash would not equal the file.
+    """
+    field_system = unsigned(emu, G_FIELD_SYS_PTR)
+    if not 0x02000000 <= field_system < 0x02400000:
+        return {"known": False, "reason": "no-field-system"}
+    manager = unsigned(emu, field_system + FIELD_LAND_MANAGER_OFFSET)
+    if not 0x02000000 <= manager < 0x02400000:
+        return {"known": False, "reason": "no-land-manager"}
+    chunks = []
+    for slot in range(4):
+        chunk = unsigned(emu, manager + LAND_MANAGER_CHUNK_POINTERS_OFFSET + slot * 4)
+        if chunk % 4 or not 0x02000000 <= chunk < 0x02400000 - LAND_CHUNK_SIZE:
+            chunks.append({"slot": slot, "known": False})
+            continue
+        models = []
+        for offset in range(LAND_CHUNK_SCAN_START, LAND_CHUNK_SIZE, 4):
+            pointer = unsigned(emu, chunk + offset)
+            if pointer % 4 or not 0x02000000 <= pointer < 0x02400000 - MODEL_HEAD_BYTES:
+                continue
+            if actor_memory_read(emu, pointer, 4) == b"BMD0":
+                head = actor_memory_read(emu, pointer, MODEL_HEAD_BYTES)
+                models.append({"recordOffset": offset, "pointer": pointer,
+                               "fileSize": struct.unpack_from("<I", head, 8)[0], "headHex": head.hex()})
+        chunks.append({"slot": slot, "known": True, "chunkPointer": chunk,
+                       "matrixIndex": unsigned(emu, chunk + LAND_CHUNK_MATRIX_INDEX_OFFSET),
+                       "modelLoaded": unsigned(emu, chunk + LAND_CHUNK_MODEL_LOADED_OFFSET),
+                       "models": models})
+    return {"known": True, "chunks": chunks}
 
 
 def loaded_terrain_cell(emu, x, y):
@@ -569,8 +655,9 @@ def loaded_surface_cell(emu, x, y, terrain_cell):
                 raise ValueError("surface catalog owner changed during read")
             return result
         return base
-    except (KeyError, struct.error, ValueError):
-        return {"known": False, "present": None, "reason": "surface-catalog-read-incoherent"}
+    except (KeyError, struct.error, ValueError) as error:
+        return {"known": False, "present": None, "reason": "surface-catalog-read-incoherent",
+                "detail": str(error) if isinstance(error, ValueError) else type(error).__name__}
 
 
 def actor_memory_read(emu, address, size):
@@ -633,9 +720,140 @@ def player_ptr(emu):
     return unsigned(emu, avatar + 0x30) if avatar else 0
 
 
+def _sprite_draw(emu, obj):
+    """The 3D sprite draw record of the two stock Pokemon draw callbacks.
+
+    Other callbacks have no known render-state layout (see
+    OverworldWalk_MountedGraphics) and report None.
+    """
+    callback = unsigned(emu, obj + 0xC8)
+    index = {0x021F7895: 0, 0x021F88F1: 1}.get(callback)
+    draw = unsigned(emu, obj + 0x108 + 4 * index) if index is not None else 0
+    return draw if (draw & 0xFFC00000) == 0x02000000 else None
+
+
+def sprite_position(emu, obj):
+    """Position the stock graphics pose last published to the 3D sprite."""
+    draw = _sprite_draw(emu, obj)
+    if draw is None:
+        return None
+    return [signed(emu, draw + offset) for offset in (0, 4, 8)]
+
+
+def sprite_crop(emu, obj):
+    """The draw's private user SBC and the texel rows its quad still shows.
+
+    A water-sunk Wild body replaces the stock shape with a cropped quad
+    (src/overworld_follower_release_overlay2/overworld_water_sink.c): the
+    display list follows the 24-byte SBC and its first texcoord holds the
+    shown rows in 1/16 texels. Stock draws report userSbc 0.
+    """
+    draw = _sprite_draw(emu, obj)
+    if draw is None:
+        return None
+    user_sbc = unsigned(emu, draw + 0x60)
+    shown = None
+    if (user_sbc & 0xFFC00003) == 0x02000000 and unsigned(emu, user_sbc + 12, 1) == 0x0A:
+        shown = unsigned(emu, user_sbc + 24 + 8) >> 20
+    return {"userSbc": user_sbc, "shownRows": shown,
+            "effectPool": _effect_pool_view(emu, draw),
+            "splash": bool(unsigned(emu, obj) & (1 << 26))}
+
+
+def _effect_pool_view(emu, body):
+    """Use of the shared field-effect render pool (shadows, splashes, ...).
+
+    The pool (fieldSystem+0x44 -> +0x20 -> +0xC) hands out records from a
+    stack: +0x8 capacity, +0xD4 used. A full pool makes stock effects get a
+    NULL model; the water sink keeps a reserve free before adding a splash.
+    """
+    field = unsigned(emu, G_FIELD_SYS_PTR)
+    effects = unsigned(emu, field + 0x44) if field else 0
+    models = unsigned(emu, effects + 0x20) if effects else 0
+    pool = unsigned(emu, models + 0xC) if models else 0
+    if (pool & 0xFFC00000) != 0x02000000:
+        return None
+    capacity = unsigned(emu, pool + 8)
+    used = unsigned(emu, pool + 0xD4)
+    stack = unsigned(emu, pool + 0xD0)
+    models = {}
+    shared = []
+    records = []
+    texture = unsigned(emu, body + 0x8C)
+    for i in range(min(used, capacity, 256)):
+        record = unsigned(emu, stack + 4 * i)
+        if (record & 0xFFC00000) == 0x02000000:
+            key = "%08x" % unsigned(emu, record + 0x88)
+            models[key] = models.get(key, 0) + 1
+            records.append({
+                "record": record,
+                "model": key,
+                "texture": unsigned(emu, record + 0x8C),
+                "pos": [signed(emu, record + o) for o in (0, 4, 8)],
+                "scale": [signed(emu, record + o) for o in (0x0C, 0x10, 0x14)],
+                "userSbc": unsigned(emu, record + 0x60),
+                "userDl": [unsigned(emu, unsigned(emu, record + 0x60) + 24 + 4 * w)
+                           for w in range(14)]
+                          if (unsigned(emu, record + 0x60) & 0xFFC00003) == 0x02000000 else None,
+            })
+            if unsigned(emu, record + 0x8C) == texture and record != body:
+                model = unsigned(emu, record + 0x88)
+                size = unsigned(emu, model) if (model & 0xFFC00000) == 0x02000000 else 0
+                shared.append({
+                    "record": record,
+                    "pos": [signed(emu, record + o) for o in (0, 4, 8)],
+                    "scale": [signed(emu, record + o) for o in (0x0C, 0x10, 0x14)],
+                    "userSbc": unsigned(emu, record + 0x60),
+                    "visible": unsigned(emu, record + 0x24, 1),
+                    "model": model,
+                    "modelBytes": actor_memory_read(emu, model, min(size, 0x400)).hex() if size else None,
+                })
+    # Field-effect tasks (fieldSystem+0x44 -> +0x1C): +0x0 count, +0xC
+    # 0xC8-byte entries; bit 0 of +0x0 is live and +0xB0 is the init callback.
+    tasks = {}
+    task_pool = unsigned(emu, effects + 0x1C)
+    if (task_pool & 0xFFC00000) == 0x02000000:
+        entries = unsigned(emu, task_pool + 0xC)
+        for i in range(min(unsigned(emu, task_pool), 128)):
+            entry = entries + 0xC8 * i
+            if unsigned(emu, entry) & 1:
+                key = "%08x" % unsigned(emu, entry + 0xB0)
+                tasks[key] = tasks.get(key, 0) + 1
+    return {"capacity": capacity, "used": used, "models": models,
+            "withBodyTexture": shared, "tasks": tasks, "records": records,
+            "modelBytes": {k: actor_memory_read(emu, int(k, 16), min(unsigned(emu, int(k, 16)), 0x400)).hex()
+                           for k in models if int(k, 16) & 0xFFC00000 == 0x02000000},
+            "camera": ({"eye": [signed(emu, unsigned(emu, 0x021D2204) + 0x14 + 4 * k) for k in range(3)],
+                        "target": [signed(emu, unsigned(emu, 0x021D2204) + 0x20 + 4 * k) for k in range(3)]}
+                       if (unsigned(emu, 0x021D2204) & 0xFFC00000) == 0x02000000 else None),
+            "body": {"pos": [signed(emu, body + o) for o in (0, 4, 8)],
+                     "scale": [signed(emu, body + o) for o in (0x0C, 0x10, 0x14)],
+                     "model": unsigned(emu, body + 0x88),
+                     "texture": unsigned(emu, body + 0x8C),
+                     "modelBytes": actor_memory_read(emu, unsigned(emu, body + 0x88), 0x200).hex()}}
+
+
+def water_sink_state(emu, obj):
+    """Wild water sink bytes for object IDs E0-E9 (runtime +2856/+2866/+2876)."""
+    slot = unsigned(emu, obj + 8) - 0xE0
+    runtime = unsigned(emu, WILD_STATE + WILD_RUNTIME_PTR_OFFSET)
+    if not 0 <= slot < 10 or (runtime & 0xFFC00000) != 0x02000000:
+        return None
+    target = unsigned(emu, runtime + 2856 + slot, 1)
+    return {"onWater": bool(target & 0x80), "targetPx": target & 0x7F,
+            "px": unsigned(emu, runtime + 2866 + slot, 1),
+            "tag": unsigned(emu, runtime + 2876 + slot, 1),
+            "customMotion": unsigned(emu, runtime + 10 + slot, 1)}
+
+
 def object_state(emu, obj):
     return {
+        "water_sink": water_sink_state(emu, obj),
+        "sprite_pos": sprite_position(emu, obj),
+        "sprite_crop": sprite_crop(emu, obj),
         "flags": unsigned(emu, obj),
+        "x_range": signed(emu, obj + 0x44),
+        "y_range": signed(emu, obj + 0x48),
         "x_prev": signed(emu, obj + 0x58),
         "y_prev": signed(emu, obj + 0x60),
         "x": signed(emu, obj + 0x64),
@@ -650,6 +868,9 @@ def object_state(emu, obj):
         "unk88_x": signed(emu, obj + 0x88),
         "unk94_y": signed(emu, obj + 0x98),
         "unk94_x": signed(emu, obj + 0x94),
+        "movement_animation": unsigned(emu, obj + 0xA0),
+        "movement_render_words": [unsigned(emu, obj + offset)
+                                  for offset in range(0x108, 0x128, 4)],
         "movement_cmd": unsigned(emu, obj + 0xA4),
         "movement_step": unsigned(emu, obj + 0xA8),
         "facing": signed(emu, obj + 0x28),
@@ -671,7 +892,168 @@ def wait_until(
     return None
 
 
+BOOT_RECOVERY_RECEIPT = None
+
+
+def _zero_hp_save_record(raw_save):
+    """Validate the existing normal-save layout before allowing a paused boot.
+
+    Offsets are the current save layout used by the shared fixture tools:
+    normal slot 0xFFA0, misc block 0x2614, owned HP bytes 0x2D5/0x2DD.
+    A partial marker, invalid checkpoint or damaged selected copy is not proof.
+    """
+    import binascii
+    if len(raw_save) != 0x80000:
+        return None
+    copies = []
+    for base in (0, 0x40000):
+        count, size, magic, slot, crc = struct.unpack_from("<IIIHH", raw_save, base + 0xFF90)
+        if (size == 0xFFA0 and magic == 0x20060623 and slot == 0
+                and binascii.crc_hqx(raw_save[base:base + 0xFF90], 0xFFFF) == crc):
+            copies.append((count, base))
+    if not copies:
+        return None
+    chosen = copies[0]
+    if len(copies) == 2:
+        distance = (copies[1][0] - chosen[0]) & 0xFFFFFFFF
+        if distance == 0x80000000:
+            return None
+        if 0 < distance < 0x80000000:
+            chosen = copies[1]
+    count, base = chosen
+    misc = base + 0x2614
+    checkpoint = struct.unpack_from("<H", raw_save, misc + 0x2DE)[0]
+    if (raw_save[misc + 0x2D5:misc + 0x2D8] != b"PH\x01"
+            or raw_save[misc + 0x2DD] != 0 or not 1 <= checkpoint <= 30):
+        return None
+    return {"saveSha256": hashlib.sha256(raw_save).hexdigest(),
+            "copyBase": base, "saveCount": count, "hp": 0,
+            "checkpointSpawn": checkpoint}
+
+
+def _zero_hp_boot_layout():
+    """Bind the small recovery reader to the current ELF and ROM overlay."""
+    from tools.overworld.devtools_field_cleanup import symbol
+    from tools.overworld.devtools_player_health_observer import _check_descriptor
+    import json
+    import ndspy.codeCompression
+    overlay, _, runtime, _ = _check_descriptor(json.loads(
+        (REPO / "build/player-health.debug.json").read_text()))
+    image = (REPO / "build/player_health_overlay_linked.o").read_bytes()
+    code = {name: symbol(image, name, 2) for name in (
+        "PlayerHealthRecovery_BlackoutTask", "PlayerHealthRecovery_StockBlackoutTask")}
+    data = {name: symbol(image, name, 1, expected_size=size)
+            for name, size in (("sPlayerHealth", 60), ("sBlackoutFieldSystem", 4),
+                               ("sBlackoutFailed", 1))}
+    with ROM.open("rb") as rom:
+        header = rom.read(0x60)
+        fat, fat_size, table, table_size = struct.unpack_from("<4I", header, 0x48)
+        file_size = rom.seek(0, 2)
+        if (table_size % 32 or table_size > 0x10000
+                or table + table_size > file_size or fat + fat_size > file_size):
+            raise ValueError("zero-boot-overlay-table")
+        rom.seek(table)
+        entries = list(struct.iter_unpack("<8I", rom.read(table_size)))
+        entries = [entry for entry in entries if entry[0] == 161]
+        if len(entries) != 1:
+            raise ValueError("zero-boot-overlay-identity")
+        _, base, size, _, _, _, file_id, flags = entries[0]
+        if (base != 0x01FFA580 or not 0 < size <= 0x5A80
+                or file_id * 8 + 8 > fat_size):
+            raise ValueError("zero-boot-overlay-range")
+        rom.seek(fat + file_id * 8)
+        start, end = struct.unpack("<II", rom.read(8))
+        if not 0 <= start <= end <= file_size or end - start > 0x5A80:
+            raise ValueError("zero-boot-overlay-file")
+        rom.seek(start)
+        package = rom.read(end - start)
+        if flags & 0x01000000:
+            package = ndspy.codeCompression.decompress(package)
+    if (len(package) < size or size != overlay["fileSize"]
+            or hashlib.sha256(package[:size]).hexdigest() != overlay["sha256"]
+            or data["sPlayerHealth"][0] != runtime["address"]):
+        raise ValueError("zero-boot-overlay-descriptor-mismatch")
+    for address, length, expected in code.values():
+        offset = address - base
+        if not 0 <= offset <= size - length or package[offset:offset + length] != expected:
+            raise ValueError("zero-boot-ELF-package-mismatch")
+    for address, length, _ in data.values():
+        if not base <= address <= base + size - length:
+            raise ValueError("zero-boot-data-outside-overlay")
+    return code, data
+
+
+def _zero_hp_boot_boundary(emu, raw_save):
+    """Return only a checked pending player blackout; never press recovery keys.
+
+    This is session readiness for subsequent bounded shared input, not evidence
+    that recovery completed or that the actor clock is running.
+    """
+    saved = _zero_hp_save_record(raw_save)
+    if saved is None:
+        return None
+    try:
+        code, data = _zero_hp_boot_layout()
+        def read(address, size):
+            value = actor_memory_read(emu, address, size)
+            if len(value) != size:
+                raise ValueError("zero-boot-short-read")
+            return value
+        def pointer(value, size=4):
+            if value % 4 or not 0x02000000 <= value <= 0x02400000 - size:
+                raise ValueError("zero-boot-pointer")
+            return value
+        def word(address):
+            return struct.unpack("<I", read(address, 4))[0]
+        for address, length, expected in code.values():
+            if read(address, length) != expected:
+                raise ValueError("zero-boot-live-code-mismatch")
+        field = pointer(word(G_FIELD_SYS_PTR), 0x70)
+        save = pointer(word(field + 0x0C), 0x2F0B4)
+        if word(data["sBlackoutFieldSystem"][0]) != field or read(data["sBlackoutFailed"][0], 1) != b"\0":
+            raise ValueError("zero-boot-recovery-owner")
+        health = read(data["sPlayerHealth"][0], 60)
+        if (health[14] != 0 or health[18] != 1 or health[56] != 1
+                or struct.unpack_from("<I", health, 20)[0] != save):
+            raise ValueError("zero-boot-runtime-state")
+        block_id, block_size, offset = struct.unpack("<III", read(save + 0x2F014 + 9 * 16, 12))
+        if block_id != 9 or not 0x2E0 <= block_size <= 0x2F000 or offset != 0x2614:
+            raise ValueError("zero-boot-save-layout")
+        misc = pointer(save + 0x10 + offset, block_size)
+        if (read(misc + 0x2D5, 3) != b"PH\x01"
+                or read(misc + 0x2DD, 3) != struct.pack("<BH", 0, saved["checkpointSpawn"])):
+            raise ValueError("zero-boot-loaded-save-mismatch")
+        task = word(field + 0x10)
+        chain = []
+        seen = set()
+        while task:
+            pointer(task, 32)
+            if task in seen or len(chain) >= 8:
+                raise ValueError("zero-boot-task-chain")
+            seen.add(task)
+            prev, callback, state, _, _, _, owner, _ = struct.unpack("<8I", read(task, 32))
+            if owner != field:
+                raise ValueError("zero-boot-task-owner")
+            chain.append({"pointer": task, "callback": callback, "state": state})
+            task = prev
+        root = code["PlayerHealthRecovery_BlackoutTask"][0] | 1
+        stock = code["PlayerHealthRecovery_StockBlackoutTask"][0] | 1
+        if (len(chain) < 2 or chain[-1]["callback"] != root or chain[-1]["state"] != 2
+                or chain[-2]["callback"] != stock or not 1 <= chain[-2]["state"] <= 6
+                or sum(row["callback"] == root for row in chain) != 1
+                or sum(row["callback"] == stock for row in chain) != 1):
+            raise ValueError("zero-boot-not-pending-blackout")
+        return {**saved, "kind": "player-health-pending-blackout",
+                "boundary": "paused-native-cycle-end", "acceptedProof": False,
+                "fieldSystem": field, "saveData": save, "tasks": chain,
+                "actorClockReady": False, "recoveryInputSent": False}
+    except (OSError, KeyError, ValueError, struct.error):
+        return None
+
+
 def boot(emu, save_path, dsv, on_rom_open=None):
+    global BOOT_RECOVERY_RECEIPT
+    BOOT_RECOVERY_RECEIPT = None
     raw_save = h.extract_raw_save(save_path) if dsv else save_path.read_bytes()
     emu.volume_set(0)
     emu.open(str(ROM))
@@ -698,6 +1080,11 @@ def boot(emu, save_path, dsv, on_rom_open=None):
                 ),
                 180,
             )
+            if ready is None:
+                recovery = _zero_hp_boot_boundary(emu, raw_save)
+                if recovery is not None:
+                    BOOT_RECOVERY_RECEIPT = recovery
+                    return recovery
             if ready is not None:
                 h.cycle(emu, 600)
                 actor_state_address = ACTOR_DESCRIPTOR["state"]["address"]
@@ -709,6 +1096,10 @@ def boot(emu, save_path, dsv, on_rom_open=None):
                     60,
                 ) is not None:
                     return
+                recovery = _zero_hp_boot_boundary(emu, raw_save)
+                if recovery is not None:
+                    BOOT_RECOVERY_RECEIPT = recovery
+                    return recovery
                 # Do not close a menu or clear a pause with recovery input:
                 # that would hide the original save-load failure. These are
                 # bounded endpoint reads, not a completed actor observation.

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.ambush.player-tile-landing",
+  "title": "Ambush Hop lands, clears overlap, and resumes its profile",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "tests/overworld/scenarios/profile.ambush.player-tile-landing.json",
+  "requirements": ["current.ambush-player-tile-landing"],
+  "budgets": {"maxSeconds": 150, "maxFrames": 360, "noProgressFrames": 180, "minObservedFrames": 10},
+  "subjects": [{"id": "weepinbell", "species": 70, "role": "WILD", "acquire": "spawn"}],
+  "measurements": [{"kind": "ambush-player-landing-v1", "subject": "weepinbell"}],
+  "setup": [
+    {"id": "place-player", "op": "teleport", "args": {"map": 33, "x": 585, "z": 408, "facing": 0}, "budget": {"maxSeconds": 60, "maxFrames": 100, "noProgressFrames": 100}},
+    {"id": "spawn-weepinbell", "op": "spawn", "args": {"species": 70, "role": "wild", "level": 5, "x": 583, "z": 406}, "budget": {"maxSeconds": 30, "maxFrames": 80, "noProgressFrames": 80}},
+    {"id": "bind-weepinbell", "op": "bind", "args": {"subject": "weepinbell"}, "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "observe-ambush-contact-and-exit", "op": "wait", "args": {"predicate": {"kind": "measurement-complete", "measurement": "ambush-player-landing-v1", "when": "final"}}, "budget": {"maxSeconds": 120, "maxFrames": 240, "noProgressFrames": 180}}
+  ],
+  "assertions": [{"kind": "measurement-complete", "measurement": "ambush-player-landing-v1", "when": "final"}]
+}

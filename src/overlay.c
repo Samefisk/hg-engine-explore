@@ -83,8 +83,8 @@ u32 LONG_CALL UnloadOverworldWildBehaviorOverlay(void)
 BOOL LONG_CALL UnloadOverworldWildOverlays(void)
 {
     /*
-     * Overlay 152 is untracked by the SDK table, so tear it down through the
-     * field-service callback before releasing its tracked overlay 149 owner.
+     * Clean overlay 149's data while its linked Selector 152 is still live,
+     * then tear down 152 through the field-service callback and release 149.
      * A later 149 load links 152 back in for the resumed field session.
      */
     UnloadOverlayByID(OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION);
@@ -135,8 +135,9 @@ unloadSecond:
                 }
             }
             if (ovyId == OVERLAY_OVERWORLD_WILD_SPAWNS_EXTENSION) {
-                if (!OverworldFieldService_ShutdownTransientServices()
-                    || !OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->cleanupResidentData()) {
+                /* Query teardown still needs the linked Selector service. */
+                if (!OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->cleanupResidentData()
+                    || !OverworldFieldService_ShutdownTransientServices()) {
                     /* Teardown still owns 149/150/151; retry before overlap. */
                     return;
                 }

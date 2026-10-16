@@ -1,0 +1,224 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.basic-attack",
+  "title": "Basic attack hops onto its adjacent Pokemon and deals damage",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.basic-attack"
+  ],
+  "budgets": {
+    "maxSeconds": 300,
+    "maxFrames": 600,
+    "noProgressFrames": 240,
+    "minObservedFrames": 16
+  },
+  "subjects": [
+    {
+      "id": "snorlax",
+      "species": 143,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "passive",
+      "species": 174,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "basic-attack-v1",
+      "subject": "snorlax"
+    }
+  ],
+  "setup": [
+    {
+      "id": "attack-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 594,
+        "z": 399,
+        "facing": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-passive",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 174,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-passive",
+      "op": "spawn",
+      "args": {
+        "species": 174,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 50
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-passive",
+      "op": "bind",
+      "args": {
+        "subject": "passive"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-snorlax",
+      "op": "spawn",
+      "args": {
+        "species": 143,
+        "form": 0,
+        "role": "wild",
+        "level": 50,
+        "x": 595,
+        "z": 396
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-cyndaquil",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "wild",
+        "level": 50,
+        "x": 596,
+        "z": 396
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-snorlax",
+      "op": "bind",
+      "args": {
+        "subject": "snorlax"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "bind-cyndaquil",
+      "op": "bind",
+      "args": {
+        "subject": "cyndaquil"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "before-contact",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "observe-attack",
+      "op": "step",
+      "args": {
+        "frames": 240,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "basic-attack-v1",
+          "stage": "landed",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "finish-contact",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "after-contact",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "basic-attack-v1",
+      "when": "final"
+    }
+  ]
+}

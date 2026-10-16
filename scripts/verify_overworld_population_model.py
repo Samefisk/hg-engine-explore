@@ -119,20 +119,21 @@ def verify_live_actor_adapter() -> None:
     )
     require(
         "OverworldWildRuntime_PopulationControl" not in wild_runtime
-        and "entry->reservedPopulationControl == 0" in wild_runtime,
-        "retired Wild population callback was not removed and zero-validated",
+        and "entry->resolveBaseYAt != NULL" in wild_runtime
+        and "entry->reservedAcknowledgeMotion == 0" in wild_runtime,
+        "retired Wild population owner remains or current Runtime slot guards are missing",
     )
     require(
-        "OVERWORLD_ACTOR_SYSTEM_OVERLAY_LOAD_ADDR 0x023B65A0"
+        "OVERWORLD_ACTOR_SYSTEM_OVERLAY_LOAD_ADDR 0x023B65C0"
             in actor_header
         and "OVERWORLD_ACTOR_SYSTEM_OVERLAY_BASE 0x023B6B00"
             in actor_header
-        and "OVERWORLD_ACTOR_SYSTEM_OVERLAY_SIZE 0x4560" in actor_header
-        and "ORIGIN = 0x023B65A0, LENGTH = 0x4560" in actor_linker
+        and "OVERWORLD_ACTOR_SYSTEM_OVERLAY_SIZE 0x4540" in actor_header
+        and "ORIGIN = 0x023B65C0, LENGTH = 0x4540" in actor_linker
         and "ACTOR_CORE_ORIGIN = 0x023B6B00" in actor_linker
         and ".overworld_condition_adapter" in actor_linker
         and ".overworld_actor_population_adapter" in actor_linker
-        and ". = ORIGIN(rom) + 0x3BD0;" in actor_linker
+        and ". = ORIGIN(rom) + 0x3BB0;" in actor_linker
         and "#define NEW_HEAP3_SIZE 0x106730" in save_constants,
         "resident population deployment does not preserve the actor ABI and field heap",
     )

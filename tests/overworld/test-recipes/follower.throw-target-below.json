@@ -1,0 +1,235 @@
+{
+  "schemaVersion": 1,
+  "id": "follower.throw-target-below",
+  "title": "Mankey throws real Cargo at a current Wild target below",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md#2-role-controllers",
+  "requirements": [
+    "current.follower-throw-target-below"
+  ],
+  "budgets": {
+    "maxSeconds": 600,
+    "maxFrames": 1400,
+    "noProgressFrames": 1000,
+    "minObservedFrames": 2
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    },
+    {
+      "id": "trigger",
+      "species": 70,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "cargo",
+      "species": 179,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "follower-throw-target-below-v1",
+      "subject": "mankey"
+    }
+  ],
+  "setup": [
+    {
+      "id": "throw-tile",
+      "op": "teleport",
+      "args": {
+        "map": 67,
+        "x": 560,
+        "z": 392,
+        "facing": 0
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-mankey",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 56,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "create-follower",
+      "op": "spawn",
+      "args": {
+        "species": 56,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-follower",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "bind-mankey",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-trigger",
+      "op": "spawn",
+      "args": {
+        "species": 70,
+        "form": 0,
+        "role": "wild",
+        "level": 20,
+        "x": 560,
+        "z": 396
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-trigger",
+      "op": "bind",
+      "args": {
+        "subject": "trigger"
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "notice-trigger",
+      "op": "step",
+      "args": {
+        "frames": 12,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 12,
+        "noProgressFrames": 12
+      }
+    },
+    {
+      "id": "spawn-cargo",
+      "op": "spawn",
+      "args": {
+        "species": 179,
+        "form": 0,
+        "role": "wild",
+        "level": 20,
+        "x": 561,
+        "z": 391
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-cargo",
+      "op": "bind",
+      "args": {
+        "subject": "cargo"
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "natural-signed-throw",
+      "op": "step",
+      "args": {
+        "frames": 600,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "follower-throw-target-below-v1",
+          "stage": "launched",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 240,
+        "maxFrames": 600,
+        "noProgressFrames": 600
+      }
+    },
+    {
+      "id": "finish-signed-flight-and-vision",
+      "op": "step",
+      "args": {
+        "frames": 400,
+        "keys": [],
+        "until": {
+          "kind": "measurement-complete",
+          "measurement": "follower-throw-target-below-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 240,
+        "maxFrames": 400,
+        "noProgressFrames": 400
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "follower-throw-target-below-v1",
+      "when": "final"
+    }
+  ]
+}

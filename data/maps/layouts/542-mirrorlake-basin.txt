@@ -1,0 +1,34 @@
+# Map 542 Mirrorlake Basin - tileset of Route 44 (map 46), 2x1 chunks.
+# Entry/return warp panel at (5, 16).
+TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT
+TTTT........................................................TTTT
+TTTT........................................................TTTT
+TTTT........................................................TTTT
+TTTT..**vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvTTTT
+TTTT........................................................TTTT
+TTTT........................................................TTTT
+TTTT......**vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv**....TTTT
+TTTT........................................................TTTT
+TTTT...........**********************************...........TTTT
+TTTT..........***~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~***..........TTTT
+TTTT..........**~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~**,,,,,,,,..TTTT
+TTTT..........**~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~**,,,,,,,,..TTTT
+TTTT..........**~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~**,,,,,,,,..TTTT
+TTTT..........**~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~**,,,,,,,,..TTTT
+TTTT..........**~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~**,,,,,,,,..TTTT
+TTTT..........**~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~**,,,,,,,,..TTTT
+TTTT..........**~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~**..........TTTT
+TTTT.,,,,,,,,.**~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~**..........TTTT
+TTTT.,,,,,,,,.**~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~**..........TTTT
+TTTT.,,,,,,,,.**~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~**..........TTTT
+TTTT.,,,,,,,,.**~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~**..........TTTT
+TTTT.,,,,,,,,.***~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~***..........TTTT
+TTTT.,,,,,,,,.************************************..........TTTT
+TTTT.,,,,,,,,..**********************************...........TTTT
+TTTT........................................................TTTT
+TTTT........................................................TTTT
+TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT
+TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT

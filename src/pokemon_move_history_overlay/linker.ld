@@ -8,9 +8,17 @@ MEMORY {
          */
         rom     : ORIGIN = 0x023BE400, LENGTH = 0x2000
         ewram   : ORIGIN = 0x023BE400, LENGTH = 0x2000
+        field   : ORIGIN = 0x02208360, LENGTH = 0xA0
 }
 
 SECTIONS {
+        .overworld_field_spawn_orphans : {
+                KEEP(*(.overworld_field_spawn_orphans))
+                ASSERT(ABSOLUTE(ADDR(.overworld_field_spawn_orphans)) == 0x02208360,
+                    "private spawn orphan cleanup moved");
+                ASSERT(SIZEOF(.overworld_field_spawn_orphans) <= LENGTH(field),
+                    "private spawn orphan cleanup exceeds Field reserve");
+        } >field
         .text : {
 
                 FILL (0xABCD)
@@ -200,6 +208,9 @@ SECTIONS {
                 ASSERT(OverworldWalk_StrictDiagonalAllowed
                         == ORIGIN(rom) + 0x12CE,
                     "Walk StrictDiagonalAllowed helper moved");
+                ASSERT((ABSOLUTE(Walk_DiagonalRejection) & ~1)
+                        == ORIGIN(rom) + 0x12D8,
+                    "Walk diagonal rejection helper moved");
                 ASSERT(. <= ORIGIN(rom) + 0x134E,
                     "Walk StrictDiagonalAllowed helper exceeds its slot");
                 . = ORIGIN(rom) + 0x134E;
@@ -214,8 +225,20 @@ SECTIONS {
                 ASSERT(OverworldWalk_ResolveMountedDiagonal
                         == ORIGIN(rom) + 0x1380,
                     "Walk ResolveMountedDiagonal helper moved");
+                ASSERT(. <= ORIGIN(rom) + 0x1390,
+                    "Walk ResolveMountedDiagonal wrapper exceeds its slot");
+                . = ORIGIN(rom) + 0x1390;
+                KEEP(*(.overworld_walk_newest_mounted_input))
+                ASSERT(OverworldWalk_SelectNewestMountedInput
+                        == ORIGIN(rom) + 0x1390,
+                    "Walk newest mounted input helper moved");
                 ASSERT(. <= ORIGIN(rom) + 0x1440,
-                    "Walk ResolveMountedDiagonal helper exceeds its slot");
+                    "Walk mounted input helpers exceed their slot");
+                . = ORIGIN(rom) + 0x1410;
+                KEEP(*(.overworld_hop_lerp))
+                ASSERT(OverworldActorHopPlanner_LerpFx32 == ORIGIN(rom) + 0x1410
+                        && . <= ORIGIN(rom) + 0x1440,
+                    "shared Hop interpolation exceeds existing Walk slot");
                 . = ORIGIN(rom) + 0x1440;
                 KEEP(*(.overworld_walk_start_mounted_flat))
                 ASSERT(OverworldWalk_StartMountedFlat
@@ -245,6 +268,9 @@ SECTIONS {
                     "Field terrain code overlaps Walk rejection code host");
                 . = ORIGIN(rom) + 0x1A50;
                 KEEP(*(.overworld_walk_candidate_rejection))
+                ASSERT((ABSOLUTE(Walk_RejectDiagonalCandidate) & ~1)
+                        == ORIGIN(rom) + 0x1A50,
+                    "Walk rejection candidate helper moved");
                 ASSERT(. <= ORIGIN(rom) + 0x1B14,
                     "Walk rejection code overlaps mount abort helper");
                 . = ORIGIN(rom) + 0x1B14;
@@ -253,6 +279,13 @@ SECTIONS {
                         == ORIGIN(rom) + 0x1B14,
                     "Walk stop-skid planner moved");
                 KEEP(*(.overworld_walk_decelerate_time_body))
+                ASSERT(. <= ORIGIN(rom) + 0x1BA2,
+                    "Walk stop-skid code overlaps Hop cell step");
+                . = ORIGIN(rom) + 0x1BA2;
+                KEEP(*(.overworld_hop_next_cell))
+                ASSERT(OverworldActorHopGeometry_NextCell
+                        == ORIGIN(rom) + 0x1BA2,
+                    "private Hop cell step moved");
                 ASSERT(. <= ORIGIN(rom) + 0x1BEA,
                     "Walk stop-skid planner overlaps mount abort helper");
                 . = ORIGIN(rom) + 0x1BEA;

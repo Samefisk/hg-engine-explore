@@ -32,10 +32,10 @@ def session():
     s.subject = select_current_actor(s._snapshot(), s.actor)
     raw = bytearray(STATE_BYTES)
     struct.pack_into("<II", raw, 0, s.field_pointer(), 0x02080000)
-    raw[8:80] = bytes(range(72))
+    raw[8:88] = bytes(range(80))
     raw[20] = 1
-    struct.pack_into("<IHHHHBBBB", raw, 80, 77, 165, 33, 3, 4, 0, 5, 0, 1)
-    struct.pack_into("<IBBBB", raw, 96, 1, 3, 0, 0, 0)
+    struct.pack_into("<IHHHHBBBB", raw, 88, 77, 165, 33, 3, 4, 0, 5, 0, 1)
+    struct.pack_into("<IBBBB", raw, 104, 1, 3, 0, 0, 0)
     raw[122] = 1
     s.put(STATE_ADDRESS, raw)
     s.aborted = []
@@ -68,6 +68,87 @@ class FixtureTests(unittest.TestCase):
                 self.assertNotIn("state", r["before"]["readiness"])
                 self.assertNotIn("actors", r["before"]["readiness"]["snapshot"])
                 self.assertNotIn("stompTime", r)
+                self.assertNotIn("timeVariance", r)
+
+    def test_time_variance_preserves_diagonal_and_all_other_bytes(self):
+        for diagonal in (0, 1):
+            for variance in (None, 0, 1, 32):
+                s = session()
+                s.put(STATE_ADDRESS + 72, bytes((0xAA | diagonal,)))
+                original = s.read(STATE_ADDRESS, STATE_BYTES)
+                expected = bytearray(original)
+                expected[27] = 0
+                if variance is not None:
+                    expected[72] = diagonal | (variance << 1)
+                receipt = MountWalkFixture(s, s.subject, 0, time_variance=variance).run()
+                self.assertEqual(s.read(STATE_ADDRESS, STATE_BYTES), bytes(expected))
+                self.assertEqual(receipt["after"]["mountStateHex"], bytes(expected).hex())
+                self.assertEqual(receipt["changedOffsets"], [19] if variance is None else [19, 64])
+                self.assertEqual(s.writes, [(STATE_ADDRESS + 27, 1)] +
+                                 ([] if variance is None else [(STATE_ADDRESS + 72, 1)]))
+                self.assertEqual(receipt["before"]["clock"], receipt["after"]["clock"])
+                self.assertFalse(receipt["guestAdvanced"])
+                if variance is None:
+                    self.assertNotIn("timeVariance", receipt)
+                else:
+                    self.assertEqual(receipt["timeVariance"], variance)
+        for variance in (True, -1, 33, 1.5, "0"):
+            s = session()
+            with self.subTest(variance=variance), self.assertRaises(MountWalkFixtureError):
+                MountWalkFixture(s, s.subject, 0, time_variance=variance)
+            self.assertFalse(s.writes)
+
+    def test_time_variance_write_failure_restores_the_entire_state(self):
+        s = session()
+        original, write = s.read(STATE_ADDRESS, STATE_BYTES), s.write
+        def failed(address, data):
+            write(address, data)
+            if len(s.writes) == 2:
+                raise ValueError("variance write failed after mutation")
+        s.write = failed
+        with self.assertRaises(ValueError) as caught:
+            MountWalkFixture(s, s.subject, 0, time_variance=0).run()
+        self.assertEqual(s.read(STATE_ADDRESS, STATE_BYTES), original)
+        self.assertEqual(caught.exception.receipt["restoredOnError"]["mountStateHex"], original.hex())
+        self.assertFalse(s.aborted)
+
+    def test_linear_acceleration_changes_only_named_bytes_and_restores_failure(self):
+        for base, fastest, ramp in ((16, 4, 120), (1, 1, 1), (32, 1, 255)):
+            s = session()
+            original = s.read(STATE_ADDRESS, STATE_BYTES)
+            expected = bytearray(original)
+            for offset, value in ((19, 0), (7, base), (50, ramp), (51, fastest), (71, 34)):
+                expected[8 + offset] = value
+            r = MountWalkFixture(s, s.subject, 0, base,
+                                 fastest_time=fastest, time_to_full_speed=ramp).run()
+            self.assertEqual(s.read(STATE_ADDRESS, STATE_BYTES), bytes(expected))
+            self.assertEqual(r["changedOffsets"], [7, 19, 50, 51, 71])
+            self.assertEqual((r["fastestTime"], r["timeToFullSpeed"]), (fastest, ramp))
+            self.assertFalse(r["guestAdvanced"])
+            self.assertEqual(r["before"]["clock"], r["after"]["clock"])
+        s = session()
+        original, write = s.read(STATE_ADDRESS, STATE_BYTES), s.write
+        def fail_last(address, data):
+            write(address, data)
+            if len(s.writes) == 5:
+                raise ValueError("Linear mode write failed after mutation")
+        s.write = fail_last
+        with self.assertRaises(ValueError) as caught:
+            MountWalkFixture(s, s.subject, 0, 16,
+                             fastest_time=4, time_to_full_speed=120).run()
+        self.assertEqual(s.read(STATE_ADDRESS, STATE_BYTES), original)
+        self.assertIsNotNone(caught.exception.receipt["restoredOnError"])
+        self.assertFalse(s.aborted)
+
+    def test_invalid_linear_args_make_no_write(self):
+        for base, fastest, ramp in ((None, 4, 120), (4, 5, 120), (16, 4, None),
+                                    (16, None, 120), (16, 0, 120), (32, 33, 120),
+                                    (16, True, 120), (16, 4, 0), (16, 4, 256), (16, 4, True)):
+            s = session()
+            with self.subTest(base=base, fastest=fastest, ramp=ramp), self.assertRaises(MountWalkFixtureError):
+                MountWalkFixture(s, s.subject, 0, base,
+                                 fastest_time=fastest, time_to_full_speed=ramp)
+            self.assertFalse(s.writes)
 
     def test_stomp_threshold_changes_only_named_bytes(self):
         for threshold in (0, 1, 2, 32):
@@ -156,7 +237,7 @@ class FixtureTests(unittest.TestCase):
             self.assertFalse(s.writes)
 
     def test_stale_binding_and_busy_state_make_no_writes(self):
-        for offset in (20, 80, 84, 86, 88, 90, 92, 93, 100, 102, 120, 122, 128, 148, 150, 180):
+        for offset in (20, 88, 92, 94, 96, 98, 100, 101, 104, 108, 120, 122, 128, 148, 150, 180):
             s = session()
             s.put(STATE_ADDRESS + offset, bytes((s.read(STATE_ADDRESS + offset, 1)[0] ^ 1,)))
             with self.assertRaises((ValueError, KeyError)):
@@ -250,21 +331,23 @@ class IndependentAnchors(unittest.TestCase):
         code = '#include <stdio.h>\n#include <stddef.h>\n#include "overworld_behavior_resolver.h"\n'
         code += '#undef offsetof\n#define offsetof(t,m) __builtin_offsetof(t,m)\n' + structs
         pairs = [("OverworldWildBehaviorProfileData", x) for x in
-                 ("hopAllowNonCardinal", "chillSpeed", "tilesToAccelerate", "maxWalkSpeed", "chillAction", "walkStompTime", "walkOptions")]
+                 ("hopAllowNonCardinal", "chillSpeed", "tilesToAccelerate", "maxWalkSpeed", "chillAction", "walkStompTime", "walkOptions", "chainRepositionAllowDiagonal")]
         pairs += [("OverworldMountRuntimeState", x) for x in
                   ("snapshot", "directionInputHeld", "presentationAttached", "pendingFieldStep",
                    "motionCooldown", "bufferedTogglePending", "motionStreamPreparing")]
         values = ["sizeof(OverworldMountRuntimeState)", "sizeof(OverworldWildBehaviorProfileData)"]
         values += ["offsetof(" + t + "," + f + ")" for t,f in pairs]
         values += ['(size_t)OW_WILD_BEHAVIOR_WALK_OPTION_LOCK_DIRECTION',
-                   '(size_t)OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_MASK']
+                   '(size_t)OW_WILD_BEHAVIOR_WALK_CRASH_SOUND_MASK',
+                   '(size_t)OW_WILD_BEHAVIOR_WALK_TIME_VARIANCE_SHIFT',
+                   '(size_t)OW_WILD_BEHAVIOR_WALK_TIME_VARIANCE_MASK']
         code += 'int main(void){printf("' + ' '.join(['%zu'] * len(values)) + '",' + ','.join(values) + ');}\n'
         with tempfile.TemporaryDirectory() as d:
             exe = str(Path(d) / "layout")
             compiled = subprocess.run(["cc", "-DOVERWORLD_BEHAVIOR_HOST", "-I", str(ROOT / "include"),
                 "-x", "c", "-", "-o", exe], input=code, text=True, capture_output=True)
             self.assertEqual(compiled.returncode, 0, compiled.stderr)
-            self.assertEqual(subprocess.check_output([exe]).decode(), "184 72 19 7 50 51 12 70 65 8 120 122 128 148 150 180 1 16")
+            self.assertEqual(subprocess.check_output([exe]).decode(), "188 80 19 7 50 51 12 70 65 64 8 120 122 128 148 150 180 1 16 1 254")
         self.assertIn("#define OW_WILD_BEHAVIOR_LOCOMOTION_WALK 1", (ROOT / "include/overworld_wild_behavior_data.h").read_text())
         self.assertIn("#define OVERWORLD_MOUNT_RUNTIME_STATE_ADDR 0x023BC744", internal)
         source = (ROOT / "src/overworld_mount_overlay/overworld_mount_overlay.c").read_text()

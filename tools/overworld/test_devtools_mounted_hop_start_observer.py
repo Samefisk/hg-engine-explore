@@ -24,14 +24,14 @@ class HopStartTests(unittest.TestCase):
         s.packaged_code = lambda start,n: next((data[start-base:start-base+n] for base,data in s.code_regions
             if base <= start and start+n <= base+len(data)),b'')
         for pose in poses.values():pose['face_y']=123
-        put(STATE_ADDRESS,bytes(184))
+        put(STATE_ADDRESS,bytes(192))
         r=NativeMountedHopStartObserver(s,old.subject,100)
         return r,s,a,regs,put,poses
 
     def accepted(self,a,put):
         a.update(motionKind='HOP',motionPhase='MOVING',motionElapsed=0,motionDuration=12,
             reservationId=51,origin=dict(x=1,y=2),target=dict(x=4,y=2))
-        raw=bytearray(184);raw[102]=1;raw[141]=7
+        raw=bytearray(192);raw[111]=1;raw[141]=7
         struct.pack_into('<H',raw,126,51);struct.pack_into('<HH',raw,144,12,0)
         struct.pack_into('<4h',raw,152,1,2,4,2);put(STATE_ADDRESS,raw)
 
@@ -86,10 +86,10 @@ class HopStartTests(unittest.TestCase):
     def test_offsets_match_arm_header(self):
         root=Path(__file__).resolve().parents[2]
         source='#include "include/overworld_mount_internal.h"\n'
-        for name,offset in [('snapshot.motionMode',102),('motionIdentity',126),('motionArcHeightQ4',141),
+        for name,offset in [('snapshot.motionMode',111),('motionIdentity',126),('motionArcHeightQ4',141),
                             ('motionFrameCount',144),('motionElapsed',146),('motionStartX',152),('motionTargetX',156)]:
             source+=f'_Static_assert(__builtin_offsetof(OverworldMountRuntimeState,{name})=={offset},"{name}");\n'
-        source+='_Static_assert(sizeof(OverworldMountRuntimeState)==184,"size");\n'
+        source+='_Static_assert(sizeof(OverworldMountRuntimeState)==188,"size");\n'
         run=subprocess.run(['clang','-target','armv5te-none-eabi','-fsyntax-only','-Wno-unknown-attributes',
             '-Wno-gnu-folding-constant','-I',str(root),'-x','c','-'],input=source,text=True,capture_output=True,timeout=15)
         self.assertEqual(run.returncode,0,run.stderr)

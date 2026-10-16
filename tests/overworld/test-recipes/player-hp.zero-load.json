@@ -1,0 +1,261 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.zero-load",
+  "title": "Zero-HP Continue uses one stock blackout and restores normal control",
+  "mode": "normal",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/player-hp-implementation-plan.md",
+  "requirements": [
+    "current.player-health-zero-load"
+  ],
+  "budgets": {
+    "maxSeconds": 540,
+    "maxFrames": 3000,
+    "noProgressFrames": 900,
+    "minObservedFrames": 53
+  },
+  "subjects": [],
+  "measurements": [
+    {
+      "kind": "player-health-zero-load-v1"
+    }
+  ],
+  "setup": [
+    {
+      "id": "message-ready",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "player-health-zero-load-v1",
+          "stage": "message-ready",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 800,
+        "noProgressFrames": 800
+      }
+    },
+    {
+      "id": "dismiss-message",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": [
+          "A"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "release-message",
+      "op": "step",
+      "args": {
+        "frames": 12,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 13,
+        "noProgressFrames": 12
+      }
+    },
+    {
+      "id": "arrival-or-free",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "player-health-zero-load-v1",
+          "stage": "arrival-or-free",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 150,
+        "maxFrames": 900,
+        "noProgressFrames": 900
+      }
+    },
+    {
+      "id": "dismiss-arrival",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": [
+          "A"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      },
+      "skipIf": {
+        "kind": "measurement-stage",
+        "measurement": "player-health-zero-load-v1",
+        "stage": "field-free",
+        "when": "final"
+      }
+    },
+    {
+      "id": "release-arrival",
+      "op": "step",
+      "args": {
+        "frames": 12,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 12,
+        "noProgressFrames": 12
+      },
+      "skipIf": {
+        "kind": "measurement-stage",
+        "measurement": "player-health-zero-load-v1",
+        "stage": "field-free",
+        "when": "final"
+      }
+    },
+    {
+      "id": "arrival-or-free-again",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "player-health-zero-load-v1",
+          "stage": "arrival-or-free",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 100,
+        "maxFrames": 500,
+        "noProgressFrames": 500
+      }
+    },
+    {
+      "id": "dismiss-arrival-again",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": [
+          "A"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      },
+      "skipIf": {
+        "kind": "measurement-stage",
+        "measurement": "player-health-zero-load-v1",
+        "stage": "field-free",
+        "when": "final"
+      }
+    },
+    {
+      "id": "release-arrival-again",
+      "op": "step",
+      "args": {
+        "frames": 12,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 12,
+        "noProgressFrames": 12
+      },
+      "skipIf": {
+        "kind": "measurement-stage",
+        "measurement": "player-health-zero-load-v1",
+        "stage": "field-free",
+        "when": "final"
+      }
+    },
+    {
+      "id": "field-free",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-stage",
+          "measurement": "player-health-zero-load-v1",
+          "stage": "field-free",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 100,
+        "maxFrames": 500,
+        "noProgressFrames": 500
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "after-recovery",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "normal-step",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "UP"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "release-step",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "after-step",
+      "op": "player-health.observe",
+      "args": {},
+      "budget": {
+        "maxSeconds": 20,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "player-health-zero-load-v1",
+      "when": "final"
+    }
+  ]
+}

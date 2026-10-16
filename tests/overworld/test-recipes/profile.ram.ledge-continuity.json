@@ -1,0 +1,195 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.ram.ledge-continuity",
+  "title": "Onix keeps its charge through a legal ledge Hop",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.ram-ledge-continuity"
+  ],
+  "budgets": {
+    "maxSeconds": 180,
+    "maxFrames": 240,
+    "noProgressFrames": 120,
+    "minObservedFrames": 40
+  },
+  "subjects": [
+    {
+      "id": "onix",
+      "species": 95,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "ram-ledge-continuity-v1",
+      "subject": "onix"
+    }
+  ],
+  "setup": [
+    {
+      "id": "route29-ledge",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 590,
+        "z": 395,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "passive-party",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 10
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "passive-follower",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "role": "follower",
+        "slot": 0,
+        "level": 10
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-onix",
+      "op": "spawn",
+      "args": {
+        "species": 95,
+        "role": "wild",
+        "level": 5,
+        "x": 590,
+        "z": 393
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-onix",
+      "op": "bind",
+      "args": {
+        "subject": "onix"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "natural-south-charge",
+      "op": "step",
+      "args": {
+        "frames": 64,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "ram-ledge-continuity-v1",
+          "stage": "charge-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "right-dodge-admit",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "x",
+          "operator": "eq",
+          "value": 591,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "right-dodge-settle",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [],
+        "until": {
+          "kind": "player-settled-at",
+          "map": 33,
+          "x": 591,
+          "z": 395
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "ledge-and-resume",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "measurement-complete",
+          "measurement": "ram-ledge-continuity-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "ram-ledge-continuity-v1",
+      "when": "final"
+    }
+  ]
+}

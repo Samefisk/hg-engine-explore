@@ -17,6 +17,10 @@ __asm__(
     ".thumb_func\n.thumb_set OverworldMount_GetSurfaceId, 0x01FF9A70\n"
     ".global memset\n"
     ".thumb_func\n.thumb_set memset, 0x023DEEA2\n"
+    ".global __gnu_thumb1_case_uqi\n"
+    ".thumb_func\n.thumb_set __gnu_thumb1_case_uqi, 0x023DEE54\n"
+    ".global __gnu_thumb1_case_uhi\n"
+    ".thumb_func\n.thumb_set __gnu_thumb1_case_uhi, 0x023DEE78\n"
     ".global OverworldWalk_DeltaX\n"
     ".thumb_func\n.thumb_set OverworldWalk_DeltaX, 0x023BF59C\n"
     ".global OverworldWalk_DeltaY\n"
@@ -24,7 +28,6 @@ __asm__(
 
 extern u16 OverworldMount_GetSurfaceId(int targetX, int targetY);
 
-#define OVERWORLD_MOUNT_CHAIN_FORWARD_DISTANCE 2
 #define OVERWORLD_MOUNT_CUSTOM_MOTION_FREEZE_COMMAND 0x3E
 #define OVERWORLD_MOUNT_AVATAR_FLAG_FORCED_MOVEMENT (1u << 0)
 #define OVERWORLD_MOUNT_HOP_IN_PLACE_FRAMES 64
@@ -42,11 +45,15 @@ extern u16 OverworldMount_GetSurfaceId(int targetX, int targetY);
 #define OVERWORLD_MOUNT_ACTION_STATE_SECOND 2
 #define OVERWORLD_MOUNT_ACTION_STATE_THIRD 3
 
-typedef char OverworldMountConditionRequestOffsetMustRemain444[
-    offsetof(OverworldWildBehaviorConditionRuntime, request) == 0x444 ? 1 : -1];
-typedef char OverworldMountConditionActiveFollowerOffsetMustRemain7B8[
+typedef char OverworldMountActionContactMarkerLayoutMustStay24[
+    sizeof(OverworldMountActionCall) == 24
+        && offsetof(OverworldMountActionCall, action) == 5
+        ? 1 : -1];
+typedef char OverworldMountConditionRequestOffsetMustRemain5AC[
+    offsetof(OverworldWildBehaviorConditionRuntime, request) == 0x5AC ? 1 : -1];
+typedef char OverworldMountConditionActiveFollowerOffsetMustRemain938[
     offsetof(OverworldWildBehaviorConditionRuntime, activeApplicationMasks)
-            + OW_WILD_FOLLOWER_SLOT * sizeof(u32) == 0x7B8
+            + OW_WILD_FOLLOWER_SLOT * sizeof(u32) == 0x938
         ? 1
         : -1];
 
@@ -54,11 +61,18 @@ const BehaviorResolveRequest * __attribute__((naked, noinline,
     section(".overworld_mount_conditional_admission")))
 OverworldMount_ValidateConditionalAdmission(
     const OverworldWildBehaviorConditionRuntime *conditions,
-    const OverworldWildBehaviorContext *context)
+    const OverworldWildBehaviorContext *context,
+    u32 mountedMask)
 {
+    /* The caller derives this one-bit mask from the authenticated subject
+     * bank. This guard rejects a missing Mounted application before reading
+     * its retained request; the mask is never a global application bit. */
     __asm__(
         "cmp r0, #0\n"
         "beq 2f\n"
+        "cmp r2, #0\n"
+        "beq 3f\n"
+        "mov ip, r2\n"
         "ldr r2, 4f\n"
         "ldr r3, [r0, r2]\n"
         "cmp r3, #0\n"
@@ -69,8 +83,7 @@ OverworldMount_ValidateConditionalAdmission(
         "cmp r2, r3\n"
         "bne 3f\n"
         "ldr r2, [r0, #12]\n"
-        "mov r3, #128\n"
-        "lsl r3, r3, #20\n"
+        "mov r3, ip\n"
         "cmp r2, r3\n"
         "bne 3f\n"
         "ldr r2, [r0, #0]\n"
@@ -93,8 +106,8 @@ OverworldMount_ValidateConditionalAdmission(
         "mov r0, #1\n"
         "bx lr\n"
         ".align 2\n"
-        "4: .word 0x000007B8\n"
-        "5: .word 0x00000444\n");
+        "4: .word 0x00000938\n"
+        "5: .word 0x000005AC\n");
 }
 
 static BOOL OverworldMountAction_IsRetryDecision(u16 decision)
@@ -129,6 +142,7 @@ static BOOL OverworldMountAction_Reduce(
     reduceCall.operation = operation;
     reduceCall.direction = direction;
     reduceCall.distance = distance;
+    reduceCall.effect = distance;
     return OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY->policy
         ->reduceWalk(&reduceCall);
 }
@@ -221,6 +235,8 @@ static u8 OverworldMountAction_StartMotion(
     u8 facing;
     OverworldActorResult actorResult;
     OverworldFieldTerrainStreamResult streamResult;
+    BOOL advances;
+    BOOL forced = call->operation == OVERWORLD_MOUNT_ACTION_START_KNOCKBACK;
 
     if (state == NULL || avatar == NULL || state->fieldSystem == NULL
         || state->fieldSystem->playerAvatar != avatar || follower == NULL
@@ -232,7 +248,8 @@ static u8 OverworldMountAction_StartMotion(
         return OVERWORLD_MOUNT_ACTION_RETRY;
     }
     player = avatar->mapObject;
-    if (targetX != player->xCurr || targetY != player->yCurr) {
+    advances = targetX != player->xCurr || targetY != player->yCurr;
+    if (advances) {
         streamResult = OverworldMountAction_Stream(
             state, OVERWORLD_FIELD_TERRAIN_STREAM_QUERY_IDLE);
         if (streamResult != OVERWORLD_FIELD_TERRAIN_STREAM_IDLE) {
@@ -242,13 +259,10 @@ static u8 OverworldMountAction_StartMotion(
         }
     }
     targetBaseY = OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY->getGroundBaseY(
-        state->fieldSystem,
-        state->surfaceCatalog,
-        player,
-        targetX,
-        targetY);
+        state->fieldSystem, state->surfaceCatalog, player, targetX, targetY);
     facing = player->curFacing <= 3 ? player->curFacing : direction;
-    if (!OW_WILD_BEHAVIOR_WALK_PRESERVES_FACING(
+    if (!forced
+        && !OW_WILD_BEHAVIOR_WALK_PRESERVES_FACING(
             state->snapshot.profile.walkOptions)) {
         facing = targetX != player->xCurr
             ? 2 + (targetX > player->xCurr)
@@ -263,11 +277,13 @@ static u8 OverworldMountAction_StartMotion(
     intent.duration = duration;
     intent.arcHeightQ4 = arcHeightQ4;
     intent.visibilityPolicy = OVERWORLD_MOTION_VISIBILITY_VISIBLE;
-    intent.pathAdvancePolicy = targetX == player->xCurr
-            && targetY == player->yCurr
-        ? OVERWORLD_MOTION_PATH_ADVANCE_NONE
-        : OVERWORLD_MOTION_PATH_ADVANCE_PLAYER;
+    intent.pathAdvancePolicy = advances
+        ? OVERWORLD_MOTION_PATH_ADVANCE_PLAYER
+        : OVERWORLD_MOTION_PATH_ADVANCE_NONE;
     intent.commitPolicy = OVERWORLD_MOTION_COMMIT_NO_CHAIN;
+    if (forced) {
+        intent.flags = OVERWORLD_MOTION_FLAG_FORCED;
+    }
     candidate.targetX = (s16)targetX;
     candidate.targetY = (s16)targetY;
     candidate.targetBaseY = targetBaseY;
@@ -306,7 +322,7 @@ static u8 OverworldMountAction_StartMotion(
     state->motionTargetY = (s16)targetY;
     state->motionStartBaseY = (s32)player->posVec[1];
     state->motionTargetBaseY = targetBaseY;
-    if ((targetX != player->xCurr || targetY != player->yCurr)
+    if (advances
         && OverworldMountAction_Stream(state, OVERWORLD_FIELD_TERRAIN_STREAM_BEGIN)
             != OVERWORLD_FIELD_TERRAIN_STREAM_WAITING) {
         OverworldMountAction_Boundary(
@@ -317,8 +333,7 @@ static u8 OverworldMountAction_StartMotion(
     }
     memset(state->reservedPolicyState, 0,
         OVERWORLD_MOUNT_WALK_STEP_FLAGS_INDEX);
-    state->motionStreamPreparing = targetX != player->xCurr
-        || targetY != player->yCurr;
+    state->motionStreamPreparing = advances;
     state->snapshot.motionMode = OVERWORLD_MOUNT_MOTION_HOP;
     state->walkEndState = OVERWORLD_MOUNT_WALK_END_CHAIN_HOP;
     state->motionDirection = facing;
@@ -384,86 +399,46 @@ OverworldMountAction_WalkCorridor(OverworldMountActionCall *call)
 {
     OverworldMountRuntimeState *state = call->state;
     LocalMapObject *player;
-    u8 flags;
-    u8 distance;
-    u8 turnDirection = OVERWORLD_WALK_DIRECTION_NONE;
-    int x;
-    int y;
-    int dx;
-    int dy;
-    int nextX;
-    int nextY;
 
     if (state == NULL || call->avatar == NULL || call->avatar->mapObject == NULL
         || call->direction > 7) {
         return FALSE;
     }
+    if ((state->reservedPolicyState[OVERWORLD_MOUNT_WALK_STEP_FLAGS_INDEX]
+            & OVERWORLD_ACTOR_WALK_STEP_SKID) == 0) {
+        return TRUE;
+    }
+    /* Admit each clear skid tile. A later blocker cannot veto this step;
+     * the next attempt reports its own collision to the Crash reducer. */
     player = call->avatar->mapObject;
-    flags = state->reservedPolicyState[OVERWORLD_MOUNT_WALK_STEP_FLAGS_INDEX];
-    if ((flags & OVERWORLD_ACTOR_WALK_STEP_PLANNED_SKID_PATH) == 0) {
-        return TRUE;
+    return OverworldMountAction_IsWalkStepOpen(
+        state, player->xCurr, player->yCurr,
+        OverworldWalk_DeltaX(call->direction),
+        OverworldWalk_DeltaY(call->direction));
+}
+
+static OverworldMotionDecision __attribute__((noinline, optimize("Os")))
+OverworldMountAction_RequestHopPlan(OverworldActorHopPlanCall *hopPlan)
+{
+    OverworldActorMotionRequestCall request;
+    OverworldActorResult result;
+
+    request.version = OVERWORLD_ACTOR_MOTION_CALL_VERSION;
+    request.size = sizeof(request);
+    request.operation = OVERWORLD_ACTOR_MOTION_SERVICE_PLAN_HOP;
+    request.hopPlan = hopPlan;
+    result = OVERWORLD_ACTOR_SYSTEM_MOTION_ENTRY->request(&request);
+    if (result != OVERWORLD_ACTOR_RESULT_OK) {
+        return result == OVERWORLD_ACTOR_RESULT_RETRY
+            ? OVERWORLD_MOTION_DECISION_RETRY_WORLD_BUSY
+            : OVERWORLD_MOTION_DECISION_PROFILE;
     }
-    distance = state->reservedPolicyProfile[
-        OVERWORLD_MOUNT_WALK_SKID_PATH_TILES_INDEX];
-    if ((flags & (OVERWORLD_ACTOR_WALK_STEP_SKID
-                | OVERWORLD_ACTOR_WALK_STEP_STOP_SKID))
-            == OVERWORLD_ACTOR_WALK_STEP_SKID) {
-        turnDirection = state->reservedPolicyState[
-            OVERWORLD_MOUNT_WALK_FACING_DIRECTION_INDEX];
-    } else if ((flags & OVERWORLD_ACTOR_WALK_STEP_SKID) == 0) {
-        distance++;
-    }
-    if (distance == 0) {
-        return FALSE;
-    }
-    x = player->xCurr;
-    y = player->yCurr;
-    dx = OverworldWalk_DeltaX(call->direction);
-    dy = OverworldWalk_DeltaY(call->direction);
-    do {
-        nextX = x + dx;
-        nextY = y + dy;
-        if (!OverworldMountAction_IsWalkStepOpen(state, x, y, dx, dy)) {
-            /* The caller has admitted Walk. It may reach the tile before a
-             * two-tile Hop; the landing gate matches the actual Hop start.
-             * Never relax the skid path or its turn exit. */
-            if ((flags & (OVERWORLD_ACTOR_WALK_STEP_SKID
-                        | OVERWORLD_ACTOR_WALK_STEP_POST_SKID)) == 0
-                && state->reservedPolicyProfile[
-                    OVERWORLD_MOUNT_WALK_SKID_PATH_TILES_INDEX] == 1
-                && distance == 1
-                && call->direction <= 3
-                && state->snapshot.profile.hopMinDistance == 2
-                && state->snapshot.profile.hopMaxDistance == 2
-                && state->snapshot.profile.hopAllowVerticalObstacles == 1
-                && nextX >= 0 && nextY >= 0
-                && (IsMetatileBlockedAt(state->fieldSystem, nextX, nextY)
-                    || OverworldWildOccupancy_Query(
-                        state->fieldSystem, player, NULL, nextX, nextY, 0,
-                        OVERWORLD_WILD_OCCUPANCY_NONPLAYER))
-                && !IsMetatileBlockedAt(
-                    state->fieldSystem, nextX + dx, nextY + dy)
-                && OverworldMountAction_IsWalkCorridorTileOpen(
-                    state, nextX + dx, nextY + dy)) {
-                return TRUE;
-            }
-            return FALSE;
-        }
-        x = nextX;
-        y = nextY;
-    } while (--distance != 0);
-    if (turnDirection == OVERWORLD_WALK_DIRECTION_NONE) {
-        return TRUE;
-    }
-    dx = OverworldWalk_DeltaX(turnDirection);
-    dy = OverworldWalk_DeltaY(turnDirection);
-    return OverworldMountAction_IsWalkStepOpen(state, x, y, dx, dy);
+    return request.decision;
 }
 
 static u8 OverworldMountAction_PlanHopTrajectory(
     OverworldMountActionCall *call)
 {
-    OverworldActorMotionRequestCall request;
     OverworldActorHopPlanCall hopPlan;
 
     if (call->state == NULL || call->avatar == NULL
@@ -484,20 +459,16 @@ static u8 OverworldMountAction_PlanHopTrajectory(
     hopPlan.targetX = call->state->motionTargetX;
     hopPlan.targetY = call->state->motionTargetY;
     hopPlan.distance = call->action;
-    request.version = OVERWORLD_ACTOR_MOTION_CALL_VERSION;
-    request.size = sizeof(request);
-    request.operation = OVERWORLD_ACTOR_MOTION_SERVICE_PLAN_HOP;
-    request.hopPlan = &hopPlan;
-    if (OVERWORLD_ACTOR_SYSTEM_MOTION_ENTRY->request(&request)
-            != OVERWORLD_ACTOR_RESULT_OK
-        || request.decision != OVERWORLD_MOTION_DECISION_ACCEPTED) {
+    if (OverworldMountAction_RequestHopPlan(&hopPlan)
+            != OVERWORLD_MOTION_DECISION_ACCEPTED) {
         return FALSE;
     }
     *call->trajectory = hopPlan.trajectory;
     return TRUE;
 }
 
-static OverworldMotionDecision OverworldMountAction_PlanReposition(
+static OverworldMotionDecision __attribute__((noinline, optimize("Os")))
+OverworldMountAction_PlanReposition(
     OverworldMountRuntimeState *state,
     LocalMapObject *player,
     u8 action,
@@ -507,9 +478,8 @@ static OverworldMotionDecision OverworldMountAction_PlanReposition(
     u16 *duration,
     u8 *arcHeightQ4)
 {
-    OverworldActorMotionRequestCall request;
     OverworldActorHopPlanCall hopPlan;
-    OverworldActorResult result;
+    OverworldMotionDecision decision;
 
     hopPlan.operation = action
             == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_JUMPS
@@ -535,21 +505,12 @@ static OverworldMotionDecision OverworldMountAction_PlanReposition(
     hopPlan.targetX = (s16)targetX;
     hopPlan.targetY = (s16)targetY;
     hopPlan.distance = distance;
-    request.version = OVERWORLD_ACTOR_MOTION_CALL_VERSION;
-    request.size = sizeof(request);
-    request.operation = OVERWORLD_ACTOR_MOTION_SERVICE_PLAN_HOP;
-    request.hopPlan = &hopPlan;
-    result = OVERWORLD_ACTOR_SYSTEM_MOTION_ENTRY->request(&request);
-    if (result != OVERWORLD_ACTOR_RESULT_OK) {
-        return result == OVERWORLD_ACTOR_RESULT_RETRY
-            ? OVERWORLD_MOTION_DECISION_RETRY_WORLD_BUSY
-            : OVERWORLD_MOTION_DECISION_PROFILE;
-    }
-    if (request.decision == OVERWORLD_MOTION_DECISION_ACCEPTED) {
+    decision = OverworldMountAction_RequestHopPlan(&hopPlan);
+    if (decision == OVERWORLD_MOTION_DECISION_ACCEPTED) {
         *duration = hopPlan.trajectory & 0xFFFF;
         *arcHeightQ4 = hopPlan.trajectory >> 16;
     }
-    return request.decision;
+    return decision;
 }
 
 static BOOL OverworldMountAction_IsOccupied(
@@ -597,17 +558,24 @@ static u8 OverworldMountAction_RunReposition(
     OverworldWildBehaviorProfileData *lane = &state->snapshot.profile;
     LocalMapObject *player = call->avatar->mapObject;
     u8 *actionState = OverworldMountAction_State(state);
-    u32 remaining = lane->chainRepositionJumpCount;
+    u32 remaining = OW_WILD_BEHAVIOR_CHAIN_REPOSITION_JUMP_COUNT(
+        lane->chainRepositionJumpCount);
     u32 startIndex;
     u32 attempt;
     u32 directionIndex;
     u32 packedOffset;
     u32 distance;
+    u32 travelDistance;
+    u32 tile;
+    int dx;
+    int dy;
     int targetX;
     int targetY;
     u16 duration = 0;
     u8 arcHeightQ4 = 0;
     u8 startResult;
+    BOOL skid;
+    OverworldActorPolicyView gridPolicy;
     OverworldMotionDecision decision;
     BOOL retry = FALSE;
 
@@ -615,19 +583,20 @@ static u8 OverworldMountAction_RunReposition(
         remaining = (encodedRemaining - 1) & 0x0F;
     }
     if (remaining == 0) {
-        (void)OverworldMountAction_Reduce(state,
-            OVERWORLD_ACTOR_WALK_POLICY_CHAIN_REPOSITION_FINISH, 0, 0);
-        memset(actionState, 0, sizeof(state->reservedPriorFollowerPolicy));
-        return OVERWORLD_MOUNT_ACTION_FINAL;
+        goto finished;
     }
     startIndex = gf_rand();
     if ((encodedRemaining & OVERWORLD_MOUNT_CHAIN_PENDING) != 0) {
         startIndex = 0x56703412u
-            >> (actionState[OVERWORLD_MOUNT_ACTION_STATE_THIRD] << 2);
+            >> ((actionState[OVERWORLD_MOUNT_ACTION_STATE_THIRD] & 7) << 2);
     }
-    distance = (encodedRemaining & OVERWORLD_MOUNT_REPOSITION_FLAT_MASK)
-            == OVERWORLD_MOUNT_REPOSITION_SKID
-        ? lane->chainRepositionDistance : 1;
+    skid = (encodedRemaining & OVERWORLD_MOUNT_REPOSITION_FLAT_MASK)
+        == OVERWORLD_MOUNT_REPOSITION_SKID;
+    distance = skid ? lane->chainRepositionDistance : 1;
+    if (skid && !OverworldActorPolicy_Inspect(
+            OVERWORLD_ACTOR_SYSTEM_FOLLOWER_SLOT, &gridPolicy)) {
+        return OVERWORLD_MOUNT_ACTION_RETRY;
+    }
     for (attempt = 0; attempt < 8; attempt++) {
         directionIndex = (startIndex + attempt) & 7;
         if (((&lane->chainRepositionAllowCardinal)[directionIndex >> 2]
@@ -635,10 +604,30 @@ static u8 OverworldMountAction_RunReposition(
             continue;
         }
         packedOffset = 0xA8206491u >> (directionIndex << 2);
-        targetX = player->xCurr + ((packedOffset & 3) - 1) * distance;
-        targetY = player->yCurr
-            + (((packedOffset >> 2) & 3) - 1) * distance;
-        if (targetX < 0 || targetY < 0
+        dx = (packedOffset & 3) - 1;
+        dy = ((packedOffset >> 2) & 3) - 1;
+        travelDistance = distance;
+        targetX = player->xCurr;
+        targetY = player->yCurr;
+        if (skid) {
+            if ((u32)((gridPolicy.chainPauseAction & 3) + dx) > 2
+                || (u32)(((gridPolicy.chainPauseAction >> 2) & 3) + dy) > 2) {
+                continue;
+            }
+            for (tile = 0; tile < distance; tile++) {
+                if (!OverworldMountAction_IsWalkStepOpen(
+                        state, targetX, targetY, dx, dy)) {
+                    break;
+                }
+                targetX += dx;
+                targetY += dy;
+            }
+            travelDistance = tile;
+        } else {
+            targetX += dx;
+            targetY += dy;
+        }
+        if (!skid && (targetX < 0 || targetY < 0
             || !OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->validateHopLanding(
                 OVERWORLD_WILD_LANDING_VALUE_SERVICE_VERSION,
                 OW_WILD_FOLLOWER_SLOT,
@@ -647,7 +636,7 @@ static u8 OverworldMountAction_RunReposition(
                 targetX,
                 targetY,
                 targetX,
-                targetY)) {
+                targetY))) {
             if (targetX >= 0 && targetY >= 0
                 && OverworldMountAction_IsOccupied(
                     state, player, targetX, targetY)) {
@@ -655,18 +644,28 @@ static u8 OverworldMountAction_RunReposition(
             }
             continue;
         }
-        decision = OverworldMountAction_PlanReposition(
-            state,
-            player,
-            call->action,
-            (u8)distance,
-            targetX,
-            targetY,
-            &duration,
-            &arcHeightQ4);
+        for (;;) {
+            if (travelDistance == 0) {
+                duration = lane->chainRepositionSpeed != 0
+                    ? lane->chainRepositionSpeed : 1;
+                arcHeightQ4 = 0;
+                decision = OVERWORLD_MOTION_DECISION_ACCEPTED;
+                break;
+            }
+            decision = OverworldMountAction_PlanReposition(
+                state, player, call->action, (u8)travelDistance,
+                targetX, targetY, &duration, &arcHeightQ4);
+            if (!skid || (decision != OVERWORLD_MOTION_DECISION_BLOCKED
+                    && decision != OVERWORLD_MOTION_DECISION_TERRAIN)) {
+                break;
+            }
+            travelDistance--;
+            targetX -= dx;
+            targetY -= dy;
+        }
         if (decision != OVERWORLD_MOTION_DECISION_ACCEPTED) {
-            if (decision != OVERWORLD_MOTION_DECISION_BLOCKED
-                && decision != OVERWORLD_MOTION_DECISION_TERRAIN) {
+            if (skid || (decision != OVERWORLD_MOTION_DECISION_BLOCKED
+                && decision != OVERWORLD_MOTION_DECISION_TERRAIN)) {
                 retry = TRUE;
                 break;
             }
@@ -678,137 +677,54 @@ static u8 OverworldMountAction_RunReposition(
             (u8)directionIndex,
             targetX,
             targetY,
-            (u8)distance,
+            (u8)travelDistance,
             duration,
             arcHeightQ4);
         if (startResult == OVERWORLD_MOUNT_ACTION_STARTED) {
             encodedRemaining = (u8)(remaining
-                | (lane->chainRepositionDust << 4)
+                | (OW_WILD_BEHAVIOR_SKID_BOOLEAN(lane->chainRepositionDust) << 4)
                 | OVERWORLD_MOUNT_CHAIN_PENDING
                 | (encodedRemaining & OVERWORLD_MOUNT_REPOSITION_FLAT_MASK));
             if (!OverworldMountAction_Reduce(state,
                     OVERWORLD_ACTOR_WALK_POLICY_CHAIN_REPOSITION_ADVANCE,
-                    (u8)((packedOffset & 3) - 1
-                        + (((packedOffset >> 2) & 3) - 1) * 4),
+                    travelDistance != 0 ? (u8)(dx + dy * 4) : 0,
                     encodedRemaining)) {
                 OverworldMountAction_Boundary(
                     state,
                     OVERWORLD_ACTOR_BOUNDARY_CANCEL,
                     OVERWORLD_MOUNT_CANCEL_CONTEXT_LOST);
-                (void)OverworldMountAction_Reduce(state,
-                    OVERWORLD_ACTOR_WALK_POLICY_CHAIN_REPOSITION_FINISH,
-                    0, 0);
-                memset(actionState, 0,
-                    sizeof(state->reservedPriorFollowerPolicy));
-                return OVERWORLD_MOUNT_ACTION_FINAL;
+                retry = FALSE;
+                goto finished;
             }
             actionState[OVERWORLD_MOUNT_ACTION_STATE_ACTION] = call->action;
             actionState[OVERWORLD_MOUNT_ACTION_STATE_FIRST] = 0;
             actionState[OVERWORLD_MOUNT_ACTION_STATE_SECOND] = 0;
             actionState[OVERWORLD_MOUNT_ACTION_STATE_THIRD] =
-                (u8)directionIndex;
+                (u8)directionIndex
+                    | (skid && travelDistance != distance ? 0x80 : 0);
             return OVERWORLD_MOUNT_ACTION_STARTED;
         }
         if (startResult == OVERWORLD_MOUNT_ACTION_RETRY) {
             retry = TRUE;
             break;
         }
-        (void)OverworldMountAction_Reduce(state,
-            OVERWORLD_ACTOR_WALK_POLICY_CHAIN_REPOSITION_FINISH, 0, 0);
-        memset(actionState, 0, sizeof(state->reservedPriorFollowerPolicy));
-        return OVERWORLD_MOUNT_ACTION_FINAL;
+        retry = FALSE;
+        goto finished;
     }
     if ((encodedRemaining & OVERWORLD_MOUNT_CHAIN_PENDING) == 0 || !retry) {
-        (void)OverworldMountAction_Reduce(state,
-            OVERWORLD_ACTOR_WALK_POLICY_CHAIN_REPOSITION_FINISH, 0, 0);
-        memset(actionState, 0, sizeof(state->reservedPriorFollowerPolicy));
+        goto finished;
     }
-    return retry
-        ? OVERWORLD_MOUNT_ACTION_RETRY : OVERWORLD_MOUNT_ACTION_FINAL;
+    return OVERWORLD_MOUNT_ACTION_RETRY;
+finished:
+    (void)OverworldMountAction_Reduce(state,
+        OVERWORLD_ACTOR_WALK_POLICY_CHAIN_REPOSITION_FINISH, 0, 0);
+    state->reservedPriorFollowerPolicy = 0;
+    return retry ? OVERWORLD_MOUNT_ACTION_RETRY
+        : OVERWORLD_MOUNT_ACTION_FINAL;
 }
 
-static u8 OverworldMountAction_StartChain(OverworldMountActionCall *call)
-{
-    OverworldMountRuntimeState *state = call->state;
-    u8 *actionState;
-    u8 mode = 0;
-    u8 frames;
-    u8 direction;
-
-    if (state == NULL || call->avatar == NULL
-        || call->avatar->mapObject == NULL || call->policy == NULL
-        || !call->policy->actorActive
-        || call->avatar->state != PLAYER_STATE_WALKING
-        || (call->avatar->unk0 & OVERWORLD_MOUNT_AVATAR_FLAG_FORCED_MOVEMENT)
-            != 0
-        || state->motionCooldown != 0
-        || (call->policy->motionPhase != OVERWORLD_MOTION_PHASE_IDLE
-            && call->policy->motionPhase != OVERWORLD_MOTION_PHASE_CANCELED)) {
-        return OVERWORLD_MOUNT_ACTION_RETRY;
-    }
-    actionState = OverworldMountAction_State(state);
-    if (actionState[OVERWORLD_MOUNT_ACTION_STATE_ACTION] != 0) {
-        return OVERWORLD_MOUNT_ACTION_RETRY;
-    }
-    direction = call->avatar->mapObject->curFacing <= 3
-        ? call->avatar->mapObject->curFacing : 1;
-    if (call->action == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE) {
-        u8 result = OverworldMountAction_StartMotion(
-            call,
-            OVERWORLD_MOTION_KIND_HOP,
-            direction,
-            call->avatar->mapObject->xCurr,
-            call->avatar->mapObject->yCurr,
-            0,
-            OVERWORLD_MOUNT_HOP_IN_PLACE_FRAMES,
-            OVERWORLD_MOUNT_HOP_IN_PLACE_ARC_Q4);
-
-        if (result == OVERWORLD_MOUNT_ACTION_STARTED) {
-            actionState[OVERWORLD_MOUNT_ACTION_STATE_ACTION] = call->action;
-            PlaySE(SEQ_SE_GS_UFO_JUMP);
-        }
-        return result;
-    }
-    if (call->action == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND) {
-        frames = call->policy->chainPauseTicks < 2
-            ? 3 : call->policy->chainPauseTicks > 127
-                ? 255 : call->policy->chainPauseTicks * 2;
-        actionState[OVERWORLD_MOUNT_ACTION_STATE_ACTION] = call->action;
-        actionState[OVERWORLD_MOUNT_ACTION_STATE_FIRST] = frames;
-        actionState[OVERWORLD_MOUNT_ACTION_STATE_SECOND] = frames;
-        actionState[OVERWORLD_MOUNT_ACTION_STATE_THIRD] =
-            OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY->policy
-                ->buildLookPlan(direction);
-        direction = (u8)OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY->policy
-            ->resolveLook(
-                actionState[OVERWORLD_MOUNT_ACTION_STATE_THIRD],
-                OVERWORLD_ACTOR_LOOK_FIRST,
-                0,
-                0);
-        OverworldMountAction_SetFacing(state, direction);
-        return OVERWORLD_MOUNT_ACTION_STARTED;
-    }
-    if (call->action == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_STEPS) {
-        mode = OVERWORLD_MOUNT_REPOSITION_STEP;
-    } else if (call->action
-        == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_SKIDS) {
-        mode = OVERWORLD_MOUNT_REPOSITION_SKID;
-    } else if (call->action
-        != OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_JUMPS) {
-        return OVERWORLD_MOUNT_ACTION_FINAL;
-    }
-    if (!OverworldMountAction_Reduce(state,
-            OVERWORLD_ACTOR_WALK_POLICY_CHAIN_REPOSITION_BEGIN,
-            OVERWORLD_MOUNT_REPOSITION_GRID_CENTER,
-            mode)) {
-        return OVERWORLD_MOUNT_ACTION_RETRY;
-    }
-    memset(actionState, 0, sizeof(state->reservedPriorFollowerPolicy));
-    actionState[OVERWORLD_MOUNT_ACTION_STATE_ACTION] = call->action;
-    return OverworldMountAction_RunReposition(call, mode);
-}
-
-static u8 OverworldMountAction_TickChain(OverworldMountActionCall *call)
+static u8 __attribute__((noinline, optimize("Os")))
+OverworldMountAction_RunChain(OverworldMountActionCall *call)
 {
     OverworldMountRuntimeState *state = call->state;
     OverworldActorPolicyView policy;
@@ -816,9 +732,89 @@ static u8 OverworldMountAction_TickChain(OverworldMountActionCall *call)
     u8 *actionState;
     u8 action;
     u8 direction;
+    u8 mode = 0;
+    u32 frames;
+    u32 remaining;
+    u8 result;
+    int targetX;
+    int targetY;
     u16 appliedThrough;
     u16 priorAppliedThrough;
+    BOOL first = call->operation == OVERWORLD_MOUNT_ACTION_START_CHAIN;
 
+    if (first) {
+        if (state == NULL || call->avatar == NULL
+            || call->avatar->mapObject == NULL || call->policy == NULL
+            || !call->policy->actorActive
+            || call->avatar->state != PLAYER_STATE_WALKING
+            || (call->avatar->unk0 & OVERWORLD_MOUNT_AVATAR_FLAG_FORCED_MOVEMENT)
+                != 0
+            || state->motionCooldown != 0
+            || (call->policy->motionPhase != OVERWORLD_MOTION_PHASE_IDLE
+                && call->policy->motionPhase != OVERWORLD_MOTION_PHASE_CANCELED)) {
+            return OVERWORLD_MOUNT_ACTION_RETRY;
+        }
+        actionState = OverworldMountAction_State(state);
+        if (actionState[OVERWORLD_MOUNT_ACTION_STATE_ACTION] != 0) {
+            return OVERWORLD_MOUNT_ACTION_RETRY;
+        }
+        direction = call->avatar->mapObject->curFacing <= 3
+            ? call->avatar->mapObject->curFacing : 1;
+        if (call->action == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE) {
+            targetX = call->avatar->mapObject->xCurr;
+            targetY = call->avatar->mapObject->yCurr;
+            remaining = call->policy->chainPauseTicks != 0
+                ? call->policy->chainPauseTicks - 1 : 0;
+            goto hop;
+        }
+        if (call->action == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND) {
+            frames = call->policy->chainPauseTicks;
+#if defined(__arm__)
+            __asm__(".syntax unified\ncmp %0,#1\nbhi 1f\nmovs %0,#3\nb 2f\n"
+                "1:\nlsls %0,#1\ncmp %0,#255\nbls 2f\nmovs %0,#255\n2:\n.syntax divided\n"
+                : "+l"(frames) : : "cc");
+#else
+            frames *= 2;
+            if (frames < 3) {
+                frames = 3;
+            } else if (frames > 255) {
+                frames = 255;
+            }
+#endif
+            actionState[OVERWORLD_MOUNT_ACTION_STATE_ACTION] = call->action;
+            actionState[OVERWORLD_MOUNT_ACTION_STATE_FIRST] = frames;
+            actionState[OVERWORLD_MOUNT_ACTION_STATE_SECOND] = frames;
+            actionState[OVERWORLD_MOUNT_ACTION_STATE_THIRD] =
+                OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY->policy
+                    ->buildLookPlan(direction);
+            direction = (u8)OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY->policy
+                ->resolveLook(
+                    actionState[OVERWORLD_MOUNT_ACTION_STATE_THIRD],
+                    OVERWORLD_ACTOR_LOOK_FIRST,
+                    0,
+                    0);
+            OverworldMountAction_SetFacing(state, direction);
+            return OVERWORLD_MOUNT_ACTION_STARTED;
+        }
+        if (call->action == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_STEPS) {
+            mode = OVERWORLD_MOUNT_REPOSITION_STEP;
+        } else if (call->action
+            == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_SKIDS) {
+            mode = OVERWORLD_MOUNT_REPOSITION_SKID;
+        } else if (call->action
+            != OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_JUMPS) {
+            return OVERWORLD_MOUNT_ACTION_FINAL;
+        }
+        if (!OverworldMountAction_Reduce(state,
+                OVERWORLD_ACTOR_WALK_POLICY_CHAIN_REPOSITION_BEGIN,
+                OVERWORLD_MOUNT_REPOSITION_GRID_CENTER,
+                mode)) {
+            return OVERWORLD_MOUNT_ACTION_RETRY;
+        }
+        state->reservedPriorFollowerPolicy = 0;
+        actionState[OVERWORLD_MOUNT_ACTION_STATE_ACTION] = call->action;
+        return OverworldMountAction_RunReposition(call, mode);
+    }
     if (state == NULL) {
         return OVERWORLD_MOUNT_ACTION_FINAL;
     }
@@ -851,38 +847,26 @@ static u8 OverworldMountAction_TickChain(OverworldMountActionCall *call)
         if (actionState[OVERWORLD_MOUNT_ACTION_STATE_FIRST] != 0) {
             actionState[OVERWORLD_MOUNT_ACTION_STATE_FIRST]--;
         }
-        direction = (u8)OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY->policy
-            ->resolveLook(
-                actionState[OVERWORLD_MOUNT_ACTION_STATE_THIRD],
-                OVERWORLD_ACTOR_LOOK_RETURN,
-                actionState[OVERWORLD_MOUNT_ACTION_STATE_SECOND],
-                actionState[OVERWORLD_MOUNT_ACTION_STATE_FIRST]);
-        if ((s8)direction < 0) {
-            direction = (u8)OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY
-                ->policy->resolveLook(
-                    actionState[OVERWORLD_MOUNT_ACTION_STATE_THIRD],
-                    OVERWORLD_ACTOR_LOOK_SECOND,
+        mode = OVERWORLD_ACTOR_LOOK_RETURN;
+        do {
+            direction = (u8)OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY->policy
+                ->resolveLook(
+                    actionState[OVERWORLD_MOUNT_ACTION_STATE_THIRD], mode,
                     actionState[OVERWORLD_MOUNT_ACTION_STATE_SECOND],
                     actionState[OVERWORLD_MOUNT_ACTION_STATE_FIRST]);
-        }
-        if ((s8)direction < 0) {
-            direction = (u8)OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY
-                ->policy->resolveLook(
-                    actionState[OVERWORLD_MOUNT_ACTION_STATE_THIRD],
-                    OVERWORLD_ACTOR_LOOK_FIRST,
-                    0,
-                    0);
-        }
+            if ((s8)direction >= 0) {
+                break;
+            }
+        } while (mode-- != OVERWORLD_ACTOR_LOOK_FIRST);
         OverworldMountAction_SetFacing(state, direction);
         if (actionState[OVERWORLD_MOUNT_ACTION_STATE_FIRST] == 0) {
-            memset(actionState, 0,
-                sizeof(state->reservedPriorFollowerPolicy));
+            state->reservedPriorFollowerPolicy = 0;
             return OVERWORLD_MOUNT_ACTION_FINAL;
         }
         return OVERWORLD_MOUNT_ACTION_STARTED;
     }
     if (action == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_SKIDS
-        && state->snapshot.profile.chainRepositionDust) {
+        && OW_WILD_BEHAVIOR_SKID_BOOLEAN(state->snapshot.profile.chainRepositionDust)) {
         appliedThrough = state->reservedPolicyState[
                 OVERWORLD_MOUNT_BOUNDARY_APPLIED_LO_INDEX]
             | ((u16)state->reservedPolicyState[
@@ -904,13 +888,50 @@ static u8 OverworldMountAction_TickChain(OverworldMountActionCall *call)
             && policy.motionPhase != OVERWORLD_MOTION_PHASE_CANCELED)) {
         return OVERWORLD_MOUNT_ACTION_STARTED;
     }
-    if (action == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE) {
-        memset(actionState, 0, sizeof(state->reservedPriorFollowerPolicy));
+    if (action == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_SKIDS
+        && (actionState[OVERWORLD_MOUNT_ACTION_STATE_THIRD] & 0x80) != 0) {
+        (void)OverworldMountAction_Reduce(state,
+            OVERWORLD_ACTOR_WALK_POLICY_PUBLISH_EFFECT, 0,
+            OVERWORLD_ACTOR_WORLD_EFFECT_CRASH);
+        PlaySE(SEQ_SE_DP_WALL_HIT);
+        (void)OverworldMountAction_Reduce(state,
+            OVERWORLD_ACTOR_WALK_POLICY_CHAIN_REPOSITION_FINISH, 0, 0);
+        state->reservedPriorFollowerPolicy = 0;
         return OVERWORLD_MOUNT_ACTION_FINAL;
+    }
+    if (action == OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE) {
+        if (actionState[OVERWORLD_MOUNT_ACTION_STATE_FIRST] != 0
+            && policy.motionPhase == OVERWORLD_MOTION_PHASE_IDLE) {
+            direction = actionState[OVERWORLD_MOUNT_ACTION_STATE_SECOND];
+            targetX = state->motionTargetX;
+            targetY = state->motionTargetY;
+            remaining = actionState[OVERWORLD_MOUNT_ACTION_STATE_FIRST] - 1;
+            goto hop;
+        }
+        goto hopFinished;
     }
     call->action = action;
     return OverworldMountAction_RunReposition(
         call, policy.chainStepsRemaining);
+
+hop:
+    result = OverworldMountAction_StartMotion(
+        call, OVERWORLD_MOTION_KIND_HOP, direction, targetX, targetY, 0,
+        OVERWORLD_MOUNT_HOP_IN_PLACE_FRAMES,
+        OVERWORLD_MOUNT_HOP_IN_PLACE_ARC_Q4);
+    if (result == OVERWORLD_MOUNT_ACTION_STARTED) {
+        actionState[OVERWORLD_MOUNT_ACTION_STATE_ACTION] =
+            OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE;
+        actionState[OVERWORLD_MOUNT_ACTION_STATE_FIRST] = remaining;
+        actionState[OVERWORLD_MOUNT_ACTION_STATE_SECOND] = direction;
+        PlaySE(SEQ_SE_GS_UFO_JUMP);
+    } else if (!first && result != OVERWORLD_MOUNT_ACTION_RETRY) {
+        goto hopFinished;
+    }
+    return result;
+hopFinished:
+    state->reservedPriorFollowerPolicy = 0;
+    return OVERWORLD_MOUNT_ACTION_FINAL;
 }
 
 static u8 OverworldMountAction_CancelChain(OverworldMountActionCall *call)
@@ -935,9 +956,32 @@ static u8 OverworldMountAction_CancelChain(OverworldMountActionCall *call)
         (void)OverworldMountAction_Reduce(call->state,
             OVERWORLD_ACTOR_WALK_POLICY_CHAIN_REPOSITION_FINISH, 0, 0);
     }
-    memset(actionState, 0, sizeof(call->state->reservedPriorFollowerPolicy));
+    call->state->reservedPriorFollowerPolicy = 0;
     return OVERWORLD_MOUNT_ACTION_STARTED;
 }
+
+static u8 OverworldMountAction_StartKnockback(OverworldMountActionCall *call)
+{
+    const OverworldMotionPlan *plan =
+        (const OverworldMotionPlan *)call->trajectory;
+    OverworldMountRuntimeState *state = call->state;
+
+    if (state == NULL || plan == NULL) {
+        return OVERWORLD_MOUNT_ACTION_FINAL;
+    }
+    /* The resident planner validates the plan and waits for mounted END.
+     * StartMotion validates the live avatar, owner and idle motion shell. */
+    (void)OverworldMountAction_CancelChain(call);
+    return OverworldMountAction_StartMotion(call,
+        OVERWORLD_MOTION_KIND_HOP, plan->direction,
+        plan->targetX, plan->targetY, plan->distance,
+        plan->duration, plan->arcHeightQ4);
+}
+
+/* End states run 0..CHAIN_HOP, so state / CHAIN_HOP is 1 only for CHAIN_HOP. */
+_Static_assert(OVERWORLD_MOUNT_WALK_END_STOP < OVERWORLD_MOUNT_WALK_END_CHAIN_HOP
+    && OVERWORLD_MOUNT_WALK_END_CHAIN_HOP == 4,
+    "only the chain-hop end state may admit a water landing");
 
 static u8 OverworldMountAction_ChainForwardTarget(
     OverworldMountActionCall *call)
@@ -946,22 +990,33 @@ static u8 OverworldMountAction_ChainForwardTarget(
     int targetX;
     int targetY;
 
-    if (state == NULL || state->fieldSystem == NULL || call->direction > 7) {
+    /* The only caller passes the static mount state, never NULL. */
+    if (state->fieldSystem == NULL || call->direction > 7) {
         return FALSE;
     }
+    /* The caller passes the exact Hop, ledge Hop or B Jump distance. */
     targetX = state->motionStartX
-        + OverworldWalkDirectionPolicy_DeltaX(call->direction)
-            * OVERWORLD_MOUNT_CHAIN_FORWARD_DISTANCE;
+        + OverworldWalkDirectionPolicy_DeltaX(call->direction) * call->action;
     targetY = state->motionStartY
-        + OverworldWalkDirectionPolicy_DeltaY(call->direction)
-            * OVERWORLD_MOUNT_CHAIN_FORWARD_DISTANCE;
-    if (targetX < 0 || targetY < 0
-        || !OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->validateHopLanding(
+        + OverworldWalkDirectionPolicy_DeltaY(call->direction) * call->action;
+    /* The landing classifier rejects a negative coordinate itself. */
+    if (!OVERWORLD_WILD_SPAWNS_OVERLAY_ENTRY->validateHopLanding(
             OVERWORLD_WILD_LANDING_VALUE_SERVICE_VERSION,
             OW_WILD_FOLLOWER_SLOT,
             state->fieldSystem,
+            /* The marker also selects one-tile Walk edges, which a cardinal
+             * ledge Hop can never pass. Only a diagonal (4-7) Hop needs its
+             * strict side tiles; this sets 0x8000 for exactly those. A
+             * ledge Hop or B Jump (end state CHAIN_HOP, 4) may land in
+             * water: a non-water-runner splashes and is returned to its
+             * takeoff tile by the mount tick. A Hop walking-style step
+             * keeps the lane terrain. */
             state->snapshot.profile.chillAllowedTerrainMask
-                | OVERWORLD_MOUNT_ACTION_STRICT_DIAGONAL_MARKER,
+                | (u32)state->walkEndState
+                    / OVERWORLD_MOUNT_WALK_END_CHAIN_HOP
+                    * OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER
+                | ((call->direction & 4)
+                    * (OVERWORLD_MOUNT_ACTION_STRICT_DIAGONAL_MARKER / 4)),
             targetX,
             targetY,
             targetX,
@@ -982,20 +1037,26 @@ OverworldMountActionAdapter_Dispatch(OverworldMountActionCall *call)
         return FALSE;
     }
     call->result = FALSE;
-    if (call->operation == OVERWORLD_MOUNT_ACTION_WALK_CORRIDOR) {
+    switch (call->operation) {
+    case OVERWORLD_MOUNT_ACTION_WALK_CORRIDOR:
         call->result = OverworldMountAction_WalkCorridor(call);
-    } else if (call->operation == OVERWORLD_MOUNT_ACTION_START_CHAIN) {
-        call->result = OverworldMountAction_StartChain(call);
-    } else if (call->operation == OVERWORLD_MOUNT_ACTION_TICK_CHAIN) {
-        call->result = OverworldMountAction_TickChain(call);
-    } else if (call->operation == OVERWORLD_MOUNT_ACTION_CANCEL_CHAIN) {
+        break;
+    case OVERWORLD_MOUNT_ACTION_START_CHAIN:
+    case OVERWORLD_MOUNT_ACTION_TICK_CHAIN:
+        call->result = OverworldMountAction_RunChain(call);
+        break;
+    case OVERWORLD_MOUNT_ACTION_CANCEL_CHAIN:
         call->result = OverworldMountAction_CancelChain(call);
-    } else if (call->operation
-        == OVERWORLD_MOUNT_ACTION_CHAIN_FORWARD_TARGET) {
+        break;
+    case OVERWORLD_MOUNT_ACTION_CHAIN_FORWARD_TARGET:
         call->result = OverworldMountAction_ChainForwardTarget(call);
-    } else if (call->operation
-        == OVERWORLD_MOUNT_ACTION_PLAN_HOP_TRAJECTORY) {
+        break;
+    case OVERWORLD_MOUNT_ACTION_PLAN_HOP_TRAJECTORY:
         call->result = OverworldMountAction_PlanHopTrajectory(call);
+        break;
+    case OVERWORLD_MOUNT_ACTION_START_KNOCKBACK:
+        call->result = OverworldMountAction_StartKnockback(call);
+        break;
     }
     return call->result;
 }

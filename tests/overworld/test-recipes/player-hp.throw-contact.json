@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.throw-contact",
+  "title": "Wild Geodude throws Weepinbell across the stationary player",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "documentation/overworld-system/player-hp-implementation-plan.md",
+  "requirements": ["current.player-health-throw-contact"],
+  "budgets": {"maxSeconds": 240, "maxFrames": 900, "noProgressFrames": 400, "minObservedFrames": 65},
+  "subjects": [
+    {"id": "weepinbell", "species": 70, "role": "WILD", "acquire": "spawn"},
+    {"id": "geodude", "species": 74, "role": "WILD", "acquire": "spawn"}
+  ],
+  "measurements": [{"kind": "player-health-throw-contact-v1", "subjects": ["weepinbell", "geodude"]}],
+  "setup": [
+    {"id": "throw-tile", "op": "teleport", "args": {"map": 33, "x": 585, "z": 407, "facing": 1},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "spawn-weepinbell", "op": "spawn", "args": {"species": 70, "role": "wild", "level": 5, "x": 585, "z": 400},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "bind-weepinbell", "op": "bind", "args": {"subject": "weepinbell"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "spawn-geodude", "op": "spawn", "args": {"species": 74, "role": "wild", "level": 5, "x": 585, "z": 402},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "bind-geodude", "op": "bind", "args": {"subject": "geodude"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "before-throw", "op": "player-health.observe", "args": {},
+      "budget": {"maxSeconds": 20, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "launch-natural-throw", "op": "step", "args": {"frames": 240, "keys": [],
+      "until": {"kind": "measurement-stage", "measurement": "player-health-throw-contact-v1", "stage": "launched"}},
+      "budget": {"maxSeconds": 100, "maxFrames": 240, "noProgressFrames": 240}},
+    {"id": "at-launch", "op": "player-health.observe", "args": {},
+      "budget": {"maxSeconds": 20, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "cross-player", "op": "step", "args": {"frames": 64, "keys": []},
+      "budget": {"maxSeconds": 40, "maxFrames": 64, "noProgressFrames": 64}},
+    {"id": "after-contact", "op": "player-health.observe", "args": {},
+      "budget": {"maxSeconds": 20, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "assertions": [{"kind": "measurement-complete", "measurement": "player-health-throw-contact-v1", "when": "final"}]
+}

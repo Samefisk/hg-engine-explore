@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.stantler-turn-skid-blocked-first",
+  "title": "Mounted Stantler crashes when the first skid tile is blocked",
+  "status": "active",
+  "capabilities": [
+    "walk.skid",
+    "mount.presentation"
+  ],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld_walk_frame_timing_spec.md",
+    "actor": "One current mounted Stantler (species 234, party slot 0) on map 33",
+    "trigger": "From map 33 (584,406), hold Right until the current mounted Stantler first targets (589,406) in a completed frame (at most 32 frames). Then hold Down for 18 frames. The pending Right Walk must commit before the due skid request.",
+    "observable": "The first east skid tile (590,406) is blocked. No skid motion starts or commits. Crash occurs and rider and Stantler remain at (589,406) with idle control.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Copy test.nds and test.sav. Teleport to map 33 (584,406), prepare party slot 0 level-10 Stantler, mount, settle 16 neutral frames, and bind its live actor. Do not edit profile, policy, motion, facing, input, or terrain during observation."
+      }
+    ],
+    "limits": [
+      "Prepared placement does not prove natural travel or acquisition. Right and Down use normal keys and unchanged Sprint timing.",
+      "This case measures a blocked first skid tile with zero skid motion. It does not prove every terrain obstacle.",
+      "Registration alone is not runtime acceptance; the checked test must pass on the current ROM."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "stantler",
+      "species": 234,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Prepare and bind one mounted Stantler at map 33 (584,406)."
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Hold Right until the current Stantler first targets (589,406), within 32 completed frames; leave that Walk in flight."
+    },
+    {
+      "at": 2,
+      "kind": "input",
+      "value": "Hold Down for 18 completed frames through the blocked first-skid Crash."
+    }
+  ],
+  "stop": {
+    "frameBudget": 240,
+    "condition": "Zero skid commits, blocked first-tile Crash, and idle control at (589,406)."
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED",
+      "WORLD_EFFECT"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED",
+      "CONTEXT_CHANGED",
+      "ACTOR_REBOUND",
+      "CONTROL_REBOUND"
+    ],
+    "invariants": [
+      "The bound mounted Stantler and rider stay at or before the last clear tile (589,406) in every completed frame.",
+      "No skid motion starts toward blocked (590,406).",
+      "Only clear skid tiles commit before Crash.",
+      "No logical commit follows motion cancellation.",
+      "Control returns with idle mounted input ownership at (589,406)."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "mount.stantler-turn-skid-blocked-first",
+    "claims": [
+      "natural-input",
+      "live-actor-identity",
+      "collision-decision",
+      "logical-commit",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumFrames": 37
+  }
+}

@@ -308,6 +308,20 @@ class ServiceTests(unittest.TestCase):
         self.assertIn(("record.start", {"maxFrames": 7000}), self.service.worker.calls)
         self.assertEqual(self.service.recording.max_frames, 1800)
 
+    def test_manual_throw_recording_passes_opt_in_to_worker(self):
+        self.start()
+        result = self.command("record.start", {"maxFrames": 120, "throwInteractions": True,
+                                               "appearancePalette": True})
+        self.assertTrue(result["ok"], result)
+        self.assertIn(("record.start", {"maxFrames": 120, "throwInteractions": True,
+                                         "appearancePalette": True}),
+                      self.service.worker.calls)
+        self.command("record.stop")
+        for option in ("throwInteractions", "appearancePalette"):
+            for value in (1, "true", {}, None):
+                with self.subTest(option=option, value=value), self.assertRaises(ValueError):
+                    validate_command("record.start", {option: value})
+
     def test_failed_trace_arm_does_not_claim_recording(self):
         self.start()
         self.service.worker.fail = DevtoolsError("trace-busy", "native trace is already armed")
@@ -704,11 +718,11 @@ class PrivateCopyTests(unittest.TestCase):
 class ContractTests(unittest.TestCase):
     def test_map_and_move_help_matches_existing_native_bounds(self):
         operations = command_help()["operations"]
-        self.assertEqual(operations["teleport"]["map"]["maximum"], 539)
+        self.assertEqual(operations["teleport"]["map"]["maximum"], 599)
         self.assertEqual(operations["party"]["moves"]["itemMaximum"], 922)
-        self.assertEqual(validate_command("teleport", {"map": 539, "x": 0, "z": 0})["map"], 539)
+        self.assertEqual(validate_command("teleport", {"map": 599, "x": 0, "z": 0})["map"], 599)
         self.assertEqual(validate_command("party", {"slot": 0, "moves": [0, 1, 921, 922]})["moves"], [0, 1, 921, 922])
-        for op, args in (("teleport", {"map": 540, "x": 0, "z": 0}),
+        for op, args in (("teleport", {"map": 600, "x": 0, "z": 0}),
                          ("party", {"slot": 0, "moves": [0, 1, 2, 923]})):
             with self.assertRaises(ValueError):
                 validate_command(op, args)
@@ -718,7 +732,7 @@ class ContractTests(unittest.TestCase):
                  if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
                  and node.func.id == "integer" and len(node.args) == 4
                  and isinstance(node.args[1], ast.Constant)]
-        for label, maximum in (("mapId", 539), ("move", 922)):
+        for label, maximum in (("mapId", 599), ("move", 922)):
             bounds = [(ast.literal_eval(n.args[2]), ast.literal_eval(n.args[3]))
                       for n in calls if n.args[1].value == label]
             self.assertEqual(bounds, [(0, maximum)])

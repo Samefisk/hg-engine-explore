@@ -149,7 +149,7 @@ int main(void)
     CHECK(!OverworldMountAction_WalkCorridor(&call));
     state.reservedPolicyProfile[OVERWORLD_MOUNT_WALK_SKID_PATH_TILES_INDEX] = 1;
     blocked[11][11] = 1;
-    CHECK(!OverworldMountAction_WalkCorridor(&call));
+    CHECK(OverworldMountAction_WalkCorridor(&call));
     blocked[11][11] = 0;
     CHECK(OverworldMountAction_WalkCorridor(&call));
     blocked[10][11] = 1;

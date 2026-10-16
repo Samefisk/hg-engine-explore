@@ -18,7 +18,11 @@ Preserve uncertainty. Do not invent steps, expected behavior, area, urgency, or 
 
 ## Work from the queue
 
-When the user asks to fix bugs or complete tasks, read `TICKETS.md` and select the requested entries. If no IDs are given, use all non-`done` tickets of the requested type. Resume `in-progress` work. Recheck whether a `blocked` ticket's blocker still applies. Follow all normal repository implementation and proof rules.
+When the user asks to fix bugs or complete tasks, start with `python3 scripts/ticket.py list`. It shows unfinished tickets and their latest notes. Use `--type bug` or `--type task` when the request selects one type; use `--status` for a named state or `--all` to include done tickets. Use `--limit` when the result reports omitted tickets. Both read commands support `--json`.
+
+Read a selected ticket with `python3 scripts/ticket.py show <ID>` before work. It shows the report, acceptance checks and latest note. Shortened fields and omitted checks are marked. Use `python3 scripts/ticket.py show <ID> --full` when they matter; it prints only that ticket's stored block unchanged. `--full` and `--json` cannot be used together. These views do not infer a next action or inspect screenshot files. For an explicit full-queue audit, read all of `TICKETS.md` and run `python3 scripts/ticket.py validate` to check structure and screenshot links.
+
+If no IDs are given, select all non-`done` tickets of the requested type. Resume `in-progress` work. Recheck whether a `blocked` ticket's blocker still applies. Follow all normal repository implementation and proof rules.
 
 - Set a ticket to `in-progress` when work starts.
 - Set it to `blocked` only for a concrete blocker. Add the blocker as a note.

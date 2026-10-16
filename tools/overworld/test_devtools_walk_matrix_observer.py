@@ -222,10 +222,26 @@ class WalkMatrixTests(unittest.TestCase):
                 code+=f'_Static_assert(__builtin_offsetof({owner},{name})=={offset},"{owner}.{name}");\n'
         code+=f'_Static_assert(OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS=={ACTOR_CAPACITY},"actor count");\n'
         code+='_Static_assert(OVERWORLD_MOTION_PHASE_MOVING==2 && OVERWORLD_MOTION_KIND_WALK==1,"qualification");\n'
+        code+='_Static_assert(OVERWORLD_MOTION_KIND_FLY_IN==6,"Fly In kind");\n'
         code+='u16 (*typed_tick)(OverworldMotionState *,u16,OverworldMotionSample *)=&OverworldMotion_Tick;\n'
         result=subprocess.run(['clang','-target','armv5te-none-eabi','-fsyntax-only','-Wno-unknown-attributes',
             '-Wno-gnu-folding-constant','-I',str(root),'-x','c','-'],input=code,text=True,capture_output=True,timeout=20)
         self.assertEqual(result.returncode,0,result.stderr)
+        descriptor = json.loads((root / 'build/overworld-system.debug.json').read_text())
+        self.assertEqual(descriptor['enums']['OverworldMotionKind']['OVERWORLD_MOTION_KIND_FLY_IN'], 6)
+        # This shared decoder also observes wild spawn Fly In during boot.
+        # It must retain kind6 while rejecting unknown enums on the same read.
+        raw = bytearray(motion(duration=16))
+        raw[2] = 6
+        decoded = decode_motion(bytes(raw))
+        self.assertEqual(decoded['plan']['kind'], 6)
+        self.assertEqual(decoded['phase'], 'MOVING')
+        self.assertEqual(decoded['rawHex'], bytes(raw).hex())
+        for offset, value in ((2, 7), (48, 7), (49, 7), (50, 2)):
+            bad = bytearray(raw)
+            bad[offset] = value
+            with self.subTest(offset=offset, value=value), self.assertRaisesRegex(ValueError, 'motion state enum is invalid'):
+                decode_motion(bytes(bad))
 
 
 if __name__=='__main__':unittest.main()

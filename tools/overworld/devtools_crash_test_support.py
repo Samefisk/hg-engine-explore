@@ -68,7 +68,7 @@ def feed_configuration(meter, receipt, snapshot, subject):
     if not isinstance(before, dict) or not isinstance(after, dict):
         raise ValueError("Crash fixed lane fixture lacks native states")
     raw, actual = bytes.fromhex(before["mountStateHex"]), bytes.fromhex(after["mountStateHex"])
-    if len(raw) != 184 or len(actual) != 184:
+    if len(raw) != 192 or len(actual) != 192:
         raise ValueError("Crash fixed lane fixture native state size differs")
     expected = bytearray(raw)
     expected[8 + 19] = 0
@@ -76,10 +76,10 @@ def feed_configuration(meter, receipt, snapshot, subject):
     readiness = after.get("readiness", {})
     actor = next(a for a in snapshot.get("actors", []) if a.get("handle") == subject["handle"])
     if actual != bytes(expected) or q.get("expectedStateHex") != actual.hex() \
-            or before.get("profileHex") != raw[8:80].hex() \
-            or after.get("profileHex") != actual[8:80].hex() \
+            or before.get("profileHex") != raw[8:88].hex() \
+            or after.get("profileHex") != actual[8:88].hex() \
             or before.get("bindingHex") != after.get("bindingHex") \
-            or after.get("bindingHex") != actual[80:96].hex() \
+            or after.get("bindingHex") != actual[88:104].hex() \
             or before.get("readiness") != readiness or before.get("clock") != after.get("clock") \
             or before.get("sessionGeneration") != after.get("sessionGeneration") \
             or after.get("clock") != {k: snapshot[k] for k in ("frame", "nativeCycle")} \

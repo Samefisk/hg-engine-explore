@@ -1,70 +1,156 @@
 {
   "formatVersion": 1,
-  "blobVersion": 81,
+  "blobVersion": 95,
   "vectors": [
     {
       "name": "default-class-and-lanes",
-      "request": {"requestVersion": 2, "species": 155, "level": 5, "terrain": 0, "groupFlags": 4096},
+      "request": {
+        "requestVersion": 2,
+        "species": 155,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 4096
+      },
       "expected": {
         "status": 0,
         "behaviorClass": 0,
         "behaviorLimitKey": 0,
         "conditionalOverrideMask": 0,
-        "requiredAppliedOverrideMask": 1024,
+        "requiredAppliedOverrideMask": 0,
         "profileFields": {
           "owner.visionRange": 3,
           "owner.chillSpeed": 16,
           "owner.walkAccelerationStep": 1,
+          "owner.knockbackType": 0,
+          "owner.knockbackDistance": 1,
           "tired.visionRange": 3,
           "tired.chillSpeed": 16,
-          "tired.walkAccelerationStep": 1
+          "tired.walkAccelerationStep": 1,
+          "tired.knockbackType": 0,
+          "tired.knockbackDistance": 1,
+          "owner.turnSkidOneTime": 5,
+          "owner.turnSkidTwoTime": 3,
+          "owner.stopSkidTime": 4,
+          "tired.turnSkidOneTime": 5,
+          "tired.turnSkidTwoTime": 3,
+          "tired.stopSkidTime": 4,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
         },
-        "primitiveFields": {"spawnLocomotion": 7, "chillLocomotion": 1, "chillTarget": 1, "tiredReaction": 5},
+        "primitiveFields": {
+          "spawnLocomotion": 7,
+          "chillLocomotion": 1,
+          "chillTarget": 1,
+          "tiredReaction": 5
+        },
         "traceContains": [
-          {"lane": 0, "kind": 2, "sourceIndex": 0},
-          {"lane": 2, "kind": 5, "sourceIndex": 10}
-        ]
+          {
+            "lane": 0,
+            "kind": 2,
+            "sourceIndex": 0
+          },
+          {
+            "lane": 2,
+            "kind": 5,
+            "sourceIndex": 11
+          }
+        ],
+        "fingerprint": 4134468016
       }
     },
     {
       "name": "stantler-sprint-one-frame-acceleration",
-      "request": {"requestVersion": 2, "species": 234, "level": 5, "terrain": 0, "groupFlags": 0},
+      "request": {
+        "requestVersion": 2,
+        "species": 234,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 0
+      },
       "expected": {
         "status": 0,
         "behaviorClass": 0,
-        "requiredMatchedOverrideMask": 2,
-        "requiredAppliedOverrideMask": 1026,
-        "fingerprint": 1928036565,
+        "requiredMatchedOverrideMask": 1,
+        "requiredAppliedOverrideMask": 1,
+        "fingerprint": 1730388763,
         "profileFields": {
           "owner.chillSpeed": 8,
           "owner.chainPauseAction": 0,
-          "owner.tilesToAccelerate": 1,
+          "owner.tilesToAccelerate": 60,
           "owner.maxWalkSpeed": 4,
-          "owner.walkAccelerationStep": 1,
+          "owner.walkAccelerationStep": 34,
           "owner.planTurnSkidPath": 1,
           "tired.chillSpeed": 8,
           "tired.chainPauseAction": 0,
-          "tired.tilesToAccelerate": 1,
+          "tired.tilesToAccelerate": 60,
           "tired.maxWalkSpeed": 4,
-          "tired.walkAccelerationStep": 1,
-          "tired.planTurnSkidPath": 1
+          "tired.walkAccelerationStep": 34,
+          "tired.planTurnSkidPath": 1,
+          "owner.turnSkidOneTime": 5,
+          "owner.turnSkidTwoTime": 3,
+          "owner.stopSkidTime": 4,
+          "tired.turnSkidOneTime": 5,
+          "tired.turnSkidTwoTime": 3,
+          "tired.stopSkidTime": 4,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
         },
         "traceContains": [
-          {"lane": 0, "kind": 3, "sourceIndex": 1, "requiredFlags": 3},
-          {"lane": 2, "kind": 3, "sourceIndex": 1, "requiredFlags": 3},
-          {"lane": 2, "kind": 5, "sourceIndex": 10}
+          {
+            "lane": 0,
+            "kind": 3,
+            "sourceIndex": 2,
+            "requiredFlags": 3
+          },
+          {
+            "lane": 2,
+            "kind": 3,
+            "sourceIndex": 2,
+            "requiredFlags": 3
+          },
+          {
+            "lane": 2,
+            "kind": 5,
+            "sourceIndex": 11
+          }
         ]
       }
     },
     {
       "name": "mareep-meander-all-lanes",
-      "request": {"requestVersion": 2, "species": 179, "level": 5, "terrain": 0, "groupFlags": 32768},
+      "request": {
+        "requestVersion": 2,
+        "species": 179,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 32768
+      },
       "expected": {
         "status": 0,
         "behaviorClass": 0,
-        "requiredMatchedOverrideMask": 32,
-        "requiredAppliedOverrideMask": 1056,
-        "fingerprint": 3685416815,
+        "requiredMatchedOverrideMask": 1,
+        "requiredAppliedOverrideMask": 1,
+        "fingerprint": 3597849827,
         "profileFields": {
           "owner.chillSpeed": 14,
           "owner.chainPauseAction": 162,
@@ -75,102 +161,246 @@
           "tired.chainPauseAction": 162,
           "tired.chainMovementVariance": 5,
           "tired.chainPauseVariance": 36,
-          "tired.chainPauseActionChance": 50
+          "tired.chainPauseActionChance": 50,
+          "owner.turnSkidOneTime": 5,
+          "owner.turnSkidTwoTime": 3,
+          "owner.stopSkidTime": 4,
+          "tired.turnSkidOneTime": 5,
+          "tired.turnSkidTwoTime": 3,
+          "tired.stopSkidTime": 4,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
         },
         "traceContains": [
-          {"lane": 0, "kind": 3, "sourceIndex": 5, "requiredFlags": 3},
-          {"lane": 2, "kind": 3, "sourceIndex": 5, "requiredFlags": 3}
+          {
+            "lane": 0,
+            "kind": 3,
+            "sourceIndex": 6,
+            "requiredFlags": 3
+          },
+          {
+            "lane": 2,
+            "kind": 3,
+            "sourceIndex": 6,
+            "requiredFlags": 3
+          }
         ]
       }
     },
     {
       "name": "pidgey-small-bird-fly-in",
-      "request": {"requestVersion": 2, "species": 16, "level": 5, "terrain": 0, "groupFlags": 20},
+      "request": {
+        "requestVersion": 2,
+        "species": 16,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 20
+      },
       "expected": {
         "status": 0,
         "behaviorClass": 0,
         "speciesClassRuleIndex": 1,
-        "requiredMatchedOverrideMask": 2056,
-        "requiredAppliedOverrideMask": 3080,
-        "fingerprint": 443272437,
+        "requiredMatchedOverrideMask": 5,
+        "requiredAppliedOverrideMask": 5,
+        "fingerprint": 445252580,
         "profileFields": {
           "owner.spawnState": 4,
           "owner.chillAction": 2,
           "owner.hopMaxDistance": 2,
           "owner.chainPauseAction": 6,
           "owner.hopTime": 6,
-          "tired.chillAction": 2
+          "tired.chillAction": 2,
+          "owner.turnSkidOneTime": 5,
+          "owner.turnSkidTwoTime": 3,
+          "owner.stopSkidTime": 4,
+          "tired.turnSkidOneTime": 5,
+          "tired.turnSkidTwoTime": 3,
+          "tired.stopSkidTime": 4,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
         },
-        "primitiveFields": {"spawnLocomotion": 9, "chillLocomotion": 2},
+        "primitiveFields": {
+          "spawnLocomotion": 9,
+          "chillLocomotion": 2
+        },
         "traceContains": [
-          {"lane": 255, "kind": 1, "sourceIndex": 1},
-          {"lane": 0, "kind": 3, "sourceIndex": 3},
-          {"lane": 0, "kind": 3, "sourceIndex": 11}
+          {
+            "lane": 255,
+            "kind": 1,
+            "sourceIndex": 1
+          },
+          {
+            "lane": 0,
+            "kind": 3,
+            "sourceIndex": 4
+          },
+          {
+            "lane": 0,
+            "kind": 3,
+            "sourceIndex": 13
+          }
         ]
       }
     },
     {
       "name": "rattata-scavenger",
-      "request": {"requestVersion": 2, "species": 19, "level": 4, "terrain": 0, "groupFlags": 1},
+      "request": {
+        "requestVersion": 2,
+        "species": 19,
+        "level": 4,
+        "terrain": 0,
+        "groupFlags": 1
+      },
       "expected": {
         "status": 0,
         "behaviorClass": 0,
         "behaviorLimitKey": 0,
         "requiredMatchedOverrideMask": 1,
-        "requiredAppliedOverrideMask": 1025,
-        "fingerprint": 2202894134,
+        "requiredAppliedOverrideMask": 1,
+        "fingerprint": 1573268740,
         "profileFields": {
           "owner.overworldLimit": 0,
           "owner.spawnState": 1,
           "owner.chillAction": 1,
           "owner.chillSpeed": 7,
           "owner.chainPauseAction": 2,
-          "tired.spawnState": 1
+          "tired.spawnState": 1,
+          "owner.turnSkidOneTime": 5,
+          "owner.turnSkidTwoTime": 3,
+          "owner.stopSkidTime": 4,
+          "tired.turnSkidOneTime": 5,
+          "tired.turnSkidTwoTime": 3,
+          "tired.stopSkidTime": 4,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
         },
-        "primitiveFields": {"spawnLocomotion": 3, "chillLocomotion": 1},
+        "primitiveFields": {
+          "spawnLocomotion": 3,
+          "chillLocomotion": 1
+        },
         "traceContains": [
-          {"lane": 0, "kind": 3, "sourceIndex": 0},
-          {"lane": 2, "kind": 5, "sourceIndex": 10}
+          {
+            "lane": 0,
+            "kind": 3,
+            "sourceIndex": 1
+          },
+          {
+            "lane": 2,
+            "kind": 5,
+            "sourceIndex": 11
+          }
         ]
       }
     },
     {
       "name": "mankey-canopy-capability-land",
-      "request": {"requestVersion": 2, "species": 56, "level": 5, "terrain": 0, "groupFlags": 0},
+      "request": {
+        "requestVersion": 2,
+        "species": 56,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 0
+      },
       "expected": {
         "status": 0,
-        "behaviorClass": 0,
-        "requiredMatchedOverrideMask": 135168,
-        "requiredAppliedOverrideMask": 136192,
+        "behaviorClass": 1,
+        "requiredMatchedOverrideMask": 11,
+        "requiredAppliedOverrideMask": 11,
         "conditionalOverrideMask": 0,
-        "fingerprint": 1876891757,
+        "fingerprint": 430881987,
         "profileFields": {
           "owner.chillAction": 2,
           "owner.hopPause": 5,
           "owner.hopAllowNonCardinal": 1,
           "owner.hopMaxDistance": 6,
-          "owner.hopAllowVerticalObstacles": 0
+          "owner.hopAllowVerticalObstacles": 0,
+          "owner.turnSkidOneTime": 5,
+          "owner.turnSkidTwoTime": 3,
+          "owner.stopSkidTime": 4,
+          "tired.turnSkidOneTime": 5,
+          "tired.turnSkidTwoTime": 3,
+          "tired.stopSkidTime": 4,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
         },
-        "primitiveFields": {"chillLocomotion": 2},
+        "primitiveFields": {
+          "chillLocomotion": 2,
+          "spawnLocomotion": 3
+        },
         "traceContains": [
-          {"lane": 0, "kind": 3, "sourceIndex": 12, "requiredFlags": 3},
-          {"lane": 0, "kind": 3, "sourceIndex": 17, "requiredFlags": 3}
+          {
+            "lane": 0,
+            "kind": 3,
+            "sourceIndex": 14,
+            "requiredFlags": 3
+          },
+          {
+            "lane": 0,
+            "kind": 3,
+            "sourceIndex": 19,
+            "requiredFlags": 3
+          }
         ]
       }
     },
     {
       "name": "mankey-canopy-capability-on-canopy",
       "request": {
-        "requestVersion": 2, "species": 56, "level": 5, "terrain": 0,
-        "groupFlags": 0, "activeConditionalMask": 262144, "winningConditionId": 3180
+        "requestVersion": 2,
+        "species": 56,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 0,
+        "activeConditionalMask": 16,
+        "winningConditionId": 3180
       },
       "expected": {
         "status": 0,
-        "behaviorClass": 0,
-        "requiredMatchedOverrideMask": 135168,
-        "conditionalOverrideMask": 262144,
-        "requiredAppliedOverrideMask": 398336,
-        "fingerprint": 2555716475,
+        "behaviorClass": 1,
+        "requiredMatchedOverrideMask": 11,
+        "conditionalOverrideMask": 16,
+        "requiredAppliedOverrideMask": 27,
+        "fingerprint": 1314145457,
         "winningConditionId": 3180,
         "profileFields": {
           "owner.chillAction": 2,
@@ -178,79 +408,197 @@
           "owner.hopElevationTimeScale": 30,
           "owner.hopElevationArcScale": 150,
           "owner.hopAllowVerticalObstacles": 1,
-          "tired.hopAllowVerticalObstacles": 1
+          "tired.hopAllowVerticalObstacles": 1,
+          "owner.alertTime": 0,
+          "tired.alertTime": 0,
+          "owner.turnSkidOneTime": 5,
+          "owner.turnSkidTwoTime": 3,
+          "owner.stopSkidTime": 4,
+          "tired.turnSkidOneTime": 5,
+          "tired.turnSkidTwoTime": 3,
+          "tired.stopSkidTime": 4,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
         },
         "traceContains": [
-          {"lane": 0, "kind": 3, "sourceIndex": 12, "requiredFlags": 3},
-          {"lane": 0, "kind": 3, "sourceIndex": 17, "requiredFlags": 3},
-          {"lane": 0, "kind": 4, "sourceIndex": 18, "requiredFlags": 10},
-          {"lane": 2, "kind": 4, "sourceIndex": 18, "requiredFlags": 10}
-        ]
+          {
+            "lane": 0,
+            "kind": 3,
+            "sourceIndex": 14,
+            "requiredFlags": 3
+          },
+          {
+            "lane": 0,
+            "kind": 3,
+            "sourceIndex": 19,
+            "requiredFlags": 3
+          },
+          {
+            "lane": 0,
+            "kind": 4,
+            "sourceIndex": 20,
+            "requiredFlags": 10
+          },
+          {
+            "lane": 2,
+            "kind": 4,
+            "sourceIndex": 20,
+            "requiredFlags": 10
+          }
+        ],
+        "primitiveFields": {
+          "spawnLocomotion": 3
+        }
       }
     },
     {
       "name": "sentret-canopy-capability-land",
-      "request": {"requestVersion": 2, "species": 161, "level": 5, "terrain": 0, "groupFlags": 0},
+      "request": {
+        "requestVersion": 2,
+        "species": 161,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 0
+      },
       "expected": {
         "status": 0,
         "behaviorClass": 0,
-        "requiredMatchedOverrideMask": 4097,
-        "requiredAppliedOverrideMask": 5121,
+        "requiredMatchedOverrideMask": 3,
+        "requiredAppliedOverrideMask": 3,
         "conditionalOverrideMask": 0,
-        "fingerprint": 648009758,
+        "fingerprint": 2684969777,
         "profileFields": {
           "owner.spawnState": 1,
           "owner.chillAction": 1,
           "owner.hopAllowNonCardinal": 0,
-          "owner.hopAllowVerticalObstacles": 0
+          "owner.hopAllowVerticalObstacles": 0,
+          "owner.turnSkidOneTime": 5,
+          "owner.turnSkidTwoTime": 3,
+          "owner.stopSkidTime": 4,
+          "tired.turnSkidOneTime": 5,
+          "tired.turnSkidTwoTime": 3,
+          "tired.stopSkidTime": 4,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
         },
         "traceContains": [
-          {"lane": 0, "kind": 3, "sourceIndex": 0, "requiredFlags": 3},
-          {"lane": 0, "kind": 3, "sourceIndex": 12, "requiredFlags": 3}
+          {
+            "lane": 0,
+            "kind": 3,
+            "sourceIndex": 1,
+            "requiredFlags": 3
+          },
+          {
+            "lane": 0,
+            "kind": 3,
+            "sourceIndex": 14,
+            "requiredFlags": 3
+          }
         ]
       }
     },
     {
       "name": "sentret-canopy-capability-on-canopy",
       "request": {
-        "requestVersion": 2, "species": 161, "level": 5, "terrain": 0,
-        "groupFlags": 0, "activeConditionalMask": 262144, "winningConditionId": 3180
+        "requestVersion": 2,
+        "species": 161,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 0,
+        "activeConditionalMask": 8,
+        "winningConditionId": 3180
       },
       "expected": {
         "status": 0,
         "behaviorClass": 0,
-        "requiredMatchedOverrideMask": 4097,
-        "conditionalOverrideMask": 262144,
-        "requiredAppliedOverrideMask": 267265,
-        "fingerprint": 3598811544,
+        "requiredMatchedOverrideMask": 3,
+        "conditionalOverrideMask": 8,
+        "requiredAppliedOverrideMask": 11,
+        "fingerprint": 590505043,
         "winningConditionId": 3180,
         "profileFields": {
           "owner.chillAction": 2,
           "owner.hopAllowNonCardinal": 1,
           "owner.hopMaxDistance": 6,
           "owner.hopAllowVerticalObstacles": 1,
-          "tired.hopAllowVerticalObstacles": 1
+          "tired.hopAllowVerticalObstacles": 1,
+          "owner.alertTime": 0,
+          "tired.alertTime": 0,
+          "owner.turnSkidOneTime": 5,
+          "owner.turnSkidTwoTime": 3,
+          "owner.stopSkidTime": 4,
+          "tired.turnSkidOneTime": 5,
+          "tired.turnSkidTwoTime": 3,
+          "tired.stopSkidTime": 4,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
         },
-        "primitiveFields": {"spawnLocomotion": 3, "chillLocomotion": 2},
+        "primitiveFields": {
+          "spawnLocomotion": 3,
+          "chillLocomotion": 2
+        },
         "traceContains": [
-          {"lane": 0, "kind": 4, "sourceIndex": 18, "requiredFlags": 10},
-          {"lane": 2, "kind": 4, "sourceIndex": 18, "requiredFlags": 10}
+          {
+            "lane": 0,
+            "kind": 4,
+            "sourceIndex": 20,
+            "requiredFlags": 10
+          },
+          {
+            "lane": 2,
+            "kind": 4,
+            "sourceIndex": 20,
+            "requiredFlags": 10
+          }
         ]
       }
     },
     {
       "name": "snorlax-heavy-stomp",
       "request": {
-        "requestVersion": 2, "species": 143, "level": 5, "terrain": 0,
+        "requestVersion": 2,
+        "species": 143,
+        "level": 5,
+        "terrain": 0,
         "groupFlags": 0
       },
       "expected": {
         "status": 0,
         "behaviorClass": 0,
-        "behaviorLimitKey": 22,
-        "requiredMatchedOverrideMask": 2097408,
-        "requiredAppliedOverrideMask": 2098432,
-        "fingerprint": 2434538980,
+        "behaviorLimitKey": 25,
+        "requiredMatchedOverrideMask": 5,
+        "requiredAppliedOverrideMask": 5,
+        "fingerprint": 2707762868,
         "profileFields": {
           "owner.chillSpeed": 20,
           "owner.ramAccelerationSteps": 2,
@@ -281,26 +629,70 @@
           "tired.walkPause": 0,
           "tired.walkPauseVariance": 0,
           "tired.walkTimeVariance": 6,
-          "tired.walkStompTime": 32
+          "tired.walkStompTime": 32,
+          "owner.turnSkidOneTime": 5,
+          "owner.turnSkidTwoTime": 3,
+          "owner.stopSkidTime": 4,
+          "tired.turnSkidOneTime": 5,
+          "tired.turnSkidTwoTime": 3,
+          "tired.stopSkidTime": 4,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
         },
-        "primitiveFields": {"spawnLocomotion": 7, "chillLocomotion": 1},
+        "primitiveFields": {
+          "spawnLocomotion": 7,
+          "chillLocomotion": 1
+        },
         "traceContains": [
-          {"lane": 0, "kind": 3, "sourceIndex": 8, "requiredFlags": 3},
-          {"lane": 0, "kind": 3, "sourceIndex": 21, "requiredFlags": 3},
-          {"lane": 2, "kind": 3, "sourceIndex": 8, "requiredFlags": 3},
-          {"lane": 2, "kind": 3, "sourceIndex": 21, "requiredFlags": 3}
+          {
+            "lane": 0,
+            "kind": 3,
+            "sourceIndex": 9,
+            "requiredFlags": 3
+          },
+          {
+            "lane": 0,
+            "kind": 3,
+            "sourceIndex": 23,
+            "requiredFlags": 3
+          },
+          {
+            "lane": 2,
+            "kind": 3,
+            "sourceIndex": 9,
+            "requiredFlags": 3
+          },
+          {
+            "lane": 2,
+            "kind": 3,
+            "sourceIndex": 23,
+            "requiredFlags": 3
+          }
         ]
       }
     },
     {
       "name": "golem-shares-heavy-stomp-limit",
       "request": {
-        "requestVersion": 2, "species": 76, "level": 5, "terrain": 0,
+        "requestVersion": 2,
+        "species": 76,
+        "level": 5,
+        "terrain": 0,
         "groupFlags": 0
       },
       "expected": {
         "status": 0,
-        "behaviorLimitKey": 22,
+        "behaviorLimitKey": 25,
         "profileFields": {
           "owner.chillSpeed": 16,
           "owner.ramAccelerationSteps": 0,
@@ -315,158 +707,819 @@
           "tired.chainPauseAction": 0,
           "tired.walkTimeVariance": 0,
           "tired.overworldLimit": 1,
-          "tired.walkStompTime": 32
-        }
+          "tired.walkStompTime": 32,
+          "owner.turnSkidOneTime": 5,
+          "owner.turnSkidTwoTime": 3,
+          "owner.stopSkidTime": 4,
+          "tired.turnSkidOneTime": 5,
+          "tired.turnSkidTwoTime": 3,
+          "tired.stopSkidTime": 4,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
+        },
+        "fingerprint": 3216269667
       }
     },
     {
       "name": "forced-follower-profile",
       "request": {
-        "requestVersion": 2, "species": 155, "level": 5, "terrain": 0,
-        "groupFlags": 4096, "forcedOverrideMask": 134217728
+        "requestVersion": 2,
+        "species": 155,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 4096,
+        "forcedOverrideMask": 1
       },
       "expected": {
         "status": 0,
-        "forcedOverrideMask": 134217728,
-        "requiredAppliedOverrideMask": 134218752,
-        "fingerprint": 3178297699,
+        "forcedOverrideMask": 1,
+        "requiredAppliedOverrideMask": 1,
+        "fingerprint": 1617762149,
         "profileFields": {
           "owner.chillState": 3,
           "owner.chillSpeed": 8,
           "owner.chillTarget": 6,
           "owner.chainPauseAction": 0,
-          "owner.walkPause": 0
+          "owner.walkPause": 0,
+          "owner.maxWalkSpeed": 2,
+          "tired.maxWalkSpeed": 2,
+          "owner.turnSkidOneTime": 5,
+          "owner.turnSkidTwoTime": 3,
+          "owner.stopSkidTime": 4,
+          "tired.turnSkidOneTime": 5,
+          "tired.turnSkidTwoTime": 3,
+          "tired.stopSkidTime": 4,
+          "owner.knockbackDistance": 1,
+          "owner.damageRecipients": 2,
+          "tired.knockbackDistance": 1,
+          "tired.damageRecipients": 2,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
         },
         "traceContains": [
-          {"lane": 0, "kind": 3, "sourceIndex": 27, "requiredFlags": 6},
-          {"lane": 2, "kind": 3, "sourceIndex": 27, "requiredFlags": 6}
+          {
+            "lane": 0,
+            "kind": 3,
+            "sourceIndex": 16,
+            "requiredFlags": 6
+          },
+          {
+            "lane": 2,
+            "kind": 3,
+            "sourceIndex": 16,
+            "requiredFlags": 6
+          }
         ]
       }
     },
     {
       "name": "conditional-perch-replay",
       "request": {
-        "requestVersion": 2, "species": 16, "level": 5, "terrain": 0,
-        "groupFlags": 20, "activeConditionalMask": 512, "winningConditionId": 56928
+        "requestVersion": 2,
+        "species": 16,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 20,
+        "activeConditionalMask": 2,
+        "winningConditionId": 56928
       },
       "expected": {
         "status": 0,
         "behaviorClass": 0,
-        "requiredMatchedOverrideMask": 2056,
-        "conditionalOverrideMask": 512,
-        "requiredAppliedOverrideMask": 3592,
-        "fingerprint": 1054422275,
+        "requiredMatchedOverrideMask": 5,
+        "conditionalOverrideMask": 2,
+        "requiredAppliedOverrideMask": 7,
+        "fingerprint": 1194404574,
         "winningConditionId": 56928,
         "profileFields": {
           "owner.chillState": 3,
           "owner.chillAction": 2,
           "owner.chillTarget": 0,
           "tired.chillState": 3,
-          "tired.chillAction": 2
+          "tired.chillAction": 2,
+          "owner.turnSkidOneTime": 5,
+          "owner.turnSkidTwoTime": 3,
+          "owner.stopSkidTime": 4,
+          "tired.turnSkidOneTime": 5,
+          "tired.turnSkidTwoTime": 3,
+          "tired.stopSkidTime": 4,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
         },
         "traceContains": [
-          {"lane": 0, "kind": 3, "sourceIndex": 3, "requiredFlags": 3},
-          {"lane": 0, "kind": 4, "sourceIndex": 9, "requiredFlags": 10},
-          {"lane": 2, "kind": 4, "sourceIndex": 9, "requiredFlags": 10}
+          {
+            "lane": 0,
+            "kind": 3,
+            "sourceIndex": 4,
+            "requiredFlags": 3
+          },
+          {
+            "lane": 0,
+            "kind": 4,
+            "sourceIndex": 10,
+            "requiredFlags": 10
+          },
+          {
+            "lane": 2,
+            "kind": 4,
+            "sourceIndex": 10,
+            "requiredFlags": 10
+          }
         ]
       }
     },
     {
       "name": "conditional-playful-actor-target",
       "request": {
-        "requestVersion": 2, "species": 35, "level": 5, "terrain": 0,
-        "groupFlags": 0, "activeConditionalMask": 16777216,
-        "winningConditionId": 31250, "targetSourceApplication": 24,
-        "resolvedTargetConditionId": 31250,
+        "requestVersion": 2,
+        "species": 35,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 0,
+        "activeConditionalMask": 6,
+        "winningConditionId": 12203,
+        "targetSourceApplication": 2,
+        "resolvedTargetConditionId": 12203,
         "resolvedTarget": {
-          "kind": "actor", "actorSlot": 2, "actorGeneration": 3,
-          "fieldEpoch": 4, "mapGeneration": 5, "encounterGeneration": 6
+          "kind": "actor",
+          "actorSlot": 2,
+          "actorGeneration": 3,
+          "fieldEpoch": 4,
+          "mapGeneration": 5,
+          "encounterGeneration": 6
         }
       },
       "expected": {
         "status": 0,
         "behaviorClass": 0,
-        "conditionalOverrideMask": 16777216,
-        "requiredAppliedOverrideMask": 16778240,
-        "fingerprint": 255365049,
-        "winningConditionId": 31250,
-        "targetSourceApplication": 24,
-        "resolvedTargetConditionId": 31250,
+        "conditionalOverrideMask": 6,
+        "requiredAppliedOverrideMask": 6,
+        "fingerprint": 251226984,
+        "winningConditionId": 12203,
+        "targetSourceApplication": 2,
+        "resolvedTargetConditionId": 12203,
         "resolvedTarget": {
-          "kind": 2, "actorSlot": 2, "actorGeneration": 3,
-          "fieldEpoch": 4, "mapGeneration": 5, "encounterGeneration": 6
+          "kind": 2,
+          "actorSlot": 2,
+          "actorGeneration": 3,
+          "fieldEpoch": 4,
+          "mapGeneration": 5,
+          "encounterGeneration": 6
         },
         "profileFields": {
           "owner.chillState": 3,
-          "owner.alertTime": 20,
+          "owner.alertTime": 0,
           "owner.chillSpeed": 14,
           "owner.chillTarget": 9,
           "owner.chainPauseAction": 1,
           "owner.hopTime": 2,
           "owner.continueWhenArrived": 1,
-          "owner.chainPauseActionChance": 60
+          "owner.chainPauseActionChance": 60,
+          "owner.turnSkidOneTime": 5,
+          "owner.turnSkidTwoTime": 3,
+          "owner.stopSkidTime": 4,
+          "tired.turnSkidOneTime": 5,
+          "tired.turnSkidTwoTime": 3,
+          "tired.stopSkidTime": 4,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 1,
+          "owner.chainHopInPlaceExtraChance": 50,
+          "tired.chainHopInPlaceExtraHops": 1,
+          "tired.chainHopInPlaceExtraChance": 50,
+          "owner.ramAccelerationSteps": 2,
+          "tired.ramAccelerationSteps": 2,
+          "owner.chainHopInPlaceHeartChance": 2,
+          "owner.chainHopInPlaceCryChance": 2,
+          "tired.chainHopInPlaceHeartChance": 2,
+          "tired.chainHopInPlaceCryChance": 2,
+          "owner.alertEmote": 255
         },
         "traceContains": [
-          {"lane": 0, "kind": 4, "sourceIndex": 24, "requiredFlags": 10},
-          {"lane": 2, "kind": 4, "sourceIndex": 24, "requiredFlags": 10}
+          {
+            "lane": 0,
+            "kind": 4,
+            "sourceIndex": 31,
+            "requiredFlags": 10
+          },
+          {
+            "lane": 2,
+            "kind": 4,
+            "sourceIndex": 31,
+            "requiredFlags": 10
+          }
         ]
       }
     },
     {
       "name": "forced-mounted-sprint-profile",
       "request": {
-        "requestVersion": 2, "species": 234, "level": 5, "terrain": 0,
-        "groupFlags": 0, "forcedOverrideMask": 268435456
+        "requestVersion": 2,
+        "species": 234,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 0,
+        "forcedOverrideMask": 4
       },
       "expected": {
         "status": 0,
         "behaviorClass": 0,
-        "requiredMatchedOverrideMask": 2,
-        "forcedOverrideMask": 268435456,
-        "requiredAppliedOverrideMask": 268436482,
-        "fingerprint": 192081701,
+        "requiredMatchedOverrideMask": 1,
+        "forcedOverrideMask": 4,
+        "requiredAppliedOverrideMask": 5,
+        "fingerprint": 996428431,
         "profileFields": {
           "owner.chillSpeed": 6,
-          "owner.tilesToAccelerate": 1,
+          "owner.tilesToAccelerate": 60,
           "owner.maxWalkSpeed": 2,
-          "owner.walkAccelerationStep": 1,
+          "owner.walkAccelerationStep": 34,
           "owner.walkTimeVariance": 2,
           "owner.tilesBeforeTurnSkid": 1,
           "owner.planTurnSkidPath": 1,
           "owner.stopSkid": 1,
           "owner.walkPause": 0,
-          "tired.tilesToAccelerate": 1,
+          "tired.tilesToAccelerate": 60,
           "tired.maxWalkSpeed": 2,
-          "tired.walkAccelerationStep": 1,
+          "tired.walkAccelerationStep": 34,
           "tired.walkTimeVariance": 2,
           "tired.tilesBeforeTurnSkid": 1,
           "tired.planTurnSkidPath": 1,
           "tired.stopSkid": 1,
-          "tired.walkPause": 0
+          "tired.walkPause": 0,
+          "owner.turnSkidOneTime": 5,
+          "owner.turnSkidTwoTime": 3,
+          "owner.stopSkidTime": 4,
+          "tired.turnSkidOneTime": 5,
+          "tired.turnSkidTwoTime": 3,
+          "tired.stopSkidTime": 4,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
         },
         "traceContains": [
-          {"lane": 0, "kind": 3, "sourceIndex": 28, "requiredFlags": 6},
-          {"lane": 2, "kind": 3, "sourceIndex": 28, "requiredFlags": 6}
+          {
+            "lane": 0,
+            "kind": 3,
+            "sourceIndex": 34,
+            "requiredFlags": 6
+          },
+          {
+            "lane": 2,
+            "kind": 3,
+            "sourceIndex": 34,
+            "requiredFlags": 6
+          }
         ]
       }
     },
     {
       "name": "forced-asleep-profile",
       "request": {
-        "requestVersion": 2, "species": 155, "level": 5, "terrain": 0,
-        "groupFlags": 4096, "forcedOverrideMask": 536870912
+        "requestVersion": 2,
+        "species": 155,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 4096,
+        "forcedOverrideMask": 4
       },
       "expected": {
         "status": 0,
         "behaviorClass": 0,
-        "forcedOverrideMask": 536870912,
-        "requiredAppliedOverrideMask": 536871936,
-        "fingerprint": 1415811515,
-        "profileFields": {"owner.stamina": 1, "owner.restTime": 4},
+        "forcedOverrideMask": 4,
+        "requiredAppliedOverrideMask": 4,
+        "fingerprint": 982977916,
+        "profileFields": {
+          "owner.stamina": 1,
+          "owner.restTime": 4,
+          "owner.turnSkidOneTime": 5,
+          "owner.turnSkidTwoTime": 3,
+          "owner.stopSkidTime": 4,
+          "tired.turnSkidOneTime": 5,
+          "tired.turnSkidTwoTime": 3,
+          "tired.stopSkidTime": 4,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
+        },
         "traceContains": [
-          {"lane": 0, "kind": 3, "sourceIndex": 29, "requiredFlags": 6},
-          {"lane": 2, "kind": 3, "sourceIndex": 29, "requiredFlags": 6}
+          {
+            "lane": 0,
+            "kind": 3,
+            "sourceIndex": 35,
+            "requiredFlags": 6
+          },
+          {
+            "lane": 2,
+            "kind": 3,
+            "sourceIndex": 35,
+            "requiredFlags": 6
+          }
         ]
+      }
+    },
+    {
+      "name": "onix-active-ram-collision-attack",
+      "request": {
+        "requestVersion": 2,
+        "species": 95,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 0,
+        "activeConditionalMask": 2,
+        "winningConditionId": 20305,
+        "targetSourceApplication": 1,
+        "resolvedTargetConditionId": 20305,
+        "resolvedTarget": {
+          "kind": "player",
+          "actorSlot": 0,
+          "actorGeneration": 0,
+          "fieldEpoch": 0,
+          "mapGeneration": 0,
+          "encounterGeneration": 0
+        }
+      },
+      "expected": {
+        "status": 0,
+        "conditionalOverrideMask": 2,
+        "requiredAppliedOverrideMask": 2,
+        "fingerprint": 593695226,
+        "profileFields": {
+          "owner.attacking": 1,
+          "owner.minImpactSpeed": 32,
+          "owner.collisionDamage": 33,
+          "owner.tilesToAccelerate": 180,
+          "owner.maxWalkSpeed": 2,
+          "owner.walkAccelerationStep": 34,
+          "owner.knockbackType": 2,
+          "owner.knockbackDistance": 3,
+          "tired.attacking": 1,
+          "tired.minImpactSpeed": 32,
+          "tired.collisionDamage": 33,
+          "tired.knockbackType": 2,
+          "tired.knockbackDistance": 3,
+          "owner.turnSkidOneTime": 5,
+          "owner.turnSkidTwoTime": 3,
+          "owner.stopSkidTime": 4,
+          "tired.turnSkidOneTime": 5,
+          "tired.turnSkidTwoTime": 3,
+          "tired.stopSkidTime": 4,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
+        },
+        "traceContains": [
+          {
+            "lane": 0,
+            "kind": 4,
+            "sourceIndex": 25,
+            "requiredFlags": 10
+          },
+          {
+            "lane": 2,
+            "kind": 4,
+            "sourceIndex": 25,
+            "requiredFlags": 10
+          }
+        ]
+      }
+    },
+    {
+      "name": "geodude-active-throw-collision-attack",
+      "request": {
+        "requestVersion": 2,
+        "species": 74,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 0,
+        "activeConditionalMask": 10,
+        "winningConditionId": 7704,
+        "targetSourceApplication": 1,
+        "resolvedTargetConditionId": 57932,
+        "resolvedTarget": {
+          "kind": "actor",
+          "actorSlot": 2,
+          "actorGeneration": 3,
+          "fieldEpoch": 4,
+          "mapGeneration": 5,
+          "encounterGeneration": 6
+        }
+      },
+      "expected": {
+        "status": 0,
+        "conditionalOverrideMask": 10,
+        "requiredAppliedOverrideMask": 10,
+        "fingerprint": 2108007631,
+        "profileFields": {
+          "owner.attacking": 1,
+          "owner.minImpactSpeed": 16,
+          "owner.collisionDamage": 20,
+          "owner.knockbackType": 1,
+          "owner.knockbackDistance": 1,
+          "tired.attacking": 1,
+          "tired.minImpactSpeed": 16,
+          "tired.collisionDamage": 20,
+          "tired.knockbackType": 1,
+          "tired.knockbackDistance": 1,
+          "owner.chillSpeed": 8,
+          "owner.hopTime": 2,
+          "tired.chillSpeed": 8,
+          "tired.hopTime": 2,
+          "owner.turnSkidOneTime": 5,
+          "owner.turnSkidTwoTime": 3,
+          "owner.stopSkidTime": 4,
+          "tired.turnSkidOneTime": 5,
+          "tired.turnSkidTwoTime": 3,
+          "tired.stopSkidTime": 4,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
+        },
+        "traceContains": [
+          {
+            "lane": 0,
+            "kind": 4,
+            "sourceIndex": 21,
+            "requiredFlags": 10
+          },
+          {
+            "lane": 0,
+            "kind": 4,
+            "sourceIndex": 24,
+            "requiredFlags": 10
+          },
+          {
+            "lane": 2,
+            "kind": 4,
+            "sourceIndex": 21,
+            "requiredFlags": 10
+          },
+          {
+            "lane": 2,
+            "kind": 4,
+            "sourceIndex": 24,
+            "requiredFlags": 10
+          }
+        ]
+      }
+    },
+    {
+      "name": "weepinbell-idle-ambush-is-not-attacking",
+      "request": {
+        "requestVersion": 2,
+        "species": 70,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 0
+      },
+      "expected": {
+        "status": 0,
+        "conditionalOverrideMask": 0,
+        "fingerprint": 3758447716,
+        "profileFields": {
+          "owner.attacking": 0,
+          "owner.collisionDamage": 0,
+          "owner.knockbackType": 0,
+          "owner.ramMaxSpeed": 60,
+          "owner.turnSkidOneTime": 5,
+          "owner.turnSkidTwoTime": 3,
+          "owner.stopSkidTime": 4,
+          "tired.turnSkidOneTime": 5,
+          "tired.turnSkidTwoTime": 3,
+          "tired.stopSkidTime": 4,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
+        },
+        "primitiveFields": {
+          "chillLocomotion": 8
+        }
+      }
+    },
+    {
+      "name": "weepinbell-active-ambush-contact-attack",
+      "request": {
+        "requestVersion": 2,
+        "species": 70,
+        "level": 5,
+        "terrain": 0,
+        "groupFlags": 0,
+        "activeConditionalMask": 4,
+        "winningConditionId": 49529,
+        "targetSourceApplication": 2,
+        "resolvedTargetConditionId": 49529,
+        "resolvedTarget": {
+          "kind": "player"
+        }
+      },
+      "expected": {
+        "status": 0,
+        "conditionalOverrideMask": 4,
+        "requiredAppliedOverrideMask": 4,
+        "fingerprint": 2343332732,
+        "profileFields": {
+          "owner.attacking": 1,
+          "owner.minImpactSpeed": 16,
+          "owner.collisionDamage": 20,
+          "owner.knockbackType": 2,
+          "owner.knockbackDistance": 1,
+          "owner.turnSkidOneTime": 5,
+          "owner.turnSkidTwoTime": 3,
+          "owner.stopSkidTime": 4,
+          "tired.turnSkidOneTime": 5,
+          "tired.turnSkidTwoTime": 3,
+          "tired.stopSkidTime": 4,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
+        },
+        "traceContains": [
+          {
+            "lane": 0,
+            "kind": 4,
+            "sourceIndex": 26,
+            "requiredFlags": 10
+          }
+        ]
+      }
+    },
+    {
+      "name": "follower-away-held-find-position",
+      "request": {
+        "requestVersion": 2,
+        "species": 56,
+        "level": 20,
+        "terrain": 0,
+        "groupFlags": 0,
+        "forcedOverrideMask": 4,
+        "winningConditionId": 44837,
+        "activeConditionalMask": 320
+      },
+      "expected": {
+        "status": 0,
+        "forcedOverrideMask": 4,
+        "conditionalOverrideMask": 320,
+        "requiredAppliedOverrideMask": 324,
+        "winningConditionId": 44837,
+        "targetSourceApplication": 255,
+        "resolvedTargetConditionId": 65535,
+        "resolvedTarget": {
+          "kind": 0,
+          "actorSlot": 0,
+          "actorGeneration": 0,
+          "fieldEpoch": 0,
+          "mapGeneration": 0,
+          "encounterGeneration": 0
+        },
+        "profileFields": {
+          "owner.chillTarget": 14,
+          "owner.chillSpeed": 3,
+          "owner.hopTime": 3,
+          "owner.throwMaxRange": 8,
+          "owner.chillState": 3,
+          "owner.attacking": 0,
+          "tired.chillTarget": 14,
+          "tired.chillSpeed": 3,
+          "tired.hopTime": 3,
+          "tired.throwMaxRange": 8,
+          "tired.chillState": 3,
+          "tired.attacking": 0,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
+        },
+        "primitiveFields": {
+          "chillTarget": 14,
+          "tiredTarget": 14,
+          "chillLocomotion": 2,
+          "tiredLocomotion": 2
+        },
+        "traceContains": [
+          {
+            "lane": 0,
+            "kind": 4,
+            "sourceIndex": 22,
+            "requiredFlags": 10
+          },
+          {
+            "lane": 0,
+            "kind": 4,
+            "sourceIndex": 28,
+            "requiredFlags": 10
+          },
+          {
+            "lane": 2,
+            "kind": 4,
+            "sourceIndex": 22,
+            "requiredFlags": 10
+          },
+          {
+            "lane": 2,
+            "kind": 4,
+            "sourceIndex": 28,
+            "requiredFlags": 10
+          }
+        ],
+        "fingerprint": 3688161046
+      }
+    },
+    {
+      "name": "follower-away-held-release",
+      "request": {
+        "requestVersion": 2,
+        "species": 56,
+        "level": 20,
+        "terrain": 0,
+        "groupFlags": 0,
+        "forcedOverrideMask": 4,
+        "winningConditionId": 44837,
+        "activeConditionalMask": 448
+      },
+      "expected": {
+        "status": 0,
+        "forcedOverrideMask": 4,
+        "conditionalOverrideMask": 448,
+        "requiredAppliedOverrideMask": 452,
+        "winningConditionId": 44837,
+        "targetSourceApplication": 255,
+        "resolvedTargetConditionId": 65535,
+        "resolvedTarget": {
+          "kind": 0,
+          "actorSlot": 0,
+          "actorGeneration": 0,
+          "fieldEpoch": 0,
+          "mapGeneration": 0,
+          "encounterGeneration": 0
+        },
+        "profileFields": {
+          "owner.chillTarget": 14,
+          "owner.chillSpeed": 3,
+          "owner.hopTime": 3,
+          "owner.throwMaxRange": 8,
+          "owner.chillState": 12,
+          "owner.attacking": 1,
+          "tired.chillTarget": 14,
+          "tired.chillSpeed": 3,
+          "tired.hopTime": 3,
+          "tired.throwMaxRange": 8,
+          "tired.chillState": 12,
+          "tired.attacking": 1,
+          "owner.throwWindupFrames": 20,
+          "owner.throwRecoveryFrames": 60,
+          "tired.throwWindupFrames": 20,
+          "tired.throwRecoveryFrames": 60,
+          "owner.cargoTargetCheckInterval": 12,
+          "owner.cargoTargetSwitchAdvantage": 1,
+          "tired.cargoTargetCheckInterval": 12,
+          "tired.cargoTargetSwitchAdvantage": 1,
+          "owner.chainHopInPlaceExtraHops": 0,
+          "owner.chainHopInPlaceExtraChance": 0,
+          "tired.chainHopInPlaceExtraHops": 0,
+          "tired.chainHopInPlaceExtraChance": 0,
+          "owner.chainHopInPlaceHeartChance": 0,
+          "owner.chainHopInPlaceCryChance": 0,
+          "tired.chainHopInPlaceHeartChance": 0,
+          "tired.chainHopInPlaceCryChance": 0
+        },
+        "primitiveFields": {
+          "chillTarget": 14,
+          "tiredTarget": 14,
+          "chillLocomotion": 0,
+          "tiredLocomotion": 0
+        },
+        "traceContains": [
+          {
+            "lane": 0,
+            "kind": 4,
+            "sourceIndex": 22,
+            "requiredFlags": 10
+          },
+          {
+            "lane": 0,
+            "kind": 4,
+            "sourceIndex": 24,
+            "requiredFlags": 10
+          },
+          {
+            "lane": 0,
+            "kind": 4,
+            "sourceIndex": 28,
+            "requiredFlags": 10
+          },
+          {
+            "lane": 2,
+            "kind": 4,
+            "sourceIndex": 22,
+            "requiredFlags": 10
+          },
+          {
+            "lane": 2,
+            "kind": 4,
+            "sourceIndex": 24,
+            "requiredFlags": 10
+          },
+          {
+            "lane": 2,
+            "kind": 4,
+            "sourceIndex": 28,
+            "requiredFlags": 10
+          }
+        ],
+        "fingerprint": 615724662
       }
     }
   ]

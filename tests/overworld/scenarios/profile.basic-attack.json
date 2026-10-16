@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.basic-attack",
+  "title": "Basic attack hops onto its Pokemon, returns at once and pauses",
+  "status": "active",
+  "capabilities": [
+    "profile.composition",
+    "collision.attack",
+    "hop"
+  ],
+  "proofLevel": "S4",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "Current level50 Wild Snorlax and Cyndaquil on adjacent open Route29 tiles, with a current Igglybuff Follower.",
+    "trigger": "Prepare and bind Igglybuff as the Follower through normal party/spawn setup before the pair. Spawn both Wild subjects through native authored placement. Bind both full owners, then observe normal neutral frames through their Appear entry and adjacent Basic attack.",
+    "observable": "Authored condition21375 captures the exact current adjacent Pokemon. Resolved Chase/Hop uses only Interest tile and inherits Hop time4 unchanged, with Return after move and Face movement. A selected clear-origin outward normal four-frame one-tile Hop commits that exact tile. The inverse normal four-frame Hop starts on the landing frame, keeps the saved arc, faces back and commits the saved origin. Complete travel is observed for both legs. The minimum impact speed is1. One accepted collision removes real resident Cyndaquil HP by20. Continuous grounded idle poses before the next outward admission prove a20\u201340 frame pause after the pair. A current same-tile condition after the outward landing is retained if observed.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "On private fixture copies, teleport, replace the saved Mankey with party-slot-0 Igglybuff through normal party/spawn commands, then bind that current Follower. Use native Wild spawns and bind both exact subjects. No profile, timer, HP, motion, condition or RNG patches."
+      },
+      {
+        "phase": "during-observation",
+        "target": "observation",
+        "change": "Neutral input and memory reads only."
+      }
+    ],
+    "limits": [
+      "Prepared placement does not prove automatic population acquisition.",
+      "Same-tile truth and live lifetime ending are retained if observed. This case does not claim all eight directions or every condition-ending path; native predicate checks cover adjacent and same-tile truth, self exclusion, and far/held/recovery/stale guards.",
+      "Both subjects inherit no knockback; nonzero inherited knockback remains covered by existing attack scenarios.",
+      "Native memory proves render travel and HP. No screenshot or audio-from-speakers claim.",
+      "A first pair blocked by a foreign MOVING reservation is retained with the exact current owner and bounded return. It earns no immediate-return credit. Pairs without a new20-HP hit are retained without collision credit. The case then seeks one clear-origin pair with its own hit within the existing observation budget."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "snorlax",
+      "species": 143,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "passive",
+      "species": 174,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": false,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Replace the saved Throw Follower with a current Igglybuff, then place two adjacent authored Wild Pokemon and bind all current identities."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Observe the normal Basic condition, an immediate outward/return Hop pair, real HP collision and the complete pause before the next pair, with neutral input."
+    }
+  ],
+  "stop": {
+    "frameBudget": 600,
+    "condition": "Complete one captured-target Hop, immediate Hop back and real20-HP contact. Observe the next outward admission after a20\u201340 frame pause, then16 neutral tail frames."
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED",
+      "ACTOR_REBOUND",
+      "CONTEXT_CHANGED"
+    ],
+    "invariants": [
+      "Captured condition names the exact live adjacent Pokemon.",
+      "Only the Interest tile is allowed.",
+      "Hop time4 is inherited unchanged.",
+      "Normal outward and return Hops each take4 frames, face their movement, commit and land. The return starts on the outward finish frame and reaches the saved origin. Resident target HP falls by20. Only after the pair, a grounded idle pause lasts20\u201340 frames before the next outward Hop."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "profile.basic-attack",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "engine-boundary",
+      "logical-commit",
+      "rendered-motion",
+      "natural-input",
+      "control-release"
+    ],
+    "minimumFrames": 16
+  }
+}

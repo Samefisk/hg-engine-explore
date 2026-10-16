@@ -129,7 +129,7 @@ def validate_feedback(window,case,bindings):
         raw=bytes.fromhex(call['policyHex']);profile=bytes.fromhex(call['profileHex'])
         require(call.get('kind')=='policy' and len(raw)==28 and struct.unpack_from('<HH',raw)==(1,28)
             and raw[8]==case['subject']['handle']['slot'] and raw[21]==call['effect']
-            and len(profile)==72 and profile[70]==call['stompTime']==case['case']['threshold']
+            and len(profile)==80 and profile[70]==call['stompTime']==case['case']['threshold']
             and profile[7]==case['case']['duration'] and call['effect'] in (0,1)
             and call['objectPointer']==bindings['pointer'] and call['args'][0]==call['before']['avatarPointer']
             and call['args'][1]==bindings['pointer'],'feedback policy/profile bytes differ')

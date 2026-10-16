@@ -3391,6 +3391,7 @@ button {
   --profile-tag-background: #f4eadc;
 }
 
+.pv2-profile-tag[data-profile-tag="follower"],
 .pv2-profile-tag[data-profile-tag="follower-mount"] {
   --profile-tag-color: #347052;
   --profile-tag-background: #e1eee6;
@@ -3517,6 +3518,14 @@ button {
   grid-column: 2;
 }
 
+.profile-group--overrides .profile-list > .pv2-profile-row.override-profile[data-profile-classification="mood"] {
+  background: color-mix(in srgb, #956629 6%, #efe5e0);
+}
+
+.profile-group--overrides .profile-list > .pv2-profile-row.override-profile[data-profile-classification="attack"] {
+  background: color-mix(in srgb, #a04c3d 6%, #efe5e0);
+}
+
 .profile-group--overrides .profile-list > .pv2-profile-row.override-profile[data-profile-classification="routine"] {
   background: color-mix(in srgb, #77519a 6%, #efe5e0);
 }
@@ -3537,6 +3546,7 @@ button {
   background: color-mix(in srgb, #9a642e 6%, #efe5e0);
 }
 
+.profile-group--overrides .profile-list > .pv2-profile-row.override-profile[data-profile-classification="follower"],
 .profile-group--overrides .profile-list > .pv2-profile-row.override-profile[data-profile-classification="follower-mount"] {
   background: color-mix(in srgb, #347052 6%, #efe5e0);
 }
@@ -3609,11 +3619,14 @@ button {
   border-left: 1px solid color-mix(in srgb, var(--profile-section-accent) 30%, #b2b0a8);
 }
 
+.pv2-profile-classification-divider[data-profile-classification="mood"] { --profile-section-accent: #956629; }
+.pv2-profile-classification-divider[data-profile-classification="attack"] { --profile-section-accent: #a04c3d; }
 .pv2-profile-classification-divider[data-profile-classification="routine"] { --profile-section-accent: #77519a; }
 .pv2-profile-classification-divider[data-profile-classification="placement"] { --profile-section-accent: #3f6f92; }
 .pv2-profile-classification-divider[data-profile-classification="capability"] { --profile-section-accent: #276c78; }
 .pv2-profile-classification-divider[data-profile-classification="attitude"] { --profile-section-accent: #a24f63; }
 .pv2-profile-classification-divider[data-profile-classification="style"] { --profile-section-accent: #9a642e; }
+.pv2-profile-classification-divider[data-profile-classification="follower"] { --profile-section-accent: #347052; }
 .pv2-profile-classification-divider[data-profile-classification="follower-mount"] { --profile-section-accent: #347052; }
 .pv2-profile-classification-divider[data-profile-classification="modifier"] { --profile-section-accent: #59616c; }
 

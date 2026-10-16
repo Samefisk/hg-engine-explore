@@ -62,8 +62,10 @@ def enable_spawn_cost_probe(session, args):
     if getattr(session, "spawn_cost_probe", None) is not None:
         raise ValueError("spawn cost probe is already enabled for this session")
     observer = getattr(session, "native_observation", None)
-    if not getattr(session, "prepared", False) or observer is None or not observer.installed:
-        raise ValueError("spawn cost probe requires prepared setup and installed observer")
+    if observer is None or not observer.installed:
+        raise ValueError("spawn cost probe requires an installed observer")
+    if args["mode"] != "baseline" and not getattr(session, "prepared", False):
+        raise ValueError("omitting spawn details requires prepared setup")
     if observer.session is not session or any(label not in observer.calls for label in LABELS):
         raise ValueError("spawn cost probe observer or labels differ")
     if (getattr(session, "native_bridge_active", False)

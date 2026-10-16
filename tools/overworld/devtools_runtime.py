@@ -195,6 +195,7 @@ def actor_identity_checks(actor, source, engine, context, slot):
 # Fixed stock Thumb entry points, checked against the local vanilla source and
 # stock ARM9 disassembly. Live bytes must also match this session's packaged ROM.
 STOCK_CALLS = {
+    "emote_quiet": (0x01FFF3B0, 2),  # fixed resident prepared T66 trigger
     "corner_collision": (0x0205DA34, 3),
     "transition": (0x02055C9C, 7),  # NewFieldTransitionEnvironment
     "allocate_task_environment": (0x0201AACC, 2),  # Heap_AllocAtEnd
@@ -214,6 +215,17 @@ STOCK_CALLBACKS = {"script_warp_task": 0x0205380C}
 WILD_ACTIVE_FOLLOWER_PARTY_SLOT_OFFSET = 0x3A5
 WILD_CAPTURE_TARGET_MASK_OFFSET = 0x3A6
 WILD_FOLLOWER_RELEASE_STATE_OFFSET = 0x3AC
+# Production ARM layout measured in tkt65/native-fit-2/private-layout.json.
+# These private reads are used only by the bounded prepared spawn command.
+ENTRY_SPAWN_RUNTIME_SIZE = 2856
+ENTRY_SPAWN_OFFSETS = {"prepared": 992, "slot": 240, "stage": 244,
+                       "serial": 2748, "receipt": 2752, "tripSerials": 2816}
+# Exact current FUNC owners bind the measured Runtime/queue layout. Queue
+# preparation and route queries now live in the current Field-owned Query image.
+# Move From Off Screen is gone, so the Wild overlay keeps no QueryEntry owner.
+ENTRY_SPAWN_OWNERS = {}
+ENTRY_SPAWN_QUERY_OWNERS = {'NativeArm.constprop.0.isra.0': (34135672, 172, 'e73050449799974c6972fd1d5457da6154ac2ec2c6f2325b495daa4ef0bc4737'),
+ 'NativeQueryEntry': (34135168, 504, '3dcca32c37afdb6a3aa102ad15889e3c0998a11d399dda6c7b4d5704a072611e')}
 LINKED_CALLS = {
     "corner_landing": ("WILD_SYMBOLS", "OverworldWildSpawns_ValidateHopLandingValue", 8),
     "mount_hop_landing": ("MOUNT_SYMBOLS", "OverworldMount_IsLandingTileAllowed", 2),
@@ -748,9 +760,10 @@ class FieldReturnBridge:
             code = s.packaged_code(address, 4)
             require(regs.lr & 1 and code == s.read(address, 4),
                     "natural poll return is not authenticated Thumb code")
-            # Only the reviewed literal-load return seam is safe to redirect:
-            # it reads code and changes one low register, not SP or game data.
-            require(code == bytes.fromhex("244b254a"),
+            # The return has two Thumb PC-relative literal loads into r3 and r2.
+            # Their offsets may move when the caller's literal pool moves.
+            # Neither instruction changes SP or game data.
+            require(len(code) == 4 and code[1] == 0x4B and code[3] == 0x4A,
                     "native poll return is not a safe Thumb literal-load seam", "abi-mismatch")
             state["entry"], state["return"] = regs.sp, address
             hook(address, guarded(returned), first=True)
@@ -959,6 +972,12 @@ class DevtoolsSession:
                 "copied ROM differs from the current linked candidate", "stale-rom")
         self.save_hash = hashlib.sha256(self.save.read_bytes()).hexdigest()
         self._load_package()
+        self.zero_load_trace = None
+        if rt._zero_hp_save_record(self.save.read_bytes()) is not None:
+            from tools.overworld.devtools_player_health_zero_load_trace import ZeroLoadRecoveryTrace
+            code, data = rt._zero_hp_boot_layout()
+            self.zero_load_trace = ZeroLoadRecoveryTrace(code, data)
+        self.zero_load_latest = None
         self.party_offsets = SUBSTRUCT_OFFSETS
         self.emu = None
         self.prepared = False
@@ -983,6 +1002,7 @@ class DevtoolsSession:
         self.semantic_trace = None
         self.native_observation = None
         self.script_warp_heap_free_observer = None
+        self.query_allocation_lifecycle = None
         self.observer_control = None
         self.spawn_height_control = None
         self.route_control = None
@@ -998,6 +1018,7 @@ class DevtoolsSession:
         self.walk_corner = None
         self.walk_matrix = None
         self.stomp_feedback = None
+        self.emote_three = None
         self.crash_feedback = None
         self.trace_request = None
         self.trace_events = []
@@ -1014,9 +1035,20 @@ class DevtoolsSession:
         rt.ROM = self.rom
         self.emu = rt.h.create_emulator()
         try:
-            rt.boot(self.emu, self.save, self.save.suffix.lower() == ".dsv",
-                    on_rom_open=self._install_sampler)
-        except Exception:
+            self.boot_recovery = rt.boot(
+                self.emu, self.save, self.save.suffix.lower() == ".dsv",
+                on_rom_open=self._install_sampler)
+            if self.zero_load_trace is not None:
+                require(isinstance(self.boot_recovery, dict),
+                        "zero-load boot did not retain a pending recovery", "zero-load-boot")
+                self.boot_recovery = {**self.boot_recovery,
+                    "preBootFrames": deepcopy(self.zero_load_trace.history)}
+        except Exception as error:
+            if isinstance(error, RuntimeError) and "actor clock stalled" in str(error):
+                failure = DevtoolsFailure("boot-actor-clock-stalled", str(error),
+                    fatal=True, details={"diagnostics": self.diagnostics()})
+                self.close()
+                raise failure from error
             self.close()
             raise
         self.bridge = FieldReturnBridge(self)
@@ -1032,7 +1064,7 @@ class DevtoolsSession:
                                  str(self.personality_sequence)).encode("ascii")).digest()
         return int.from_bytes(digest[:4], "little") or 1
 
-    def prepare_observation(self):
+    def prepare_observation(self, appearance_subject=None):
         """Retire empty setup IRQ hooks once; no native calls or frame credit."""
         require(self.emu is not None, "session is closed", "closed")
         require(not any(getattr(self, name, False) for name in (
@@ -1040,6 +1072,10 @@ class DevtoolsSession:
             "observation preparation during a native call", "observation-prepare-active")
         if getattr(self, "_observation_prepare_error", None) is not None:
             raise self._observation_prepare_error
+        if appearance_subject is not None:
+            appearance = getattr(self.native_observation, "appearance", None)
+            require(appearance is not None, "palette window is not active", "observation-prepare-active")
+            appearance.select_subject(appearance_subject)
         if getattr(self, "_observation_setup", None) is not None:
             return deepcopy(self._observation_setup)
         # Exactly the stock IRQ subset of _native_checkpoint_points. Other
@@ -1086,6 +1122,7 @@ class DevtoolsSession:
         from tools.overworld.devtools_observer import NativeObservation
         self.native_observation = NativeObservation(self, self.party_getter_hooks, _elf_code)
         self.native_observation.install()
+        self._install_query_allocation_observer()
         def completed(_address, _size):
             self.completed_frames += 1
             phase = getattr(self, "input_step_phase", None)
@@ -1106,6 +1143,10 @@ class DevtoolsSession:
                 rt, emu = self.rt, self.emu
                 state = rt.ACTOR_DESCRIPTOR["state"]["address"]
                 magic, field = rt.unsigned(emu, state), rt.unsigned(emu, rt.G_FIELD_SYS_PTR)
+                if self.zero_load_trace is not None:
+                    self.zero_load_latest = self.zero_load_trace.observe(
+                        self.read, field, self.completed_frames, rt.EXECUTED_FRAME_COUNT,
+                        read_overlay=lambda address, size: rt.actor_memory_read(emu, address, size))
                 if magic != 0x5353574F or not field:
                     self._record_field_absence(field, magic, guest_queue_clock=guest_queue_clock)
                     return
@@ -1139,12 +1180,19 @@ class DevtoolsSession:
                     self.walk_matrix.completed_boundary()
                 if getattr(self, "stomp_feedback", None) is not None:
                     self.stomp_feedback.completed_boundary()
+                if getattr(self, "emote_three", None) is not None:
+                    self.emote_three.completed_boundary()
                 if getattr(self, "crash_feedback", None) is not None:
                     self.crash_feedback.completed_boundary()
                 if self.party_getter_hooks.error is not None:
                     raise DevtoolsFailure("party-getter-mismatch", self.party_getter_hooks.error)
                 party = self.callback_costs.call("sampler:party-read", self._read_party_at_boundary)
                 value = self.callback_costs.call("sampler:snapshot", self._snapshot, 0, details=False)
+                pending_spawn = getattr(self, "_queued_entry_spawn", None)
+                if pending_spawn is not None:
+                    value["queuedEntrySpawn"] = self.callback_costs.call(
+                        "sampler:queued-entry-spawn", self._read_entry_spawn,
+                        pending_spawn["slot"])
                 if getattr(self, "observer_control", None) is not None:
                     value["observerControl"] = self.observer_control.result()
                 if getattr(self, "route_control", None) is not None:
@@ -1174,11 +1222,17 @@ class DevtoolsSession:
                 if getattr(self, "crash_feedback", None) is not None:
                     value["crashFeedback"] = self.crash_feedback.result()
                 value["observationBoundary"] = "main-task-queue-completion"
+                if self.zero_load_latest is not None:
+                    value["zeroLoadRecovery"] = deepcopy(self.zero_load_latest)
                 value["guestQueueClock"] = guest_queue_clock
                 value["fieldAvailable"] = True
                 value["selector"] = self.callback_costs.call("sampler:selector", self._selector_observation)
                 value["dialogue"] = self.callback_costs.call("sampler:dialogue", self._dialogue_observation, field)
                 value["party"] = party
+                from tools.overworld.devtools_pokemon_combat_observer import observe_pokemon_combat
+                value["pokemonCombat"] = self.callback_costs.call(
+                    "sampler:pokemon-combat", observe_pokemon_combat, self, value,
+                    include_interactions=getattr(self, "_throw_interactions_window", False))
                 value["partyObservation"] = {"frame": self.completed_frames,
                     "boundary": "main-task-queue-completion",
                     "nativeGetterChecks": list(self.party_getter_checks.values())}
@@ -1218,7 +1272,7 @@ class DevtoolsSession:
         states come from overlay_manager.h/c. Package bytes are session-owned;
         only the 24-byte ARM9 predicate and bounded live data are read here.
         """
-        from tools.overworld.devtools_field_lifecycle import FIELD_TEMPLATE
+        from tools.overworld.devtools_field_lifecycle import FIELD_TEMPLATE, FIELD_EXIT_WRAPPER
         base, arm9 = self.arm9_code_region
         require(arm9[0x0203DF8C - base:0x0203DFA4 - base]
                 == bytes.fromhex("01680968002904d0c06e002801d001207047002070470000"),
@@ -1262,6 +1316,8 @@ class DevtoolsSession:
         value.update(managerExecState=execute, managerProcState=process)
         require(not ready or execute == 2,
                 "ready field manager is not executing", "field-lifecycle-invalid")
+        if ready:
+            self._authenticate_field_reader_code(*FIELD_EXIT_WRAPPER)
         if not ready:
             value["reason"] = "field-initializing" if execute in (0, 1) else "field-exiting"
         return value
@@ -1297,6 +1353,8 @@ class DevtoolsSession:
                  "prepared": self.prepared, "proofStatus": "diagnostic-only",
                  "romSha256": self.rom_hash, "sourceSaveSha256": self.save_hash,
                  "nativeObservation": self.native_observation.snapshot(), "observationErrors": []}
+        if self.zero_load_latest is not None:
+            value["zeroLoadRecovery"] = deepcopy(self.zero_load_latest)
         if lifecycle is not None:
             value["fieldAvailability"]["lifecycle"] = {
                 key: item for key, item in lifecycle.items() if key != "reason"}
@@ -1454,15 +1512,46 @@ class DevtoolsSession:
         finally:
             self.trace_request = None
 
-    def record_start(self, max_frames=1800, binding_context=False, role_profile=False):
+    def record_start(self, max_frames=1800, binding_context=False, role_profile=False, appearance_palette=False,
+                     throw_interactions=False):
         integer(max_frames, "maxFrames", 1, 65535)
         require(type(binding_context) is bool, "bindingContext must be boolean")
         require(type(role_profile) is bool, "roleProfile must be boolean")
+        require(type(appearance_palette) is bool, "appearancePalette must be boolean")
+        require(type(throw_interactions) is bool, "throwInteractions must be boolean")
+        require(not getattr(self, "_throw_interactions_window", False),
+                "throw interaction recording window is already active")
+        if appearance_palette:
+            require(getattr(self.native_observation, "appearance", None) is None,
+                    "appearance palette window is already active")
+            from tools.overworld.devtools_appearance_observer import NativeAppearanceObserver
+            self.native_observation.appearance = NativeAppearanceObserver(self.native_observation)
         require(getattr(self, "_role_profile_window", None) is None,
                 "role profile recording window is already active")
         if role_profile:
             require(self.prepared, "role profile recording requires prepared setup")
-        result = self._record_control("start", max_frames)
+        if throw_interactions:
+            from tools.overworld.devtools_query_observer import NativeQueryObserver
+            require(getattr(self.native_observation, "query", None) is None,
+                    "Throw query recording window is already active")
+            self.native_observation.query = NativeQueryObserver(self.native_observation)
+        self._throw_interactions_window = throw_interactions
+        try:
+            if throw_interactions:
+                from tools.overworld.devtools_slam_admission_observer import SlamAdmissionObserver
+                self.native_observation.slam_admission = SlamAdmissionObserver(self.native_observation)
+            result = self._record_control("start", max_frames)
+        except Exception:
+            self._throw_interactions_window = False
+            slam = getattr(self.native_observation, "slam_admission", None)
+            if slam is not None:
+                slam.close()
+                self.native_observation.slam_admission = None
+            query = getattr(self.native_observation, "query", None)
+            if query is not None:
+                query.close()
+                self.native_observation.query = None
+            raise
         if binding_context:
             self.native_observation.binding_context.enable()
         if role_profile:
@@ -1483,7 +1572,20 @@ class DevtoolsSession:
         try:
             return self._record_control("stop")
         finally:
+            self._throw_interactions_window = False
             self._close_role_profile_window()
+            slam = getattr(self.native_observation, "slam_admission", None)
+            if slam is not None:
+                slam.close()
+                self.native_observation.slam_admission = None
+            query = getattr(self.native_observation, "query", None)
+            if query is not None:
+                query.close()
+                self.native_observation.query = None
+            appearance = getattr(self.native_observation, "appearance", None)
+            if appearance is not None:
+                appearance.close()
+                self.native_observation.appearance = None
 
     def observer_control_arm(self, args):
         """Internal checked-job operation; no frame or input is advanced here."""
@@ -2139,6 +2241,7 @@ class DevtoolsSession:
         self.code_regions = [(address, ndspy.codeCompression.decompress(data[offset:offset + size]))]
         self.arm9_code_region = self.code_regions[0]
         self.dialogue_overlay_regions = {}
+        self.overlay_code_regions = {}
         fat, fat_size = struct.unpack_from("<II", data, 0x48)
         y9, y9_size = struct.unpack_from("<II", data, 0x50)
         require(y9_size % 32 == 0 and fat + fat_size <= len(data), "ROM overlay tables are invalid")
@@ -2152,6 +2255,10 @@ class DevtoolsSession:
                 code = ndspy.codeCompression.decompress(code)
             require(len(code) >= size, "overlay is shorter than its RAM image")
             self.code_regions.append((base, code[:size]))
+            if overlay_id == 161:
+                require(overlay_id not in self.overlay_code_regions,
+                        "ROM has duplicate player HP overlay IDs", "abi-mismatch")
+                self.overlay_code_regions[overlay_id] = (base, code[:size])
             if overlay_id in (1, 2, 27):
                 self.dialogue_overlay_regions[overlay_id] = (base, code[:size])
 
@@ -2185,8 +2292,23 @@ class DevtoolsSession:
                 require(all(slots[index + 1] in (0, 1) for index in range(0, 16, 2)),
                         "dialogue overlay active flag is invalid", "abi-mismatch")
                 loaded = {slots[index] for index in range(0, 16, 2) if slots[index + 1] == 1}
+            blackout_parents = None
+            recovery = getattr(self, "zero_load_latest", None)
+            trace = getattr(self, "zero_load_trace", None)
+            if (trace is not None and isinstance(recovery, dict)
+                    and recovery.get("frame") == self.completed_frames
+                    and recovery.get("nativeCycle") == self.rt.EXECUTED_FRAME_COUNT
+                    and recovery.get("field") == field
+                    and isinstance(recovery.get("stock"), dict)
+                    and isinstance(recovery.get("root"), dict)
+                    and recovery["stock"].get("state") == 6
+                    and recovery["root"].get("state") == 2):
+                blackout_parents = (
+                    (recovery["stock"]["pointer"], trace.stock, 6, 0),
+                    (recovery["root"]["pointer"], trace.root, 2, 0))
             return observe_dialogue(self.read, authenticate, field, self.completed_frames,
-                                    self.rt.EXECUTED_FRAME_COUNT, loaded)
+                                    self.rt.EXECUTED_FRAME_COUNT, loaded,
+                                    blackout_parents=blackout_parents)
         except Exception as error:
             return {"frame": self.completed_frames, "nativeCycle": self.rt.EXECUTED_FRAME_COUNT,
                     "boundary": "main-task-queue-completion", "fieldPointer": field,
@@ -2196,11 +2318,23 @@ class DevtoolsSession:
         candidates = [data[address - base:address - base + size] for base, data in self.code_regions
                       if base <= address and address + size <= base + len(data)]
         require(candidates, f"address {address:#x} is outside packaged code", "abi-mismatch")
-        live = self.read(address, size)
+        if type(size) is int and 0 < size <= 0x10000\
+                and 0x01FF8000 <= address < address + size <= 0x02000000:
+            # The exact packaged span above permits this resident ITCM code
+            # read only. General diagnostic data reads keep their bounds.
+            require(self.emu is not None, "session is closed", "closed")
+            live = self.rt.actor_memory_read(self.emu, address, size)
+        else:
+            live = self.read(address, size)
         require(live in candidates, f"live code at {address:#x} differs from ROM", "abi-mismatch")
         return live
 
     def target(self, name):
+        if name == "emote_quiet":
+            from tools.overworld.devtools_emote_three_probe import QUIET
+            require(hashlib.sha256(self.packaged_code(QUIET[0], QUIET[1])).hexdigest() == QUIET[2],
+                    "fixed quiet bubble full native body differs", "abi-mismatch")
+            return QUIET[0]
         require(name in STOCK_CALLS or name in STOCK_CALLBACKS or name in LINKED_CALLS, "routine is not permitted")
         if name in STOCK_CALLS or name in STOCK_CALLBACKS:
             address = STOCK_CALLS[name][0] if name in STOCK_CALLS else STOCK_CALLBACKS[name]
@@ -2270,15 +2404,15 @@ class DevtoolsSession:
         points.append(("create-box-mon-entry", box))
         # Narrow diagnostic: preserve which CreateBox native call actually
         # entered/returned, separately from the rolling IRQ trace. These are
-        # reviewed call-site offsets in the fully authenticated 584-byte body.
-        # The linker may move this unchanged function when unrelated ROM code
-        # changes. The authenticated symbol, packaged bytes, size, and relative
-        # Thumb BL sites above are the stable contract.
-        require(box_size == 584,
+        # Reviewed call-site offsets in the fully authenticated 612-byte body
+        # include the encounter HP-IV construction. The linker may move this
+        # function when unrelated ROM code changes. The authenticated symbol,
+        # packaged bytes, exact size and relative Thumb BL sites are the contract.
+        require(box_size == 612,
                 "CreateBoxMonData internal observation layout differs", "abi-mismatch")
         for name, offset in (("init", 0x18), ("fast-mode", 0x20), ("personality-override", 0x2E),
-                             ("species-name", 0xBA), ("level-exp", 0xC4),
-                             ("personal-data", 0xDA), ("moveset", 0x194)):
+                             ("species-name", 0xBE), ("level-exp", 0xC8),
+                             ("personal-data", 0xDE), ("moveset", 0x1B0)):
             high, low = struct.unpack_from("<HH", live_box, offset)
             require(high & 0xF800 == 0xF000 and low & 0xF800 == 0xF800,
                     f"CreateBoxMonData {name} is not a Thumb BL", "abi-mismatch")
@@ -2405,6 +2539,10 @@ class DevtoolsSession:
         require(0x02000000 <= value < 0x02400000, "no live field system")
         return value
 
+    def player_health_observe(self, args):
+        from tools.overworld.devtools_player_health_observer import observe_player_health
+        return observe_player_health(self, args)
+
     def party_pointer(self):
         save = self.rt.unsigned(self.emu, 0x021D2228)
         require(0x02000000 <= save < 0x02400000, "no live save data")
@@ -2501,13 +2639,66 @@ class DevtoolsSession:
         if self.runtime_health_failure is not None:
             raise self.runtime_health_failure
         try:
+            kwargs = {}
+            if (operation == "observe"
+                    and self.rt.EXECUTED_FRAME_COUNT
+                        - self.runtime_health._progress_cycle >= 119
+                    and self._stock_save_write_active()):
+                # Stock synchronous SaveGameNormal waits for async flash
+                # writes without returning to the main queue. A full write of
+                # an older save (both blocks) measured past 600 cycles.
+                kwargs["stall_limit"] = 2400
             getattr(self.runtime_health, operation)(self.rt.EXECUTED_FRAME_COUNT,
-                self.completed_frames, self.emu.memory.register_arm9.cpsr & 0xFFFFFFFF)
+                self.completed_frames, self.emu.memory.register_arm9.cpsr & 0xFFFFFFFF,
+                **kwargs)
         except RuntimeHealthFailure as error:
             failure = DevtoolsFailure(error.code, "Automatic runtime freeze check: " + error.code,
                 fatal=True, details={**error.details, "diagnostics": self.diagnostics()})
             self.runtime_health_failure = failure
             raise failure from error
+
+    def _stock_save_write_active(self):
+        try:
+            from tools.overworld.devtools_start_menu_observer import observe_save_app
+            app = observe_save_app(self.read, self.field_pointer())
+            return app.get("save", {}).get("state") == 12
+        except (ValueError, DevtoolsFailure):
+            return False
+
+    def save_wait(self, max_native_cycles=2000):
+        """Advance released input only through the authenticated stock Save write."""
+        from tools.overworld.devtools_start_menu_observer import observe_save_app
+        integer(max_native_cycles, "maxNativeCycles", 1, 2000)
+        app = observe_save_app(self.read, self.field_pointer())
+        save = app.get("save", {})
+        state = save.get("state")
+        require(state in (10, 11, 12) or state == 2 and save.get("stateAfterText") == 11,
+                "stock Save app is not about to write", "save-wait-invalid")
+        first_frame = self.completed_frames
+        first_cycle = self.rt.EXECUTED_FRAME_COUNT
+        saw_write = state == 12
+        self.rt.h.set_key_mask(self.emu, 0)
+        for count in range(1, max_native_cycles + 1):
+            self.cycle(1, 0)
+            app = observe_save_app(self.read, self.field_pointer())
+            end_state = app.get("save", {}).get("state")
+            if end_state == 12:
+                saw_write = True
+            if saw_write and isinstance(end_state, int) and 13 <= end_state <= 15\
+                    and self.completed_frames > first_frame:
+                return {"schemaVersion": 1, "startSaveState": state,
+                        "endSaveState": end_state, "observedWriteState12": True,
+                        "nativeCycles": count,
+                        "completedGameFrames": self.completed_frames - first_frame,
+                        "startNativeCycle": first_cycle,
+                        "snapshot": self.snapshot(diagnostic_details=False)}
+        raise DevtoolsFailure("save-wait-timeout",
+                              "stock Save write did not finish inside the native-cycle limit",
+                              details={"maxNativeCycles": max_native_cycles,
+                                       "sawWriteState12": saw_write,
+                                       "startSaveState": state,
+                                       "lastSaveState": end_state,
+                                       "completedGameFrames": self.completed_frames - first_frame})
 
     def _wait_new_frame(self, after_frame, predicate, *, native_limit, code, message):
         """Wait for fresh field readback after a native command.
@@ -2519,7 +2710,7 @@ class DevtoolsSession:
             self.cycle(1)
             require(self.sample_error is None, f"coherent sampler failed: {self.sample_error}", "observation-failed")
             value = self.latest_frame
-            if value is not None and value.get("fieldAvailable") is not False \
+            if value is not None and value.get("fieldAvailable") is not False\
                     and value["frame"] > after_frame and predicate(value):
                 return self.snapshot()
         raise DevtoolsFailure(code, message, details={
@@ -2546,7 +2737,8 @@ class DevtoolsSession:
                 return True
             return observe_field_cleanup(self.read, authenticate,
                 lambda name: (self.rt.REPO / "build" / name).read_bytes(), loaded,
-                self.completed_frames, self.rt.EXECUTED_FRAME_COUNT)
+                self.completed_frames, self.rt.EXECUTED_FRAME_COUNT,
+                actor_descriptor=self.rt.ACTOR_DESCRIPTOR)
         except Exception as error:
             return {"known": False, "reason": str(error)[:240], "diagnosticOnly": True,
                     "acceptedProof": False, "boundary": "paused-native-cycle-end",
@@ -2590,6 +2782,62 @@ class DevtoolsSession:
                     phase, map_id, warp_id, x, z, facing = struct.unpack("<6i", self.read(env, 24))
                     item["transition"] = {"kind": "script-warp", "state": phase, "mapId": map_id,
                                           "warpId": warp_id, "x": x, "z": z, "facing": facing}
+                elif function == 0x0203BEF1:
+                    from tools.overworld.devtools_start_menu_observer import observe_start_menu
+                    item["startMenu"] = observe_start_menu(self.read, field, function, owner, env)
+                elif function == 0x0203FF45:
+                    # A stock arrival script can be a child of blackout. The
+                    # regular dialogue reader rejects that parent chain, so
+                    # retain only this script's checked execution state here.
+                    self.packaged_code(0x0203FF44, 0xD8)
+                    data = self.read(env, 0x44)
+                    require(struct.unpack_from("<I", data)[0] == 222271,
+                            "native script environment magic differs")
+                    count = data[9]
+                    contexts = struct.unpack_from("<3I", data, 0x38)
+                    require(0 <= count <= 3 and sum(bool(x) for x in contexts) == count,
+                            "native script context count differs")
+                    script = {"state": data[4], "activeContextCount": count,
+                              "scriptNumber": struct.unpack_from("<H", data, 10)[0],
+                              "contexts": []}
+                    for index, context in enumerate(contexts[:count]):
+                        ctx = self.read(context, 0x84)
+                        script["contexts"].append({
+                            "pointer": context, "id": ctx[3], "mode": ctx[1],
+                            "callback": struct.unpack_from("<I", ctx, 4)[0],
+                            "scriptPointer": struct.unpack_from("<I", ctx, 8)[0],
+                            "task": struct.unpack_from("<I", ctx, 0x74)[0],
+                            "fieldPointer": struct.unpack_from("<I", ctx, 0x80)[0]})
+                        require(script["contexts"][-1]["id"] == index
+                                and script["contexts"][-1]["task"] == task
+                                and script["contexts"][-1]["fieldPointer"] == field,
+                                "native script context owner differs")
+                        if script["contexts"][-1]["callback"] == 0x021EF349:
+                            self.packaged_code(0x020202EC, 0x6C)
+                            printer_id = self.read(env + 5, 1)[0]
+                            require(printer_id <= 8, "native printer ID differs")
+                            printer = {"id": printer_id}
+                            if printer_id < 8:
+                                printer_task = struct.unpack("<I", self.read(
+                                    0x021D1F74 + 4 * printer_id, 4))[0]
+                                printer["task"] = printer_task
+                                if printer_task:
+                                    task_data = self.read(printer_task, 28)
+                                    require(struct.unpack_from("<I", task_data, 20)[0] == 0x020202ED,
+                                            "native printer callback differs")
+                                    printer_env = struct.unpack_from("<I", task_data, 16)[0]
+                                    printer_data = self.read(printer_env, 0x34)
+                                    require(struct.unpack_from("<I", printer_data, 4)[0] == env + 0x14
+                                            and printer_data[0x2C] == printer_id,
+                                            "native printer owner differs")
+                                    printer.update({"environment": printer_env,
+                                        "characterPointer": struct.unpack_from("<I", printer_data)[0],
+                                        "active": printer_data[0x27], "state": printer_data[0x28],
+                                        "callbackWaiting": printer_data[0x2D],
+                                        "suspended": self.read(0x021D1F6C, 1)[0],
+                                        "textFlags": list(self.read(0x02111886, 2))})
+                            script["printer"] = printer
+                    item["script"] = script
                 result["tasks"].append(item)
                 task = prev
             if task:
@@ -2622,6 +2870,8 @@ class DevtoolsSession:
         require(self.sample_error is None, f"coherent sampler failed: {self.sample_error}", "observation-failed")
         require(self.latest_frame is not None, "no complete live field frame was observed", "observation-missing")
         value = deepcopy(self.latest_frame)
+        if self.boot_recovery is not None:
+            value["bootRecovery"] = deepcopy(self.boot_recovery)
         if self.native_observation is not None:
             require(self.native_observation.hooks.error is None,
                     f"native observer failed: {self.native_observation.hooks.error}", "observation-failed")
@@ -2715,7 +2965,10 @@ class DevtoolsSession:
             actor["lastCancelReasonName"] = rt.actor_probe._enum_name(rt.ACTOR_DESCRIPTOR, "OverworldActorReason", actor["lastCancelReason"], "OVERWORLD_ACTOR_REASON")
             if engine["in_manager"]:
                 actor["engineObject"] = rt.object_state(emu, engine["pointer"])
-                if actor["motionKind"] == "FLY_IN" and all(checks.values()):
+                # Field menus release the Wild runtime while the Actor still
+                # reports its last motion; there is then no shadow to read.
+                if (actor["motionKind"] == "FLY_IN" and all(checks.values())
+                        and rt.unsigned(emu, rt.WILD_STATE + rt.WILD_RUNTIME_PTR_OFFSET) != 0):
                     pose = actor["engineObject"]
                     tile_x, tile_z = pose["pos_x"] >> 16, pose["pos_z"] >> 16
                     cell = rt.loaded_terrain_cell(emu, tile_x, tile_z)
@@ -2789,6 +3042,12 @@ class DevtoolsSession:
                 "player": graphics_pose(rt.player_ptr(emu)),
                 "mount": graphics_pose(mounted["engineIdentity"]["pointer"]),
             }
+            if mounted.get("identityVerified") is True:
+                from tools.overworld.devtools_mount_gait import read_gait_pair
+                result["mountedPair"] = read_gait_pair(self, {
+                    "playerPointer": rt.player_ptr(emu),
+                    "mountPointer": mounted["engineIdentity"]["pointer"],
+                }, player=player, mount=mounted["engineObject"])
             # Stock native shadows are separate field-effect slots. Their
             # update tasks run before the late mounted pose sync, so retain
             # their actual draw positions beside the two MapObject sprites.
@@ -2847,6 +3106,8 @@ class DevtoolsSession:
                               "loaded": cell is not None, **(cell or {}), "surface": surface})
         address = rt.ACTOR_DESCRIPTOR["state"]["address"]
         return {"terrain": {"cells": cells, "warps": rt.loaded_warp_events(emu),
+                            "events": rt.loaded_events_digest(emu),
+                            "landModels": rt.loaded_land_models(emu),
                             "observation": {"boundary": "paused-native-cycle-end",
                                             "nativeCycle": rt.EXECUTED_FRAME_COUNT,
                                             "lastCompletedGameFrame": self.completed_frames,
@@ -2858,10 +3119,18 @@ class DevtoolsSession:
 
     def diagnostics(self):
         """Bounded paused-endpoint evidence, never a repair or a game tick."""
+        from tools.overworld.devtools_emote_vram_diagnostics import observe_emote_vram_diagnostics
         result = {"boundary": "paused-native-cycle-end", "captureErrors": []}
         for key, capture in (
             ("cpu", lambda: native_cpu_diagnostics(self)),
             ("fieldControl", self._control_diagnostics),
+            ("mountToggle", self._mount_toggle_diagnostics),
+            ("heaps", self._heap_diagnostics),
+            ("emoteVram", lambda: observe_emote_vram_diagnostics(self)),
+            ("queryOwner", self._query_owner_diagnostics),
+            ("queryAllocationLifecycle", self._query_allocation_diagnostics),
+            ("nativeObserverFault", lambda: self.native_observation.snapshot()
+                if self.native_observation is not None else None),
             ("lastCompleteSnapshot", lambda: deepcopy(self.latest_frame)),
         ):
             try:
@@ -2869,6 +3138,235 @@ class DevtoolsSession:
             except Exception as error:
                 result["captureErrors"].append(f"{key}: {type(error).__name__}: {error}")
         return result
+
+    def _install_query_allocation_observer(self):
+        # on_rom_open calls this before Continue. No guest call or frame is
+        # added; an unavailable exact package is retained as unknown evidence.
+        from tools.overworld.devtools_heap_free_observer import QueryAllocationLifecycleObserver
+        try:
+            self.query_allocation_lifecycle = QueryAllocationLifecycleObserver(self)
+            self.query_allocation_lifecycle.install()
+        except Exception as error:
+            self.query_allocation_error = f"{type(error).__name__}: {error}"[:300]
+            if self.query_allocation_lifecycle is not None:
+                self.query_allocation_lifecycle.close()
+            self.query_allocation_lifecycle = None
+
+    def _query_allocation_diagnostics(self):
+        observer = getattr(self, "query_allocation_lifecycle", None)
+        if observer is not None:
+            return observer.result()
+        return {"known": False, "diagnosticOnly": True, "acceptedProof": False,
+                "reason": getattr(self, "query_allocation_error", "boot observer is unavailable")}
+
+    def _query_owner_diagnostics(self):
+        """Read the authenticated Selector-owned query state; no pointer follow."""
+        from tools.overworld.devtools_field_cleanup import symbol
+        result = {"known": False, "diagnosticOnly": True, "acceptedProof": False,
+                  "boundary": "paused-native-cycle-end", "frame": self.completed_frames,
+                  "nativeCycle": self.rt.EXECUTED_FRAME_COUNT, "bytesRead": 0,
+                  "readBudgetBytes": 53}
+
+        def span(address, size):
+            require(type(address) is int and address % 4 == 0
+                    and 0x02000000 <= address <= 0x02400000 - size,
+                    "query diagnostic pointer is outside main RAM", "query-diagnostic")
+
+        def read(address, size):
+            result["bytesRead"] += size
+            require(result["bytesRead"] <= result["readBudgetBytes"],
+                    "query diagnostic read budget exceeded", "query-diagnostic")
+            raw = self.read(address, size)
+            require(isinstance(raw, bytes) and len(raw) == size,
+                    "query diagnostic read is incomplete", "query-diagnostic")
+            return raw
+
+        try:
+            build = Path(self.rt.REPO) / "build"
+            linked = build / "overworld_follower_selector_overlay_linked.o"
+            image = linked.read_bytes()
+            table, _, _ = symbol(image, "gOverworldQueryCodeAddonServiceEntry", 1,
+                                  expected_size=24)
+            state, _, _ = symbol(image, "gOverworldQueryCodeAddonState", 1,
+                                  expected_size=28)
+            flag, _, _ = symbol((build / "field_linked.o").read_bytes(),
+                "gOverworldFollowerSelectorStateStorage", 1, expected_size=1)
+            require((table, state, flag) == (0x023C22F0, 0x023C2308, 0x023C8148),
+                    "query diagnostic linked homes differ", "query-diagnostic")
+            span(table, 24)
+            span(state, 28)
+            span(flag, 1)
+            require(read(flag, 1)[0] & 0x40,
+                    "query diagnostic Selector is not loaded", "query-diagnostic")
+            expected = _elf_code(linked, table, 24)
+            magic, version, size, pointer, load, acquire, unload = struct.unpack("<IHH4I", expected)
+            require((magic, version, size, pointer) == (0x53444F57, 2, 24, state)
+                    and all(p & 1 and 0x023BFC00 <= (p & ~1) < 0x023C3000
+                            for p in (load, acquire, unload)),
+                    "query diagnostic service ABI differs", "query-diagnostic")
+            result["bytesRead"] += 24  # packaged_code performs the live table read.
+            require(self.packaged_code(table, 24) == expected,
+                    "query diagnostic live/package/ELF table differs", "query-diagnostic")
+            raw = read(state, 28)
+            blob, blob_size, entry, field, epoch, generation, member, phase, reserved =\
+                struct.unpack("<4I2HIB3s", raw)
+            require(phase in (0, 1, 2, 3) and reserved == bytes(3),
+                    "query diagnostic state ABI differs", "query-diagnostic")
+            if phase == 0:
+                require(raw == bytes(28), "query diagnostic empty owner differs", "query-diagnostic")
+            else:
+                require(64 + 196 <= blob_size <= 70144 and epoch > 0 and generation > 0
+                        and member == 21 and entry == blob + 64,
+                        "query diagnostic active owner differs", "query-diagnostic")
+                span(blob, blob_size)
+                span(entry, 196)
+                span(field, 4)
+            result.update(known=True, blob=blob, blobSize=blob_size, entry=entry,
+                fieldIdentity=field, fieldEpoch=epoch, mapGeneration=generation,
+                memberId=member, phase=phase, rawHex=raw.hex())
+        except Exception as error:
+            result["reason"] = str(error)[:240]
+        return result
+
+    def _heap_diagnostics(self):
+        """Read stock ExpHeap free lists at the paused endpoint; no guest call."""
+        result = {"known": False, "diagnosticOnly": True, "acceptedProof": False,
+                  "boundary": "paused-native-cycle-end",
+                  "frame": self.completed_frames,
+                  "nativeCycle": self.rt.EXECUTED_FRAME_COUNT,
+                  "heapInfoAddress": 0x021D1584, "maximumNodesPerHeap": 128,
+                  "readBudgetBytes": 8192, "bytesRead": 0, "heaps": []}
+
+        def span(address, size, *, alignment=4):
+            require(type(address) is int and address % alignment == 0
+                    and 0x02000000 <= address <= 0x02400000 - size,
+                    "heap diagnostic pointer is outside main RAM", "heap-diagnostic")
+
+        def read(address, size, *, alignment=4):
+            span(address, size, alignment=alignment)
+            result["bytesRead"] += size
+            require(result["bytesRead"] <= result["readBudgetBytes"],
+                    "heap diagnostic read budget exceeded", "heap-diagnostic")
+            raw = self.read(address, size)
+            require(isinstance(raw, bytes) and len(raw) == size,
+                    "heap diagnostic read is incomplete", "heap-diagnostic")
+            return raw
+
+        try:
+            # heap.c's complete Heap_Free supplies the sHeapInfo literal.
+            # nnsys.s's complete total-free function proves +24/+4/+C layout.
+            result["codeIdentity"] = []
+            for address, size, expected in (
+                (0x0201AB0C, 0x74, "733072e27d455c37056dd163c7f991821a6ee1ccce3c479dc57556d1ce2759d3"),
+                (0x020B556C, 0x28, "aaf84ff67caa286fa5c80456bdc03b7bee822602fb19dee22815fdfaffd15fcd"),
+            ):
+                code = self.packaged_code(address, size)
+                result["bytesRead"] += size
+                require(hashlib.sha256(code).hexdigest() == expected,
+                        "heap diagnostic stock code identity differs", "heap-diagnostic")
+                result["codeIdentity"].append({"address": address, "size": size,
+                                                "sha256": expected})
+            info = read(result["heapInfoAddress"], 28)
+            handles, parents, raw_blocks, counts, indexes, total, templates, maximum, unallocated =\
+                struct.unpack("<5I4H", info)
+            require(0 < maximum < 256 and maximum <= total <= 256
+                    and templates <= maximum and unallocated == maximum
+                    and parents == handles + (maximum + 1) * 4
+                    and raw_blocks == parents + maximum * 4
+                    and counts == raw_blocks + maximum * 4
+                    and indexes == counts + total * 2,
+                    "heap diagnostic table layout differs", "heap-diagnostic")
+            span(handles, (maximum + 1) * 4 + maximum * 8 + total * 3)
+            result["table"] = {"heapHandles": handles, "parentHeapHandles": parents,
+                "subHeapRawPtrs": raw_blocks, "numMemBlocks": counts,
+                "heapIndexes": indexes, "totalHeaps": total,
+                "templates": templates, "maximumHeaps": maximum,
+                "unallocatedIndex": unallocated}
+            for heap_id in (3, 4, 11):
+                heap = {"heapId": heap_id, "known": False}
+                result["heaps"].append(heap)
+                try:
+                    require(heap_id < total, "heap diagnostic ID is outside table", "heap-diagnostic")
+                    index = read(indexes + heap_id, 1, alignment=1)[0]
+                    heap["heapIndex"] = index
+                    require(index <= maximum, "heap diagnostic index is invalid", "heap-diagnostic")
+                    if index == unallocated:
+                        heap.update(known=True, allocated=False,
+                                    totalFreeBytes=None, largestFreeBytes=None)
+                        continue
+                    handle = struct.unpack("<I", read(handles + index * 4, 4))[0]
+                    parent = struct.unpack("<I", read(parents + index * 4, 4))[0]
+                    raw_block = struct.unpack("<I", read(raw_blocks + index * 4, 4))[0]
+                    allocation_count = struct.unpack("<H", read(counts + heap_id * 2, 2,
+                                                                 alignment=2))[0]
+                    heap.update(allocated=True, handle=handle, parentHandle=parent,
+                                rawSubHeapBlock=raw_block, allocationCount=allocation_count)
+                    for pointer in (parent, raw_block):
+                        if pointer:
+                            span(pointer, 4)
+                    header = read(handle, 0x38)
+                    signature = struct.unpack_from("<I", header)[0]
+                    start, end = struct.unpack_from("<2I", header, 0x18)
+                    head, tail = struct.unpack_from("<2I", header, 0x24)
+                    heap.update(signature=signature, heapStart=start, heapEnd=end,
+                                freeHead=head, freeTail=tail)
+                    require(signature == 0x45585048 and start == handle + 0x38
+                            and start <= end and end % 4 == 0 and end <= 0x02400000
+                            and bool(head) == bool(tail),
+                            "heap diagnostic ExpHeap header differs", "heap-diagnostic")
+                    pointer, previous, previous_end = head, 0, start
+                    visited, total_free, largest, largest_address = set(), 0, 0, 0
+                    while pointer:
+                        require(len(visited) < 128, "heap diagnostic node limit exceeded", "heap-diagnostic")
+                        require(pointer not in visited and pointer % 4 == 0
+                                and start <= pointer <= end - 16 and pointer >= previous_end,
+                                "heap diagnostic free block is invalid", "heap-diagnostic")
+                        visited.add(pointer)
+                        kind, attributes, size, prev, following = struct.unpack("<HH3I", read(pointer, 16))
+                        require(kind == 0x4652 and attributes == 0 and size % 4 == 0
+                                and prev == previous and size <= end - pointer - 16,
+                                "heap diagnostic free block header differs", "heap-diagnostic")
+                        total_free += size
+                        if size > largest:
+                            largest, largest_address = size, pointer
+                        previous, previous_end = pointer, pointer + 16 + size
+                        pointer = following
+                    require(previous == tail and read(handle, 0x38) == header,
+                            "heap diagnostic free tail or heap identity changed", "heap-diagnostic")
+                    heap.update(known=True, freeBlockCount=len(visited),
+                                totalFreeBytes=total_free, largestFreeBytes=largest,
+                                largestFreeBlockAddress=largest_address,
+                                largestUserAllocationBytes=max(0, largest - 16))
+                except Exception as error:
+                    heap["reason"] = str(error)[:240]
+            require(read(result["heapInfoAddress"], 28) == info,
+                    "heap diagnostic table owner changed", "heap-diagnostic")
+            for heap in result["heaps"]:
+                heap["parentHeapIds"] = [item["heapId"] for item in result["heaps"]
+                    if item.get("known") and item.get("handle")
+                    and item["handle"] == heap.get("parentHandle")]
+            result["known"] = all(heap["known"] for heap in result["heaps"])
+        except Exception as error:
+            result["reason"] = str(error)[:240]
+        return result
+
+    def _mount_toggle_diagnostics(self):
+        """Read only the fixed resident mount latch and its current field gate."""
+        base = 0x023BC744
+        field = self.field_pointer()
+        avatar = self.rt.unsigned(self.emu, field + 0x40)
+        return {
+            "fieldPointer": self.rt.unsigned(self.emu, base),
+            "phase": self.rt.unsigned(self.emu, base + 0x6C, 1),
+            "lastCancelReason": self.rt.unsigned(self.emu, base + 0x6E, 1),
+            "pending": self.rt.unsigned(self.emu, base + 0x96, 1),
+            "down": self.rt.unsigned(self.emu, base + 0x97, 1),
+            "boundaryFlags": self.rt.unsigned(self.emu, base + 0x83, 1),
+            "motionStreamPreparing": self.rt.unsigned(self.emu, base + 0xB4, 1),
+            "avatarState": self.rt.unsigned(self.emu, avatar + 0x18),
+            "avatarFlags": self.rt.unsigned(self.emu, avatar),
+            "avatarMoveState": self.rt.unsigned(self.emu, avatar + 0x14),
+        }
 
     def _install_input_poll_fence(self):
         if getattr(self, "input_poll_fence_installed", False):
@@ -3124,12 +3622,29 @@ class DevtoolsSession:
         return {"path": str(target), "size": len(data), "sha256": hashlib.sha256(data).hexdigest(),
                 "frame": self.completed_frames, "nativeCycle": self.rt.EXECUTED_FRAME_COUNT}
 
+    def export_cartridge_save(self, path):
+        """Copy the paused core's battery to a new private file, without advancing it."""
+        target = owned_path(path, self.directory, exists=False)
+        require(not self.closed and self.emu is not None, "session is closed", "closed")
+        self.emu.backup.export_file(str(target))
+        require(target.is_file() and target.stat().st_nlink == 1 and target.stat().st_size > 0,
+                "cartridge export is missing or not a private regular file", "save-export-invalid")
+        return {"path": str(target), "size": target.stat().st_size,
+                "sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+                "frame": self.completed_frames, "nativeCycle": self.rt.EXECUTED_FRAME_COUNT}
+
+    def cartridge_save_fingerprint(self):
+        require(not self.closed and self.emu is not None, "session is closed", "closed")
+        data = self.emu.backup.read_bytes()
+        return {"size": len(data), "sha256": hashlib.sha256(data).hexdigest(),
+                "frame": self.completed_frames, "nativeCycle": self.rt.EXECUTED_FRAME_COUNT}
+
     def _new_script_warp_heap_free_observer(self, constructor):
         from tools.overworld.devtools_heap_free_observer import ScriptWarpHeapFreeObserver
         return ScriptWarpHeapFreeObserver(self, constructor)
 
     def teleport(self, args):
-        map_id = integer(args.get("mapId", args.get("map")), "mapId", 0, 539)
+        map_id = integer(args.get("mapId", args.get("map")), "mapId", 0, 599)
         x = integer(args.get("x"), "x", 0, 32767)
         z = integer(args.get("z", args.get("y")), "z", 0, 32767)
         facing = integer(args.get("facing", 0), "facing", 0, 3)
@@ -3219,7 +3734,10 @@ class DevtoolsSession:
                     "no complete selector observation", "observation-missing")
             return deepcopy(self.latest_frame["selector"])
         def drive(key, predicate, *, minimum_frames=1):
-            mask = self.rt.h.keymask(self.rt.h.key_constant(key)) if key else 0
+            # A tuple holds several keys together (Y stays held while open).
+            mask = 0
+            for name in ((key,) if isinstance(key, str) else key or ()):
+                mask |= self.rt.h.keymask(self.rt.h.key_constant(name))
             start = self.completed_frames
             entry = {"key": key, "firstFrame": start, "before": observation()}
             receipt["inputs"].append(entry)
@@ -3240,24 +3758,24 @@ class DevtoolsSession:
                          and value["heldKeys"] == 0 and value["newKeys"] == 0, minimum_frames=2)
         try:
             current = release()
-            if current["state"] == 0:
-                drive("Y", lambda value: value["state"] == 2)
-                current = release()
-            elif current["state"] == 1:
-                current = drive(None, lambda value: value["state"] == 2)
+            # Hold Y opens the menu and releasing Y confirms, so Y stays held
+            # until the final confirmation.
+            current = drive("Y", lambda value: value["state"] == 2 and value["rawHeld"] != 0)
             require(current["state"] == 2, "selector did not become visible", "selector-not-visible")
+            held_y = current["rawHeld"]
             self._ensure_selector_getter_observer()
             receipt["selections"].append(current["highlight"])
             while current["highlight"] != slot:
                 previous = current["highlight"]
-                drive("R", lambda value: value["state"] == 2 and value["highlight"] != previous)
-                current = release()
+                drive(("Y", "R"), lambda value: value["state"] == 2 and value["highlight"] != previous)
+                current = drive("Y", lambda value: value["rawHeld"] == value["heldKeys"] == held_y
+                                and value["rawNew"] == 0 and value["newKeys"] == 0)
                 require(current["state"] == 2, "selector closed during navigation", "selector-closed")
                 require(current["highlight"] not in receipt["selections"],
                         "requested party slot is not in the menu's eligible cycle", "ineligible-party")
                 receipt["selections"].append(current["highlight"])
                 require(len(receipt["selections"]) <= 6, "selector visited too many party slots", "selector-state")
-            receipt["confirmation"] = drive("SELECT" if role == "MOUNTED" else "Y",
+            receipt["confirmation"] = drive(("Y", "SELECT") if role == "MOUNTED" else None,
                                              lambda value: value["state"] == 0)
             # TaskPoll clears 0x80 separately from physical-key release. A
             # pending lifecycle must be judged by live actor readback, not
@@ -3412,6 +3930,138 @@ class DevtoolsSession:
             "frame": frame, "nativeCycle": cycle, "endpointNativeCycle": endpoint}
         return receipt
 
+    def _authenticate_entry_spawn_layout(self):
+        from tools.overworld.devtools_query_observer import authenticate_loaded_query_functions
+        from tools.overworld.devtools_observer import NativeObservationError
+        require(not ENTRY_SPAWN_OWNERS
+                and set(ENTRY_SPAWN_QUERY_OWNERS) == {"NativeArm.constprop.0.isra.0", "NativeQueryEntry"},
+                "queued Entry spawn native owner seals differ", "abi-mismatch")
+        for owners in (ENTRY_SPAWN_OWNERS, ENTRY_SPAWN_QUERY_OWNERS):
+            require(all(isinstance(value, tuple) and len(value) == 3
+                        and isinstance(value[2], str) and len(value[2]) == 64
+                        for value in owners.values()),
+                    "queued Entry spawn native owner seal is not installed", "abi-mismatch")
+        elf = self.rt.REPO / "build" / ELF_FILES["WILD_SYMBOLS"]
+        for name, (expected_address, expected_size, digest) in ENTRY_SPAWN_OWNERS.items():
+            address, size = _elf_function_extent(elf, name)
+            body = _elf_code(elf, address, size)
+            require((address, size) == (expected_address, expected_size)
+                    and hashlib.sha256(body).hexdigest() == digest
+                    and self.packaged_code(address, size) == body
+                    and self.read(address, size) == body,
+                    "queued Entry spawn native owner differs", "abi-mismatch")
+        # Cache immutable package inputs only. The current lease and full live
+        # relocated image are authenticated again before every private read.
+        key = (self.rom_hash, str(self.rom))
+        cached = getattr(self, "_entry_spawn_query_inputs", None)
+        if cached is None or cached[0] != key:
+            import ndspy.narc
+            import ndspy.rom
+            directory = self.rt.REPO / "build/overworld_query_code_addon"
+            member = ndspy.narc.NARC(ndspy.rom.NintendoDSRom.fromFile(str(self.rom))
+                                     .getFileByName("a/0/2/8")).files[21]
+            cached = (key, (directory / "image.elf").read_bytes(),
+                      (directory / "query.bin").read_bytes(), member)
+            self._entry_spawn_query_inputs = cached
+        try:
+            owner = authenticate_loaded_query_functions(self, *cached[1:], ENTRY_SPAWN_QUERY_OWNERS)
+        except (ValueError, NativeObservationError) as error:
+            raise DevtoolsFailure("abi-mismatch", "queued Entry spawn Query owner differs: " + str(error)) from error
+        self._entry_spawn_layout_key = (self.rom_hash, self.native_heap_generation,
+                                       self.field_pointer(), owner["rawHex"])
+
+    def _read_entry_spawn(self, slot, *, typed=True, include_prepared=False):
+        self._authenticate_entry_spawn_layout()
+        rt, emu = self.rt, self.emu
+        pointer = rt.unsigned(emu, rt.WILD_STATE + rt.WILD_RUNTIME_PTR_OFFSET)
+        require(pointer % 4 == 0 and 0x02000000 <= pointer <= 0x02400000 - ENTRY_SPAWN_RUNTIME_SIZE,
+                "queued Entry spawn runtime pointer is invalid", "abi-mismatch")
+        state = rt.ACTOR_DESCRIPTOR["state"]["address"]
+        result = {"runtimePointer": pointer, "fieldPointer": self.field_pointer(),
+            "fieldEpoch": rt.unsigned(emu, state + 12, 2),
+            "mapGeneration": rt.unsigned(emu, state + 46, 2),
+            "queueSlot": self.read(pointer + ENTRY_SPAWN_OFFSETS["slot"], 1)[0],
+            "stage": self.read(pointer + ENTRY_SPAWN_OFFSETS["stage"], 1)[0],
+            "queueSerial": struct.unpack("<I", self.read(pointer + ENTRY_SPAWN_OFFSETS["serial"], 4))[0],
+            "tripSerial": struct.unpack("<I", self.read(pointer + ENTRY_SPAWN_OFFSETS["tripSerials"] + slot * 4, 4))[0],
+            "frame": self.completed_frames, "nativeCycle": rt.EXECUTED_FRAME_COUNT}
+        if include_prepared:
+            result["preparedHex"] = self.read(pointer + ENTRY_SPAWN_OFFSETS["prepared"], 260).hex()
+        if typed:
+            raw = self.read(pointer + ENTRY_SPAWN_OFFSETS["receipt"], 64)
+            version, size, serial = struct.unpack_from("<HHI", raw)
+            handle = dict(zip(("slot", "generation", "fieldEpoch", "mapGeneration", "encounterGeneration", "reserved"),
+                              struct.unpack_from("<6H", raw, 8)))
+            status, reads, queued, has_next = raw[60:64]
+            require(version == 1 and size == 64 and serial != 0 and handle["reserved"] == 0
+                    and status <= 4 and reads <= 8 and queued <= 1 and has_next <= 1
+                    and struct.unpack_from("<H", raw, 58)[0] <= 96
+                    and all(struct.unpack_from("<H", raw, off + 10)[0] == 0 for off in (20, 32, 44)),
+                    "queued Entry spawn receipt layout differs", "abi-mismatch")
+            result["receipt"] = {"version": version, "size": size, "serial": serial,
+                "actor": handle, "status": status, "readsUsed": reads, "queued": queued,
+                "hasNextStep": has_next, "stepsRemaining": struct.unpack_from("<H", raw, 58)[0],
+                "origin": list(struct.unpack_from("<hhiH", raw, 20)),
+                "target": list(struct.unpack_from("<hhiH", raw, 32)), "rawHex": raw.hex()}
+        return result
+
+    def _wait_entry_spawn(self, receipt, pending, args):
+        self._queued_entry_spawn = pending
+        last = None
+        def created(value):
+            nonlocal last
+            observed = value.get("queuedEntrySpawn")
+            require(observed is not None and observed["frame"] == value["frame"]
+                    and value.get("observationBoundary") == "main-task-queue-completion",
+                    "queued Entry spawn has no completed-frame receipt", "observation-failed")
+            if last is not None and observed["frame"] == last["frame"]:
+                return False
+            last = observed
+            require(all(observed[key] == pending[key] for key in
+                        ("runtimePointer", "fieldPointer", "fieldEpoch", "mapGeneration"))
+                    and value["context"]["fieldEpoch"] == pending["fieldEpoch"]
+                    and value["context"]["mapGeneration"] == pending["mapGeneration"],
+                    "queued Entry spawn Field or map owner changed", "spawn-entry-replaced")
+            entry = observed["receipt"]
+            require(entry["serial"] == pending["serial"],
+                    "queued Entry spawn request serial changed", "spawn-entry-replaced")
+            if entry["status"] not in (0, 1):
+                raise DevtoolsFailure("spawn-rejected", "queued Entry route or constructor failed",
+                                      details={"queuedEntrySpawn": observed})
+            handle = entry["actor"]
+            if not any(handle.values()):
+                require(observed["queueSlot"] == pending["slot"] + 1
+                        and observed["queueSerial"] == pending["serial"]
+                        and observed["stage"] in (0xFB, 0xFC, 0xFD, 0xFE, 0xFF),
+                        "queued Entry ended without adopting an actor", "spawn-rejected")
+                return False  # READY is a proved route, never a created actor.
+            require(entry["status"] == 1 and entry["queued"] == 0
+                    and handle["slot"] == pending["slot"]
+                    and all(handle[key] != 0 for key in ("generation", "fieldEpoch", "mapGeneration", "encounterGeneration"))
+                    and observed["tripSerial"] in (0, pending["serial"]),
+                    "queued Entry reply is not an authentic ADOPT", "spawn-entry-replaced")
+            matches = [actor for actor in value["actors"] if actor.get("identityVerified")
+                       and actor["role"] == "WILD"
+                       and all(actor["handle"].get(key) == handle[key] for key in
+                               ("slot", "generation", "fieldEpoch", "mapGeneration", "encounterGeneration"))]
+            require(len(matches) == 1 and matches[0]["species"] == receipt["value"]["species"]
+                    and matches[0]["form"] == args.get("form", 0)
+                    and matches[0]["level"] == args.get("level", 5),
+                    "ADOPT did not bind the requested current actor", "spawn-entry-replaced")
+            receipt["value"]["personality"] = matches[0]["subjectIdentity"]
+            receipt["value"]["entrySpawn"] = deepcopy(observed)
+            return True
+        try:
+            receipt["snapshot"] = self._wait_new_frame(self.completed_frames, created,
+                native_limit=1200, code="spawn-entry-timeout",
+                message="queued Entry did not adopt the requested actor inside 1200 native cycles")
+            return receipt
+        except DevtoolsFailure as error:
+            error.details = {**(error.details or {}), "queuedEntrySpawn": deepcopy(last or pending)}
+            raise
+        finally:
+            self._queued_entry_spawn = None
+
     def spawn(self, args):
         role = args.get("role", "WILD").upper()
         require(role in ("WILD", "FOLLOWER", "MOUNTED"), "spawn role is invalid", "invalid-argument")
@@ -3489,26 +4139,71 @@ class DevtoolsSession:
         slot = next((i for i in range(6) if not self.rt.wild_spawn(self.emu, i)["active"]), None)
         require(slot is not None, "all six regular wild slots are occupied", "population-full")
         def recipe(scratch):
-            prepared = bytearray(268)
+            prepared = bytearray(260)
             struct.pack_into("<ii", prepared, 0, x, z)
             struct.pack_into("<IHBB", prepared, 12, pid, species, form, level)
-            struct.pack_into("<i", prepared, 260, -1)
+            struct.pack_into("<i", prepared, 252, -1)
             self.write(scratch, prepared)
             native_args = (self.rt.WILD_STATE, self.field_pointer(), terrain, slot, scratch)
+            prior = self._read_entry_spawn(slot, typed=False)
+            require(prior["queueSlot"] == 0, "native spawn queue is already owned", "busy")
             accepted = yield Call("finalize_spawn", native_args)
-            require(accepted == 1, "native profile/terrain/startup rejected this spawn", "spawn-rejected")
+            if accepted != 1:
+                finalized = self.read(scratch, len(prepared))
+                queued = self._read_entry_spawn(slot, typed=False, include_prepared=True)
+                if accepted == 0 and queued["queueSlot"] == slot + 1 and queued["stage"] == 0xFB\
+                        and queued["queueSerial"] != prior["queueSerial"]\
+                        and queued["preparedHex"] == finalized.hex()\
+                        and all(queued[key] == prior[key] for key in
+                                ("runtimePointer", "fieldPointer", "fieldEpoch", "mapGeneration")):
+                    queued = self._read_entry_spawn(slot)
+                    entry = queued["receipt"]
+                    require(entry["serial"] == queued["queueSerial"] and entry["status"] == 0
+                            and entry["queued"] == 1 and not any(entry["actor"].values()),
+                            "native finalize did not publish its pending Entry owner", "spawn-entry-replaced")
+                    return {"slot": slot, "species": species, "requestedPersonality": pid,
+                        "pendingEntry": {**{key: queued[key] for key in
+                            ("runtimePointer", "fieldPointer", "fieldEpoch", "mapGeneration")},
+                            "serial": entry["serial"], "slot": slot}}
+                raise DevtoolsFailure("spawn-rejected",
+                    "native profile/terrain/startup rejected this spawn",
+                    details={"preparedSpawn": {
+                        "acceptedProof": False,
+                        "scope": "owned scratch after native finalize return; rejection diagnosis only",
+                        "requestedTile": {"x": x, "z": z},
+                        "finalizedTile": dict(zip(("x", "z"), struct.unpack_from("<ii", finalized))),
+                        "startupTarget": dict(zip(("x", "z"), struct.unpack_from("<hh", finalized, 20))),
+                        "startupOrigin": dict(zip(("x", "z"), struct.unpack_from("<hh", finalized, 24))),
+                        "startupLocomotion": finalized[28],
+                        "preparedSize": len(finalized),
+                        "preparedHex": finalized.hex()}})
             finalized_pid = struct.unpack("<I", self.read(scratch + 12, 4))[0]
             accepted = yield Call("spawn_encounter", native_args)
             require(accepted == 1, "native spawn lifecycle rejected this encounter", "spawn-rejected")
             return {"slot": slot, "species": species, "personality": finalized_pid, "requestedPersonality": pid}
-        receipt = self.bridge.run(recipe)
-        snapshot = self._wait_new_frame(self.completed_frames,
-            lambda value: any(a["identityVerified"] and a["role"] == role and a["handle"]["slot"] == slot
-                              and a["subjectIdentity"] == receipt["value"]["personality"] and a["species"] == species
-                              for a in value["actors"]),
-            native_limit=1200, code="spawn-failed", message="spawn did not produce the requested bound actor")
-        receipt["snapshot"] = snapshot
-        return self._prepared_result_boundary(receipt)
+        require(getattr(self, "_prepared_retained_events", None) is None,
+                "prepared event retention is already active", "busy")
+        self._prepared_retained_events, self._prepared_retained_bytes = [], 0
+        try:
+            receipt = self.bridge.run(recipe)
+            pending = receipt["value"].pop("pendingEntry", None)
+            if pending is not None:
+                receipt = self._wait_entry_spawn(receipt, pending, args)
+            else:
+                receipt["snapshot"] = self._wait_new_frame(self.completed_frames,
+                    lambda value: any(a["identityVerified"] and a["role"] == role and a["handle"]["slot"] == slot
+                                      and a["subjectIdentity"] == receipt["value"]["personality"] and a["species"] == species
+                                      for a in value["actors"]),
+                    native_limit=1200, code="spawn-failed", message="spawn did not produce the requested bound actor")
+            return self._prepared_result_boundary(receipt)
+        except DevtoolsFailure as error:
+            error.details = {**(error.details or {}),
+                             "preparedRetainedEvents": self._prepared_retained_events + self.drain_events()}
+            raise
+        finally:
+            self._queued_entry_spawn = None
+            self._prepared_retained_events = None
+            self._prepared_retained_bytes = 0
 
     def mount_walk_configure(self, args):
         """Bounded private fixture setup; never changes authored profiles."""
@@ -3519,7 +4214,10 @@ class DevtoolsSession:
         try:
             receipt = MountWalkFixture(self, args["subject"], args["directionMode"],
                                        args.get("travelTime"), args.get("stompTime"),
-                                       turning=args.get("turning"), crash_sound=args.get("crashSound")).run()
+                                       turning=args.get("turning"), crash_sound=args.get("crashSound"),
+                                       fastest_time=args.get("fastestTime"),
+                                       time_to_full_speed=args.get("timeToFullSpeed"),
+                                       time_variance=args.get("timeVariance")).run()
         except Exception as error:
             if getattr(error, "receipt", None) is not None:
                 error.details = {"mountWalkFixture": error.receipt}
@@ -3575,6 +4273,45 @@ class DevtoolsSession:
         receipt["snapshot"] = self.snapshot(0, diagnostic_details=False)
         return self._prepared_result_boundary(receipt)
 
+
+    def emote_three_arm(self, args):
+        """One fixed quiet burst on four exact current Wild actors."""
+        require(isinstance(args, dict) and set(args) == set("abcd"),
+                "emote-three.arm needs four handles only", "invalid-argument")
+        handles = {name: integer(args[name], name + " handle", 1, 0xFFFFFFFF) for name in "abcd"}
+        require(len(set(handles.values())) == 4, "emote subjects must be distinct", "invalid-argument")
+        self.prepared = True
+        self.require_quiescent()
+        require(self.emote_three is None and self.rom.resolve().is_relative_to(self.directory.resolve()),
+                "emote burst needs a private unarmed session", "emote-three-invalid")
+        snapshot = self._snapshot(0, details=False)
+        subjects = {}
+        for name, handle in handles.items():
+            actors = [a for a in snapshot["actors"] if a.get("handle", {}).get("value") == handle]
+            require(len(actors) == 1, "exact emote subject missing", "emote-three-invalid")
+            subjects[name] = actors[0]
+        from tools.overworld.devtools_emote_three_probe import EmoteThreeProbe
+        probe = self.emote_three = EmoteThreeProbe(self, subjects)
+        try:
+            probe.install()
+            receipt = self.bridge.run(lambda scratch: probe.recipe(scratch, Call))
+            snapshot = self._wait_new_frame(self.completed_frames, lambda _value: True,
+                native_limit=120, code="emote-three-readback-timeout", message="emote burst has no completed field readback")
+            probe.normal_start = dict(frame=snapshot["frame"], nativeCycle=snapshot["nativeCycle"])
+            receipt.update(snapshot=snapshot, emotes=probe.result(), acceptedProof=False)
+            return self._prepared_result_boundary(receipt)
+        except Exception:
+            probe.close(disposing=True)
+            raise
+
+    def emote_three_close(self, args):
+        require(args == {} and self.emote_three is not None, "no current emote burst", "emote-three-invalid")
+        self.require_quiescent()
+        self.emote_three.close()
+        receipt = dict(snapshot=self.snapshot(diagnostic_details=False), emotes=self.emote_three.result(),
+                       advancedFrames=0, acceptedProof=False)
+        return self._prepared_result_boundary(receipt)
+
     def _actor_inspect_probe_service(self):
         """Bind the fixed call to the live, packaged public facade."""
         descriptor = self.rt.ACTOR_DESCRIPTOR
@@ -3619,6 +4356,9 @@ class DevtoolsSession:
         return self._prepared_result_boundary(receipt)
 
     def _resolver_probe_inputs(self):
+        from tools.overworld.devtools_resolver_parity import (
+            packaged_query_identity, current_query_owner, RESOLVER_BLOB_VERSION)
+        import json
         discovery = getattr(self.native_observation, "resolver_discovery", None)
         require(isinstance(discovery, dict) and discovery.get("status") == 0,
                 "no successful natural resolver discovery", "resolver-discovery-missing")
@@ -3630,9 +4370,9 @@ class DevtoolsSession:
                 "packaged resolver service is unavailable", "abi-mismatch")
         service = services[0]
         target = self.target("resolve_behavior")
-        expected = struct.pack("<IHHII", 0x5250574F, 2, 16,
+        expected = struct.pack("<IHHII", 0x5250574F, 3, 16,
                                service["callbacks"]["resolve"], service["callbacks"]["inspectClass"])
-        require(service["version"] == 2 and service["size"] == 16
+        require(service["version"] == 3 and service["size"] == 16
                 and service["callbacks"]["resolve"] == target | 1
                 and self.packaged_code(service["address"], 16) == expected,
                 "native resolver service differs from linked target", "abi-mismatch")
@@ -3645,10 +4385,20 @@ class DevtoolsSession:
         require(all(self.read(address + offset, len(blob[offset:offset + 4096])) == blob[offset:offset + 4096]
                     for offset in range(0, len(blob), 4096)),
                 "live resolver blob differs from packaged data", "resolver-blob-mismatch")
+        corpus = json.loads((self.rt.REPO / "tools/overworld/native/behavior_resolver_golden.json").read_text())
+        require(corpus.get("blobVersion") == RESOLVER_BLOB_VERSION,
+                "resolver authored cases use another blob version", "abi-mismatch")
+        try:
+            query_identity, query_blob, query_receipt = packaged_query_identity(self.rt.REPO, self.rom)
+            query_owner = current_query_owner(self, query_blob, query_receipt)
+        except (OSError, ValueError, KeyError, IndexError, struct.error) as error:
+            require(False, "resolver loaded Query identity differs: " + str(error), "abi-mismatch")
         return {"blob_address": address, "blob_bytes": blob,
-                "service_identity": {"magic": 0x5250574F, "version": 2, "size": 16,
+                "query_owner": query_owner,
+                "service_identity": {"magic": 0x5250574F, "version": 3, "size": 16,
                     "resolveAddress": target | 1,
-                    "entrySha256": hashlib.sha256(self.packaged_code(target, 32)).hexdigest()}}
+                    "entrySha256": hashlib.sha256(self.packaged_code(target, 32)).hexdigest(),
+                    **query_identity}}
 
     def resolver_probe(self, args):
         """Seven fixed prepared service calls; no actor or acceptance credit."""
@@ -3953,6 +4703,8 @@ class DevtoolsSession:
                     self.walk_matrix.close(disposing=True)
                 if getattr(self, "stomp_feedback", None) is not None:
                     self.stomp_feedback.close(disposing=True)
+                if getattr(self, "emote_three", None) is not None:
+                    self.emote_three.close(disposing=True)
                 if getattr(self, "crash_feedback", None) is not None:
                     self.crash_feedback.close(disposing=True)
                 # No game resumes after this instrumentation shutdown.
@@ -3962,6 +4714,8 @@ class DevtoolsSession:
                     emu.memory.register_exec(self.sampling_hook, None)
                 if self.native_observation is not None:
                     self.native_observation.close()
+                if getattr(self, "query_allocation_lifecycle", None) is not None:
+                    self.query_allocation_lifecycle.close()
                 if self.party_getter_hooks is not None:
                     self.party_getter_hooks.close()
                 self.rt.h.set_key_mask(emu, 0)

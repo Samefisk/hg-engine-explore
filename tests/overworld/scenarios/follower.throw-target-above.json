@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "id": "follower.throw-target-above",
+  "title": "Mankey throws real Cargo at a current Wild target above",
+  "status": "active",
+  "capabilities": [
+    "condition.evaluation",
+    "chase"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md#2-role-controllers",
+    "actor": "Current FOLLOWER Mankey56, WILD Weepinbell Trigger70, and distinct WILD Cargo179 on map67.",
+    "trigger": "Only normal neutral frames after checked party/placement. A fresh authored ACTOR Trigger capture must have the required physical height sign.",
+    "observable": "Same full identities, real pickup/windup native position Y, exact native52-byte signed flight, native terminal and real current Trigger HP hit.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Checked teleport, party0 Mankey20, ordinary follower creation, two native Wild spawns and exact current binds; no claims, timers, profiles or height writes."
+      }
+    ],
+    "limits": [
+      "Loaded native Pot550398 must be surface9304/model5/instance130 with actual current Trigger baseY122880. Requested coordinates or catalog height alone earn no credit.",
+      "Target native position Y must stay fixed through the real windup so the completed-queue pose proves the source latch.",
+      "Below Vision requires a fresh lower-target capture after high pickup; the first ground capture earns no lower-height proof.",
+      "This proves one prepared signed-height fixture, not every surface or obstruction."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "trigger",
+      "species": 70,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "cargo",
+      "species": 179,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Player554398 East; native settled ground Mankey555398 West sees passive Weep70 on native Pot550398 at range5. Cargo179 starts555399. Current loaded clear East ray551..555,398 and Cargo site, exact finalized identities, live loaded Pot and actual native heights are required; Player stays outside Weep Vision3."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Observe authored Trigger capture, natural pickup, real windup, native signed-height flight, terminal and contact."
+    }
+  ],
+  "stop": {
+    "frameBudget": 1400,
+    "condition": "Full signed-height Vision/Throw/contact proof or the first identity, pose, control or native motion failure."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Exact current Follower/Trigger/Cargo",
+      "Real signed height at fresh authored Vision capture and windup",
+      "Latched physical aim survives native flight",
+      "Real terminal and Trigger contact"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "follower.throw-target-above",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "natural-input",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumFrames": 2
+  }
+}

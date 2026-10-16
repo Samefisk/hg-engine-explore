@@ -1,0 +1,220 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.throw-notice-walk-commit",
+  "title": "Natural Throw notice does not strand an accepted Wild Walk",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.throw-notice-walk-commit"
+  ],
+  "budgets": {
+    "maxSeconds": 240,
+    "maxFrames": 550,
+    "noProgressFrames": 500,
+    "minObservedFrames": 25
+  },
+  "subjects": [
+    {
+      "id": "snorlax",
+      "species": 143,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "geodude",
+      "species": 74,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "throw-notice-walk-commit-v1",
+      "subject": "snorlax"
+    }
+  ],
+  "setup": [
+    {
+      "id": "throw-tile",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 406,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-passive-follower",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "create-passive-follower",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-snorlax",
+      "op": "spawn",
+      "args": {
+        "species": 143,
+        "role": "wild",
+        "level": 5,
+        "x": 585,
+        "z": 403,
+        "form": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-snorlax",
+      "op": "step",
+      "args": {
+        "frames": 40,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "spawn-geodude",
+      "op": "spawn",
+      "args": {
+        "species": 74,
+        "role": "wild",
+        "level": 5,
+        "x": 586,
+        "z": 412,
+        "form": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-snorlax",
+      "op": "bind",
+      "args": {
+        "subject": "snorlax"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "bind-geodude",
+      "op": "bind",
+      "args": {
+        "subject": "geodude"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "wait-ordinary-up-walk",
+      "op": "step",
+      "args": {
+        "frames": 300,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "throw-notice-walk-commit-v1",
+          "stage": "ordinary-up-walk",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 120,
+        "maxFrames": 300,
+        "noProgressFrames": 300
+      }
+    },
+    {
+      "id": "enter-notice-range",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": [
+          "DOWN",
+          "B"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 15,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "finish-accepted-walk",
+      "op": "step",
+      "args": {
+        "frames": 60,
+        "keys": [],
+        "until": {
+          "kind": "measurement-complete",
+          "measurement": "throw-notice-walk-commit-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 60,
+        "noProgressFrames": 60
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "throw-notice-walk-commit-v1",
+      "when": "final"
+    }
+  ]
+}

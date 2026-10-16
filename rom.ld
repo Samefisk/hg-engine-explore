@@ -978,6 +978,7 @@ BattleSetup_GetWildBattleMusic = 0x020517FC | 1;
 Encounter_New = 0x020506BC | 1;
 FieldSystem_CreateTask = 0x020504F0 | 1;
 TaskManager_Call = 0x02050530 | 1;
+CallTask_LeaveOverworld = 0x0205525C | 1;
 Task_ScriptWarp = 0x0205380C | 1;
 Task_TutorialBattle = 0x0205128C | 1;
 

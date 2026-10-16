@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "id": "population.failed-series-retry",
+  "title": "Natural failed-series retry",
+  "status": "active",
+  "capabilities": [
+    "population",
+    "spawn"
+  ],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md#10-population-and-lifecycle",
+    "actor": "Natural population actors and full native receipts; the saved Mankey is a field identity anchor only",
+    "trigger": "Exactly240 neutral Cherrygrove frames at(543,393), one declared Route29 warp, then360 neutral frames at(585,406). Existing saved Mankey only anchors the field. Require a native failed series15-frame delay followed by a new attempt before60 Actor frames, and a native Commit SUCCESS with its exact actual constructor followed by the full density wait. READY never earns creation credit. Four-failure backoff/RNG order stay covered by the existing actual-C refill fixture.",
+    "observable": "Strict normal native outcome and completed landing/timing receipts",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use the normal 35-step input path to verified Route29(585,406), with released input and the same saved Mankey. Then warp to the declared different map and bind its current full follower. The 13 warmup actions include a 120-frame neutral wait for the same full follower to finish its move; they add a 481-frame ceiling and earn no outcome credit. No spawn, population, profile, party or RNG setup."
+      },
+      {
+        "phase": "during-observation",
+        "target": "fixture",
+        "change": "One exact different-field warp to Route29, then a released-input wait of at most64 frames for the existing saved follower to settle and a fresh full-handle bind. The warp and wait earn no outcome credit; the measured windows remain240 +360 frames."
+      }
+    ],
+    "limits": [
+      "Exactly240 neutral Cherrygrove frames at(543,393), one declared Route29 warp, then360 neutral frames at(585,406). Existing saved Mankey only anchors the field. Require a native failed series15-frame delay followed by a new attempt before60 Actor frames, and a native Commit SUCCESS with its exact actual constructor followed by the full density wait. READY never earns creation credit. Four-failure backoff/RNG order stay covered by the existing actual-C refill fixture.",
+      "This test does not close either current-ROM pacing gate or grant acceptance from copied data."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": false,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Enter the declared natural window without changing encounter or actor state"
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Retain exact natural finalizer, native constructor and current full-handle outcome"
+    }
+  ],
+  "stop": {
+    "frameBudget": 1266,
+    "condition": "Both exact finite natural windows finish with all required native outcomes"
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Exactly240 neutral Cherrygrove frames at(543,393), one declared Route29 warp, then360 neutral frames at(585,406). Existing saved Mankey only anchors the field. Require a native failed series15-frame delay followed by a new attempt before60 Actor frames, and a native Commit SUCCESS with its exact actual constructor followed by the full density wait. READY never earns creation credit. Four-failure backoff/RNG order stay covered by the existing actual-C refill fixture."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "population.failed-series-retry",
+    "claims": [
+      "live-actor-identity",
+      "population-bounds"
+    ],
+    "minimumFrames": 600
+  }
+}

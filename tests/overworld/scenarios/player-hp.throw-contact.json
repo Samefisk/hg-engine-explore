@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.throw-contact",
+  "title": "Geodude throws Weepinbell into the player and knocks them back",
+  "status": "active",
+  "capabilities": ["player.health", "collision.attack"],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/player-hp-implementation-plan.md",
+    "actor": "One current WILD Geodude (species 74) at Route 29 map 33 tile (585,404) and one current WILD Weepinbell (species 70) at (585,400); the player stands at (585,407).",
+    "trigger": "Let Geodude notice the player, walk to Weepinbell, pick it up, and throw it under normal profile timing while the player remains still.",
+    "observable": "The bound Weepinbell starts a current airborne Hop from Geodude's tile toward the player. Player HP and saved HP are 100 at launch and 80 after the flight, with one Throw hit, a flat one-tile slide to (585,408) under the stationary movement command, and no battle.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {"phase": "before-observation", "target": "fixture", "change": "Use checked teleport and two native Wild spawns at tiles four apart. Bind each live actor by full handle, personality, and generation. Keep Throw conditions, timing, player HP, and actor movement unmodified."}
+    ],
+    "limits": [
+      "Prepared placement proves the later natural pickup, throw, and HP path, not population spawn selection.",
+      "The current frame stream and HP reads prove a flight followed by 20 Throw damage. They do not timestamp the HP change inside the flight; that needs a per-frame HP observation.",
+      "Wrong or stale actor identity, an unbound throw target, a missing airborne path, movement outside the one-tile knockback path, a battle task, or a different HP result fails."
+    ]
+  },
+  "fixture": {"rom": "test.nds", "save": {"path": "test.sav", "kind": "sav"}, "seed": 0},
+  "subjects": [
+    {"id": "weepinbell", "species": 70, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true},
+    {"id": "geodude", "species": 74, "role": "WILD", "acquisition": "spawn", "minimum": 1, "maximum": 1, "motionActor": true, "requirePresentation": true}
+  ],
+  "events": [
+    {"at": 0, "kind": "setup", "value": "Place the player, then spawn and bind idle Weepinbell and Throw-capable Geodude."},
+    {"at": 1, "kind": "lifecycle", "value": "Wait for Geodude's normal pickup and Weepinbell's launched Hop."},
+    {"at": 2, "kind": "lifecycle", "value": "Observe the airborne crossing and one 20-HP Throw result."}
+  ],
+  "stop": {"frameBudget": 900, "condition": "One exact launched flight, 64 following completed game frames, checked HP 100 to 80, or the first failed identity, motion, field, or HP observation."},
+  "expect": {"requiredEvents": [], "forbiddenEvents": [],
+    "invariants": ["Both current WILD actors retain their exact identities", "Player moves only from (585,407) to (585,408) after damage", "Weepinbell flies from Geodude toward the player", "HP and saved HP change from 100 to 80", "No battle starts"]},
+  "capture": "none",
+  "adapter": {"kind": "devtools-test", "test": "player-hp.throw-contact",
+    "claims": ["live-actor-identity", "engine-boundary", "natural-input", "control-release"],
+    "minimumFrames": 65}
+}

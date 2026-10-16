@@ -8,6 +8,7 @@
 #include "../../include/map_events_internal.h"
 #include "../../include/overworld_follower_selector.h"
 #include "../../include/overworld_wild_spawns.h"
+#include "../../include/overworld_combat.h"
 #include "../../include/overworld_wild_movement.h"
 #include "../../include/overlay.h"
 #include "../../include/pokemon.h"
@@ -46,13 +47,17 @@ BOOL OverworldWildSpawns_StartFollowerReleaseBounce(
 #define OW_WILD_HELPER_HEADBUTT_SPECIAL_TREE 1
 #define OW_WILD_HELPER_RANDOM_TIME_TABLE_CHANCE_PERCENT 20
 #define OW_WILD_HELPER_SPAWN_MIN_DISTANCE 4
-#define OW_WILD_HELPER_SPAWN_MAX_DISTANCE 8
+#define OW_WILD_HELPER_SPAWN_MAX_DISTANCE 10
 #define OW_WILD_HELPER_SPAWN_MIN_MON_DISTANCE 3
 #define OW_WILD_HELPER_BUDGETED_SPAWN_POSITION_SEARCH 1
 #define OW_WILD_HELPER_SPAWN_POSITION_DIAMETER (OW_WILD_HELPER_SPAWN_MAX_DISTANCE * 2 + 1)
 #define OW_WILD_HELPER_SPAWN_POSITION_TILE_COUNT \
     (OW_WILD_HELPER_SPAWN_POSITION_DIAMETER * OW_WILD_HELPER_SPAWN_POSITION_DIAMETER)
 #define OW_WILD_HELPER_SPAWN_POSITION_STRIDE 73
+/* Spawns are searched ahead of the player so a run through a route keeps
+ * meeting new Pokemon. Only tiles at least this far along the facing are
+ * checked, except on every fourth starting cursor (see TryPickSpawnPosition). */
+#define OW_WILD_HELPER_SPAWN_FRONT_MIN_AHEAD 4
 #define OW_WILD_HELPER_HOP_PLAN_MAX_DISTANCE 8
 #define OW_WILD_HELPER_HOP_PLAN_VALIDATION_BUDGET \
     (OW_WILD_HELPER_HOP_PLAN_MAX_DIRECTIONS \
@@ -503,6 +508,7 @@ static OverworldWildHelperPrepareResult OverworldWildHelper_TryPickSpawnPosition
     u32 cursor;
     u32 checked = 0;
     u32 visited = 0;
+    u32 facing;
 
     if (!callbacks->getPlayerState(context, &playerState)) {
         return OW_WILD_HELPER_PREPARE_FAILED;
@@ -513,6 +519,9 @@ static OverworldWildHelperPrepareResult OverworldWildHelper_TryPickSpawnPosition
     cursor = *storedCursor == 0
         ? gf_rand() % OW_WILD_HELPER_SPAWN_POSITION_TILE_COUNT
         : *storedCursor - 1;
+    /* Every fourth starting cursor searches the whole ring, so a front that
+     * holds no valid tile cannot stall spawning. */
+    facing = (cursor & 3) != 0 ? playerState.facing : OW_WILD_HELPER_DIRECTION_NONE;
 
     while (checked < OW_WILD_HELPER_SPAWN_POSITION_CHECKS_PER_UPDATE
         && visited < OW_WILD_HELPER_SPAWN_POSITION_TILE_COUNT) {
@@ -521,20 +530,28 @@ static OverworldWildHelperPrepareResult OverworldWildHelper_TryPickSpawnPosition
         int dy;
         int x;
         int y;
-        OverworldWildSpawnTerrain terrain;
+        int ahead;
+        u32 terrain;
 
-        cursor = (cursor + OW_WILD_HELPER_SPAWN_POSITION_STRIDE)
-            % OW_WILD_HELPER_SPAWN_POSITION_TILE_COUNT;
+        cursor += OW_WILD_HELPER_SPAWN_POSITION_STRIDE;
+        if (cursor >= OW_WILD_HELPER_SPAWN_POSITION_TILE_COUNT) {
+            cursor -= OW_WILD_HELPER_SPAWN_POSITION_TILE_COUNT;
+        }
         visited++;
-        dx = candidate % OW_WILD_HELPER_SPAWN_POSITION_DIAMETER
+        dy = candidate / OW_WILD_HELPER_SPAWN_POSITION_DIAMETER;
+        dx = candidate - dy * OW_WILD_HELPER_SPAWN_POSITION_DIAMETER
             - OW_WILD_HELPER_SPAWN_MAX_DISTANCE;
-        dy = candidate / OW_WILD_HELPER_SPAWN_POSITION_DIAMETER
-            - OW_WILD_HELPER_SPAWN_MAX_DISTANCE;
+        dy -= OW_WILD_HELPER_SPAWN_MAX_DISTANCE;
 
-        if (OverworldWildHelper_Max(
+        /* Facing up, down, left or right: distance ahead; otherwise ring distance. */
+        ahead = facing == OW_WILD_HELPER_DIRECTION_UP ? -dy
+            : facing == OW_WILD_HELPER_DIRECTION_DOWN ? dy
+            : facing == OW_WILD_HELPER_DIRECTION_LEFT ? -dx
+            : facing == OW_WILD_HELPER_DIRECTION_RIGHT ? dx
+            : OverworldWildHelper_Max(
                 OverworldWildHelper_Abs(dx),
-                OverworldWildHelper_Abs(dy))
-            < OW_WILD_HELPER_SPAWN_MIN_DISTANCE) {
+                OverworldWildHelper_Abs(dy));
+        if (ahead < OW_WILD_HELPER_SPAWN_FRONT_MIN_AHEAD) {
             continue;
         }
 
@@ -582,7 +599,7 @@ static OverworldWildHelperPrepareResult OverworldWildHelper_TryPickSpawnPosition
             int distance = OverworldWildHelper_Max(
                 OverworldWildHelper_Abs(dx),
                 OverworldWildHelper_Abs(dy));
-            OverworldWildSpawnTerrain terrain;
+            u32 terrain;
 
             if (distance < OW_WILD_HELPER_SPAWN_MIN_DISTANCE
                 || distance > OW_WILD_HELPER_SPAWN_MAX_DISTANCE
@@ -629,7 +646,7 @@ static BOOL OverworldWildHelper_TryPickFishingSpawnPosition(
     for (i = 0; i < OW_WILD_HELPER_NELEMS(sOverworldWildHelperCardinalOffsets); i++) {
         const OverworldWildHelperCoordOffset *offset =
             &sOverworldWildHelperCardinalOffsets[(start + i) & 3];
-        OverworldWildSpawnTerrain terrain;
+        u32 terrain;
         int x = playerState.playerX + offset->dx;
         int y = playerState.playerY + offset->dy;
 
@@ -1276,22 +1293,20 @@ static BOOL OverworldWildHelper_TryGetHopVector(
     u8 *distance)
 {
     int jumpDistance;
-    u8 directions[4];
+    int absDx = OverworldWildHelper_Abs(dx);
+    int absDy = OverworldWildHelper_Abs(dy);
 
-    if (!OverworldWildHelper_IsHopVectorShape(config, dx, dy)
-        || OverworldWildHelper_BuildDirections(dx, dy, directions) == 0) {
+    if (!OverworldWildHelper_IsHopVectorShape(config, dx, dy)) {
         return FALSE;
     }
 
-    jumpDistance = OverworldWildHelper_Max(
-        OverworldWildHelper_Abs(dx),
-        OverworldWildHelper_Abs(dy));
+    jumpDistance = OverworldWildHelper_Max(absDx, absDy);
     if (jumpDistance < config->minDistance || jumpDistance > config->maxDistance) {
         return FALSE;
     }
 
     if (direction != NULL) {
-        *direction = directions[0];
+        *direction = absDx >= absDy ? 2 + (dx > 0) : (dy > 0);
     }
     if (distance != NULL) {
         *distance = (u8)jumpDistance;
@@ -1314,7 +1329,7 @@ static BOOL OverworldWildHelper_IsLandingAllowed(
         context);
 }
 
-static BOOL OverworldWildHelper_SetHopResult(
+static BOOL __attribute__((noinline, optimize("Os"))) OverworldWildHelper_SetHopResult(
     const OverworldWildHelperHopConfig *config,
     int landingX,
     int landingY,
@@ -1323,22 +1338,18 @@ static BOOL OverworldWildHelper_SetHopResult(
     u8 flags,
     OverworldWildHelperHopResult *result)
 {
-    u8 direction;
-    u8 distance;
-
-    (void)OverworldWildHelper_TryGetHopVector(
-        config,
-        landingX - config->objectX,
-        landingY - config->objectY,
-        &direction,
-        &distance);
+    int dx = landingX - config->objectX;
+    int dy = landingY - config->objectY;
+    int absDx = OverworldWildHelper_Abs(dx);
+    int absDy = OverworldWildHelper_Abs(dy);
 
     result->landingX = landingX;
     result->landingY = landingY;
     result->finalTargetX = finalTargetX;
     result->finalTargetY = finalTargetY;
-    result->direction = direction;
-    result->distance = distance;
+    /* Both callers have already selected a legal geometric endpoint. */
+    result->direction = absDx >= absDy ? 2 + (dx > 0) : (dy > 0);
+    result->distance = OverworldWildHelper_Max(absDx, absDy);
     result->flags = flags;
     return TRUE;
 }
@@ -1460,101 +1471,93 @@ static BOOL OverworldWildHelper_IsHopTargetOneHopAway(
         NULL);
 }
 
-static BOOL __attribute__((optimize("Os", "tree-dominator-opts", "if-conversion")))
+static BOOL __attribute__((optimize("Os", "no-tree-forwprop", "no-if-conversion", "no-ivopts")))
 OverworldWildHelper_PickRandomBehaviorHop(
     const OverworldWildHelperHopConfig *config,
     OverworldWildHelperHopTileValidator validator,
     void *context,
     OverworldWildHelperHopResult *result)
 {
-    int dx;
-    int dy;
-    int targetX = 0;
-    int targetY = 0;
-    int fallbackXs[2];
-    int fallbackYs[2];
-    u32 candidateCount = 0;
-    u8 fallbackCount = 0;
+    static const s8 steps[8][2] = {
+        {0, -1}, {0, 1}, {-1, 0}, {1, 0},
+        {-1, -1}, {1, -1}, {-1, 1}, {1, 1},
+    };
+    u8 candidates[8 * 12];
+    u8 fallbacks[2];
+    u32 minimum = config->minDistance ? config->minDistance : 1;
+    u32 firstDirection = config->allowNonCardinal >= 2 ? 4 : 0;
+    u32 directionCount = config->allowNonCardinal == 1 ? 8 : 4;
+    u32 remaining = 0;
+    u32 fallbackCount = 0;
+    int targetX;
+    int targetY;
 
-    for (dy = -config->maxDistance; dy <= config->maxDistance; dy++) {
-        for (dx = -config->maxDistance; dx <= config->maxDistance; dx++) {
-            int candidateX;
-            int candidateY;
+    if (config->maxDistance < minimum || config->maxDistance > 12) {
+        return FALSE;
+    }
+    for (u32 direction = firstDirection;
+         direction < firstDirection + directionCount; direction++) {
+        for (u32 distance = minimum; distance <= config->maxDistance; distance++) {
+            u8 candidate = (u8)((direction << 4) | distance);
 
-            if (dx == 0 && dy == 0) {
-                continue;
-            }
-
-            candidateX = config->objectX + dx;
-            candidateY = config->objectY + dy;
-            if (!OverworldWildHelper_TryGetHopVector(config, dx, dy, NULL, NULL)
-                || !validator(
-                    candidateX,
-                    candidateY,
-                    candidateX,
-                    candidateY,
-                    context)) {
-                continue;
-            }
-            if ((config->directionCount & 0x80) != 0) {
+            if (config->directionCount & 0x80) {
                 int straightX = config->objectX
                     + ((config->objectX > config->targetX)
                         - (config->objectX < config->targetX));
                 int straightY = config->objectY
                     + ((config->objectY > config->targetY)
                         - (config->objectY < config->targetY));
-
-                if (candidateX == straightX && candidateY == straightY) {
-                    if (config->planMode
-                        == OW_WILD_HELPER_HOP_PLAN_STOP_ONE_HOP_AWAY) {
-                        return OverworldWildHelper_SetHopResult(
-                            config,
-                            candidateX,
-                            candidateY,
-                            candidateX,
-                            candidateY,
-                            OW_WILD_HELPER_HOP_RESULT_FLAG_DIRECT,
-                            result);
+                targetX = config->objectX + steps[direction][0] * (int)distance;
+                targetY = config->objectY + steps[direction][1] * (int)distance;
+                if (targetX == straightX && targetY == straightY) {
+                    if (config->planMode == OW_WILD_HELPER_HOP_PLAN_STOP_ONE_HOP_AWAY) {
+                        if (validator(targetX, targetY, targetX, targetY, context)) {
+                            goto found;
+                        }
+                    } else {
+                        fallbacks[fallbackCount++] = candidate;
                     }
-                    fallbackXs[fallbackCount] = candidateX;
-                    fallbackYs[fallbackCount++] = candidateY;
                     continue;
                 }
-                if ((config->directionCount & 0x40) != 0
-                    && candidateX == config->targetX
-                    && candidateY == config->targetY) {
-                    fallbackXs[fallbackCount] = candidateX;
-                    fallbackYs[fallbackCount++] = candidateY;
+                if ((config->directionCount & 0x40)
+                    && targetX == config->targetX && targetY == config->targetY) {
+                    fallbacks[fallbackCount++] = candidate;
                     continue;
                 }
             }
-            candidateCount++;
-            if ((gf_rand() % candidateCount) == 0) {
-                targetX = candidateX;
-                targetY = candidateY;
-            }
+            candidates[remaining++] = candidate;
         }
     }
 
-    if (candidateCount == 0) {
-        int fallbackIndex;
+    /* Each random tier draws without replacement. The first legal endpoint
+     * has the old reservoir distribution; history keeps its priority tiers. */
+    for (;;) {
+        while (remaining != 0) {
+            u32 index = gf_rand() % remaining;
+            u32 candidate = candidates[index];
+            u32 direction = candidate >> 4;
+            u32 distance = candidate & 15;
 
+            candidates[index] = candidates[--remaining];
+            targetX = config->objectX + steps[direction][0] * (int)distance;
+            targetY = config->objectY + steps[direction][1] * (int)distance;
+            if (validator(targetX, targetY, targetX, targetY, context)) {
+                goto found;
+            }
+        }
         if (fallbackCount == 0) {
             return FALSE;
         }
-        fallbackIndex = gf_rand() % fallbackCount;
-        targetX = fallbackXs[fallbackIndex];
-        targetY = fallbackYs[fallbackIndex];
+        remaining = fallbackCount;
+        for (u32 i = 0; i < remaining; i++) {
+            candidates[i] = fallbacks[i];
+        }
+        fallbackCount = 0;
     }
-
+found:
     return OverworldWildHelper_SetHopResult(
-        config,
-        targetX,
-        targetY,
-        targetX,
-        targetY,
-        OW_WILD_HELPER_HOP_RESULT_FLAG_DIRECT,
-        result);
+        config, targetX, targetY, targetX, targetY,
+        OW_WILD_HELPER_HOP_RESULT_FLAG_DIRECT, result);
 }
 
 static BOOL OverworldWildHelper_PlanBehaviorHopStep(
@@ -2026,7 +2029,8 @@ static BOOL OverworldWildHelper_PrepareCapturedPokemonFrame(
         }
         break;
     case 7:
-        RecalcPartyPokemonStats(pokemon);
+        OVERWORLD_COMBAT_ENTRY->captureHp(projectile->state,
+            (u8)projectile->impactSlot, pokemon);
         break;
     case 8:
         projectile->targetY = (s32)PokeFormNoPersonalParaGet(
@@ -3454,7 +3458,9 @@ static BOOL OverworldWildHelper_TickPlayerBallCapture(
     }
 }
 
-static BOOL OverworldWildHelper_TickPlayerBallProjectile(
+/* Keep the existing state branches compact in Helper151's fixed core. */
+static BOOL __attribute__((optimize("Os", "no-tree-forwprop")))
+OverworldWildHelper_TickPlayerBallProjectile(
     FieldSystem *fieldSystem,
     OverworldWildSpawnState *state,
     OverworldWildPresentationState *presentation,
@@ -4023,16 +4029,9 @@ static BOOL OverworldWildHelper_IsValidPickupThrowTarget(
         || carrierSlot >= OW_WILD_MAX_SPAWNS
         || targetSlot < 0
         || targetSlot >= OW_WILD_MAX_SPAWNS
-        || carrierSlot == OW_WILD_FOLLOWER_SLOT
-        || targetSlot == OW_WILD_FOLLOWER_SLOT
         || carrierSlot == targetSlot
         || !state->spawns[targetSlot].active
-        || state->spawns[targetSlot].object == NULL
-        || state->movementActorControlModes[targetSlot]
-            == OW_WILD_ACTOR_CONTROL_HELD
-        || state->movementQueuedBattleSlot == targetSlot
-        || state->pendingSlot == targetSlot
-        || throwState->targets[targetSlot] != OW_WILD_HELPER_THROW_TARGET_NONE) {
+        || state->spawns[targetSlot].object == NULL) {
         return FALSE;
     }
 
@@ -4043,103 +4042,87 @@ static BOOL OverworldWildHelper_IsValidPickupThrowTarget(
             targetSlot);
 }
 
-static BOOL OverworldWildHelper_IsStablePickupThrowTarget(
+static BOOL OverworldWildHelper_IsEligiblePickupThrowTarget(
     OverworldWildSpawnState *state,
     OverworldWildThrowState *throwState,
     int carrierSlot,
     int targetSlot,
-    u16 unstableMask)
+    u16 unstableMask,
+    u16 reservableWalkMask)
 {
     LocalMapObject *object;
+    u16 targetMask;
+    u8 specialMotion;
 
     if (!OverworldWildHelper_IsValidPickupThrowTarget(
             state,
             throwState,
             carrierSlot,
-            targetSlot)
-        || state->movementSpotStates[targetSlot] == 1
-        || (unstableMask & (1u << targetSlot)) != 0
+            targetSlot)) {
+        return FALSE;
+    }
+    targetMask = 1u << targetSlot;
+    specialMotion = state->movementStagedHopPending[targetSlot]
+        | state->movementRamCrashShakeTimers[targetSlot]
+        | state->movementTeleportHidden[targetSlot]
+        | state->movementTeleportFlickerTimers[targetSlot];
+    if (state->movementSpotStates[targetSlot] == 1
         || state->movementSpawnRunActive[targetSlot] == OW_WILD_SPAWN_ENTRY_HOP
-        || state->movementStagedHopPending[targetSlot]
-        || state->movementRamCrashShakeTimers[targetSlot] != 0
-        || state->movementTeleportHidden[targetSlot]
-        || state->movementTeleportFlickerTimers[targetSlot] != 0
-        || state->movementTeleportFlickerObjects[targetSlot] != NULL
-        || (state->movementInProgressMask & (1u << targetSlot)) != 0) {
+        || specialMotion != 0
+        || state->movementTeleportFlickerObjects[targetSlot] != NULL) {
         return FALSE;
     }
 
     object = state->spawns[targetSlot].object;
-    return !MapObject_IsSingleMovementActive(object)
-        && (object->flags & BIT_VANISH) == 0;
+    if ((object->flags & BIT_VANISH) != 0) {
+        return FALSE;
+    }
+    /* Only initial reservation may accept an owner-authenticated Walk.
+     * Passing zero keeps the pickup query's stopped-target requirement. */
+    if ((reservableWalkMask & targetMask) != 0) {
+        return state->movementSpawnRunActive[targetSlot] == 0;
+    }
+    return ((unstableMask | state->movementInProgressMask) & targetMask) == 0
+        && !MapObject_IsSingleMovementActive(object);
 }
 
-static BOOL OverworldWildHelper_IsReservedPickupTargetNearCarrier(
+static BOOL OverworldWildHelper_ShouldPauseReservedPickupTarget(
     OverworldWildSpawnState *state,
     OverworldWildThrowState *throwState,
     int targetSlot)
 {
-    int carrierSlot;
-
-    if (state == NULL
-        || throwState == NULL
-        || targetSlot < 0
-        || targetSlot >= OW_WILD_MAX_SPAWNS
-        || (throwState->targetMask & (1u << targetSlot)) == 0
-        || state->movementActorControlModes[targetSlot]
-            == OW_WILD_ACTOR_CONTROL_HELD) {
-        return FALSE;
-    }
-
-    for (carrierSlot = 0; carrierSlot < OW_WILD_MAX_SPAWNS; carrierSlot++) {
-        u8 relation = throwState->targets[carrierSlot];
-        LocalMapObject *carrierObject;
-        LocalMapObject *targetObject;
-
-        if (relation == OW_WILD_HELPER_THROW_TARGET_NONE
-            || (relation & OW_WILD_HELPER_THROW_TARGET_CARRIED_FLAG) != 0
-            || OW_WILD_HELPER_THROW_TARGET_DECODE(relation) != targetSlot
-            || !OverworldWildHelper_IsValidPickupThrowTarget(
-                state,
-                throwState,
-                carrierSlot,
-                targetSlot)
-            || !OverworldWildHelper_IsExactObject(
-                state->movementFieldSystem,
-                state,
-                carrierSlot)) {
-            continue;
-        }
-
-        carrierObject = state->spawns[carrierSlot].object;
-        targetObject = state->spawns[targetSlot].object;
-        return OverworldWildHelper_Max(
-            OverworldWildHelper_Abs(
-                MapObject_GetCurrentX(carrierObject) - MapObject_GetCurrentX(targetObject)),
-            OverworldWildHelper_Abs(
-                MapObject_GetCurrentY(carrierObject) - MapObject_GetCurrentY(targetObject))) <= 1;
-    }
+    /* A claim never owns the target's motion or profiles. */
+    (void)state; (void)throwState; (void)targetSlot;
     return FALSE;
 }
 
-static BOOL OverworldWildHelper_QueryPickupThrowTarget(
+/* Keep the shared query in Helper151's fixed code slot. */
+static BOOL __attribute__((optimize("no-tree-forwprop")))
+OverworldWildHelper_QueryPickupThrowTarget(
     OverworldWildSpawnState *state,
     OverworldWildThrowState *throwState,
     int carrierSlot,
     int targetSlot,
     u8 query,
-    u16 unstableMask)
+    u32 motionMasks)
 {
+    u16 unstableMask = (u16)motionMasks;
+
+    if (query == OW_WILD_HELPER_PICKUP_THROW_QUERY_ELIGIBLE) {
+        return OverworldWildHelper_IsValidPickupThrowTarget(
+            state, throwState, carrierSlot, targetSlot);
+    }
     if (query == OW_WILD_HELPER_PICKUP_THROW_QUERY_STABLE) {
-        return OverworldWildHelper_IsStablePickupThrowTarget(
+        return OverworldWildHelper_IsEligiblePickupThrowTarget(
             state,
             throwState,
             carrierSlot,
             targetSlot,
-            unstableMask);
+            unstableMask,
+            0);
     }
-    if (query == OW_WILD_HELPER_PICKUP_THROW_QUERY_RESERVED_NEAR) {
-        return OverworldWildHelper_IsReservedPickupTargetNearCarrier(
+    if (query == OW_WILD_HELPER_PICKUP_THROW_QUERY_RESERVED_PAUSE) {
+        return OverworldWildHelper_ShouldPauseReservedPickupTarget(
             state,
             throwState,
             targetSlot);
@@ -4156,9 +4139,15 @@ static u16 OverworldWildHelper_ClearPickupThrowState(
     OverworldWildSpawnState *state,
     OverworldWildThrowState *throwState,
     OverworldWildPresentationState *presentation,
-    int slot)
+    int slot,
+    BOOL clearIncoming)
 {
-    u16 restoreMask = 0;
+    unsigned clearedTargets;
+    unsigned clearedCarriers;
+    unsigned survivingTargets = 0;
+    unsigned heldMask = 0;
+    unsigned restoreCandidates;
+    unsigned restoreMask;
     int i;
 
     if (state == NULL
@@ -4168,41 +4157,41 @@ static u16 OverworldWildHelper_ClearPickupThrowState(
         || slot >= OW_WILD_MAX_SPAWNS) {
         return 0;
     }
-
-    throwState->targetMask &= ~(1u << slot);
-    throwState->carrierMask &= ~(1u << slot);
+    clearedTargets = clearIncoming ? 1u << slot : 0;
+    clearedCarriers = 1u << slot;
+    restoreCandidates = clearedTargets;
     presentation->farSamples[slot] = 0;
-    if (state->movementActorControlModes[slot]
-        == OW_WILD_ACTOR_CONTROL_HELD) {
-        restoreMask |= 1u << slot;
-    }
     for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
         u8 relation = throwState->targets[i];
-        u8 target;
-
+        unsigned target;
+        if (state->movementActorControlModes[i] == OW_WILD_ACTOR_CONTROL_HELD) {
+            heldMask |= 1u << i;
+        }
         if (relation == OW_WILD_HELPER_THROW_TARGET_NONE) {
             continue;
         }
-        target = OW_WILD_HELPER_THROW_TARGET_DECODE(relation);
-        if (target >= OW_WILD_MAX_SPAWNS) {
-            throwState->targets[i] = OW_WILD_HELPER_THROW_TARGET_NONE;
-            throwState->carrierMask &= ~(1u << i);
-            state->movementEmoteTimers[i] = 0;
+        target = (relation & OW_WILD_HELPER_THROW_TARGET_SLOT_MASK) - 1u;
+        if (i != slot && (!clearIncoming
+            || (target < OW_WILD_MAX_SPAWNS && target != (unsigned)slot))) {
+            if (target < OW_WILD_MAX_SPAWNS) survivingTargets |= 1u << target;
             continue;
         }
-        if (i == slot || target == slot) {
-            throwState->targetMask &= ~(1u << target);
+        if (target < OW_WILD_MAX_SPAWNS) {
+            clearedTargets |= 1u << target;
             presentation->farSamples[target] = 0;
-            if ((relation & OW_WILD_HELPER_THROW_TARGET_CARRIED_FLAG) != 0
-                && state->movementActorControlModes[target]
-                    == OW_WILD_ACTOR_CONTROL_HELD) {
-                restoreMask |= 1u << target;
+            if ((relation & OW_WILD_HELPER_THROW_TARGET_CARRIED_FLAG) != 0) {
+                restoreCandidates |= 1u << target;
             }
-            throwState->targets[i] = OW_WILD_HELPER_THROW_TARGET_NONE;
-            throwState->carrierMask &= ~(1u << i);
-            state->movementEmoteTimers[i] = 0;
         }
+        throwState->targets[i] = OW_WILD_HELPER_THROW_TARGET_NONE;
+        clearedCarriers |= 1u << i;
     }
+    restoreMask = restoreCandidates & heldMask;
+    throwState->carrierMask &= ~clearedCarriers;
+    throwState->recoveringMask &= ~clearedCarriers;
+    /* Only bits affected by this cleanup are changed. */
+    throwState->targetMask = (throwState->targetMask & ~clearedTargets)
+        | (clearedTargets & (survivingTargets | (heldMask & ~restoreMask)));
     return restoreMask;
 }
 
@@ -4211,41 +4200,33 @@ static BOOL OverworldWildHelper_TryStartPickupThrowAction(
     OverworldWildThrowState *throwState,
     OverworldWildPresentationState *presentation,
     int slot,
-    u16 unstableMask)
+    int targetSlot,
+    u16 unstableMask,
+    u16 reservableWalkMask)
 {
-    int i;
-
+    (void)unstableMask; (void)reservableWalkMask;
     if (state == NULL
         || throwState == NULL
         || presentation == NULL
         || slot < 0
         || slot >= OW_WILD_MAX_SPAWNS
-        || slot == OW_WILD_FOLLOWER_SLOT
+        || targetSlot < 0
+        || targetSlot >= OW_WILD_MAX_SPAWNS
         || throwState->targets[slot] != OW_WILD_HELPER_THROW_TARGET_NONE
-        || ((throwState->targetMask | throwState->carrierMask) & (1u << slot)) != 0) {
+        || (throwState->carrierMask & (1u << slot)) != 0
+        || state->movementActorControlModes[slot] != OW_WILD_ACTOR_CONTROL_AUTONOMOUS) {
         return FALSE;
     }
-
-    for (i = 0; i < OW_WILD_MAX_SPAWNS; i++) {
-        u16 targetMask = 1u << i;
-
-        if (OverworldWildHelper_IsStablePickupThrowTarget(
-                state,
-                throwState,
-                slot,
-                i,
-                unstableMask)
-            && throwState->targets[i] == OW_WILD_HELPER_THROW_TARGET_NONE
-            && (throwState->targetMask & targetMask) == 0) {
-            throwState->targets[slot] = OW_WILD_HELPER_THROW_TARGET_ENCODE(i);
-            throwState->targetMask |= targetMask;
-            throwState->carrierMask |= 1u << slot;
-            presentation->farSamples[slot] = 0;
-            presentation->farSamples[i] = 0;
-            state->movementEmoteTimers[slot] =
-                OW_WILD_HELPER_THROW_RESERVATION_DECISIONS;
-            return TRUE;
-        }
+    if (OverworldWildHelper_QueryPickupThrowTarget(
+            state, throwState, slot, targetSlot,
+            OW_WILD_HELPER_PICKUP_THROW_QUERY_ELIGIBLE, 0)) {
+        throwState->targets[slot] =
+            OW_WILD_HELPER_THROW_TARGET_ENCODE(targetSlot);
+        throwState->targetMask |= 1u << targetSlot;
+        throwState->carrierMask |= 1u << slot;
+        presentation->farSamples[slot] = 0;
+        presentation->farSamples[targetSlot] = 0;
+        return TRUE;
     }
     return FALSE;
 }
@@ -4262,6 +4243,11 @@ static BOOL OverworldWildHelper_StartCarriedThrowTarget(
     if (state == NULL
         || throwState == NULL
         || presentation == NULL
+        || (u32)carrierSlot >= OW_WILD_MAX_SPAWNS
+        || (u32)targetSlot >= OW_WILD_MAX_SPAWNS
+        || throwState->targets[carrierSlot] != OW_WILD_HELPER_THROW_TARGET_ENCODE(targetSlot)
+        || !(throwState->targetMask & (1u << targetSlot))
+        || !(throwState->carrierMask & (1u << carrierSlot))
         || !OverworldWildHelper_IsPickupThrowMovementContextCurrent(state)
         || !OverworldWildHelper_IsExactObject(
             state->movementFieldSystem,
@@ -4279,11 +4265,13 @@ static BOOL OverworldWildHelper_StartCarriedThrowTarget(
         OW_WILD_ACTOR_CONTROL_HELD;
     state->movementSpotStates[targetSlot] = 0;
     state->movementEmoteTimers[targetSlot] = 0;
-    MapObject_SetBits(targetObject, MAPOBJECTFLAG_UNK18);
-    MapObject_ClearBits(targetObject, BIT_VANISH);
+    targetObject->flags = (targetObject->flags | MAPOBJECTFLAG_UNK18)
+        & ~BIT_VANISH;
     throwState->targets[carrierSlot] =
         OW_WILD_HELPER_THROW_TARGET_ENCODE_CARRIED(targetSlot);
     throwState->targetMask |= 1u << targetSlot;
+    /* Pickup ends the target's old recovery together with its tired timer. */
+    throwState->recoveringMask &= ~(1u << targetSlot);
     throwState->carrierMask |= 1u << carrierSlot;
     state->movementEmoteTimers[carrierSlot] = 0;
     OverworldWildHelper_SyncCarriedThrowTarget(
@@ -4842,8 +4830,9 @@ static LocalMapObject *OverworldWildHelper_CreatePresentationObject(
     }
     MapObject_SetID(object, OW_WILD_OBJECT_ID_START + slot);
     MapObject_SetScript(object, OVERWORLD_WILD_SPAWNS_BATTLE_SCRIPT);
-    MapObject_SetXRange(object, range);
-    MapObject_SetYRange(object, range);
+    (void)range; /* Retained callback ABI; both native axes are unlimited. */
+    MapObject_SetXRange(object, -1);
+    MapObject_SetYRange(object, -1);
     OVERWORLD_WILD_SPAWN_METADATA_ENTRY->applyRenderParams(
         object,
         spawn->species,

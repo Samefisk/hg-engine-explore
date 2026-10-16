@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 1,
+  "id": "profile.playful.in-place-hop",
+  "title": "Wild Playful Clefairy makes one or two natural in-place hops",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/overworld-system/architecture.md",
+  "requirements": [
+    "current.playful-in-place-hop"
+  ],
+  "budgets": {
+    "maxSeconds": 600,
+    "maxFrames": 3600,
+    "noProgressFrames": 3600,
+    "minObservedFrames": 2
+  },
+  "subjects": [
+    {
+      "id": "clefairy",
+      "species": 35,
+      "role": "WILD",
+      "acquire": "spawn"
+    },
+    {
+      "id": "passive",
+      "species": 155,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "playful-in-place-hop-v1",
+      "subject": "clefairy"
+    }
+  ],
+  "setup": [
+    {
+      "id": "open-area",
+      "op": "teleport",
+      "args": {
+        "map": 33,
+        "x": 585,
+        "z": 408,
+        "facing": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "prepare-passive-party",
+      "op": "party",
+      "args": {
+        "slot": 0,
+        "species": 155,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "create-passive-follower",
+      "op": "spawn",
+      "args": {
+        "species": 155,
+        "form": 0,
+        "role": "follower",
+        "slot": 0,
+        "level": 20
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-passive",
+      "op": "bind",
+      "args": {
+        "subject": "passive"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "spawn-clefairy",
+      "op": "spawn",
+      "args": {
+        "species": 35,
+        "role": "wild",
+        "level": 5,
+        "x": 585,
+        "z": 404,
+        "form": 0
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "bind-clefairy",
+      "op": "bind",
+      "args": {
+        "subject": "clefairy"
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "observe-natural-hops",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "measurement-complete",
+          "measurement": "playful-in-place-hop-v1",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 600,
+        "maxFrames": 3600,
+        "noProgressFrames": 3600
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "playful-in-place-hop-v1",
+      "when": "final"
+    }
+  ]
+}

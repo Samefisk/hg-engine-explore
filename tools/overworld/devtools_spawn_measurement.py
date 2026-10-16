@@ -1,6 +1,6 @@
 """Pure checks for a species-bound, native POOL placement receipt.
 
-No emulator, mutation, file access or proof grant. The shared job must still
+No emulator, mutation or proof grant. Canonical bank lowering reads only the shared species constants. The shared job must still
 prove the live actor, completed landing and observation coverage. In particular,
 preserving a pool site is NOT proof of its physical surface or later movement.
 """
@@ -22,6 +22,27 @@ def _bytes(value, size, name):
 def _encounter(raw):
     pid, species, form, level = struct.unpack_from("<IHBB", raw, 12)
     return {"personality": pid, "species": species, "form": form, "level": level}
+
+
+def _pool_layers(authored, species, owner, applied):
+    """Use the shared canonical lowering and subject-local bank mapping."""
+    if "overrideProfiles" in authored:
+        overrides = authored["overrideProfiles"]
+        if not isinstance(overrides, list) or len(overrides) > 32 or applied >> len(overrides):
+            raise ValueError("applied layers exceed current authored source")
+        return overrides, tuple(i for i in range(len(overrides)) if owner & (1 << i)), False
+    from pathlib import Path
+    from scripts.overworld_behavior_profile_viewer import (project_behavior_catalog_runtime,
+                                                           _runtime_source_behavior_catalog)
+    from scripts.overworld_application_bank_compiler import compile_bank
+    from tools.overworld.devtools_application_bank import global_mask
+    catalog = _runtime_source_behavior_catalog(authored)
+    compiled = compile_bank(catalog, Path(__file__).resolve().parents[2] / "include/constants/species.h")
+    bank = dict(rows=[(n if isinstance(n, int) else 0xFFFF, first, count, 0)
+                     for n, first, count in compiled["rows"]], indexes=compiled["indexes"])
+    global_mask(bank, species, applied)  # Validate all applied local bits too.
+    owners = global_mask(bank, species, owner)
+    return project_behavior_catalog_runtime(authored)["overrideProfiles"], owners, True
 
 
 def check_pool_spawn_receipt(spawn, *, source_sha256, authored_profiles):
@@ -99,30 +120,34 @@ def check_pool_spawn_receipt(spawn, *, source_sha256, authored_profiles):
     if resolved.get("resolved") is not True or resolved.get("sourceSha256") != source_sha256:
         raise ValueError("finalizer profile has missing or stale source identity")
     request = _bytes(resolved.get("requestHex"), 44, "resolver request")
-    result = _bytes(resolved.get("resultHex"), 200, "resolver result")
-    applied = int.from_bytes(result[172:176], "little")
-    matched, forced, conditional = struct.unpack_from("<III", result, 160)
+    result = _bytes(resolved.get("resultHex"), 216, "resolver result")
+    applied = int.from_bytes(result[188:192], "little")
+    matched, forced, conditional = struct.unpack_from("<III", result, 176)
     owner = matched | forced
     # Tired references also enter appliedOverrideMask. They are not Owner
     # layers. Conditional layering and canopy-hopper exceptions require a
     # separate witness; this narrow legacy POOL check must not infer them.
-    if forced or conditional or owner & ~applied or result[146] == 4 or result[150] == 4:
+    if forced or conditional or owner & ~applied or result[162] == 4 or result[166] == 4:
         raise ValueError("conditional, forced or tree-top placement is outside this POOL witness")
     if resolved.get("appliedOverrides") != applied \
-            or resolved.get("fingerprint") != int.from_bytes(result[176:180], "little") \
-            or resolved.get("lanes") != [result[n:n + 72].hex() for n in (0, 72)]:
+            or resolved.get("fingerprint") != int.from_bytes(result[192:196], "little") \
+            or resolved.get("lanes") != [result[n:n + 80].hex() for n in (0, 80)]:
         raise ValueError("native finalizer profile bytes differ")
     if int.from_bytes(request[:2], "little") != incoming["species"] \
             or request[8] != incoming["level"] or request[9] != receipt["terrain"] \
             or int.from_bytes(request[12:16], "little") != 0:
         raise ValueError("finalizer resolved a different or forced subject")
-    overrides = authored_profiles.get("overrideProfiles")
-    if not isinstance(overrides, list) or len(overrides) > 32 or applied >> len(overrides):
-        raise ValueError("applied layers exceed current authored source")
+    overrides, owners, canonical = _pool_layers(authored_profiles, incoming["species"], owner, applied)
+    if canonical and incoming["species"] != 165:
+        raise ValueError("current POOL flight witness is bound to Ledyba")
     winner = None
-    for index, override in enumerate(overrides):
-        if not owner & (1 << index):
-            continue
+    fly_owner = False
+    for index in owners:
+        override = overrides[index]
+        if canonical and getattr(override, "profile_id", None) == "fly-in" \
+                and getattr(override, "application_id", None) == "apply-fly-in":
+            fly_owner = override["fields"].get("spawnState") == {
+                "operator": "replace", "value": "OW_WILD_BEHAVIOR_SPAWN_STATE_FLY_IN"}
         fields = override["fields"]
         if "spawnDestinationOverrideMask" in fields:
             raise ValueError("modern destination override is outside the legacy POOL witness")
@@ -136,14 +161,24 @@ def check_pool_spawn_receipt(spawn, *, source_sha256, authored_profiles):
     target = list(struct.unpack_from("<hh", after, 20))
     if any(not 0 <= coordinate <= 32767 for coordinate in source + destination + target):
         raise ValueError("pool position is outside the supported map coordinate range")
+    startup_kind = 9 if canonical else 4
+    if canonical and not fly_owner:
+        raise ValueError("Ledyba has no applied authored Fly In owner")
     if receipt.get("inputPosition") != source or receipt.get("position") != destination \
-            or receipt.get("startup", {}).get("target") != target or after[28] != 4:
-        raise ValueError("native position/startup fields disagree or are not an off-screen Hop")
+            or receipt.get("startup", {}).get("target") != target or after[28] != startup_kind:
+        raise ValueError("native position/startup fields disagree with the authored entry")
+    if canonical:
+        startup_raw = _bytes(receipt.get("startupHex"), 16, "finalized Fly In startup")
+        if startup_raw[:10] != after[20:30] or any(startup_raw[10:12]) \
+                or spawn.get("startupHex") != startup_raw.hex() \
+                or receipt.get("startup") != spawn.get("startup") \
+                or receipt["startup"].get("targetBaseY") != int.from_bytes(startup_raw[12:16], "little", signed=True):
+            raise ValueError("finalized Fly In target height/startup bytes differ")
     preserved = source == destination == target
     return {"passed": preserved, "reason": None if preserved else "pool-destination-replaced",
             "finalizationId": receipt["finalizationId"], "finalizationSequence": receipt["sequence"],
             "spawnSequence": spawn["sequence"], "subject": deepcopy(subject),
-            "terrain": receipt["terrain"], "sourcePosition": source,
+            "terrain": receipt["terrain"], "startupKind": startup_kind, "sourcePosition": source,
             "destination": destination, "landingTarget": target,
             "authoredLayer": {"index": winner[0], "name": winner[1]},
             "inputPersonality": incoming["personality"], "finalPersonality": outgoing["personality"],
@@ -151,7 +186,7 @@ def check_pool_spawn_receipt(spawn, *, source_sha256, authored_profiles):
 
 
 class PoolSpawnMeasurement:
-    """One normal Ledyba's POOL receipt plus its complete first spawn Hop.
+    """One normal Ledyba's POOL receipt plus its complete authored spawn motion.
 
     Reuses the shared identity, profile, coverage, motion and terminal recorder.
     It does not grant the chain recorder's three-action claim, nor infer terrain
@@ -159,7 +194,8 @@ class PoolSpawnMeasurement:
     """
 
     def __init__(self, schema, source_sha256, *, authored_profiles, max_frames):
-        self.landing = LedybaChainMeasurement(schema, source_sha256, max_frames=max_frames)
+        self.landing = LedybaChainMeasurement(schema, source_sha256, max_frames=max_frames,
+            spawn_kind="FLY_IN" if "overrideProfiles" not in authored_profiles else "HOP")
         self.authored_profiles = deepcopy(authored_profiles)
         self.placement = None
         self.finalizer_receipts = {}
@@ -205,7 +241,7 @@ class PoolSpawnMeasurement:
             and not failures and not observed["measurementErrors"]
         return {"state": "failed" if failures or self.closed and not ready else "completed" if self.closed else "observing",
             "passed": self.closed and ready, "ready": ready, "acceptedProof": False,
-            "scope": "one normal Wild Ledyba keeps its own POOL site and completes its native spawn Hop; physical surface legality and later mobility unproved",
+            "scope": "one normal Wild Ledyba keeps its own POOL site and completes its native authored spawn motion; physical surface legality and later mobility unproved",
             "subject": observed["subject"], "frames": observed["frames"],
             "identitySamples": observed["identitySamples"],
             "selectedProfileObservationCount": observed["selectedProfileObservationCount"],
@@ -233,6 +269,7 @@ class PoolSpawnSurfaceMeasurement(PoolSpawnMeasurement):
         self.surface = None
         self.surfaceErrors = []
         self._height_event_bound = False
+        self._fly_admission_cell = None
 
     def observe(self, snapshot, events=()):
         if self.closed:
@@ -245,18 +282,24 @@ class PoolSpawnSurfaceMeasurement(PoolSpawnMeasurement):
                 jumps = self.landing.spawn.get("jumpReceipts")
                 if not isinstance(jumps, list) or len(jumps) != 1:
                     raise ValueError("spawn lacks one native jump receipt")
-                height = jumps[0].get("landingHeight")
-                if not isinstance(height, dict) or height.get("status") != "observed":
+                if self.landing.spawn.get("startup", {}).get("locomotion") == 9:
+                    from tools.overworld.devtools_spawn_surface_measurement import pool_fly_loaded_cell
+                    self._fly_admission_cell = pool_fly_loaded_cell(self.landing.spawn, snapshot, stage="admission")
+                    self._height_event_bound = True
+                    height = None
+                else:
+                    height = jumps[0].get("landingHeight")
+                if self.landing.spawn.get("startup", {}).get("locomotion") != 9 and (not isinstance(height, dict) or height.get("status") != "observed"):
                     raise ValueError("spawn lacks native landing height")
                 queued = [e for e in events if e.get("kind") == "native-observation"
                           and e.get("data", {}).get("observation") == "spawn-landing-height"
                           and e["data"].get("slot") == self.landing.spawn.get("slot")]
-                if len(queued) != 1 or queued[0].get("frame") != snapshot.get("frame") \
-                        or queued[0]["data"] != height:
+                if height is not None and (len(queued) != 1 or queued[0].get("frame") != snapshot.get("frame") \
+                        or queued[0]["data"] != height):
                     raise ValueError("spawn lacks its exact same-frame queued height receipt")
                 self._height_event_bound = True
             except (ValueError, KeyError, TypeError, AttributeError) as error:
-                self.surfaceErrors.append({"code": "missing-spawn-height-event", "frame": snapshot.get("frame"),
+                self.surfaceErrors.append({"code": "invalid-spawn-surface" if self.landing.spawn.get("startup", {}).get("locomotion") == 9 else "missing-spawn-height-event", "frame": snapshot.get("frame"),
                                            "message": str(error)})
         old = PoolSpawnMeasurement.result(self)
         if old["ready"] and self._height_event_bound and not self.surfaceErrors and self.surface is None:
@@ -264,7 +307,7 @@ class PoolSpawnSurfaceMeasurement(PoolSpawnMeasurement):
             try:
                 self.surface = check_pool_spawn_surface(self.landing.spawn, snapshot,
                     source_sha256=self.landing.source_sha256, authored_profiles=self.authored_profiles,
-                    verified_stop_boundary=old["stopBoundary"])
+                    verified_stop_boundary=old["stopBoundary"], fly_admission_cell=self._fly_admission_cell)
             except ValueError as error:
                 self.surfaceErrors.append({"code": "invalid-spawn-surface", "frame": snapshot.get("frame"),
                                            "message": str(error)})
@@ -276,7 +319,7 @@ class PoolSpawnSurfaceMeasurement(PoolSpawnMeasurement):
             and not self.surfaceErrors
         failures = result["failures"] + deepcopy(self.surfaceErrors)
         return {**result, "ready": ready, "passed": self.closed and ready,
-                "scope": "own POOL site, complete spawn Hop, loaded metatile legality, authored surface exclusion and native terminal height; unmodeled geometry and later mobility unproved",
+                "scope": "own POOL site, complete authored spawn motion, loaded metatile legality, authored surface exclusion and native terminal height; unmodeled geometry and later mobility unproved",
                 "state": "failed" if failures or self.closed and not ready
                          else "completed" if self.closed else "observing",
                 "surface": deepcopy(self.surface), "surfaceErrors": deepcopy(self.surfaceErrors),

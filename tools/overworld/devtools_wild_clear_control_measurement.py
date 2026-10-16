@@ -96,7 +96,7 @@ class WildClearControlMeasurement:
         self.control=deepcopy(control)
 
     def _reader(self,value,closed,control):
-        expected_clears=len(self.natural.clears)+len(self.natural.result().get("idleNoopClears",[]))
+        expected_clears=self.natural.clear_count
         require(value.get("armed") is True and value.get("closed") is closed and value.get("failure") is None
             and value.get("subject")==self.natural.subject and value.get("startFrame")==self.initial["frame"]
             and value.get("counts")=={"clear":expected_clears} and value.get("guestMemoryWrites")==2

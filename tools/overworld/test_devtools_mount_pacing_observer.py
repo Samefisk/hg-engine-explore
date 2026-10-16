@@ -3,7 +3,10 @@ from copy import deepcopy
 from pathlib import Path
 import re
 import subprocess
+import struct
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from tools.overworld import test_devtools_role_profile as role_fixture
 from tools.overworld.devtools_observer import NativeObservation, NativeObservationError
@@ -46,7 +49,7 @@ class MountPacingTests(unittest.TestCase):
         s.rt.player_ptr = lambda emu: player
         poses = {player:dict(pos_x=100,pos_y=200,pos_z=300,x=1,y=2), source["object"]:dict(pos_x=100,pos_y=200,pos_z=300,x=1,y=2)}
         values.update({0x01FFA500 + 60: 1, 0x01FFA500 + 64: player,
-                       0x01FFA500 + 68: 1, 0x023BC744 + 0x60: 1,
+                       0x01FFA500 + 68: 1, 0x023BC744 + 0x68: 1,
                        0x023BC744 + 0x18: 0x5A})
         previous_signed = s.rt.signed
         def signed(emu, address, size=4):
@@ -65,7 +68,15 @@ class MountPacingTests(unittest.TestCase):
         for address in names.values(): put(address,code)
         from scripts.verify_pokemon_move_history_capture import elf_bytes_at
         gait_object = s.rt.REPO / 'build/overworld_mount_chain_overlay_linked.o'
-        s.rt.actor_memory_read = lambda emu,address,size: elf_bytes_at(gait_object,address,size)
+        s.rom_hash, s.save_hash = "host-fixture-rom", "host-fixture-save"
+        s.packaged_code = lambda address, size: elf_bytes_at(gait_object, address, size)
+        gait_state = bytearray(72)
+        for offset in (0, 28):
+            struct.pack_into("<4i4hHBx", gait_state, offset, 100, 300, 0, 0, 0, 0, 0, 0, 0, 0)
+        struct.pack_into("<3IB", gait_state, 56, 0, 1, player, 1)
+        s.rt.actor_memory_read = lambda emu, address, size: (
+            bytes(gait_state[:size]) if address == 0x01FFA500 else
+            elf_bytes_at(gait_object, address, size))
         regs.lr=0x02010001
         observer = NativeObservation(s, _.observer.hooks, lambda path,address,size:code)
         s.native_observation=observer
@@ -73,6 +84,160 @@ class MountPacingTests(unittest.TestCase):
         bound = select_current_actor(dict(frame=12,context=dict(fieldEpoch=2,mapGeneration=3),actors=[checked]),checked)
         reader=NativeMountedPacingObserver(s,bound,10)
         return reader,s,actor,engine,regs,put,calls,poses
+
+    def test_shared_gait_auth_rejects_code_or_layout_mismatch_without_hooks(self):
+        from scripts.verify_pokemon_move_history_capture import elf_section_layout
+        from tools.overworld.devtools_mount_gait import authenticate_gait
+        for fault in ("gait-live", "presentation-live", "gait-package", "presentation-package",
+                      "missing-gait", "missing-presentation", "missing-state", "short-state"):
+            r, s, a, e, regs, put, calls, poses = self.fixture()
+            sections = elf_section_layout(s.rt.REPO / 'build/overworld_mount_chain_overlay_linked.o')
+            address = 0x01FFA100 if "presentation" in fault else 0x01FFA500 if "state" in fault else 0x01FF9D00
+            if fault.startswith("missing"):
+                sections = [row for row in sections if row[2] != address]
+            elif fault == "short-state":
+                sections = [(*row[:3], 71) if row[2] == address else row for row in sections]
+            elif fault.endswith("live"):
+                original = s.rt.actor_memory_read
+                s.rt.actor_memory_read = lambda emu, target, size, original=original, address=address: (
+                    bytes(size) if target == address else original(emu, target, size))
+            else:
+                original = s.packaged_code
+                s.packaged_code = lambda target, size, original=original, address=address: (
+                    bytes(size) if target == address else original(target, size))
+            with self.subTest(fault=fault), patch(
+                    'scripts.verify_pokemon_move_history_capture.elf_section_layout', return_value=sections):
+                with self.assertRaises(NativeObservationError):
+                    authenticate_gait(s)
+            self.assertFalse(hasattr(s, "_mounted_gait_identity"))
+            self.assertEqual(calls, [])
+            self.assertEqual(r.observer.hooks.callbacks, {})
+
+    def test_shared_gait_input_reads_current_mount_layout(self):
+        from tools.overworld.devtools_mount_gait import read_gait_pair
+        r, s, a, e, regs, put, calls, poses = self.fixture()
+        reads, original = [], s.rt.unsigned
+        def unsigned(emu, address, size=4):
+            reads.append((address, size))
+            return {0x023BC744 + 0x60: 65539, 0x023BC744 + 0x67: 0,
+                    0x023BC744 + 0x68: 1, 0x023BC744 + 0x6F: 4}.get(
+                        address, original(emu, address, size))
+        s.rt.unsigned = unsigned
+        pair = read_gait_pair(s, dict(playerPointer=e['anchorPointer'] if 'anchorPointer' in e
+                                     else s.rt.player_ptr(s.emu), mountPointer=e['pointer']))
+        self.assertEqual(pair['gait']['input']['session'], 1)
+        self.assertEqual(pair['gait']['input']['mode'], 1)
+        self.assertIn((0x023BC744 + 0x68, 4), reads)
+        self.assertIn((0x023BC744 + 0x6F, 1), reads)
+        self.assertNotIn((0x023BC744 + 0x60, 4), reads)
+        self.assertNotIn((0x023BC744 + 0x67, 1), reads)
+
+    def test_shared_gait_auth_rejects_changed_input_loads(self):
+        from scripts.verify_pokemon_move_history_capture import elf_bytes_at
+        from tools.overworld.devtools_mount_gait import authenticate_gait
+        for offset in (0x12, 0x1A, 0x1C, 0x32):
+            r, s, a, e, regs, put, calls, poses = self.fixture()
+            def bytes_at(linked, address, size):
+                value = bytearray(elf_bytes_at(linked, address, size))
+                if address == 0x01FF9D00:
+                    value[offset] ^= 1
+                return bytes(value)
+            with self.subTest(offset=offset), patch(
+                    'scripts.verify_pokemon_move_history_capture.elf_bytes_at', side_effect=bytes_at):
+                with self.assertRaisesRegex(NativeObservationError, 'input layout differs'):
+                    authenticate_gait(s)
+            self.assertFalse(hasattr(s, '_mounted_gait_identity'))
+            self.assertEqual(calls, [])
+
+    def test_shared_gait_auth_cache_is_only_for_current_session_emu_and_rom(self):
+        from tools.overworld.devtools_mount_gait import authenticate_gait
+        r, s, a, e, regs, put, calls, poses = self.fixture()
+        reads, original = [], s.rt.actor_memory_read
+        def read(emu, address, size):
+            reads.append((emu, address, size))
+            return original(emu, address, size)
+        s.rt.actor_memory_read = read
+        identity = authenticate_gait(s)
+        self.assertEqual(authenticate_gait(s), identity)
+        self.assertEqual(len(reads), 2)
+        s.rom_hash = "other-rom"
+        self.assertEqual(authenticate_gait(s), identity)
+        self.assertEqual(len(reads), 4)
+        s.emu = SimpleNamespace(**vars(s.emu))
+        self.assertEqual(authenticate_gait(s), identity)
+        self.assertEqual(len(reads), 6)
+        other = SimpleNamespace(**vars(s))
+        self.assertEqual(authenticate_gait(other), identity)
+        self.assertEqual(len(reads), 8)
+        self.assertEqual(calls, [])
+
+    def test_shared_gait_pair_collects_exact_bounded_state_without_pose_checks(self):
+        from tools.overworld.devtools_mount_gait import POSE_KEYS, read_gait_pair
+        r, s, a, e, regs, put, calls, poses = self.fixture()
+        current = r._current()
+        reads, original = [], s.rt.actor_memory_read
+        def read(emu, address, size):
+            reads.append((address, size))
+            return original(emu, address, size)
+        s.rt.actor_memory_read = read
+        before, clock = vars(regs).copy(), r.observer._clock()
+        poses[e['pointer']]['pos_x'] += 9
+        with patch('tools.overworld.devtools_mount_gait.check_gait', side_effect=AssertionError("collector judged pose")):
+            pair = read_gait_pair(s, current)
+        self.assertEqual((pair['playerPointer'], pair['mountPointer']),
+                         (current['playerPointer'], e['pointer']))
+        self.assertEqual((pair['player']['pos_x'], pair['mount']['pos_x']), (100, 109))
+        self.assertEqual(pair['gait']['schemaVersion'], 1)
+        self.assertEqual(pair['gait']['address'], 0x01FFA500)
+        self.assertEqual(set(pair['gait']['pose']), set(POSE_KEYS))
+        self.assertEqual(pair['gait']['pose'], pair['gait']['previous'])
+        self.assertEqual((pair['gait']['owner'], pair['gait']['initialized']),
+                         (current['playerPointer'], 1))
+        self.assertEqual([item for item in reads if item[0] == 0x01FFA500], [(0x01FFA500, 72)])
+        self.assertEqual(vars(regs), before)
+        self.assertEqual(r.observer._clock(), clock)
+        self.assertEqual(calls, [])
+        s.rt.object_state = lambda *args: (_ for _ in ()).throw(AssertionError("reread supplied pose"))
+        self.assertEqual(read_gait_pair(s, current, player=poses[current['playerPointer']],
+                                       mount=poses[e['pointer']]), pair)
+        self.assertNotIn('unk88_z', poses[e['pointer']])
+        for fault in ("short-state", "playerPointer", "mountPointer"):
+            bad = dict(current)
+            if fault == "short-state":
+                s.rt.actor_memory_read = lambda emu, address, size: bytes(71)
+            else:
+                bad[fault] = 0x02400000
+            with self.subTest(fault=fault), self.assertRaises(NativeObservationError):
+                read_gait_pair(s, bad)
+
+    def test_session_snapshot_attaches_only_verified_same_boundary_gait_pair(self):
+        from tools.overworld.devtools_runtime import DevtoolsSession
+        r, s, a, e, regs, put, calls, poses = self.fixture()
+        a.update(lastDecision=0, lastCancelReason=0)
+        original_actor, original_identity = s.rt.actor_state, s.rt.live_wild_object_identity
+        s.rt.actor_state = lambda emu, slot: original_actor(emu, slot) if slot == 7 else {'active': False}
+        s.rt.live_wild_object_identity = lambda emu, slot, **kwargs: original_identity(emu, slot)
+        s.rt.movement_policy_state = lambda *args: {}
+        s.rt.actor_probe = SimpleNamespace(_enum_name=lambda *args: 'NONE')
+        s._crash_presentation_reader = SimpleNamespace(boundary=lambda read: None,
+                                                      observe=lambda *args: {'known': False})
+        s.native_observation = None
+        before, clock = vars(regs).copy(), r.observer._clock()
+        poses[e['pointer']]['pos_x'] += 9
+        value = DevtoolsSession._snapshot(s, 0, details=False)
+        pair = value['mountedPair']
+        self.assertTrue(value['actors'][0]['identityVerified'])
+        self.assertEqual(pair['player']['pos_x'], value['player']['pos_x'])
+        self.assertEqual(pair['mount']['pos_x'], value['actors'][0]['engineObject']['pos_x'])
+        self.assertEqual((pair['player']['pos_x'], pair['mount']['pos_x']), (100, 109))
+        self.assertEqual((value['frame'], value['nativeCycle']), (12, 30))
+        self.assertEqual(vars(regs), before)
+        self.assertEqual(r.observer._clock(), clock)
+        self.assertEqual(calls, [])
+        a['subjectIdentity'] += 1
+        unverified = DevtoolsSession._snapshot(s, 0, details=False)
+        self.assertFalse(unverified['actors'][0]['identityVerified'])
+        self.assertNotIn('mountedPair', unverified)
 
     def invoke(self, reader, address):
         for callback in tuple(reader.observer.hooks.callbacks[address]): callback()

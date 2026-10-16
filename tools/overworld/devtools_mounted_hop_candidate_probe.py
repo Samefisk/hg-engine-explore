@@ -57,7 +57,7 @@ def authenticate(session):
 def candidate_order(origin, profile):
     """The current search order for UP; profile remains an observed input."""
     direction_mode = profile[19] & 0x03
-    require(len(profile) == 72 and direction_mode in (0, 1, 2), 'invalid mounted Hop profile')
+    require(len(profile) == 80 and direction_mode in (0, 1, 2), 'invalid mounted Hop profile')
     minimum = profile[20] or 1
     maximum = min(16, max(minimum, profile[21]))
     require(1 <= minimum <= maximum, 'Hop profile has no bounded distance')
@@ -94,15 +94,15 @@ class MountedHopCandidateProbe:
         require(len(raw) == STATE_BYTES, 'incomplete mounted state')
         actor = ready['actor']; source = actor['sourceIdentity']; context = ready['snapshot']['context']
         field, surface = struct.unpack_from('<II', raw)
-        binding = struct.unpack_from('<IHHHHBBBB', raw, 80)
+        binding = struct.unpack_from('<IHHHHBBBB', raw, 88)
         require(field == self.reset.field and surface % 2 == 0 and 0x02000000 <= surface <= 0x023FFFFC
                 and binding[:7] == (source['personality'], actor['species'], context['mapId'],
                     actor['handle']['mapGeneration'], actor['handle']['encounterGeneration'], actor['form'], actor['level'])
                 and binding[7] < 6, 'mounted Hop binding differs')
-        require(struct.unpack_from('<I',raw,96)[0] > 0 and tuple(raw[100:104]) == (2,0,0,0)
+        require(struct.unpack_from('<I',raw,104)[0] > 0 and tuple(raw[108:112]) == (2,0,0,0)
                 and raw[122] == 1 and not any(raw[i] for i in (120,123,128,148,149,150,151,180,182,183)),
                 'mounted Hop is not idle')
-        self.initial = dict(readiness=ready, mountStateHex=raw.hex(), profileHex=raw[8:80].hex())
+        self.initial = dict(readiness=ready, mountStateHex=raw.hex(), profileHex=raw[8:88].hex())
         actor = self.initial['readiness']['actor']
         require(actor['species'] == 56 and actor['role'] == 'MOUNTED' and actor['handle']['slot'] == 7
                 and actor.get('presentationAttached') is True

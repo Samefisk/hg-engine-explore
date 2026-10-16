@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.hop-contact",
+  "title": "Ordinary Wild Mankey Hop damages through its active contact profile",
+  "mode": "prepared",
+  "fixture": {"rom": "test.nds", "save": "test.sav"},
+  "expectationSource": "data/overworld_behavior_profiles.json#long-hop+throw",
+  "requirements": ["current.player-health-hop-contact"],
+  "budgets": {"maxSeconds": 220, "maxFrames": 700, "noProgressFrames": 510, "minObservedFrames": 1},
+  "subjects": [{"id": "mankey", "species": 56, "role": "WILD", "acquire": "spawn"}],
+  "measurements": [{"kind": "player-health-hop-contact-v1", "subject": "mankey"}],
+  "setup": [
+    {"id": "open-area", "op": "teleport", "args": {"map": 33, "x": 585, "z": 407, "facing": 1},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "spawn-mankey", "op": "spawn", "args": {"species": 56, "form": 0, "role": "wild", "level": 5, "x": 586, "z": 406},
+      "budget": {"maxSeconds": 30, "maxFrames": 120, "noProgressFrames": 120}},
+    {"id": "bind-mankey", "op": "bind", "args": {"subject": "mankey"},
+      "budget": {"maxSeconds": 5, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "actions": [
+    {"id": "settle-spawn", "op": "step", "args": {"frames": 80, "keys": [],
+      "until": {"kind": "actor-field", "subject": "mankey", "path": "motionKind", "operator": "eq", "value": "NONE", "when": "final"}},
+      "budget": {"maxSeconds": 50, "maxFrames": 80, "noProgressFrames": 80}},
+    {"id": "before-hop", "op": "player-health.observe", "args": {},
+      "budget": {"maxSeconds": 20, "maxFrames": 1, "noProgressFrames": 1}},
+    {"id": "wait-crossing-hop", "op": "step", "args": {"frames": 500, "keys": [],
+      "until": {"kind": "measurement-stage", "measurement": "player-health-hop-contact-v1", "stage": "airborne-crossed", "when": "final"}},
+      "budget": {"maxSeconds": 145, "maxFrames": 500, "noProgressFrames": 500}},
+    {"id": "after-contact", "op": "player-health.observe", "args": {},
+      "budget": {"maxSeconds": 20, "maxFrames": 1, "noProgressFrames": 1}}
+  ],
+  "assertions": [{"kind": "measurement-complete", "measurement": "player-health-hop-contact-v1", "when": "final"}]
+}

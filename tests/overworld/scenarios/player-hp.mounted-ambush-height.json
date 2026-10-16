@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "id": "player-hp.mounted-ambush-height",
+  "title": "Mounted Ambush hit moves one shared anchor and restores seat height",
+  "status": "active",
+  "capabilities": [
+    "player.health",
+    "collision.attack",
+    "hop"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "data/overworld_behavior_profiles.json#ambush",
+    "actor": "One current mounted Cyndaquil (155) and one current Wild Weepinbell (70) on Route 29.",
+    "trigger": "Mount Cyndaquil through its native party path, then keep input neutral for 150 completed game frames while Weepinbell performs ordinary Ambush Hops.",
+    "observable": "Each hit loses20 saved rider HP and uses one shared rider/mount Jump anchor. The rider and mount stay paired with a32768-unit seat gap and restore their starting face height after knockback. No battle or recovery starts.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use a private ROM/save copy; teleport to map 33 (585,407), prepare and mount party-slot-0 Cyndaquil, settle and bind it, then spawn Wild Weepinbell at (585,404) and bind it. Do not force motion, HP, or collision."
+      }
+    ],
+    "limits": [
+      "Prepared party, mount, and Wild placement do not prove natural population selection or Select mounting.",
+      "The fixed 150-frame window observes normal Ambush motion and damage without forcing a Hop or contact.",
+      "Native paired player/mount pose and saved HP, not screen capture, decide height and hit results."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "cyndaquil",
+      "species": 155,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": false,
+      "requirePresentation": true
+    },
+    {
+      "id": "weepinbell",
+      "species": 70,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Bind current mounted Cyndaquil and Wild Weepinbell; read pre-hit paired height and 100 HP."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Observe150 neutral game frames with active Wild Ambush Hops and shared mounted Jump knockback."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Read saved/player HP and require at least one20-HP hit with restored rider and mount face heights."
+    }
+  ],
+  "stop": {
+    "frameBudget": 500,
+    "condition": "150 complete mounted game frames, at least one20-HP Ambush hit and shared Jump, with restored rider and mount face heights; or the first identity, motion, HP or field-control failure."
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED"
+    ],
+    "forbiddenEvents": [
+      "ACTOR_REBOUND",
+      "CONTEXT_CHANGED"
+    ],
+    "invariants": [
+      "The same current mounted Cyndaquil and Wild Weepinbell remain attached and bound",
+      "Active Ambush Hop motion occurs during 150 neutral game frames; at least one hit lowers player and saved HP by 20 per accepted hit",
+      "The rider and mount use one shared Jump anchor. They stay paired with a32768-unit seat gap and restore their original face and gait heights after landing."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "player-hp.mounted-ambush-height",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "engine-boundary",
+      "natural-input",
+      "control-release"
+    ],
+    "minimumFrames": 150
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "id": "follower.target-access-signpost",
+  "title": "Mankey rejects the inaccessible Signpost Pidgey and keeps following",
+  "status": "active",
+  "capabilities": [
+    "condition.evaluation"
+  ],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "Current FOLLOWER Mankey56 and one current WILD Pidgey16, bound by full native identity.",
+    "trigger": "Prepare native target placement and a passive Cyndaquil, let the target settle, walk the player normally to580398, then create Mankey through the party/follower setup. Use normal input for the measured condition window.",
+    "observable": "The real current Pidgey must finish its authored Fly In on Route29 Signpost581397. Mankey has no raised-surface permission. Eight adjacent completed queues must show Notice12365 inactive, no Interest capture and no Throw motion. The same Mankey must then commit and return control from a complete normal Follow movement.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Checked Route29 teleport585402, party0 passive Cyndaquil20 and ordinary follower creation; one authored Wild target spawn; then normal Left/Up input, party0 Mankey20 and ordinary follower creation. Subject binds and terrain are read-only. No profile, target state, HP, timer, motion or result is forced."
+      }
+    ],
+    "limits": [
+      "Prepared placement does not prove natural population or every terrain arrangement.",
+      "The shared production-C controls cover physical surface precedence, missing support, stale identities and current moving support. This native case uses the stated settled target.",
+      "The Notice has authored adjacent awareness. An adjacent target has no intermediate occlusion tile. This case makes no claim about distant Vision."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "target",
+      "species": 16,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Create the native target and read its actual loaded terrain after landing; approach with normal input before ordinary Mankey follower creation."
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "The real current Pidgey must finish its authored Fly In on Route29 Signpost581397. Mankey has no raised-surface permission. Eight adjacent completed queues must show Notice12365 inactive, no Interest capture and no Throw motion. The same Mankey must then commit and return control from a complete normal Follow movement."
+    }
+  ],
+  "stop": {
+    "frameBudget": 650,
+    "condition": "Complete the stated access proof, or stop at the first invalid native actor, surface, binding, profile, motion or field boundary."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "The real current Pidgey must finish its authored Fly In on Route29 Signpost581397. Mankey has no raised-surface permission. Eight adjacent completed queues must show Notice12365 inactive, no Interest capture and no Throw motion. The same Mankey must then commit and return control from a complete normal Follow movement.",
+      "All state comes from the same current ROM and native field. No copied profile or predicate writes."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "follower.target-access-signpost",
+    "claims": [
+      "live-actor-identity",
+      "terrain-selection",
+      "profile-resolution",
+      "natural-input",
+      "control-release"
+    ],
+    "minimumFrames": 8
+  }
+}

@@ -8,6 +8,8 @@
 #define POPULATION_PHASE_MASK 0x0F
 #define POPULATION_DIRTY 0x80
 
+typedef u32 OverworldPopulationLogicalTile __attribute__((may_alias));
+
 static void OverworldPopulation_ClearState(
     OverworldPopulationState *state,
     u16 fieldEpoch,
@@ -32,7 +34,7 @@ static u8 OverworldPopulation_HasPending(
     return state->maintenanceState != POPULATION_PHASE_NONE;
 }
 
-static void OverworldPopulation_RequestMaintenance(
+__attribute__((noinline)) static void OverworldPopulation_RequestMaintenance(
     OverworldPopulationState *state)
 {
     if (state->maintenanceState == POPULATION_PHASE_NONE) {
@@ -47,20 +49,15 @@ static u8 OverworldPopulation_TakeWork(OverworldPopulationState *state)
     u8 phase = state->maintenanceState & POPULATION_PHASE_MASK;
     u8 work = OVERWORLD_POPULATION_WORK_NONE;
 
-    if (phase == POPULATION_PHASE_QUEUED) {
+    if (phase >= POPULATION_PHASE_QUEUED
+        && phase <= POPULATION_PHASE_REFILL) {
         state->maintenanceState =
-            (state->maintenanceState & POPULATION_DIRTY)
-                | POPULATION_PHASE_DESPAWN;
-    } else if (phase == POPULATION_PHASE_DESPAWN) {
-        state->maintenanceState =
-            (state->maintenanceState & POPULATION_DIRTY)
-                | POPULATION_PHASE_REFILL;
-        work = OVERWORLD_POPULATION_WORK_DESPAWN;
-    } else if (phase == POPULATION_PHASE_REFILL) {
-        state->maintenanceState =
-            (state->maintenanceState & POPULATION_DIRTY)
-                | POPULATION_PHASE_REVEAL;
-        work = OVERWORLD_POPULATION_WORK_REFILL;
+            (state->maintenanceState & POPULATION_DIRTY) | (phase + 1);
+        if (phase == POPULATION_PHASE_DESPAWN) {
+            work = OVERWORLD_POPULATION_WORK_DESPAWN;
+        } else if (phase == POPULATION_PHASE_REFILL) {
+            work = OVERWORLD_POPULATION_WORK_REFILL;
+        }
     } else if (phase == POPULATION_PHASE_REVEAL) {
         state->maintenanceState =
             (state->maintenanceState & POPULATION_DIRTY) != 0
@@ -120,8 +117,8 @@ static OverworldPopulationDecision OverworldPopulation_ApplyFieldEvent(
             || state->centerY != input->logicalY) {
             result->flags |= OVERWORLD_POPULATION_RESULT_REGION_CHANGED;
         }
-        state->centerX = input->logicalX;
-        state->centerY = input->logicalY;
+        *(OverworldPopulationLogicalTile *)&state->centerX =
+            *(const OverworldPopulationLogicalTile *)&input->logicalX;
         state->fieldEpoch = input->fieldEpoch;
         state->fieldActive = 0;
         OverworldPopulation_RequestMaintenance(state);
@@ -167,9 +164,13 @@ static OverworldPopulationDecision OverworldPopulation_ApplyMotionSignal(
     if ((input->flags & OVERWORLD_POPULATION_INPUT_PLAYER_CENTERED) != 0
         && (state->centerX != input->logicalX
             || state->centerY != input->logicalY)) {
-        state->centerX = input->logicalX;
-        state->centerY = input->logicalY;
+        *(OverworldPopulationLogicalTile *)&state->centerX =
+            *(const OverworldPopulationLogicalTile *)&input->logicalX;
         result->flags |= OVERWORLD_POPULATION_RESULT_REGION_CHANGED;
+        if ((input->flags & OVERWORLD_POPULATION_INPUT_NATIVE_PLAYER) != 0) {
+            OverworldPopulation_RequestMaintenance(state);
+            result->flags |= OVERWORLD_POPULATION_RESULT_RECONCILE_DUE;
+        }
     }
     return OVERWORLD_POPULATION_DECISION_OK;
 }

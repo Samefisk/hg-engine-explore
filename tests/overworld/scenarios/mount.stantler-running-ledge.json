@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.stantler-running-ledge",
+  "title": "Running Stantler keeps momentum through two South ledges",
+  "status": "active",
+  "capabilities": [
+    "hop.ledge",
+    "mount.lifecycle",
+    "walk.acceleration"
+  ],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md",
+    "actor": "One prepared current Mounted Stantler, species 234 in party slot 0, at map 33 tile (590,392), HP 1 with its current resolved profile.",
+    "trigger": "Hold Down without release through three normal Walks, South ledge (590,396), three more Walks, South ledge (590,401), and the next Walk.",
+    "observable": "The same current actor makes shared two-tile Hops (590,395) to (590,397) and (590,400) to (590,402). Each Hop uses accumulated Walk speed. Its next Walk starts no later than one completed frame after control returns, with the preceding committed heading, base, Linear elapsed and fractional carry intact. All seven normal Walks commit; the last ends at (590,403).",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Disposable save, checked teleport to (590,392), prepared party-slot-0 Stantler HP 1, native Mounted spawn and exact-subject bind. Observation uses only normal held Down; no motion, policy, timer or collision writes."
+      }
+    ],
+    "limits": [
+      "Prepared party, HP and position do not prove natural capture, healing, selection or mounting.",
+      "Public native terrain readback confirms (590,392) through (590,395) clear, South ledges (590,396) and (590,401) with behavior 59 and collision, and clear landing/recovery tiles. This recipe measures that route; it does not survey other terrain.",
+      "Native Walk policy receipts supply committed Linear state. A one-frame fractional tile-time change is allowed when that state is preserved.",
+      "Copied-data controls reject reset speed, reset Linear elapsed or carry, a different full owner, short landing, absent shared Hop, missing Hop commit and Crash. These are evaluator controls; the existing current owner-reader control remains required.",
+      "This covers two South ledges at running speed. The separate from-rest static and NPC obstacle cases remain required for those claims."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "stantler",
+      "species": 234,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Place the player at (590,392), prepare and mount own Stantler, then bind the exact current actor."
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Hold Down through three Walks, a ledge Hop, three more Walks, a second ledge Hop, and one last Walk."
+    }
+  ],
+  "stop": {
+    "frameBudget": 240,
+    "condition": "Observe the next normal Walk admitted with origin (590,403), after the required Walk (590,402) to (590,403) has committed. A mid-motion logical tile update does not end observation. Fail on any owner, speed, native policy, Hop, terminal or Crash error."
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED",
+      "CONTEXT_CHANGED",
+      "ACTOR_REBOUND",
+      "CONTROL_REBOUND"
+    ],
+    "invariants": [
+      "Every completed queue is retained.",
+      "One full current Mounted actor owns every motion.",
+      "A successful running ledge Hop keeps committed Walk momentum and cannot publish Crash."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "mount.stantler-running-ledge",
+    "claims": [
+      "natural-input",
+      "live-actor-identity",
+      "collision-decision",
+      "logical-commit",
+      "frame-pacing",
+      "control-release"
+    ],
+    "minimumFrames": 24
+  }
+}

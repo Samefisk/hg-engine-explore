@@ -131,7 +131,7 @@ _Static_assert(__builtin_offsetof(OverworldWildSpawnState,movementCooldowns)==0x
 _Static_assert(__builtin_offsetof(OverworldActorPolicyState,chainStepsRemaining)==16,"steps ABI");
 _Static_assert(__builtin_offsetof(OverworldActorPolicyState,deferredChainPauseTicks)==17,"ticks ABI");
 _Static_assert(__builtin_offsetof(OverworldActorPolicyState,deferredChainPauseAction)==18,"action ABI");
-_Static_assert(sizeof(OverworldActorPolicyState)==32,"policy stride");
+_Static_assert(sizeof(OverworldActorPolicyState)==36,"policy stride");
 _Static_assert(OVERWORLD_MOTION_DECISION_PROFILE==8,"retry reason");
 _Static_assert(OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_REPOSITION_SKIDS==5,"selected action");
 '''

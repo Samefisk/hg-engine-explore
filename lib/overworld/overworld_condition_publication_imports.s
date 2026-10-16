@@ -1,0 +1,8 @@
+ .syntax unified
+.thumb
+.global OverworldConditionPublication_InitResult
+.thumb_func
+.thumb_set OverworldConditionPublication_InitResult, 0x01FF9A48
+.global OverworldConditionPublication_FoldResult
+.thumb_func
+.thumb_set OverworldConditionPublication_FoldResult, 0x01FF9C94

@@ -1,0 +1,35 @@
+---
+import Base from '../layouts/Base.astro';
+import Gallery from '../components/Gallery.astro';
+import { shots } from '../data/shots';
+---
+<Base title="Overview" description="What Pokémon Wild at Heart Version is and what makes it different.">
+  <div class="wrap narrow">
+    <h1>Project overview</h1>
+    <p>Pokémon Wild at Heart Version is a fan hack of Pokémon HeartGold, built on the <a href="https://github.com/BluRosie/hg-engine">hg-engine</a> battle and game engine. The goal is a Johto where the world feels inhabited, not just a set of grass patches.</p>
+
+    <h2>The big idea</h2>
+    <p>Wild Pokémon are visible in the overworld. They walk, rest, notice you, and respond. Your partner Pokémon follows you and has opinions of its own. You can ride it. What a Pokémon does depends on its species and the situation around it.</p>
+
+    <h2>What makes it different</h2>
+    <div class="grid">
+      <div class="card"><h3>Living routes</h3><p>Wild Pokémon spawn, wander and despawn as you travel. Each species moves in its own way.</p></div>
+      <div class="card"><h3>Behavior with character</h3><p>A Geodude might freeze when it spots you. A Mankey might charge, or pick up a Pokémon and throw it. Behaviors are authored per species and layered together.</p></div>
+      <div class="card"><h3>Partners that act</h3><p>Your follower reacts to what it sees. Some can throw Pokémon that hit you away.</p></div>
+      <div class="card"><h3>Riding</h3><p>Mount your Pokémon and travel with its own movement, hops and speed.</p></div>
+      <div class="card"><h3>Player HP</h3><p>Contact with wild Pokémon can hurt and knock you back, so the overworld has real stakes. This is still being built.</p></div>
+      <div class="card"><h3>Engine upgrades</h3><p>The project inherits hg-engine's expanded battle system and data, which includes newer moves, abilities, Pokémon and forms.</p></div>
+    </div>
+
+    <h2>In the game</h2>
+    <Gallery items={shots} />
+
+    <h2>Where it stands</h2>
+    <p>The overworld system is in active testing. The core behaviors work, and the current focus is polish: stuck Pokémon, timing, performance and edge cases. Player HP, healing and battle interaction are still open. See <a href="/testing">what's being tested</a> for the detailed picture.</p>
+
+    <h2>How it is made</h2>
+    <p>Everything is built in the open-source hg-engine toolchain, then tested in an emulator and on a handful of testers' setups. This project is non-commercial and free.</p>
+    <p class="meta">The game is distributed only as a patch. You need your own legal copy of Pokémon HeartGold to use it.</p>
+  </div>
+  <div style="height:3rem"></div>
+</Base>

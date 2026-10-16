@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.rattata-walking-ledge",
+  "title": "Mounted Rattata crosses a permitted ledge from rest",
+  "status": "active",
+  "capabilities": [
+    "hop.ledge",
+    "mount.lifecycle"
+  ],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "TICKETS.md",
+    "actor": "One native-prepared Mounted Rattata, species19, party slot0, level20 and full native HP, at Map33(590,395), with the current resolved owner lane and a fresh zero-speed policy.",
+    "trigger": "Hold normal DOWN for at most32 frames. Stop on the first real admitted Hop, then release for48 completed frames. No force writes to speed, motion, timer, collision, HP or profile.",
+    "observable": "The same fresh zero-speed Mounted Rattata resolves Walk/time6/jumpBoth/hop1..8/obstacleHopNo and naturally admits one shared two-tile Hop(590,395) to(590,397). Read its exact native plan and every elapsed1..12 completed-frame pose, one real ordered commit/finish/input return, and exact final mount and rider base heights. Stay idle at the landing through48 released-input frames.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Disposable save; checked teleport; native party creation at level20/fullHP; native Mounted spawn and exact bind. No profile, speed, motion, timer, terrain or collision writes."
+      }
+    ],
+    "limits": [
+      "This is the fresh South-ledge Rattata case. Do not change the existing Stantler running/Linear-momentum proof.",
+      "Public terrain inspection must confirm the same measured front behavior59/collision and a legal landing.",
+      "The normal resolved lane must retain jumpLevelBoth, Walk, hop1..8, obstacleHopNo. Authored parity and a current native lane receipt supply that profile fact; do not use diagnostic-only ForwardHop return packets as accepted proof.",
+      "Actual-C durable controls cover all48 direction/jump-level pairs and forbidden/occupied/busy/turn/dismount cases. This prepared case does not prove natural capture or selection."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "rattata",
+      "species": 19,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Native full-HP Rattata mounted from rest at Map33(590,395)."
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Normal DOWN until first logical397 readback, then neutral48 through the real Hop terminal."
+    }
+  ],
+  "stop": {
+    "frameBudget": 480,
+    "condition": "Finish both bounded actions. Require one real Hop terminal, one exact commit and final logical(590,397), motionNONE/IDLE, no pending commit, grounded base height and control returned. A mid-Hop logical target cannot pass."
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED",
+      "CONTEXT_CHANGED",
+      "ACTOR_REBOUND",
+      "CONTROL_REBOUND"
+    ],
+    "invariants": [
+      "Same full current Mounted Rattata and one input owner",
+      "Fresh idle speed0 with authored Walk/time6/jumpBoth/hop1..8/obstacleHopNo",
+      "Loaded South ledge behavior59/collisiontrue and a clear exact landing",
+      "Native two-tile duration12 Hop with every elapsed1..12 pose observed",
+      "One real commit/finish/input return, no crash/cancel, and exact final base heights"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "mount.rattata-walking-ledge",
+    "claims": [
+      "natural-input",
+      "live-actor-identity",
+      "profile-resolution",
+      "rendered-motion",
+      "logical-commit",
+      "control-release"
+    ],
+    "minimumFrames": 24
+  }
+}

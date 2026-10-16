@@ -27,13 +27,13 @@ static BOOL QuerySurface(FieldSystem *field, const OverworldWildSurfaceCatalog *
     hit->surfaceId = 1;
     return TRUE;
 }
-static s32 GroundBaseY(FieldSystem *field, const OverworldWildSurfaceCatalog *catalog,
-    LocalMapObject *object, int x, int y)
-{ (void)field; (void)catalog; (void)object; (void)x; (void)y; return 0; }
+static BOOL ResolveBaseYAt(FieldSystem *field, const OverworldWildSurfaceHit *hit,
+    s32 origin, u32 flags, int x, int y, s32 *out)
+{ (void)field; (void)origin; (void)flags; (void)x; (void)y; *out = hit ? hit->height : 0; return TRUE; }
 static const struct {
     BOOL (*querySurface)(FieldSystem *, const OverworldWildSurfaceCatalog *, int, int, OverworldWildSurfaceHit *);
-    s32 (*getGroundBaseY)(FieldSystem *, const OverworldWildSurfaceCatalog *, LocalMapObject *, int, int);
-} runtimeEntry = {QuerySurface, GroundBaseY};
+    BOOL (*resolveBaseYAt)(FieldSystem *, const OverworldWildSurfaceHit *, s32, u32, int, int, s32 *);
+} runtimeEntry = {QuerySurface, ResolveBaseYAt};
 #define OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY (&runtimeEntry)
 /* @LERP@ */
 /* Preserve the production mixed-sign comparison unchanged. Both operands are

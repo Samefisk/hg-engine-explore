@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "id": "world.transition.wild-signpost-height",
+  "title": "Retained signpost height survives a natural field handoff",
+  "status": "active",
+  "capabilities": [
+    "world.transition"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "TICKETS.md#tkt-0012 and documentation/overworld-system/architecture.md#field-transition-protocol",
+    "actor": "One prepared Wild pidgey species16, bound from its native finalized Fly In target and full actor lifetime.",
+    "trigger": "Let the real Pidgey Fly In settle on signpost581397, then walk to576400 and take one normal Left step into Cherrygrove.",
+    "observable": "Requirement current.retained-signpost-height: the same verified native object/manager and Pok\u00e9mon personality rebound once into the new field context. Its native body is centered on its own target at the authenticated absolute signpost height, with zero Hop offset, for at least four completed queues. Player control returns at the expected seam tile.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Use a private ROM/save copy, native teleport and finalized spawn. Bind the actual Fly In target. Read its loaded authored surface with the existing shared terrain command. Do not write timers, profile, target, height, pose or map-transition state."
+      }
+    ],
+    "limits": [
+      "One same-manager outdoor map handoff; no indoor recreation or all-surface claim.",
+      "Requested spawn coordinates are hints only. A different surface, unknown target height or wrong role is setup failure.",
+      "This is a settled signpost control; it does not claim that the old ROM failed this control.",
+      "Initial spawn-height observations do not grant restore credit. Actual post-handoff engineObject poses are required.",
+      "Draft registration must be integrated before verify-overworld can grant accepted proof."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "pidgey",
+      "species": 16,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Bind real native Fly In and its loaded absolute target surface."
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Cross the seam with one normal player step."
+    },
+    {
+      "at": 2,
+      "kind": "lifecycle",
+      "value": "Check rebound identity, native body height and player control at four completed queues."
+    }
+  ],
+  "stop": {
+    "frameBudget": 420,
+    "condition": "Current rebound actor has exact target support height and player is settled at the expected seam tile."
+  },
+  "expect": {
+    "requiredEvents": [
+      "CONTEXT_CHANGED",
+      "ACTOR_REBOUND"
+    ],
+    "forbiddenEvents": [
+      "ACTOR_DETACHED"
+    ],
+    "invariants": [
+      "Retain the same Pok\u00e9mon personality and actor encounter generation.",
+      "Advance field epoch/map generation exactly once.",
+      "Use the actual native Fly In target, never the requested spawn coordinate.",
+      "Retain absolute body height and zero terminal Hop offset."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "world.transition.wild-signpost-height",
+    "claims": [
+      "natural-input",
+      "live-actor-identity",
+      "terrain-selection",
+      "world-transition",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumFrames": 4
+  }
+}

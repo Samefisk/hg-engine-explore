@@ -15,6 +15,14 @@ class RuntimeHealthTests(unittest.TestCase):
         self.assertEqual(caught.exception.details["nativeCyclesWithoutProgress"], 120)
         self.assertEqual(caught.exception.details["lastProgressNativeCycle"], 1000)
 
+    def test_stock_save_wait_has_bounded_extra_cycles(self):
+        monitor = RuntimeHealthMonitor(20, 1000)
+        for cycle in range(1001, 1600):
+            monitor.observe(cycle, 20, 0x1F, stall_limit=600)
+        with self.assertRaises(RuntimeHealthFailure) as caught:
+            monitor.observe(1600, 20, 0x1F, stall_limit=600)
+        self.assertEqual(caught.exception.details["stallLimit"], 600)
+
     def test_abort_and_undefined_fail_first_cycle_even_with_queue_progress(self):
         for mode, code in ((0x17, "arm9-abort"), (0x1B, "arm9-undefined")):
             with self.subTest(mode=mode):

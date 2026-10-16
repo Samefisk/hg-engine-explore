@@ -17,6 +17,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 RUNTIME = ROOT / "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c"
 WILD = ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
+POLICY = ROOT / "src/player_health_overlay/overworld_walk_input_policy.c"
 
 
 def load_module(name: str, path: Path):
@@ -31,13 +32,25 @@ def harness_source() -> str:
         "passive_chain_extract",
         ROOT / "scripts/verify_overworld_spawn_profile_lifecycle.py",
     )
+    runtime_source = RUNTIME.read_text().replace("static inline ", "static ")
+    # Native imports need external names; host extraction makes only linkage
+    # local while retaining every statement of these production definitions.
+    policy_source = POLICY.read_text().replace(
+        "\nu32 __attribute__", "\nstatic u32 __attribute__"
+    ).replace("\nBOOL __attribute__", "\nstatic BOOL __attribute__")
+    variance_body = extract.production_function(
+        policy_source, "OverworldActorWalkPolicy_SampleVariance", "u32"
+    )
     choice_body = extract.production_function(
-        RUNTIME.read_text(),
+        runtime_source,
         "OverworldActorWalkPolicy_SelectChainPauseAction",
-        "u8",
+        "u32",
     )
     runtime_body = extract.production_function(
-        RUNTIME.read_text(), "OverworldActorWalkPolicy_ReduceChain", "void"
+        runtime_source, "OverworldActorWalkPolicy_ReduceChain", "void"
+    )
+    chance_body = extract.production_function(
+        policy_source, "OverworldActorWalkPolicy_SampleChainChance", "BOOL"
     )
     wild_body = extract.production_function(
         WILD.read_text(), "OverworldWildSpawns_ApplyUniversalChainMovementPause", "void"
@@ -45,8 +58,17 @@ def harness_source() -> str:
     look_body = extract.production_function(
         WILD.read_text(), "OverworldWildSpawns_GetLookAroundFrames", "u8"
     )
+    header = (ROOT / "include/overworld_wild_behavior_data.h").read_text()
+    packed_getters = "\n".join(
+        line for line in header.splitlines()
+        if line.startswith((
+            "#define OW_WILD_BEHAVIOR_CHAIN_REPOSITION_JUMP_COUNT(",
+            "#define OW_WILD_BEHAVIOR_CHAIN_HOP_IN_PLACE_EXTRA_HOPS(",
+            "#define OW_WILD_BEHAVIOR_CHAIN_HOP_IN_PLACE_EXTRA_CHANCE(",
+        ))
+    )
     return (
-        SUPPORT + choice_body + "\n" + runtime_body + "\n"
+        SUPPORT + packed_getters + "\n" + variance_body + "\n" + choice_body + "\n" + chance_body + "\n" + runtime_body + "\n"
         + wild_body + "\n" + look_body + DRIVER
     )
 
@@ -104,6 +126,7 @@ typedef struct OverworldWildBehaviorProfileData {
     u8 chainPauseVariance;
     u8 chainRepositionJumpCount;
     u8 tilesBeforeTurnSkid;
+    u8 avoidPreviousTile;
 } OverworldWildBehaviorProfileData;
 
 typedef struct OverworldWildBehaviorProfile {
@@ -150,7 +173,7 @@ static OverworldActorStateSnapshot actor;
 static OverworldActorWalkPolicyCall lastCall;
 static unsigned deferredCalls;
 static unsigned publishCalls;
-static u32 randomValues[4];
+static u32 randomValues[32];
 static unsigned randomIndex;
 static u32 gf_rand(void) { return randomValues[randomIndex++]; }
 static BOOL OverworldActorWalkPolicy_PublishEffect(
@@ -222,6 +245,16 @@ int main(void)
     OverworldWildBehaviorProfile profile = {0};
     OverworldWildBehaviorPrimitives primitives = {0};
     primitives.chillLocomotion = OW_WILD_BEHAVIOR_LOCOMOTION_HOP;
+
+    Reset();
+    randomValues[17] = 5;
+    if (OverworldActorWalkPolicy_SelectChainPauseAction(
+            OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_PAUSE)
+            != OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE
+        || randomIndex != 1) {
+        fprintf(stderr, "single enabled action must finish in one draw; got %u\n", randomIndex);
+        return 14;
+    }
 
     Reset();
     profile.lane.chainPauseAction = OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_NONE;
@@ -395,7 +428,7 @@ int main(void)
     profile.lane.ramMaxSpeed = 30;
     profile.lane.chainPauseActionChance = 50;
     randomValues[0] = 0;
-    randomValues[1] = 1;
+    randomValues[1] = 0;
     OverworldWildSpawns_ApplyUniversalChainMovementPause(
         &state, 0, &profile, &primitives);
     if (lastCall.chainAction != OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND
@@ -438,17 +471,19 @@ int main(void)
     profile.lane.chainPauseActionChance = 50;
     randomValues[0] = 0;
     randomValues[1] = 0;
-    randomValues[2] = 5;
     OverworldWildSpawns_ApplyUniversalChainMovementPause(
         &state, 0, &profile, &primitives);
-    if (lastCall.chainAction != OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE
-        || randomIndex != 3) {
-        fprintf(stderr, "random action set did not reject an unselected bit\n");
+    if (lastCall.chainAction != OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_LOOK_AROUND
+        || randomIndex != 2) {
+        fprintf(stderr, "random action set retried instead of selecting an enabled rank\n");
         return 9;
     }
 
     Reset();
-    randomValues[0] = 5;
+    /* A real native CHAIN_COMMIT exceeded sixteen draws. This same
+     * single-enabled-action mask must finish even when every draw has
+     * an unselected low bit. The retained old reducer retries 18 times. */
+    randomValues[17] = 5;
     if (OverworldActorWalkPolicy_SelectChainPauseAction(
             OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_PAUSE)
             != OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_PAUSE
@@ -476,7 +511,89 @@ int main(void)
         fprintf(stderr, "random action set bypassed its overall chance\n");
         return 11;
     }
-    puts("None, passive Pause, look-around, forward-Hop, and random action-set cases passed");
+    /* Every nonempty normalized mask maps equal ranks to only its
+     * enabled actions. Selection uses exactly one stock RNG draw. */
+    for (unsigned mask = 1; mask <= OW_WILD_BEHAVIOR_CHAIN_PAUSE_CHOICE_MASK; mask++) {
+        unsigned count = 0;
+        for (unsigned bit = 0; bit < 7; bit++) count += !!(mask & (1u << bit));
+        unsigned counts[7] = {0};
+        for (unsigned rank = 0; rank < count * 9; rank++) {
+            Reset();
+            randomValues[0] = rank;
+            u8 selected = OverworldActorWalkPolicy_SelectChainPauseAction(mask);
+            if (randomIndex != 1 || selected < 1 || selected > 7
+                || !(mask & (1u << (selected - 1)))) return 12;
+            counts[selected - 1]++;
+        }
+        for (unsigned bit = 0; bit < 7; bit++) {
+            if (counts[bit] != ((mask & (1u << bit)) ? 9u : 0u)) return 13;
+        }
+    }
+    /* Action admission and extra-Hop selection are distinct rolls. The
+     * production reducer must keep its chosen count until the adapter takes
+     * it; an unrelated profile change or a retry cannot reroll it. */
+    for (unsigned extraRoll = 49; extraRoll <= 50; extraRoll++) {
+        Reset();
+        memset(&state, 0, sizeof(state));
+        memset(&profile, 0, sizeof(profile));
+        primitives.chillLocomotion = OW_WILD_BEHAVIOR_LOCOMOTION_HOP;
+        profile.lane.chainPauseAction = OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE;
+        profile.lane.ramAccelerationSteps = 1;
+        profile.lane.chainPauseActionChance = 60;
+        profile.lane.chainRepositionJumpCount = 1 | (1u << 4);
+        profile.lane.avoidPreviousTile = 1 | (50u << 1);
+        randomValues[0] = 59;
+        randomValues[1] = extraRoll;
+        OverworldWildSpawns_ApplyUniversalChainMovementPause(
+            &state, 0, &profile, &primitives);
+        unsigned expectedCount = extraRoll == 49 ? 2 : 1;
+        if (lastCall.chainAction != OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE
+            || lastCall.chainTicks != expectedCount
+            || policy.deferredChainPauseTicks != expectedCount
+            || policy.deferredChainPauseAction != 0x81
+            || randomIndex != 2 || publishCalls != 1 || deferredCalls != 1) return 14;
+        profile.lane.chainRepositionJumpCount = 1;
+        profile.lane.avoidPreviousTile = 0;
+        OverworldActorWalkPolicyCall retry = {0};
+        retry.lane = &profile.lane;
+        OverworldActorWalkPolicy_ReduceChain(&policy, &actor, &retry);
+        if (policy.deferredChainPauseTicks != expectedCount
+            || policy.deferredChainPauseAction != 0x81 || randomIndex != 2) return 15;
+        retry.operation = OVERWORLD_ACTOR_WALK_POLICY_CHAIN_TAKE_PENDING;
+        ReduceWalk(&retry);
+        if (retry.chainAction != OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE
+            || retry.chainTicks != expectedCount
+            || policy.deferredChainPauseAction != 0 || randomIndex != 2) return 16;
+    }
+    for (unsigned disabled = 0; disabled < 3; disabled++) {
+        Reset();
+        memset(&profile, 0, sizeof(profile));
+        profile.lane.chainPauseAction = OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE;
+        profile.lane.ramAccelerationSteps = 1;
+        profile.lane.chainPauseActionChance = 60;
+        profile.lane.chainRepositionJumpCount = 1 | ((disabled == 1 ? 0u : 1u) << 4);
+        profile.lane.avoidPreviousTile = disabled == 2 ? 0 : (50u << 1);
+        randomValues[0] = disabled == 0 ? 60 : 59;
+        OverworldWildSpawns_ApplyUniversalChainMovementPause(
+            &state, 0, &profile, &primitives);
+        if (randomIndex != 1
+            || policy.deferredChainPauseTicks != (disabled == 0 ? 0 : 1)
+            || publishCalls != (disabled == 0 ? 0 : 1)) return 17;
+    }
+    Reset();
+    memset(&profile, 0, sizeof(profile));
+    profile.lane.chainPauseAction = OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_FORWARD;
+    profile.lane.walkOptions = 1;
+    profile.lane.ramAccelerationSteps = 1;
+    profile.lane.chainPauseActionChance = 60;
+    profile.lane.chainRepositionJumpCount = 1 | (2u << 4);
+    profile.lane.avoidPreviousTile = 100u << 1;
+    randomValues[0] = 0;
+    OverworldWildSpawns_ApplyUniversalChainMovementPause(
+        &state, 0, &profile, &primitives);
+    if (lastCall.chainAction != OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_FORWARD
+        || lastCall.chainTicks != 0 || randomIndex != 1) return 18;
+    puts("Pause choices, independent extra-Hop roll, and retained count cases passed");
     return 0;
 }
 """
@@ -520,6 +637,9 @@ class PassiveChainPauseTests(unittest.TestCase):
             profiles["playful"]["chainPauseAction"]["value"],
             "OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE",
         )
+        self.assertEqual(profiles["playful"]["chainPauseActionChance"]["value"], 60)
+        self.assertEqual(profiles["playful"]["chainHopInPlaceExtraHops"]["value"], 1)
+        self.assertEqual(profiles["playful"]["chainHopInPlaceExtraChance"]["value"], 50)
         self.assertEqual(
             profiles["meander"]["chainPauseAction"]["value"],
             "OW_WILD_BEHAVIOR_CHAIN_PAUSE_RANDOM_CHOICE | "

@@ -5,11 +5,13 @@ import struct
 
 from tools.overworld.devtools_walk_reset import WalkPolicyReset, WalkResetError
 
-STATE_ADDRESS, STATE_BYTES = 0x023BC744, 184
-ENTRY_ADDRESS, PROFILE_OFFSET, PROFILE_BYTES = 0x023BB600, 8, 72
+STATE_ADDRESS, STATE_BYTES = 0x023BC744, 192
+ENTRY_ADDRESS, PROFILE_OFFSET, PROFILE_BYTES = 0x023BB600, 8, 80
 DIRECTION_OFFSET, TRAVEL_OFFSET, ACCEL_OFFSET, FASTEST_OFFSET = 19, 7, 50, 51
 STOMP_OFFSET = 70
+ACCEL_STEP_OFFSET, LINEAR_ACCELERATION = 71, 34
 OPTIONS_OFFSET = 65
+TIME_VARIANCE_OFFSET, TIME_VARIANCE_SHIFT, TIME_VARIANCE_MASK = 64, 1, 0xFE
 
 
 class MountWalkFixtureError(WalkResetError):
@@ -44,15 +46,28 @@ def authenticate_mount(session):
 
 class MountWalkFixture:
     def __init__(self, session, subject, direction_mode, travel_time=None, stomp_time=None,
-                 *, turning=None, crash_sound=None):
+                 *, turning=None, crash_sound=None, fastest_time=None, time_to_full_speed=None,
+                 time_variance=None):
         require(type(direction_mode) is int and 0 <= direction_mode <= 2,
                 "directionMode must be an integer 0..2")
         require(travel_time is None or type(travel_time) is int and 1 <= travel_time <= 32,
                 "travelTime must be an integer 1..32")
         require(stomp_time is None or type(stomp_time) is int and 0 <= stomp_time <= 32,
                 "stompTime must be an integer 0..32")
+        require(time_variance is None or type(time_variance) is int and 0 <= time_variance <= 32,
+                "timeVariance must be an integer 0..32")
         self.session, self.direction_mode, self.travel_time = session, direction_mode, travel_time
         self.stomp_time = stomp_time
+        self.time_variance = time_variance
+        require((fastest_time is None) == (time_to_full_speed is None),
+                "fastestTime and timeToFullSpeed must be supplied together")
+        require(fastest_time is None or type(fastest_time) is int and 1 <= fastest_time <= 32,
+                "fastestTime must be an integer 1..32")
+        require(time_to_full_speed is None or type(time_to_full_speed) is int and 1 <= time_to_full_speed <= 255,
+                "timeToFullSpeed must be an integer 1..255")
+        require(fastest_time is None or travel_time is not None and fastest_time <= travel_time,
+                "Linear acceleration requires travelTime and fastestTime <= travelTime")
+        self.fastest_time, self.time_to_full_speed = fastest_time, time_to_full_speed
         require(turning is None or turning in ('free', 'locked'), "turning must be free or locked")
         require(crash_sound is None or crash_sound in ('none', 'wall-hit'),
                 "crashSound must be none or wall-hit")
@@ -89,7 +104,7 @@ class MountWalkFixture:
         require(len(raw) == STATE_BYTES, "fixture mounted state read is incomplete")
         require(raw[PROFILE_OFFSET + 12] == 1, "fixture requires mounted Walk locomotion")
         field, surface = struct.unpack_from("<II", raw)
-        binding = struct.unpack_from("<IHHHHBBBB", raw, 80)
+        binding = struct.unpack_from("<IHHHHBBBB", raw, 88)
         source = actor["sourceIdentity"]
         require(field == self.reset.field and surface % 2 == 0
                 and 0x02000000 <= surface <= 0x023FFFFC,
@@ -98,15 +113,15 @@ class MountWalkFixture:
                 actor["handle"]["mapGeneration"], actor["handle"]["encounterGeneration"], actor["form"])
                 and binding[6] == actor["level"] and binding[7] < 6,
                 "fixture mounted binding differs from live subject")
-        generation, phase, cancel, motion, reserved = struct.unpack_from("<IBBBB", raw, 96)
+        generation, phase, cancel, motion, reserved = struct.unpack_from("<IBBBB", raw, 104)
         pending = {i: raw[i] for i in (120, 123, 128, 148, 149, 150, 151, 180, 182, 183) if raw[i]}
         require(generation > 0 and (phase, cancel, motion, reserved) == (3, 0, 0, 0)
                 and raw[122] == 1 and not pending,
                 "fixture mounted motion/input/stream state is not idle: "
                 + str(dict(generation=generation, phase=phase, cancel=cancel, motion=motion,
                            reserved=reserved, attached=raw[122], nonzeroBytes=pending)))
-        return dict(readiness=ready, mountStateHex=raw.hex(), profileHex=raw[8:80].hex(),
-                    bindingHex=raw[80:96].hex(), sessionGeneration=generation, clock=self._clock())
+        return dict(readiness=ready, mountStateHex=raw.hex(), profileHex=raw[8:88].hex(),
+                    bindingHex=raw[88:104].hex(), sessionGeneration=generation, clock=self._clock())
 
     @staticmethod
     def _public(value):
@@ -129,8 +144,15 @@ class MountWalkFixture:
         changes = {DIRECTION_OFFSET: self.direction_mode}
         if self.travel_time is not None:
             changes.update({TRAVEL_OFFSET: self.travel_time, FASTEST_OFFSET: self.travel_time, ACCEL_OFFSET: 0})
+        if self.fastest_time is not None:
+            changes.update({FASTEST_OFFSET: self.fastest_time, ACCEL_OFFSET: self.time_to_full_speed,
+                            ACCEL_STEP_OFFSET: LINEAR_ACCELERATION})
         if self.stomp_time is not None:
             changes[STOMP_OFFSET] = self.stomp_time
+        if self.time_variance is not None:
+            changes[TIME_VARIANCE_OFFSET] = (
+                original[PROFILE_OFFSET + TIME_VARIANCE_OFFSET] & ~TIME_VARIANCE_MASK
+            ) | ((self.time_variance << TIME_VARIANCE_SHIFT) & TIME_VARIANCE_MASK)
         if self.turning is not None or self.crash_sound is not None:
             options = original[PROFILE_OFFSET + OPTIONS_OFFSET]
             if self.turning is not None:
@@ -147,8 +169,12 @@ class MountWalkFixture:
             before=self._public(before), expectedStateHex=bytes(expected).hex(), after=None,
             restoredOnError=None, guestAdvanced=False,
             limits="Private mounted Owner fixture only; no normal resolved-profile or gameplay proof")
+        if self.fastest_time is not None:
+            self.receipt.update(fastestTime=self.fastest_time, timeToFullSpeed=self.time_to_full_speed)
         if self.stomp_time is not None:
             self.receipt["stompTime"] = self.stomp_time
+        if self.time_variance is not None:
+            self.receipt["timeVariance"] = self.time_variance
         if self.turning is not None:
             self.receipt["turning"] = self.turning
         if self.crash_sound is not None:

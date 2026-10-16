@@ -111,7 +111,7 @@ def complete(requirement):
 
 class MountControlStressTests(unittest.TestCase):
     def test_unarmed_setup_is_ignored_and_aliases_are_exact(self):
-        for alias,requirement in (("walk","legacy.cyndaquil-control-stress"),("hop","legacy.mankey-control-stress")):
+        for alias,requirement in (("walk","legacy.cyndaquil-control-stress"),):
             m=MountControlStressMeasurement(alias)
             self.assertEqual(m.contract,requirement)
             self.assertEqual(m.observe({},[])["failures"],[])
@@ -129,8 +129,7 @@ class MountControlStressTests(unittest.TestCase):
 
     def test_both_typed_evaluators_arm_at_bind_and_own_the_role_transfer(self):
         root = Path(__file__).resolve().parents[2]
-        cases = (("mount.detach-restores-control", "cyndaquil", "legacy.cyndaquil-control-stress"),
-                 ("hop.mounted-single-motion", "mankey", "legacy.mankey-control-stress"))
+        cases = (("mount.detach-restores-control", "cyndaquil", "legacy.cyndaquil-control-stress"),)
         for name, subject, requirement in cases:
             with self.subTest(name=name):
                 test = json.loads((root / "tests/overworld/test-recipes" / (name + ".json")).read_text())

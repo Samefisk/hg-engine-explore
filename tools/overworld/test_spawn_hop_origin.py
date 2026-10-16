@@ -13,6 +13,7 @@ from scripts.verify_overworld_spawn_identity import execute, function
 
 ROOT = Path(__file__).resolve().parents[2]
 PRODUCT = ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
+ENTRY = ROOT / "lib/overworld/overworld_entry_route.c"
 
 
 def harness_source():
@@ -26,7 +27,6 @@ def harness_source():
         "OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_LEFT",
         "OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_RIGHT",
         "OW_WILD_SPAWNER_SPAWN_HOP_DISTANCE",
-        "OW_WILD_SPAWNER_SPAWN_MOVE_MAX_DISTANCE",
         "OW_WILD_SPAWNER_SPAWN_FLY_IN_DISTANCE",
         "OW_WILD_SPAWNER_OFFSCREEN_VIEW_HALF_WIDTH_TILES",
         "OW_WILD_SPAWNER_OFFSCREEN_VIEW_HALF_HEIGHT_TILES",
@@ -46,14 +46,24 @@ def harness_source():
     )
     if len(startup) != 1:
         raise AssertionError("expected exact public spawn-startup type")
-    bodies = "\n".join((
-        function(source, "OverworldWildSpawns_Abs", "int"),
-        function(source, "OverworldWildSpawns_GetSpawnHopVisibleTravelScore", "int"),
-        function(source, "OverworldWildSpawns_TryPickVisibleOffscreenOrigin", "BOOL"),
-        function(source, "OverworldWildSpawns_PrepareSpawnAirborneStart", "BOOL"),
-    ))
+    entry = ENTRY.read_text()
+    bodies = "\n".join((function(entry,'Abs','int'),function(entry,'AirborneScore','int'),
+                          function(entry,'AirborneOrigin','BOOL'),function(entry,'NativeAirborneStart','BOOL')))
+    shim = r"""
+typedef struct {int(*behavior)(FieldSystem*,int,int);} Ops;
+typedef struct {const Ops*ops;} World;
+typedef struct {const World*world;} OverworldCargoQueryWildCall;
+"""
+    wrapper = r"""
+static BOOL OverworldWildSpawns_PrepareSpawnAirborneStart(FieldSystem*f,OverworldWildSpawnStartup*s,u8 locomotion){
+    LocalMapObject player={f->playerAvatar->x,f->playerAvatar->y};f->playerAvatar->mapObject=&player;
+    const Ops ops={GetMetatileBehaviorAt};const World world={&ops};const OverworldCargoQueryWildCall call={&world};
+    int result=NativeAirborneStart(&call,f,s,locomotion);f->playerAvatar->mapObject=NULL;return result;
+}
+"""
     return (PRELUDE.replace("/* CONSTANTS */", "\n".join(constants))
-            .replace("/* STARTUP */", startup[0]) + bodies + DRIVER)
+            .replace("/* STARTUP */", startup[0]) + shim + bodies + wrapper + DRIVER)
+
 
 
 PRELUDE = r"""
@@ -90,13 +100,13 @@ _Static_assert(OW_WILD_MOVEMENT_DIAGNOSTIC_DIRECTION_NONE == 255, "NONE ABI");
 _Static_assert(OW_WILD_BEHAVIOR_LOCOMOTION_HOP_FROM_OFF_SCREEN == 4, "Hop ABI");
 _Static_assert(OW_WILD_BEHAVIOR_LOCOMOTION_FLY_IN == 9, "Fly In ABI");
 _Static_assert(OW_WILD_SPAWNER_SPAWN_HOP_DISTANCE == 8, "short Hop extent");
-_Static_assert(OW_WILD_SPAWNER_SPAWN_MOVE_MAX_DISTANCE == 16, "Move extent");
 _Static_assert(OW_WILD_SPAWNER_SPAWN_FLY_IN_DISTANCE == 16, "Fly In extent");
 _Static_assert(OW_WILD_SPAWNER_OFFSCREEN_VIEW_HALF_WIDTH_TILES == 8, "view width");
 _Static_assert(OW_WILD_SPAWNER_OFFSCREEN_VIEW_HALF_HEIGHT_TILES == 6, "view height");
 _Static_assert(OW_WILD_SPAWNER_OFFSCREEN_SAFE_MARGIN_TILES == 4, "safe margin");
 _Static_assert(OW_WILD_SPAWNER_OFFSCREEN_COMMIT_RUNWAY_TILES == 1, "commit runway");
-typedef struct { int x, y; } PlayerAvatar;
+typedef struct LocalMapObject {int xCurr,yCurr;} LocalMapObject;
+typedef struct { int x,y;LocalMapObject*mapObject; } PlayerAvatar;
 typedef struct { PlayerAvatar *playerAvatar; } FieldSystem;
 static const int vx[4] = {0, 0, -1, 1};
 static const int vy[4] = {-1, 1, 0, 0};
@@ -111,10 +121,10 @@ static void require(int ok, const char *message) {
         exit(1);
     }
 }
-static int GetPlayerXCoord(PlayerAvatar *p) { return p->x; }
-static int GetPlayerYCoord(PlayerAvatar *p) { return p->y; }
-static int OverworldWildSpawns_MovementDirectionDeltaX(u8 d) { return vx[d]; }
-static int OverworldWildSpawns_MovementDirectionDeltaY(u8 d) { return vy[d]; }
+
+
+
+
 static int loaded(int x, int y) {
     if (x < 0 || y < 0 || x >= map_width || y >= map_height) return 0;
     for (int d = 0; d < 4; d++) {
@@ -134,25 +144,9 @@ static int GetMetatileBehaviorAt(FieldSystem *field, int x, int y) {
     queries++;
     return loaded(x, y) ? 0x02 : 0xFF;
 }
-static int OverworldWildSpawns_IsWalkableLandTile(FieldSystem *field, int x, int y) {
-    (void)field;
-    queries++;
-    for (int d = 0; d < 4; d++)
-        if ((walkable_mask & (1 << d)) != 0
-                && x == walkable_x[d] && y == walkable_y[d])
-            return 1;
-    return 0;
-}
-static int OverworldWildSpawns_IsSpawnRunStartTile(
-    FieldSystem *field, OverworldWildSpawnTerrain terrain, int x, int y) {
-    (void)field; (void)terrain; (void)x; (void)y;
-    return 0;
-}
-static int OverworldWildSpawns_IsNearActiveSpawn(
-    OverworldWildSpawnState *state, int x, int y, int ignored) {
-    (void)state; (void)x; (void)y; (void)ignored;
-    return 0;
-}
+
+
+
 """
 
 
@@ -192,23 +186,12 @@ static int oracle(const PlayerAvatar *player) {
     }
     return best;
 }
-static int move_candidate(int direction, int distance) {
-    walkable_x[direction] = target_x - vx[direction] * distance;
-    walkable_y[direction] = target_y - vy[direction] * distance;
-    return 1;
-}
-static int move_oracle(const PlayerAvatar *player) {
-    for (int d = 0; d < 4; d++) {
-        if ((walkable_mask & (1 << d)) != 0
-                && safely_prepared(walkable_x[d], walkable_y[d], player))
-            return d;
-    }
-    return -1;
-}
+
+
 static void run_case(int px, int py, int tx, int ty, int mask, int width, int height,
                      int explicit_direction) {
     cases++;
-    PlayerAvatar player = {px, py};
+    PlayerAvatar player = {px, py, NULL};
     FieldSystem field = {&player};
     OverworldWildSpawnStartup state = {(s16)tx, (s16)ty, -1234, -2345, 0xA5, 0x5A, 0};
     OverworldWildSpawnStartup before = state;
@@ -240,60 +223,11 @@ static void run_case(int px, int py, int tx, int ty, int mask, int width, int he
     require(state.locomotion == 4 && state.hopDirection == expected,
             "startup output fields differ");
 }
-static void run_move_case(
-    int px, int py, int tx, int ty, int mask, int expected_direction) {
-    cases++;
-    PlayerAvatar player = {px, py};
-    FieldSystem field = {&player};
-    OverworldWildSpawnState state = {0};
-    int start_x = -1234, start_y = -2345;
-    target_x = tx; target_y = ty; walkable_mask = mask; queries = 0;
-    map_width = 1024; map_height = 1024;
-    for (int d = 0; d < 4; d++)
-        move_candidate(d, OW_WILD_SPAWNER_SPAWN_MOVE_MAX_DISTANCE);
-    int expected = move_oracle(&player);
-    require(expected == expected_direction, "independent Move direction differs");
-    int accepted = OverworldWildSpawns_TryPickVisibleOffscreenOrigin(
-        &state, &field, OW_WILD_SPAWN_TERRAIN_LAND,
-        OW_WILD_SPAWNER_SPAWN_MOVE_MAX_DISTANCE,
-        tx, ty, &start_x, &start_y);
-    require(queries <= 128, "Move exceeded its bounded cardinal origin search");
-    require(!!accepted == (expected >= 0), "Move accept/reject differs");
-    if (!accepted) {
-        require(start_x == -1234 && start_y == -2345, "failed Move changed output");
-        return;
-    }
-    int distance = abs(start_x - tx) + abs(start_y - ty);
-    require(start_x == walkable_x[expected] && start_y == walkable_y[expected],
-            "Move did not select its eligible Hop-style origin");
-    require(safely_prepared(start_x, start_y, &player),
-            "Move origin lacks the commit runway");
-    require(distance >= 1 && distance <= OW_WILD_SPAWNER_SPAWN_MOVE_MAX_DISTANCE
-            && (start_x == tx || start_y == ty),
-            "Move A is not within sixteen cardinal tiles of B");
-}
-static void run_move_fallback_case(void) {
-    cases++;
-    PlayerAvatar player = {32, 32};
-    FieldSystem field = {&player};
-    OverworldWildSpawnState state = {0};
-    int start_x = -1234, start_y = -2345;
-    target_x = 32; target_y = 42; walkable_mask = 1 << 0; queries = 0;
-    map_width = 1024; map_height = 1024;
-    move_candidate(0, 6);
-    require(OverworldWildSpawns_TryPickVisibleOffscreenOrigin(
-                &state, &field, OW_WILD_SPAWN_TERRAIN_LAND,
-                OW_WILD_SPAWNER_SPAWN_MOVE_MAX_DISTANCE,
-                target_x, target_y, &start_x, &start_y),
-            "Move did not fall back from a blocked sixteen-tile point");
-    require(start_x == 32 && start_y == 48,
-            "Move did not keep the farthest eligible cardinal A");
-    require(safely_prepared(start_x, start_y, &player),
-            "Move fallback A lacks the commit runway");
-}
+
+
 static void run_commit_runway_case(void) {
     cases++;
-    PlayerAvatar player = {568, 399};
+    PlayerAvatar player = {568, 399, NULL};
     FieldSystem field = {&player};
     OverworldWildSpawnStartup state = {568, 405, -1234, -2345, 0xA5, 0x5A, 0};
     target_x = state.targetX; target_y = state.targetY; loaded_mask = 15;
@@ -312,7 +246,7 @@ static void run_commit_runway_case(void) {
 }
 static void run_fly_in_case(void) {
     cases++;
-    PlayerAvatar player = {32, 32};
+    PlayerAvatar player = {32, 32, NULL};
     FieldSystem field = {&player};
     OverworldWildSpawnStartup state = {32, 32, -1234, -2345, 0xA5, 0x5A, 0};
     target_x = state.targetX; target_y = state.targetY; loaded_mask = 15;
@@ -357,19 +291,8 @@ int main(void) {
                 if (tx < 0 || ty < 0 || tx >= 64 || ty >= 64) continue;
                 for (int mask = 0; mask < 16; mask++)
                     run_case(centers[p][0], centers[p][1], tx, ty, mask, 64, 64, -2);
-    run_move_case(585, 406, 584, 410, 1 << 1, 1);
-    run_move_case(32, 32, 32, 28, 1 << 0, 0);
-    run_move_case(32, 32, 32, 36, 1 << 1, 1);
-    run_move_case(32, 32, 29, 32, 1 << 2, 2);
-    run_move_case(32, 32, 35, 32, 1 << 3, 3);
-    run_move_case(32, 32, 35, 35, 1 << 3, 3);
-    run_move_case(32, 32, 33, 42, 1 << 3, 3);
-    run_move_case(32, 32, 36, 32, 0, -1);
-    /* A is walkable but still visible, so the spawn must fail. */
-    run_move_case(32, 32, 44, 32, 1 << 3, -1);
-    /* A negative visible-travel score must still be checked. */
-    run_move_case(32, 32, 32, 60, 1 << 0, 0);
-    run_move_fallback_case();
+    /* Move entry uses the shared directed route proof. Its old four-ray
+     * oracle is replaced by test_spawn_move_route; Hop/Fly stay here. */
     run_commit_runway_case();
     run_fly_in_case();
             }
@@ -389,8 +312,8 @@ class SpawnHopOriginTests(unittest.TestCase):
         source = harness_source()
         controls = (
             ("missing safety margin",
-             "|| (OverworldWildSpawns_Abs(candidateX - playerX)",
-             "|| (0 && OverworldWildSpawns_Abs(candidateX - playerX)",
+             "|| (Abs(candidateX - playerX)",
+             "|| (0 && Abs(candidateX - playerX)",
              "accept/reject differs"),
             ("reverse tie order", "if (visibleTravel > bestVisibleTravel)",
              "if (visibleTravel >= bestVisibleTravel)", "differs"),
@@ -404,8 +327,8 @@ class SpawnHopOriginTests(unittest.TestCase):
 
     def test_prepare_reserves_one_update_of_commit_runway(self):
         source = function(
-            PRODUCT.read_text(),
-            "OverworldWildSpawns_TryPickVisibleOffscreenOrigin",
+            ENTRY.read_text(),
+            "AirborneOrigin",
             "BOOL",
         )
         self.assertEqual(

@@ -41,7 +41,7 @@ def harness_source():
                           '#include "overworld_motion_model.h"\n#include "overworld_role_controller.h"')
     source = replace_once(source, "u8 walkOptions, walkSwayWidth, hopSwayWidth, spawnHopSwayWidth, spawnHopTime;",
                           "u8 walkOptions, walkSwayWidth, hopSwayWidth, spawnHopSwayWidth, spawnHopTime, hopTime, hopPause, chainRepositionJumpCount, chainRepositionDistance, "
-                          "chainRepositionAllowCardinal, chainRepositionAllowDiagonal, chainRepositionDust; u16 chillAllowedTerrainMask;")
+                          "chainRepositionAllowCardinal, chainRepositionAllowDiagonal, chainRepositionDust, onReachAction; u16 chillAllowedTerrainMask;")
     source = replace_once(
         source,
         "typedef struct OverworldWildBehaviorProfile { OverworldWildBehaviorProfileData lane; } OverworldWildBehaviorProfile;",
@@ -299,10 +299,11 @@ static BOOL OverworldWildSpawns_StartPreparedCustomJumpCommand(OverworldWildSpaw
 { return OverworldWildSpawns_StartPreparedCustomJumpCommandTimed(state, field, slot, object,
     dir, distance, x, y, profile, suppress, 0) == OVERWORLD_MOTION_DECISION_ACCEPTED; }
 static BOOL OverworldWildSpawns_TryStartManualHopEmote(OverworldWildSpawnState *state, int slot,
-    LocalMapObject *object, u8 required, u8 end, u8 direction, u8 count, u8 frames,
-    u8 bubble, BOOL each, BOOL sound)
-{ (void)state; (void)slot; (void)object; (void)required; (void)end; (void)direction;
-  (void)count; (void)frames; (void)bubble; (void)each; (void)sound; return FALSE; }
+    LocalMapObject *object, u8 required, u8 direction, u8 count, BOOL sound)
+{ (void)state; (void)slot; (void)object; (void)required; (void)direction;
+  (void)count; (void)sound; return FALSE; }
+static BOOL OverworldActorWalkPolicy_SampleChainChance(u32 chance)
+{ (void)chance; return FALSE; }
 static void OverworldWildSpawns_StartNextSpotEmoteStep(OverworldWildSpawnState *state, int slot, LocalMapObject *object)
 { (void)state; (void)slot; (void)object; }
 static BOOL OverworldWildSpawns_ResolveChainConditionsAtIntentBoundary(
@@ -594,7 +595,521 @@ def execute(source, case):
         return subprocess.run([str(binary), case], capture_output=True, text=True)
 
 
+def hop_vector_preflight_source(wild=None, *, directed=False):
+    """Extract the actual admission bodies; only engine boundaries count calls."""
+    extract = module("hop_preflight_extract", ROOT / "scripts/verify_overworld_spawn_profile_lifecycle.py")
+    wild = WILD.read_text() if wild is None else wild
+    planner = (ROOT / "src/pokemon_move_history_task6_overlay/overworld_actor_hop_planner.c").read_text()
+    # Use the real pure vector predicate, not a second host choice algorithm.
+    lane = extract.production_function(planner, "OverworldActorHopPlanner_GetLane",
+                                       "inline const OverworldWildBehaviorProfileData *")
+    vector = extract.production_function(planner, "OverworldActorHopPlanner_PlanVector", "OverworldMotionDecision")
+    planned = extract.production_function(wild, "OverworldWildSpawns_TryStartBehaviorHopToPlannedTileCommand", "BOOL")
+    chain = extract.production_function(wild, "OverworldWildSpawns_TryStartChainForwardHop", "u8")
+    actual = lane + vector + HOP_PREFLIGHT_VECTOR_BRIDGE + planned + chain
+    if directed:
+        actual += extract.production_function(wild, "OverworldWildSpawns_TryStartDirectedBehaviorHopCommand", "BOOL")
+    definitions = {}
+    for source in (wild, *((ROOT / "include" / name).read_text() for name in
+            ("overworld_wild_behavior_data.h", "overworld_wild_spawns_internal.h",
+             "overworld_wild_helper.h", "overworld_wild_movement.h"))):
+        for line in source.replace("\\\n", " ").splitlines():
+            match = re.match(r"#define\s+(\w+)", line)
+            if match:
+                definitions[match[1]] = line
+    wanted = set(re.findall(r"\bOW_WILD_[A-Z_0-9]+\b", actual + HOP_PREFLIGHT_SUPPORT
+                           + HOP_PREFLIGHT_DRIVER + HOP_PREFLIGHT_DIRECTED_DRIVER))
+    macros = []
+    while wanted:
+        name = wanted.pop()
+        if name in {re.match(r"#define\s+(\w+)", line)[1] for line in macros}:
+            continue
+        line = definitions[name]
+        macros.append(line)
+        wanted.update(re.findall(r"\bOW_WILD_[A-Z_0-9]+\b", line.split(name, 1)[1]))
+    driver = HOP_PREFLIGHT_DIRECTED_DRIVER if directed else HOP_PREFLIGHT_DRIVER
+    return "\n".join(macros) + "\n" + HOP_PREFLIGHT_SUPPORT + actual + driver
+
+
+HOP_PREFLIGHT_SUPPORT = r"""
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "overworld_motion_model.h"
+#include "overworld_role_controller.h"
+typedef int BOOL;
+typedef struct OverworldWildBehaviorProfileData {
+    u8 chillAction, hopMinDistance, hopMaxDistance, hopAllowNonCardinal, hopPause, walkOptions;
+} OverworldWildBehaviorProfileData;
+typedef struct OverworldWildBehaviorProfile { OverworldWildBehaviorProfileData owner, tired; u8 jumpLevel; } OverworldWildBehaviorProfile;
+typedef struct OverworldWildBehaviorPrimitives { u8 unused; } OverworldWildBehaviorPrimitives;
+typedef struct LocalMapObject { int xCurr, yCurr; u8 facing; } LocalMapObject;
+typedef struct FieldSystem { int unused; } FieldSystem;
+typedef struct OverworldWildSpawnState {
+    struct { LocalMapObject *object; u8 active; } spawns[10];
+    FieldSystem *movementFieldSystem;
+    u8 movementSpotStates[10], movementStagedHopFinishWithTired[10], movementStagedHopDistances[10], movementStagedHopPending[10], movementCooldowns[10];
+    s16 movementStagedHopOriginX[10], movementStagedHopOriginY[10], movementStagedHopTargetX[10], movementStagedHopTargetY[10];
+} OverworldWildSpawnState;
+typedef struct OverworldWildDirectionStepContext {
+    OverworldWildSpawnState *state; FieldSystem *fieldSystem; LocalMapObject *object;
+    const OverworldWildBehaviorProfile *profile; const OverworldWildBehaviorPrimitives *primitives;
+    u8 slot; u16 allowedTile; u8 jumpLevel, avoidPreviousTile;
+} OverworldWildDirectionStepContext;
+typedef struct OverworldActorHopPlanCall {
+    const OverworldWildBehaviorProfile *profile; s16 deltaX, deltaY; u8 spotState, direction, distance;
+} OverworldActorHopPlanCall;
+static unsigned worldQueries, invalidTargetQueries, vectorCalls, roleRequests, hopStarts, walkStarts, planCalls, facingWrites;
+static OverworldMotionDecision landingResult;
+static u16 lastAllowed;
+static void Check(BOOL good, const char *message) { if (!good) { fprintf(stderr, "%s\n", message); exit(1); } }
+static int OverworldWildSpawns_ObjectCurrentX(LocalMapObject *object) { return object->xCurr; }
+static int OverworldWildSpawns_ObjectCurrentY(LocalMapObject *object) { return object->yCurr; }
+static int OverworldWildSpawns_Abs(int value) { return abs(value); }
+static const OverworldWildBehaviorProfileData *OverworldWildSpawns_GetControllerLane(const OverworldWildBehaviorProfile *profile, u8 spot) {
+    return spot == OW_WILD_SPAWNER_SPOT_STATE_TIRED ? &profile->tired : &profile->owner;
+}
+static OverworldMotionDecision OverworldWildSpawns_ClassifyBehaviorHopLandingTile(OverworldWildSpawnState *state, int slot, FieldSystem *field, u16 allowed, int x, int y, int tx, int ty) {
+    (void)state; (void)slot; (void)field; (void)tx; (void)ty;
+    worldQueries++; lastAllowed = allowed;
+    if (x == 584 && y == 397) invalidTargetQueries++;
+    return landingResult;
+}
+static u32 OverworldWildSpawns_ReduceRole(int slot, u32 request, u32 flags) {
+    (void)slot; (void)flags; roleRequests++;
+    return OW_WILD_SPAWNER_ROLE_RESULT_ACCEPTED | (u8)(request >> OW_WILD_SPAWNER_ROLE_INPUT_DIRECTION_SHIFT);
+}
+static u8 OverworldWalk_DirectionFromDelta(int dx, int dy) { return dx != 0 ? 2 + (dx > 0) : dy > 0; }
+static BOOL OverworldWildSpawns_TryStartAcceleratedWalkStep(const OverworldWildDirectionStepContext *context, const void *policy, u8 direction, BOOL preview) {
+    (void)context; (void)policy; (void)direction; (void)preview; walkStarts++; return TRUE;
+}
+static OverworldMotionDecision OverworldWildSpawns_StartPreparedCustomJumpCommandTimed(OverworldWildSpawnState *state, FieldSystem *field, int slot, LocalMapObject *object, u8 direction, u8 distance, int x, int y, const OverworldWildBehaviorProfile *profile, BOOL suppress, u8 time) {
+    (void)state; (void)field; (void)slot; (void)object; (void)direction; (void)distance; (void)x; (void)y; (void)profile; (void)suppress; (void)time;
+    hopStarts++; return OVERWORLD_MOTION_DECISION_ACCEPTED;
+}
+static void OverworldWildSpawns_ClearStagedHopTargetLocal(OverworldWildSpawnState *state, int slot) { state->movementStagedHopPending[slot] = 0; }
+static u16 OverworldWildSpawns_GetAllowedTileForSpotState(const OverworldWildBehaviorProfile *profile, u8 spot) { (void)profile; (void)spot; return 512; }
+static u8 OverworldWildSpawns_GetBehaviorHopMinDistance(const OverworldWildBehaviorProfile *profile, u8 spot) { return OverworldWildSpawns_GetControllerLane(profile, spot)->hopMinDistance; }
+static u8 OverworldWildSpawns_GetBehaviorHopMaxDistance(const OverworldWildBehaviorProfile *profile, u8 spot) { return OverworldWildSpawns_GetControllerLane(profile, spot)->hopMaxDistance; }
+static int OverworldWildSpawns_MovementDirectionDeltaX(int direction) { return direction == 2 ? -1 : direction == 3 ? 1 : 0; }
+static int OverworldWildSpawns_MovementDirectionDeltaY(int direction) { return direction == 0 ? -1 : direction == 1 ? 1 : 0; }
+static BOOL OverworldWildSpawns_IsPlayerTile(FieldSystem *field, int x, int y) { (void)field; (void)x; (void)y; return FALSE; }
+static BOOL OverworldWildSpawns_IsTileOccupiedByNonPlayerObject(FieldSystem *field, LocalMapObject *object, int x, int y) { (void)field; (void)object; (void)x; (void)y; return FALSE; }
+static BOOL OverworldWildSpawns_IsBehaviorAllowedHopLandingTile(OverworldWildSpawnState *state, int slot, FieldSystem *field, u16 allowed, int x, int y, int tx, int ty) {
+    return OverworldWildSpawns_ClassifyBehaviorHopLandingTile(state,slot,field,allowed,x,y,tx,ty) == OVERWORLD_MOTION_DECISION_ACCEPTED;
+}
+static BOOL OverworldWildSpawns_TryStartBehaviorHopPlanStepCommand(OverworldWildSpawnState *state, FieldSystem *field, int slot, const OverworldWildBehaviorProfile *profile, u16 allowed, int x, int y, const u8 *directions, int count, u8 mode) {
+    (void)state; (void)field; (void)slot; (void)profile; (void)allowed; (void)x; (void)y; (void)directions; (void)count; (void)mode; planCalls++; return FALSE;
+}
+static void OverworldWildSpawns_SetObjectFacing(LocalMapObject *object, u8 facing) { object->facing = facing; facingWrites++; }
+static void ResetCounts(void) { worldQueries = invalidTargetQueries = vectorCalls = roleRequests = hopStarts = walkStarts = planCalls = facingWrites = 0; }
+"""
+
+HOP_PREFLIGHT_VECTOR_BRIDGE = r"""
+static BOOL OverworldWildSpawns_TryGetBehaviorHopVector(const OverworldWildBehaviorProfile *profile, u8 spotState, int dx, int dy, u8 *direction, u8 *distance) {
+    OverworldActorHopPlanCall call = {.profile=profile, .spotState=spotState, .deltaX=(s16)dx, .deltaY=(s16)dy};
+    vectorCalls++;
+    if (OverworldActorHopPlanner_PlanVector(&call) != OVERWORLD_MOTION_DECISION_ACCEPTED) return FALSE;
+    if (direction != NULL) { *direction=call.direction; *distance=call.distance; }
+    return TRUE;
+}
+"""
+
+HOP_PREFLIGHT_DRIVER = r"""
+int main(int argc, char **argv) {
+    LocalMapObject object={.xCurr=589, .yCurr=399}; FieldSystem field={0};
+    OverworldWildSpawnState state={.movementFieldSystem=&field};
+    OverworldWildBehaviorProfile profile={.owner={.chillAction=OW_WILD_BEHAVIOR_LOCOMOTION_HOP, .hopMinDistance=1, .hopMaxDistance=6, .hopAllowNonCardinal=1}};
+    state.spawns[7].object=&object; state.spawns[7].active=TRUE;
+    landingResult=OVERWORLD_MOTION_DECISION_ACCEPTED;
+    if (argc == 2 && !strcmp(argv[1], "ordinary-invalid")) {
+        const int deltas[][2]={{-14,-1},{0,0},{0,7}};
+        for (unsigned i=0;i<3;i++) {
+            ResetCounts(); state.movementStagedHopFinishWithTired[7]=77;
+            OverworldWildSpawnState before=state;
+            Check(!OverworldWildSpawns_TryStartBehaviorHopToPlannedTileCommand(&state,&field,7,&profile,512,589+deltas[i][0],399+deltas[i][1],589+deltas[i][0],399+deltas[i][1],0), "invalid ordinary Hop started");
+            Check(worldQueries==0, "invalid ordinary Hop queried world before vector rejection");
+            Check(roleRequests==0 && hopStarts==0 && walkStarts==0 && !memcmp(&state,&before,sizeof(state)), "invalid ordinary Hop changed motion or staged state");
+        }
+    } else {
+        Check(OverworldWildSpawns_TryStartBehaviorHopToPlannedTileCommand(&state,&field,7,&profile,512,583,393,583,393,0), "valid diagonal Hop rejected");
+        Check(worldQueries==1 && vectorCalls==1 && roleRequests==1 && hopStarts==1 && walkStarts==0 && state.movementStagedHopDistances[7]==6, "valid Hop lost landing role or START");
+        ResetCounts(); landingResult=OVERWORLD_MOTION_DECISION_TERRAIN;
+        Check(!OverworldWildSpawns_TryStartBehaviorHopToPlannedTileCommand(&state,&field,7,&profile,512,583,393,583,393,0), "terrain-blocked valid Hop started");
+        Check(worldQueries==1 && roleRequests==0 && hopStarts==0, "valid blocked Hop bypassed landing");
+        ResetCounts(); landingResult=OVERWORLD_MOTION_DECISION_ACCEPTED; profile.owner.chillAction=OW_WILD_BEHAVIOR_LOCOMOTION_WANDER;
+        Check(OverworldWildSpawns_TryStartBehaviorHopToPlannedTileCommand(&state,&field,7,&profile,512,588,399,588,399,0), "flat Walk rejected");
+        Check(worldQueries==1 && (lastAllowed&OW_WILD_SPAWNER_WALK_STRICT_DIAGONAL_MARKER) && vectorCalls==0 && roleRequests==0 && walkStarts==1 && hopStarts==0, "flat Walk lost strict landing or Walk START");
+        profile.owner.chillAction=OW_WILD_BEHAVIOR_LOCOMOTION_HOP;
+        profile.owner.hopMinDistance=OW_WILD_SPAWNER_CHAIN_HOP_FORWARD_DISTANCE+1;
+        const OverworldMotionDecision decisions[]={OVERWORLD_MOTION_DECISION_ACCEPTED, OVERWORLD_MOTION_DECISION_TERRAIN, OVERWORLD_MOTION_DECISION_RETRY_WORLD_BUSY, OVERWORLD_MOTION_DECISION_OCCUPIED};
+        for (unsigned i=0;i<4;i++) {
+            ResetCounts(); landingResult=decisions[i]; state.movementStagedHopFinishWithTired[7]=77;
+            u8 result=OverworldWildSpawns_TryStartChainForwardHop(&state,7,&profile,2);
+            Check(worldQueries==1 && state.movementStagedHopFinishWithTired[7]==decisions[i], "invalid chain Hop lost original landing receipt");
+            Check(result==(decisions[i]==OVERWORLD_MOTION_DECISION_ACCEPTED ? 0 : OW_WILD_CHAIN_ABORT), "invalid chain Hop changed abort or retry");
+            Check(roleRequests==0 && hopStarts==0 && walkStarts==0, "invalid chain Hop reached START");
+        }
+    }
+    puts("PASS actual Hop preflight"); return 0;
+}
+"""
+
+HOP_PREFLIGHT_DIRECTED_DRIVER = r"""
+int main(int argc, char **argv) {
+    (void)argc; (void)argv;
+    LocalMapObject object={.xCurr=570, .yCurr=396}; FieldSystem field={0};
+    OverworldWildSpawnState state={.movementFieldSystem=&field};
+    OverworldWildBehaviorProfile profile={.owner={.chillAction=OW_WILD_BEHAVIOR_LOCOMOTION_HOP, .hopMinDistance=1, .hopMaxDistance=2, .hopAllowNonCardinal=0, .hopPause=9}};
+    const u8 directions[]={3}; state.spawns[0].object=&object; state.spawns[0].active=TRUE;
+    landingResult=OVERWORLD_MOTION_DECISION_TERRAIN;
+    Check(!OverworldWildSpawns_TryStartDirectedBehaviorHopCommand(&state,&field,0,&profile,2,0,directions,1,OW_WILD_HELPER_HOP_PLAN_STOP_ONE_HOP_AWAY), "valid blocked directed Hop started");
+    Check(worldQueries==2 && planCalls==0 && state.movementCooldowns[0]==9, "valid blocked vector lost blocked branch");
+    ResetCounts();
+    Check(!OverworldWildSpawns_TryStartDirectedBehaviorHopCommand(&state,&field,0,&profile,14,1,directions,1,OW_WILD_HELPER_HOP_PLAN_STOP_ONE_HOP_AWAY), "invalid directed Hop started");
+    Check(invalidTargetQueries==0, "invalid directed vector queried impossible target");
+    Check(planCalls==2 && worldQueries==2 && state.movementCooldowns[0]==9, "invalid vector did not continue to valid fallback checks");
+    puts("PASS actual directed vector order"); return 0;
+}
+"""
+
+
+def hop_effects_source():
+    """Use actual adapter packets and borrowed body; mock only lease/engine/RNG."""
+    extract = module("hop_effect_extract", ROOT / "scripts/verify_overworld_spawn_profile_lifecycle.py")
+    wild = WILD.read_text()
+    mount = (ROOT / "src/overworld_mount_overlay/overworld_mount_overlay.c").read_text()
+    native = (ROOT / "lib/overworld/overworld_condition_moving_notice_native.c").read_text().replace("\nOverworldBehaviorConditionStatus Overworld", "\nstatic OverworldBehaviorConditionStatus Overworld")
+    chooser = extract.production_function(
+        (ROOT / "include/overworld_hop_effects_internal.h").read_text(),
+        "OverworldActorWalkPolicy_SampleHopEffectsInline", "inline u8")
+    actual = chooser.replace("SampleHopEffectsInline", "SampleHopEffects")
+    actual += "\n".join(extract.production_function(wild, name, result) for name, result in (
+        ("OverworldWildSpawns_ShowBubble", "void"),
+        ("OverworldWildSpawns_StartNextSpotEmoteStep", "BOOL"),
+    ))
+    actual += extract.production_function(native, "OverworldHopPresentation_Run", "OverworldBehaviorConditionStatus")
+    dispatcher = extract.production_function(native, "OverworldConditionNative_Run", "OverworldBehaviorConditionStatus")
+    # Keep the exact common packet gate and private operation dispatch. Normal
+    # condition reduction has its own existing compiled-source fixtures.
+    gate = dispatcher[dispatcher.index("    if(call==NULL"):dispatcher.index("    if (call->operation>OVERWORLD_CONDITION_NATIVE_TARGET_ACCESS")]
+    gate = gate.replace("#if !defined(OVERWORLD_BEHAVIOR_HOST) && !defined(OVERWORLD_ACTOR_SYSTEM_HOST)", "").replace("#endif", "")
+    actual += "\nstatic OverworldBehaviorConditionStatus DispatchHop(OverworldConditionNativeCall *call)\n{\n" + gate + "    return OVERWORLD_BEHAVIOR_CONDITION_INVALID_ARGUMENT;\n}\n"
+    lease = (ROOT / "src/overworld_hop_lease.c").read_text()
+    left = lease.index("{", lease.index("OverworldHopPresentation_Acquire("))
+    actual += HOP_LEASE_STUB.replace("LEASE_BODY", lease[left:].replace("(u32)field", "(u32)(uintptr_t)field"))
+    for owner, table in ((wild, "sOverworldWildHopOps"), (mount, "sOverworldMountHopOps")):
+        left = owner.index("static const OverworldHopPresentationOps " + table)
+        right = owner.index("};", left) + 2
+        actual += re.sub(r'__attribute__\(\(section\("[^"]+"\)\)\)', '', owner[left:right]) + "\n"
+    actual += "\n".join(extract.production_function(wild, name, result) for name, result in (
+        ("OverworldWildSpawns_TryStartManualHopEmote", "u8"),
+        ("OverworldWildSpawns_TryStartChainPauseAction", "u8"),
+    ))
+    actual += extract.production_function(mount, "OverworldMount_TickChainHopEffects", "void")
+    begin = extract.production_function(mount, "OverworldMount_BeginSharedMotion", "BOOL")
+    left = begin.index("        if (sOverworldMountState.walkEndState == OVERWORLD_MOUNT_WALK_END_CHAIN_HOP)", begin.index("sOverworldMountState.motionIdentity = call.motionIdentity;"))
+    right = begin.index("        if (intent.kind == OVERWORLD_MOTION_KIND_WALK)", left)
+    actual += "\nstatic void AcceptHopLatch(void)\n{\n" + begin[left:right] + "}\n"
+    definitions = {}
+    for path in (WILD, ROOT / "include/overworld_wild_behavior_data.h", ROOT / "include/overworld_wild_movement.h",
+                 ROOT / "include/overworld_wild_spawns_internal.h", ROOT / "include/overworld_hop_presentation_native.h"):
+        for line in path.read_text().replace("\\\n", " ").splitlines():
+            match = re.match(r"#define\s+(\w+)\b", line)
+            if match:
+                definitions[match[1]] = line
+    present = set(re.findall(r"^#define\s+(\w+)", HOP_EFFECT_STUBS, re.M))
+    wanted = set(re.findall(r"\bOW_WILD_[A-Z_0-9]+\b|\bOVERWORLD_HOP_PRESENTATION_[A-Z_0-9]+\b", actual + HOP_EFFECT_DRIVER))
+    macros = []
+    while wanted:
+        name = wanted.pop()
+        if name in present:
+            continue
+        line = definitions[name]
+        macros.append(line)
+        present.add(name)
+        wanted.update(re.findall(r"\bOW_WILD_[A-Z_0-9]+\b|\bOVERWORLD_HOP_PRESENTATION_[A-Z_0-9]+\b", line.split(name, 1)[1]))
+    return "\n".join(macros) + HOP_EFFECT_STUBS + actual + HOP_EFFECT_DRIVER
+
+
+HOP_EFFECT_STUBS = r'''
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+#include "constants/sndseq.h"
+typedef uint8_t u8; typedef uint16_t u16; typedef uint32_t u32; typedef int BOOL;
+#define TRUE 1
+#define FALSE 0
+#define OW_WILD_RUNTIME(state) (&(state)->runtime)
+#define OW_WILD_MAX_SPAWNS 10
+#define OVERWORLD_ACTOR_WALK_POLICY_CHAIN_REPOSITION_BEGIN 1
+#define OVERWORLD_MOUNT_MOTION_NONE 0
+#define OVERWORLD_MOUNT_MOTION_HOP 1
+#define OVERWORLD_MOUNT_WALK_END_CHAIN_HOP 4
+typedef struct LocalMapObject { u8 curFacing; union { u32 flags; u8 active; }; } LocalMapObject;
+#define MAPOBJECTFLAG_SINGLE_MOVEMENT 1
+typedef struct FieldSystem { int unused; } FieldSystem;
+typedef struct OverworldWildBehaviorProfileData { u8 chainRepositionJumpCount, onReachAction; } OverworldWildBehaviorProfileData;
+typedef struct OverworldWildBehaviorProfile { OverworldWildBehaviorProfileData owner, tired; } OverworldWildBehaviorProfile;
+typedef struct OverworldActorWalkPolicyCall { u8 direction, distance; } OverworldActorWalkPolicyCall;
+typedef struct OverworldWildChainRepositionResult { u8 outcome; } OverworldWildChainRepositionResult;
+typedef struct OverworldWildSpawnState {
+    struct { LocalMapObject *object; u16 species; u8 form, active; } spawns[10];
+    u8 movementSpotStates[10], movementEmoteJumpsRemaining[10], movementEmoteTimers[10];
+    u8 movementEmoteSteps[10], movementEmoteDirections[10], movementEmoteEndStates[10];
+    u8 movementEmoteBubbleIds[10], movementEmoteShowBubbleEachJump[10], movementEmotePlayCryOnHop[10];
+    u8 movementBattleSettleFrames; FieldSystem *movementFieldSystem;
+    struct { LocalMapObject *movementEmotePartnerPrepObjects[10]; u8 movementEmotePlayHopSound[10]; } runtime;
+} OverworldWildSpawnState;
+typedef struct OverworldMountRuntimeState {
+    FieldSystem *fieldSystem;
+    struct { u8 motionMode; OverworldWildBehaviorProfileData profile; struct { u16 species; u8 form; } binding; } snapshot;
+    u8 walkEndState; u32 reservedPriorFollowerPolicy;
+} OverworldMountRuntimeState;
+typedef int OverworldBehaviorConditionStatus;
+#define OVERWORLD_BEHAVIOR_CONDITION_OK 0
+#define OVERWORLD_BEHAVIOR_CONDITION_INVALID_ARGUMENT 1
+#define OVERWORLD_CONDITION_NATIVE_CALL_VERSION 2
+#define OVERWORLD_CONDITION_NATIVE_TARGET_ACCESS 2
+typedef struct OverworldHopPresentationOps {
+    union { BOOL (*startNext)(OverworldWildSpawnState *, int, LocalMapObject *); LocalMapObject *(*follower)(void); };
+    union { void (*ensureFrame)(OverworldWildSpawnState *, FieldSystem *); void (*cry)(u16,u8); };
+    void (*heart)(LocalMapObject *,u8);
+    u8 (*choices)(u32);
+} OverworldHopPresentationOps;
+typedef struct OverworldConditionNativeCall {
+    union { void *runtime; OverworldMountRuntimeState *hopMount; };
+    OverworldWildSpawnState *state;
+    FieldSystem *field;
+    LocalMapObject *hopObject;
+    union { u32 blobSize; struct { u8 hopRequiredState,hopDirection,hopCount,hopOptions; }; };
+    const OverworldHopPresentationOps *hopOps;
+    u16 version,size; u8 slot,subjectMovementSpeed,operation,reserved;
+} OverworldConditionNativeCall;
+typedef struct OverworldQueryCodeAddonEntry { OverworldBehaviorConditionStatus (*conditionNative)(OverworldConditionNativeCall *); } OverworldQueryCodeAddonEntry;
+static OverworldMountRuntimeState sOverworldMountState;
+static LocalMapObject mountedObject;
+static BOOL followerCurrent = TRUE;
+static unsigned rngCalls, cries, hearts, commands, sounds;
+static u32 draws[2], chances[2];
+static BOOL OverworldActorWalkPolicy_SampleChainChance(u32 chance) {
+    chances[rngCalls % 2] = chance;
+    return draws[rngCalls++ % 2] < chance;
+}
+static void PlayCry(u16 species, u8 form) { if (species != 74 || form != 2) cries += 100; cries++; }
+static void OverworldWildBubble_ShowQuiet(LocalMapObject *object, u8 id) { if (object == NULL || id != 0) hearts += 100; hearts++; }
+static BOOL MapObject_IsSingleMovementActive(LocalMapObject *object) { return object->active; }
+static u32 MapObject_MovementCommandFromDirection(u8 direction, u32 command) { return command + direction; }
+static void OverworldWildSpawns_StartSpotEmoteCommand(LocalMapObject *object, u32 command) { (void)command; object->active = TRUE; commands++; }
+static void PlaySE(u32 sound) { (void)sound; sounds++; }
+static void OverworldWildSpawns_StartHopStartSoundSuppression(OverworldWildSpawnState *state, int slot) { (void)state; (void)slot; }
+static void OverworldWildSpawns_EnsureFrameMovementTask(OverworldWildSpawnState *state, FieldSystem *field) { (void)state; (void)field; }
+static u8 BuildLookPlan(u8 direction) { return direction; }
+static int ResolveLook(u8 plan, u8 step, u8 count, u8 timer) { (void)step; (void)count; (void)timer; return plan; }
+static struct { u8 (*buildLookPlan)(u8); int (*resolveLook)(u8,u8,u8,u8); } policy = {BuildLookPlan, ResolveLook};
+static struct { typeof(policy) *policy; } policyEntry = {&policy};
+#define OVERWORLD_ACTOR_SYSTEM_MOVEMENT_POLICY_ENTRY (&policyEntry)
+static const OverworldWildBehaviorProfileData *OverworldWildSpawns_GetControllerLane(const OverworldWildBehaviorProfile *p, u8 spot) { return spot == 3 ? &p->tired : &p->owner; }
+static u8 OverworldWildSpawns_TryStartChainForwardHop(OverworldWildSpawnState *s,int slot,const OverworldWildBehaviorProfile *p,u8 d) { (void)s; (void)slot; (void)p; (void)d; return FALSE; }
+static BOOL OverworldWildSpawns_IsChainActionReady(int slot) { (void)slot; return FALSE; }
+static void OverworldWildSpawns_InitPolicyCall(OverworldActorWalkPolicyCall *c,int slot,u8 op) { (void)c; (void)slot; (void)op; }
+static BOOL OverworldWildSpawns_ReduceWalk(OverworldActorWalkPolicyCall *c) { (void)c; return FALSE; }
+static BOOL OverworldWildSpawns_RunChainReposition(OverworldWildSpawnState *s,int slot,const OverworldWildBehaviorProfile *p,u8 d,OverworldWildChainRepositionResult *r) { (void)s; (void)slot; (void)p; (void)d; (void)r; return FALSE; }
+static BOOL OverworldWildSpawns_ApplyChainRepositionResult(int slot,const OverworldWildChainRepositionResult *r) { (void)slot; (void)r; return FALSE; }
+static u8 OverworldWildSpawns_GetLookAroundFrames(u8 ticks) { return ticks; }
+static void OverworldWildSpawns_ResetEmotePresentationStyle(OverworldWildSpawnState *s,int slot,u8 id) { s->movementEmoteBubbleIds[slot]=id; }
+static LocalMapObject *OverworldMount_GetFollowerObject(void) { return followerCurrent ? &mountedObject : NULL; }
+'''
+
+HOP_LEASE_STUB = r'''
+static BOOL leaseCurrent = TRUE;
+static const OverworldQueryCodeAddonEntry hostHopEntry = { DispatchHop };
+typedef struct OverworldQueryCodeAddonOwner { u32 fieldIdentity; u16 fieldEpoch,mapGeneration; } OverworldQueryCodeAddonOwner;
+typedef struct OverworldQueryCodeAddonServiceEntry { u32 magic; u16 version,size; void *state; void *load; const OverworldQueryCodeAddonEntry *(*acquire)(const OverworldQueryCodeAddonOwner *); void *unload; } OverworldQueryCodeAddonServiceEntry;
+#define OVERWORLD_QUERY_CODE_ADDON_SERVICE_MAGIC 0x53444F57u
+#define OVERWORLD_QUERY_CODE_ADDON_SERVICE_VERSION 2
+static u32 hostContext = 0x00340012u;
+static BOOL hostGate = TRUE;
+static FieldSystem *hostCurrentField;
+static u32 ReadContext(void) { return hostContext; }
+static struct { u32 (*getContext)(void); } hostCompat = { ReadContext };
+#define OVERWORLD_ACTOR_SYSTEM_COMPAT_ENTRY (&hostCompat)
+static void *ReadConditionGate(void) { return hostGate ? &hostCompat : NULL; }
+#define OVERWORLD_BEHAVIOR_CONDITION_SERVICE_GATE ReadConditionGate
+static const OverworldQueryCodeAddonEntry *ReadLease(const OverworldQueryCodeAddonOwner *owner) {
+    return leaseCurrent && owner->fieldIdentity==(u32)(uintptr_t)hostCurrentField
+        && owner->fieldEpoch==0x12 && owner->mapGeneration==0x34 ? &hostHopEntry : NULL;
+}
+static OverworldQueryCodeAddonServiceEntry hostService = {
+    OVERWORLD_QUERY_CODE_ADDON_SERVICE_MAGIC, 2, sizeof(OverworldQueryCodeAddonServiceEntry), NULL,NULL, ReadLease,NULL
+};
+#define OVERWORLD_QUERY_CODE_ADDON_SERVICE_ADDR ((uintptr_t)&hostService)
+static const OverworldQueryCodeAddonEntry *OverworldHopPresentation_Acquire(FieldSystem *field) LEASE_BODY
+'''
+
+
+HOP_EFFECT_DRIVER = r'''
+#define CHECK(test) do { if (!(test)) { fprintf(stderr,"Hop effect invariant failed line%d\n",__LINE__); return 1; } } while(0)
+int main(int argc, char **argv) {
+    (void)argc; OverworldWildSpawnState state = {0}; LocalMapObject object = {0};
+    OverworldWildBehaviorProfile profile = {0};
+    FieldSystem field = {0}; hostCurrentField=&field; state.movementFieldSystem=&field; sOverworldMountState.fieldSystem=&field;
+    state.spawns[0].object=&object; state.spawns[0].active=TRUE; state.spawns[0].species=74; state.spawns[0].form=2;
+    if (!strcmp(argv[1],"chooser")) {
+        const u32 chance[] = {0,25,50,100};
+        for (u32 code=0; code<16; code++) {
+            for (u32 first=0; first<100; first++) {
+                for (u32 second=0; second<100; second++) {
+                    u32 heart=code&3u, cry=(code>>2)&3u;
+                    rngCalls=0; draws[0]=first; draws[1]=second;
+                    u8 actual=OverworldActorWalkPolicy_SampleHopEffects(code);
+                    u8 expected=(heart && first<chance[heart])
+                        | ((cry && (heart ? second:first)<chance[cry])<<1);
+                    CHECK(actual==expected);
+                    CHECK(rngCalls==(unsigned)(heart!=0)+(unsigned)(cry!=0));
+                }
+            }
+        }
+    } else if (!strcmp(argv[1],"wild")) {
+        for (u8 code=0; code<4; code++) {
+            state.movementSpotStates[0]=0; object.active=FALSE; rngCalls=cries=hearts=commands=0;
+            profile.owner.chainRepositionJumpCount=code<<6; profile.owner.onReachAction=code<<6;
+            draws[0]=0; draws[1]=99;
+            CHECK(OverworldWildSpawns_TryStartChainPauseAction(&state,0,&profile,OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE,2,0));
+            CHECK(commands==1 && cries==0 && hearts==0 && rngCalls==(code ? 2u:0u));
+            CHECK(state.movementEmoteJumpsRemaining[0]==2 && state.movementEmoteShowBubbleEachJump[0]);
+            if (code) CHECK(chances[0]==(25u<<(code-1)) && chances[1]==chances[0]);
+            profile.owner=(OverworldWildBehaviorProfileData){0};
+            object.active=FALSE; CHECK(OverworldWildSpawns_StartNextSpotEmoteStep(&state,0,&object));
+            CHECK(hearts==(code ? 1u:0u) && cries==(code==3 ? 1u:0u));
+            CHECK(!OverworldWildSpawns_StartNextSpotEmoteStep(&state,0,&object));
+            CHECK(rngCalls==(code ? 2u:0u));
+            object.active=FALSE; state.movementEmoteSteps[0]=OW_WILD_SPAWNER_SPOT_EMOTE_STEP_JUMP;
+            CHECK(OverworldWildSpawns_StartNextSpotEmoteStep(&state,0,&object));
+            CHECK(hearts==(code ? 2u:0u) && cries==(code==3 ? 2u:0u) && rngCalls==(code ? 2u:0u));
+        }
+    } else if (!strcmp(argv[1],"independent")) {
+        profile.owner.chainRepositionJumpCount=profile.owner.onReachAction=2u<<6;
+        draws[0]=99; draws[1]=0;
+        CHECK(OverworldWildSpawns_TryStartChainPauseAction(&state,0,&profile,OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE,1,0));
+        object.active=FALSE; CHECK(OverworldWildSpawns_StartNextSpotEmoteStep(&state,0,&object));
+        CHECK(rngCalls==2 && cries==1 && hearts==0);
+    } else if (!strcmp(argv[1],"guards")) {
+        profile.owner.chainRepositionJumpCount=profile.owner.onReachAction=3u<<6;
+        object.active=TRUE;
+        CHECK(!OverworldWildSpawns_TryStartChainPauseAction(&state,0,&profile,OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE,2,0));
+        CHECK(rngCalls==0 && cries==0 && hearts==0 && commands==0);
+        object.active=FALSE;
+        CHECK(OverworldWildSpawns_TryStartManualHopEmote(&state,0,&object,OW_WILD_HOP_PARAMETERS(0,0,1,FALSE)));
+        object.active=FALSE; CHECK(OverworldWildSpawns_StartNextSpotEmoteStep(&state,0,&object));
+        CHECK(rngCalls==0 && cries==0 && hearts==0 && !state.movementEmoteShowBubbleEachJump[0]);
+    } else if (!strcmp(argv[1],"tired")) {
+        state.movementSpotStates[0]=3; profile.tired.chainRepositionJumpCount=profile.tired.onReachAction=2u<<6;
+        draws[0]=0; draws[1]=99;
+        CHECK(OverworldWildSpawns_TryStartChainPauseAction(&state,0,&profile,OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE,1,0));
+        CHECK(rngCalls==2 && chances[0]==50 && chances[1]==50 && state.movementEmoteEndStates[0]==3);
+    } else if (!strcmp(argv[1],"mounted")) {
+        u8 *action=(u8 *)(void *)&sOverworldMountState.reservedPriorFollowerPolicy;
+        sOverworldMountState.snapshot.motionMode=OVERWORLD_MOUNT_MOTION_HOP;
+        sOverworldMountState.walkEndState=OVERWORLD_MOUNT_WALK_END_CHAIN_HOP;
+        sOverworldMountState.snapshot.binding.species=74; sOverworldMountState.snapshot.binding.form=2;
+        for (u8 code=0; code<4; code++) {
+            sOverworldMountState.reservedPriorFollowerPolicy=OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE;
+            sOverworldMountState.snapshot.profile.chainRepositionJumpCount=code<<6; sOverworldMountState.snapshot.profile.onReachAction=code<<6;
+            draws[0]=0; draws[1]=99; rngCalls=cries=hearts=0;
+            OverworldMount_TickChainHopEffects(); OverworldMount_TickChainHopEffects();
+            CHECK(rngCalls==(code ? 2u:0u) && hearts==(code ? 1u:0u) && cries==(code==3 ? 1u:0u));
+            CHECK((action[3]&12u)==12u);
+            sOverworldMountState.snapshot.profile=(OverworldWildBehaviorProfileData){0};
+            AcceptHopLatch(); CHECK((action[3]&12u)==4u);
+            OverworldMount_TickChainHopEffects();
+            CHECK(rngCalls==(code ? 2u:0u) && hearts==(code ? 2u:0u) && cries==(code==3 ? 2u:0u));
+        }
+    } else if (!strcmp(argv[1],"borrowed-guards")) {
+        OverworldConditionNativeCall call = {.state=&state,.field=&field,.hopObject=&object,
+            .hopCount=1,.hopOptions=0x3F,.hopOps=&sOverworldWildHopOps,
+            .version=2,.size=sizeof(call),.operation=OVERWORLD_HOP_PRESENTATION_WILD_INIT};
+        OverworldConditionNativeCall good=call; OverworldWildSpawnState before=state;
+        for(unsigned bad=0; bad<12; bad++) {
+            call=good; state=before; object.flags=0; OverworldHopPresentationOps ops=sOverworldWildHopOps;
+            switch(bad) {
+            case 0:call.version=1;break; case 1:call.size--;break;case 2:call.reserved=1;break;
+            case 3:call.operation=OVERWORLD_HOP_PRESENTATION_PREFLIGHT;break;
+            case 4:call.operation=7;break; case 5:call.slot=10;break;
+            case 6:state.spawns[0].active=FALSE;break;
+            case 7:state.spawns[0].object=&mountedObject;break;
+            case 8:call.hopObject=NULL;break;case 9:call.hopCount=0;break;
+            case 10:ops.choices=NULL;call.hopOps=&ops;break;
+            case 11:state.movementSpotStates[0]=3;break;
+            }
+            OverworldWildSpawnState retained=state;
+            CHECK(DispatchHop(&call)==OVERWORLD_BEHAVIOR_CONDITION_INVALID_ARGUMENT);
+            CHECK(!memcmp(&state,&retained,sizeof(state)) && rngCalls==0 && commands==0);
+        }
+        state=before; object.flags=0; leaseCurrent=FALSE;
+        CHECK(!OverworldWildSpawns_TryStartManualHopEmote(&state,0,&object,OW_WILD_HOP_PARAMETERS(0,0,1,0x3F)));
+        CHECK(!memcmp(&state,&before,sizeof(state)) && rngCalls==0 && commands==0);
+        CHECK(OverworldHopPresentation_Acquire(sOverworldMountState.fieldSystem)==NULL);
+        leaseCurrent=TRUE;
+        CHECK(OverworldHopPresentation_Acquire(&field)==&hostHopEntry);
+        for(unsigned bad=0; bad<7; bad++) {
+            u32 context=hostContext,magic=hostService.magic;u16 version=hostService.version,size=hostService.size;
+            typeof(hostService.acquire) acquire=hostService.acquire;
+            switch(bad) {case 0:hostGate=FALSE;break;case 1:hostService.magic^=1;break;
+            case 2:hostService.version++;break;case 3:hostService.size--;break;
+            case 4:hostService.acquire=NULL;break;case 5:hostContext^=1;break;
+            case 6:hostContext^=1u<<16;break;}
+            CHECK(OverworldHopPresentation_Acquire(&field)==NULL);
+            hostGate=TRUE;hostService.magic=magic;hostService.version=version;hostService.size=size;
+            hostService.acquire=acquire;hostContext=context;
+        }
+        CHECK(OverworldHopPresentation_Acquire(NULL)==NULL);
+        CHECK(OverworldHopPresentation_Acquire((FieldSystem *)&object)==NULL);
+    } else if (!strcmp(argv[1],"mounted-guards")) {
+        sOverworldMountState.snapshot.profile.chainRepositionJumpCount=sOverworldMountState.snapshot.profile.onReachAction=3u<<6;
+        OverworldMount_TickChainHopEffects(); CHECK(rngCalls==0);
+        sOverworldMountState.snapshot.motionMode=OVERWORLD_MOUNT_MOTION_HOP;
+        sOverworldMountState.walkEndState=OVERWORLD_MOUNT_WALK_END_CHAIN_HOP;
+        OverworldMount_TickChainHopEffects(); CHECK(rngCalls==0);
+        sOverworldMountState.reservedPriorFollowerPolicy=OW_WILD_BEHAVIOR_CHAIN_PAUSE_ACTION_HOP_IN_PLACE;
+        followerCurrent=FALSE; OverworldMount_TickChainHopEffects(); CHECK(rngCalls==0 && cries==0 && hearts==0);
+    }
+    return 0;
+}
+'''
+
+
+class HopEffectsLifecycleTests(unittest.TestCase):
+    def test_accepted_sequence_and_each_real_jump(self):
+        source = hop_effects_source()
+        for case in ("chooser", "wild", "independent", "guards", "tired", "mounted", "mounted-guards", "borrowed-guards"):
+            with self.subTest(case=case):
+                result = execute(source, case)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_native_output_boundaries_remain_guarded(self):
+        audit = module("hop_effect_boundaries", ROOT / "scripts/verify_overworld_role_controller.py")
+        wild = audit.function_bodies(WILD.read_text())
+        self.assertIn("&& !state->movementEmoteShowBubbleEachJump[slot]", wild["OverworldWildSpawns_TickSpotEmote"])
+        mount = audit.function_bodies((ROOT / "src/overworld_mount_overlay/overworld_mount_overlay.c").read_text())
+        update = mount["OverworldMount_UpdateCustomMotion"]
+        self.assertLess(update.index("if (!OverworldMount_AcknowledgeSharedMotion("), update.index("OverworldMount_TickChainHopEffects()"))
+        self.assertIn("OverworldMount_Cancel(OVERWORLD_MOUNT_CANCEL_CONTEXT_LOST);", update)
+        begin = mount["OverworldMount_BeginSharedMotion"]
+        self.assertLess(begin.index("OverworldHopPresentation_Acquire(sOverworldMountState.fieldSystem)"), begin.index("intent.version"))
+        self.assertLess(begin.index("OVERWORLD_MOTION_DECISION_ACCEPTED"), begin.index("[3] &= ~8u"))
+        self.assertLess(begin.index("motionIdentity = call.motionIdentity"), begin.index("[3] &= ~8u"))
+        self.assertNotIn("HopPresentation(OVERWORLD_HOP_PRESENTATION_MOUNT_FINISH)", mount["OverworldMount_FinishCustomMotion"])
+
+
 class ChainActionLifecycleTests(unittest.TestCase):
+    def test_actual_hop_vector_preflight_preserves_walk_and_chain_receipts(self):
+        source = hop_vector_preflight_source()
+        for case in ("ordinary-invalid", "semantics"):
+            with self.subTest(case=case):
+                result = execute(source, case)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_temporary_blocker_preserves_selected_continuation(self):
         result = execute(harness_source(), "temporary-blocked-later")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

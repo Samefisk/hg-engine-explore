@@ -24,7 +24,7 @@ load_arm9_expansion: // load the narc subfile with arm9 expansion data
 // Load all resident homes without extending into the data at 0x02110374.
 // The order keeps actor, mount, and their adapters in place before runtime use.
     ldr r4, =ResidentOverlayIds
-    mov r5, #7
+    mov r5, #8
 ResidentOverlayLoop:
     mov r0, #0
     ldrb r1, [r4]
@@ -39,7 +39,7 @@ ResidentOverlayLoop:
 
     .align 2
 ResidentOverlayIds:
-    .byte 158, 157, 159, 160, 155, 153, 156
+    .byte 158, 157, 159, 160, 155, 153, 156, 161
 
 .pool
 .endarea
@@ -62,6 +62,8 @@ LoadResidentOverlay:
     beq LoadResidentItcmOverlay
     cmp r1, #160
     beq LoadResidentItcmOverlay
+    cmp r1, #161
+    beq LoadResidentItcmOverlay
     ldr r2, =0x02007188|1 // LoadOverlayNoInit(region 0, r1)
     bx r2
 
@@ -74,8 +76,10 @@ LoadResidentItcmOverlay:
 .pool
 
 // OS_InitArena reads this OS_GetInitArenaLo(ITCM) literal. Reserve both
-// boot-resident mount adapters and gait capsule above the stock ITCM image.
+// boot-resident mount adapters, gait capsule, player HP and the Walk policy
+// transition reset above stock ITCM. HeartGold never allocates from the ITCM
+// arena, so it stays empty at the ITCM end.
 .org 0x020D2C68
-    .word 0x01FFA580
+    .word 0x02000000
 
 .close

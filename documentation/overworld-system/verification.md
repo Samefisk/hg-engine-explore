@@ -176,10 +176,32 @@ or changes the subject and must fail. A second controller-owned negative
 control removes a required semantic behavior event and must also fail. For an
 off-screen spawn, it also proves the real spawn motion reaches its valid
 target and returns control. Move From Off Screen proof must also show that the
-origin is between1 and16 cardinal tiles from its selected spawn tile and at least four tiles
-beyond the current player-relative inclusive8-by6 view, and the fixed spawn tile is only a target substitution in the normal
-Owner destination trip. A missing eligible origin must reject the spawn; an on-screen
+origin is loaded and has a shared directed route of at most96 movement steps
+to its selected spawn tile. The origin may be noncardinal or more than16 tiles
+from that tile. It must remain at least four tiles beyond the current
+player-relative inclusive8-by6 view at creation; preparation reserves the
+existing extra tile for player movement. The route uses the attempt's single
+prepared profile and the normal Walk, Hop or Teleport planner. The fixed spawn
+tile is only a target substitution in the normal Owner destination trip. Each
+accepted segment must complete shared START, END and control return, and the
+full final tile, physical height and surface must match before the trip clears.
+A missing eligible origin or bounded route must reject the spawn; an on-screen
 fallback fails.
+Pending Move proof also binds the full prepared queue, queued slot and serial,
+READY, the native constructor result, and full-handle ADOPT. A setup call or
+metadata finalizer cannot count as creation. The borrowed native Entry control
+has its own exact table magic, version, size, owner and body checks. Ordinary
+route calls keep their existing World and Subject checks. A COMMIT can replace
+a Subject only when the authenticated constructor receipt proves that exact
+queued actor; Move also requires the matching full-handle ADOPT receipt.
+
+Cold follower metadata FINALIZE may run before the Wild movement Field is
+bound. The reader admits that exact inactive slot7 call only, with unchanged
+runtime, condition and query owners at entry and return. Retained condition
+storage must have a cleared actor record, binding, active mask and frame-valid
+flag. It reports no current Subject or World frame and earns no Cargo,
+admission or movement credit.
+
 Static acceptance rejects a separate entry scheduler or completion path and
 rejects entry-only changes to Walk pause, Movement Chain, stamina, tired
 effects, turn skid, battle rules, or previous-tile policy.
@@ -352,6 +374,31 @@ The search and finalizer must join on attempt, finalization, slot, and map
 identity. A successful actor spawn is not required because a rejected placement
 scan can still cause the hitch.
 
+`population.route30.saturated-headroom` is the headroom gate for the same
+claim at a saturated population. `world.unmounted.spawn-zero-stutter` walks only
+Cherrygrove and Route 29 with two to five actors, so it cannot see lag that
+needs seven or more actors on Route 30. The new test reads the loop's idle
+ticks (the mandatory VBlank wait) as well as its interval, because a loop that
+uses 95% of its budget passes a late-loop count and still hitches on a slower
+host. It prepares the population (declared, uncredited setup), keeps natural
+refill running, and requires zero late loops and floors on the 1st and 5th
+percentile and minimum idle over at least 600 credited loops. The registered
+run teleports to map 34 (557,361), prepares six level 5 Wild actors (species
+16, 16, 60, 60, 163, 167; a busy native spawn queue or a lost queued Entry is answered with
+neutral frames and asked again), arms 768 credited loops, and walks UP x16 frames,
+DOWN x16 frames twenty-four times with no run key (a 120-frame step walked the
+Player 30 tiles away on test3591 and every Wild actor despawned). Floors: idle minimum 30,000, 1st
+percentile 175,000, 5th percentile 275,000 ARM9 scheduler ticks, and at least
+six active actors (saved Mankey plus five Wild) in 90% of the loops; the share
+with all seven is recorded only. Measured on
+Route 30 beside the pond (diagnostic recording, not accepted proof): before
+the TKT-0076 fixes 6 late loops in 955, idle minimum 14,000 ticks, 1st
+percentile 150,000, 5th percentile 231,000; after them 0 late loops, idle
+minimum 73,000–159,000, 1st percentile 323,000–336,000, 5th percentile
+390,000–434,000. Diagnostic recordings that carry cost spans
+(`population-movement-cost`, `tick-*-cost`) use `spawn-cost.probe` baseline
+mode and can never be accepted proof.
+
 ## Feature map
 
 The validated machine-readable source is
@@ -368,6 +415,8 @@ its own graph can never satisfy.
 
 | Capability | Owner | Roles | Minimum proof |
 | --- | --- | --- | --- |
+| Profile-gated collision damage (`collision.attack`) | Wild behavior resolver and player health contact service | Wild | S3 |
+| Player health save and field state (`player.health`) | Player health field service | Player | S3 |
 | Resident actor facade (`actor.system`) | Actor facade | Wild, Follower, Mounted, Scripted | S0, S1, S2, S3 |
 | Profile composition (`profile.composition`) | Resolver | Wild, Follower, Mounted | S0, S1, S3 |
 | Exact Walk (`walk.exact`) | Motion Module | Wild, Follower, Mounted | S1, S2, S3 |
@@ -397,6 +446,8 @@ its own graph can never satisfy.
 | Chain profile policy (`chain`) | Role controllers | Wild, Follower | S0, S1, S3 |
 | Chase profile policy (`chase`) | Role controllers | Wild, Follower | S0, S1 |
 | Battle and capture handoff (`battle.capture`) | World reactions | Wild | S2, S3 |
+| HP and cooldown Pokémon palette tint (`pokemon.appearance`) | Actor appearance presentation owner in Field overlay1 | Wild, Follower, Mounted | S4 |
+| Three independent native emote slots (`presentation.emote-slots`) | Stock field effect owner with shared three-slot resource admission | Wild | S3 |
 
 <!-- END GENERATED OVERWORLD FEATURE MAP -->
 
@@ -410,16 +461,13 @@ The scenario catalog includes:
 - `walk.diagonal.corner-block`
 - `walk.turn-skid.control-release`
 - `chain.pause.counts-semantic-moves`
-- `hop.cardinal-and-diagonal`
-- `hop.mankey-visual-arc`
 - `spawn.appear-hop-timing`
 - `hop.ledge-up-and-down`
-- `hop.mounted-single-motion`
 - `teleport.wild-lifecycle`
 - `teleport.fixed-and-per-tile`
 - `mount.begin-current-follower`
 - `mount.detach-restores-control`
-- `mount.transition-mid-motion`
+- `mount.walk-transition-mid-motion`
 - `world.streaming.cardinal-held-route`
 - `mount.movement.frame-pacing`
 - `world.streaming.path-advance`
@@ -720,8 +768,9 @@ cover the separate profile destination-mask scanner.
 
 ## Spawn-work budget and proof freshness
 
-Every automatic spawn-destination scanner shares two pacing limits. It performs
-at most16 expensive candidate terrain queries in one completed game update. It
+Every automatic spawn-destination scanner shares two pacing limits. The explicit
+profile scanner performs at most4 expensive candidate terrain queries in one
+completed game update; the separate legacy helper keeps its16-candidate attempt. It
 also resolves the profile and prepares spawn metadata/class only once for the
 complete attempt; every resumed update reuses that prepared result. The limits
 apply to legacy Pool selection and explicit profile masks, including Pool (`8`),
@@ -736,25 +785,35 @@ python3 tools/overworld/test_spawn_refill_budget.py
 python3 tools/overworld/test_spawn_destination_scan.py
 ```
 
-The destination-budget checker includes known-bad controls with13 candidate
-queries in one update and repeated profile preparation on a resumed update.
-Both controls must be rejected for their matching reason. A product check that
+The destination-budget checker includes known-bad controls with5 and9 candidate
+queries in one update (the new first invalid batch and the old invalid batch) and repeated profile preparation on a resumed update.
+Each control must be rejected for its matching reason. A product check that
 still batches queries or repeats preparation is a real red result; do not label
 it a checker failure or skip it to reach a live test.
 
 After the host checks pass, run the bounded
 `population.spawn-work-budget` scenario on the current ROM. Its fixed route
-crosses the map seam from Route 30 into Cherrygrove. Its strict window starts on the
-first completed update after that seam and keeps the player moving through the
-scan. It must observe one natural helper-to-explicit-scanner handoff, one
+crosses the map seam from Route 29 into Cherrygrove. Before the one reviewed
+crossing, automatic Route 29 destination scans use the existing uncredited
+setup tracker. Each scan keeps its exact prepared value, one preparation,
+240 candidates, four-query batches, 50,000-tick resumed finalizer bound,
+terminal result, and next-update retirement. It must retire before the field
+changes; it earns no scan, constructor, entry, movement, or pacing credit.
+The strict window starts on the first completed update after that seam and
+keeps the player moving through the fresh Cherrygrove scan. It must observe one natural helper-to-explicit-scanner handoff, one
 complete explicit scan,
 exactly one profile receipt for the attempt, completed game-update boundaries,
-zero terrain-matcher queries on setup, exactly 20 resumed batches, no update
-above the 12-query cap, no resumed finalizer above its guest-work
+zero terrain-matcher queries on setup, exactly 60 resumed batches, no update
+above the 4-query cap, no resumed finalizer above its guest-work
 budget, and one successful prepared encounter actor on the next update. That actor
 must use its normal Fly In from the retained off-screen origin to the
 retained target. The test measures every main loop from the first strict
-post-seam update through the loop after actor creation. Zero
+post-seam update through the loop after actor creation.
+For the final entry wait, the 32-frame no-progress check follows that exact
+created Wild actor's motion and position, rather than the saved Follower.
+An idle Follower does not stop a moving Fly In; missing or stale entry identity
+cannot renew the wait.
+Zero
 late loops is the only pass: `gSystem.frameCounter` must stay at or below `2`,
 native-cycle and frame-sequence intervals must stay at or below `2`. The ARM9
 clock cross-check allows only the sub-VBlank hook offset and must stay below
@@ -775,7 +834,7 @@ contract. Do not replace the follower, heal a party member, refill population,
 or otherwise prepare the save. It binds Mankey's current source-checked
 resolved profile. Separate movement scenarios own Hop and Movement Chain
 timing; a valid profile pause does not fail the spawn-stutter gate. The gate
-also rejects an explicit destination scan over21 frames. Population-count
+also rejects an explicit destination scan over61 frames. Population-count
 behavior stays in the separate population scenarios. One loop above two frame
 times is a red result, even if candidate and preparation budgets pass.
 

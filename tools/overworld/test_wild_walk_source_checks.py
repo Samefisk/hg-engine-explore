@@ -43,11 +43,13 @@ def verify_obstacle_hop_turn_source(spawns):
     ledge = "".join(pause.function_body(spawns, LEDGE).split())
     chooser = "".join(pause.function_body(
         spawns, "OverworldWildSpawns_TryStartSpawnerMovementCommand").split())
-    if "||!obstacleHopAllowed||!IsMetatileBlockedAt(" not in ledge:
+    if "if(obstacleReach==0||lane->hopMinDistance!=2" not in ledge:
         raise AssertionError("blocked obstacle Hop bypasses Walk turn control")
-    if ("policy.walkMomentum.speed==0"
-            "||policy.walkMomentum.direction==direction" not in chooser):
+    if ("policy.walkMomentum.direction!=direction&&policy.walkMomentum.speed!=0"
+            "?0:OVERWORLD_JUMP_REACH(policy.walkMomentum.speed)" not in chooser):
         raise AssertionError("obstacle Hop ignores the current Walk heading")
+    if "distance=obstacleHop?obstacleReach:OW_WILD_SPAWNER_MOVEMENT_DISTANCE_LEDGE_JUMP;" not in ledge:
+        raise AssertionError("Jump reach does not set the obstacle landing distance")
 
 
 def verify_chain_forward_hop_pause_source(spawns, runtime):
@@ -125,7 +127,8 @@ class WildWalkSourceChecksTests(unittest.TestCase):
         verify_obstacle_hop_turn_source(self.spawns)
         with self.assertRaisesRegex(AssertionError, "bypasses Walk turn"):
             verify_obstacle_hop_turn_source(self.spawns.replace(
-                "            || !obstacleHopAllowed\n", "", 1))
+                "        if (obstacleReach == 0\n            || lane->hopMinDistance != 2",
+                "        if (lane->hopMinDistance != 2", 1))
 
     def test_chain_forward_hop_has_no_shared_motion_settle_pause(self):
         verify_chain_forward_hop_pause_source(self.spawns, self.runtime)
