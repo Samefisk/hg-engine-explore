@@ -28,7 +28,8 @@
    1
   ],
   "polishCandidates": 1000,
-  "heightWeight": 8.0
+  "heightWeight": 8.0,
+  "polishRigidWeight": 60.0
  },
  "search": {
   "placeSizes": [

@@ -45,12 +45,25 @@ numbers) when tried; add new ones with the evidence that suggests them.
    floor; extend the judge to floor-water edges (water surface vs bank
    height, closed by a bank face), then the solver.
 
+11. ~~Polish rigid weight.~~ Accepted 2026-10-16 (0.842 -> 0.851, hard
+   failures 38 -> 33). Remaining overhangs sit mostly in echo (7/2) and
+   route-land9; the same trade for heightBreaks/criticalMismatches (polish
+   weights for those terms, rank guard unchanged) is the untested follow-up.
+
 Judge ideas (need a defect or a vanilla false alarm first):
 
 - **2x2 junctions (D3).** Pairwise joins can all be vanilla-observed while
   a corner is not: a path's top/bottom edge pieces meeting plain grass at
   the path's end. Score each tile corner by its four edge profiles: seen in
   vanilla, or all four joins continuous.
+  Measured 2026-10-16, not adoptable as stated: with the chunk held out,
+  vanilla's own non-continuous corners are unseen 76% of the time (12
+  chunks per tileset), versus 26%/30%/49% on maps 541/542/543, so the
+  check would flag vanilla more than our output. The exact 8-profile
+  signature is too specific (profiles carry texture coordinates). A usable
+  version needs a coarser corner key (material and height per quadrant).
+  Also, D3's spot (541 at 30,11) is plain grass in the current map; find a
+  current path end before using D3 as the target.
 - **Render void (D2).** `tools.maps.render.voids` sees what the tile
   metrics miss: black void beside reachable ground, from above and from the
   camera's pitch. Vanilla routes, towns and caves score 0 (38-map sample;

@@ -255,7 +255,8 @@ class Solver:
             cost = cost + self._height_cost(grid, x0, z0, wins) * self.cfg["heightWeight"]
         return cost
 
-    def solve_region(self, grid, codes, x0, z0, h, w, patch, rng, current=None, candidates=None) -> bool:
+    def solve_region(self, grid, codes, x0, z0, h, w, patch, rng, current=None, candidates=None,
+                     rigid_weight=None) -> bool:
         """Choose a window for grid[z0:z0+h, x0:x0+w]; with `current`, only if strictly cheaper."""
         wins = self.windows(patch)[:, :h, :w]
         saved = grid[z0:z0 + h, x0:x0 + w].copy()
@@ -264,7 +265,7 @@ class Solver:
         incoming = self._incoming(grid, x0, z0, h, w)
         k = min(candidates or self.cfg["candidates"], len(wins))
         top = np.argpartition(cost, k - 1)[:k]
-        rigid_w = self.cfg["rigidWeight"]
+        rigid_w = self.cfg["rigidWeight"] if rigid_weight is None else rigid_weight
         total = {int(i): float(cost[i]) + rigid_w * self._rigid_cost(grid, x0, z0, wins[i], incoming) for i in top}
         best = min(total.values())
         if current is not None:
@@ -399,8 +400,10 @@ class Solver:
                         x0 = min(max(0, x - rng.randrange(w)), width - w)
                         z0 = min(max(0, z - rng.randrange(h)), height - h)
                         saved = grid[z0:z0 + h, x0:x0 + w].copy()
+                        # A broken overhang outranks joins in evaluate(), so let polish trade joins for it.
                         if not self.solve_region(grid, codes, x0, z0, h, w, patch, rng, current=True,
-                                                 candidates=self.cfg.get("polishCandidates", 1000)):
+                                                 candidates=self.cfg.get("polishCandidates", 1000),
+                                                 rigid_weight=self.cfg.get("polishRigidWeight")):
                             continue
                         new_rank = self.evaluate(grid, rows)
                         if new_rank < rank:
