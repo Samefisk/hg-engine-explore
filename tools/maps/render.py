@@ -11,10 +11,13 @@ resolve can be looked at seconds later. Images go to build/map-render/.
 What it reproduces (pokeheartgold src/field/field_camera.c, area_light.c,
 GBATEK 3D): the field camera preset of the map header's cameraType (256x192,
 perspective, W-buffer), the area light file's entry at noon, material
-lighting/vertex colours, texture formats 1-7 with repeat/flip, culling, and
-translucent polygons. What it does not: buildings/props (land.json
-`buildings`), texture animation, fog, edge marking, overworld sprites.
-The background is black, like the void the game shows where no polygon is.
+lighting/vertex colours, texture formats 1-7 with repeat/flip, culling,
+translucent polygons, and map props (land.json `buildings`, as
+MapPropManager_DrawWithOffset: the area's prop models and prop textures,
+translation and scale; the game ignores their rotation). What it does not:
+texture animation, fog, edge marking, overworld sprites, billboards and
+skinning (4 room props). The background is black, like the void the game
+shows where no polygon is.
 
 Images are for the map-look review (AGENTS.md "Maps"); walking and warps
 are still proven with memory reads in melonDS.
@@ -271,18 +274,108 @@ def _lit(material: dict, normal, light: dict) -> np.ndarray:
     return np.minimum(out, 31) / 31
 
 
+def mdl0_only(data: bytes) -> bytes:
+    """A BMD0 file reduced to its MDL0 section (map props also embed a TEX0 that the game does not
+    bind: AreaDataManager_Load binds them to the area's prop textures)."""
+    nsec = struct.unpack_from("<H", data, 14)[0]
+    if data[:4] != b"BMD0":
+        raise nsbmd.NsbmdError("not a BMD0 file")
+    if nsec == 1:
+        return data
+    for off in struct.unpack_from(f"<{nsec}I", data, 16):
+        if data[off:off + 4] == b"MDL0":
+            section = data[off:off + struct.unpack_from("<I", data, off + 4)[0]]
+            return struct.pack("<4sHHIHHI", b"BMD0", 0xFEFF, struct.unpack_from("<H", data, 6)[0],
+                               20 + len(section), 16, 1, 20) + section
+    raise nsbmd.NsbmdError("no MDL0 section")
+
+
+# gPivotMtxIndices (NitroSystem): the four elements outside the pivot's row and column.
+_PIVOT = ((4, 5, 7, 8), (3, 5, 6, 8), (3, 4, 6, 7), (1, 2, 7, 8), (0, 2, 6, 8), (0, 1, 6, 7),
+          (1, 2, 4, 5), (0, 2, 3, 5), (0, 1, 3, 4))
+
+
+def _node_matrix(node: dict) -> np.ndarray:
+    """A node's SRT as a 4x4 row-vector matrix (v @ M): scale, then rotation, then translation
+    (NNSi_G3dFuncSbc_NODEDESC with the basic joint scale)."""
+    flag, m = node["flag"], np.eye(4)
+    rot = np.eye(3)
+    if not flag & 2:
+        r = node["rotation"]
+        a = np.zeros(9)
+        if flag & 8:
+            pivot, (pa, pb) = (flag >> 4) & 15, r
+            a[pivot] = -1 if flag & 0x100 else 1
+            idx = _PIVOT[pivot]
+            a[idx[0]], a[idx[1]] = pa / 4096, pb / 4096
+            a[idx[2]] = (-pb if flag & 0x200 else pb) / 4096
+            a[idx[3]] = (-pa if flag & 0x400 else pa) / 4096
+        else:
+            a[0] = node["m00"] / 4096
+            a[1:] = [v / 4096 for v in r]
+        rot = a.reshape(3, 3)
+    s = np.diag([v / 4096 for v in node["scale"][:3]]) if not flag & 4 else np.eye(3)
+    m[:3, :3] = s @ rot
+    if not flag & 1:
+        m[3, :3] = [v / 4096 for v in node["translation"]]
+    return m
+
+
+def _sbc_draws(model: dict) -> list[tuple[int, int, np.ndarray]]:
+    """(material, shape, node matrix) in SBC draw order. Billboards draw unrotated; envelopes
+    (skinning) keep the current matrix."""
+    out, mat, cur, stack, visible = [], None, np.eye(4), {}, True
+    for c in model["sbc"]:
+        op, base = c[0], c[0] & 0x1F
+        if base == 0x02:
+            visible = bool(c[2] & 1)
+        elif base == 0x03:
+            cur = stack.get(c[1], np.eye(4))
+        elif base == 0x04:
+            mat = c[1]
+        elif base == 0x05:
+            if visible and mat is not None:
+                out.append((mat, c[1], cur))
+        elif base == 0x06:
+            extra = c[4:]
+            if op & 0x40:
+                cur = stack.get(extra[-1], np.eye(4))
+            cur = _node_matrix(model["nodes"][c[1]]) @ cur
+            if op & 0x20:
+                stack[extra[0]] = cur
+        elif base in (0x07, 0x08):
+            extra = c[2:]
+            if op & 0x40:
+                cur = stack.get(extra[-1], np.eye(4))
+            if op & 0x20:
+                stack[extra[0]] = cur
+    return out
+
+
 class Mesh:
-    """Triangles of land models in world units, with per-vertex colour and texcoords."""
+    """Triangles of land models in world units, with per-vertex colour and texcoords.
+
+    `props` counts map props: drawn, and skipped (missing or undecodable models)."""
 
     def __init__(self):
         self.pos, self.uv, self.color, self.normal, self.mat = [], [], [], [], []
         self.materials: list[dict] = []
+        self.props = {"drawn": 0, "skipped": 0}
+        self.land_triangles = 0
 
-    def add_model(self, model_bytes: bytes, offset: tuple[float, float, float], textures: Textures,
-                  light: dict) -> None:
-        model = nsbmd.parse(model_bytes)["models"][0]
-        scale = model["info"]["posScale"] / 4096 / 4096
-        tr = [c / 4096 for c in model["nodes"][0].get("translation", (0, 0, 0))]
+    def add_model(self, model_bytes, offset: tuple[float, float, float], textures: Textures,
+                  light: dict, scale=(1.0, 1.0, 1.0), shapewise: bool = False) -> None:
+        """Add a model (BMD0 bytes, or an already parsed nsbmd model dict) at `offset`, scaled per
+        axis about its origin. shapewise draws every (material, shape) pair without node matrices,
+        as DrawModelShapewise / NNS_G3dDraw1Mat1Shp do for props listed in bm_*_matshp.dat."""
+        model = nsbmd.parse(mdl0_only(model_bytes))["models"][0] if isinstance(model_bytes, (bytes, bytearray)) \
+            else model_bytes
+        pos_scale = model["info"]["posScale"] / 4096 / 4096
+        if shapewise:
+            draws = [(mat, shp, np.eye(4)) for mat, shp in nsbmd._shape_materials(model)]
+        else:
+            draws = _sbc_draws(model)
+        base = np.array(scale, np.float64)
         tex_of = {i: t["name"] for t in model["textures"] for i in t["materials"]}
         pal_of = {i: p["name"] for p in model["palettes"] for i in p["materials"]}
         first = len(self.materials)
@@ -300,8 +393,11 @@ class Mesh:
                 "translucent": ((m["polyAttr"] >> 16) & 31) < 31 or fmt in (1, 6),  # alpha textures blend
                 "front": bool(m["polyAttr"] >> 7 & 1), "back": bool(m["polyAttr"] >> 6 & 1),
                 "diffuse": _bgr555(m["diffAmb"] & 0x7FFF) if m["diffAmb"] & 0x8000 else np.ones(3, np.float32)})
-        for mat, shp in nsbmd._shape_materials(model):
+        for mat, shp, node in draws:
             material = self.materials[first + mat]
+            rot = node[:3, :3] * base  # node rotation/scale, then the prop's base scale
+            shift = node[3, :3] * base + np.array(offset, np.float64)
+            rigid = np.allclose(rot, np.eye(3))
             for prim in _vertices(model["shapes"][shp]["dl"]):
                 verts = prim["vertices"]
                 for poly in nsbmd._polygons({"type": prim["type"], "vertices": verts}):
@@ -309,11 +405,18 @@ class Mesh:
                     for tri in tris:
                         p, uv, col, nrm = [], [], [], []
                         for (vp, vuv, vn, vc, last) in tri:
-                            p.append([vp[k] * scale + tr[k] + offset[k] for k in range(3)])
+                            if rigid:
+                                p.append([vp[k] * pos_scale + shift[k] for k in range(3)])
+                            else:
+                                p.append(list(np.array(vp, np.float64) * pos_scale @ rot + shift))
                             uv.append(vuv or (0.0, 0.0))
                             if last == "normal" and vn is not None:  # no light enabled: emission only
-                                col.append(_lit(material, _normal(vn), light))
-                                nrm.append(_normal(vn))
+                                n = _normal(vn)
+                                if not rigid:
+                                    n = np.array(n) @ rot
+                                    n = tuple(n / (np.linalg.norm(n) or 1.0))
+                                col.append(_lit(material, n, light))
+                                nrm.append(n)
                             elif last == "color" and vc is not None:
                                 col.append(_bgr555(vc))
                                 nrm.append((0.0, 1.0, 0.0))
@@ -534,6 +637,7 @@ class MapScene:
         self.textures = Textures(narc.members(self.source.read("a/0/4/4"))[self.area["mapTileset"]])
         self.matrix = self.world.matrix_for(map_id)
         self._meshes: dict = {}
+        self._props = None
 
     def own_chunks(self) -> list[tuple[int, int]]:
         m = self.matrix
@@ -551,15 +655,73 @@ class MapScene:
         land = m["landData"][cz][cx]
         return None if land == 0xFFFF or land >= len(self.world.raw["land"]) else land
 
-    def mesh(self, chunks) -> Mesh:
+    def _prop_set(self) -> dict:
+        """The area's map props, as AreaDataManager_Alloc/_Load: AreaData field 0 selects the prop id
+        list (a/0/4/3) and the prop textures (a/0/7/0); buildModelKind (areaType) picks the model
+        archive: a/0/4/0 outdoors, a/1/4/8 in rooms, with bm_field/bm_room_matshp.dat."""
+        if self._props is None:
+            outdoor = bool(self.area["areaType"])
+            bank = self.area["buildingsTileset"]
+            ids = narc.members(self.source.read("a/0/4/3"))[bank]
+            count = struct.unpack_from("<H", ids)[0]
+            matshp = self.source.read("fielddata/build_model/bm_field_matshp.dat" if outdoor
+                                      else "fielddata/build_model/bm_room_matshp.dat")
+            n = struct.unpack_from("<H", matshp)[0]
+            self._props = {
+                "ids": set(struct.unpack_from(f"<{count}H", ids, 2)),
+                "models": narc.members(self.source.read("a/0/4/0" if outdoor else "a/1/4/8")),
+                "textures": Textures(narc.members(self.source.read("a/0/7/0"))[bank]) if count else None,
+                "shapewise": {i for i in range(n) if struct.unpack_from("<H", matshp, 4 + 4 * i)[0]},
+                "parsed": {},
+            }
+        return self._props
+
+    def _prop_model(self, model_id: int):
+        """The parsed prop model, or None when the area does not load it (the game then draws prop 0,
+        a placeholder) or it cannot be decoded."""
+        props = self._prop_set()
+        if model_id not in props["parsed"]:
+            model = None
+            if model_id in props["ids"] and model_id < len(props["models"]) and props["textures"] is not None:
+                try:
+                    model = nsbmd.parse(mdl0_only(props["models"][model_id]))["models"][0]
+                except (nsbmd.NsbmdError, struct.error, IndexError, KeyError):
+                    model = None
+            props["parsed"][model_id] = model
+        return props["parsed"][model_id]
+
+    def mesh(self, chunks, props: bool = True) -> Mesh:
+        """Land models of `chunks`; with props, their map props too (mesh.props counts them)."""
         mesh = Mesh()
+        placed = []
         for cx, cz in chunks:
             land = self.land_at(cx, cz)
             if land is None:
                 continue
+            centre = (cx * CHUNK + CHUNK / 2, 0.0, cz * CHUNK + CHUNK / 2)
             model = codecs.decode_land_model(self.world.raw["land"][land])
-            mesh.add_model(model, (cx * CHUNK + CHUNK / 2, 0.0, cz * CHUNK + CHUNK / 2), self.textures, self.light)
+            mesh.add_model(model, centre, self.textures, self.light)
+            placed.append((land, centre))
+        mesh.land_triangles = len(mesh.pos)  # land first: props are appended after
+        if props:
+            for land, centre in placed:
+                self._add_props(mesh, land, centre)
         return mesh
+
+    def _add_props(self, mesh: Mesh, land: int, centre) -> None:
+        # MapPropManager_DrawWithOffset: translation (x/z relative to the chunk centre; y is absolute,
+        # the chunk's matrix altitude is not added), identity rotation, the stored scale.
+        for b in self.world.member("land", land)["buildings"]:
+            model = self._prop_model(b["modelId"])
+            if model is None:
+                mesh.props["skipped"] += 1
+                continue
+            offset = (centre[0] + b["x"] / 4096, b["y"] / 4096, centre[2] + b["z"] / 4096)
+            scale = tuple(b[k] / 4096 for k in ("scaleX", "scaleY", "scaleZ"))
+            props = self._prop_set()
+            mesh.add_model(model, offset, props["textures"], self.light, scale,
+                           shapewise=b["modelId"] in props["shapewise"])
+            mesh.props["drawn"] += 1
 
     def height(self, x: int, z: int) -> float:
         land = self.land_at(x // GRID, z // GRID)
@@ -573,14 +735,14 @@ class MapScene:
     def tile_world(self, x: int, z: int) -> tuple[float, float, float]:
         return (x * TILE + TILE / 2, self.height(x, z), z * TILE + TILE / 2)
 
-    def view(self, x: int, z: int, scale: int = 1, pick: bool = False):
+    def view(self, x: int, z: int, scale: int = 1, pick: bool = False, props: bool = True):
         """The top screen with the player standing on tile (x, z)."""
         cx, cz = x // GRID, z // GRID
-        mesh = self.mesh([(cx + dx, cz + dz) for dz in (-1, 0, 1) for dx in (-1, 0, 1)])
+        mesh = self.mesh([(cx + dx, cz + dz) for dz in (-1, 0, 1) for dx in (-1, 0, 1)], props)
         cam = Camera.field(self.tile_world(x, z), self.camera_preset, (SCREEN[0] * scale, SCREEN[1] * scale))
         return rasterize(mesh, cam, pick=pick)
 
-    def overview(self, ppt: int = 8, top: bool = False, chunks=None, pick: bool = False):
+    def overview(self, ppt: int = 8, top: bool = False, chunks=None, pick: bool = False, props: bool = True):
         """Whole map, orthographic; oblique from the field camera's pitch unless top.
 
         Returns (image, camera), or (image, camera, world x/z per pixel) with pick."""
@@ -589,8 +751,9 @@ class MapScene:
         zs = [c[1] for c in chunks]
         x0, x1 = min(xs) * CHUNK, (max(xs) + 1) * CHUNK
         z0, z1 = min(zs) * CHUNK, (max(zs) + 1) * CHUNK
-        mesh = self.mesh(chunks)
-        ys = np.array(mesh.pos).reshape(-1, 3)[:, 1] if mesh.pos else np.zeros(1)
+        mesh = self.mesh(chunks, props)
+        land = mesh.pos[:mesh.land_triangles]  # the floor height: props do not shift it
+        ys = np.array(land).reshape(-1, 3)[:, 1] if land else np.zeros(1)
         cx, cz, cy = (x0 + x1) / 2, (z0 + z1) / 2, float(np.median(ys))
         width = int((x1 - x0) / TILE * ppt)
         if top:
@@ -615,27 +778,27 @@ class MapScene:
         return rasterize(mesh, cam), cam
 
 
-def voids(scene: MapScene, ppt: int = 4) -> dict:
+def voids(scene: MapScene, ppt: int = 4, props: bool = True) -> dict:
     """Tiles where the black void shows: a check the tile metrics cannot make.
 
     `top`: tiles not fully covered seen from straight above. `camera`: tiles
     whose ground (at the median floor height) is seen through void from the
     field camera's pitch, i.e. a missing wall face or floor edge. Only
     tiles beside ground reachable from the map's warps count (as lint's
-    reachability), away from the map's edge, in
-    chunks without buildings (generated chunks have none).
+    reachability), away from the map's edge and from warps. Map props
+    (buildings) are drawn unless props=False: they cover ground like the game's.
     """
     chunks = scene.own_chunks()
     x0, z0 = min(c[0] for c in chunks) * GRID, min(c[1] for c in chunks) * GRID
     x1, z1 = (max(c[0] for c in chunks) + 1) * GRID, (max(c[1] for c in chunks) + 1) * GRID
     owned = {(cx, cz) for cx, cz in chunks}
-    _, _, where = scene.overview(ppt, top=True, pick=True)
+    _, _, where = scene.overview(ppt, top=True, pick=True, props=props)
     h, w = where.shape[:2]
     gaps = np.isnan(where[..., 0])[:h - h % ppt, :w - w % ppt]
     gaps = gaps.reshape(h // ppt, ppt, w // ppt, ppt).any(axis=(1, 3))
     top = sorted((x0 + int(x), z0 + int(z)) for z, x in zip(*np.nonzero(gaps))
                  if ((x0 + int(x)) // GRID, (z0 + int(z)) // GRID) in owned)
-    _, cam, where = scene.overview(ppt, top=False, pick=True)
+    _, cam, where = scene.overview(ppt, top=False, pick=True, props=props)
     ys, xs = np.nonzero(np.isnan(where[..., 0]))
     wv, hv = cam.size
     k = cam.ortho_height / hv
@@ -645,18 +808,16 @@ def voids(scene: MapScene, ppt: int = 4) -> dict:
     t = (floor - origin[:, 1]) / cam.forward[1]
     hit = origin + t[:, None] * cam.forward
     tiles = {(int(px // TILE), int(pz // TILE)) for px, pz in hit[:, [0, 2]]}
-    # Only void beside ground the player can reach counts (cave walls sit in void by design), and only
-    # in chunks without buildings: their models are not drawn, and rooms are mostly buildings.
+    # Only void beside ground the player can reach counts (cave walls sit in void by design).
     near_land = set()
     for x, z in reachable(scene):
         near_land |= {(x + dx, z + dz) for dx in (-1, 0, 1) for dz in (-1, 0, 1)}
-    checked = {(cx, cz) for cx, cz in chunks if not scene.world.member("land", scene.land_at(cx, cz))["buildings"]}
     header = scene.world.headers[scene.map_id]
     exits = {(w["x"] + dx, w["z"] + dz) for w in scene.world.member("events", header["eventsBank"])["warps"]
              for dx in range(-3, 4) for dz in range(-3, 4)}  # vanilla room exits open onto the void
 
     def counts(x, z):  # nor the void beyond the map's own edge
-        return ((x, z) in near_land and (x // GRID, z // GRID) in checked and (x, z) not in exits
+        return ((x, z) in near_land and (x, z) not in exits
                 and all(((x + dx) // GRID, (z + dz) // GRID) in owned for dx in (-2, 0, 2) for dz in (-2, 0, 2)))
     return {"top": [t for t in top if counts(*t)], "camera": sorted(t for t in tiles if counts(*t))}
 

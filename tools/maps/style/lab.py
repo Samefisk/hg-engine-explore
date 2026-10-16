@@ -82,15 +82,16 @@ def judge_check(tilesets: list[int] | None = None) -> list[str]:
     """Every vanilla chunk of the benchmark's tilesets must score perfectly against its full kit."""
     import numpy as np
     from .. import world
-    from . import kit as kits, score, seams as seams_mod
+    from . import coverage, kit as kits, score, seams as seams_mod
     from .cli import _base, _tileset_of_map  # noqa: F811
+    base = _base()
     if tilesets is None:
-        base = _base()
         tilesets = sorted({_tileset_of_map(base, c["map"]) for c in json.loads(BENCH.read_text())["cases"]})
     problems = []
     for tileset in tilesets:
         kit = kits.load_or_build_kit(world.RomSource(REPO / "rom.nds"), tileset)
         s = seams_mod.for_kit(kit)
+        built = coverage.building_lands(base, kit)  # props cover polygon-less ground; not judged
         for land in s.self_excluded:
             print(f"note: tileset {tileset} land {land}: floor beside empty tiles (walls are props); not learned from")
         for land, grid in sorted(kit["chunks"].items()):
@@ -99,7 +100,8 @@ def judge_check(tilesets: list[int] | None = None) -> list[str]:
             g = np.array(grid)
             found = {"badSeams": s.profile_seams(g)[0], "rigidViolations": len(s.rigid_violations(g)),
                      "holes": len(s.holes(g)), "bareEdges": len(s.bare_edges(g, margin=2)),
-                     "heightBreaks": len(s.height_breaks(g))}
+                     "heightBreaks": len(s.height_breaks(g)),
+                     "renderVoid": 0 if land in built else len(coverage.render_void_tiles(kit, g))}
             exposed = score.void_exposed(kit, grid)
             found = {k: v for k, v in found.items() if v}
             if found:
@@ -328,7 +330,7 @@ def _generated_cell(map_id: int, x: int, z: int):
 
 def defect_check(radius: int = 2) -> int:
     import numpy as np
-    from . import seams as seams_mod
+    from . import coverage, seams as seams_mod
     defects = [d for d in _read_jsonl(DEFECTS) if d["status"] == "open"]
     if not defects:
         print("no open defects")
@@ -348,6 +350,7 @@ def defect_check(radius: int = 2) -> int:
             "badSeams": int(seam[max(0, gz - radius):gz + radius + 1, max(0, gx - radius):gx + radius + 1].sum()),
             "rigidViolations": sum(near(x, z) or near(x + dx, z + dz) for x, z, dx, dz in s.rigid_violations(g)),
             "holes": sum(near(x, z) for x, z in s.holes(g)),
+            "renderVoid": sum(near(x, z) for x, z in coverage.render_void_tiles(kit, g)),
         }
         seen = any(counts.values())
         gaps += not seen
@@ -356,10 +359,15 @@ def defect_check(radius: int = 2) -> int:
     return 1 if gaps else 0
 
 
-def defect_add(map_id: int, x: int, z: int, note: str) -> dict:
+def defect_add(map_id: int, x: int, z: int, note: str, source: str | None = None,
+               evidence: dict | None = None) -> dict:
     existing = _read_jsonl(DEFECTS)
     entry = {"id": f"D{len(existing) + 1}", "time": now(), "map": map_id, "x": x, "z": z, "note": note,
              "status": "open"}
+    if source:
+        entry["source"] = source  # "scan": filed by `lab scan`, closed by it when it no longer reproduces
+    if evidence:
+        entry["evidence"] = evidence
     _append_jsonl(DEFECTS, entry)
     return entry
 
@@ -430,7 +438,25 @@ def main(argv=None) -> int:
     close = dsub.add_parser("close")
     close.add_argument("--id", required=True)
     close.add_argument("--note", required=True)
+    sc = sub.add_parser("scan", help="find defects proactively: renderer vs judge on every generated map")
+    sc.add_argument("--map", type=int, action="append", help="only these maps")
+    sc.add_argument("--write", action="store_true", help="file new defects, close scan defects that are gone")
+    sc.add_argument("--json", action="store_true")
+    rt = sub.add_parser("retro", help="score the loop's own records; propose process changes")
+    rt.add_argument("--write", action="store_true", help="append to documentation/map-system/lab/retro.md")
+    rt.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
+    if args.command in ("scan", "retro"):
+        from . import loop
+        if args.command == "scan":
+            result = loop.scan(args.map, args.write)
+            print(json.dumps(result, indent=1) if args.json else loop.format_scan(result))
+            return 1 if any(r["proposals"] for r in result["maps"]) and not args.write else 0
+        result = loop.retro()
+        print(json.dumps(result, indent=1) if args.json else loop.format_retro(result))
+        if args.write:
+            print(f"appended to {loop.write_retro(result)}")
+        return 0
     if args.command == "status":
         return status()
     if args.command == "judge-check":

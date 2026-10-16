@@ -74,7 +74,14 @@ Judge ideas (need a defect or a vanilla false alarm first):
   6/67, 19/41 and 34/109 (top/camera), and it flags (18–19, 47) next to D2.
   It needs the ROM's textures only for colour; the coverage itself is
   geometry, so a judge version can rasterize kit cells without textures.
-  Adopt with `judge-check` on every tileset, then rebaseline.
+  **Adopted 2026-10-16** (run 20261016-102013-judge-render-void, rebaseline):
+  `tools/maps/style/coverage.py` rasterizes kit cells (geometry only, 4
+  samples per tile, field camera pitch); `score.py` has `renderVoid == 0` as
+  a review gate (fails the score and the bench, `generate` still writes and
+  lists the tiles). Vanilla bench tilesets score 0. It agrees with
+  render.voids tile for tile except texture-alpha void (542: 3 tiles of
+  `river_r` over nothing). Detects D4 and D5. Next (player): make the solver
+  avoid render void; 16 of 18 bench seeds fail it.
 - **Area statistics (D4).** Echo Cavern fills big `T` areas with flat rock
   tops; compare the share of visible top-surface material per class against
   vanilla.

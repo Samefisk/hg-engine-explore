@@ -9,6 +9,8 @@ Gates (also in the design-map-look skill):
   voidExposed == 0         no floorless void tile ('?') next to land the player stands on
   bareEdges == 0           no standable tile beside a tile no polygon touches (black void)
   heightBreaks == 0        neighbouring floor tiles meet at the same height (no gap between levels)
+  renderVoid == 0          no black void visible beside reachable ground, from above or from the
+                           field camera's pitch (coverage.py: the kit version of render.voids)
   seamRate >= 0.95         neighbour joins whose edge profiles continue or
                            that vanilla also has; the rest may show as a visible
                            texture or height break
@@ -25,11 +27,16 @@ from collections import Counter, deque
 
 import numpy as np
 
+from . import coverage
 from . import seams as seams_mod
 from .layout import GRID, cell_char
 
 GATES = {"criticalMismatches": 0, "walkableComponents": 1, "rigidViolations": 0, "holes": 0,
-         "voidExposed": 0, "bareEdges": 0, "heightBreaks": 0, "seamRate": 0.95}
+         "voidExposed": 0, "bareEdges": 0, "heightBreaks": 0, "renderVoid": 0, "seamRate": 0.95}
+# Gates that fail the score and count in the bench, but do not stop `generate`
+# writing: the solver cannot avoid them yet, so the agent fixes the listed tiles
+# with `resolve` (they weigh into hotspots) instead of being blocked.
+REVIEW_GATES = ("renderVoid",)
 LAND = set(".,v^<>")
 
 
@@ -89,6 +96,12 @@ def walkable_components(kit: dict, grid: list[list[int]]) -> int:
     return components
 
 
+def _render_void(kit: dict, g: np.ndarray) -> dict:
+    found = coverage.render_void(kit, g)
+    return {"renderVoid": len(set(found["top"]) | set(found["camera"])),
+            "renderVoidTop": len(found["top"]), "renderVoidCamera": len(found["camera"])}
+
+
 def score(kit: dict, grid: list[list[int]], rows: list[str] | None = None,
           exclude: frozenset = frozenset(), windows: set | None = None, pairs: tuple | None = None) -> dict:
     s = seams_mod.for_kit(kit, frozenset(exclude))
@@ -110,6 +123,7 @@ def score(kit: dict, grid: list[list[int]], rows: list[str] | None = None,
         "voidExposed": void_exposed(kit, grid),
         "bareEdges": len(s.bare_edges(g)),
         "heightBreaks": len(s.height_breaks(g)),
+        **_render_void(kit, g),
         "pairRate": round(seen / total, 4),
         "windowRate": round(window_seen / ((height - 1) * (width - 1)), 4),
         "classMix": dict(class_mix(kit, grid)),
@@ -124,12 +138,18 @@ def score(kit: dict, grid: list[list[int]], rows: list[str] | None = None,
     return result
 
 
+def blocking(result: dict) -> list[str]:
+    """Failed gates that stop `generate` from writing (all but REVIEW_GATES)."""
+    return [g for g in passes(result) if g not in REVIEW_GATES]
+
+
 def passes(result: dict) -> list[str]:
     """Names of failed gates (empty = pass)."""
     failed = []
     if result["seamRate"] < GATES["seamRate"]:
         failed.append("seamRate")
-    for name in ("criticalMismatches", "rigidViolations", "holes", "voidExposed", "bareEdges", "heightBreaks"):
+    for name in ("criticalMismatches", "rigidViolations", "holes", "voidExposed", "bareEdges", "heightBreaks",
+                 "renderVoid"):
         if result.get(name, 0) > GATES[name]:
             failed.append(name)
     if result["walkableComponents"] > GATES["walkableComponents"]:
@@ -145,7 +165,7 @@ def hotspots(kit: dict, grid: list[list[int]], exclude: frozenset = frozenset(),
     weight = s.seam_map(g).astype(float)
     for x, z, _, _ in s.rigid_violations(g):
         weight[z, x] += 3
-    for x, z in s.holes(g) + s.bare_edges(g) + s.height_breaks(g):
+    for x, z in s.holes(g) + s.bare_edges(g) + s.height_breaks(g) + coverage.render_void_tiles(kit, g):
         weight[z, x] += 3
     out = []
     for z0 in range(0, g.shape[0], size):
@@ -159,7 +179,7 @@ def hotspots(kit: dict, grid: list[list[int]], exclude: frozenset = frozenset(),
 # --- benchmark quality (the improvement loop's single number) ----------------
 
 HARD_GATES = ("criticalMismatches", "rigidViolations", "holes", "voidExposed", "bareEdges", "heightBreaks",
-              "walkableComponents")
+              "renderVoid", "walkableComponents")
 GATE_PENALTY = 0.05
 
 

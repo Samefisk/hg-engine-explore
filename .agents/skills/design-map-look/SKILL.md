@@ -37,6 +37,25 @@ scratch; the committed result is the override in `data/maps/`):
 - Keep paths at least 2 tiles wide; encounter grass in patches, not stripes.
 - Leave the warp/start tile on `.`.
 
+Before a long `generate`, run the pre-check (about 1–2 s): `python3 -B -m
+tools.maps.style precheck --layout build/map-style/L.txt --map 33 [--relax 1]
+[--events EV.json --origin X0 Z0 | --start X Z]` (same `--relax` as
+generate; event x/z are matrix-wide, `--origin` is the layout's top-left map
+tile). It compares
+the layout with the class layouts of every vanilla chunk of the tileset and
+exits 1 on errors that will certainly fail a gate: a class the tileset has no
+cells for (water, a ledge direction), standable pockets that stay sealed even
+if every `*` is walkable, and warp or start tiles off `.`. Warnings are
+arrangements vanilla never uses: 2x2 class windows, and 3x3 windows with grass
+read as ground, that no vanilla chunk has (`*` matches anything); ledges
+without ground on both sides; paths, walls or water 1 tile wide. Each warning
+region is printed beside the nearest vanilla window with its land id and
+coordinates, so you can copy that habit. Fix every error; treat warnings as
+hints. Known-good layouts get 0–4, vanilla chunks checked against the rest of
+their tileset 0–11, and a clean pre-check does not predict the solver's own
+mismatches, 1-tile pockets from `*` tiles or `seamRate`; only `generate`
+measures those. `--calibrate` reprints the vanilla baseline for a tileset.
+
 ## 3. Generate and read the score
 
 ```bash
@@ -54,6 +73,7 @@ best seed that passes every gate:
 | `rigidViolations` = 0 | no tree, cliff, ledge or slope cut off from its vanilla neighbours |
 | `holes` = 0 | no tile missing the ground vanilla always had |
 | `voidExposed` = 0 | no floorless void beside standable land |
+| `renderVoid` = 0 | no black void visible beside reachable ground (review gate: the map is still written; fix the report's `renderVoidTiles` with `resolve`) |
 | `seamRate` ≥ 0.95 | joins whose textures and heights continue, or that vanilla has |
 | game limits | model ≤ 0xF000 bytes, BDHC, polygons (checked on write) |
 
@@ -104,7 +124,10 @@ template. Then review the look yourself: `python3 -B -m tools.maps.showcase
 shots` (or the same capture loop for your map) and inspect every sheet for
 black void beside floors, floating or cut-off walls/trees/cliffs, hard-edged
 texture squares and moving non-water textures. Each problem becomes a lab
-defect and gets fixed before hand-off. Then tell the user exactly where to look: map ID, coordinates and how
+defect and gets fixed before hand-off. Run `python3 -B -m tools.maps.style.lab
+scan --map M --write` too: it files what the renderer and judge find, so the
+user is not the first to see it. Run `python3 -B -m tools.maps.status --map M`
+last; hand off only when it reports nothing to do. Then tell the user exactly where to look: map ID, coordinates and how
 to reach it (teleport or warp). Offer the review page, `python3 -B -m
 tools.maps.review --map M` (they click a spot and record what looks wrong).
 Their visual review closes the task; record any "looks wrong" note as a

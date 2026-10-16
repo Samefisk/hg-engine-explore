@@ -14,10 +14,16 @@ clean either way.
 
 ```bash
 python3 -B -m tools.maps.style.lab status
+python3 -B -m tools.maps.style.lab scan --write    # find defects before anyone reports them
 python3 -B -m tools.maps.style.lab defect check
+python3 -B -m tools.maps.style.lab retro           # how the loop itself is doing
 ```
 
-Read the ledger tail (`documentation/map-system/lab/ledger.jsonl`) and
+`scan` compares the renderer with the judge on every generated map and files
+what it finds (`source: scan`): a METRIC GAP candidate where the render shows
+void no check sees, one detected defect per map and set of checks otherwise.
+It closes its own defects once they no longer reproduce, never the user's
+(it lists those for a re-look instead). Read the ledger tail (`documentation/map-system/lab/ledger.jsonl`) and
 `ideas.md`. Priority:
 
 1. An open defect that `defect check` reports as a METRIC GAP: fix the judge
@@ -26,6 +32,10 @@ Read the ledger tail (`documentation/map-system/lab/ledger.jsonl`) and
 3. The worst benchmark cases in `status`: pick the top untried idea, or a new
    one backed by evidence from those cases (break their bad joins down by
    cause before guessing).
+
+If `retro` reports a MISS, its proposal is a process fix (a skill step, a
+tool, the backlog): do it in this iteration when it is small, otherwise add
+it to `ideas.md`, so the same failure does not repeat.
 
 Never retry a rejected ledger entry without a new reason stated in the note.
 If `status` says the champion code differs from the tree, find out why
@@ -86,7 +96,12 @@ first (AGENTS.md Maps); every visual problem becomes a defect (`lab defect
 add`). Then tell the user what changed. Their notes become defects too.
 Scheduled runs skip this step (no builds or sessions unattended).
 
+## 6. Retro (every iteration)
+
+`python3 -B -m tools.maps.style.lab retro --write` appends the rubric result
+to `documentation/map-system/lab/retro.md`; commit it with the ledger line.
+
 ## Report
 
-Hypothesis, decision, quality before → after, per-case changes worth
+Retro score and any process fix made, hypothesis, decision, quality before → after, per-case changes worth
 noting, defects touched, commit hash, and the next idea you would try.

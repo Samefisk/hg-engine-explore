@@ -1,6 +1,7 @@
 """Generate vanilla-looking map chunks from an ASCII layout.
 
   python3 -B -m tools.maps.style examples --map 33 --count 3   # learn from vanilla
+  python3 -B -m tools.maps.style precheck --layout L.txt --map 33 [--relax 1]   # ~1 s, before generate
   python3 -B -m tools.maps.style generate --layout L.txt --map 33 --land 676 [--seeds 16] [--relax 1]
   python3 -B -m tools.maps.style new-map --map 541 --template 33 --land 676 --start 16 16
   python3 -B -m tools.maps.style resolve --land 682 (--region X0 Z0 W H | --hotspots K) [--set X Z C] [--seeds 4] [--write]
@@ -34,9 +35,11 @@ import sys
 import time
 from pathlib import Path
 
+import numpy as np
+
 from .. import codecs, world
 from ..cli import REPO
-from . import bdhc_gen, kit as kits, layout, quilt, score, wfc
+from . import bdhc_gen, coverage, kit as kits, layout, quilt, score, wfc
 
 REPORT_DIR = REPO / "build/map-style"
 
@@ -76,12 +79,15 @@ def generate(layout_text: str, map_id: int, land_id: int, overrides: Path,
         raise SystemExit("no seed solved the layout:\n  " + "\n  ".join(sorted(set(errors))[:5]))
     candidates.sort(key=lambda c: (c[0], c[1]))
     _, seed, grid, result = candidates[0]  # gates, then fewest problems, then best joins
-    passed = not score.passes(result)
+    passed = not score.blocking(result)
     report = {"map": map_id, "tileset": tileset, "land": land_id, "seed": seed, "score": result,
               "failedGates": score.passes(result), "seedsTried": seeds, "seedsSolved": len(candidates),
               "realizedLayout": layout.render(grid, kit), "hotspots": score.hotspots(kit, grid),
               "grid": grid, "layout": rows, "relax": relax_depth,
               "seconds": round(time.time() - started, 1)}
+    if result.get("renderVoid"):
+        found = coverage.render_void(kit, np.array(grid))
+        report["renderVoidTiles"] = {k: sorted(map(list, v)) for k, v in found.items()}
     if not passed:
         report["written"] = False
         return report
@@ -92,7 +98,7 @@ def generate(layout_text: str, map_id: int, land_id: int, overrides: Path,
 def rank(result: dict) -> tuple:
     """Seed ranking key, lower is better: failed gates, then fewest problems, then best joins."""
     return (len(score.passes(result)), result["criticalMismatches"], result["rigidViolations"],
-            result["holes"], -result["seamRate"])
+            result["holes"], result.get("renderVoid", 0), -result["seamRate"])
 
 
 def _replace(path: Path, data: bytes) -> None:
@@ -181,6 +187,36 @@ def examples(map_id: int, count: int) -> list[str]:
     return out
 
 
+def _precheck(args) -> int:
+    """`precheck`: exit 1 on errors (a gate will fail), 0 with warnings only."""
+    from . import precheck
+    tileset, lands = precheck.load_vanilla(args.map)
+    if not lands:
+        print(f"error: map {args.map}'s tileset {tileset} has no vanilla chunks to compare with; pass the "
+              "vanilla template map generate used (a report's \"map\")", file=sys.stderr)
+        return 2
+    if args.calibrate:
+        print(json.dumps({"map": args.map, "tileset": tileset, "chunks": precheck.calibrate(lands)}, indent=1))
+        return 0
+    if args.layout is None:
+        print("error: --layout is required (or --calibrate)", file=sys.stderr)
+        return 2
+    events = json.loads(args.events.read_text()) if args.events else None
+    vanilla = precheck.Vanilla(lands)
+    ox, oz = args.origin
+    points = [(x - ox, z - oz, what) for x, z, what in precheck.points_from(events, ())]
+    points += [(x, z, "start") for x, z in args.start]
+    _, findings = precheck.check_text(args.layout.read_text(), vanilla, args.relax, points)
+    if args.json:
+        print(json.dumps({"layout": str(args.layout), "map": args.map, "tileset": tileset, "relax": args.relax,
+                          "vanillaChunks": len(lands), **precheck.summary(findings), "findings": findings},
+                         indent=1))
+    else:
+        print(precheck.format_text(findings, f"precheck {args.layout} on map {args.map} (tileset {tileset}, "
+                                             f"{len(lands)} vanilla chunks), relax {args.relax}"))
+    return 1 if any(f["severity"] == "error" for f in findings) else 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="tools.maps.style", description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -223,7 +259,20 @@ def main(argv=None) -> int:
     ins.add_argument("--radius", type=int, default=0, help="also an ASCII neighbourhood of this radius")
     ins.add_argument("--layout", type=Path, help="intent layout, for reports without a stored one")
     ins.add_argument("--relax", type=int, default=0)
+    pre = sub.add_parser("precheck", help="about 1 s: layout patterns vanilla never uses, before generate")
+    pre.add_argument("--layout", type=Path, help="layout file (required unless --calibrate)")
+    pre.add_argument("--map", type=int, required=True, help="map whose area tileset to use")
+    pre.add_argument("--relax", type=int, default=0, help="the --relax generate will use")
+    pre.add_argument("--events", type=Path, help="events JSON; its warps (matrix-wide x/z) must be on '.'")
+    pre.add_argument("--origin", type=int, nargs=2, default=(0, 0), metavar=("X0", "Z0"),
+                     help="map tile of the layout's top-left corner, for --events (default 0 0)")
+    pre.add_argument("--start", type=int, nargs=2, action="append", default=[], metavar=("X", "Z"),
+                     help="a start tile in layout x/z")
+    pre.add_argument("--calibrate", action="store_true", help="check every vanilla chunk (leave-one-out)")
+    pre.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
+    if args.command == "precheck":
+        return _precheck(args)
     if args.command in ("resolve", "inspect"):
         from . import edit
         layout_text = args.layout.read_text() if args.layout else None
@@ -252,6 +301,9 @@ def main(argv=None) -> int:
         report_dir.mkdir(parents=True, exist_ok=True)
         (report_dir / f"report-{args.land:04d}.json").write_text(json.dumps(report, indent=1) + "\n")
         print(json.dumps({k: v for k, v in report.items() if k not in ("realizedLayout", "written", "grid")}, indent=1))
+        if report.get("written") and report.get("renderVoidTiles"):
+            print(f"warning: written, but {report['score']['renderVoid']} tiles show black void (renderVoidTiles); "
+                  "fix them with `resolve --hotspots K` and check with `tools.maps.render sheet`", file=sys.stderr)
         return 0 if report.get("written") else 1
     print(json.dumps(new_map(args.map, args.template, args.land, tuple(args.start), args.overrides,
                              tuple(args.chunks))))

@@ -49,8 +49,11 @@ def _json_cycle(spec):
 
 
 def _dump(path: Path, spec) -> None:
+    """Write through a temporary file: an interrupted write never leaves a truncated member."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(spec, indent=1) + "\n")
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(spec, indent=1) + "\n")
+    tmp.replace(path)
 
 
 def cmd_roundtrip(args) -> int:
@@ -448,6 +451,8 @@ def main(argv=None) -> int:
     checkout.add_argument("--force", action="store_true", help="overwrite existing override files")
     checkout.add_argument("--shared", action="store_true", help="allow members other maps also use")
     checkout.set_defaults(func=cmd_checkout)
+    from . import events_edit
+    events_edit.register(sub)
     args = parser.parse_args(argv)
     if args.root is not None:
         if args.arm9 is None:

@@ -36,6 +36,23 @@ passes `--root base/root --arm9 base/arm9.bin`.
    and `secondary` (hex). Behavior IDs are `enum TILE_BEHAVIOR` in
    pokeheartgold `include/constants/metatile_behavior.h`.
 
+   Or edit events through the CLI, which checks each edit before writing:
+   `python3 -B -m tools.maps events list --map 33` shows objects, warps, signs
+   and triggers with their indices. `events add-npc --map M --x X --z Z
+   --sprite S --script N [--movement] [--facing up|down|left|right] [--flag F]
+   [--range RX RZ]`, `add-sign`, `add-warp --to-map T --anchor A`,
+   `add-trigger [--w --h] --script N --var V --value VAL`, and `move` /
+   `remove --kind object|warp|bg|coord --index I` change the map's events
+   bank, checking it out first if needed. They refuse shared banks unless you
+   pass `--private` (a copy at the next free index plus a header override for
+   this map) or `--shared`. They run lint's own checks on the tree before and
+   after the edit: a new error refuses the edit unless `--force`; warnings
+   (a warp that does not lead back) are printed. Removing a warp that another
+   warp targets is refused, since later anchors would shift. `--dry-run`
+   prints the JSON diff and writes nothing. New objects get the next free id;
+   `y` defaults to 0 as in vanilla (the game places objects on the terrain).
+   Each edit takes 5–8 s (two lint passes).
+
 3. **Lint**:
 
    ```bash
@@ -68,6 +85,22 @@ passes `--root base/root --arm9 base/arm9.bin`.
    ```json
    {"waivers": [{"key": "object-blocked:33:600:395", "reason": "NPC behind counter"}]}
    ```
+
+   **Walk it offline** (optional, before building): `python3 -B -m
+   tools.maps.walk --map 542 --at 20 5 --facing down --moves "DOWN 1, UP 1"`
+   replays steps over `rom.nds` plus `data/maps/` (`--vanilla`: ROM only). It
+   prints each step with its reason: moved, blocked by collision, object or a
+   one-way behavior, map edge, height change (≥ 1.25 tiles of BDHC height),
+   ledge jump (two tiles), surf needed (`--surf` allows it), or warp to
+   map/anchor (with door step-out). `DIR N` is N full steps; in game a press
+   in a new direction turns first and a short tap only turns. `--check
+   cases.json` runs `{map, at, moves, expect: [map, x, z]}` cases and exits 1
+   on a mismatch. The rules come from the field decompilation (cited in
+   `walk.py`); it reproduces every walk the showcase and Route 29 proofs
+   measured in melonDS. Anything not modelled stops with "unmodelled": ice and
+   spin tiles, dynamic warps whose origin the walk did not see. Scripts, gym
+   puzzles, HM obstacles, NPC flags and the bike are ignored. A prediction,
+   not proof: still prove walking and warps in game (step 5).
 
 4. **Build** with the `hg-engine-delta-build` skill. The Makefile runs
    `tools.maps apply --in-place` right after `scripts/make.py`. It rewrites
@@ -119,16 +152,41 @@ translucency. Checked against melonDS on Route 29, Twinwood Crossing and Echo
 Cavern (2026-10-16): the same geometry and the same black void, pixel for
 pixel. Cave colours were within about 7/255. Outdoor colours differed only by
 the save clock's evening tint, a per-channel multiplier the renderer does not
-model. Not drawn: buildings/props, texture animation, fog, sprites.
+model.
+
+Map props (land.json `buildings`) are drawn as the game does
+(`AreaDataManager_Load`, `MapPropManager_DrawWithOffset`): AreaData field 0
+selects the prop list (`a/0/4/3`) and the prop textures (`a/0/7/0`); models
+come from `a/0/4/0` outdoors or `a/1/4/8` in rooms, placed at their
+translation (x/z from the chunk centre) with their scale. The game ignores the
+stored rotation, and so does the renderer. `props=False` on `mesh`, `view`,
+`overview` or `voids` gives land only. Not drawn: texture animation, fog,
+sprites, billboard facing, skinning (4 room models).
 
 `render.voids(scene)` lists tiles where the black void shows beside ground
 the player can reach (from the map's warps), seen from above (`top`) or from
 the camera's pitch (`camera`). The tile metrics cannot see this: open defect
-D2's floating floor has clean joins. It counts only chunks without buildings
-(not drawn) and ignores the map edge and tiles near warps (room exits).
-Vanilla sample: 38 maps. Every route, town and cave scored 0; two indoor rooms
-(D49R0107, D24R0208) keep 9–15 edge tiles by design. The showcase maps score
-6/67, 19/41 and 34/109 (top/camera). It is a review aid, not a gate.
+D2's floating floor has clean joins. It ignores the map edge and tiles near warps
+(room exits). Vanilla sample: every route, town and cave scored 0 (including
+New Bark, Cherrygrove, Violet, Azalea, Goldenrod with their buildings drawn).
+Rooms report the black edge outside their walls by design (D49R0107 11/9,
+D24R0208 15/15, Elm's Lab 5/5). The current showcase maps score
+0/2, 7/36 and 28/64 (top/camera). The generator's judge has a kit-only
+version of this check, the `renderVoid` review gate
+([style-system.md](style-system.md#score-scorepy)).
+
+To see what an edit changed: `python3 -B -m tools.maps.render_diff --map 543
+[--before REF|snapshot:NAME|DIR] [--after DIR] [--top] [--views]` renders the
+map before and after with the same camera. Before defaults to git `HEAD`,
+after to `data/maps/`. HEAD may not hold the pre-edit state, so run
+`render_diff --snapshot NAME` before a `resolve` or hand edit and diff with
+`--before snapshot:NAME`. It writes `build/map-render/diff/diff-M.png`
+(before | after, changed tiles red, newly void magenta, fixed void green),
+with `--views` the game camera at up to six changed regions, and a JSON
+summary: changed chunks (land id, model, BDHC, buildings, tiles), changed
+tiles with the reason (a land.json layer or changed pixels), `render.voids`
+before/after with newly void and fixed tiles, and the last `resolves` entry of
+the map's report. A few seconds per run.
 
 Review page for the user: `python3 -B -m tools.maps.review --map 543` serves
 `http://127.0.0.1:8765/`. It shows the overview with overlays (the judge's
@@ -141,6 +199,24 @@ The renderer and review page do not replace in-game proof: walking and warps
 are still proven with memory reads, and the agent's final map-look review
 still uses `showcase shots` (AGENTS.md "Maps").
 
+## Is my map work consistent?
+
+`python3 -B -m tools.maps.status [--map M] [--json]` checks in a few seconds,
+without building, that:
+- every generate report in `build/map-style/` still matches the land models
+  on disk (which `style resolve --write` requires) and stores its layout;
+- `showcase write` would change nothing;
+- lint has no errors;
+- `test.nds` is newer than every file in `data/maps/`;
+- the lab champion was measured on the current solver and judge code.
+
+Each problem is listed with what is out of date and the exact command that
+fixes it; exit 0 when nothing needs doing, 1 otherwise. When a report's
+stored model hashes are only out of date because the compose code changed
+(the lands on disk are still that report's grid), `status --refresh-hashes`
+updates them without regenerating the map. Run it before handing off map
+work and before trusting a melonDS observation.
+
 ## Checks for the tool itself
 
 ```bash
@@ -150,6 +226,7 @@ python3 -B -m unittest tools.maps.test_codecs
 python3 -B -m tools.maps.nsbmd roundtrip    # all 676 chunk models re-encode identically
 python3 -B -m unittest tools.maps.test_nsbmd
 python3 -B -m unittest tools.maps.test_render     # renderer, void check, review page
+python3 -B -m unittest tools.maps.test_render_diff tools.maps.test_walk tools.maps.test_events_edit tools.maps.test_status
 ```
 
 Run these after changing anything in `tools/maps/`.

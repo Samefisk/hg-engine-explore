@@ -76,6 +76,27 @@ a map uses.
 - `height_at(bdhc, x, z) -> float | None`: the game's height query (port of
   `src/field/bdhc.c` in `.codex-reference/pokeheartgold-full`).
 
+### Layout pre-check (`precheck.py`)
+
+Before a long `generate`, run the pre-check (about 1–2 s): `python3 -B -m
+tools.maps.style precheck --layout build/map-style/L.txt --map 33 [--relax 1]
+[--events EV.json --origin X0 Z0 | --start X Z]` (same `--relax` as
+generate; event x/z are matrix-wide, `--origin` is the layout's top-left map
+tile). It compares
+the layout with the class layouts of every vanilla chunk of the tileset and
+exits 1 on errors that will certainly fail a gate: a class the tileset has no
+cells for (water, a ledge direction), standable pockets that stay sealed even
+if every `*` is walkable, and warp or start tiles off `.`. Warnings are
+arrangements vanilla never uses: 2x2 class windows, and 3x3 windows with grass
+read as ground, that no vanilla chunk has (`*` matches anything); ledges
+without ground on both sides; paths, walls or water 1 tile wide. Each warning
+region is printed beside the nearest vanilla window with its land id and
+coordinates, so you can copy that habit. Fix every error; treat warnings as
+hints. Known-good layouts get 0–4, vanilla chunks checked against the rest of
+their tileset 0–11, and a clean pre-check does not predict the solver's own
+mismatches, 1-tile pockets from `*` tiles or `seamRate`; only `generate`
+measures those. `--calibrate` reprints the vanilla baseline for a tileset.
+
 ### Why quilting, not tile-by-tile collapse
 
 Vanilla chunks are modelled scenes, not tile sets. Tileset 2 (Route 29 and
@@ -146,7 +167,27 @@ pass the gates below.
 | `rigidViolations` = 0 | no tree, cliff, ledge or slope cut off from its vanilla neighbours |
 | `holes` = 0 | no tile missing ground vanilla always had there |
 | `voidExposed` = 0 | no floorless void tile beside standable land |
+| `renderVoid` = 0 | no black void visible beside reachable ground, from above or from the field camera's pitch (`coverage.py`); a review gate, see below |
 | `seamRate` ≥ 0.95 | joins whose edge profiles continue or that vanilla has; the rest can show as texture or height breaks |
+
+`renderVoid` is the judge's version of `tools.maps.render.voids`, computed
+from the kit alone. It draws each cell's polygons (no textures) at 4 samples
+per tile, from above and orthographically at the field camera's pitch (preset
+0, about 48.7° down), with the renderer's face culling. A tile counts when a
+sample shows nothing and the tile is within one tile of ground the player can
+reach (open land, ledges, HM-passable blocks, water connected to land). From
+above that is a gap in the floor; from the camera it is usually a missing wall
+face or a floor edge against nothing. The 2-tile grid border is skipped, as is
+camera void whose ray runs into the north border (neighbouring chunks draw
+there). Vanilla chunks of the bench tilesets score 0; chunks with buildings
+are not judged (props stand over polygon-less ground). It cannot see void
+through transparent texels; `render.voids` can. About 15–20 ms per chunk once
+a kit's cells are cached. It is a **review gate** (`score.REVIEW_GATES`): it
+fails the score, counts in the bench and in hotspots, and `generate` ranks
+seeds by it, but a seed failing only review gates is still written, with the
+tiles in the report's `renderVoidTiles` and a warning. When it was added, 16 of
+18 bench seeds and all three showcase maps failed it, so a hard gate would
+have blocked generation; fix the listed tiles with `resolve`.
 
 `hotspots` lists the 8×8 areas with the most problems: where to look first
 in game. Informational: `layoutMatch`, `pairRate`, `windowRate`.

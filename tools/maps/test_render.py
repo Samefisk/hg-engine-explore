@@ -171,6 +171,29 @@ class VanillaTest(unittest.TestCase):
     def test_union_cave_has_no_void_beside_reachable_floor(self):
         self.assertEqual(render.voids(render.MapScene(107, None)), {"top": [], "camera": []})
 
+    def test_cherrygrove_draws_its_buildings_and_has_no_void(self):
+        scene = render.MapScene(67, None)  # MAP_CHERRYGROVE
+        x, z = 564, 393  # just south of the Pokemon Center door
+        mesh = scene.mesh([(x // render.GRID + dx, z // render.GRID + dz) for dz in (-1, 0, 1) for dx in (-1, 0, 1)])
+        self.assertGreater(mesh.props["drawn"], 10)
+        self.assertEqual(mesh.props["skipped"], 0)
+        self.assertGreater(len(mesh.pos), mesh.land_triangles)
+        with_props, without = scene.view(x, z), scene.view(x, z, props=False)
+        self.assertGreater((with_props != without).any(axis=2).mean(), 0.05)  # building pixels
+        self.assertEqual(render.voids(scene), {"top": [], "camera": []})
+
+
+class NodeMatrixTest(unittest.TestCase):
+    def test_pivot_rotation(self):
+        # Pivot 4 (+1 at the centre), A and B at elements 0 and 2, B at 6, -A at 8 (SIGN_REVD);
+        # the scale applies first (x doubled), then the translation.
+        c, s = 2896, 2896  # 45 degrees in fx16
+        m = render._node_matrix({"flag": 8 | (4 << 4) | 0x400, "m00": 0, "rotation": [c, s],
+                                 "translation": [4096, 0, 0], "scale": [8192, 4096, 4096, 0, 0, 0]})
+        np.testing.assert_allclose(m[:3, :3], [[2 * c / 4096, 0, 2 * s / 4096], [0, 1, 0], [s / 4096, 0, -c / 4096]],
+                                   atol=1e-6)
+        self.assertEqual(list(m[3, :3]), [1.0, 0.0, 0.0])
+
 
 @unittest.skipUnless(ROM.exists(), "needs rom.nds")
 class ReviewTest(unittest.TestCase):
