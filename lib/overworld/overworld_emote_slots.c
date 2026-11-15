@@ -131,7 +131,8 @@ void *EMOTE_PART("admit") OverworldEmoteSlots_Admit(void *context, LocalMapObjec
     OverworldEmoteOwner *owner = ov01_021F1450(context, 18);
     OverworldEmoteSlot *slot = NULL;
     VecFx32 position, facing;
-    if (emote < 0 || emote >= 14 || !owner || owner->closing || owner->count >= 3)
+    if (((u32)emote & ~OVERWORLD_EMOTE_MODE_QUIET) >= 14
+        || !owner || owner->closing || owner->count >= 3)
         return NULL;
     slot = OverworldEmoteSlots_Select(owner, object);
     if (!slot) return NULL;
@@ -141,9 +142,12 @@ void *EMOTE_PART("admit") OverworldEmoteSlots_Admit(void *context, LocalMapObjec
         owner->retirementTask = SysTask_CreateOnVWaitQueue(OverworldEmoteSlots_Collect, owner, 0);
         if (!owner->retirementTask) return NULL;
     }
-    *slot = (OverworldEmoteSlot){.owner=owner, .object=object, .state=EMOTE_RESERVED};
+    /* CreateOwner and Release clear every FREE slot. Select cannot return
+     * another state, so its resource words are already zero. */
+    slot->owner=owner; slot->object=object; slot->state=EMOTE_RESERVED;
     owner->count++;
-    if (!OverworldEmoteSlots_Prepare(slot, context, emote)) goto reject;
+    if (!OverworldEmoteSlots_Prepare(slot, context,
+            (u32)emote & ~OVERWORLD_EMOTE_MODE_QUIET)) goto reject;
     MapObject_CopyPositionVector(object, &position);
     MapObject_CopyFacingVector(object, &facing);
     position.x += facing.x;
@@ -172,11 +176,15 @@ static BOOL EMOTE_PART("initialize") OverworldEmoteSlots_Initialize(void *effect
 {
     const OverworldEmoteInit *init = sub_02068D98(effect);
     OverworldEmoteSlot *slot = init->slot;
-    OverworldEmoteNativeModelTemplate model = {
-        .modelFile=init->owner->modelFile, .texture=init->owner->texture,
-        .animation=ov01_0220952C, .textureKey=slot->textureKey, .paletteKey=slot->paletteKey
-    };
+    OverworldEmoteNativeModelTemplate model;
+    model.modelFile=init->owner->modelFile;
+    model.texture=init->owner->texture;
+    model.animation=ov01_0220952C;
+    model.textureKey=slot->textureKey; model.texture4x4Key=0;
+    model.paletteKey=slot->paletteKey;
     VecFx32 position;
+    /* The native leaf writes all four animationState words before the model
+     * constructor reads them. Only the unused 4x4 texture key needs zero. */
     sub_02026E18(init->owner->animationFile, model.animationState);
     sub_02068DB8(effect, &position);
     slot->model = ov01_021F16EC(init->context, &model, &position);
@@ -198,7 +206,7 @@ static BOOL EMOTE_PART("initialize") OverworldEmoteSlots_Initialize(void *effect
             sub_02020838(slot->texture, 0), 512)
         || !GF_CreateNewVramTransferTask(1, (slot->paletteKey & 0xFFFF) << 3,
             sub_02020888(slot->texture, 0), 32)) return FALSE;
-    PlaySE(1501); /* Existing quiet caller pairs this with its unchanged StopSE. */
+    if (!(sub_02068D90(effect) & OVERWORLD_EMOTE_MODE_QUIET)) PlaySE(1501);
     return TRUE;
 }
 

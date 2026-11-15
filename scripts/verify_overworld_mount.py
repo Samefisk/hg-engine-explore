@@ -32,7 +32,7 @@ PLAYER_STEP_RESIDENT_HANDLER = 0x023D9B0D
 PLAYER_STEP_RESIDENT_LITERAL = PLAYER_STEP_WRAPPER + 0x20
 FIELD_INPUT_WRAPPER = OVERLAY_ENTRY + 0xE0
 CRASH_SOUND_WRAPPER = OVERLAY_ENTRY + 0x140
-TOGGLE_LATCH_WRAPPER = OVERLAY_BASE + 0xC78
+TOGGLE_LATCH_WRAPPER = OVERLAY_BASE + 0x30C
 TOGGLE_LATCH_ADDR = 0x023BC7DA
 MOVE_CONTROL_CALL_SITES = (0x0203E1F0, 0x0203E260, 0x0203E2E4)
 FIELD_INPUT_CALL_SITE = 0x0203E270
@@ -117,6 +117,20 @@ def decode_thumb_bl(arm9: bytes, load_address: int, address: int) -> int:
     if displacement & (1 << 22):
         displacement -= 1 << 23
     return address + 4 + displacement
+
+
+def toggle_latch_contract(original, wrapper, tick, linked: bytes,
+                          packaged: bytes, callback: int, file_size: int) -> None:
+    """T83 moves only the unchanged forwarding leaf into its owned prefix tail."""
+    require(original == (0, 8, ".overworld_mount_tick_latch_tail", "F")
+            and wrapper == (TOGGLE_LATCH_WRAPPER, 8, ".text", "F")
+            and tick is not None and tick[2:] == (".text", "F")
+            and OVERLAY_BASE + 0xC78 <= tick[0]
+            and 0 < tick[1] <= OVERLAY_BASE + file_size - tick[0]
+            and callback == TOGGLE_LATCH_WRAPPER + 1
+            and linked == packaged == bytes.fromhex("004b1847")
+                + struct.pack("<I", tick[0] | 1),
+            "Select frame callback lost its exact owned forwarding leaf or Tick target")
 
 
 def fixed_import_source_contract(source: str) -> None:
@@ -566,7 +580,7 @@ def retained_mask_capsule_contract(symbol, linked_body: bytes, packaged_body: by
             and hashlib.sha256(linked_body).hexdigest()
                 == "1edbd1908da0b08504c7de4f948799ab0d1940b3ebc83333bb2e0e8394c280b0"
             and packaged_body[0x130:0x14C] == linked_body
-            and re.search(r"\b23d4858:\s+[0-9a-f]+\s+[0-9a-f]+\s+bl\s+1fff930\s+"
+            and re.search(r"\b23d485c:\s+[0-9a-f]+\s+[0-9a-f]+\s+bl\s+1fff930\s+"
                           r"<OverworldWildSpawns_RetainedMaskNamesActiveSpawns>", caller),
             "private retained mask leaf has wrong address, extent, bytes or Thumb call")
 
@@ -574,13 +588,13 @@ def retained_mask_capsule_contract(symbol, linked_body: bytes, packaged_body: by
 def retained_mask_call_owner_contract(symbol, binding, linked_body: bytes,
                                       packaged_body: bytes) -> None:
     """The reviewed T65 caller moved; its private leaf and target did not."""
-    require(symbol == (0x023D46C4, 1072, ".text", "F")
-            and binding is not None and binding[:3] == (0x023D46C5, 1072, "FUNC")
+    require(symbol == (0x023D46C8, 1072, ".text", "F")
+            and binding is not None and binding[:3] == (0x023D46C9, 1072, "FUNC")
             and binding[3].isdigit() and int(binding[3]) > 0
             and len(linked_body) == 1072 and packaged_body == linked_body
             and hashlib.sha256(linked_body).hexdigest()
-                == "9d321a57ac1c6f5678b5c879f1dd1791aec9e9922ab07b956415a338809f1dd2"
-            and decode_thumb_bl(linked_body, 0x023D46C4, 0x023D4858) == 0x01FFF930,
+                == "4bd024b6dd6b8137b0815667d1911729bcf6d57c840f8a9291eb384fc8233c70"
+            and decode_thumb_bl(linked_body, 0x023D46C8, 0x023D485C) == 0x01FFF930,
             "private retained mask caller lost its exact Thumb owner, body, package or target")
 
 
@@ -926,7 +940,12 @@ def custom_motion_source_contract(
     for code, expected in (
         (start, "const OverworldWildBehaviorProfileData *lane = &sOverworldMountState.snapshot.profile;"),
         (start, "u8 rawLocomotion = lane->chillAction;"),
-        (start, "OverworldMount_PlanHopTrajectory((u8)distance, &trajectory)"),
+        (start, "OverworldMount_PlanHopTrajectory((u8)distance, direction, adjacent, &trajectory)"),
+        (hop_bridge, "call.operation = OVERWORLD_MOUNT_ACTION_CHAIN_FORWARD_TARGET;"),
+        (hop_bridge, "call.direction = direction;"),
+        (hop_bridge, "if (!OVERWORLD_MOUNT_ACTION_ADAPTER_DISPATCH(&call)) { return FALSE; }"),
+        (hop_bridge, "sOverworldMountState.motionTargetBaseY = OVERWORLD_WILD_RUNTIME_OVERLAY_ENTRY->getGroundBaseY(sOverworldMountState.fieldSystem, sOverworldMountState.surfaceCatalog, call.avatar->mapObject, sOverworldMountState.motionTargetX, sOverworldMountState.motionTargetY);"),
+        (hop_bridge, "if (raised && sOverworldMountState.motionTargetBaseY <= sOverworldMountState.motionStartBaseY) { return FALSE; }"),
         (hop_bridge, "call.operation = OVERWORLD_MOUNT_ACTION_PLAN_HOP_TRAJECTORY;"),
         (hop_bridge, "call.action = distance;"),
         (hop_bridge, "call.state = &sOverworldMountState;"),
@@ -1509,7 +1528,7 @@ def main() -> None:
         ((retained_symbol[0], retained_symbol[1], ".text", "F"), retained_body, carrier_package, transition_calls),
         (retained_symbol, bytes([retained_body[0] ^ 1]) + retained_body[1:], carrier_package, transition_calls),
         (retained_symbol, retained_body, carrier_package[:0x130] + bytes([carrier_package[0x130] ^ 1]) + carrier_package[0x131:], transition_calls),
-        (retained_symbol, retained_body, carrier_package, transition_calls.replace("23d4858:", "23d47ce:")),
+        (retained_symbol, retained_body, carrier_package, transition_calls.replace("23d485c:", "23d47ce:")),
         (retained_symbol, retained_body, carrier_package, transition_calls.replace("bl\t1fff930", "blx\t1fff930")),
         (retained_symbol, retained_body, carrier_package, transition_calls.replace("1fff930", "1fff932")),
     ):
@@ -1687,20 +1706,40 @@ def main() -> None:
         and callbacks[-1] & ~1 != CRASH_SOUND_WRAPPER,
         "frame callback aliases a fixed player-control wrapper",
     )
+    mount_symbols = layout_symbols(mount_elf, "arm-none-eabi-objdump")
+    mount_original = layout_symbols(
+        REPO / "build/overworld_mount_overlay/overworld_mount_overlay.o",
+        "arm-none-eabi-objdump")
+    original_toggle = mount_original.get("OverworldMount_TickLatched")
+    toggle_symbol = mount_symbols.get("OverworldMount_TickLatched")
+    tick_symbol = mount_symbols.get("OverworldMount_Tick")
+    toggle_linked = elf_bytes_at(mount_elf, TOGGLE_LATCH_WRAPPER, 8)
     toggle_wrapper = packaged[
         TOGGLE_LATCH_WRAPPER - OVERLAY_BASE:
-        TOGGLE_LATCH_WRAPPER - OVERLAY_BASE + 8
-    ]
-    require(
-        callbacks[-1] == TOGGLE_LATCH_WRAPPER + 1
-        and toggle_wrapper[:4] == bytes.fromhex("00 4b 18 47")
-        and (
-            OVERLAY_BASE
-            <= (struct.unpack_from("<I", toggle_wrapper, 4)[0] & ~1)
-            < OVERLAY_BASE + file_size
-        ),
-        "Select frame callback does not forward to the mounted tick",
-    )
+        TOGGLE_LATCH_WRAPPER - OVERLAY_BASE + 8]
+    toggle_latch_contract(original_toggle, toggle_symbol, tick_symbol,
+                          toggle_linked, toggle_wrapper, callbacks[-1], file_size)
+    for bad_original, bad_wrapper, bad_tick, bad_linked, bad_packaged, bad_callback in (
+        ((0, 8, ".text", "F"), toggle_symbol, tick_symbol,
+         toggle_linked, toggle_wrapper, callbacks[-1]),
+        (original_toggle, (TOGGLE_LATCH_WRAPPER + 2, 8, ".text", "F"), tick_symbol,
+         toggle_linked, toggle_wrapper, callbacks[-1]),
+        (original_toggle, toggle_symbol, (tick_symbol[0] + 2, *tick_symbol[1:]),
+         toggle_linked, toggle_wrapper, callbacks[-1]),
+        (original_toggle, toggle_symbol, tick_symbol,
+         bytes([toggle_linked[0] ^ 1]) + toggle_linked[1:], toggle_wrapper, callbacks[-1]),
+        (original_toggle, toggle_symbol, tick_symbol,
+         toggle_linked, toggle_wrapper[:4] + struct.pack("<I", tick_symbol[0]), callbacks[-1]),
+        (original_toggle, toggle_symbol, tick_symbol,
+         toggle_linked, toggle_wrapper, OVERLAY_BASE + 0xC79),
+    ):
+        try:
+            toggle_latch_contract(bad_original, bad_wrapper, bad_tick,
+                                  bad_linked, bad_packaged, bad_callback, file_size)
+        except SystemExit:
+            pass
+        else:
+            require(False, "wrong Mount tick forwarding owner, body or callback passed")
 
     arm9_offset, arm9_entry, arm9_load, arm9_size = struct.unpack_from(
         "<4I", rom, 0x20
@@ -2015,9 +2054,9 @@ def main() -> None:
         "mounted Hop does not suppress synthetic warp/step transitions",
     )
     # A Hop walking-style mount keeps its Hop locomotion and Hops on held
-    # input. Every mounted Hop (Hop style, ledge Hop, B Jump) takes one
-    # exact-distance forward target, from hopMaxDistance down to
-    # hopMinDistance; the chain adapter sets both to its one distance. Only the
+    # input. Ordinary Hop first tries its legal adjacent raised support, then
+    # exact forward targets from hopMaxDistance down to hopMinDistance. The
+    # chain adapter sets both to its one distance and skips that preference. Only the
     # chain-hop path (ledge Hop and B Jump) streams terrain live like
     # cardinal Walk.
     require(
@@ -2025,7 +2064,10 @@ def main() -> None:
         and re.search(
             r"chillAction =\s*OW_WILD_BEHAVIOR_LOCOMOTION_WALK;",
             mount_source) is None
-        and "actionCall.action = (u8)distance;" in mount_source
+        and "distance = adjacent ? 1 : lane->hopMaxDistance;" in mount_source
+        and "(u8)distance, direction, adjacent, &trajectory)" in mount_source
+        and "call.action = distance;" in function_body(
+            mount_source, "OverworldMount_PlanHopTrajectory")
         and "if (distance <= lane->hopMinDistance || distance <= 1) {" in mount_source
         and "hop_target_found" not in mount_source
         and "if (!liveStream && !OverworldMount_BeginTerrainStream())" in mount_source
@@ -2514,12 +2556,15 @@ def main() -> None:
         ) < resident_field_ready_task.group(0).find(
             "if (!sub_0203DF8C(fieldSystem))"
         )
-        and "section(\".overworld_mount_toggle_latch\")" in mount_source
+        and "section(\".overworld_mount_tick_latch_tail\")" in mount_source
         and "OverworldMount_TickLatched" in mount_source
         and "__mount_state_start + 0x96 == 0x023BC7DA" in mount_linker
         and "OverworldMount_TickLatched," in mount_source
         and ". = ORIGIN(rom) + 0xC78;" in mount_linker
-        and "KEEP(*(.overworld_mount_toggle_latch))" in mount_linker,
+        and "KEEP(*(.overworld_mount_tick_latch_tail))" in mount_linker
+        and ". = ORIGIN(rom) + 0x30C;" in mount_linker
+        and "ABSOLUTE(__mount_tick_latch_tail_start) == ORIGIN(rom) + 0x30C" in mount_linker
+        and "ASSERT(. == ORIGIN(rom) + 0x314," in mount_linker,
         "Select input can be lost while the mount frame service is stopped",
     )
     require(

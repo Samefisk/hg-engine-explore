@@ -14,7 +14,7 @@ static void print_usage(const char *program)
 {
     fprintf(stderr,
         "usage: %s [--blob FILE] [--batch] [--species N] [--level N] [--terrain N] "
-        "[--shiny 0|1] [--groups MASK] "
+        "[--shiny 0|1] [--groups MASK] [--map-id N] "
         "[--forced-override-mask MASK] [--behavior-class auto|N] "
         "[--request-version N] [--active-conditional-mask MASK] "
         "[--target-kind N] [--target-actor-slot N] "
@@ -170,20 +170,22 @@ static int run_batch(const void *blobBytes, u32 blobSize)
     int failed = 0;
 
     while (fgets(line, sizeof(line), stdin) != NULL) {
-        unsigned long values[19];
+        unsigned long values[20];
         char extra;
         BehaviorResolveRequest request;
         int parsed;
+        int consumed = 0;
 
         parsed = sscanf(line,
                 "%lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu "
-                "%lu %lu %lu %lu %lu %lu %c",
+                "%lu %lu %lu %lu %lu %lu%n %lu %c",
                 &values[0], &values[1], &values[2], &values[3],
                 &values[4], &values[5], &values[6], &values[7],
                 &values[8], &values[9], &values[10], &values[11],
                 &values[12], &values[13], &values[14], &values[15],
-                &values[16], &values[17], &values[18], &extra);
-        if (parsed != 19
+                &values[16], &values[17], &values[18], &consumed, &values[19], &extra);
+        if ((parsed != 19 && parsed != 20)
+            || (parsed == 19 && strspn(line + consumed, " \t\r\n") != strlen(line + consumed))
             || values[0] > 0xFFFFul
             || values[1] > 0xFFul
             || values[2] > 0xFFul
@@ -202,9 +204,10 @@ static int run_batch(const void *blobBytes, u32 blobSize)
             || values[15] > 0xFFFFul
             || values[16] > 0xFFFFul
             || values[17] > 0xFFul
-            || values[18] > 0xFFFFul) {
+            || values[18] > 0xFFFFul
+            || (parsed == 20 && values[19] > 0xFFFFul)) {
             fprintf(stderr,
-                "invalid resolver batch request; expected the 19-value v2 format: %s",
+                "invalid resolver batch request; expected the 19/20-value v2 format: %s",
                 line);
             return 2;
         }
@@ -216,6 +219,7 @@ static int run_batch(const void *blobBytes, u32 blobSize)
         }
         memset(&request, 0, sizeof(request));
         request.context.species = (u16)values[0];
+        request.context.mapId = parsed == 20 ? (u16)values[19] : OW_WILD_BEHAVIOR_MATCH_ANY_MAP;
         request.context.level = (u8)values[1];
         request.context.terrain = (u8)values[2];
         request.context.shiny = (u8)values[3];
@@ -258,6 +262,7 @@ int main(int argc, char **argv)
 
     memset(&request, 0, sizeof(request));
     request.context.level = 1;
+    request.context.mapId = OW_WILD_BEHAVIOR_MATCH_ANY_MAP;
     request.context.terrain = OW_WILD_SPAWN_TERRAIN_LAND;
     request.behaviorClass = BEHAVIOR_RESOLVER_CLASS_AUTO;
     request.winningConditionId = BEHAVIOR_RESOLVER_NO_CONDITION;
@@ -293,6 +298,8 @@ int main(int argc, char **argv)
         }
         if (strcmp(option, "--species") == 0 && parsed <= 0xFFFFu) {
             request.context.species = (u16)parsed;
+        } else if (strcmp(option, "--map-id") == 0 && parsed <= 0xFFFFu) {
+            request.context.mapId = (u16)parsed;
         } else if (strcmp(option, "--level") == 0 && parsed <= 0xFFu) {
             request.context.level = (u8)parsed;
         } else if (strcmp(option, "--terrain") == 0 && parsed <= 0xFFu) {

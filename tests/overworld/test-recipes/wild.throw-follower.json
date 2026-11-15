@@ -1,0 +1,238 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.throw-follower",
+  "title": "Wild Geodude throws the unchanged follower",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "TICKETS.md",
+  "requirements": [
+    "current.wild-throw-follower"
+  ],
+  "budgets": {
+    "maxSeconds": 600,
+    "maxFrames": 1800,
+    "noProgressFrames": 360,
+    "minObservedFrames": 2
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    },
+    {
+      "id": "geodude",
+      "species": 74,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "party-throw-follower-cargo-v1",
+      "subjects": [
+        "mankey",
+        "geodude"
+      ]
+    }
+  ],
+  "setup": [
+    {
+      "id": "throw-tile",
+      "op": "teleport",
+      "args": {
+        "map": 101,
+        "x": 5,
+        "z": 8,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-field",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "saved-follower",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "follower-settled",
+          "species": 56,
+          "partySlot": 2,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "bind-mankey",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-geodude",
+      "op": "spawn",
+      "args": {
+        "species": 74,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 5,
+        "z": 4
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 360,
+        "noProgressFrames": 360
+      }
+    },
+    {
+      "id": "bind-geodude",
+      "op": "bind",
+      "args": {
+        "subject": "geodude"
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "normal-follower-move",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "walk-player-left",
+      "op": "step",
+      "args": {
+        "frames": 40,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 40,
+        "noProgressFrames": 40
+      }
+    },
+    {
+      "id": "move-away-during-pursuit",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "natural-pickup-and-launch",
+      "op": "step",
+      "args": {
+        "frames": 600,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "party-throw-follower-cargo-v1",
+          "stage": "launched",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 300,
+        "maxFrames": 600,
+        "noProgressFrames": 600
+      }
+    },
+    {
+      "id": "walk-player-right",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "follow-after-throw",
+      "op": "step",
+      "args": {
+        "frames": 300,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "party-throw-follower-cargo-v1",
+          "stage": "resumed",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 300,
+        "noProgressFrames": 300
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "party-throw-follower-cargo-v1",
+      "when": "final"
+    }
+  ]
+}

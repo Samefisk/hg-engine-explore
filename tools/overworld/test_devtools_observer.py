@@ -696,6 +696,139 @@ class SharedNativeObserverTests(unittest.TestCase):
         self.assertFalse(f.observer.spawn_contexts)
         self.assertIsNone(f.hooks.error)
 
+    def test_heap_allocation_diagnostic_is_baseline_only_and_ignores_success(self):
+        f = self.f
+        for label, address in (("heap-alloc-diagnostic", 0x0201AA8C),
+                               ("heap-alloc-end-diagnostic", 0x0201AACC)):
+            self.assertEqual(f.observer.calls[label]["address"], address)
+            for mode in (None, "omit-spawn-details"):
+                f.spawn_cost_probe = SimpleNamespace(mode=mode, gate=lambda observer, label: True)
+                f.enter(label, r0=4, r1=0x30000, r2=7, r3=9)
+                self.assertEqual(f.observer.calls[label]["entered"], 0)
+                self.assertFalse(f.observer.return_tokens)
+                self.assertNotIn("heapAllocationFailures", f.observer.snapshot())
+            f.spawn_cost_probe = SimpleNamespace(mode="baseline", gate=lambda observer, label: True)
+            f.enter(label, r0=4, r1=0x30000, r2=7, r3=9)
+            f.returned(0x02244000)
+            self.assertEqual(f.observer.calls[label]["returned"], 1)
+            self.assertNotIn("heapAllocationFailures", f.observer.snapshot())
+        self.assertFalse(f.observer.pending)
+        self.assertFalse(f.observer.return_tokens)
+        self.assertIsNone(f.hooks.error)
+
+    def test_failed_heap_allocation_keeps_archive_identity_before_main_queue(self):
+        f = self.f
+        f.spawn_cost_probe = SimpleNamespace(mode="baseline", gate=lambda observer, label: True)
+        # Include a non-archive parent to prove the chain contains only archive
+        # calls, with their entry arguments rather than the allocator's registers.
+        f.enter("follower-hop-start-cost", sp=0x027E3800, lr=0x02001001,
+                r0=f.rt.WILD_STATE, r1=0x02231000, r2=7, r3=0x02224000)
+        f.enter("archive-id-alloc-read-cost", sp=0x027E37E0, lr=0x021FBA65,
+                r0=44, r1=12, r2=4, r3=0)
+        f.regs.sp, f.regs.lr = 0x027E37C0, 0x0200759F
+        f.regs.r0, f.regs.r1, f.regs.r2, f.regs.r3 = 4, 0x3A000, 7, 9
+
+        def observe_without_writes(address):
+            memory, registers = dict(f.memory), vars(f.regs).copy()
+            clocks = (f.rt.EXECUTED_FRAME_COUNT, dict(f.guest_clock))
+            f.callbacks[address](address, 2)
+            self.assertEqual(f.memory, memory)
+            self.assertEqual(vars(f.regs), registers)
+            self.assertEqual((f.rt.EXECUTED_FRAME_COUNT, f.guest_clock), clocks)
+            self.assertIsNone(f.hooks.error)
+
+        observe_without_writes(0x0201AA8C)
+        self.assertNotIn("heapAllocationFailures", f.observer.snapshot())
+        f.put(0x02200008, struct.pack("<I", 101))
+        f.rt.EXECUTED_FRAME_COUNT = 11
+        # r1-r3 are caller-saved: return-time values must not replace the entry.
+        f.regs.r0, f.regs.r1, f.regs.r2, f.regs.r3 = 0, 1, 2, 3
+        observe_without_writes(0x0200759E)
+        expected = {
+            "allocator": "heap-alloc-diagnostic",
+            "arguments": [4, 0x3A000, 7, 9], "caller": 0x0200759E,
+            "archiveChain": [{"label": "archive-id-alloc-read-cost",
+                "arguments": [44, 12, 4, 0], "caller": 0x021FBA64}],
+            "entry": {"actorFrame": 100, "nativeCycle": 10},
+            "returned": {"actorFrame": 101, "nativeCycle": 11},
+            "returnValue": 0, "acceptedProof": False,
+        }
+        # The failing archive call has not returned, and no main queue has
+        # flushed. An immediate abort can still export the allocation failure.
+        self.assertEqual(f.observer.calls["archive-id-alloc-read-cost"]["returned"], 0)
+        self.assertFalse(f.observer.pending)
+        snapshot = f.observer.snapshot()
+        self.assertEqual(snapshot["heapAllocationFailures"], [expected])
+        snapshot["heapAllocationFailures"][0]["archiveChain"][0]["arguments"][1] = 999
+        self.assertEqual(f.observer.snapshot()["heapAllocationFailures"], [expected])
+        f.returned(0, sp=0x027E37E0, address=0x021FBA64)
+        f.returned(0, sp=0x027E3800, address=0x02001000)
+        self.assertFalse(f.observer.contexts)
+        self.assertEqual(f.observer.snapshot()["heapAllocationFailures"], [expected])
+        self.assertIsNone(f.hooks.error)
+
+    def test_end_heap_failure_exposes_pending_archive_owner_until_its_return(self):
+        f = self.f
+        self.assertNotIn("pendingArchiveCalls", f.observer.snapshot())
+        f.spawn_cost_probe = SimpleNamespace(mode="baseline", gate=lambda observer, label: True)
+        f.enter("follower-hop-start-cost", sp=0x027E3800, lr=0x02001001,
+                r0=f.rt.WILD_STATE, r1=0x02231000, r2=7, r3=0x02224000)
+        f.enter("archive-id-alloc-read-cost", sp=0x027E37E0, lr=0x021FBA65,
+                r0=44, r1=12, r2=4, r3=0)
+        outer = {"label": "archive-id-alloc-read-cost",
+                 "entry": {"actorFrame": 100, "nativeCycle": 10},
+                 "arguments": [44, 12, 4, 0], "caller": 0x021FBA64}
+        f.put(0x02200008, struct.pack("<I", 101))
+        f.rt.EXECUTED_FRAME_COUNT = 11
+        f.enter("archive-read-cost", sp=0x027E37C0, lr=0x02007565,
+                r0=0x02244000, r1=12, r2=0, r3=0x30000)
+        inner = {"label": "archive-read-cost",
+                 "entry": {"actorFrame": 101, "nativeCycle": 11},
+                 "arguments": [0x02244000, 12, 0, 0x30000], "caller": 0x02007564}
+        self.assertEqual(f.observer.snapshot()["pendingArchiveCalls"], [outer, inner])
+        f.enter("heap-alloc-end-diagnostic", sp=0x027E37A0, lr=0x02007755,
+                r0=4, r1=0x30000, r2=1, r3=2)
+        f.returned(0, sp=0x027E37A0, address=0x02007754)
+        expected = {"allocator": "heap-alloc-end-diagnostic",
+                    "arguments": [4, 0x30000, 1, 2], "caller": 0x02007754,
+                    "archiveChain": [{key: value for key, value in row.items() if key != "entry"}
+                                     for row in (outer, inner)],
+                    "entry": {"actorFrame": 101, "nativeCycle": 11},
+                    "returned": {"actorFrame": 101, "nativeCycle": 11},
+                    "returnValue": 0, "acceptedProof": False}
+        snapshot = f.observer.snapshot()
+        self.assertEqual(snapshot["heapAllocationFailures"], [expected])
+        self.assertEqual(snapshot["pendingArchiveCalls"], [outer, inner])
+        self.assertFalse(f.observer.pending)
+        snapshot["pendingArchiveCalls"][0]["arguments"][1] = 999
+        self.assertEqual(f.observer.snapshot()["pendingArchiveCalls"], [outer, inner])
+        f.returned(0, sp=0x027E37C0, address=0x02007564)
+        self.assertEqual(f.observer.snapshot()["pendingArchiveCalls"], [outer])
+        f.returned(0, sp=0x027E37E0, address=0x021FBA64)
+        self.assertNotIn("pendingArchiveCalls", f.observer.snapshot())
+        self.assertEqual(len(f.observer.contexts), 1)  # The non-archive parent remains.
+        self.assertEqual(f.observer.snapshot()["heapAllocationFailures"], [expected])
+        f.returned(0, sp=0x027E3800, address=0x02001000)
+        self.assertIsNone(f.hooks.error)
+
+    def test_failed_heap_allocation_keeps_only_the_latest_eight_failures(self):
+        f = self.f
+        f.spawn_cost_probe = SimpleNamespace(mode="baseline", gate=lambda observer, label: True)
+        for size in range(1, 13):
+            f.enter("heap-alloc-diagnostic", r0=4, r1=size, r2=0, r3=0)
+            f.returned(0)
+            # Successful calls between failures must not evict failure evidence.
+            f.enter("heap-alloc-diagnostic", r0=4, r1=size + 100, r2=0, r3=0)
+            f.returned(0x02244000)
+        rows = f.observer.snapshot()["heapAllocationFailures"]
+        self.assertEqual([row["arguments"][1] for row in rows], list(range(5, 13)))
+        self.assertTrue(all(row["archiveChain"] == [] and row["returnValue"] == 0
+                            and row["acceptedProof"] is False for row in rows))
+        self.assertEqual(f.observer.calls["heap-alloc-diagnostic"]["returned"], 24)
+        self.assertFalse(f.observer.pending)
+        self.assertFalse(f.observer.return_tokens)
+        self.assertIsNone(f.hooks.error)
+
     def test_sequential_archive_cost_is_baseline_only_and_keeps_exact_entry_return(self):
         f = self.f
         label, address = "archive-sequential-read-cost", 0x020078D8
@@ -741,7 +874,13 @@ class SharedNativeObserverTests(unittest.TestCase):
                 for origin, code in g.code_regions:
                     if origin == 0x02000000:
                         end = address - origin
-                        code = code[:end] if not replacement else code[:end] + replacement + code[end + 32:]
+                        if not replacement:
+                            # Omit this one anchor; keep later stock owners so
+                            # they do not mask the intended missing-entry error.
+                            regions.extend(((origin, code[:end]),
+                                            (address + 32, code[end + 32:])))
+                            continue
+                        code = code[:end] + replacement + code[end + 32:]
                     regions.append((origin, code))
                 g.code_regions = regions
                 g.observer = NativeObservation(g, g.hooks, lambda path, entry, size: g.read(entry, size))
@@ -2063,7 +2202,7 @@ class AutomaticQuerySpawnObserverTests(unittest.TestCase):
     def begin(self):
         f = self.f
         f.put(0x027E3800, struct.pack("<2I", self.selected_terrain, self.selected_slot))
-        offset = 0xFE38 if f.read(self.control + 47, 1)[0] == 1 else 0xFF62
+        offset = 0x10092 if f.read(self.control + 47, 1)[0] == 1 else 0x101EE
         f.enter("spawn-queued", r0=self.call, r1=self.control,
                 r2=f.rt.WILD_STATE, r3=0x02231000,
                 lr=(self.owner["entry"] + offset) | 1)
@@ -2077,7 +2216,7 @@ class AutomaticQuerySpawnObserverTests(unittest.TestCase):
         if before_stage is not None:
             f.put(self.runtime + 244, bytes((before_stage, 0, 0, 0)))
         f.put(0x027E3600, struct.pack("<3I", self.selected_terrain, self.selected_slot, self.prepared))
-        self.leaf_return = self.owner["entry"] + (0xE1F4 if f.read(self.control + 44, 1)[0] == 8 else 0xF8C6)
+        self.leaf_return = self.owner["entry"] + (0xE460 if f.read(self.control + 44, 1)[0] == 8 else 0xFB56)
         f.enter("spawn-query-finalized", sp=0x027E3600, lr=self.leaf_return | 1,
                 r0=self.call, r1=self.control, r2=f.rt.WILD_STATE, r3=0x02231000)
         if resolver:
@@ -2089,7 +2228,7 @@ class AutomaticQuerySpawnObserverTests(unittest.TestCase):
 
     def finish(self):
         f = self.f
-        offset = 0xFE38 if f.read(self.control + 47, 1)[0] == 1 else 0xFF62
+        offset = 0x10092 if f.read(self.control + 47, 1)[0] == 1 else 0x101EE
         f.returned(1, address=self.owner["entry"] + offset)
         f.observer.completed_frame(12)
         return f.observer.drain()
@@ -2111,6 +2250,43 @@ class AutomaticQuerySpawnObserverTests(unittest.TestCase):
             body = elf_bytes_at(linked, address, size)
             calls = packaged_thumb_calls(body, address, address, size)
             self.assertIn((QUERY_SPAWN_CALLERS[key] - 4, "bl", bindings[target][0] & ~1), calls)
+        # Both Control branches call the same leaf. Identify its data source,
+        # not just its callee: Commit uses runtime.queuedSpawn (248<<2), queue
+        # slot/terrain; public FINALIZE loads c->prepared at control+24.
+        commit = QUERY_SPAWN_CALLERS["finalizer_from_commit"]
+        self.assertEqual(elf_bytes_at(linked, commit - 0x3A, 0x36), bytes.fromhex(
+            "f822013b0c933b009200ba180f920022f43311931b781092fa2b00d8cee1"
+            "0f9b320002930c9b210001933b00f1331b780a980093099b"))
+        public_return = 0x0208FC34
+        self.assertEqual(elf_bytes_at(linked, public_return - 0x20, 0x1C), bytes.fromhex(
+            "a369002b00d1ece50293230001972e331b78320000932100099b0a98"))
+        self.assertNotEqual(commit, public_return)
+
+    def test_measured_operation7_commit_rejects_the_public_finalize_branch(self):
+        # Current3710 failure test-f38016f0aa4a44ffa9a13c6633ecd1e5 reported
+        # operation7/caller0x0208FB72 with every other transaction check true.
+        # Bank interning moves the unchanged Entry module back another28
+        # bytes: current Commit is FB56 and public FINALIZE is FC34. Keep
+        # these independent of the pin map; public cannot replace Commit.
+        for operation, actual_return in ((7,0x0208FB56),(7,0x0208FC34),(2,0x0208FC34)):
+            with self.subTest(operation=operation,caller=actual_return):
+                self.setUp();f=self.prepare_query();self.set_control(operation)
+                f.put(self.runtime+240,bytes((1,0,0,0)))
+                f.put(self.runtime+244,bytes((0xFD,0,0,0)))
+                f.put(self.runtime+2748,struct.pack("<I",1))
+                f.prepare_spawn(pointer=self.prepared,locomotion=3)
+                f.put(0x027E3600,struct.pack("<3I",0,0,self.prepared))
+                f.enter("spawn-query-finalized",sp=0x027E3600,
+                    lr=(self.owner["entry"]+actual_return-0x02080000)|1,
+                    r0=self.call,r1=self.control,r2=f.rt.WILD_STATE,r3=0x02231000)
+                if operation==7 and actual_return==0x0208FC34:
+                    self.assertIn("'failed': ['caller']",f.hooks.error)
+                else:
+                    self.assertIsNone(f.hooks.error)
+                    self.assertEqual(f.observer.calls["spawn-query-finalized"]["entered"],int(operation==7))
+                    if operation==2:
+                        self.assertFalse(f.observer.finalization_contexts)
+                        self.assertFalse(f.observer.pending)
 
     def test_real_query_finalizer_binds_owned260_and_pending_move_without_a_fake_wrapper(self):
         f = self.prepare_query()
@@ -2223,7 +2399,7 @@ class AutomaticQuerySpawnObserverTests(unittest.TestCase):
                 f = self.prepare_query()
                 if mutation == "owner": f.put(self.owner["stateAddress"] + 20, bytes(4))
                 if mutation == "descriptor": f.put(self.owner["entry"] + 4, bytes((1,)))
-                if mutation == "body": f.put(self.owner["entry"] + 0xDEF4 + 40, bytes((1,)))
+                if mutation == "body": f.put(self.owner["entry"] + QUERY_SPAWN_OWNERS["NativeSpawn"][0] - 0x02080000 + 40, bytes((1,)))
                 if mutation == "ops": f.put(self.ops + 8, bytes(4))
                 if mutation == "control": f.put(self.control + 8, struct.pack("<I", f.rt.WILD_STATE + 4))
                 if mutation == "command": f.put(self.command, bytes((1,)))
@@ -2261,7 +2437,7 @@ class AutomaticQuerySpawnObserverTests(unittest.TestCase):
         f.put(self.runtime + 2748, struct.pack("<I", 1))
         f.prepare_spawn(pointer=self.prepared, locomotion=3)
         f.put(0x027E3600, struct.pack("<3I", self.selected_terrain, self.selected_slot, self.prepared))
-        address = self.owner["entry"] + 0xE1F4
+        address = self.owner["entry"] + 0xE460
         f.enter("spawn-query-finalized", sp=0x027E3600, lr=address | 1,
                 r0=self.call, r1=self.control, r2=f.rt.WILD_STATE, r3=0x02231000)
         f.put(self.command, bytes((1,)))
@@ -2307,7 +2483,7 @@ class AutomaticQuerySpawnObserverTests(unittest.TestCase):
             with self.subTest(result=result):
                 self.setUp()
                 f=self.prepare_query();self.begin()
-                f.returned(result,address=self.owner["entry"]+0xFF62)
+                f.returned(result,address=self.owner["entry"]+0x101EE)
                 f.observer.completed_frame(12)
                 rows=[e["data"] for e in f.observer.drain()]
                 self.assertIsNone(f.hooks.error)
@@ -2336,7 +2512,7 @@ class AutomaticQuerySpawnObserverTests(unittest.TestCase):
                 else:self.begin()
                 if fault in ("returned-input","return-value"):
                     if fault=="returned-input":f.put(self.command,bytes((1,)))
-                    f.returned(3 if fault=="return-value" else 0,address=self.owner["entry"]+0xFF62)
+                    f.returned(3 if fault=="return-value" else 0,address=self.owner["entry"]+0x101EE)
                 self.assertIsNotNone(f.hooks.error)
                 self.assertFalse(f.observer.pending)
 
@@ -2386,7 +2562,7 @@ class AutomaticQuerySpawnObserverTests(unittest.TestCase):
         enable_spawn_cost_probe(f,{"mode":"omit-spawn-details"})
         with patch.object(f,"read",side_effect=AssertionError("cost gate must precede reads")):
             f.enter("spawn-queued",r0=self.call,r1=self.control,r2=f.rt.WILD_STATE,r3=0x02231000,
-                    lr=(self.owner["entry"]+0xFF62)|1)
+                    lr=(self.owner["entry"]+0x101EE)|1)
         self.assertIsNone(f.hooks.error)
         self.assertEqual(tuple(f.observer.tokens),tokens)
         self.assertFalse(f.observer.contexts)

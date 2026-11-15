@@ -932,6 +932,70 @@ continuation:
         self.assertFalse(fixture.closed)
 
 
+class EmoteThreeCloseTests(unittest.TestCase):
+    def fixture(self):
+        from tools.overworld.devtools_emote_three_probe import EmoteThreeProbe
+        from tools.overworld.test_devtools_emote_three_measurement import burst, snapshot, FIELD, CONTEXT, OWNER
+        session = DevtoolsSession.__new__(DevtoolsSession)
+        session.emu = object()
+        session.native_bridge_active = session.native_trampoline_in_use = session.native_health_exclusion_active = False
+        session.native_heap_generation = 3
+        session.completed_frames = 250
+        session.rt = SimpleNamespace(EXECUTED_FRAME_COUNT=1250)
+        session.field_pointer = lambda: FIELD
+        value, current, removed = burst(), snapshot(250), []
+        current['actors'].append(dict(role='FOLLOWER', species=56, active=True, motionPhase='MOVING'))
+        memory = {FIELD + 0x44: struct.pack('<I', CONTEXT), OWNER: bytes.fromhex(value['final']['bubble']['rawHex'])}
+        session.read = lambda address, size: memory[address][:size]
+        session._snapshot = lambda *args, **kwargs: current
+        session.snapshot = lambda **kwargs: current
+        session._prepared_result_boundary = lambda receipt: receipt
+        session.party_getter_hooks = SimpleNamespace(remove=removed.append)
+        session.cycle = session.write = lambda *args: self.fail('passive close changed the guest')
+        session.bridge = SimpleNamespace(run=lambda *args: self.fail('passive close called the guest'))
+        probe = session.emote_three = EmoteThreeProbe.__new__(EmoteThreeProbe)
+        probe.s, probe.field, probe.heap, probe.context, probe.owner = session, FIELD, 3, CONTEXT, OWNER
+        probe.subjects, probe.reads, probe.active = value['subjects'], 0, []
+        probe.trigger_done, probe.closed, probe.tokens = True, False, [1, 2]
+        probe.model_count = lambda: value['modelAfter']
+        probe.result = lambda: dict(closed=probe.closed, final=probe.after)
+        return session, current, memory, removed, value['final']
+
+    def test_passive_emote_close_allows_moving_follower_without_guest_work(self):
+        session, current, memory, removed, final = self.fixture()
+        session.require_quiescent = lambda: self.fail('read-only close required idle motion')
+        before = dict(memory), session.completed_frames, session.rt.EXECUTED_FRAME_COUNT
+        with patch('tools.overworld.devtools_emote_three_probe.observe_emote_vram_diagnostics', return_value=final):
+            result = session.emote_three_close({})
+        self.assertTrue(result['emotes']['closed'])
+        self.assertEqual(result['advancedFrames'], 0)
+        self.assertEqual(removed, [1, 2])
+        self.assertEqual(before, (memory, session.completed_frames, session.rt.EXECUTED_FRAME_COUNT))
+        self.assertEqual(current['actors'][-1]['motionPhase'], 'MOVING')
+
+    def test_passive_emote_close_rejects_stale_owners_and_active_calls(self):
+        for fault in ('field', 'heap', 'context', 'epoch', 'subject', 'engine', 'generation',
+                      'native_bridge_active', 'native_trampoline_in_use', 'native_health_exclusion_active',
+                      'unfinished', 'closed'):
+            with self.subTest(fault=fault):
+                session, current, memory, removed, final = self.fixture()
+                probe = session.emote_three
+                if fault == 'field': session.field_pointer = lambda: probe.field + 4
+                elif fault == 'heap': session.native_heap_generation += 1
+                elif fault == 'context': memory[probe.field + 0x44] = struct.pack('<I', probe.context + 4)
+                elif fault == 'epoch': current['context']['fieldEpoch'] += 1
+                elif fault == 'subject': current['actors'][0]['subjectIdentity'] += 1
+                elif fault == 'engine': current['actors'][0]['engineIdentity']['pointer'] += 4
+                elif fault == 'generation': current['actors'][0]['engineAnchorGeneration'] += 1
+                elif fault == 'unfinished': probe.active = [object()]
+                elif fault == 'closed': session.emu = None
+                else: setattr(session, fault, True)
+                with patch('tools.overworld.devtools_emote_three_probe.observe_emote_vram_diagnostics', return_value=final), \
+                        self.assertRaises((DevtoolsFailure, ValueError)):
+                    session.emote_three_close({})
+                self.assertEqual(removed, [1, 2] if fault == 'unfinished' else [])
+
+
 class FreshObservationTests(unittest.TestCase):
     def fixture(self):
         session = DevtoolsSession.__new__(DevtoolsSession)

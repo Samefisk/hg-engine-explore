@@ -235,8 +235,9 @@ class FlyLandingCostTests(unittest.TestCase):
         r.r0=w['fieldPointer'];r.r1=src['object'];r.r2=562;r.r3=388
         height=p.before('height');self.assertEqual(height['tile'],[562,388])
         p.after('height',height,{'returnValue':0})
-        r.r0=0x02240000;r.r1=src['object'];r.r2=0
+        r.r0=0x02240000;r.r1=src['object'];r.r2=128
         admit=p.before('admit');self.assertEqual(admit['effectOwner']['slot'],4)
+        self.assertEqual((admit['emote'],admit['mode']),(0,128))
         owner=0x02250000;slot=owner+28
         words=[r.r0,1,0x02250100,0x02250200,0x02250300,0x02250400,0]
         words += [owner,src['object'],0,0,0,0,0,0,0,1] + [0]*20
@@ -244,6 +245,7 @@ class FlyLandingCostTests(unittest.TestCase):
         r.r0=slot;r.r1=admit['context'];r.r2=admit['emote']
         prepare=p.before('prepare');p.after('prepare',prepare,{'returnValue':1})
         r.r0=0x02260000;r.r1=0x02261000
+        put(r.r0+4,struct.pack('<I',128))
         init=p.before('initialize')
         put(r.r1+44,struct.pack('<5I',slot,admit['context'],owner,src['object'],0x02262000))
         self.assertIn('bindingHex',p.after('initialize',init,{'returnValue':1}))
@@ -251,6 +253,47 @@ class FlyLandingCostTests(unittest.TestCase):
         a.update(motionKind='NONE',motionPhase='IDLE')
         self.assertEqual(p.after('frame',frame,{'returnValue':0})['motionAfter']['motionKind'],'NONE')
         self.assertIsNone(p.frame);self.assertEqual(p.bubbles,[])
+
+    def test_emote_nine_preserves_full_normal_or_quiet_constructor_mode(self):
+        for mode in (9,137):
+            p,o,s,a,src,eng,w,r,put=self.fixture();p.before('frame')
+            r.r0=0x02240000;r.r1=src['object'];r.r2=mode
+            admit=p.before('admit')
+            self.assertEqual((admit['emote'],admit['mode'],admit['arguments'][2]),(9,mode,mode))
+            owner=0x02250000;slot=owner+28
+            words=[r.r0,1,0x02250100,0x02250200,0x02250300,0x02250400,0]
+            words += [owner,src['object'],0,0,0,0,0,0,0,1] + [0]*20
+            put(owner,struct.pack('<37I',*words))
+            r.r0=slot;r.r1=admit['context'];r.r2=9
+            prepare=p.before('prepare');p.after('prepare',prepare,{'returnValue':1})
+            effect=0x02260000;r.r0=effect;r.r1=0x02261000
+            put(effect+4,struct.pack('<I',mode))
+            init=p.before('initialize');self.assertEqual(init['mode'],mode)
+            put(r.r1+44,struct.pack('<5I',slot,admit['context'],owner,src['object'],0x02262000))
+            self.assertEqual(p.after('initialize',init,{'returnValue':1})['mode'],mode)
+            self.assertEqual(p.after('admit',admit,{'returnValue':effect})['mode'],mode)
+
+    def test_emote_bad_bits_unstripped_prepare_and_changed_mode_reject(self):
+        for mode in (-1,14,127,142,255,256,384):
+            p,o,s,a,src,eng,w,r,put=self.fixture();p.before('frame')
+            r.r0=0x02240000;r.r1=src['object'];r.r2=mode
+            with self.subTest(mode=mode),self.assertRaisesRegex(ValueError,'type/mode'):
+                p.before('admit')
+        for fault in ('prepare','initialize','initialize-return','admit-return'):
+            p,o,s,a,src,eng,w,r,put=self.fixture();p.before('frame')
+            r.r0=0x02240000;r.r1=src['object'];r.r2=137
+            admit=p.before('admit');slot=0x0225001C;effect=0x02260000
+            admit['slotPointer']=slot;admit['bubbleOwner']=slot-28
+            with self.subTest(fault=fault),self.assertRaisesRegex(ValueError,'type|mode'):
+                if fault=='prepare':
+                    r.r0=slot;r.r1=admit['context'];r.r2=137;p.before('prepare')
+                elif fault=='admit-return':
+                    put(effect+4,struct.pack('<I',9));p.after('admit',admit,{'returnValue':effect})
+                else:
+                    r.r0=effect;r.r1=0x02261000
+                    put(effect+4,struct.pack('<I',9 if fault=='initialize' else 137))
+                    init=p.before('initialize')
+                    put(effect+4,struct.pack('<I',9));p.after('initialize',init,{'returnValue':0})
 
     def test_wrong_generation_world_object_slot_code_and_bounds_reject(self):
         for fault in ('generation','world','object','live','slot','limit'):

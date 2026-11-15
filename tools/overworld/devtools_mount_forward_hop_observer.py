@@ -65,8 +65,15 @@ class NativeMountForwardHopObserver:
         s, rt = self.session, self.session.rt
         registers = s.emu.memory.register_arm9
         owner = self.observer.role_profiles._owner()
+        actor = rt.actor_state(s.emu, 7)
+        if (owner is not None and owner["publicSubject"]["role"] == "FOLLOWER"
+                and actor.get("inputOwnership") == 0):
+            # Native RIDING precedes the next public Actor sync. This verified
+            # follower call has no mounted receipt or ownership credit yet.
+            self.state(owner)
+            return None
         require(owner is not None and owner["publicSubject"]["role"] == "MOUNTED"
-                and rt.actor_state(s.emu, 7).get("inputOwnership") == 1,
+                and actor.get("inputOwnership") == 1,
                 "current mounted subject differs")
         avatar = rt.unsigned(s.emu, owner["fieldPointer"] + 0x40)
         require(registers.r0 == STATE_ADDRESS and registers.r1 == avatar,

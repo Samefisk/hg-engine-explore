@@ -80,6 +80,7 @@ typedef struct OverworldWildSpawnState {
 } OverworldWildSpawnState;
 
 #include "cargo_motion_decision_production.inc"
+void sys_FreeMemoryEz(void *);
 #include "cargo_query_wild_production.inc"
 
 static FieldSystem field;
@@ -100,6 +101,7 @@ static _Alignas(void *) u8 land[0xD0];
 static _Alignas(u32) u8 slots[4][0x868];
 static u8 matrix[2];
 static u32 freeBytes,allocations,positionReads,nativeCalls;
+static u32 heap4Free,heap11Free,failAllocation,frees;static void *allocationResult[4];
 static int missingX=-1,blockedX=-1;
 static u8 expectedSubjectSlot,expectedCargoSlot;
 
@@ -115,8 +117,10 @@ static BOOL Base(FieldSystem *f,const OverworldWildSurfaceHit *s,s32 y,u32 flags
     (void)f;(void)s;(void)flags;(void)x;(void)z;++positionReads;*out=y;return 1;
 }
 static BOOL Inspect(u8 slot,OverworldActorPolicyView *out) { if(slot>=10)return 0;*out=actorPolicy;return 1; }
-static void *Allocate(u32 heap,u32 bytes) { (void)heap;++allocations;return calloc(1,bytes); }
-static u32 FreeSize(u32 heap) { (void)heap;return freeBytes; }
+static void *Allocate(u32 heap,u32 bytes) { (void)heap;++allocations;void *p=failAllocation==allocations?NULL:calloc(1,bytes);if(allocations<=4)allocationResult[allocations-1]=p;return p; }
+void sys_FreeMemoryEz(void *p){++frees;free(p);}
+static void FreeOwnedQuery(void){if(runtime.pickupQuery){OverworldCargoQueryWildAllocation *a=runtime.pickupQuery;runtime.pickupQuery=NULL;a->destroy(a);}}
+static u32 FreeSize(u32 heap) { return heap4Free&&heap==4?heap4Free:heap11Free&&heap==11?heap11Free:freeBytes; }
 static BOOL WalkTerrain(FieldSystem *f,const void *position,int x,int y,s8 *direction) {
     (void)f;(void)position;(void)x;(void)y;*direction=0;return FALSE;
 }
@@ -250,13 +254,13 @@ static u32 ThrowFacts(OverworldWildSpawnState *s,int slot,const OverworldWildBeh
 static const PlayerHealthThrowServiceEntry throwService={ThrowFacts,BindingPosition};
 
 static void Reset(void) {
-    free(runtime.pickupQuery);
+    FreeOwnedQuery();
     memset(&spawns,0,sizeof(spawns));memset(&runtime,0,sizeof(runtime));memset(&conditions,0,sizeof(conditions));
     memset(&actors,0,sizeof(actors));memset(objects,0,sizeof(objects));memset(&world,0,sizeof(world));
     memset(land,0,sizeof(land));memset(slots,0,sizeof(slots));memset(&player,0,sizeof(player));
     memset(spawns.movementActorControlModes,OW_WILD_ACTOR_CONTROL_AUTONOMOUS,
         sizeof(spawns.movementActorControlModes));
-    freeBytes=100000;allocations=positionReads=nativeCalls=0;missingX=blockedX=-1;actorPolicy=(OverworldActorPolicyView){0};
+    freeBytes=100000;heap4Free=heap11Free=failAllocation=frees=0;memset(allocationResult,0,sizeof(allocationResult));allocations=positionReads=nativeCalls=0;missingX=blockedX=-1;actorPolicy=(OverworldActorPolicyView){0};
     forcedRouteStatus=-1;forcedRouteFlags=0;
     observedRoute=(OverworldCargoQueryResult){0};
     expectedSubjectSlot=0;expectedCargoSlot=1;
@@ -284,7 +288,7 @@ static void Reset(void) {
     world.subjectObject=world.heightObject=&objects[0];world.ops=&ops;world.catalog=(const void *)&field;
     profile.owner=(OverworldWildBehaviorProfileData){1,2,8,0,6,0,0,0};options=(OverworldWildBehaviorConditionOptions){2,16,1,1};
     call=(OverworldCargoQueryWildCall){.world=&world,.profile=&profile,.options=&options,
-        .allocate=Allocate,.freeSize=FreeSize,.heapId=11,.eligibleActorMask=2,
+        .allocate=Allocate,.freeSize=FreeSize,.heapId=4,.eligibleActorMask=2,
         .allowedTerrainMask=1,.locomotion=OW_WILD_BEHAVIOR_LOCOMOTION_WALK};
 }
 static int Finish(void) {
@@ -297,11 +301,11 @@ static int Finish(void) {
     CHECK(0);return 1;
 }
 static int HasTile(const NativeQuery *q,int x,int y) {
-    for(u16 n=0;n<q->changeCount;n++)if(q->changed[n].x==x&&q->changed[n].y==y)return 1;return 0;
+    for(u16 n=0;n<q->changeCount;n++)if(AUX(q)->changed[n].x==x&&AUX(q)->changed[n].y==y)return 1;return 0;
 }
 static int PolicyChecks(void) {
     Reset();objects[0].xInit=objects[0].xCurr;objects[0].yInit=objects[0].yCurr;
-    NativeQuery q={0};OverworldPickupRouteNativePolicy p;
+    NativeAuxiliary a={0};NativeQuery q={.allocation.auxiliary=&a};OverworldPickupRouteNativePolicy p;
     CHECK(Policy(&q,&call,&p));CHECK(q.edgeCount==8 && p.hopMinDistance==1 && p.hopMaxDistance==1);
     for(int n=0;n<q.edgeCount;n++)CHECK(q.edges[n].dx>=-1&&q.edges[n].dx<=1&&q.edges[n].dy>=-1&&q.edges[n].dy<=1
         && (q.edges[n].tag>>OVERWORLD_PICKUP_ROUTE_NATIVE_KIND_SHIFT)==OVERWORLD_PICKUP_ROUTE_NATIVE_WALK);
@@ -320,7 +324,7 @@ static int PolicyChecks(void) {
     puts("production Policy: Walk stride1, Hop range, all movement hash dependencies");return 0;
 }
 static int HopOnlyPolicyChecks(void) {
-    Reset();NativeQuery q={0};OverworldPickupRouteNativePolicy p;
+    Reset();NativeAuxiliary a={0};NativeQuery q={.allocation.auxiliary=&a};OverworldPickupRouteNativePolicy p;
     CHECK(Policy(&q,&call,&p));u32 walk=q.policyRevision;
     #define WALK_STABLE(statement) do {statement;CHECK(Policy(&q,&call,&p));CHECK(q.policyRevision==walk);}while(0)
     WALK_STABLE(profile.owner.hopAllowVerticalObstacles=1);
@@ -340,7 +344,7 @@ static int HopOnlyPolicyChecks(void) {
 static int UnlimitedHopAnchorChecks(void) {
     Reset();call.locomotion=OW_WILD_BEHAVIOR_LOCOMOTION_HOP;
     objects[0].xInit=objects[0].xCurr;objects[0].yInit=objects[0].yCurr;
-    NativeQuery q={0};OverworldPickupRouteNativePolicy p;
+    NativeAuxiliary a={0};NativeQuery q={.allocation.auxiliary=&a};OverworldPickupRouteNativePolicy p;
     CHECK(Policy(&q,&call,&p));u32 unlimited=q.policyRevision;
     /* Native Hop advances current at its render midpoint before init rebase. */
     objects[0].xCurr++;objects[0].yCurr++;
@@ -391,7 +395,7 @@ static int MovingAnchorChecks(void) {
     CHECK(reached);return 0;
 }
 static int FootprintChecks(void) {
-    Reset();NativeQuery q={0};q.changesComplete=1;
+    Reset();NativeAuxiliary a={0};NativeQuery q={.allocation.auxiliary=&a};q.changesComplete=1;
     CHECK(Observe(&q,&call,&actors,10));q.changeCount=0;q.changesComplete=1;
     objects[63]=(LocalMapObject){.flags=1,.id=EXCLUDED_ID,.xCurr=7,.yCurr=4,.posVec={0,64,0}};
     CHECK(Observe(&q,&call,&actors,10));CHECK(HasTile(&q,7,4));u32 revision=q.dynamicRevision;
@@ -407,7 +411,7 @@ static int FootprintChecks(void) {
     puts("production Observe: all64 objects, ID reuse, reservations, player front, same-frame deltas, overflow");return 0;
 }
 static int OwnDependencyChecks(void) {
-    Reset();NativeQuery q={0};q.changesComplete=1;
+    Reset();NativeAuxiliary a={0};NativeQuery q={.allocation.auxiliary=&a};q.changesComplete=1;
     CHECK(Observe(&q,&call,&actors,10));q.changeCount=0;q.changesComplete=1;
     u32 revision=q.dynamicRevision;objects[0].xCurr++;
     actors.slots[0].snapshot.reservationId=4;actors.slots[0].snapshot.targetX=20;actors.slots[0].snapshot.targetY=7;
@@ -436,7 +440,7 @@ static int OwnDependencyChecks(void) {
     puts("Native Observe omits exact current self only; stale self, other object and owner switch remain conservative");return 0;
 }
 static int SetupChecks(void) {
-    Reset();NativeQuery q={0};CHECK(Scope(&world,&q));CHECK(q.bounds.minX==0&&q.bounds.maxX==63&&q.bounds.maxY==31);
+    Reset();NativeAuxiliary a={0};NativeQuery q={.allocation.auxiliary=&a};CHECK(Scope(&world,&q));CHECK(q.bounds.minX==0&&q.bounds.maxX==63&&q.bounds.maxY==31);
     land[0xC0]=1;CHECK(!Scope(&world,&q));land[0xC0]=0;*(u32 *)(slots[1]+0x860)=2;CHECK(!Scope(&world,&q));
     *(u32 *)(slots[1]+0x860)=1;*(u32 *)(slots[1]+0x864)=0;CHECK(Scope(&world,&q));CHECK(q.bounds.maxX==31);
     Reset();freeBytes=sizeof(NativeQuery)+1023;CHECK(OverworldCargoQueryWild_Tick(&call,&output)==LIMIT&&allocations==0);
@@ -550,7 +554,7 @@ static int SlotMaskCase(const char *name,u8 subject,u8 cargo) {
 static int SlotMaskRegression(void) {
     int failed=SlotMaskCase("Wild hole",0,2);
     failed|=SlotMaskCase("Follower slot7 with Wild hole",7,2);
-    free(runtime.pickupQuery);runtime.pickupQuery=NULL;
+    FreeOwnedQuery();runtime.pickupQuery=NULL;
     if(failed)fprintf(stderr,"RED: native slot masks do not cross the compact World boundary correctly\n");
     return failed;
 }
@@ -591,7 +595,7 @@ static int FollowerPriorityChecks(void) {
     CHECK(OverworldCargoQueryWild_Tick(&call,&output)==PENDING);
     CHECK(q->owner.slot==7 && q->valid && nativeCalls==beforeCalls);
     CHECK(!output.eligibleActorMask && !output.route.hasNextStep);
-    CHECK(!memcmp(before,conditions.bindings,sizeof(before)) && allocations==1);
+    CHECK(!memcmp(before,conditions.bindings,sizeof(before)) && allocations==2);
     ++conditions.frame.world.frame;
     CHECK(OverworldCargoQueryWild_Tick(&call,&output)==PENDING);
     CHECK(q->state.query.subject.slot==7 && q->state.required
@@ -609,7 +613,7 @@ static int FollowerPriorityChecks(void) {
     CHECK(output.eligibleActorMask==2 && output.route.hasNextStep
         && output.route.origin.x==10 && output.route.nextStep.x==11
         && output.route.cargoPosition.x==12);
-    CHECK(!memcmp(before,conditions.bindings,sizeof(before)) && allocations==1
+    CHECK(!memcmp(before,conditions.bindings,sizeof(before)) && allocations==2
         && !runtime.throwState.targetMask && !runtime.throwState.carrierMask
         && !runtime.throwState.targets[0] && !runtime.throwState.targets[7]);
     /* An incoming pursuit cannot change either owner's query rights. */
@@ -679,7 +683,7 @@ static int FollowerPriorityChecks(void) {
         && !memcmp(before,conditions.bindings,sizeof(before))
         && !memcmp(&held,&actors.slots[0].snapshot,sizeof(held))
         && runtime.throwState.targets[0]==0x82 && runtime.throwState.carrierMask==1
-        && runtime.throwState.targetMask==2 && allocations==1);
+        && runtime.throwState.targetMask==2 && allocations==2);
     puts("Follower exact-Interest priority: same workspace/current full path; same-frame budget and19 ownership/identity controls");
     return 0;
 }
@@ -777,7 +781,7 @@ static int ClaimedRouteCompetitionChecks(void) {
     world.slot=7;world.subjectObject=world.heightObject=&objects[2];expectedSubjectSlot=7;
     CHECK(OverworldCargoQueryWild_Tick(&call,&output)==PENDING);
     CHECK(q->owner.slot==7 && nativeCalls<=beforeCalls+1
-        && output.lastWork.routeUnits<=16 && allocations==1);
+        && output.lastWork.routeUnits<=16 && allocations==2);
     CHECK(!memcmp(before,conditions.bindings,sizeof(before))
         && !memcmp(&original,&actors.slots[0].snapshot,sizeof(original))
         && runtime.throwState.targets[0]==2 && runtime.throwState.targets[7]==2
@@ -854,7 +858,7 @@ static int ClaimedRouteRoundRobinChecks(void) {
     CHECK(runtime.throwState.targets[0]==2 && runtime.throwState.targets[2]==2
         && runtime.throwState.targets[7]==2
         && runtime.throwState.carrierMask==(1u|(1u<<2)|(1u<<7))
-        && runtime.throwState.targetMask==2 && allocations==1);
+        && runtime.throwState.targetMask==2 && allocations==2);
     puts("three claimed routes: round robin0->2->7->0, one shared native turn per frame");
     return 0;
 }
@@ -976,7 +980,7 @@ static int AvailableCargoProtectionChecks(void) {
             && (observation&OVERWORLD_BEHAVIOR_ACTOR_FACT_TRIGGER_VALID)
             && !(observation&(1023u<<8)));
         CHECK(!memcmp(&before,q,sizeof(before)) && nativeCalls==callsBefore
-            && positionReads==readsBefore && allocations==1);
+            && positionReads==readsBefore && allocations==2);
         CHECK(!memcmp(&runtimeBefore,&runtime,sizeof(runtimeBefore))
             && !memcmp(&actorsBefore,&actors,sizeof(actorsBefore))
             && !memcmp(bindingsBefore,conditions.bindings,sizeof(bindingsBefore)));
@@ -1091,7 +1095,7 @@ static int UnavailableCargoRegression(void) {
     failed|=AvailableCargoProtectionChecks();
     failed|=FollowerPriorityChecks();
     failed|=PendingClaimChecks();
-    free(runtime.pickupQuery);runtime.pickupQuery=NULL;
+    FreeOwnedQuery();runtime.pickupQuery=NULL;
     return failed;
 }
 static int WildResourceLimitChecks(void) {
@@ -1140,7 +1144,7 @@ static int WildResourceLimitChecks(void) {
         CHECK(!abort && (observation&OVERWORLD_BEHAVIOR_ACTOR_FACT_TRIGGER_VALID));
         CHECK(observedRoute.status==PENDING);
     }
-    CHECK(limitFrame && allocations==1 && forcedRouteStatus==-1);
+    CHECK(limitFrame && allocations==2 && forcedRouteStatus==-1);
     printf("Wild resource exhaustion: frame%u nodes%u edges%u owner%u valid%u Interest%u Cargo%u nativeCalls%u frameNativeWork%u stateFrame%u frameValid%u\n",
         limitFrame,nodes,edges,q->owner.slot,q->valid,
         conditions.bindings[0].bindings[OVERWORLD_TARGET_BINDING_OBJECT_OF_INTEREST].flags,
@@ -1185,9 +1189,9 @@ static int WildResourceLimitChecks(void) {
     CHECK((observation>>8)&2);
     CHECK(q->cached.status==OVERWORLD_PICKUP_ROUTE_REACHABLE && q->cached.route.cargo.slot==1);
     CHECK(!conditions.bindings[2].bindings[OVERWORLD_TARGET_BINDING_CARGO].flags
-        && !runtime.throwState.targetMask && !runtime.throwState.carrierMask && allocations==1);
+        && !runtime.throwState.targetMask && !runtime.throwState.carrierMask && allocations==2);
     puts("Wild resource-limit owner releases shared workspace; same-frame budget survives and next Wild proves current Cargo");
-    free(runtime.pickupQuery);runtime.pickupQuery=NULL;
+    FreeOwnedQuery();runtime.pickupQuery=NULL;
     return 0;
 }
 /* An enclosed Wild can end UNREACHABLE with a real reachable Cargo still
@@ -1237,7 +1241,7 @@ static int WildUnreachableChecks(void) {
         CHECK(observedRoute.status==PENDING && !abort
             && (observation&OVERWORLD_BEHAVIOR_ACTOR_FACT_TRIGGER_VALID));
     }
-    CHECK(terminalFrame && allocations==1 && forcedRouteStatus==-1);
+    CHECK(terminalFrame && allocations==2 && forcedRouteStatus==-1);
     CHECK(q->state.route.nodeCount==1 && q->state.route.cachedEdgeCount==4);
     /* An unchanged same-owner read in the used frame stays terminal. */
     OverworldCargoReadWildObservationCall repeat=ReadCall();BOOL abort=FALSE;
@@ -1282,10 +1286,10 @@ static int WildUnreachableChecks(void) {
         && Same(&q->cached.route.cargo,&actors.slots[1].snapshot.handle,12));
     CHECK(q->cached.route.origin.x==11 && q->cached.route.origin.y==4
         && q->cached.route.cargoPosition.x==12 && q->cached.route.cargoPosition.y==4);
-    CHECK(!memcmp(bindingsBefore,conditions.bindings,sizeof(bindingsBefore)) && allocations==1
+    CHECK(!memcmp(bindingsBefore,conditions.bindings,sizeof(bindingsBefore)) && allocations==2
         && !runtime.throwState.targetMask && !runtime.throwState.carrierMask && !runtime.throwState.recoveringMask);
     printf("Wild unreachable owner releases to current peer/Cargo in%u later frames; same-frame budget and Cargo/reservation claims preserved\n",frames);
-    free(runtime.pickupQuery);runtime.pickupQuery=NULL;return 0;
+    FreeOwnedQuery();runtime.pickupQuery=NULL;return 0;
 }
 static int WildRetargetChecks(void) {
     Reset();expectedCargoSlot=255;
@@ -1368,6 +1372,6 @@ int main(int argc,char **argv) {
     CHECK(!UnavailableCargoRegression());
     CHECK(!PolicyChecks());CHECK(!HopOnlyPolicyChecks());CHECK(!UnlimitedHopAnchorChecks());CHECK(!MovingAnchorChecks());CHECK(!FootprintChecks());CHECK(!OwnDependencyChecks());CHECK(!SetupChecks());CHECK(!CacheChecks());
     CHECK(!SlotMaskRegression());
-    free(runtime.pickupQuery);runtime.pickupQuery=NULL;
+    FreeOwnedQuery();runtime.pickupQuery=NULL;
     printf("Cargo Wild production checks passed; host NativeQuery bytes%zu (not ARM layout)\n",sizeof(NativeQuery));return 0;
 }

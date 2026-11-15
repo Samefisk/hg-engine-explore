@@ -14,6 +14,7 @@ const DEFAULT_MATCH = Object.freeze({
   maxLevel: "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
   shiny: "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
   behaviorClass: "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS",
+  mapId: "OW_WILD_BEHAVIOR_MATCH_ANY_MAP",
 });
 
 const WALK_TIME_FIELDS = Object.freeze(new Set([
@@ -116,7 +117,11 @@ const MATCH_FIELDS = Object.freeze([
   ["maxLevel", "Maximum level"],
   ["shiny", "Shiny"],
   ["behaviorClass", "Base profile"],
+  ["mapId", "Map ID"],
 ]);
+
+// Base selectors remain stable across map seams. Only applications/pools expose map filters.
+const SELECTOR_MATCH_FIELDS = Object.freeze(MATCH_FIELDS.filter(([field]) => field !== "mapId"));
 
 const PROFILE_FIELD_RANGES = Object.freeze([
   Object.freeze({ min: "spawnDestinationMinDistance", max: "spawnDestinationMaxDistance", label: "Spawn distance", unit: "tiles" }),
@@ -141,7 +146,7 @@ const TERRAIN_POLICY_CONFIGS = Object.freeze({
     valueField: "spawnDestinationMask",
     explicitField: "spawnDestinationOverrideMask",
     label: "Spawn destinations",
-    note: "Set each destination independently",
+    note: "Set each destination independently. Behind Buildings limits spawning to legal ground one tile north of a catalogued roof.",
     ariaLabel: "Spawn destination policy",
   }),
 });
@@ -1532,10 +1537,10 @@ function projectCanonicalProfileDeck(input, catalogOverride = null) {
     return [key, canonicalRawView(displayRaw, key, source)];
   }));
   const emptyMask = () => ({ raw: "0", displayRaw: "0", value: 0, bits: [], labels: [] });
-  const matchView = (match) => Object.fromEntries(MATCH_FIELDS.map(([key]) => [key, canonicalRawView(match?.[key] ?? DEFAULT_MATCH[key], key, source)]));
-  const matchSummary = (match) => MATCH_FIELDS
+  const matchView = (match, fields = MATCH_FIELDS) => Object.fromEntries(fields.map(([key]) => [key, canonicalRawView(match?.[key] ?? DEFAULT_MATCH[key], key, source)]));
+  const matchSummary = (match, fields = MATCH_FIELDS) => fields
     .map(([key]) => String(match?.[key] ?? DEFAULT_MATCH[key]))
-    .filter((raw, index) => raw !== DEFAULT_MATCH[MATCH_FIELDS[index][0]])
+    .filter((raw, index) => raw !== DEFAULT_MATCH[fields[index][0]])
     .map(humanizeRaw).join(" · ") || "Any";
 
   const selectors = (catalog.selectors || []).map((selector, index) => {
@@ -1544,11 +1549,11 @@ function projectCanonicalProfileDeck(input, catalogOverride = null) {
     return {
       id: selector.id,
       order: index + 1,
-      match: matchView(selector.match),
+      match: matchView(selector.match, SELECTOR_MATCH_FIELDS),
       behaviorClass: canonicalRawView(binding.symbol, "behaviorClass", source),
       profile: binding.symbol,
       storage: (catalog.runtimeBindings.speciesSelectors || []).includes(selector.id) ? "species" : "full",
-      summary: matchSummary(selector.match),
+      summary: matchSummary(selector.match, SELECTOR_MATCH_FIELDS),
       className: profilesById.get(selector.profile)?.name || selector.profile,
     };
   });
@@ -3043,6 +3048,7 @@ export function createProfilesController({
     const maximum = match.maxLevel === DEFAULT_MATCH.maxLevel ? 100 : Number(match.maxLevel);
     return {
       species: assignment.species?.symbol,
+      mapId: match.mapId === DEFAULT_MATCH.mapId ? String(ui.context.mapId ?? 65535) : match.mapId,
       terrain: match.terrain === DEFAULT_MATCH.terrain ? ui.context.terrain : match.terrain,
       level: String(Math.min(maximum, Math.max(minimum, currentLevel))),
       shiny: match.shiny === DEFAULT_MATCH.shiny ? ui.context.shiny : String(match.shiny) === "1",
@@ -3116,12 +3122,17 @@ export function createProfilesController({
       current.terrain,
       DEFAULT_MATCH.terrain,
     );
+    const mapRelation = exactDimensionRelation(
+      prior.mapId,
+      current.mapId,
+      DEFAULT_MATCH.mapId,
+    );
     const shinyRelation = exactDimensionRelation(
       prior.shiny,
       current.shiny,
       DEFAULT_MATCH.shiny,
     );
-    if (terrainRelation === "disjoint" || shinyRelation === "disjoint") return "disjoint";
+    if (terrainRelation === "disjoint" || shinyRelation === "disjoint" || mapRelation === "disjoint") return "disjoint";
 
     const levelRange = (match) => {
       const minimum = match.minLevel === DEFAULT_MATCH.minLevel ? 1 : Number(match.minLevel);
@@ -3132,6 +3143,7 @@ export function createProfilesController({
     const [currentMin, currentMax] = levelRange(current);
     if (priorMax < currentMin || priorMin > currentMax) return "disjoint";
     return terrainRelation === "covers-current"
+      && mapRelation === "covers-current"
       && shinyRelation === "covers-current"
       && priorMin <= currentMin
       && priorMax >= currentMax
@@ -3902,7 +3914,7 @@ export function createProfilesController({
     if (descriptor.branch === "spawn-destination") {
       const destinationPolicy = TERRAIN_POLICY_CONFIGS.spawn;
       const destinationInherited = isOverrideProfile(profile)
-        && terrainPolicyMaskNumber(fieldRaw(profile, destinationPolicy.explicitField)) === 0;
+        && terrainPolicyMaskNumber(fieldRaw(profile, destinationPolicy.explicitField), "spawn") === 0;
       return {
         nodes: ["spawnDestinationMinDistance", "spawnDestinationMaxDistance"].map((field) => ({ field })),
         context: "Minimum and maximum distance used by Player tile and Player front destinations.",
@@ -4364,20 +4376,31 @@ export function createProfilesController({
     ];
   }
 
-  function terrainPolicyAllMask() {
-    return allowedTerrainCatalog().reduce((mask, terrain) => mask | Number(terrain.bit || 0), 0);
+  function terrainPolicyCatalog(policyId = "allowed") {
+    if (policyId !== "spawn") return allowedTerrainCatalog();
+    const configured = Array.isArray(data.spawnDestinations) ? data.spawnDestinations : [];
+    if (configured.length) return configured.filter((destination) => Number(destination.bit) > 0);
+    return [
+      ...allowedTerrainCatalog().filter((terrain) => terrain.key !== "water-surface"),
+      { key: "behind-buildings", label: "Behind Buildings", raw: "OW_WILD_SPAWN_DESTINATION_MASK_BEHIND_BUILDINGS", bit: 2048 },
+    ];
   }
 
-  function terrainPolicyMaskNumber(raw) {
-    const allMask = terrainPolicyAllMask();
+  function terrainPolicyAllMask(policyId = "allowed") {
+    return terrainPolicyCatalog(policyId).reduce((mask, terrain) => mask | Number(terrain.bit || 0), 0);
+  }
+
+  function terrainPolicyMaskNumber(raw, policyId = "allowed") {
+    const allMask = terrainPolicyAllMask(policyId);
     const cleaned = String(raw || "").trim();
     if (!cleaned) return 0;
     const numeric = Number(cleaned);
     if (Number.isInteger(numeric)) return numeric & allMask;
-    if (cleaned.includes("ALLOWED_TERRAIN_ALL")) return allMask;
+    if (cleaned.includes(policyId === "spawn" ? "SPAWN_DESTINATION_MASK_ALL" : "ALLOWED_TERRAIN_ALL")) return allMask;
     const parts = cleaned.replace(/[()]/g, "").split("|").map((part) => part.trim());
     return parts.reduce((mask, part) => {
-      const terrain = allowedTerrainCatalog().find((candidate) => candidate.raw === part);
+      const terrain = terrainPolicyCatalog(policyId).find((candidate) => candidate.raw === part);
+      if (policyId === "spawn" && part === "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL") return mask | 1023;
       return mask | Number(terrain?.bit || 0);
     }, 0) & allMask;
   }
@@ -4405,6 +4428,7 @@ export function createProfilesController({
       signpost: '<path d="M5 5h14v9H5zM12 14v7M9 21h6"/>',
       mailbox: '<path d="M4 10a6 6 0 0 1 12 0v7H4zM16 10h4v7h-4M8 7v10M11 4h4v4h-4"/>',
       flowerbed: '<path d="M4 14h16l-2 7H6l-2-7Zm3 0V9m5 5V6m5 8V9M5 9c2-2 4-2 5 0-1 2-3 3-5 0Zm5-3c2-3 4-3 5 0-1 2-4 3-5 0Zm5 3c2-2 4-2 5 0-1 2-3 3-5 0Z"/>',
+      "behind-buildings": '<path d="M3 13 12 6l9 7M5 12v8h14v-8M8 3h8M12 1v4"/>',
     };
     return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${paths[key] || paths.land}</svg>`;
   }
@@ -4412,9 +4436,9 @@ export function createProfilesController({
   function setTerrainPolicyState(profile, policyId, bit, state) {
     const policy = TERRAIN_POLICY_CONFIGS[policyId];
     if (!policy) return;
-    const allMask = terrainPolicyAllMask();
-    let valueMask = terrainPolicyMaskNumber(fieldRaw(profile, policy.valueField));
-    let explicitMask = terrainPolicyMaskNumber(fieldRaw(profile, policy.explicitField));
+    const allMask = terrainPolicyAllMask(policyId);
+    let valueMask = terrainPolicyMaskNumber(fieldRaw(profile, policy.valueField), policyId);
+    let explicitMask = terrainPolicyMaskNumber(fieldRaw(profile, policy.explicitField), policyId);
     if (state === "inherit") {
       explicitMask &= ~bit;
       valueMask &= ~bit;
@@ -4440,8 +4464,8 @@ export function createProfilesController({
     if (!policy) return "";
     const valueRawValue = fieldRaw(profile, policy.valueField);
     const explicitRawValue = fieldRaw(profile, policy.explicitField);
-    const valueMask = terrainPolicyMaskNumber(valueRawValue);
-    const explicitMask = terrainPolicyMaskNumber(explicitRawValue);
+    const valueMask = terrainPolicyMaskNumber(valueRawValue, policyId);
+    const explicitMask = terrainPolicyMaskNumber(explicitRawValue, policyId);
     const originalValue = originalFieldRaw(profile, policy.valueField);
     const originalExplicit = originalFieldRaw(profile, policy.explicitField);
     const changed = profile.draftId
@@ -4453,7 +4477,7 @@ export function createProfilesController({
       <div class="field-row profile-field pv2-field pv2-terrain-policy-field${changed ? " is-changed" : ""}${inherited ? " is-inherited" : ""}${presentation.depth ? " is-suboption" : ""}${presentation.inactive ? " is-inactive" : ""}" data-profile-key="${escapeHtml(profileKey(profile))}" data-field-row="${policy.valueField}" data-field-state="${state}" data-field-depth="${presentation.depth || 0}">
         <span class="field-copy pv2-field-copy"><strong>${escapeHtml(policy.label)}</strong><small class="pv2-field-meta"><span class="pv2-field-note">${escapeHtml(policy.note)}</span>${presentation.inactive ? `<span class="pv2-field-note">inactive</span>` : ""}</small></span>
         <span class="pv2-terrain-policy" role="group" aria-label="${escapeHtml(policy.ariaLabel)}">
-          ${allowedTerrainCatalog().filter((terrain) => policyId !== "spawn" || terrain.key !== "water-surface").map((terrain) => {
+          ${terrainPolicyCatalog(policyId).map((terrain) => {
             const bit = Number(terrain.bit);
             const terrainState = terrainPolicyState(valueMask, explicitMask, bit);
             const nextState = nextTerrainPolicyState(terrainState);
@@ -5468,6 +5492,7 @@ export function createProfilesController({
       ...existing,
     ]);
     if (field === "behaviorClass") return unique([DEFAULT_MATCH.behaviorClass, ...baseProfiles().map((profile) => profile.symbol), ...existing]);
+    if (field === "mapId") return unique([DEFAULT_MATCH.mapId, ...existing]);
     if (field === "shiny") return unique([DEFAULT_MATCH.shiny, "0", "1", ...existing]);
     return unique([DEFAULT_MATCH[field], ...Array.from({ length: 101 }, (_, index) => String(index)), ...existing]);
   }
@@ -5483,9 +5508,9 @@ export function createProfilesController({
     const allowed = new Map(MATCH_FIELDS.map(([field]) => [field, new Set(matchSuggestions(field))]));
     MATCH_FIELDS.forEach(([field, label]) => {
       const raw = String(match?.[field] || "");
-      const numeric = ["minLevel", "maxLevel"].includes(field) && /^\d+$/.test(raw);
+      const numeric = ["minLevel", "maxLevel", "mapId"].includes(field) && /^\d+$/.test(raw);
       if (!raw || (!allowed.get(field).has(raw) && !numeric)) errors.push(`${label} has an unknown value`);
-      if (numeric && Number(raw) > 100) errors.push(`${label} must be between 0 and 100`);
+      if (numeric && Number(raw) > (field === "mapId" ? 65535 : 100)) errors.push(`${label} must be between 0 and ${field === "mapId" ? 65535 : 100}`);
     });
     const min = isAnyMatchValue("minLevel", match.minLevel) ? null : Number(match.minLevel);
     const max = isAnyMatchValue("maxLevel", match.maxLevel) ? null : Number(match.maxLevel);

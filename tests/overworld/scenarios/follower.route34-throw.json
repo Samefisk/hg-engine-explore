@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "id": "follower.route34-throw",
+  "title": "Saved follower Throw flow on Route34",
+  "status": "active",
+  "capabilities": [
+    "condition.evaluation",
+    "chase"
+  ],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "TICKETS.md",
+    "actor": "The unchanged saved party2 Mankey and one current ordinary Wild actor",
+    "trigger": "Unchanged Continue save and saved party2 Mankey. Walk normally from Goldenrod358366 into Route34 at358385; retain the same saved follower identity. Request one ordinary Bellsprout at358387, retaining bounded busy-queue refusals and neutral retries. No party, follower, profile, RNG or population override. Normal notice must bind that same Interest as Cargo, with no Resource Limit, then complete pickup, native Throw flight, exact landing and a normal follower move.",
+    "observable": "Current native Trigger/Cargo bindings, HELD handoff, full shared Motion plan/poses, commit/control return and same-party normal movement",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "actors",
+        "change": "Unchanged Continue save and saved party2 Mankey. Walk normally from Goldenrod358366 into Route34 at358385; retain the same saved follower identity. Request one ordinary Bellsprout at358387, retaining bounded busy-queue refusals and neutral retries. No party, follower, profile, RNG or population override. Normal notice must bind that same Interest as Cargo, with no Resource Limit, then complete pickup, native Throw flight, exact landing and a normal follower move."
+      }
+    ],
+    "limits": [
+      "Finite one-throw check; not a population, FPS or soak claim."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "bellsprout",
+      "species": 69,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Declare the saved follower and ordinary Wild placement"
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Normal notice, free pursuit, pickup, Throw, landing and follower control"
+    }
+  ],
+  "stop": {
+    "frameBudget": 1800,
+    "condition": "One complete same-identity Throw and subsequent follower move"
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Unchanged Continue save and saved party2 Mankey. Walk normally from Goldenrod358366 into Route34 at358385; retain the same saved follower identity. Request one ordinary Bellsprout at358387, retaining bounded busy-queue refusals and neutral retries. No party, follower, profile, RNG or population override. Normal notice must bind that same Interest as Cargo, with no Resource Limit, then complete pickup, native Throw flight, exact landing and a normal follower move."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "follower.route34-throw",
+    "claims": [
+      "natural-input",
+      "live-actor-identity",
+      "profile-resolution",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumFrames": 2
+  }
+}

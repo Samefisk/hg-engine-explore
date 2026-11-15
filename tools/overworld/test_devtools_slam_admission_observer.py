@@ -99,18 +99,18 @@ class Fixture:
         self.hooks.call(lr)
     def begin(self):
         self.enter('attempt', [1,585,407,585,407,0,0x40040408],
-                   [self.world['statePointer'],self.world['fieldPointer'],0,0x02229000],0x027E3800,0x023D6883)
+                   [self.world['statePointer'],self.world['fieldPointer'],0,0x02229000],0x027E3800,0x023D6933)
     def landing(self):
         self.enter('landing', [585,407,585,407],
-                   [self.world['statePointer'],0,self.world['fieldPointer'],0x4001],0x027E37A0,0x023D0FBF)
+                   [self.world['statePointer'],0,self.world['fieldPointer'],0x4001],0x027E37A0,0x023D10A3)
     def occupancy(self, occupied):
         setattr(self.regs, f'r{self.query_register}', draft.PINS['occupancy'][2] | 1)
         self.enter('occupancy',[407,0,1], [self.world['fieldPointer'],self.source['object'],0,585],
                    0x027E36A0, self.query_call+3)
         self.returned(int(occupied),0x027E36A0,self.query_call+2)
     def finish(self, occupied):
-        self.returned(5 if occupied else 0,0x027E37A0,0x023D0FBE)
-        self.returned(int(not occupied),0x027E3800,0x023D6882)
+        self.returned(5 if occupied else 0,0x027E37A0,0x023D10A2)
+        self.returned(int(not occupied),0x027E3800,0x023D6932)
         return self.observer.pending[-1]
 
 

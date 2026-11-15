@@ -53,7 +53,7 @@ def decode_conditions(read, pointer, actor, blob, frame, enabled, bank=None):
                        preparedPointer=pointer, rawHex="", statesHex="")
     if pointer == 0:
         return dict(unavailable, reason="no-prepared-owner")
-    current = struct.unpack_from("<H", blob, 4)[0] == 95
+    current = struct.unpack_from("<H", blob, 4)[0] == 96
     if current:
         need(bank is not None, "current bank provenance is missing")
     raw = read(pointer, 88 if current else 52)
@@ -69,7 +69,8 @@ def decode_conditions(read, pointer, actor, blob, frame, enabled, bank=None):
         need(struct.unpack_from("<H", raw, 84)[0] == actor["species"]
              and subject_damage_pending in (0, 1), "prepared subject species differs")
     offset, entries, stride = struct.unpack_from("<IHH", blob, 52)
-    need(stride == 48 and offset + entries * stride <= struct.unpack_from("<I", blob, 60)[0],
+    delta = 4 if current else 0
+    need(stride == 48 + delta and offset + entries * stride <= struct.unpack_from("<I", blob, 60)[0],
          "catalog condition directory differs")
     state_pointer = struct.unpack_from("<I", raw, 12)[0]
     if count == 0 or state_pointer == 0:
@@ -80,15 +81,15 @@ def decode_conditions(read, pointer, actor, blob, frame, enabled, bank=None):
         source = struct.unpack_from("<H", raw, 16 + i * 2)[0] if current else raw[16 + i]
         need(source < entries, "prepared catalog index differs")
         entry = blob[offset + source * stride:offset + (source + 1) * stride]
-        application = bank["conditionOwners"][source] if current else entry[34]
+        application = bank["conditionOwners"][source] if current else entry[34 + delta]
         application_local = local_application(bank, actor["species"], application) if current else application
         active, cooldown, target, generation, encounter, kind, flags = struct.unpack_from("<II3H2B", states, i * 16)
         need(application_local < 32 and flags & ~127 == 0, "condition state values differ")
         result.append(dict(catalogIndex=source, application=application,
             applicationLocal=application_local,
-            conditionId=struct.unpack_from("<H", entry, 32)[0], activationMode=entry[38],
-            durationFrames=struct.unpack_from("<H", entry, 20)[0],
-            cooldownFrames=struct.unpack_from("<H", entry, 22)[0],
+            conditionId=struct.unpack_from("<H", entry, 32 + delta)[0], activationMode=entry[38 + delta],
+            durationFrames=struct.unpack_from("<H", entry, 20 + delta)[0],
+            cooldownFrames=struct.unpack_from("<H", entry, 22 + delta)[0],
             activeUntil=active, cooldownUntil=cooldown, targetSlot=target,
             targetGeneration=generation, targetEncounterGeneration=encounter,
             targetKind=kind, flags=flags, enabled=bool(enabled & (1 << application_local))))
@@ -118,13 +119,13 @@ class NativeAppearanceObserver:
         self.entry = observer.elf_code(self.path, BASE, 28)
         need(self.entry[:8] == ENTRY, "entry ABI differs")
         self.blob = (rt.REPO / "build/OverworldWildBehaviorData.bin").read_bytes()
-        need(len(self.blob) >= 88 and struct.unpack_from("<H", self.blob, 4)[0] in (86, 87, 88, 89, 95)
+        need(len(self.blob) >= 88 and struct.unpack_from("<H", self.blob, 4)[0] in (86, 87, 88, 89, 96)
              and struct.unpack_from("<HI", self.blob, 6) == (84, len(self.blob)), "catalog ABI differs")
         template_offset, template_count, template_size = struct.unpack_from("<IHH", self.blob, 76)
         rest_offset = (template_offset + template_count * template_size + 3) & ~3
         condition_count = struct.unpack_from("<H", self.blob, 56)[0]
         options_bytes = max(condition_count, 1) * 12 if struct.unpack_from("<H", self.blob, 4)[0] in (87, 88, 89) else 0
-        current = struct.unpack_from("<H", self.blob, 4)[0] == 95
+        current = struct.unpack_from("<H", self.blob, 4)[0] == 96
         self.bank = decode_application_bank(self.blob, rt.REPO) if current else None
         need(current or rest_offset + 4 + options_bytes == len(self.blob),
              "catalog appended tint/options layout differs")

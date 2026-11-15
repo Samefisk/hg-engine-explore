@@ -132,7 +132,7 @@ def cargo_fixture(root):
     } OverworldWildPreparedSpawn;
     _Static_assert(sizeof(OverworldWildPreparedSpawn)==260,"packet seam must include every byte");
     typedef struct OverworldWildOverlayRuntimeState {''')
-    fixture=fixture.replace('struct {u8 targets[10];u16 targetMask,carrierMask,recoveringMask;} throwState;','struct {u8 targets[10];u16 targetMask,carrierMask,recoveringMask;} throwState;\n    OverworldWildPreparedSpawn queuedSpawn;u32 queuedSpawnSerial;u32 refillQueuedSerial;u8 refillFailureStreak,refillTerrainMask,refillLandSurfSlot;u8 queuedSpawnSlotPlusOne;\n    OverworldEntryRouteReceipt entryRouteReceipt;')
+    fixture=fixture.replace('struct {u8 targets[10];u16 targetMask,carrierMask,recoveringMask;} throwState;','struct {u8 targets[10];u16 targetMask,carrierMask,recoveringMask;} throwState;\n    OverworldWildPreparedSpawn queuedSpawn;OverworldWildQueuedSpawnGuard queuedSpawnGuard;u32 queuedSpawnSerial;u32 refillQueuedSerial;u8 refillFailureStreak,refillTerrainMask,refillLandSurfSlot;u8 queuedSpawnSlotPlusOne;\n    OverworldEntryRouteReceipt entryRouteReceipt;')
     fixture=fixture.replace('u16 captureTargetMask;','u16 captureTargetMask;u8 justSpawned;u16 movementInProgressMask;int movementQueuedBattleSlot;u8 movementSpotStates[10];u8 movementSpawnRunActive[10];s16 movementSpawnRunTargetX[10],movementSpawnRunTargetY[10];')
     # Motion model supplies the actual enums already.
     fixture=fixture.replace('#include "cargo_motion_decision_production.inc"','')
@@ -145,7 +145,7 @@ def cargo_fixture(root):
     /* Exact ResetMemo body is included below from the actual Entry unit. */
     OverworldPickupRouteStatus OverworldEntryRoute_Begin(OverworldEntryRouteSearch*s,const OverworldEntryRouteRequest*r,const OverworldPickupRouteWildWorld*w,const OverworldPickupRouteNativePolicy*p,OverworldCargoQueryState*l,const OverworldPickupRouteEdge*e,u16 n,const OverworldPickupRouteBounds*b,u32 sc,u32 pc,u32 dc,u8(*c)(void*,const OverworldEntryRouteRequest*),void*o){(void)s;(void)r;(void)w;(void)p;(void)l;(void)e;(void)n;(void)b;(void)sc;(void)pc;(void)dc;(void)c;(void)o;NEVER();}
     OverworldPickupRouteStatus OverworldEntryRoute_Resume(OverworldEntryRouteSearch*s,u32 d,const OverworldCargoQueryChangedTile*t,u16 n,u8 c,OverworldEntryRoutePath*p,OverworldEntryRouteReceipt*r){(void)s;(void)d;(void)t;(void)n;(void)c;(void)p;(void)r;NEVER();}
-    OverworldPickupRouteStatus OverworldEntryRoute_ValidateStep(OverworldEntryRouteSearch*s,const OverworldEntryRoutePath*p,u32 d,const OverworldCargoQueryChangedTile*t,u16 n,u8 c,OverworldEntryRouteReceipt*r){(void)s;(void)p;(void)d;(void)t;(void)n;(void)c;(void)r;NEVER();}
+    OverworldPickupRouteStatus OverworldEntryRoute_ValidateStep(OverworldEntryRouteSearch*s,OverworldEntryRoutePath*p,u32 d,const OverworldCargoQueryChangedTile*t,u16 n,u8 c,OverworldEntryRouteReceipt*r){(void)s;(void)p;(void)d;(void)t;(void)n;(void)c;(void)r;NEVER();}
     /* Exact Confirm is included below. */
     /* Exact IdleStall is included below. */
     const OverworldPickupRouteNativeSeams *OverworldEntryRoute_MemoSeams(void){NEVER();}
@@ -185,13 +185,13 @@ def cargo_fixture(root):
     fixture=re.sub(r'#include "../../../([^"]+)"',lambda m:'#include "'+str(product_path(root,m.group(1)))+'"',fixture)
 
     fixture=fixture.replace('int main(int argc,char **argv)', 'int CargoMain(int argc,char **argv)')
-    fixture=fixture.replace('    OverworldEntryRouteReceipt entryRouteReceipt;', '    OverworldEntryRouteReceipt entryRouteReceipt;u32 entryRouteSerial[10];struct {u8 phase;} returnMoves[10];u8 queuedSpawnTerrain,refillPositionChecksRemaining;OverworldWildQueuedSpawnGuard queuedSpawnGuard;')
+    fixture=fixture.replace('    OverworldEntryRouteReceipt entryRouteReceipt;', '    OverworldEntryRouteReceipt entryRouteReceipt;u32 entryRouteSerial[10];struct {u8 phase;} returnMoves[10];u8 queuedSpawnTerrain,refillPositionChecksRemaining;')
     return fixture
 
 def guided_program(root=ROOT, fault=None):
     fixture = cargo_fixture(root)
     entry = product(root,'lib/overworld/overworld_entry_route.c')
-    guide = entry[entry.index('u8 OverworldEntryRoute_Guide('):entry.index('u8 OverworldEntryRoute_Confirm(')]
+    guide = wild_function(entry,'StepEdge')+'\n'+entry[entry.index('u8 OverworldEntryRoute_Guide('):entry.index('u8 OverworldEntryRoute_Confirm(')]
     wild = product(root,'src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c')
     names = ('OverworldWildSpawns_EntryControl','OverworldWildSpawns_ArmEntryQueue',
              'OverworldWildSpawns_QueryEntry','OverworldWildSpawns_FinalizePreparedSpawn',
@@ -217,8 +217,8 @@ def guided_program(root=ROOT, fault=None):
         driver = mutate(driver,'*sequence=actors->slots[slot].snapshot.commitSequence;',
                         '*sequence=actors->slots[slot].snapshot.commitSequence+1;')
     elif fault == 'consume-order':
-        fixture = mutate(fixture,'runtime->queuedSpawnSlotPlusOne = 0;\n    runtime->refillPositionChecksRemaining = 0;\n    if ((u32)slot',
-                         'runtime->queuedSpawnSlotPlusOne = runtime->queuedSpawnSlotPlusOne;\n    runtime->refillPositionChecksRemaining = 0;\n    if ((u32)slot')
+        fixture = mutate(fixture,'runtime->queuedSpawnSlotPlusOne = 0;\n    runtime->refillPositionChecksRemaining = 0;\n    if (!originReady || (u32)slot',
+                         'runtime->queuedSpawnSlotPlusOne = runtime->queuedSpawnSlotPlusOne;\n    runtime->refillPositionChecksRemaining = 0;\n    if (!originReady || (u32)slot')
     elif fault == 'guard-tail':
         fixture = mutate(fixture,'byte < sizeof(guard);','byte < sizeof(guard)-4;')
     files = {'check.c':fixture+driver,'cargo_query_wild_production.inc':cargo.host_body(body)}
@@ -339,20 +339,21 @@ static const OverworldPickupRouteWildOps ops=''')
  a=s.rindex(marker);s=s[:a]+re.sub(r'\bAbs\b','PreparedAbs',s[a:])
  landing=product(root,'lib/overworld/overworld_pickup_landing_wild.c')
  if fault=='missing-bare-directions':
-  landing=mutate(landing,'            policy.directions=OVERWORLD_PICKUP_ROUTE_NATIVE_CARDINAL\n                | OVERWORLD_PICKUP_ROUTE_NATIVE_DIAGONAL;\n','')
+  landing=mutate(landing,'            setup.policy.directions=OVERWORLD_PICKUP_ROUTE_NATIVE_CARDINAL\n                | OVERWORLD_PICKUP_ROUTE_NATIVE_DIAGONAL;\n','')
  s+=without_includes(landing)
  s+=product(root,'tools/overworld/fixtures/spawn_move_walk_landing_driver.c')
  return {'check.c':s}
 
 def origin_program(root=ROOT, fault=None):
-    source = product(root, 'src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c')
-    body = wild_function(source, 'OverworldWildSpawns_SpawnPreparedEncounter')
-    entry = product(root,'lib/overworld/overworld_entry_route.c')
-    ready = wild_function(entry,'NativeReady')
-    if fault == 'stale-ready-origin':
-        ready = mutate(ready,'Abs(c->prepared->position.startX-player->xCurr)>=13','Abs(c->prepared->position.startX-player->xCurr)>=12')
-    driver = (FIXTURES / 'spawn_move_origin_driver.c').read_text()
-    return {'check.c':driver.replace('/* ACTUAL READY OWNER */',ready).replace('/* ACTUAL PREPARED CONSTRUCTOR */',body)}
+    # READY admission moved out of the constructor; use the actual final
+    # NativeCommitOnce boundary, with its real queued packet and native ops.
+    files=guided_program(root)
+    unit=mutate(files['check.c'],'int main(void){return NativeControls();}','')
+    if fault=='stale-ready-origin':
+        unit=mutate(unit,'Abs(c->prepared->position.startX-player->xCurr)>=13','Abs(c->prepared->position.startX-player->xCurr)>=12')
+    elif fault is not None:raise AssertionError('unknown READY-origin fault: '+fault)
+    files['check.c']=unit+product(root,'tools/overworld/fixtures/spawn_move_origin_driver.c')
+    return files
 
 
 def compile_program(work, files, root=ROOT, linked=False):
@@ -372,3 +373,174 @@ def compile_program(work, files, root=ROOT, linked=False):
     if result.returncode:
         raise RuntimeError('Move entry host compile failed:\n' + result.stderr)
     return work / 'check'
+
+
+def workspace_program(root=ROOT, fault=None, host_layout=None):
+    """Actual allocator/rollback, measured heap admission and existing drain.
+
+    The retained Route29 failure had37720 free bytes on11 and79940 on4.
+    Native sizeof/offsetof proof records16600/11268-byte current chunks.
+    Host fixtures add pointer-width storage only. The copied old placement
+    must reuse the positive run's overhead, not credit its extra640 bytes.
+    """
+    files=guided_program(root)
+    unit=cargo_fixture(root)
+    overlay=product(root,'src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c')
+    drain=wild_function(overlay,'OverworldWildSpawns_DrainQuery')
+    driver=product(root,'tools/overworld/fixtures/query_workspace_storage_driver.c')
+    driver=driver.replace('/* ACTUAL DRAIN OWNER */',drain)
+    source=product(root,'lib/overworld/overworld_cargo_query_wild.c')
+    if fault=='rollback':
+        source=mutate(source,'if(auxiliary==NULL) { sys_FreeMemoryEz(q);return NULL; }','if(auxiliary==NULL) { return NULL; }')
+    elif fault=='early-publication':
+        source=mutate(source,'q=call->allocate(OVERWORLD_FIELD_QUERY_CORE_HEAP_ID,sizeof(*q));if(q==NULL) return NULL;',
+            'q=call->allocate(OVERWORLD_FIELD_QUERY_CORE_HEAP_ID,sizeof(*q));if(q==NULL) return NULL;runtime->pickupQuery=q;')
+    elif fault=='nested-free':
+        source=mutate(source,'sys_FreeMemoryEz(auxiliary);sys_FreeMemoryEz(q);','(void)auxiliary;sys_FreeMemoryEz(q);')
+    elif fault=='drain-version':
+        driver=mutate(driver,'allocation->version!=OVERWORLD_FIELD_QUERY_ALLOCATION_VERSION','0')
+    elif fault=='queue-tail':
+        driver=mutate(driver,'sizeof(runtime->queuedSpawn) + sizeof(runtime->queuedSpawnGuard)','sizeof(runtime->queuedSpawn) + sizeof(runtime->queuedSpawnGuard)-1')
+    elif fault=='serial-tail':
+        driver=mutate(driver,'sizeof(runtime->entryRouteReceipt) + sizeof(runtime->entryRouteSerial)','sizeof(runtime->entryRouteReceipt) + sizeof(runtime->entryRouteSerial)-1')
+    elif fault=='old-core-placement':
+        if host_layout is None:
+            raise AssertionError('old placement needs the current host layout receipt')
+        changed='    OverworldCargoQueryChangedTile changed[CHANGES];\n'
+        source=mutate(source,'typedef struct NativeAuxiliary {\n'+changed,
+                      'typedef struct NativeAuxiliary {\n')
+        source=mutate(source,
+            '    Footprint objects[OBJECTS], reservations[OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS], front;\n',
+            '    Footprint objects[OBJECTS], reservations[OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS], front;\n'+changed)
+        if source.count('AUX(q)->changed')!=6:
+            raise AssertionError('current transient tile accesses changed')
+        source=source.replace('AUX(q)->changed','q->changed')
+        unit=unit.replace('AUX(q)->changed','q->changed')
+    elif fault is not None:raise AssertionError('unknown workspace control: '+fault)
+    measured=r'''
+static int MovedTilesAndMeasuredHeaps(void){
+ Reset();
+ printf("HOST_LAYOUT %zu %zu\n",sizeof(NativeQuery),sizeof(NativeAuxiliary));
+ /* Hold these translations fixed for the copied old-layout control. */
+ heap4Free=79940u+sizeof(NativeAuxiliary)-11268u;
+ heap11Free=37720u+sizeof(NativeQuery)-16600u;
+ NativeQuery*q=AcquireQuery(&call);CHECK(q && allocations==2);
+ /* Native observations must not alias the live route nodes or packet. */
+ memset(AUX(q)->nodes,0xA5,sizeof(AUX(q)->nodes));
+ memset(&AUX(q)->packet,0x5A,sizeof(AUX(q)->packet));
+ q->changesComplete=1;CHECK(Observe(q,&call,&actors,10));
+ q->changeCount=0;objects[63]=(LocalMapObject){.flags=1,.id=15,.xCurr=7,.yCurr=4,.posVec={0,64,0}};
+ CHECK(Observe(q,&call,&actors,11) && HasTile(q,7,4));
+ const u8*raw=(const u8*)AUX(q)->nodes;
+ for(unsigned n=0;n<sizeof(AUX(q)->nodes);n++)CHECK(raw[n]==0xA5);
+ raw=(const u8*)&AUX(q)->packet;
+ for(unsigned n=0;n<sizeof(AUX(q)->packet);n++)CHECK(raw[n]==0x5A);
+ CHECK(OverworldWildSpawns_DrainQuery(&runtime) && frees==2);
+ puts("measured Route29 heaps admit both chunks; observed tiles preserve route nodes and prepared packet PASS");
+ return 0;
+}
+int main(void){
+ if(AllocationControls() || AllPathsAndCargo() || DrainSpans())return 1;
+ return MovedTilesAndMeasuredHeaps();
+}
+'''
+    if host_layout is not None:
+        core,auxiliary=host_layout
+        if core<16600 or auxiliary<11268:
+            raise AssertionError('host pointer-width translation is negative')
+        measured=mutate(measured,'sizeof(NativeAuxiliary)-11268u',str(auxiliary-11268)+'u')
+        measured=mutate(measured,'sizeof(NativeQuery)-16600u',str(core-16600)+'u')
+    driver=mutate(driver,
+        'int main(void){if(AllocationControls() || AllPathsAndCargo())return 1;return DrainSpans();}',
+        measured)
+    files['check.c']=unit+driver
+    files['cargo_query_wild_production.inc']=cargo.host_body(source)
+    return files
+
+
+def fairness_program(root=ROOT, fault=None):
+    """Real shared Query turns with duplicate calls and competing current actors."""
+    files=workspace_program(root)
+    source=product(root,'lib/overworld/overworld_cargo_query_wild.c')
+    faults={
+        'pre-fix-follower-priority': ('                    && !(q->waitingMask&(1u<<world->slot))\n',''),
+        'forget-displaced-owner': ('            q->waitingMask|=1u<<q->owner.slot;','            (void)q->owner.slot;'),
+        'forget-waiter-retirement': ('        q->waitingMask^=waiting;','        (void)waiting;'),
+        'forget-valid-waiter': ('    q->waitingMask|=waiting;','    (void)waiting;'),
+    }
+    if fault is not None:
+        if fault not in faults:raise AssertionError('unknown fair query control: '+fault)
+        source=mutate(source,*faults[fault])
+    driver=r"""
+static u8 fairWildUsesBinding=1;
+static OverworldPickupRouteStatus FairCall(u8 slot){
+ world.slot=slot;world.subjectObject=world.heightObject=spawns.spawns[slot].object;
+ expectedSubjectSlot=slot;options.usesBinding=slot==7?OVERWORLD_TARGET_SELECT_OBJECT_OF_INTEREST:fairWildUsesBinding;
+ return OverworldCargoQueryWild_Tick(&call,&output);
+}
+static int FairPendingWildTurn(void){
+ fairWildUsesBinding=1;CHECK(!FollowerPrioritySetup());
+ profile.owner.continueWhenArrived=12u<<2;
+ NativeQuery*q=runtime.pickupQuery;
+ OverworldTargetBindingsState saved[10];memcpy(saved,conditions.bindings,sizeof(saved));
+ OverworldActorStateSnapshot wild=actors.slots[0].snapshot,follower=actors.slots[7].snapshot;
+ u32 calls=nativeCalls;
+ /* First explicit follower request stays prompt, without a second native call. */
+ CHECK(FairCall(7)==PENDING && q->owner.slot==7 && nativeCalls==calls);
+ CHECK((q->waitingMask&1u)!=0);
+ CHECK(FairCall(7)==PENDING && nativeCalls==calls);
+ u8 followerReady=0,wildTurn=0,finished=0;unsigned frames;
+ for(frames=1;frames<=512;frames++){
+  ++conditions.frame.world.frame;calls=nativeCalls;
+  OverworldPickupRouteStatus status=FairCall(0);
+  if(q->owner.slot==0){wildTurn=1;CHECK(followerReady);}
+  if(status==OVERWORLD_PICKUP_ROUTE_REACHABLE && q->owner.slot==0){CHECK(nativeCalls-calls<=1);finished=1;break;}
+  /* Repeated calls in this queue must retain a denied waiter's place. */
+  if(q->owner.slot==7)CHECK((q->waitingMask&1u)!=0);
+  CHECK(FairCall(0)==PENDING && nativeCalls-calls<=1);
+  status=FairCall(7);
+  if(status==OVERWORLD_PICKUP_ROUTE_REACHABLE && q->owner.slot==7)followerReady=1;
+  CHECK(!wildTurn || q->owner.slot==0);
+  if(wildTurn)CHECK((q->waitingMask&(1u<<7))!=0);
+  status=FairCall(7);
+  if(status==OVERWORLD_PICKUP_ROUTE_REACHABLE && q->owner.slot==7)followerReady=1;
+  CHECK(!wildTurn || q->owner.slot==0);
+  CHECK(nativeCalls-calls<=1 && output.lastWork.routeUnits<=16);
+  CHECK(!memcmp(saved,conditions.bindings,sizeof(saved))
+   && !memcmp(&wild,&actors.slots[0].snapshot,sizeof(wild))
+   && !memcmp(&follower,&actors.slots[7].snapshot,sizeof(follower))
+   && !runtime.throwState.carrierMask && !runtime.throwState.targetMask);
+ }
+ CHECK(finished && followerReady && wildTurn && frames<=512);
+ CHECK(q->owner.slot==0 && output.route.subject.slot==0 && output.route.cargo.slot==1
+  && output.eligibleActorMask==2 && output.route.hasNextStep && allocations==2);
+ printf("actual fair query: first follower priority, then uninterrupted Wild nearest completion in%u frames; duplicate-frame work and identities PASS\n",frames);
+ return 0;
+}
+static int RetireUnavailableWaiter(void){
+ fairWildUsesBinding=OVERWORLD_TARGET_SELECT_OBJECT_OF_INTEREST;CHECK(!ClaimedRouteCompetitionSetup(0));
+ NativeQuery*q=runtime.pickupQuery;CHECK((q->waitingMask&(1u<<7))!=0);
+ call.eligibleActorMask=0;++conditions.frame.world.frame;u32 calls=nativeCalls;
+ CHECK(FairCall(7)==INVALID && q->owner.slot==0 && nativeCalls==calls);
+ CHECK((q->waitingMask&(1u<<7))==0);
+ call.eligibleActorMask=2;
+ CHECK(FairCall(0)==OVERWORLD_PICKUP_ROUTE_REACHABLE && q->owner.slot==0
+  && nativeCalls==calls && q->waitingMask==0);
+ /* The same-frame owner keeps its receipt and clears its own waiting bit. */
+ q->waitingMask=1;
+ CHECK(FairCall(0)==OVERWORLD_PICKUP_ROUTE_REACHABLE && q->owner.slot==0
+  && q->waitingMask==0 && nativeCalls==calls);
+ puts("actual fair query: ineligible queued request retires; same-frame owner receipt survives PASS");
+ return 0;
+}
+int main(void){
+ if(FairPendingWildTurn() || RetireUnavailableWaiter())return 1;
+ if(FollowerPriorityChecks() || ClaimedRouteCompetitionChecks() || ClaimedRouteRoundRobinChecks())return 1;
+ FreeOwnedQuery();return 0;
+}
+"""
+    files['check.c']=mutate(files['check.c'],
+        'int main(void){\n if(AllocationControls() || AllPathsAndCargo() || DrainSpans())return 1;\n return MovedTilesAndMeasuredHeaps();\n}',
+        driver)
+    files['cargo_query_wild_production.inc']=cargo.host_body(source)
+    return files

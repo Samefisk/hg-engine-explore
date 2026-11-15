@@ -78,6 +78,12 @@ int md_set_phase_timing(void* handle, uint32_t enabled);
 int md_read_phase_timing(void* handle, void* out, uint32_t length);
 int md_read_bytes(void* handle, int cpu, uint32_t address, void* out, uint32_t length);
 int md_write_bytes(void* handle, int cpu, uint32_t address, const void* data, uint32_t length);
+/* Opened cartridge image, paused core only. Size is melonDS's power-of-two
+ * padded image. Read/write spans must lie in [0x8000, size); writes change
+ * what later guest card reads return, not guest RAM or the source file. */
+uint32_t md_cart_rom_size(void* handle);
+int md_read_cart_rom(void* handle, uint32_t offset, void* out, uint32_t length);
+int md_write_cart_rom(void* handle, uint32_t offset, const void* data, uint32_t length);
 /* Registers 0..15, CPSR=16, current-mode SPSR=17. At exec callbacks r15 has ARM architectural
  * PC (instruction+8 ARM / +4 Thumb); md_next_pc is the instruction address.
  * Set r15 alone does NOT flush the pipeline: use md_branch afterwards. */

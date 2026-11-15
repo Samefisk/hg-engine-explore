@@ -532,6 +532,13 @@
 	.byte num
 .endmacro
 
+// Optional overworld policy in the native encounter header's two spare bytes.
+// Bit 0 keeps land selection in the current clock table. Old records stay zero.
+.macro overworldtimepolicy,num
+	.org 6
+	.byte num, 0
+.endmacro
+
 .macro walklevels,num1,num2,num3,num4,num5,num6,num7,num8,num9,num10,num11,num12
 	.org 8
 

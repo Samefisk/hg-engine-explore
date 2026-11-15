@@ -1,5 +1,5 @@
 #include <assert.h>
-static unsigned reads,heightReads,behaviorReads,terrainReads,hopCalls,ownerOkay=1,midBehavior=2,walkBlocked,occupancyBlocked;
+static unsigned reads,heightReads,behaviorReads,terrainReads,hopCalls,hopSteps,edgePolicyCalls,policyCallsAtHop,ownerOkay=1,midBehavior=2,walkBlocked,occupancyBlocked;
 static FieldSystem f;static LocalMapObject player;static PlayerAvatar avatar;
 static OverworldWildBehaviorProfile profile;
 static u8 Behavior(FieldSystem *field,int x,int y){(void)field;(void)x;(void)y;reads++;behaviorReads++;return midBehavior;}
@@ -10,7 +10,10 @@ static BOOL NoDirection(u8 b){(void)b;return 0;}
 static const OverworldPickupRouteWildDirectionBlock directionBlocks[4]={NoDirection,NoDirection,NoDirection,NoDirection};
 static OverworldMotionDecision HopPlan(OverworldActorHopPlanCall *call){
  if(call->operation==OVERWORLD_ACTOR_HOP_PLAN_VECTOR){int dx=Abs(call->deltaX),dy=Abs(call->deltaY);call->distance=dx>dy?dx:dy;return OVERWORLD_MOTION_DECISION_ACCEPTED;}
- assert(call->operation==OVERWORLD_ACTOR_HOP_PLAN_CLEARANCE_BEGIN || call->operation==OVERWORLD_ACTOR_HOP_PLAN_CLEARANCE_STEP);hopCalls++;call->clearanceCursor->readsUsed=0;call->clearanceCursor->phase=OVERWORLD_ACTOR_HOP_CLEARANCE_DONE;return OVERWORLD_MOTION_DECISION_ACCEPTED;
+ assert(call->operation==OVERWORLD_ACTOR_HOP_PLAN_CLEARANCE_BEGIN || call->operation==OVERWORLD_ACTOR_HOP_PLAN_CLEARANCE_STEP);hopCalls++;call->clearanceCursor->readsUsed=0;
+ if(call->operation==OVERWORLD_ACTOR_HOP_PLAN_CLEARANCE_BEGIN){policyCallsAtHop=edgePolicyCalls;call->clearanceCursor->phase=OVERWORLD_ACTOR_HOP_CLEARANCE_NEXT;return OVERWORLD_MOTION_DECISION_RETRY_WORLD_BUSY;}
+ assert(policyCallsAtHop==edgePolicyCalls);if(++hopSteps==1){call->clearanceCursor->phase=OVERWORLD_ACTOR_HOP_CLEARANCE_NEXT;return OVERWORLD_MOTION_DECISION_RETRY_WORLD_BUSY;}
+ call->clearanceCursor->phase=OVERWORLD_ACTOR_HOP_CLEARANCE_DONE;return OVERWORLD_MOTION_DECISION_ACCEPTED;
 }
 static const OverworldPickupRouteWildOps ops={.version=OVERWORLD_PICKUP_ROUTE_WILD_VERSION,.size=sizeof(OverworldPickupRouteWildOps),.behavior=Behavior,.occupancy=MidOccupancy,.walkHeight=WalkHeight,.blockedTerrain=Blocked,.sourceDirectionBlocks=directionBlocks,.targetDirectionBlocks=directionBlocks,.hopPlan=HopPlan};
 static OverworldPickupRouteEdgeResult B(void *raw,const OverworldPickupRouteQuery *query){OverworldPickupRouteWildWorld *w=raw;return !ownerOkay || w->field!=&f || w->ops!=&ops || w->ops->version!=OVERWORLD_PICKUP_ROUTE_WILD_VERSION || (query && (!OverworldPickupRoute_QueryCurrent(query) || query->scopeRevision!=w->scopeRevision || query->movementPolicyRevision!=w->movementPolicyRevision || query->dynamicRevision!=w->dynamicRevision))?INVALID:LEGAL;}
@@ -19,7 +22,7 @@ static OverworldPickupRouteEdgeResult S(void *raw,const OverworldPickupRoutePosi
 static OverworldPickupRouteEdgeResult O(void *raw,const OverworldActorHandle *subject,const OverworldPickupRoutePosition *pose,u8 include){(void)raw;(void)subject;(void)pose;(void)include;reads++;return occupancyBlocked?BLOCKED:LEGAL;}
 static OverworldPickupRouteEdgeResult R(void *raw,const OverworldActorHandle *subject,const OverworldPickupRoutePosition *pose){(void)raw;(void)subject;(void)pose;reads++;return LEGAL;}
 static OverworldPickupRouteEdgeResult E(void *raw,const OverworldPickupRouteNativePolicy *p,u8 kind,const OverworldPickupRoutePosition *from,const OverworldPickupRouteNativeTile *source,const OverworldPickupRoutePosition *to,const OverworldPickupRouteNativeTile *target){
- if(kind==OVERWORLD_PICKUP_ROUTE_NATIVE_LANDING_ONLY)return LEGAL;
+ edgePolicyCalls++;if(kind==OVERWORLD_PICKUP_ROUTE_NATIVE_LANDING_ONLY)return LEGAL;
  OverworldPickupRouteWildWorld *w=raw;OverworldEntryRouteMemo *m=w->entryMemo;
  if(!m->movementStarted){m->movementInput=(OverworldPreparedMovementInput){0};OverworldPreparedMovementInput *i=&m->movementInput;i->version=1;i->size=sizeof(*i);i->profile=p->resolvedProfile;i->lane=p->resolvedLane;i->field=w->field;i->ops=w->ops;i->from=*from;i->to=*to;i->source=*source;i->target=*target;i->kind=kind;i->directions=p->directions;i->rangeX=i->rangeY=-1;i->anchorX=from->x;i->anchorY=from->y;i->blockedTerrain=Blocked;m->movement=(OverworldPreparedMovementCursor){0};m->movement.version=1;m->movement.size=sizeof(m->movement);m->movement.input=i;OverworldPickupRouteEdgeResult d=OverworldPreparedMovement_Begin(&m->movement);m->movementStarted=1;if(m->movement.phase==OVERWORLD_PREPARED_MOVEMENT_DONE)return d;}
  m->movement.readBudget=m->budget;OverworldPickupRouteEdgeResult d=OverworldPreparedMovement_Step(&m->movement);assert(m->movement.readsUsed<=m->budget);m->budget-=m->movement.readsUsed;m->used+=m->movement.readsUsed;return d;
@@ -29,11 +32,12 @@ static OverworldPickupRouteEdgeResult P(void *raw,const OverworldPickupRouteNati
 static const OverworldPickupRouteNativeSeams seams={B,T,S,O,R,E,H,P};
 const OverworldPickupRouteNativeSeams *OverworldPickupRouteWild_GetSeams(void *world){(void)world;return &seams;}
 static u8 CurrentTest(void *owner,const OverworldEntryRouteRequest *r){(void)owner;return ownerOkay && r->serial==7 && r->slot==0 && r->fieldEpoch==1 && r->mapGeneration==2;}
-static OverworldCargoQueryStorage storage;static OverworldCargoQueryState ledger;static OverworldEntryRouteSearch search;
+static OverworldCargoQueryStorage storage;
+static OverworldCargoQueryBuffers buffers;static OverworldCargoQueryState ledger;static OverworldEntryRouteSearch search;
 static OverworldPickupRouteEdge edge;static OverworldPickupRoutePosition output;
 static void Init(u8 direction,u8 level,u8 behavior,u8 kind){
- memset(&storage,0,sizeof(storage));storage.workspace=(OverworldPickupRouteWorkspace){storage.nodes,storage.edges,storage.visited,OVERWORLD_CARGO_QUERY_NODES,OVERWORLD_CARGO_QUERY_EDGES,OVERWORLD_CARGO_QUERY_HASH,0};OverworldCargoQuery_Init(&ledger,&storage);
- reads=heightReads=behaviorReads=terrainReads=hopCalls=walkBlocked=occupancyBlocked=0;ownerOkay=1;midBehavior=behavior;profile=(OverworldWildBehaviorProfile){0};profile.owner.jumpLevel=level;avatar.mapObject=&player;f.playerAvatar=&avatar;player.xCurr=player.yCurr=20;
+ memset(&storage,0,sizeof(storage));OverworldCargoQuery_BindStorage(&storage,&buffers);OverworldCargoQuery_Init(&ledger,&storage);
+ reads=heightReads=behaviorReads=terrainReads=hopCalls=walkBlocked=occupancyBlocked=0;hopSteps=edgePolicyCalls=policyCallsAtHop=0;ownerOkay=1;midBehavior=behavior;profile=(OverworldWildBehaviorProfile){0};profile.owner.jumpLevel=level;avatar.mapObject=&player;f.playerAvatar=&avatar;player.xCurr=player.yCurr=20;
  static const s8 delta[4][2]={{0,-1},{0,1},{-1,0},{1,0}};static const u8 opposite[4]={1,0,3,2};int distance=kind==OVERWORLD_PICKUP_ROUTE_NATIVE_LEDGE?2:1;
  edge=(OverworldPickupRouteEdge){-delta[direction][0]*distance,-delta[direction][1]*distance,OVERWORLD_PICKUP_ROUTE_NATIVE_TAG(kind,opposite[direction])};
  OverworldEntryRouteRequest request={0};request.version=1;request.size=sizeof(request);request.serial=7;request.slot=0;request.fieldEpoch=1;request.mapGeneration=2;request.physical.rangeX=request.physical.rangeY=-1;request.destination=(OverworldPickupRoutePosition){10,10,0,0xFFFF,0};
@@ -52,7 +56,7 @@ int main(int argc,char **argv){
   unsigned ledgeIndex=behavior-56;u8 legal=ledgeIndex<=3 && level!=0 && (ledgeIndex^(direction^(2|(direction>>1))))<=(level>=2);
   OverworldPickupRouteEdgeResult d=Complete();assert(d==(legal?LEGAL:BLOCKED));if(!legal)assert(!memcmp(&prior,&output,sizeof(output)));else assert(output.x==10+edge.dx && output.y==10+edge.dy && output.baseY==0 && output.surfaceId==0xFFFF);
   if(!legal){negativeReads+=reads;negativeHeight+=heightReads;if(argc>1 && !strcmp(argv[1],"savings")){assert(reads==1 && heightReads==0 && terrainReads==0 && calls==1);}}
-  else {positiveReads+=reads;positiveHeight+=heightReads;assert(hopCalls==2);}
+  else {positiveReads+=reads;positiveHeight+=heightReads;assert(hopCalls==3 && hopSteps==2);}
   cases++;
  }
  for(u8 direction=0;direction<4;direction++){Init(direction,1,2,OVERWORLD_PICKUP_ROUTE_NATIVE_WALK);assert(Complete()==LEGAL);walkReads+=reads;walkHeight+=heightReads;}

@@ -332,7 +332,6 @@ all: $(TOOLS) $(OUTPUT) $(OVERLAY_OUTPUTS) | venv
 	@echo "$(ROMNAME) Decompression successful!!"
 	$(NARCHIVE) extract $(FILESYS)/a/0/2/8 -o $(BUILD)/a028/ -nf
 	$(PYTHON) scripts/make.py $(CFLAGS)
-	$(PYTHON) -B -m tools.maps --root $(FILESYS) --arm9 $(BASE)/arm9.bin --overrides data/maps apply --in-place
 	$(MAKE) move_narc
 	$(ARMIPS) armips/global.s $(ARMIPS_FLAGS)
 	$(PYTHON_NO_VENV) scripts/pack_overworld_emote_slots.py --seal-final-package

@@ -1,0 +1,1318 @@
+{
+  "schemaVersion": 1,
+  "id": "world.goldenrod-route34-entry",
+  "title": "Goldenrod cold Route 34 load, Y summon and normal entry return with the saved follower",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "tests/overworld/scenarios/world.goldenrod-route34-entry.json",
+  "requirements": [
+    "current.goldenrod-route34-entry"
+  ],
+  "budgets": {
+    "maxSeconds": 360,
+    "maxFrames": 2400,
+    "noProgressFrames": 240,
+    "minObservedFrames": 16
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    }
+  ],
+  "setup": [
+    {
+      "id": "goldenrod-street",
+      "op": "teleport",
+      "args": {
+        "map": 76,
+        "x": 339,
+        "z": 381,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "street-neutral-warmup",
+      "op": "step",
+      "args": {
+        "frames": 64,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "valid-goldenrod-street-start",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 76,
+          "x": 339,
+          "z": 381
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "saved-mankey-slot",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "party-field",
+          "path": "species",
+          "operator": "eq",
+          "value": 56,
+          "slot": 2
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "saved-mankey-personality",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "party-field",
+          "path": "personality",
+          "operator": "eq",
+          "value": 2920357538,
+          "slot": 2
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "saved-cyndaquil-slot",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "party-field",
+          "path": "species",
+          "operator": "eq",
+          "value": 155,
+          "slot": 1
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "saved-cyndaquil-personality",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "party-field",
+          "path": "personality",
+          "operator": "eq",
+          "value": 2046726716,
+          "slot": 1
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "initial-saved-mankey-current",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "follower-settled",
+          "species": 56,
+          "partySlot": 2
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "initial-release-ended",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "followerReleaseState",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 180,
+        "noProgressFrames": 180
+      }
+    },
+    {
+      "id": "initial-queue-drained",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "queue.count",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 90,
+        "noProgressFrames": 90
+      }
+    },
+    {
+      "id": "initial-no-request",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "queue.request",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "initial-no-capture-owner",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "captureTargetMask",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "cold-route34-native-entry",
+      "op": "teleport",
+      "args": {
+        "map": 38,
+        "x": 354,
+        "z": 385,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "cold-route34-neutral-warmup",
+      "op": "step",
+      "args": {
+        "frames": 64,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "cold-route34-player-settled",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 38,
+          "x": 354,
+          "z": 385
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "cold-route34-saved-mankey-current",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "follower-settled",
+          "species": 56,
+          "partySlot": 2
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "cold-goldenrod-native-return",
+      "op": "teleport",
+      "args": {
+        "map": 76,
+        "x": 339,
+        "z": 381,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "cold-goldenrod-neutral-warmup",
+      "op": "step",
+      "args": {
+        "frames": 64,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "cold-goldenrod-player-settled",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 76,
+          "x": 339,
+          "z": 381
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "cold-goldenrod-saved-mankey-current",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "follower-settled",
+          "species": 56,
+          "partySlot": 2
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "cold-goldenrod-release-ended",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "followerReleaseState",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "cold-goldenrod-queue-drained",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "queue.count",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 90,
+        "noProgressFrames": 90
+      }
+    },
+    {
+      "id": "cold-goldenrod-no-request",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "queue.request",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "cold-goldenrod-no-capture-owner",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "captureTargetMask",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "zero-admitted-route-steps",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "new-cyndaquil-open-y",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "Y"
+        ],
+        "until": {
+          "kind": "selector-field",
+          "path": "state",
+          "operator": "eq",
+          "value": 2
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "new-cyndaquil-highlight",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "Y",
+          "L"
+        ],
+        "until": {
+          "kind": "selector-field",
+          "path": "highlight",
+          "operator": "eq",
+          "value": 1
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "new-cyndaquil-confirm-release",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "new-cyndaquil-current-follower",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "follower-settled",
+          "species": 155,
+          "partySlot": 1
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 180,
+        "noProgressFrames": 180
+      }
+    },
+    {
+      "id": "new-cyndaquil-release-ended",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "followerReleaseState",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 180,
+        "noProgressFrames": 180
+      }
+    },
+    {
+      "id": "new-cyndaquil-queue-drained",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "queue.count",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 90,
+        "noProgressFrames": 90
+      }
+    },
+    {
+      "id": "new-cyndaquil-no-request",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "queue.request",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "new-cyndaquil-no-capture-owner",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "captureTargetMask",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "new-mankey-open-y",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "Y"
+        ],
+        "until": {
+          "kind": "selector-field",
+          "path": "state",
+          "operator": "eq",
+          "value": 2
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "new-mankey-first-r",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "Y",
+          "R"
+        ],
+        "until": {
+          "kind": "selector-field",
+          "path": "highlight",
+          "operator": "eq",
+          "value": 1
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "new-mankey-release-r",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": [
+          "Y"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "new-mankey-highlight",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": [
+          "Y",
+          "R"
+        ],
+        "until": {
+          "kind": "selector-field",
+          "path": "highlight",
+          "operator": "eq",
+          "value": 2
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "new-mankey-confirm-release",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "new-mankey-current-follower",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "follower-settled",
+          "species": 56,
+          "partySlot": 2
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 180,
+        "noProgressFrames": 180
+      }
+    },
+    {
+      "id": "new-mankey-release-ended",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "followerReleaseState",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 180,
+        "noProgressFrames": 180
+      }
+    },
+    {
+      "id": "new-mankey-queue-drained",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "queue.count",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 90,
+        "noProgressFrames": 90
+      }
+    },
+    {
+      "id": "new-mankey-no-request",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "queue.request",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "new-mankey-no-capture-owner",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "captureTargetMask",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "goldenrod-new-mankey-saved-identity",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "party-field",
+          "path": "personality",
+          "operator": "eq",
+          "value": 2920357538,
+          "slot": 2
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "first-right-admit",
+      "op": "step",
+      "args": {
+        "frames": 48,
+        "keys": [
+          "RIGHT",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 1
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 48,
+        "noProgressFrames": 48
+      }
+    },
+    {
+      "id": "first-right-settled",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 76,
+          "x": 340,
+          "z": 381
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 48,
+        "noProgressFrames": 48
+      }
+    },
+    {
+      "id": "south-two-admit",
+      "op": "step",
+      "args": {
+        "frames": 48,
+        "keys": [
+          "DOWN",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 3
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 48,
+        "noProgressFrames": 48
+      }
+    },
+    {
+      "id": "south-two-settled",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 76,
+          "x": 340,
+          "z": 383
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 48,
+        "noProgressFrames": 48
+      }
+    },
+    {
+      "id": "east-fourteen-admit",
+      "op": "step",
+      "args": {
+        "frames": 180,
+        "keys": [
+          "RIGHT",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 17
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 180,
+        "noProgressFrames": 180
+      }
+    },
+    {
+      "id": "east-fourteen-settled",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 76,
+          "x": 354,
+          "z": 383
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 48,
+        "noProgressFrames": 48
+      }
+    },
+    {
+      "id": "leave-goldenrod-admit",
+      "op": "step",
+      "args": {
+        "frames": 96,
+        "keys": [
+          "DOWN",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 19
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 96,
+        "noProgressFrames": 96
+      }
+    },
+    {
+      "id": "leave-goldenrod-settled",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 38,
+          "x": 354,
+          "z": 385
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 48,
+        "noProgressFrames": 48
+      }
+    },
+    {
+      "id": "route34-current-saved-mankey",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "follower-settled",
+          "species": 56,
+          "partySlot": 2
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "route34-unchanged-party-identity",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "party-field",
+          "path": "personality",
+          "operator": "eq",
+          "value": 2920357538,
+          "slot": 2
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "route34-release-ended",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "followerReleaseState",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 180,
+        "noProgressFrames": 180
+      }
+    },
+    {
+      "id": "route34-queue-drained",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "queue.count",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 90,
+        "noProgressFrames": 90
+      }
+    },
+    {
+      "id": "route34-no-request",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "queue.request",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "route34-no-capture-owner",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "captureTargetMask",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "return-goldenrod-admit",
+      "op": "step",
+      "args": {
+        "frames": 96,
+        "keys": [
+          "UP",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 21
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 96,
+        "noProgressFrames": 96
+      }
+    },
+    {
+      "id": "return-goldenrod-settled",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 76,
+          "x": 354,
+          "z": 383
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 48,
+        "noProgressFrames": 48
+      }
+    },
+    {
+      "id": "goldenrod-return-current-saved-mankey",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "follower-settled",
+          "species": 56,
+          "partySlot": 2
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "post-return-control-admit",
+      "op": "step",
+      "args": {
+        "frames": 48,
+        "keys": [
+          "LEFT",
+          "B"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 22
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 48,
+        "noProgressFrames": 48
+      }
+    },
+    {
+      "id": "post-return-control-settled",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 76,
+          "x": 353,
+          "z": 383
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 48,
+        "noProgressFrames": 48
+      }
+    },
+    {
+      "id": "post-control-current-saved-mankey",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "follower-settled",
+          "species": 56,
+          "partySlot": 2
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 240,
+        "noProgressFrames": 240
+      }
+    },
+    {
+      "id": "goldenrod-return-release-ended",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "followerReleaseState",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 180,
+        "noProgressFrames": 180
+      }
+    },
+    {
+      "id": "goldenrod-return-queue-drained",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "queue.count",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 90,
+        "noProgressFrames": 90
+      }
+    },
+    {
+      "id": "goldenrod-return-no-request",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "queue.request",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "goldenrod-return-no-capture-owner",
+      "op": "assert",
+      "args": {
+        "predicate": {
+          "kind": "selector-field",
+          "path": "captureTargetMask",
+          "operator": "eq",
+          "value": 0
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "bind-returned-mankey",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "observe-returned-mankey",
+      "op": "step",
+      "args": {
+        "frames": 16,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "returned-mankey-landing-finished",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "follower-settled",
+          "species": 56,
+          "partySlot": 2
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "actor-field",
+      "path": "identityVerified",
+      "operator": "eq",
+      "value": true,
+      "subject": "mankey",
+      "when": "always"
+    },
+    {
+      "kind": "actor-field",
+      "path": "presentationAttached",
+      "operator": "eq",
+      "value": true,
+      "subject": "mankey",
+      "when": "always"
+    },
+    {
+      "kind": "actor-field",
+      "path": "role",
+      "operator": "eq",
+      "value": "FOLLOWER",
+      "subject": "mankey",
+      "when": "always"
+    },
+    {
+      "kind": "player-settled-at",
+      "map": 76,
+      "x": 353,
+      "z": 383,
+      "when": "final"
+    },
+    {
+      "kind": "follower-settled",
+      "species": 56,
+      "partySlot": 2,
+      "when": "final"
+    },
+    {
+      "kind": "party-field",
+      "path": "personality",
+      "operator": "eq",
+      "value": 2920357538,
+      "slot": 2,
+      "when": "final"
+    },
+    {
+      "kind": "selector-field",
+      "path": "followerReleaseState",
+      "operator": "eq",
+      "value": 0,
+      "when": "final"
+    },
+    {
+      "kind": "selector-field",
+      "path": "queue.count",
+      "operator": "eq",
+      "value": 0,
+      "when": "final"
+    },
+    {
+      "kind": "selector-field",
+      "path": "queue.request",
+      "operator": "eq",
+      "value": 0,
+      "when": "final"
+    },
+    {
+      "kind": "frame-count",
+      "operator": "gte",
+      "value": 16
+    }
+  ]
+}

@@ -166,6 +166,18 @@ freezes both the exact V4 source inventory and complete target inventory. The
 checker accepts the untouched source or the complete target and rejects a
 partial mixed catalog.
 
+Shared normal-application and condition-subject matches can set
+`mapId`. The editor shows this as **Map ID**. It compares the current loaded map
+header, not a map section or map matrix. Omission and
+`OW_WILD_BEHAVIOR_MATCH_ANY_MAP` (`65535`) mean any map; `0` means map zero.
+Base-profile selectors require Any map because the runtime retains their selected
+base class across map seams. Use a normal application for map-specific changes.
+Map filters choose when an application applies and do not change movement or
+terrain permissions. The current Field supplies `context.mapId`, including
+spawn preparation. Host requests omit it to use the same explicit Any value.
+Blob v96 stores a 16-byte Match with `mapId` at offset 12; the Context remains
+12 bytes with `mapId` in its former reserved word at offset 2.
+
 ### Profile building-block model
 
 The saved classifications and composition order are:
@@ -225,8 +237,15 @@ binary field names while compatibility storage remains.
 The frozen composition changes are:
 
 - Teleport and Stalker use the same direct member list.
-- Current small birds use Small Bird Hop plus Fly In. A large-bird redesign is
-  outside this catalog change.
+- `Bird Pokémon` supplies Fly In, Canopy Access, and the Perch condition's
+  subjects. `Small Bird Pokémon` is its explicit subset and alone supplies
+  Small Bird Hop. The pools include supported bird forms and can be edited in
+  the Workshop. Large birds keep their other ordinary Routine rules.
+  Fly In's separate insect application and Canopy Access's separate climber
+  application preserve those memberships. The bird Canopy Access application
+  runs last in Placement, so Swimmer and map placement rules do not clear its
+  canopy permission. These pools assign behavior; encounter tables still
+  choose which species appear on a map.
 - Flying insects use Erratic Flutter and Fly In.
 - Bellsprout, the Oddish line, and Sunflora use Meander, Waddle, and Startled.
 - Sunkern, Cherubi, and both Cherrim forms use Hop Around and Startled.
@@ -317,6 +336,12 @@ bank for unlisted species. A bank stores borrowed 16-bit global IDs in catalog
 order. It filters only fixed species membership; role, class, group, terrain,
 level, form, shiny status and other live predicates still run in the shared
 resolver and condition evaluator.
+
+Identical ordered banks share one immutable slice in the compiled index table.
+Each species keeps its own directory row and exact candidate order. Directory
+offsets can repeat and do not need to increase. This avoids copying the same
+profile list for every member of a large Pokémon pool and leaves Field heap
+space for follower queries.
 
 Each subject can have at most 32 candidate applications and 32 prepared
 condition entries. The compiler names any subject and applications that exceed

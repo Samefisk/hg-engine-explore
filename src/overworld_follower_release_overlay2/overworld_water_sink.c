@@ -577,27 +577,40 @@ OverworldWaterSink_RefreshAll(
  * move every frame, and a fly-in keeps its logical tile on the take-off
  * grass while it flies, so the stock call stacked one rustle per frame until
  * the field-effect pool ran out. A Wild body now rustles once per tile it
- * enters and never while airborne; other objects keep the stock call. */
+ * enters and never while airborne; other objects keep the stock call.
+ * The very-tall-grass updates (sub_02060698/sub_020606CC, ov01_021FF8F0)
+ * stacked the same way and crashed National Park on a NULL effect sprite;
+ * their call sites pass mode | WATER_SINK_VERY_TALL_GRASS to share this
+ * gate. The tile key is 16 bits (x + (y << 10)) so both kinds fit the slot;
+ * consecutive tiles of one Wild body cannot share a key. */
 __asm__(".thumb_set WaterSink_StockGrassRustle, 0x021FF071\n");
 void WaterSink_StockGrassRustle(LocalMapObject *object, int mode);
+__asm__(".thumb_set WaterSink_StockVeryTallGrassRustle, 0x021FF8F1\n");
+void WaterSink_StockVeryTallGrassRustle(LocalMapObject *object, int mode);
 
-static u32 sWaterSinkRustleTile[OW_WILD_MAX_SPAWNS]
+#define WATER_SINK_VERY_TALL_GRASS 2
+
+static u16 sWaterSinkRustleTile[OW_WILD_MAX_SPAWNS]
     __attribute__((section(".overworld_water_sink_grass_data")));
 
 void __attribute__((noinline, used, section(".overworld_water_sink_grass")))
 OverworldWaterSink_GrassRustle(LocalMapObject *object, int mode)
 {
     u32 slot = (u32)(object->id - OW_WILD_OBJECT_ID_START);
-    u32 tile;
+    u16 tile;
 
     if (slot < OW_WILD_MAX_SPAWNS) {
-        tile = (u16)object->xCurr | ((u32)(u16)object->yCurr << 16);
+        tile = (u16)(object->xCurr + (object->yCurr << 10));
         if ((s32)object->unk88[1] > 0 || sWaterSinkRustleTile[slot] == tile) {
             return;
         }
         sWaterSinkRustleTile[slot] = tile;
     }
-    WaterSink_StockGrassRustle(object, mode);
+    if (mode & WATER_SINK_VERY_TALL_GRASS) {
+        WaterSink_StockVeryTallGrassRustle(object, mode - WATER_SINK_VERY_TALL_GRASS);
+    } else {
+        WaterSink_StockGrassRustle(object, mode);
+    }
 }
 
 /* The stock splash draw (ov01_021FF658) places its record at the object's

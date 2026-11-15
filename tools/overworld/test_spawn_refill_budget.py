@@ -181,9 +181,14 @@ static PopulationEntry populationEntry;
 
 static int scheduleArguments[32];
 static int scheduleCount;
-static int advanceCalls, nextMaintenanceWork, waitQueries;
+static int advanceCalls, nextMaintenanceWork, waitQueries, maintenanceRequests;
 static int scheduleControl(int operation, int argument)
 {
+    if (operation == OVERWORLD_ACTOR_POPULATION_CONTROL_REQUEST_MAINTENANCE) {
+        assert(argument == 0);
+        maintenanceRequests++;
+        return OverworldActorSystem_PopulationControlImpl(operation, argument);
+    }
     if (operation == OVERWORLD_ACTOR_POPULATION_CONTROL_ADVANCE_MAINTENANCE) {
         assert(argument == 0);
         advanceCalls++;
@@ -332,7 +337,7 @@ static void resetFixture(
     transitionActive = FALSE;
     (void)OverworldActorSystem_PopulationControlImpl(
         OVERWORLD_ACTOR_POPULATION_CONTROL_RESET, 0);
-    scheduleCount = 0; waitQueries = 0;
+    scheduleCount = 0; waitQueries = 0; maintenanceRequests = 0;
     advanceCalls = 0;
     nextMaintenanceWork = OVERWORLD_ACTOR_POPULATION_WORK_NONE;
     freeSlotCalls = 0;
@@ -616,6 +621,11 @@ static void test_follower_has_immediate_priority(void)
     assert(spawnCalls == 0);
     assert(runtime.refillTerrainMask == 0);
     assert(randomIndex == 0);
+    /* The follower spent this pass. A reset population has no armed wait,
+     * so the ordinary refill needs one more queued pass (map 34->33->34). */
+    assert(maintenanceRequests == 1);
+    assert(OverworldActorSystem_PopulationControlImpl(
+        OVERWORLD_ACTOR_POPULATION_CONTROL_HAS_PENDING_MAINTENANCE, 0));
 }
 
 static void test_cold_data_has_separate_updates_before_follower_or_timer(void)

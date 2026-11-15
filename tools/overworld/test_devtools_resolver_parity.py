@@ -131,7 +131,7 @@ int main(void) {
 #include "overworld_behavior_resolver.h"
 int main(void) {
  BehaviorResolveRequest r; memset(&r,0,sizeof r);
- r.context.species=155; r.context.reserved=0;
+ r.context.species=155; r.context.mapId=76;
  r.context.groupFlags=4096; r.context.level=5; r.context.terrain=2;
  r.context.shiny=1; r.forcedOverrideMask=4; r.activeConditionalMask=8;
  r.resolvedTarget.actorSlot=1; r.resolvedTarget.actorGeneration=2;
@@ -144,6 +144,7 @@ int main(void) {
 }'''
         request = dict(
             species=155,
+            mapId=76,
             groupFlags=4096,
             level=5,
             terrain=2,

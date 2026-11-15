@@ -1191,29 +1191,7 @@
         {
           "id": "condition-perch-on-elevated-surface",
           "subjects": {
-            "mode": "members",
-            "match": {
-              "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-              "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-              "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-              "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-              "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-              "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-              "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-            },
-            "members": [
-              "SPECIES_PIDGEY",
-              "SPECIES_PIDGEOTTO",
-              "SPECIES_PIDGEOT",
-              "SPECIES_SPEAROW",
-              "SPECIES_FEAROW",
-              "SPECIES_HOOTHOOT",
-              "SPECIES_NOCTOWL",
-              "SPECIES_DELIBIRD",
-              "SPECIES_TAILLOW",
-              "SPECIES_SWELLOW",
-              "SPECIES_ROWLET"
-            ]
+            "pool": "bird-pokemon"
           },
           "when": {
             "kind": "terrain-motion",
@@ -1890,7 +1868,8 @@
           "target": {
             "kind": "actor",
             "roles": [
-              "wild"
+              "wild",
+              "follower"
             ],
             "selection": "nearest",
             "pool": "throw-cargo",
@@ -3391,6 +3370,90 @@
           }
         }
       ]
+    },
+    {
+      "id": "behind-buildings",
+      "name": "Behind Buildings",
+      "parent": "default",
+      "kind": "normal",
+      "classification": "placement",
+      "fields": {
+        "spawnDestinationMask": {
+          "operator": "replace",
+          "value": 2049
+        },
+        "spawnDestinationOverrideMask": {
+          "operator": "replace",
+          "value": 3071
+        }
+      }
+    },
+    {
+      "id": "land-placement",
+      "name": "Land Placement",
+      "parent": "default",
+      "kind": "normal",
+      "classification": "placement",
+      "fields": {
+        "spawnDestinationMask": {
+          "operator": "replace",
+          "value": 1
+        },
+        "spawnDestinationOverrideMask": {
+          "operator": "replace",
+          "value": 3071
+        }
+      }
+    },
+    {
+      "id": "land-rooftop-placement",
+      "name": "Land and Rooftop",
+      "parent": "default",
+      "kind": "normal",
+      "classification": "placement",
+      "fields": {
+        "spawnDestinationMask": {
+          "operator": "replace",
+          "value": 65
+        },
+        "spawnDestinationOverrideMask": {
+          "operator": "replace",
+          "value": 3071
+        },
+        "chillAllowedTerrainMask": {
+          "operator": "replace",
+          "value": 64
+        },
+        "chillAllowedTerrainOverrideMask": {
+          "operator": "replace",
+          "value": 64
+        }
+      }
+    },
+    {
+      "id": "rooftop-canopy-placement",
+      "name": "Rooftop and Canopy",
+      "parent": "default",
+      "kind": "normal",
+      "classification": "placement",
+      "fields": {
+        "spawnDestinationMask": {
+          "operator": "replace",
+          "value": 68
+        },
+        "spawnDestinationOverrideMask": {
+          "operator": "replace",
+          "value": 3071
+        },
+        "chillAllowedTerrainMask": {
+          "operator": "replace",
+          "value": 68
+        },
+        "chillAllowedTerrainOverrideMask": {
+          "operator": "replace",
+          "value": 68
+        }
+      }
     }
   ],
   "selectors": [
@@ -5027,6 +5090,186 @@
         "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
       },
       "members": []
+    },
+    {
+      "id": "small-bird-pokemon",
+      "name": "Small Bird Pokémon",
+      "mode": "members",
+      "match": {
+        "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+        "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+        "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+        "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+        "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+        "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+        "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+      },
+      "members": [
+        "SPECIES_PIDGEY",
+        "SPECIES_SPEAROW",
+        "SPECIES_HOOTHOOT",
+        "SPECIES_NATU",
+        "SPECIES_MURKROW",
+        "SPECIES_DELIBIRD",
+        "SPECIES_TORCHIC",
+        "SPECIES_TAILLOW",
+        "SPECIES_SWELLOW",
+        "SPECIES_WINGULL",
+        "SPECIES_SWABLU",
+        "SPECIES_PIPLUP",
+        "SPECIES_STARLY",
+        "SPECIES_STARAVIA",
+        "SPECIES_CHATOT",
+        "SPECIES_PIDOVE",
+        "SPECIES_TRANQUILL",
+        "SPECIES_ARCHEN",
+        "SPECIES_DUCKLETT",
+        "SPECIES_RUFFLET",
+        "SPECIES_VULLABY",
+        "SPECIES_FLETCHLING",
+        "SPECIES_FLETCHINDER",
+        "SPECIES_ROWLET",
+        "SPECIES_DARTRIX",
+        "SPECIES_PIKIPEK",
+        "SPECIES_TRUMBEAK",
+        "SPECIES_ORICORIO",
+        "SPECIES_ROOKIDEE",
+        "SPECIES_CORVISQUIRE",
+        "SPECIES_QUAXLY",
+        "SPECIES_SQUAWKABILLY",
+        "SPECIES_WATTREL",
+        "SPECIES_FLITTLE",
+        "SPECIES_IRON_BUNDLE",
+        "SPECIES_ORICORIO_POM_POM",
+        "SPECIES_ORICORIO_PAU",
+        "SPECIES_ORICORIO_SENSU",
+        "SPECIES_SQUAWKABILLY_BLUE_PLUMAGE",
+        "SPECIES_SQUAWKABILLY_YELLOW_PLUMAGE",
+        "SPECIES_SQUAWKABILLY_WHITE_PLUMAGE"
+      ]
+    },
+    {
+      "id": "bird-pokemon",
+      "name": "Bird Pokémon",
+      "mode": "members",
+      "match": {
+        "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+        "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+        "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+        "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+        "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+        "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+        "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
+      },
+      "members": [
+        "SPECIES_PIDGEY",
+        "SPECIES_PIDGEOTTO",
+        "SPECIES_PIDGEOT",
+        "SPECIES_SPEAROW",
+        "SPECIES_FEAROW",
+        "SPECIES_PSYDUCK",
+        "SPECIES_GOLDUCK",
+        "SPECIES_FARFETCHD",
+        "SPECIES_DODUO",
+        "SPECIES_DODRIO",
+        "SPECIES_ARTICUNO",
+        "SPECIES_ZAPDOS",
+        "SPECIES_MOLTRES",
+        "SPECIES_HOOTHOOT",
+        "SPECIES_NOCTOWL",
+        "SPECIES_TOGETIC",
+        "SPECIES_NATU",
+        "SPECIES_XATU",
+        "SPECIES_MURKROW",
+        "SPECIES_DELIBIRD",
+        "SPECIES_SKARMORY",
+        "SPECIES_LUGIA",
+        "SPECIES_HO_OH",
+        "SPECIES_TORCHIC",
+        "SPECIES_COMBUSKEN",
+        "SPECIES_BLAZIKEN",
+        "SPECIES_TAILLOW",
+        "SPECIES_SWELLOW",
+        "SPECIES_WINGULL",
+        "SPECIES_PELIPPER",
+        "SPECIES_SWABLU",
+        "SPECIES_ALTARIA",
+        "SPECIES_PIPLUP",
+        "SPECIES_PRINPLUP",
+        "SPECIES_EMPOLEON",
+        "SPECIES_STARLY",
+        "SPECIES_STARAVIA",
+        "SPECIES_STARAPTOR",
+        "SPECIES_HONCHKROW",
+        "SPECIES_CHATOT",
+        "SPECIES_TOGEKISS",
+        "SPECIES_CRESSELIA",
+        "SPECIES_PIDOVE",
+        "SPECIES_TRANQUILL",
+        "SPECIES_UNFEZANT",
+        "SPECIES_SIGILYPH",
+        "SPECIES_ARCHEN",
+        "SPECIES_ARCHEOPS",
+        "SPECIES_DUCKLETT",
+        "SPECIES_SWANNA",
+        "SPECIES_RUFFLET",
+        "SPECIES_BRAVIARY",
+        "SPECIES_VULLABY",
+        "SPECIES_MANDIBUZZ",
+        "SPECIES_FLETCHLING",
+        "SPECIES_FLETCHINDER",
+        "SPECIES_TALONFLAME",
+        "SPECIES_SPRITZEE",
+        "SPECIES_AROMATISSE",
+        "SPECIES_HAWLUCHA",
+        "SPECIES_YVELTAL",
+        "SPECIES_ROWLET",
+        "SPECIES_DARTRIX",
+        "SPECIES_DECIDUEYE",
+        "SPECIES_PIKIPEK",
+        "SPECIES_TRUMBEAK",
+        "SPECIES_TOUCANNON",
+        "SPECIES_ORICORIO",
+        "SPECIES_TAPU_KOKO",
+        "SPECIES_ROOKIDEE",
+        "SPECIES_CORVISQUIRE",
+        "SPECIES_CORVIKNIGHT",
+        "SPECIES_CRAMORANT",
+        "SPECIES_SIRFETCHD",
+        "SPECIES_EISCUE",
+        "SPECIES_QUAXLY",
+        "SPECIES_QUAXWELL",
+        "SPECIES_QUAQUAVAL",
+        "SPECIES_SQUAWKABILLY",
+        "SPECIES_WATTREL",
+        "SPECIES_KILOWATTREL",
+        "SPECIES_FLITTLE",
+        "SPECIES_ESPATHRA",
+        "SPECIES_BOMBIRDIER",
+        "SPECIES_FLAMIGO",
+        "SPECIES_IRON_BUNDLE",
+        "SPECIES_FEZANDIPITI",
+        "SPECIES_MEGA_PIDGEOT",
+        "SPECIES_MEGA_BLAZIKEN",
+        "SPECIES_MEGA_ALTARIA",
+        "SPECIES_FARFETCHD_GALARIAN",
+        "SPECIES_ARTICUNO_GALARIAN",
+        "SPECIES_ZAPDOS_GALARIAN",
+        "SPECIES_MOLTRES_GALARIAN",
+        "SPECIES_TORNADUS_THERIAN",
+        "SPECIES_ORICORIO_POM_POM",
+        "SPECIES_ORICORIO_PAU",
+        "SPECIES_ORICORIO_SENSU",
+        "SPECIES_CRAMORANT_GULPING",
+        "SPECIES_CRAMORANT_GORGING",
+        "SPECIES_EISCUE_NOICE_FACE",
+        "SPECIES_BRAVIARY_HISUIAN",
+        "SPECIES_DECIDUEYE_HISUIAN",
+        "SPECIES_UNFEZANT_FEMALE",
+        "SPECIES_SQUAWKABILLY_BLUE_PLUMAGE",
+        "SPECIES_SQUAWKABILLY_YELLOW_PLUMAGE",
+        "SPECIES_SQUAWKABILLY_WHITE_PLUMAGE"
+      ]
     }
   ],
   "applications": [
@@ -5180,29 +5423,7 @@
       "id": "apply-small-bird-hop",
       "profile": "small-bird-hop",
       "target": {
-        "mode": "members",
-        "match": {
-          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
-          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
-          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
-          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
-          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
-          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
-        },
-        "members": [
-          "SPECIES_PIDGEY",
-          "SPECIES_PIDGEOTTO",
-          "SPECIES_PIDGEOT",
-          "SPECIES_SPEAROW",
-          "SPECIES_FEAROW",
-          "SPECIES_HOOTHOOT",
-          "SPECIES_NOCTOWL",
-          "SPECIES_DELIBIRD",
-          "SPECIES_TAILLOW",
-          "SPECIES_SWELLOW",
-          "SPECIES_ROWLET"
-        ]
+        "pool": "small-bird-pokemon"
       }
     },
     {
@@ -5392,6 +5613,13 @@
       "id": "apply-fly-in",
       "profile": "fly-in",
       "target": {
+        "pool": "bird-pokemon"
+      }
+    },
+    {
+      "id": "apply-fly-in-insects",
+      "profile": "fly-in",
+      "target": {
         "mode": "members",
         "match": {
           "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
@@ -5403,16 +5631,6 @@
           "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"
         },
         "members": [
-          "SPECIES_PIDGEY",
-          "SPECIES_PIDGEOTTO",
-          "SPECIES_PIDGEOT",
-          "SPECIES_SPEAROW",
-          "SPECIES_FEAROW",
-          "SPECIES_HOOTHOOT",
-          "SPECIES_NOCTOWL",
-          "SPECIES_DELIBIRD",
-          "SPECIES_TAILLOW",
-          "SPECIES_SWELLOW",
           "SPECIES_BEEDRILL",
           "SPECIES_BUTTERFREE",
           "SPECIES_SCYTHER",
@@ -5446,13 +5664,12 @@
           "SPECIES_VIVILLON_OCEAN",
           "SPECIES_VIVILLON_JUNGLE",
           "SPECIES_VIVILLON_FANCY",
-          "SPECIES_VIVILLON_POKE_BALL",
-          "SPECIES_ROWLET"
+          "SPECIES_VIVILLON_POKE_BALL"
         ]
       }
     },
     {
-      "id": "apply-canopy-access",
+      "id": "apply-canopy-access-climbers",
       "profile": "canopy-access",
       "target": {
         "mode": "members",
@@ -5570,6 +5787,118 @@
           "SPECIES_TENTACRUEL",
           "SPECIES_OCTILLERY"
         ]
+      }
+    },
+    {
+      "id": "apply-goldenrod-behind-buildings",
+      "profile": "behind-buildings",
+      "target": {
+        "mode": "members",
+        "match": {
+          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS",
+          "mapId": 76
+        },
+        "members": [
+          "SPECIES_MEOWTH",
+          "SPECIES_RATTATA",
+          "SPECIES_TRUBBISH",
+          "SPECIES_GRIMER",
+          "SPECIES_ROTOM"
+        ]
+      }
+    },
+    {
+      "id": "apply-goldenrod-land",
+      "profile": "land-placement",
+      "target": {
+        "mode": "members",
+        "match": {
+          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS",
+          "mapId": 76
+        },
+        "members": [
+          "SPECIES_SNUBBULL"
+        ]
+      }
+    },
+    {
+      "id": "apply-goldenrod-land-rooftop",
+      "profile": "land-rooftop-placement",
+      "target": {
+        "mode": "members",
+        "match": {
+          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS",
+          "mapId": 76
+        },
+        "members": [
+          "SPECIES_PIDOVE"
+        ]
+      }
+    },
+    {
+      "id": "apply-goldenrod-rooftop-canopy",
+      "profile": "rooftop-canopy-placement",
+      "target": {
+        "mode": "members",
+        "match": {
+          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS",
+          "mapId": 76
+        },
+        "members": [
+          "SPECIES_MURKROW"
+        ]
+      }
+    },
+    {
+      "id": "apply-underground-land",
+      "profile": "land-placement",
+      "target": {
+        "mode": "members",
+        "match": {
+          "species": "OW_WILD_BEHAVIOR_MATCH_ANY_SPECIES",
+          "groupMask": "OW_WILD_BEHAVIOR_GROUP_NONE",
+          "terrain": "OW_WILD_BEHAVIOR_MATCH_ANY_TERRAIN",
+          "minLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
+          "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
+          "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS",
+          "mapId": 199
+        },
+        "members": [
+          "SPECIES_RATTATA",
+          "SPECIES_GRIMER"
+        ]
+      }
+    },
+    {
+      "id": "apply-canopy-access",
+      "profile": "canopy-access",
+      "target": {
+        "pool": "bird-pokemon"
       }
     },
     {

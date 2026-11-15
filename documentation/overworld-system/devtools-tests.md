@@ -402,6 +402,13 @@ flags, sprite offsets and other actors do not extend that wait. A stationary
 authored pause must fit the recipe's declared no-progress budget. Frame clocks
 alone are not movement progress.
 
+The two-party Throw measurements expose both bound `subjects` and their
+declared primary saved follower as `subject`, which the shared progress reader
+tracks. Compare a free target's motion and each pickup handoff with the prior
+coherent queue, including a new claim after a failed launch. A prior claim's
+pre-pickup motion is not the next claim's previous frame. A drop or retry earns
+no flight credit; successful flight, landing and normal Follow remain required.
+
 Player travel waits and held-input steps watch native X/Z travel and tile
 admissions. Changing ready flags, movement commands or unrelated context fields
 cannot extend their no-progress deadline. A satisfied action predicate on the
@@ -517,6 +524,39 @@ The reviewed Wild moving setup change moves Geodude from (582, 402) to
 that do not select `wild-throw-moving-candidate-v1` can reuse those exact
 bytes. A later byte change or a selected or mixed Wild moving test needs fresh
 memory data; the ROM, save, actions, and inventory checks still apply.
+
+The reviewed D1 gate-load correction is pinned to the exact old/new
+`devtools_test_contract.py` hashes in `_D1_ROUTE35_WARMUP_SHA_PAIR` in
+`tools/overworld/control.py`. Only the private Route35 boundary function body
+changed; its signature and all other module bytes are identical. During the
+admitted41st-step gate warp, the exact busy arrival at101(5,12) may retain the
+old Actor context. After context adoption, the fixed gatehouse path may
+continue while the custom follower loads, only at native counts41..50 and
+x5/y53-count. Both stages share the same120-queue cap and earn no proof or
+rebind credit while the follower is absent. Every admission is still checked.
+Final arm requires the same living saved Mankey with a fresh full handle at
+count50/(5,3). The temporary city hold is absent from the final fixture.
+
+The separate `_D1_ROUTE35_GATE_INPUT_SHA_PAIR` pins the reviewed normal-route
+changes in `devtools_d1_routes.py`: the Route35 anchor and the Route35/Goldenrod
+action bodies. Other route records, signatures and module bytes are identical.
+Route35 releases UP at native count51, then waits with no keys for the exact
+arrival and current follower. Its split gate actions retain160 frames/45seconds.
+UP1 and eight RIGHT2/UP1/LEFT2/DOWN1 rectangles give49 normal moves around
+x358..360/y314..315. The physical Signpost at361310, height230912, stays within
+the real bird destination mask456; ordinary4..10 rings have no Land/Surf
+spawn sites. All steps, trainer rays, warp avoidance and airborne origins are
+checked against the current packaged map. Native random selection, profile
+resolution and entry still need fresh live proof. No pool or RNG is changed.
+The Route34 long case keeps its first10 loops, then adds a fixed one-tile
+right step before the last11 south legs, passing the observed358386 blocker
+onx359 and rejoining the same left/up/right path. All global frame/time,
+minimum movement, scan-work, refill, rhythm and zero-late-loop gates stay fixed.
+
+Unselected captures may reuse only these exact reviewed old/new pairs, after
+fresh controller replay and all required copied controls. Both D1 kinds,
+including mixed recipes, still need fresh captures. Other hashes, inventories,
+product inputs, readers and unclassified changes remain strict.
 
 Repeated acceptance within one process uses a bounded32-entry cache. Its key
 binds the artifact bytes, ROM/save/debug data, linked objects, current checker
@@ -976,6 +1016,15 @@ every strict update. One interval above two frame times fails immediately. A
 complete pass also needs a joined normal search/finalizer pair with matching
 attempt, finalization, slot, and map identity, at least2600 strict intervals,
 and at least1800 moving frames. The test captures no images.
+
+Refill timing starts at the real constructor joined to its same-call native
+COMMIT SUCCESS, not a READY queue reply. The raw density delay must stay valid
+in that owned receipt. Raw delays60,120 and180 use the resident sparse wait of
+eight Actor frames. Delays240,300 and360 keep their full native wait. Each
+witness retains both the raw delay and its required wait; the proof checks
+each witness as well as the minimum summary. A next batch at seven sparse
+frames or239 full-density frames fails. This does not change the zero-late-loop
+rule, the frame limits, the moving-frame floor or the Mankey identity checks.
 
 Its `stock-main-loop-pacing` event measures loop pacing, not visible pixel changes.
 The raw `gSystem.frameCounter` resets each loop; it is not a monotonic clock.

@@ -256,8 +256,13 @@ OverworldActorHopPlanner_ClearanceStep(OverworldActorHopPlanCall *request,
             cursor->hasSurface = ops->querySurface(
                 call->fieldSystem, call->surfaceCatalog,
                 geometry->tileX, geometry->tileY, &cursor->hit) != 0;
+            /* Ordinary Hop clears every crossed native height through the
+             * shared reducer. Exact-distance Jump keeps its capped native
+             * obstacle model; flat motion and Slam keep their existing rule. */
             if (!spawnEntry && (!cursor->hasSurface
-                    || cursor->hit.surfaceId == OW_WILD_SURFACE_ID_NATIVE_GROUND)) {
+                    || cursor->hit.surfaceId >= OW_WILD_SURFACE_ID_NATIVE_CANOPY)
+                && (call->operation != OVERWORLD_ACTOR_HOP_PLAN_TRAJECTORY
+                    || slam || OverworldActorHopPlanner_IsJump(call))) {
                 u32 height = OverworldActorHopPlanner_IsJump(call)
                     ? OverworldActorHopPlanner_JumpObstacleHeight(
                         call, ops, geometry->tileX, geometry->tileY)

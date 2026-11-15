@@ -18,11 +18,17 @@ needle = 'static u32 Addon_Address(const void *pointer) { return (u32)(uintptr_t
 assert source.count(needle) == 1
 source = source.replace('#include "../../include/overworld_query_code_addon.h"', '')
 source = source.replace(needle, 'static u32 Addon_Address(const void *pointer) { return pointer ? gNativeAddress : 0; }')
-# The loader compares a serialized ARM size, not this host's pointer width.
-# Its native header assertion and compiled package both independently bind424.
-assert "CargoQueryStateMustRemain424[sizeof(OverworldCargoQueryState)==424?1:-1]" in (ROOT / "include/overworld_cargo_query.h").read_text()
-assert source.count("sizeof(OverworldCargoQueryState)") == 1
-source = source.replace("sizeof(OverworldCargoQueryState)", "424u")
+# These serialized ARM sizes include native pointers.  The native header
+# assertions and the compiled package bind them independently of host width.
+for header, declaration, type_name, size in (
+    ("overworld_cargo_query.h", "CargoQueryStateMustRemain424", "OverworldCargoQueryState", 424),
+    ("overworld_cargo_query.h", "CargoQueryStorageMustRemain40", "OverworldCargoQueryStorage", 40),
+    ("overworld_pickup_route.h", "PickupRouteStateMustRemain188", "OverworldPickupRouteState", 188),
+    ("overworld_pickup_route.h", "PickupRouteWorkspaceMustRemain28", "OverworldPickupRouteWorkspace", 28),
+):
+    assert f"{declaration}[sizeof({type_name})=={size}?1:-1]" in (ROOT / "include" / header).read_text()
+    assert source.count(f"sizeof({type_name})") == 1
+    source = source.replace(f"sizeof({type_name})", f"{size}u")
 service_source=(ROOT / 'lib/overworld/overworld_query_code_addon_service.c').read_text()
 service_source=service_source.replace('#include "../../include/overworld_query_code_addon_service.h"','')
 field_source=(ROOT / 'lib/overworld/overworld_query_code_addon_field.c').read_text()
@@ -208,7 +214,7 @@ int main(int argc,char **argv)
     CHECK(OverworldQueryCodeAddon_Unload(&state,&ops,&owner)==OVERWORLD_QUERY_ADDON_OK);
     owner=savedOwner;
     u8 *bad=malloc(length); CHECK(bad);
-    for(int kind=0;kind<18;++kind) {
+    for(int kind=0;kind<21;++kind) {
         memcpy(bad,original,length); OverworldQueryCodeAddonHeader *b=(void*)bad;
         u32 *r=(void*)(bad+b->relocationOffset);
         OverworldQueryCodeAddonImport *im=(void*)(bad+b->importOffset);
@@ -231,19 +237,22 @@ int main(int argc,char **argv)
         case 15:((u16*)(bad+64))[5]=183;break;
         case 16:*(u32*)(bad+64+r[0])=b->linkBase-1;break;
         case 17:*(u32*)(bad+64+r[0])=b->linkBase+OVERWORLD_QUERY_CODE_ADDON_ENTRY_BYTES-1;break;
+        case 18:r[b->relocationCount-1]=b->imageSize-2;break;
+        case 19:im[b->importCount-1].offset=b->imageSize;break;
+        case 20:im[b->importCount-1].offset=b->imageSize-2;break;
         }
         Checksum(bad); Bad(bad);
     }
     static const u32 expectedImports[]={0x023DEEA3,0x023DEEBF,0x023DEE4D,
         0x01FF9A49,0x01FF9C95,0x01FFA39D,0x023C2F75,
-        0x02208201,0x0205C67D,0x0205C689,0x023C7EA9,0x01FFD2CD};
-    u32 seen[12], seenCount=0;
+        0x02208201,0x0205C67D,0x0205C689,0x023C7EA9,0x01FFD2CD,0x0201AB0D};
+    u32 seen[13], seenCount=0;
     for(u32 index=0;index<h->importCount;++index) {
         u32 target=imports[index].target, k;
         for(k=0;k<seenCount && seen[k]!=target;++k) {}
         if(k<seenCount) continue;
-        for(k=0;k<12 && expectedImports[k]!=target;++k) {}
-        CHECK(k<12 && seenCount<12); seen[seenCount++]=target;
+        for(k=0;k<13 && expectedImports[k]!=target;++k) {}
+        CHECK(k<13 && seenCount<13); seen[seenCount++]=target;
         memcpy(bad,original,length);
         OverworldQueryCodeAddonHeader *b=(void*)bad;
         OverworldQueryCodeAddonImport *im=(void*)(bad+b->importOffset);
@@ -257,12 +266,12 @@ int main(int argc,char **argv)
         *(u32*)(bad+64+im[index].offset)=im[index].target;
         Checksum(bad); Bad(bad);
     }
-    CHECK(seenCount==12);
+    CHECK(seenCount==13);
     /* Independent physical ABI inventory: every callback must stay Thumb,
      * including each span on either side of the two metadata gaps. */
     static const u16 callbackOffsets[]={20,24,28,32,36,40,44,48,52,56,60,64,68,72,
         84,88,92,96,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,
-        172,176,180,184,188};
+        172,176,180,184,188,192};
     CHECK(sizeof(callbackOffsets)/sizeof(callbackOffsets[0])==OVERWORLD_QUERY_CODE_ADDON_CALLBACKS);
     for(u32 index=0;index<OVERWORLD_QUERY_CODE_ADDON_CALLBACKS;++index) {
         memcpy(bad,original,length);
@@ -319,6 +328,21 @@ if compiled.returncode: raise SystemExit(compiled.stderr)
 run = subprocess.run([str(exe), str(args.package.resolve())],text=True,capture_output=True)
 print(run.stdout+run.stderr,end='')
 if run.returncode: raise SystemExit(run.returncode)
+# The real current package uses the destructor import.  Removing only its
+# admission must reject that otherwise valid package before cache/publication.
+free_gate = " && fixed!=0x0201AB0D"
+assert fixture.read_text().count(free_gate) == 1
+mutant_fixture = HERE / 'loader_without_free.c'
+mutant_fixture.write_text(fixture.read_text().replace(free_gate, ''))
+mutant_exe = HERE / 'loader_without_free'
+mutant_args = [str(mutant_fixture) if part == str(fixture) else
+               str(mutant_exe) if part == str(exe) else part for part in compile_args]
+subprocess.run(mutant_args, check=True, capture_output=True, text=True)
+mutant = subprocess.run([str(mutant_exe), str(args.package.resolve())], text=True, capture_output=True)
+assert mutant.returncode != 0 and (
+    'OverworldQueryCodeAddon_Load(&state,&owner,&ops,37,length)==OVERWORLD_QUERY_ADDON_OK'
+    in mutant.stderr), mutant.stdout + mutant.stderr
+print('PASS missing free-import admission rejects the unchanged current package')
 receipt = ROOT / 'build/tickets/query-code-addon-v2/host-lifecycle-receipt.json'
 receipt.parent.mkdir(parents=True, exist_ok=True)
 receipt.write_text(json.dumps({
@@ -326,4 +350,6 @@ receipt.write_text(json.dumps({
     'sourceSha256':hashlib.sha256(SOURCE.read_bytes()).hexdigest(),
     'packageSha256':hashlib.sha256(args.package.read_bytes()).hexdigest(),
     'result':run.stdout.strip(),
+    'missingFreeAdmissionControl':{'rejected':True, 'returnCode':mutant.returncode,
+        'reason':'unchanged complete current package fails initial load before cache/publication'},
     'fixture':"temporary extracted production C"},indent=2)+'\n')

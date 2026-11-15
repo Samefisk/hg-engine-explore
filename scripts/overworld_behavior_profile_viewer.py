@@ -246,6 +246,7 @@ MATCH_FIELDS = [
     "maxLevel",
     "shiny",
     "behaviorClass",
+    "mapId",
 ]
 
 CONDITIONAL_TERRAIN_ALL_VALUE = 0x03FF
@@ -427,6 +428,12 @@ ALLOWED_TERRAIN_OPTIONS = [
     ("mailbox", "Mailbox", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_MAILBOX"),
     ("flowerbed", "Flowerbed", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_FLOWERBED"),
     ("water-surface", "Water surface", "OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER_SURFACE"),
+]
+
+SPAWN_DESTINATION_OPTIONS = [
+    option for option in ALLOWED_TERRAIN_OPTIONS if option[0] != "water-surface"
+] + [
+    ("behind-buildings", "Behind Buildings", "OW_WILD_SPAWN_DESTINATION_MASK_BEHIND_BUILDINGS"),
 ]
 
 CANONICAL_PROFILE_FIELD_RAWS = {
@@ -1960,6 +1967,7 @@ def parse_behavior_override_profiles(source: str, macros: dict[str, int]) -> lis
                 and max_level == any_level
                 and numeric(match["shiny"]) == macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_SHINY")
                 and numeric(match["behaviorClass"]) == macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_CLASS")
+                and numeric(match["mapId"]) == macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_MAP", 65535)
             )
             if is_global:
                 raise ParseError(f"override profile #{order} ALL target requires a shared condition")
@@ -2240,6 +2248,8 @@ def add_value_option(options: list[dict], seen: set[str], raw: str, field: str, 
 
 
 def profile_option_symbol_allowed(field: str, symbol: str) -> bool:
+    if field == "spawnDestination" and symbol.startswith("OW_WILD_SPAWN_DESTINATION_MASK_"):
+        return False
     if symbol in PROFILE_OPTION_FIELD_EXCLUDED_RAWS.get(field, set()):
         return False
     return not any(symbol.endswith(suffix) for suffix in PROFILE_OPTION_EXCLUDED_SUFFIXES)
@@ -2307,6 +2317,8 @@ def build_edit_options(macros: dict[str, int], class_profiles: list[dict[str, di
 
 
 def parse_match(items: list, macros: dict[str, int]) -> dict[str, dict]:
+    if len(items) == len(MATCH_FIELDS) - 1:
+        items = [*items, "OW_WILD_BEHAVIOR_MATCH_ANY_MAP"]
     if len(items) != len(MATCH_FIELDS):
         raise ParseError(f"match has {len(items)} fields, expected {len(MATCH_FIELDS)}")
     return {
@@ -2497,7 +2509,7 @@ def override_edit_profile(behavior: dict, macros: dict[str, int]) -> dict[str, d
         legacy_mask = spawn_destination_mask_for_legacy(behavior["profile"]["spawnDestination"])
         profile["spawnDestinationMask"] = make_value(str(legacy_mask), "spawnDestinationMask", macros)
         profile["spawnDestinationOverrideMask"] = make_value(
-            str(macros.get("OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL", 0x7FF)),
+            str(macros["OW_WILD_SPAWN_DESTINATION_MASK_ALL"]),
             "spawnDestinationOverrideMask",
             macros,
         )
@@ -4011,6 +4023,7 @@ def match_is_no_target_placeholder(match: dict, macros: dict[str, int]) -> bool:
         and numeric(match["minLevel"]) == macros.get("OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY", 0)
         and numeric(match["maxLevel"]) == macros.get("OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY", 0)
         and numeric(match["shiny"]) == macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_SHINY")
+        and numeric(match["mapId"]) == macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_MAP", 65535)
         and numeric(match["behaviorClass"]) == OVERRIDE_PROFILE_NO_TARGET_CLASS_VALUE
     )
 
@@ -4037,6 +4050,8 @@ def match_summary(match: dict, macros: dict[str, int], group_labels: dict[int, d
         parts.append("shiny" if numeric(match["shiny"]) else "not shiny")
     if numeric(match["behaviorClass"]) != macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_CLASS"):
         parts.append(f"class {match['behaviorClass']['label']}")
+    if numeric(match["mapId"]) != macros.get("OW_WILD_BEHAVIOR_MATCH_ANY_MAP", 65535):
+        parts.append(f"map {match['mapId']['label']}")
     return ", ".join(parts) if parts else "All Pokemon"
 
 
@@ -4856,6 +4871,10 @@ def build_data(
             }
             for key, label, raw in ALLOWED_TERRAIN_OPTIONS
         ],
+        "spawnDestinations": [
+            {"key": key, "label": label, "raw": raw, "bit": macros.get(raw, 0)}
+            for key, label, raw in SPAWN_DESTINATION_OPTIONS
+        ],
         "fields": [
             {"key": field, "label": FIELD_LABELS[field], "unit": FIELD_UNITS.get(field, "")}
             for field in PROFILE_FIELDS
@@ -5565,9 +5584,16 @@ def _validate_catalog_chain_pause_action(value: object, label: str) -> None:
 
 
 def _validate_catalog_match(value: object, label: str) -> None:
-    match = _catalog_object(value, label, set(MATCH_FIELDS))
+    match = _catalog_object(value, label, set(MATCH_FIELDS) - {"mapId"}, {"mapId"})
     for field in MATCH_FIELDS:
-        _catalog_expression(match[field], f"{label}.{field}")
+        if field in match:
+            _catalog_expression(match[field], f"{label}.{field}")
+    map_id = match.get("mapId", 65535)
+    if isinstance(map_id, str) and re.fullmatch(r"-?(?:0[xX][0-9A-Fa-f]+|[0-9]+)", map_id.strip()):
+        value = map_id.strip()
+        map_id = int(value, 16 if value.lstrip("-").lower().startswith("0x") else 10)
+    if type(map_id) is int and not 0 <= map_id <= 65535:
+        raise ParseError(f"{label}.mapId must fit u16 storage")
 
 
 def _validate_catalog_override_field(field: str, authored: object, label: str) -> None:
@@ -5616,6 +5642,8 @@ def _validate_catalog_override_field(field: str, authored: object, label: str) -
                     raise ParseError(
                         f"{label}.{field}.value must be {minimum}..{maximum}"
                     )
+                if field in {"spawnDestinationMask", "spawnDestinationOverrideMask"} and literal & ~0xBFF:
+                    raise ParseError(f"{label}.{field}.value has undefined spawn-destination-policy bits")
         return
 
     value = authored["value"]
@@ -6254,6 +6282,15 @@ def _validate_behavior_catalog_v4(catalog: object) -> None:
         if profiles_by_id[profile_id]["kind"] != "normal":
             raise ParseError(f"{label} must select a normal profile")
         _validate_catalog_match(selector["match"], f"{label}.match")
+        map_filter = selector["match"].get("mapId", "OW_WILD_BEHAVIOR_MATCH_ANY_MAP")
+        if str(map_filter) != "OW_WILD_BEHAVIOR_MATCH_ANY_MAP":
+            try:
+                text = str(map_filter).strip()
+                map_filter = int(text, 16 if text.lower().startswith("0x") else 10)
+            except ValueError:
+                map_filter = None
+        if map_filter not in (65535, "OW_WILD_BEHAVIOR_MATCH_ANY_MAP"):
+            raise ParseError(f"{label}.match.mapId must be Any; map filters belong to profile applications")
         selectors_by_id[selector_id] = selector
 
     applications = catalog["applications"]
@@ -6545,7 +6582,7 @@ def _resolve_v5_actor_target(
     unsupported = [
         field
         for field in MATCH_FIELDS
-        if field != "groupMask" and pool["match"][field] != defaults[field]
+        if field != "groupMask" and pool["match"].get(field, defaults[field]) != defaults[field]
     ]
     if unsupported:
         raise ParseError(
@@ -7271,7 +7308,7 @@ def project_behavior_catalog_runtime(catalog: dict) -> dict:
             continue
         match = selector["match"]
         if any(
-            match[field] != defaults[field]
+            match.get(field, defaults[field]) != defaults[field]
             for field in MATCH_FIELDS
             if field != "species"
         ) or match["species"] == defaults["species"]:
@@ -7382,9 +7419,9 @@ def apply_catalog_symbol_values(catalog: dict, macros: dict[str, int]) -> None:
 
 
 def _catalog_match_raws(entry: object, label: str) -> dict[str, str]:
-    if not isinstance(entry, dict) or set(entry) != set(MATCH_FIELDS):
-        raise ParseError(f"{label} must name exactly: {', '.join(MATCH_FIELDS)}")
-    return {field: clean_token(str(entry[field])) for field in MATCH_FIELDS}
+    _validate_catalog_match(entry, label)
+    defaults = default_behavior_match_raws()
+    return {field: clean_token(str(entry.get(field, defaults[field]))) for field in MATCH_FIELDS}
 
 
 def _format_catalog_class_rule(rule: dict, indent: str) -> str:
@@ -8009,12 +8046,13 @@ def default_behavior_match_raws() -> dict[str, str]:
         "maxLevel": "OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY",
         "shiny": "OW_WILD_BEHAVIOR_MATCH_ANY_SHINY",
         "behaviorClass": "OW_WILD_BEHAVIOR_MATCH_ANY_CLASS",
+        "mapId": "OW_WILD_BEHAVIOR_MATCH_ANY_MAP",
     }
 
 
 def format_match_initializer(raws: dict[str, str], indent: str) -> str:
     value_indent = indent + "    "
-    values = ",\n".join(f"{value_indent}{raws[field]}" for field in MATCH_FIELDS)
+    values = ",\n".join(f"{value_indent}{raws.get(field, default_behavior_match_raws()[field])}" for field in MATCH_FIELDS)
     return f"{{\n{values},\n{indent}}}"
 
 
@@ -16951,7 +16989,7 @@ HTML = r"""<!doctype html>
       "chillSpeed", "maxWalkSpeed", "chaseBoostSpeed",
       "chainRepositionSpeed", "walkStompTime",
     ]);
-    const PROFILE_NUMBER_FIELD_LIMITS = {"alertTime":{"min":0,"max":255},"stamina":{"min":0,"max":255},"restTime":{"min":0,"max":255},"chillSpeed":{"min":1,"max":32},"hopMinDistance":{"min":0,"max":12},"hopMaxDistance":{"min":0,"max":12},"hopPause":{"min":0,"max":255},"teleportTime":{"min":0,"max":64},"teleportPause":{"min":0,"max":255},"overworldLimit":{"min":0,"max":10},"spawnDestinationMinDistance":{"min":1,"max":8},"spawnDestinationMaxDistance":{"min":1,"max":8},"ramAccelerationSteps":{"min":0,"max":32},"ramMaxSpeed":{"min":0,"max":255},"chillAllowedTerrainMask":{"min":0,"max":2047},"chillAllowedTerrainOverrideMask":{"min":0,"max":2047},"hopTime":{"min":0,"max":64},"chaseBoostDistance":{"min":0,"max":32},"chaseBoostSpeed":{"min":0,"max":32},"hopSpinSpeed":{"min":0,"max":15},"spawnHopTime":{"min":0,"max":64},"circleRadius":{"min":0,"max":8},"chainMovementVariance":{"min":0,"max":32},"chainPauseVariance":{"min":0,"max":255},"tiredProfile":{"min":0,"max":255},"hopElevationTimeScale":{"min":0,"max":255},"hopElevationArcScale":{"min":0,"max":255},"tilesToAccelerate":{"min":1,"max":32},"maxWalkSpeed":{"min":1,"max":32},"spawnDestinationMask":{"min":0,"max":1023},"spawnDestinationOverrideMask":{"min":0,"max":1023},"chainRepositionJumpCount":{"min":1,"max":8},"hopSwayWidth":{"min":0,"max":8},"spawnHopSwayWidth":{"min":0,"max":8},"chainRepositionSpeed":{"min":1,"max":32},"chainRepositionDistance":{"min":1,"max":5},"walkOptions":{"min":0,"max":255},"wanderStraightChance":{"min":0,"max":100},"chainPauseActionChance":{"min":0,"max":100},"chainHopInPlaceExtraHops":{"min":0,"max":2},"chainHopInPlaceExtraChance":{"min":0,"max":100},"walkPause":{"min":0,"max":255},"tilesBeforeTurnSkid":{"min":0,"max":32},"walkStompTime":{"min":0,"max":32},"walkAccelerationStep":{"min":0,"max":33},"walkTimeVariance":{"min":0,"max":32},"walkPauseVariance":{"min":0,"max":32}};
+    const PROFILE_NUMBER_FIELD_LIMITS = {"alertTime":{"min":0,"max":255},"stamina":{"min":0,"max":255},"restTime":{"min":0,"max":255},"chillSpeed":{"min":1,"max":32},"hopMinDistance":{"min":0,"max":12},"hopMaxDistance":{"min":0,"max":12},"hopPause":{"min":0,"max":255},"teleportTime":{"min":0,"max":64},"teleportPause":{"min":0,"max":255},"overworldLimit":{"min":0,"max":10},"spawnDestinationMinDistance":{"min":1,"max":8},"spawnDestinationMaxDistance":{"min":1,"max":8},"ramAccelerationSteps":{"min":0,"max":32},"ramMaxSpeed":{"min":0,"max":255},"chillAllowedTerrainMask":{"min":0,"max":2047},"chillAllowedTerrainOverrideMask":{"min":0,"max":2047},"hopTime":{"min":0,"max":64},"chaseBoostDistance":{"min":0,"max":32},"chaseBoostSpeed":{"min":0,"max":32},"hopSpinSpeed":{"min":0,"max":15},"spawnHopTime":{"min":0,"max":64},"circleRadius":{"min":0,"max":8},"chainMovementVariance":{"min":0,"max":32},"chainPauseVariance":{"min":0,"max":255},"tiredProfile":{"min":0,"max":255},"hopElevationTimeScale":{"min":0,"max":255},"hopElevationArcScale":{"min":0,"max":255},"tilesToAccelerate":{"min":1,"max":32},"maxWalkSpeed":{"min":1,"max":32},"spawnDestinationMask":{"min":0,"max":3071},"spawnDestinationOverrideMask":{"min":0,"max":3071},"chainRepositionJumpCount":{"min":1,"max":8},"hopSwayWidth":{"min":0,"max":8},"spawnHopSwayWidth":{"min":0,"max":8},"chainRepositionSpeed":{"min":1,"max":32},"chainRepositionDistance":{"min":1,"max":5},"walkOptions":{"min":0,"max":255},"wanderStraightChance":{"min":0,"max":100},"chainPauseActionChance":{"min":0,"max":100},"chainHopInPlaceExtraHops":{"min":0,"max":2},"chainHopInPlaceExtraChance":{"min":0,"max":100},"walkPause":{"min":0,"max":255},"tilesBeforeTurnSkid":{"min":0,"max":32},"walkStompTime":{"min":0,"max":32},"walkAccelerationStep":{"min":0,"max":33},"walkTimeVariance":{"min":0,"max":32},"walkPauseVariance":{"min":0,"max":32}};
     const PROFILE_FIELD_HINTS = {
       profileId: "Optional behavior-family label. Most profiles can leave this as Default.",
       chillAllowedTerrainMask: "Per-terrain On/Off values for this behavior.",

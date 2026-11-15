@@ -22,20 +22,38 @@
 typedef struct OverworldCargoQueryChangedTile { s16 x, y; } OverworldCargoQueryChangedTile;
 typedef struct OverworldCargoQueryTileStamp {
     s16 x, y;
-    u32 revision, generation;
+    u32 revision;
 } OverworldCargoQueryTileStamp;
 
-/* One lazy Field allocation, shared by every pickup intent. Initialize this
- * block to zero once, then point workspace at its arrays. Init/Clear do not
- * clear hash stamps, allocate memory, or free the Field owner's storage. */
+/* One Field-owned descriptor shared by every pickup intent. Bind owned
+ * arrays once; Init/Clear clear only64 validity bytes, never the large
+ * backing arrays. They neither allocate nor free the owner's storage. */
 typedef struct OverworldCargoQueryStorage {
     OverworldPickupRouteWorkspace workspace;
+    u32 changeGeneration;
+    OverworldCargoQueryTileStamp *changes;
+    u8 *changesValid; /* OVERWORLD_CARGO_QUERY_CHANGES bits. */
+} OverworldCargoQueryStorage;
+/* Optional contiguous backing. The native owner splits the same arrays
+ * across its two Field heaps; the descriptor never assumes adjacency. */
+typedef struct OverworldCargoQueryBuffers {
     OverworldPickupRouteNode nodes[OVERWORLD_CARGO_QUERY_NODES];
     OverworldPickupRouteCachedEdge edges[OVERWORLD_CARGO_QUERY_EDGES];
     OverworldPickupRouteVisited visited[OVERWORLD_CARGO_QUERY_HASH];
-    u32 changeGeneration;
+    u8 visitedValid[OVERWORLD_CARGO_QUERY_HASH/8];
     OverworldCargoQueryTileStamp changes[OVERWORLD_CARGO_QUERY_CHANGES];
-} OverworldCargoQueryStorage;
+    u8 changesValid[OVERWORLD_CARGO_QUERY_CHANGES/8];
+} OverworldCargoQueryBuffers;
+/* Bind zeroed caller-owned backing once, before Init. Clear/Begin retain
+ * these pointers and never clear the large node/edge/ledger arrays. */
+static inline void OverworldCargoQuery_BindStorage(OverworldCargoQueryStorage *s,
+    OverworldCargoQueryBuffers *b)
+{
+    *s=(OverworldCargoQueryStorage){
+        {b->nodes,b->edges,b->visited,OVERWORLD_CARGO_QUERY_NODES,
+         OVERWORLD_CARGO_QUERY_EDGES,OVERWORLD_CARGO_QUERY_HASH,0,b->visitedValid},
+        0,b->changes,b->changesValid};
+}
 
 typedef struct OverworldCargoQueryWork {
     OverworldPickupRouteNativeWork native;
@@ -110,16 +128,16 @@ typedef struct OverworldCargoQueryState OverworldCargoQueryState;
  * PENDING and RESOURCE_LIMIT never prove that an incumbent is unreachable.
  * Clear starts the next ranking pass; the caller owns its check interval.
  *
- * ARM: State416 + Storage24604 =25020 persistent bytes, plus the caller's
+ * ARM: State424 + descriptor40 + backing19584 =20048 bytes, plus the caller's
  * resolved edge array (6 bytes/candidate) and Native world/context. Result140
- * is a synchronous receipt. The original route workspace is18456; the change
- * ledger adds6148, not another search. Tick bounds:16 route units, one native
+ * is a synchronous receipt. Both512-cell tables use validity bitmaps, with
+ * full32-bit generation/revision/wrap checks. Tick bounds:16 route units, one native
  * edge/goal, one canonical position read, <=4096 change-table probes and
  * <=8192 witness comparisons. Native Hop adds its authored stride clearance
  * budget. These counts are not a game-frame pacing proof.
  *
  * Clear BEFORE addon/Field teardown; clear the caller's Native world/query
- * pointers too. Caller may then free the single lazy allocation. */
+ * pointers too. Caller may then free every owned backing block. */
 /* Shared current dynamic ledger, also used by the sole Entry traversal.
  * These are read-only facts, not a new query or ownership grant. */
 u8 OverworldCargoQuery_ObserveChanges(OverworldCargoQueryState *,const OverworldCargoQueryInput *);
@@ -154,7 +172,7 @@ struct OverworldCargoQueryState {
 };
 
 #ifndef OVERWORLD_ACTOR_SYSTEM_HOST
-typedef char CargoQueryStorageMustRemain24604[sizeof(OverworldCargoQueryStorage)==24604?1:-1];
+typedef char CargoQueryStorageMustRemain40[sizeof(OverworldCargoQueryStorage)==40?1:-1];
 typedef char CargoQueryStateMustRemain424[sizeof(OverworldCargoQueryState)==424?1:-1];
 typedef char CargoQueryInputMustRemain40[sizeof(OverworldCargoQueryInput)==40?1:-1];
 typedef char CargoQueryResultMustRemain140[sizeof(OverworldCargoQueryResult)==140?1:-1];

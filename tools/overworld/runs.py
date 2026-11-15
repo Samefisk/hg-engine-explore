@@ -144,7 +144,7 @@ def run_id_for(
     return digest_value(receipt)[:20], result_sha256
 
 
-def file_record(path: Path | None, repo: Path) -> dict[str, Any] | None:
+def file_record(path: Path | None, repo: Path, *, label: str | None = None) -> dict[str, Any] | None:
     if path is None:
         return None
     target = path if path.is_absolute() else repo / path
@@ -159,11 +159,12 @@ def file_record(path: Path | None, repo: Path) -> dict[str, Any] | None:
                 break
             digest.update(chunk)
             size += len(chunk)
-    try:
-        relative = target.resolve().relative_to(repo.resolve())
-        label = relative.as_posix()
-    except ValueError:
-        label = target.name
+    if label is None:
+        try:
+            relative = target.resolve().relative_to(repo.resolve())
+            label = relative.as_posix()
+        except ValueError:
+            label = target.name
     return {
         "path": label,
         "present": True,
@@ -322,7 +323,9 @@ def _input_record(repo: Path, relative: Path) -> dict[str, Any]:
                       "sha256": digest_value({"symlink": link, "target": canonical}),
                       "kind": "directory-alias", "target": canonical}
         else:
-            record = file_record(relative, repo)
+            # This caller retains the inventory's path below. Resolving a
+            # display label again adds no identity or confinement check.
+            record = file_record(relative, repo, label=relative.as_posix())
         content_after = target.stat()
         after = target.lstat()
     except (OSError, RuntimeError) as error:

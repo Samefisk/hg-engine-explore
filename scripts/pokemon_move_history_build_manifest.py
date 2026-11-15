@@ -369,6 +369,7 @@ DEPENDENCY_FILES = (
     "build/overworld_field_capsule/overworld_actor_appearance_native.d",
     "build/overworld_field_capsule/overworld_appearance_policy.d",
     "build/overworld_field_capsule/overworld_condition_subject_native.d",
+    "build/overworld_field_capsule/overworld_field_model_alloc.d",
     "build/overworld_field_capsule/overworld_world_effect_delivery.d",
 )
 FIXED_INPUTS = (
@@ -388,6 +389,7 @@ FIXED_INPUTS = (
     "lib/overworld/overworld_query_code_addon_field.c",
     "lib/overworld/overworld_throw_observation_native.c",
     "lib/overworld/overworld_condition_subject_native.c",
+    "lib/overworld/overworld_field_model_alloc.c",
     "lib/overworld/overworld_cargo_query_wild.c",
     "lib/overworld/overworld_pickup_landing_wild.c",
     "lib/overworld/overworld_cargo_read_wild.c",
@@ -461,6 +463,8 @@ FIXED_INPUTS = (
     "scripts/generate_ld.py",
     "scripts/make.py",
     "scripts/verify_pokemon_move_history_capture.py",
+    "scripts/verify_no_item_data.py",
+    "data/itemdata/itemdata.c",
     "scripts/verify_pokemon_move_history.py",
     "scripts/verify_move_relearn_candidates.py",
     "scripts/verify_summary_move_relearn.py",
@@ -483,6 +487,7 @@ OUTPUTS = {
     "query_addon_field_object": "build/overworld_follower_selector_overlay/overworld_query_code_addon_field.o",
     "throw_observation_native_object": "build/overworld_follower_selector_overlay/overworld_throw_observation_native.o",
     "condition_subject_native_object": "build/overworld_field_capsule/overworld_condition_subject_native.o",
+    "field_model_alloc_object": "build/overworld_field_capsule/overworld_field_model_alloc.o",
     "query_addon_condition_delegate_object": "build/overworld_follower_selector_overlay/overworld_query_code_addon_condition_delegate.o",
     "core_linked": "build/linked.o",
     "core_binary": "build/output.bin",

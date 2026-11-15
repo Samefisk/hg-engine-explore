@@ -21,6 +21,7 @@ PRELUDE = native.HARNESS.split("int main(void)", 1)[0]
 HARNESS = r'''
 #include "overworld_cargo_query.h"
 static OverworldCargoQueryStorage storage;
+static OverworldCargoQueryBuffers buffers;
 static OverworldCargoQueryState scheduler;
 static OverworldCargoQueryInput input;
 static OverworldCargoQueryResult output;
@@ -40,7 +41,7 @@ static Result ReadPosition(void *raw,const OverworldActorHandle *actor,Overworld
 static void Setup(int width,int height,int cargoX,int cargoY) {
  Reset();memset(&storage,0,sizeof(storage));memset(&bindingsWorld,0,sizeof(bindingsWorld));
  positionCalls=positionFail=0;
- storage.workspace=(OverworldPickupRouteWorkspace){storage.nodes,storage.edges,storage.visited,256,512,512,0};
+ OverworldCargoQuery_BindStorage(&storage,&buffers);
  OverworldCargoQuery_Init(&scheduler,&storage);
  query.bounds=(OverworldPickupRouteBounds){0,0,width-1,height-1};query.cargoPosition.x=cargoX;query.cargoPosition.y=cargoY;
  query.edges=walkEdges;query.edgeCount=4;query.origin.y=height>1?1:0;
@@ -144,9 +145,9 @@ static int SuffixChange(void) {
   if(scheduler.route.phase==OVERWORLD_PICKUP_ROUTE_PHASE_PROOF && scheduler.route.proofLength>=8)break;
  }
  CHECK(frame<4000);
- const OverworldPickupRouteNode *goal=&storage.nodes[scheduler.route.goalNode];
+ const OverworldPickupRouteNode *goal=&storage.workspace.nodes[scheduler.route.goalNode];
  CHECK(goal->parent< scheduler.route.nodeCount);
- OverworldPickupRoutePosition blocked=storage.nodes[goal->parent].position;
+ OverworldPickupRoutePosition blocked=storage.workspace.nodes[goal->parent].position;
  world.body[blocked.y][blocked.x]=1;++query.dynamicRevision;
  changes[0]=(OverworldCargoQueryChangedTile){blocked.x,blocked.y};input.changedTileCount=1;
  CHECK(!Tick());CHECK(!output.eligibleActorMask);
@@ -322,36 +323,38 @@ LEDGER_HARNESS = r'''
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"ledger line%d: %s\n",__LINE__,#x);return 1;}}while(0)
 const OverworldPickupRouteNativeSeams *OverworldPickupRouteWild_GetSeams(void *world) {(void)world;return 0;}
 int main(void) {
- OverworldCargoQueryStorage storage={0};OverworldCargoQueryState s;
+ OverworldCargoQueryStorage storage={0};OverworldCargoQueryBuffers backing={0};OverworldCargoQuery_BindStorage(&storage,&backing);OverworldCargoQueryState s;
  OverworldCargoQueryChangedTile tiles[513]={{1,0}};
  OverworldCargoQueryInput input={.changedTiles=tiles,.changesComplete=1};
  OverworldCargoQuery_Init(&s,&storage);
  OverworldPickupRoutePosition from={0,0,64,0xFFFF,0},to={2,2,64,0xFFFF,0};
- s.query.dynamicRevision=1;CHECK(Observe(&s,&input));CHECK(Unchanged(&s,&from,&to,1));
+ s.query.dynamicRevision=1;CHECK(OverworldCargoQuery_ObserveChanges(&s,&input));CHECK(OverworldCargoQuery_Unchanged(&s,&from,&to,1));
  s.query.dynamicRevision=2;input.changedTileCount=1;
- CHECK(Observe(&s,&input));CHECK(!Unchanged(&s,&from,&to,1)); /* Diagonal side guard. */
+ CHECK(OverworldCargoQuery_ObserveChanges(&s,&input));CHECK(!OverworldCargoQuery_Unchanged(&s,&from,&to,1)); /* Diagonal side guard. */
  to=(OverworldPickupRoutePosition){4,0,128,7,0};
- CHECK(!Unchanged(&s,&from,&to,1)); /* Hop corridor, height ignored conservatively. */
- CHECK(Unchanged(&s,&from,&to,2));
+ CHECK(!OverworldCargoQuery_Unchanged(&s,&from,&to,1)); /* Hop corridor, height ignored conservatively. */
+ CHECK(OverworldCargoQuery_Unchanged(&s,&from,&to,2));
  /* Repeated updates coalesce at one tile; an unrelated tile permits reuse. */
  s.query.dynamicRevision=3;tiles[0]=(OverworldCargoQueryChangedTile){20,20};
- CHECK(Observe(&s,&input));CHECK(Unchanged(&s,&from,&to,2));
+ CHECK(OverworldCargoQuery_ObserveChanges(&s,&input));CHECK(OverworldCargoQuery_Unchanged(&s,&from,&to,2));
  /* Force nine colliding keys into an eight-probe set, evicting old history.
   * Old receipt becomes unknown even when its changed tile is no longer stored. */
  s.query.dynamicRevision=4;input.changedTileCount=9;
  for(int n=0;n<9;n++)tiles[n]=(OverworldCargoQueryChangedTile){(s16)(1+512*n),0};
- CHECK(Observe(&s,&input));CHECK(s.evictionFloor>=4 && !Unchanged(&s,&from,&to,2));
+ CHECK(OverworldCargoQuery_ObserveChanges(&s,&input));CHECK(s.evictionFloor>=4 && !OverworldCargoQuery_Unchanged(&s,&from,&to,2));
  s.query.dynamicRevision=5;input.changesComplete=0;input.changedTileCount=0;
- CHECK(Observe(&s,&input));CHECK(!Unchanged(&s,&from,&to,5));
+ CHECK(OverworldCargoQuery_ObserveChanges(&s,&input));CHECK(!OverworldCargoQuery_Unchanged(&s,&from,&to,5));
  s.query.dynamicRevision=6;input.changesComplete=1;input.changedTileCount=513;
- CHECK(Observe(&s,&input));CHECK(!s.changesKnown && !Unchanged(&s,&from,&to,6));
+ CHECK(OverworldCargoQuery_ObserveChanges(&s,&input));CHECK(!s.changesKnown && !OverworldCargoQuery_Unchanged(&s,&from,&to,6));
  input.changedTileCount=0;s.query.dynamicRevision=7;
- CHECK(Observe(&s,&input));CHECK(!Unchanged(&s,&from,&to,5));CHECK(Unchanged(&s,&from,&to,7));
- input.changedTileCount=1;CHECK(!Observe(&s,&input)); /* Facts changed without revision. */
+ CHECK(OverworldCargoQuery_ObserveChanges(&s,&input));CHECK(!OverworldCargoQuery_Unchanged(&s,&from,&to,5));CHECK(OverworldCargoQuery_Unchanged(&s,&from,&to,7));
+ input.changedTileCount=1;CHECK(!OverworldCargoQuery_ObserveChanges(&s,&input)); /* Facts changed without revision. */
+ s.query.dynamicRevision=9;input.changedTileCount=1;tiles[0]=(OverworldCargoQueryChangedTile){1,0};CHECK(OverworldCargoQuery_ObserveChanges(&s,&input));
  unsigned gen=storage.changeGeneration;OverworldCargoQuery_Clear(&s);
  CHECK(storage.changeGeneration==gen+1 && !s.runtime && !s.route.query.legalEdge);
+ s.query.dynamicRevision=1;input.changedTileCount=0;CHECK(OverworldCargoQuery_ObserveChanges(&s,&input) && OverworldCargoQuery_Unchanged(&s,&from,&to,1));
  storage.changeGeneration=0xFFFFFFFFu;s.query.dynamicRevision=8;input.changedTileCount=0;
- CHECK(Observe(&s,&input));CHECK(!Unchanged(&s,&from,&to,8));
+ CHECK(OverworldCargoQuery_ObserveChanges(&s,&input));CHECK(!OverworldCargoQuery_Unchanged(&s,&from,&to,8));
  puts("production ledger coalescing/guard/Hop/eviction/unknown/overflow/generation controls passed");return 0;
 }
 '''
@@ -385,12 +388,22 @@ def main():
                                   str(ledger), "-o", str(binary)], check=True)
         subprocess.run([str(binary)], check=True)
         source = SOURCE.read_text()
+        ledger_mutant=directory/'ledger-mutant.inc'
+        old='if(storage->changesValid) memset(storage->changesValid,0,OVERWORLD_CARGO_QUERY_CHANGES/8);'
+        if source.count(old)!=1:raise SystemExit('ledger validity boundary changed')
+        ledger_mutant.write_text(source.replace(old,''))
+        ledger.write_text(LEDGER_HARNESS.replace('#include "overworld_cargo_query.c"','#include "ledger-mutant.inc"'))
+        subprocess.run(command + ["-I", str(directory), str(native_source), str(route_source),str(ledger),"-o",str(binary)],check=True)
+        stale=subprocess.run([str(binary)],capture_output=True,text=True)
+        if stale.returncode==0 or 'OverworldCargoQuery_Unchanged(&s,&from,&to,1)' not in stale.stderr:
+            raise SystemExit('stale ledger bitmap did not fail for new-owner history')
+        print('rejected mutant: stale ledger validity across Clear')
         mutants = {
             "one native unit per frame": ("if(s->unitUsed) { s->edgeOwed=2;return DEFERRED; }", "if(s->unitUsed>3) { s->edgeOwed=2;return DEFERRED; }"),
             "full Cargo encounter identity": ("#define Handle(a,b) Equal(a,b,12)", "#define Handle(a,b) Equal(a,b,8)"),
             "eligibility only after proof": ("else if(status==REACHABLE) {", "else if(status==PENDING || status==REACHABLE) {"),
             "changed-edge corridor witness": ("&& Touches(tile->x,tile->y,from,to)) return 0;", "&& Touches(tile->x,tile->y,from,to) && 0) return 0;"),
-            "changed checked suffix": ("ProofUnchanged(s,(u16)(work*OVERWORLD_CARGO_QUERY_CHANGES))", "(ProofUnchanged(s,(u16)(work*OVERWORLD_CARGO_QUERY_CHANGES)),1)"),
+            "changed checked suffix": ("OverworldCargoQuery_ProofUnchanged(s,(u16)(work*OVERWORLD_CARGO_QUERY_CHANGES))", "(OverworldCargoQuery_ProofUnchanged(s,(u16)(work*OVERWORLD_CARGO_QUERY_CHANGES)),1)"),
         }
         for name, (old, new) in mutants.items():
             if source.count(old) != 1:
@@ -404,8 +417,8 @@ def main():
             print("rejected mutant:", name)
         layout = directory / "layout.c"
         layout.write_text('#include "overworld_cargo_query.h"\n'
-                          '_Static_assert(sizeof(OverworldCargoQueryStorage)==24604,"ARM storage");\n'
-                          '_Static_assert(sizeof(OverworldCargoQueryState)==416,"ARM state");\n'
+                          '_Static_assert(sizeof(OverworldCargoQueryStorage)==40,"ARM storage");\n'
+                          '_Static_assert(sizeof(OverworldCargoQueryState)==424,"ARM state");\n'
                           '_Static_assert(sizeof(OverworldCargoQueryInput)==40,"ARM input");\n'
                           '_Static_assert(sizeof(OverworldCargoQueryResult)==140,"ARM result");\n')
         layouts = subprocess.run([clang, "-target", "arm-none-eabi", "-ffreestanding", "-fsyntax-only", "-std=c11",

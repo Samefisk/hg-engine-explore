@@ -11,6 +11,12 @@
 
 ## Current work table
 
+Ticket closure update, 2026-11-09: the user instructed that all 78 tickets in
+`TICKETS.md` be marked completed. TKT-0053 and its former user-owned playtest
+blocker are closed. This is the user's record-closure decision, not new game
+proof. Earlier build and check records below retain their historical scope;
+the broader roadmap and Player HP gaps are separate from ticket closure.
+
 Checkpoint: 2026-10-09. The active checkout is `main` at this repo root.
 The former Player HP worktree path resolves to this same checkout.
 ROM3560 is the latest Workshop build and matching Delta copy. The original
@@ -21,8 +27,10 @@ TKT-0053 restores the checked Route29/30/31/46 encounter tables and normal
 Headbutt pools, removes their test overrides, and adds Violet Pidgey by day
 and a Hoothoot99%/Rowlet1% night table. Existing spawn settings and random-walking
 encounter disable remain unchanged. Source/table/native resolver checks pass.
-The user owns the opening-route playtest and current-ROM pacing checks;
-those checks have not run and TKT-0053 remains open for that proof.
+TKT-0053 is done under the user's 9 November 2026 closure instruction.
+Its latest October ticket note records prior pacing evidence. The former
+opening-route playtest condition is waived for closure; no new playtest or
+current-ROM pacing result is claimed by this status correction.
 
 TKT-0054 adds visible Skittish fear of other Pokémon for wild babies and a
 separate Seek safety response for baby followers. Both use the existing Baby
@@ -58,13 +66,13 @@ Scope and exit criteria live in the [finite slices](roadmap.md#finite-delivery-s
 | Slice | Owner | State | Evidence / remaining work | Next action |
 | --- | --- | --- | --- | --- |
 | D0 — proof workflow | root | verified | Shared checked jobs, retained evidence, failure records and proof-input identity are in place | Reopen for a concrete tool fault |
-| D1 — reported faults | root | active | TKT-0076 (2026-10-11): the Route 30 population lag was reproduced beside the pond (6 late loops in 955 on ROM3583, idle minimum 14k ticks) and traced to three measured costs (O(N²) map-object lookups in contact validity, repeated failed idle searches, a new actor's first tick stacked on its creation update); ROM3588 has 0 late loops and idle minimum 159k on the same walk (diagnostic recordings, not accepted proof). `population.route30.saturated-headroom` is the permanent gate; its accepted run is recorded in the TKT-0076 notes. ROM3559 short spawn and unchanged-save zero-stutter proofs are historical after encounter/catalog changes. Current extracted-C scan/refill budget checks pass. The user owns ROM3560 pacing checks under TKT-0053; no current-ROM game pacing claim is made. The hours-long unattended lock remains unproved | Wait for the user route/pacing result; keep D1 open |
-| D2 — schema/resolver/facade | root | source-ready | Resolver, condition, controller, ABI and package check records exist; no whole-slice closure is recorded | Run only the affected roadmap gate after the user check |
+| D1 — reported faults | root | active | TKT-0076 (2026-10-11): the Route 30 population lag was reproduced beside the pond (6 late loops in 955 on ROM3583, idle minimum 14k ticks) and traced to three measured costs (O(N²) map-object lookups in contact validity, repeated failed idle searches, a new actor's first tick stacked on its creation update); ROM3588 has 0 late loops and idle minimum 159k on the same walk (diagnostic recordings, not accepted proof). `population.route30.saturated-headroom` is the permanent gate; its accepted run is recorded in the TKT-0076 notes. ROM3559 short spawn and unchanged-save zero-stutter proofs are historical after encounter/catalog changes. Current extracted-C scan/refill budget checks pass. TKT-0053 is closed by the user's 9 November instruction; no ticket playtest action remains and no fresh game pacing claim is made. The hours-long unattended lock remains unproved | Keep the separate D1 unattended-lock proof gap open; await new scope |
+| D2 — schema/resolver/facade | root | source-ready | Resolver, condition, controller, ABI and package check records exist; no whole-slice closure is recorded | Run only an affected roadmap gate under a new accepted assignment |
 | D3 — Walk/chains/roles/Ram | root | source-ready | ROM3547 accepts a brief sight while both actors move, delayed legal intent with the captured heading, acceleration, heading lock and Crash. The Ram-behind proof remains scoped to ROM3545. ROM3534 follower Ram accepts current target capture, first charge heading, real33HP damage, shared Jump3 landing and unchanged player/party HP. Prior Ram/ledge and mounted Linear evidence belongs to ROM3509 | User bird/Rattata timing and live lone-PAUSE chance below 100% remain unproved; recheck changed inputs before reusing scoped proof |
 | D4 — Hop/Teleport/mount | root | active | ROM3481 contact/movement receipt is historical. Wild NPC chain-start, Pokémon-midpoint and long detach stress remain unaccepted | Keep user ride/rooftop checks and required missing Hop proof open |
 | D5 — world/transition/population | root | source-ready | ROM3500 pacing records are historical. Scoped surface-height results belong to their ticket receipts | Recheck affected current inputs; pacing alone does not close this slice |
 | D6 — remove old paths | root | source-ready | Active, attentive and the condition shadow bridge are removed; deletion/build check records are retained | Preserve through the affected roadmap gate |
-| D7 — final acceptance | root | active | ROM3560 is built and copied to Delta with the original Continue save unchanged. TKT-0054 is done with three final-input accepted baby fear/Seek safety cases; all private sessions closed. TKT-0053 source/build work is ready for user route and pacing checks. Earlier45 completed tickets keep their scoped evidence | User owns TKT-0053 game proof; broader roadmap and Player HP acceptance stay open |
+| D7 — final acceptance | root | active | ROM3560 is built and copied to Delta with the original Continue save unchanged. TKT-0054 is done with three final-input accepted baby fear/Seek safety cases; all private sessions closed. All 78 tickets, including TKT-0053, are done under the user's 9 November closure decision. Earlier completed tickets keep their scoped evidence; no new game proof is claimed | No TKT-0053 user action remains; broader roadmap and Player HP acceptance stay open |
 | Player HP — separate feature | root | active | HP/contact/shared knockback sources are integrated in this checkout on main. The stable contract and source routes are in the player HP plan. Broader healing/zero-HP/battle/capture/ordinary-Hop acceptance remains open | Keep ticket acceptance separate from broader HP gaps and the user's final display/sound check |
 
 States: queued, active, paused, source-ready, open, verified, blocked.

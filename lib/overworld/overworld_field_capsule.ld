@@ -41,8 +41,14 @@ SECTIONS {
         *(COMMON)
         . = ALIGN(4);
         __appearance_end = ABSOLUTE(.);
+        ASSERT(ABSOLUTE(.) <= 0x022081A0,
+            "field appearance overlaps temporary model allocation");
+        . = ABSOLUTE(0x022081A0);
+        KEEP(*(.overworld_field_model_alloc))
+        ASSERT(ABSOLUTE(OverworldFieldModel_AllocTemporary) == 0x022081A0,
+            "temporary model allocation entry moved");
         ASSERT(ABSOLUTE(.) <= 0x022081E0,
-            "field appearance overlaps Wild route support");
+            "temporary model allocation exceeds Field reserve");
         . = ABSOLUTE(0x022081E0);
         KEEP(*(.overworld_field_wild_route_base_y))
         ASSERT(ABSOLUTE(.) == 0x02208200,

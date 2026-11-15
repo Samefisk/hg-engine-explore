@@ -22,7 +22,7 @@ REST_POLICY_SLOT_SIZE = 0x1F8
 REST_POLICY_SECTION = ".overworld_appearance_rest_policy"
 REST_POLICY_SOURCE = "OverworldAppearancePolicy_ShouldRestTint"
 REST_POLICY_COPY = "OverworldActorPrivateRestTint"
-REST_POLICY_SHA256 = "b965152ad5efa78e3c87d8d110a7bdb44469cf4433327ac7857667cac8add538"
+REST_POLICY_SHA256 = "998b78a72642f0e1d1413b896c39f0713e86df19a2ff5b121e6ecf661d7a3b9f"
 REST_APPLICABLE_ADDRESS, REST_APPLICABLE_SIZE = 0x022088EA, 22
 
 
@@ -39,7 +39,7 @@ def rest_policy_contract(hosted, applicable, body):
         raise ValueError("Field Rest tint policy body differs")
     calls = packaged_thumb_calls(body, REST_POLICY_ADDRESS,
                                  REST_POLICY_ADDRESS, REST_POLICY_SIZE)
-    if calls != [(REST_POLICY_ADDRESS + 0x106, "bl", REST_APPLICABLE_ADDRESS)]:
+    if calls != [(REST_POLICY_ADDRESS + 0x108, "bl", REST_APPLICABLE_ADDRESS)]:
         raise ValueError("Field Rest tint policy lost its sole exact Field role read")
 
 

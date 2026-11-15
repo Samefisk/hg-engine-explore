@@ -13,6 +13,11 @@ from copy import deepcopy
 import re
 
 from tools.overworld.devtools_contract import PREPARED_OPS, validate_command
+from tools.overworld.devtools_d1_routes import (
+    CHERRYGROVE, GOLDENROD, GOLDENROD35, descriptor as d1_descriptor,
+    selected_route as d1_selected_route, warmup_admissions as d1_admissions,
+    goldenrod_actions as d1_goldenrod_actions, route35_actions as d1_route35_actions,
+)
 from tools.overworld.devtools_records import HANDLE_FIELDS, _copy_json, select_current_actor
 from tools.overworld.devtools_movement_predicates import (
     MOVEMENT_PREDICATE_KINDS, validate_movement_predicate, check_movement_predicate,
@@ -70,6 +75,10 @@ PLAYFUL_HOPS = "playful-in-place-hop-v1"
 STOMP_SLAM = "stomp-slam-player-contact-v1"
 STOMP_SLAM_MOUNTED = "stomp-slam-mounted-player-contact-v1"
 RATTATA_LEDGE = "mounted-rattata-walking-ledge-v1"
+MANKEY_CANOPY = "mounted-mankey-adjacent-canopy-v1"
+HOP_CLEARANCE = "mounted-hop-vertical-clearance-v1"
+MOUNT_AIRBORNE = "mount-airborne-input-v1"
+PARTY_THROW_KINDS = frozenset({"party-throw-route34-v1", "party-throw-follower-cargo-v1"})
 HELD_THROW_SEARCH = "held-throw-search-v1"
 CROSS_HEIGHT_KINDS = frozenset({"follower-throw-target-above-v1", "follower-throw-target-below-v1"})
 TARGET_ACCESS_KINDS = frozenset({"follower-target-access-signpost-v1", "follower-target-access-ground-v1"})
@@ -108,28 +117,31 @@ UNMOUNTED_ZERO_STUTTER = "unmounted-zero-stutter-v1"
 SENTRET_THROW = "route30-sentret-throw-pacing-v1"
 POPULATION_HEADROOM = "population-headroom-v1"
 SPAWN_PRIORITY_KINDS = frozenset({"natural-refill-retry-v1", "natural-water-spawn-v1"})
+GOLDENROD_SPAWN_KINDS = frozenset({"goldenrod-natural-behind-v1", "goldenrod-natural-raised-v1", "goldenrod-natural-underground-v1"})
+GOLDENROD_FOLLOWER = "goldenrod-follower-hop-rebind-v1"
 D1_WARMUP_STEPS = 35
 
 
-def _d1_warmup_setup():
+def _d1_warmup_setup(route_key=CHERRYGROVE):
     """The measured normal-key path; excluded from both D1 claim windows."""
     def settle(action_id, map_id, x, z):
         return {"id": action_id, "op": "wait", "args": {"predicate": {
             "kind": "player-settled-at", "map": map_id, "x": x, "z": z,
             "when": "final"}}, "budget": {
                 "maxSeconds": 10, "maxFrames": 16, "noProgressFrames": 8}}
-    actions = [settle("warmup-city-start", 67, 564, 392)]
-    for name, direction, count, frames, map_id, x, z in (
-            ("east", "RIGHT", 1, 16, 67, 565, 392),
-            ("south", "DOWN", 7, 40, 67, 565, 398),
-            ("east-seam", "RIGHT", 27, 96, 33, 585, 398),
-            ("south-start", "DOWN", 35, 48, 33, 585, 406)):
+    route = d1_descriptor(route_key)
+    actions = [settle("warmup-city-start", *route["start"])]
+    for name, direction, count, frames, map_id, x, z in route["warmup"]:
         actions.append({"id": "warmup-" + name, "op": "step", "args": {
             "frames": frames, "keys": [direction, "B"], "until": {
                 "kind": "player-step-count", "operator": "eq",
                 "value": count, "when": "final"}}, "budget": {
                     "maxSeconds": 30, "maxFrames": frames, "noProgressFrames": 16}})
-        actions.append(settle("warmup-" + name + "-settle", map_id, x, z))
+        wait = settle("warmup-" + name + "-settle", map_id, x, z)
+        if route_key == GOLDENROD35 and name == "north-gate":
+            actions[-1]["budget"]["noProgressFrames"] = 96
+            wait["budget"] = {"maxSeconds":30,"maxFrames":120,"noProgressFrames":120}
+        actions.append(wait)
     actions.append({"id": "warmup-release", "op": "step", "args": {
         "frames": 16, "keys": []}, "budget": {
             "maxSeconds": 10, "maxFrames": 16, "noProgressFrames": 16}})
@@ -155,38 +167,40 @@ def _d1_warmup_identity(snapshot, identity=None):
     return current
 
 
-def _d1_warmup_initial(snapshot):
+def _d1_warmup_initial(snapshot, route_key=CHERRYGROVE):
     identity = _d1_warmup_identity(snapshot)
-    if (snapshot.get("context", {}).get("mapId") != 67
-            or [snapshot.get("player", {}).get(k) for k in ("x", "y")] != [564, 392]
+    route = d1_descriptor(route_key)
+    if (snapshot.get("context", {}).get("mapId") != route["start"][0]
+            or [snapshot.get("player", {}).get(k) for k in ("x", "y")] != list(route["start"][1:])
             or type(snapshot.get("nativeObservation", {}).get("playerStepCount")) is not int
             or snapshot["nativeObservation"]["playerStepCount"] != 0):
-        raise ValueError("D1 warm-up requires the unchanged Cherrygrove start and zero counter")
-    return {"identity": identity, "count": 0, "object": None,
+        raise ValueError(f"D1 warm-up requires the unchanged {route_key} start and zero counter")
+    return {"identity": identity, "count": 0, "object": None, "route": route_key,
+            "context": deepcopy(snapshot.get("context")), "initialHandle": deepcopy(next(a for a in snapshot["actors"] if a.get("role")=="FOLLOWER" and a.get("species")==56).get("handle")),
+            "gateAdmitted":False,"gateRebound":False,"gateFrames":0,
             "initialFrame": _int(snapshot.get("frame"), "D1 initial frame", 0, 0xFFFFFFFF)}
 
 
 def _d1_warmup_observe(state, snapshot, events):
-    """Require all35 native admissions; endpoints alone cannot replace this path."""
-    _d1_warmup_identity(snapshot, state["identity"])
+    """Require every sealed native admission; endpoints cannot replace the path."""
+    if state["route"] == GOLDENROD35:
+        _d1_route35_warmup_boundary(state, snapshot, events)
+    else:
+        _d1_warmup_identity(snapshot, state["identity"])
     for event in events:
         data = event.get("data", {})
         if event.get("kind") != "native-observation" or data.get("observation") != "player-step-admitted":
             continue
         count = state["count"] + 1
-        if count == 1:
-            direction, origin, target = 3, [564, 392], [565, 392]
-        elif count <= 7:
-            direction, origin, target = 1, [565, 390 + count], [565, 391 + count]
-        elif count <= 27:
-            direction, origin, target = 3, [557 + count, 398], [558 + count, 398]
-        else:
-            direction, origin, target = 1, [585, 370 + count], [585, 371 + count]
+        admissions = d1_admissions(state["route"])
+        if count > len(admissions):
+            raise ValueError("D1 warm-up exceeded its sealed native route")
+        map_id, direction, origin, target = admissions[count - 1]
         pointer = data.get("objectPointer")
-        if (count > D1_WARMUP_STEPS or data.get("setupMode") != "normal"
+        if (data.get("setupMode") != "normal"
                 or type(data.get("stepIndex")) is not int or data["stepIndex"] != count
                 or data.get("direction") != direction
-                or data.get("mapId") != (67 if count <= 18 else 33)
+                or data.get("mapId") != map_id
                 or data.get("origin") != origin or data.get("target") != target
                 or [data.get("objectBefore", {}).get(k) for k in ("x", "y")] != origin
                 or [data.get("objectAfter", {}).get(k) for k in ("x", "y")] != target
@@ -195,6 +209,8 @@ def _d1_warmup_observe(state, snapshot, events):
                 or (state["object"] is not None and pointer != state["object"])):
             raise ValueError("D1 warm-up native admission differs from the measured route")
         state.update(count=count, object=pointer)
+        if state["route"] == GOLDENROD35 and count == 41:
+            state["gateAdmitted"] = True
     observation = snapshot.get("nativeObservation", {})
     if (type(observation.get("playerStepCount")) is not int
             or observation["playerStepCount"] != state["count"]
@@ -203,15 +219,90 @@ def _d1_warmup_observe(state, snapshot, events):
         raise ValueError("D1 warm-up counter lacks its exact native admissions")
 
 
+
+def _d1_route35_warmup_boundary(state, snapshot, events):
+    """One admitted normal warp may replace the field before the final bind."""
+    from tools.overworld.devtools_records import validate_field_absence
+    if snapshot.get("prepared") is not False:
+        raise ValueError("D1 Route35 warm-up was changed by prepared setup")
+    if snapshot.get("fieldAvailable") is False:
+        validate_field_absence(snapshot)
+        if not state["gateAdmitted"] or state["gateRebound"]:
+            raise ValueError("D1 Route35 field absence is outside its admitted gate warp")
+        state["gateFrames"] += 1
+        if state["gateFrames"] > 120 or any(e.get("data",{}).get("observation")=="player-step-admitted" for e in events):
+            raise ValueError("D1 Route35 missing field exceeded its gate bound")
+        return
+    context=snapshot.get("context",{})
+    task=snapshot.get("fieldControl",{}).get("taskPointer")
+    busy=task != 0
+    if context != state["context"] and all(context.get(k)==state["context"].get(k)
+            for k in ("fieldEpoch","mapGeneration")):
+        # Stock can publish the gate's Field before the Actor transition has
+        # acknowledged engine canonicalization. This is not a ready rebind.
+        party=[p for p in snapshot.get("party",[]) if p.get("personality")==state["identity"]
+               and p.get("species")==56 and p.get("identityVerified") is True
+               and type(p.get("hp")) is int and p["hp"]>0]
+        if (snapshot.get("fieldAvailable") is not True or not state["gateAdmitted"]
+                or state["gateRebound"] or state["count"]!=41 or context.get("mapId")!=101
+                or [snapshot.get("player",{}).get(k) for k in ("x","y")] != [5,12]
+                or type(task) is not int or task<=0 or len(party)!=1
+                or any(e.get("data",{}).get("observation")=="player-step-admitted" for e in events)):
+            raise ValueError("D1 Route35 pending gate field differs from its admitted rebuild")
+        state["gateFrames"]+=1
+        if state["gateFrames"]>120:
+            raise ValueError("D1 Route35 pending gate field exceeded its gate bound")
+        return
+    if context != state["context"]:
+        if (not state["gateAdmitted"] or state["gateRebound"] or context.get("mapId")!=101
+            or context.get("fieldEpoch")==state["context"].get("fieldEpoch")
+            or context.get("mapGeneration")==state["context"].get("mapGeneration")
+            or [snapshot.get("player",{}).get(k) for k in ("x","y")] != [5,12]):
+            raise ValueError("D1 Route35 warm-up changed field outside its normal gate")
+        state.update(context=deepcopy(context),gateRebound=True,object=None)
+    followers=[a for a in snapshot.get("actors",[]) if a.get("active") is True and a.get("role")=="FOLLOWER"]
+    if busy or not followers:
+        # The custom follower is restored by refill retries after stock control
+        # returns. Only the sealed, still-unarmed gatehouse route may continue
+        # without it; every native admission is checked by the caller below.
+        native_count=snapshot.get("nativeObservation",{}).get("playerStepCount")
+        pending_follower=(not followers and task==0 and state["gateRebound"]
+            and 41<=state["count"]<=50 and context==state["context"] and context.get("mapId")==101
+            and type(native_count) is int and 41<=native_count<=50
+            and [snapshot.get("player",{}).get(k) for k in ("x","y")] == [5,53-native_count]
+            and all(context.get(k)!=state["initialHandle"].get(k)
+                    for k in ("fieldEpoch","mapGeneration")))
+        if not state["gateAdmitted"] or not (busy and state["count"]==41 or pending_follower):
+            raise ValueError("D1 Route35 lost its follower outside the gate rebuild")
+        party=[p for p in snapshot.get("party",[]) if p.get("personality")==state["identity"]
+               and p.get("species")==56 and p.get("identityVerified") is True
+               and type(p.get("hp")) is int and p["hp"]>0]
+        state["gateFrames"]+=1
+        if len(party)!=1 or state["gateFrames"]>120:
+            raise ValueError("D1 Route35 gate rebuild lost the saved Mankey")
+        return
+    _d1_warmup_identity(snapshot,state["identity"])
+    if state["gateRebound"]:
+        current=select_current_actor(snapshot,followers[0])
+        if current["handle"]==state["initialHandle"]:
+            raise ValueError("D1 Route35 gate reused the old field handle")
+        state["reboundHandle"]=deepcopy(current["handle"])
+
+
 def _d1_warmup_arm(state, snapshot, subject):
     _d1_warmup_identity(snapshot, state["identity"])
-    if (state["count"] != D1_WARMUP_STEPS
-            or snapshot.get("nativeObservation", {}).get("playerStepCount") != D1_WARMUP_STEPS
+    route = d1_descriptor(state["route"])
+    map_id, x, z = route["arm"]
+    if state["route"] == GOLDENROD35 and (not state["gateRebound"]
+            or subject.get("handle") != state.get("reboundHandle")):
+        raise ValueError("D1 Route35 bind lacks the new full field handle")
+    if (state["count"] != route["steps"]
+            or snapshot.get("nativeObservation", {}).get("playerStepCount") != route["steps"]
             or subject.get("subjectIdentity") != state["identity"]
             or snapshot.get("selector", {}).get("physicalPressed") != 0
             or not check_movement_predicate({"kind": "player-settled-at",
-                "map": 33, "x": 585, "z": 406}, snapshot)):
-        raise ValueError("D1 warm-up did not finish the exact normal35-step route")
+                "map": map_id, "x": x, "z": z}, snapshot)):
+        raise ValueError(f"D1 warm-up did not finish the exact normal{route['steps']}-step route")
 
 
 def _d1_spawn_remaining_frames(state, snapshot, setup_frames, overall_frames):
@@ -287,8 +378,8 @@ RAW_MEASUREMENTS = RAW_MEASUREMENTS | {THROW_CARGO_FLEE, HELD_THROW_SEARCH}
 MEASUREMENTS = MEASUREMENTS | {THROW_CARGO_FLEE, HELD_THROW_SEARCH}
 RAW_MEASUREMENTS = RAW_MEASUREMENTS | BABY_FEAR_KINDS
 MEASUREMENTS = MEASUREMENTS | BABY_FEAR_KINDS
-RAW_MEASUREMENTS = RAW_MEASUREMENTS | {PLAYFUL_HOPS, STOMP_SLAM, STOMP_SLAM_MOUNTED, RATTATA_LEDGE}
-MEASUREMENTS = MEASUREMENTS | {PLAYFUL_HOPS, STOMP_SLAM, STOMP_SLAM_MOUNTED, RATTATA_LEDGE}
+RAW_MEASUREMENTS = RAW_MEASUREMENTS | {PLAYFUL_HOPS, STOMP_SLAM, STOMP_SLAM_MOUNTED, RATTATA_LEDGE, MANKEY_CANOPY, MOUNT_AIRBORNE, HOP_CLEARANCE} | PARTY_THROW_KINDS
+MEASUREMENTS = MEASUREMENTS | {PLAYFUL_HOPS, STOMP_SLAM, STOMP_SLAM_MOUNTED, RATTATA_LEDGE, MANKEY_CANOPY, MOUNT_AIRBORNE, HOP_CLEARANCE} | PARTY_THROW_KINDS
 RAW_MEASUREMENTS = RAW_MEASUREMENTS | {WILD_THROW_SOAK}
 MEASUREMENTS = MEASUREMENTS | {WILD_THROW_SOAK}
 RAW_MEASUREMENTS = RAW_MEASUREMENTS | DISTANCE_KINDS | CROSS_HEIGHT_KINDS
@@ -299,8 +390,8 @@ RAW_MEASUREMENTS = RAW_MEASUREMENTS | {POKEMON_COMBAT, POKEMON_SKID_HIT, FOLLOWE
 MEASUREMENTS = MEASUREMENTS | {POKEMON_COMBAT, POKEMON_SKID_HIT, FOLLOWER_RAM, BASIC_ATTACK}
 RAW_MEASUREMENTS = RAW_MEASUREMENTS | SURFACE_REBIND_KINDS
 MEASUREMENTS = MEASUREMENTS | SURFACE_REBIND_KINDS
-RAW_MEASUREMENTS = RAW_MEASUREMENTS | SPAWN_PRIORITY_KINDS | {SENTRET_THROW, POPULATION_HEADROOM}
-MEASUREMENTS = MEASUREMENTS | SPAWN_PRIORITY_KINDS | {SENTRET_THROW, POPULATION_HEADROOM}
+RAW_MEASUREMENTS = RAW_MEASUREMENTS | SPAWN_PRIORITY_KINDS | GOLDENROD_SPAWN_KINDS | {SENTRET_THROW, POPULATION_HEADROOM, GOLDENROD_FOLLOWER}
+MEASUREMENTS = MEASUREMENTS | SPAWN_PRIORITY_KINDS | GOLDENROD_SPAWN_KINDS | {SENTRET_THROW, POPULATION_HEADROOM, GOLDENROD_FOLLOWER}
 RAW_MEASUREMENTS = RAW_MEASUREMENTS | APPEARANCE_KINDS
 MEASUREMENTS = MEASUREMENTS | APPEARANCE_KINDS
 RAW_MEASUREMENTS = RAW_MEASUREMENTS | {EMOTE_THREE}
@@ -536,6 +627,10 @@ def validate_predicate(value, subject_ids):
         stages[STOMP_SLAM] = ("contact", "finished")
         stages[STOMP_SLAM_MOUNTED] = ("contact", "finished")
         stages[RATTATA_LEDGE] = ("started", "finished")
+        stages[MANKEY_CANOPY] = ("started", "finished")
+        stages[HOP_CLEARANCE] = ("started", "finished")
+        stages[MOUNT_AIRBORNE] = ("dismounted", "remounted", "second-started", "switched")
+        for kind in PARTY_THROW_KINDS: stages[kind] = ("launched", "resumed")
         stages[PLAYER_HEALTH_HOP] = ("airborne-crossed",)
         stages[PLAYER_HEALTH_AMBUSH_JUMP] = ("airborne-crossed",)
         stages[PLAYER_HEALTH_RUNNING_HIT] = ("running-contact", "knockback-returned")
@@ -1378,6 +1473,15 @@ def validate_test(value):
             from tools.overworld.devtools_population_headroom_measurement import validate_recipe
             validate_recipe(value)
             continue
+        if isinstance(measurement, dict) and measurement.get("kind") == GOLDENROD_FOLLOWER:
+            from tools.overworld.devtools_goldenrod_follower_measurement import validate_recipe
+            validate_recipe(value)
+            continue
+        if isinstance(measurement, dict) and measurement.get("kind") in GOLDENROD_SPAWN_KINDS:
+            _shape(measurement, {"kind", "subject"}, label="Goldenrod natural spawn measurement")
+            from tools.overworld.devtools_goldenrod_spawn_measurement import validate_recipe
+            validate_recipe(value)
+            continue
         if isinstance(measurement, dict) and measurement.get("kind") in SPAWN_PRIORITY_KINDS:
             _shape(measurement, {"kind", "subject"}, label="natural spawn measurement")
             from tools.overworld.devtools_spawn_priority_measurement import validate_recipe
@@ -1409,8 +1513,40 @@ def validate_test(value):
                     or value["actions"][0]["args"] != {"predicate": expected_stage}:
                 raise ValueError("land/surf Cherrygrove inputs differ")
             continue
+        if isinstance(measurement, dict) and measurement.get("kind") in (SPAWN_WORK_BUDGET, UNMOUNTED_ZERO_STUTTER):
+            _shape(measurement, {"kind", "subject"}, {"route"}, label="D1 measurement")
+            route_key = d1_selected_route(value, measurement["kind"])
+            if route_key in (GOLDENROD, GOLDENROD35):
+                subject = measurement["subject"]
+                short = measurement["kind"] == SPAWN_WORK_BUDGET
+                if route_key == GOLDENROD35 and not short:
+                    raise ValueError("Route35 is only a reviewed short D1 route")
+                expected_setup = _d1_warmup_setup(route_key) + [
+                    {"id": "current-follower" if short else "follower-present", "op": "wait",
+                     "args": {"predicate": {"kind": "actor-present", "subject": subject, "when": "final"}},
+                     "budget": {"maxSeconds": 30, "maxFrames": 64 if short else 600,
+                                "noProgressFrames": 64 if short else 600}},
+                    {"id": "bind-current-field" if short else "bind-mankey", "op": "bind",
+                     "args": {"subject": subject},
+                     "budget": {"maxSeconds": 10, "maxFrames": 1, "noProgressFrames": 1}},
+                ]
+                expected_assertions = [{"kind": "measurement-complete", "measurement": measurement["kind"], "when": "final"}]
+                if not short:
+                    expected_assertions.append({"kind": "player-settled-at", "map": 38,
+                                                "x": 358, "z": 385, "when": "final"})
+                if (value["mode"] != "normal"
+                        or value["requirements"] != ["shared.spawn-work-budget-v1" if short else "current.unmounted-zero-stutter"]
+                        or value["subjects"] != [{"id": subject, "species": 56, "role": "FOLLOWER", "acquire": "existing"}]
+                        or value["budgets"] != ({"maxSeconds": 180, "maxFrames": 720, "noProgressFrames": 320, "minObservedFrames": 120}
+                            if short else {"maxSeconds": 900, "maxFrames": 4000, "noProgressFrames": 600, "minObservedFrames": 2600})
+                        or value["setup"] != expected_setup
+                        or value["actions"] != (d1_route35_actions(measurement["kind"]) if route_key == GOLDENROD35
+                            else d1_goldenrod_actions(measurement["kind"]))
+                        or value["assertions"] != expected_assertions):
+                    raise ValueError("Goldenrod D1 test differs from its sealed normal-input route")
+                continue
         if isinstance(measurement, dict) and measurement.get("kind") == SPAWN_WORK_BUDGET:
-            _shape(measurement, {"kind", "subject"}, label="spawn-work measurement")
+            _shape(measurement, {"kind", "subject"}, {"route"}, label="spawn-work measurement")
             subject = measurement["subject"]
             expected_stage = {"kind": "measurement-stage", "measurement": SPAWN_WORK_BUDGET,
                               "stage": "complete", "when": "final"}
@@ -1469,7 +1605,7 @@ def validate_test(value):
                 raise ValueError("spawn-work final entry wait differs")
             continue
         if isinstance(measurement, dict) and measurement.get("kind") == UNMOUNTED_ZERO_STUTTER:
-            _shape(measurement, {"kind", "subject"}, label="zero-stutter measurement")
+            _shape(measurement, {"kind", "subject"}, {"route"}, label="zero-stutter measurement")
             subject = measurement["subject"]
             expected_assertions = [
                 {"kind": "measurement-complete", "measurement": UNMOUNTED_ZERO_STUTTER,
@@ -2050,6 +2186,26 @@ def validate_test(value):
             if measurement["subject"] != "snorlax":
                 raise ValueError("Stomp Slam needs the exact current Snorlax")
             validate_recipe(value, measurement["kind"], "MOUNTED" if measurement["kind"] == STOMP_SLAM_MOUNTED else "FOLLOWER")
+            continue
+        if isinstance(measurement, dict) and measurement.get("kind") in PARTY_THROW_KINDS:
+            _shape(measurement, {"kind", "subjects"}, label="saved party Throw flow")
+            from tools.overworld.devtools_party_throw_flow_measurement import validate_recipe
+            validate_recipe(value, measurement["kind"])
+            continue
+        if isinstance(measurement, dict) and measurement.get("kind") == MOUNT_AIRBORNE:
+            _shape(measurement, {"kind", "subject"}, label="airborne mount input measurement")
+            from tools.overworld.devtools_mount_airborne_measurement import validate_recipe
+            validate_recipe(value)
+            continue
+        if isinstance(measurement, dict) and measurement.get("kind") == HOP_CLEARANCE:
+            _shape(measurement, {"kind", "subject"}, label="mounted Hop clearance measurement")
+            from tools.overworld.devtools_mounted_hop_clearance_measurement import validate_recipe
+            validate_recipe(value)
+            continue
+        if isinstance(measurement, dict) and measurement.get("kind") == MANKEY_CANOPY:
+            _shape(measurement, {"kind", "subject"}, label="Mankey canopy measurement")
+            from tools.overworld.devtools_mounted_canopy_hop_measurement import validate_recipe
+            validate_recipe(value)
             continue
         if isinstance(measurement, dict) and measurement.get("kind") == RATTATA_LEDGE:
             _shape(measurement, {"kind", "subject"}, label="Rattata ledge measurement")
@@ -2715,6 +2871,14 @@ class TestEvaluator:
                 from tools.overworld.devtools_population_headroom_measurement import PopulationHeadroomMeasurement
                 self.measurements[kind] = PopulationHeadroomMeasurement(self.test, source)
                 continue
+            if kind == GOLDENROD_FOLLOWER:
+                from tools.overworld.devtools_goldenrod_follower_measurement import GoldenrodFollowerMeasurement
+                self.measurements[kind] = GoldenrodFollowerMeasurement(self.test, source)
+                continue
+            if kind in GOLDENROD_SPAWN_KINDS:
+                from tools.overworld.devtools_goldenrod_spawn_measurement import GoldenrodSpawnMeasurement
+                self.measurements[kind] = GoldenrodSpawnMeasurement(self.test, source)
+                continue
             if kind in SPAWN_PRIORITY_KINDS:
                 from tools.overworld.devtools_spawn_priority_measurement import SpawnPriorityMeasurement
                 self.measurements[kind] = SpawnPriorityMeasurement(self.test, source)
@@ -2953,11 +3117,25 @@ class TestEvaluator:
                 from tools.overworld.devtools_baby_fear_measurement import BabyFearMeasurement
                 self.measurements[kind] = BabyFearMeasurement(kind, source)
                 continue
-            if kind in (STOMP_SLAM, STOMP_SLAM_MOUNTED, RATTATA_LEDGE):
+            if kind in PARTY_THROW_KINDS:
+                _shape(source, {"contractVersion", "romSha256", "sourceSaveSha256", "profileSha256", "overlaySha256", "queryImage"}, label="saved party Throw source")
+                from tools.overworld.devtools_party_throw_flow_measurement import PartyThrowFlowMeasurement
+                self.measurements[kind] = PartyThrowFlowMeasurement(source, kind)
+                continue
+            if kind in (STOMP_SLAM, STOMP_SLAM_MOUNTED, RATTATA_LEDGE, MANKEY_CANOPY, MOUNT_AIRBORNE, HOP_CLEARANCE):
                 _shape(source, {"contractVersion", "romSha256", "overlaySha256", "profileSha256"}, label="mounted contact/ledge source")
                 if source["contractVersion"] != 1:
                     raise ValueError("mounted contact/ledge source identity differs")
-                if kind == RATTATA_LEDGE:
+                if kind == MOUNT_AIRBORNE:
+                    from tools.overworld.devtools_mount_airborne_measurement import MountAirborneMeasurement
+                    self.measurements[kind] = MountAirborneMeasurement(source)
+                elif kind == HOP_CLEARANCE:
+                    from tools.overworld.devtools_mounted_hop_clearance_measurement import MountedHopClearanceMeasurement
+                    self.measurements[kind] = MountedHopClearanceMeasurement(source)
+                elif kind == MANKEY_CANOPY:
+                    from tools.overworld.devtools_mounted_canopy_hop_measurement import MountedCanopyHopMeasurement
+                    self.measurements[kind] = MountedCanopyHopMeasurement(source)
+                elif kind == RATTATA_LEDGE:
                     from tools.overworld.devtools_mounted_rattata_ledge_measurement import MountedRattataLedgeMeasurement
                     self.measurements[kind] = MountedRattataLedgeMeasurement(source)
                 else:
@@ -3125,6 +3303,28 @@ class TestEvaluator:
                     self.latest = deepcopy(record["snapshot"])
                 elif record.get("initialSnapshot") is not None:
                     self.latest = deepcopy(record["initialSnapshot"])
+                return self.result(full_report=full_report)
+            if meter_kind in GOLDENROD_SPAWN_KINDS or meter_kind == GOLDENROD_FOLLOWER:
+                if "initialSnapshot" in record:
+                    snapshot = record["initialSnapshot"]
+                    self.first_handles = {_handle(a["handle"]) for a in snapshot["actors"] if a.get("active") is True}
+                    self.first_subjects = {_actor_identity(a) for a in snapshot["actors"] if a.get("active") is True}
+                elif record.get("command") == "bind":
+                    if self.bind("mankey", record["snapshot"]) != record["receipt"]:
+                        raise ValueError("Goldenrod natural current follower binding differs")
+                def accepted(sample, frames):
+                    self.latest = deepcopy(sample)
+                    self.frames = self.sampled_frames = frames
+                    if meter_kind == GOLDENROD_FOLLOWER and meter.subject is not None:
+                        self.subjects["mankey"] = deepcopy(meter.subject)
+                    if frame_callback is not None:
+                        frame_callback(sample, self)
+                measured = meter.observe_record(record, on_sample=accepted)
+                if measured["failures"]:
+                    self.fail("measurement-failed", meter_kind, measured["failures"])
+                snapshot = record.get("snapshot", record.get("initialSnapshot"))
+                if snapshot is not None:
+                    self.latest = deepcopy(snapshot)
                 return self.result(full_report=full_report)
             if meter_kind in SPAWN_PRIORITY_KINDS:
                 if "initialSnapshot" in record:
@@ -3395,7 +3595,30 @@ class TestEvaluator:
                 if snapshot is not None: self.latest = deepcopy(snapshot)
                 self.frames = self.sampled_frames = measured["observedFrames"]
                 return self.result(full_report=full_report)
-            if meter_kind in (STOMP_SLAM, STOMP_SLAM_MOUNTED, RATTATA_LEDGE):
+            if meter_kind in PARTY_THROW_KINDS:
+                if "initialSnapshot" in record:
+                    initial = record["initialSnapshot"]
+                    self.first_handles = {_handle(a["handle"]) for a in initial["actors"] if a.get("active") is True}
+                    self.first_subjects = {_actor_identity(a) for a in initial["actors"] if a.get("active") is True}
+                elif record.get("command") == "spawn":
+                    action = next(a for a in self.test["setup"] if a["id"] == record["action"])
+                    prepared = _wild_spawn_setup(record["receipt"], record["snapshot"],
+                        species=action["args"]["species"], locomotion=7)
+                    self._prepared_attached.add(_handle(prepared["subject"]["handle"]))
+                elif record.get("command") == "bind":
+                    action = next(a for a in self.test["setup"] if a["id"] == record["action"])
+                    if self.bind(action["args"]["subject"], record["snapshot"]) != record["receipt"]:
+                        raise ValueError("saved party Throw binding differs from the current actor")
+                def accepted(sample, frames):
+                    self.latest = deepcopy(sample)
+                    self.frames = self.sampled_frames = frames
+                    if frame_callback is not None: frame_callback(sample, self)
+                measured = meter.observe_record(record, on_sample=accepted)
+                if measured["failures"]: self.fail("measurement-failed", meter_kind, measured["failures"])
+                self.latest = deepcopy(meter.latest)
+                self.frames = self.sampled_frames = measured["observedFrames"]
+                return self.result(full_report=full_report)
+            if meter_kind in (STOMP_SLAM, STOMP_SLAM_MOUNTED, RATTATA_LEDGE, MANKEY_CANOPY, MOUNT_AIRBORNE, HOP_CLEARANCE):
                 if "initialSnapshot" in record:
                     snapshot = record["initialSnapshot"]
                     self.first_handles = {_handle(a["handle"]) for a in snapshot["actors"] if a.get("active") is True}
@@ -4039,13 +4262,16 @@ class TestEvaluator:
         subject = select_current_actor(snapshot, self.subjects[args["subject"]])
         return validate_command("obstacle-intent.arm", {**args, "subject": subject})
 
-    def _acceleration_prefix(self, snapshot, events, *, start_frame, boundary=None, allow_normal=False):
+    def _acceleration_prefix(self, snapshot, events, *, start_frame, boundary=None, allow_normal=False, allow_field_absence=False):
         """Consume complete excluded setup data; never grant event/frame credit."""
         frame = _int(snapshot.get("frame"), "setup frame", start_frame, 0xFFFFFFFF)
         cycle = _int(snapshot.get("nativeCycle"), "setup native cycle", 0, 0xFFFFFFFF)
-        if (type(snapshot.get("prepared")) is not bool or (not allow_normal and snapshot["prepared"] is not True)) or snapshot.get("fieldAvailable") is not True \
+        if (type(snapshot.get("prepared")) is not bool or (not allow_normal and snapshot["prepared"] is not True)) or (snapshot.get("fieldAvailable") is not True and not allow_field_absence) \
                 or snapshot.get("observationBoundary") != "main-task-queue-completion":
             raise ValueError("acceleration setup endpoint is not a coherent prepared field")
+        if allow_field_absence:
+            from tools.overworld.devtools_records import validate_field_absence
+            validate_field_absence(snapshot)
         if not isinstance(events, list) or len(events) > 65536:
             raise ValueError("acceleration setup lacks bounded retained events")
         old_events = self.events.copy()
@@ -4170,7 +4396,7 @@ class TestEvaluator:
             snapshot = record["initialSnapshot"]
             initial_events = record.get("initialEvents", [])
             if meter_kind in (SPAWN_WORK_BUDGET, UNMOUNTED_ZERO_STUTTER):
-                self._d1_warmup = _d1_warmup_initial(snapshot)
+                self._d1_warmup = _d1_warmup_initial(snapshot, meter.route_key)
             if meter_kind == UNMOUNTED_ZERO_STUTTER:
                 profiles = snapshot.get("nativeObservation", {}).get(
                     "resolvedProfiles", [])
@@ -4520,8 +4746,11 @@ class TestEvaluator:
                 if meter_kind in (SPAWN_WORK_BUDGET, UNMOUNTED_ZERO_STUTTER):
                     _d1_warmup_observe(self._d1_warmup, snapshot, events)
                 if meter_kind == SPAWN_WORK_BUDGET:
-                    meter.observe_setup(snapshot, events)
-                self._acceleration_prefix(snapshot, events, start_frame=self.latest["frame"], allow_normal=True)
+                    if snapshot.get("fieldAvailable") is True:
+                        meter.observe_setup(snapshot, events)
+                self._acceleration_prefix(snapshot, events, start_frame=self.latest["frame"], allow_normal=True,
+                    allow_field_absence=meter_kind == SPAWN_WORK_BUDGET and meter.route_key == GOLDENROD35
+                        and snapshot.get("fieldAvailable") is False)
             else:
                 self._events(events, snapshot["frame"])
                 if self.failures: return
@@ -4555,7 +4784,7 @@ class TestEvaluator:
                     subject_id = self.test["measurements"][0]["subject"]
                     self.subjects[subject_id] = select_current_actor(
                         snapshot, report["subject"])
-                if meter_kind == SPAWN_WORK_BUDGET and report.get("subject"):
+                if meter_kind == SPAWN_WORK_BUDGET and report.get("subject") and not report.get("gatePending", False):
                     # This meter owns the reviewed Route 30 -> Cherrygrove
                     # crossing and proves the same follower identity on both
                     # sides. Publish its current handle before the independent

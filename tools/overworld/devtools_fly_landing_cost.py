@@ -13,17 +13,18 @@ from tools.overworld.devtools_resolver_parity import packaged_query_identity, cu
 from tools.overworld.devtools_query_observer import relocated_image
 
 PINS = {
-    "frame": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_FrameMovementTask", 0x023D7890, 1296, "fc3bca5b9cd7d809ee7a6c12de51fcba565bd91e95a54fc160f34acd7391606e"),
-    "height": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_ResolveObjectLandingHeight", 0x023CEDDC, 48, "07b5e87dd59897bf611c604faf04eede4b50dc8c8f937ccc923edb3e4496dd60"),
-    "finish": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_HandleFinishedMovementCommand", 0x023D2E06, 930, "c7682486010ecc943701331fef031d05ccddc7595a3372f532f10c52343374fa"),
+    "frame": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_FrameMovementTask", 0x023D7898, 1296, "bf41e54c53a5530ef56b94fd6cf7abf42ae727f19672bd0d81c10df1cbad4477"),
+    "height": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_ResolveObjectLandingHeight", 0x023CEDD8, 48, "4531ad78c481c71719fb8b7294d0ea8956f76afd53eb97d6bad30c1c7f288e7b"),
+    "finish": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_HandleFinishedMovementCommand", 0x023D2E02, 930, "1a198491433e03c51acfcf01ec1622316287393b67cb16d3988404104d7b9041"),
     "resolver": ("overworld_actor_system_overlay_linked.o", "BehaviorResolver_Resolve", 0x023B84A8, 84, "be15a7659f1ec76cedb1b0ecc686ae00a408511c9b9e2522cf48865c9c6819f9"),
-    "admit": ("overworld_actor_system_overlay_linked.o", "OverworldEmoteSlots_Admit", 0x023B9110, 272, "d1210539d613061cbee646211a77522a3a00605f346cef68ae90575cd1c1ee8d"),
-    "prepare": ("overworld_actor_system_overlay_linked.o", "OverworldEmoteSlots_Prepare", 0x023BA01C, 128, "f1950ff831f0571f620d85623b2412a394d682732f5b349d6f8f8760ad287763"),
-    "initialize": ("overworld_actor_system_overlay_linked.o", "OverworldEmoteSlots_Initialize", 0x02203B28, 316, "5529dd0bea1f91d2694c3fa340466cedffc78f186db49b1ea29db55e32e4b921"),
+    "admit": ("overworld_actor_system_overlay_linked.o", "OverworldEmoteSlots_Admit", 0x023B9110, 268, "6a1766d2a1d464a54025352f7dd04b6a88964457cf3abe95a00d8bf5a241bf72"),
+    "prepare": ("overworld_actor_system_overlay_linked.o", "OverworldEmoteSlots_Prepare", 0x023BA01C, 128, "00b94956cf433e5b489510da424fc06c5e991dc51b0910319db7bd0cf459f276"),
+    "initialize": ("overworld_actor_system_overlay_linked.o", "OverworldEmoteSlots_Initialize", 0x02203B28, 324, "ae1981fd114cd098f9639b9dcefaaf12ad787bc7cb1c81ee9f988431c7290434"),
     "condition": ("overworld_actor_system_overlay_linked.o", "OverworldBehaviorConditionAdapter_EvaluateActor", 0x023B65C0, 880, "11cfb506614679d6aee37fbea2fcdefe71fc7a3c1d8713dd328b1a9aac2f1c64"),
 }
-QUERY_NATIVE = (37116, 1580, 'b917228445052ec3fe2b26f7befd00f2aaada86e3ff4e436d1d7c4bf3d9c712b')
+QUERY_NATIVE = (37500, 1580, 'b559e186a17f72b1739183210282886069f683629d1eaebfb3ecc108f15b7fce')
 FRAME_WORLD, WORLD_BYTES, RUNTIME_CONDITIONS = 0x6BC, 248, 0x514
+EMOTE_QUIET_MODE = 0x80
 
 
 def need(ok, reason):
@@ -288,8 +289,10 @@ class FlyLandingCost:
                 if effect_owner is None:
                     return None
                 value["effectOwner"] = effect_owner
-                need(0 <= r.r2 < 14, "bubble type differs")
-                value.update(context=r.r0, object=r.r1, emote=r.r2, slotPointer=None, bubbleOwner=None)
+                emote = r.r2 & ~EMOTE_QUIET_MODE
+                need(type(r.r2) is int and 0 <= emote < 14, "bubble type/mode differs")
+                value.update(context=r.r0, object=r.r1, emote=emote, mode=r.r2,
+                             slotPointer=None, bubbleOwner=None)
                 self.bubbles.append(value)
             else:
                 if not self.bubbles:
@@ -308,7 +311,9 @@ class FlyLandingCost:
                     value["ownerSlotCount"] = owned["activeCount"]
                 elif key == "initialize":
                     need(bubble["slotPointer"] is not None, "Initialize lacks prepared slot")
-                    value.update(effect=r.r0, dataPointer=r.r1)
+                    mode = struct.unpack("<I", public_bytes(self.session, r.r0+4, 4))[0]
+                    need(mode == bubble["mode"], "Initialize constructor mode differs")
+                    value.update(effect=r.r0, dataPointer=r.r1, mode=mode)
             self.frame["children"] += 1
             need(self.frame["children"] <= self.MAX_CHILDREN, "child receipt bound exceeded")
         self.live(key)
@@ -329,6 +334,9 @@ class FlyLandingCost:
             self.conditions.pop()
         if key in ("admit", "prepare", "initialize"):
             self.same((value if key == "admit" else value["bubble"])["effectOwner"])
+        if key == "initialize":
+            mode = struct.unpack("<I", public_bytes(self.session, value["effect"]+4, 4))[0]
+            need(mode == value["mode"] == value["bubble"]["mode"], "Initialize return mode differs")
         receipt = {k: deepcopy(v) for k, v in value.items() if k != "bubble"}
         receipt.update(diagnosticOnly=True, acceptedProof=False,
                        costScope="inclusive guest scheduler ticks; nested spans must not be added")
@@ -344,6 +352,9 @@ class FlyLandingCost:
             receipt["bindingHex"] = raw.hex()
         if key == "admit":
             need(self.bubbles and self.bubbles[-1] is value, "bubble return nesting differs")
+            if context["returnValue"]:
+                mode = struct.unpack("<I", public_bytes(self.session, context["returnValue"]+4, 4))[0]
+                need(mode == value["mode"], "Admit return mode differs")
             self.bubbles.pop()
         if key == "frame":
             need(self.frame is value and not self.bubbles and not self.conditions and not self.native_pending,

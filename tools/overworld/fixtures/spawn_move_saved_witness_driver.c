@@ -15,7 +15,7 @@ static int SetupPoseToken(void){
  savedPath=EntryPath(owned,0);*savedPath=(OverworldEntryRoutePath){0};
  savedPath->valid=1;savedPath->serial=7;savedPath->scope=owned->scopeRevision;savedPath->policy=owned->policyRevision;savedPath->count=6;
  savedPath->origin=savedPath->expected=(OverworldPickupRoutePosition){4,4,64,0xFFFF,0};savedPath->target=(OverworldPickupRoutePosition){10,4,64,0xFFFF,0};
- for(int n=0;n<6;n++){savedPath->endpoints[n]=(OverworldPickupRoutePosition){5+n,4,64,0xFFFF,0};savedPath->edgeTags[n]=3;}
+ for(int n=0;n<6;n++)savedPath->commands[n]=11;
  command=(OverworldEntryRouteCommand){0};call.entry=&command;command.receipt=&reply;
  command.request=(OverworldEntryRouteRequest){.version=1,.size=sizeof(command.request),.serial=7,.fieldEpoch=3,.mapGeneration=4,.actor=actors.slots[0].snapshot.handle,.origin={4,4,64,0,0},.destination=savedPath->target,.physical={50209,0,-1,-1,10,4},.slot=0,.operation=OVERWORLD_ENTRY_ROUTE_ADOPT};
  runtime.queuedSpawnSerial=7;CHECK(OverworldCargoQueryWild_Tick(&call,&output)==OVERWORLD_PICKUP_ROUTE_REACHABLE);CHECK(savedPath->valid&&savedPath->policy==owned->policyRevision);
@@ -39,7 +39,7 @@ static int CheckPoseToken(void){
 }
 static int InvalidControls(void){
  /* A surface0 is a real catalog token; never map all policy0 values to ground. */
- CHECK(!SetupPoseToken());fixtureSurface=0;savedPath->origin.surfaceId=savedPath->expected.surfaceId=savedPath->target.surfaceId=0;for(int n=0;n<6;n++)savedPath->endpoints[n].surfaceId=0;
+ CHECK(!SetupPoseToken());fixtureSurface=0;savedPath->origin.surfaceId=savedPath->expected.surfaceId=savedPath->target.surfaceId=0;
  for(int n=0;n<20&&!returnedSteps;n++)Advance();CHECK(returnedSteps==1&&reply.nextStep.surfaceId==0&&largestReads<=8&&owned->state.route.nodeCount==0);
  /* Stale actor request is rejected before any physical query. */
  CHECK(!SetupPoseToken());command.request.actor.generation++;unsigned before=nativeCalls;CHECK(Advance()==OVERWORLD_PICKUP_ROUTE_INVALID&&nativeCalls==before&&!returnedSteps);

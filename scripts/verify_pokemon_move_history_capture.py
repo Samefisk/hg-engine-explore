@@ -92,6 +92,17 @@ OVERLAY_RETIRED_WALK_SYMBOLS = {
 }
 FIELD_OVERLAY_BASE = 0x023C8000
 FIELD_OVERLAY_END = 0x023CCFD8
+WALKING_FRIENDSHIP_ENTRY = 0x023CCF90
+# Exact authored Thumb: skip unselected walking draws before the party lock,
+# then recreate the stock frame and enter its unchanged post-draw body.
+WALKING_FRIENDSHIP_IMAGE = bytes.fromhex(
+    "f8b504000d001600052d03d152f4d2fec0070cd12000a0f4cbfe0700"
+    "20002900320000f005f820003900a0f4e7fef8bdf8b582b00e000500"
+    "0092014b1847c046a9fe0602"
+)
+WALKING_FRIENDSHIP_NATIVE_SHA256 = (
+    "5dc25d32241728c2f3d6116b3f54b724ace3deef66c2d65bca4ccc517d49a8ff"
+)
 FIELD_TERRAIN_ENTRY = OVERLAY_BASE + 0x1860
 FIELD_TERRAIN_END = OVERLAY_BASE + 0x1A50
 FIELD_TERRAIN_STATE = "sOverworldFieldTerrainStream"
@@ -188,7 +199,7 @@ OVERLAY155_RETIRED_HOP_SYMBOLS = {
     "OverworldWild_IsChainActionReady",
 }
 EXPECTED_MAKEFILE_SHA256 = (
-    "892374f79d9300db34bac328b972fa2ddc6de949f51c83f48429f79c9141ff4b"
+    "44bd78719449e6b2b1fde4eaf2331e182cc068515a5423f68ce0aabc4b1c6ede"
 )
 EXPECTED_BUILD_WRAPPER_SHA256 = (
     "96a807bb9033336361b2da6c57eb0b55a3dcc18e19b900007bdf416c11833e1c"
@@ -205,7 +216,7 @@ EXPECTED_INCLUDED_MAKE_SOURCES = {
     "narcs.mk":
         "5e6d2626a4266136f8be0343b1a192d05a5e1c34194c8ed7af7767d4b8c541db",
     "overlays.mk":
-        "02fbe8246111540410fe1bff2c7957371526697f347ff83add4a2c0ee89f1406",
+        "ca75ef7cd7c835da494dc540d9bde0e783e7fb50d7a22c14e1ae45335d94454f",
 }
 MANAGED_BUILD_PATH = (
     "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -3301,8 +3312,6 @@ def source_contracts() -> None:
         "$(NARCHIVE) extract $(FILESYS)/a/0/2/8 "
         "-o $(BUILD)/a028/ -nf",
         "$(PYTHON) scripts/make.py $(CFLAGS)",
-        "$(PYTHON) -B -m tools.maps --root $(FILESYS) "
-        "--arm9 $(BASE)/arm9.bin --overrides data/maps apply --in-place",
         "$(MAKE) move_narc",
         "$(ARMIPS) armips/global.s $(ARMIPS_FLAGS)",
         "$(NARCHIVE) create $(FILESYS)/a/0/2/8 "
@@ -5743,6 +5752,35 @@ def verify_overlay153_spawn_tail_packaging(linked: Path, resident: bytes,
     return linked_image
 
 
+def walking_friendship_native_contracts(arm9: bytes) -> None:
+    require(hashlib.sha256(arm9[0x6FE90:0x6FF88]).hexdigest()
+            == WALKING_FRIENDSHIP_NATIVE_SHA256,
+            "walking friendship native body or continuation ABI differs")
+
+
+def walking_friendship_item_contracts(rom: bytes) -> None:
+    if __package__:
+        from .verify_no_item_data import authored_item_records, narc_records, friendship_item_rule
+        from .verify_pokemon_move_history import checked_slice, nitrofs_file
+    else:
+        from verify_no_item_data import authored_item_records, narc_records, friendship_item_rule
+        from verify_pokemon_move_history import checked_slice, nitrofs_file
+    require(len(rom) >= 0x50, "friendship item guard needs a complete ROM header")
+    fnt_offset, fnt_size, fat_offset, fat_size = struct.unpack_from("<4I", rom, 0x40)
+    fnt = checked_slice(rom, fnt_offset, fnt_size, "friendship item FNT")
+    fat = checked_slice(rom, fat_offset, fat_size, "friendship item FAT")
+    _, data = nitrofs_file(rom, fnt, fat, "a/0/1/7")
+    try:
+        records = narc_records(data)
+        authored = authored_item_records()
+        friendship_item_rule(records)
+        friendship_item_rule(authored)
+    except ValueError as error:
+        require(False, str(error))
+    require(records == authored,
+            "packaged friendship item records differ from the complete authored array")
+
+
 def field_terrain_layout_contracts(
     field: bytes,
     resident: bytes,
@@ -5761,7 +5799,7 @@ def field_terrain_layout_contracts(
                 "Field file/BSS zeroing boundary differs or exceeds its fixed cap")
     else:
         address, size, section, kind = friendship
-        require(address == 0x023CCF90 and 0 < size <= 72
+        require(address == WALKING_FRIENDSHIP_ENTRY and size == len(WALKING_FRIENDSHIP_IMAGE)
                 and (section, kind) == (".walking_friendship", "F")
                 and bss_start + bss_size <= address
                 and FIELD_OVERLAY_BASE + len(field) == address + size
@@ -5769,13 +5807,9 @@ def field_terrain_layout_contracts(
                 "walking friendship tail overlaps Field state or exceeds its cap")
         require(not any(field[bss_start - FIELD_OVERLAY_BASE:address - FIELD_OVERLAY_BASE]),
                 "Field BSS before walking friendship is not zero-filled")
-        targets = []
-        for site in range(address, address + size - 2, 2):
-            opcode = struct.unpack_from("<H", field, site - FIELD_OVERLAY_BASE)[0]
-            if opcode & 0xF800 == 0xF000:
-                targets.append(thumb_bl_target(field, FIELD_OVERLAY_BASE, site))
-        require(targets == [0x0206DD40, 0x0206FE90, 0x0206DD8C],
-                "walking friendship native lock/apply/release calls differ")
+        require(field[address - FIELD_OVERLAY_BASE:address - FIELD_OVERLAY_BASE + size]
+                == WALKING_FRIENDSHIP_IMAGE,
+                "walking friendship draw, lock, stock bridge or release body differs")
     state = field_symbols.get(FIELD_TERRAIN_STATE)
     require(state is not None and state[1:] == (24, ".bss", "O")
             and bss_start <= state[0] and state[0] + 24 <= bss_start + bss_size
@@ -6470,18 +6504,17 @@ def field_terrain_layout_mutation_fixtures() -> None:
                 {FIELD_TERRAIN_APPLY}, state, 24]
     field_terrain_layout_contracts(*baseline)
     tail_case = copy.deepcopy(baseline)
-    tail_address = 0x023CCF90
+    tail_address = WALKING_FRIENDSHIP_ENTRY
     image = bytearray(field)
     image.extend(bytes(tail_address - FIELD_OVERLAY_BASE - len(image)))
-    for target in (0x0206DD40, 0x0206FE90, 0x0206DD8C):
-        delta = target - (FIELD_OVERLAY_BASE + len(image) + 4)
-        image.extend(struct.pack("<HH", 0xF000 | ((delta >> 12) & 0x7FF),
-                                 0xF800 | ((delta >> 1) & 0x7FF)))
+    image.extend(WALKING_FRIENDSHIP_IMAGE)
     tail_case[0] = bytes(image)
     tail_case[2]["OverworldField_ApplyWalkingFriendship"] = (
-        tail_address, 12, ".walking_friendship", "F")
+        tail_address, len(WALKING_FRIENDSHIP_IMAGE), ".walking_friendship", "F")
     field_terrain_layout_contracts(*tail_case)
-    for offset in (state - FIELD_OVERLAY_BASE, tail_address - FIELD_OVERLAY_BASE + 2):
+    for offset in (state - FIELD_OVERLAY_BASE,
+                   *(tail_address - FIELD_OVERLAY_BASE + value
+                     for value in (2, 10, 12, 18, 24, 34, 42, 50, 56, 64))):
         mutated = copy.deepcopy(tail_case)
         changed = bytearray(mutated[0])
         changed[offset] ^= 1
@@ -8037,6 +8070,7 @@ def binary_contracts(
             )
 
     rom_bytes = rom_path.read_bytes()
+    walking_friendship_item_contracts(rom_bytes)
     field_metadata = current_field_overlay_metadata()
     arm9_base, packaged_arm9, packaged_overlays = (
         packaged_components_from_bytes(rom_bytes, field_metadata)
@@ -8183,6 +8217,7 @@ def binary_contracts(
         "packaged overlay 155 base differs",
     )
     base_arm9 = arm9_path.read_bytes()
+    walking_friendship_native_contracts(packaged_arm9)
     require(
         base_arm9.startswith(packaged_arm9)
         and len(base_arm9) - len(packaged_arm9) <= 12,

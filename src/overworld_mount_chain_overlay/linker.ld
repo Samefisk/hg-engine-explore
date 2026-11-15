@@ -6,7 +6,7 @@ MEMORY {
 }
 
 OverworldMount_ProcessPlayerControl = 0x023BC2AC | 1;
-OverworldMount_TryStartCustomMotion = 0x023BB20C | 1;
+OverworldMount_TryStartCustomMotion = 0x023BB24C | 1;
 OverworldMount_GetInputDirection = 0x023BB67C | 1;
 OverworldActorPolicy_MountCommand = 0x023BA0E0 | 1;
 OverworldWildOccupancy_Query = 0x023C0184 | 1;

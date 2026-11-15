@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 1,
+  "id": "population.goldenrod-raised-birds",
+  "title": "Goldenrod natural rooftop bird births",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "documentation/encounter-rebalance-player-guide.md#goldenrod-encounter-plan--october-2026",
+  "requirements": [
+    "current.goldenrod-natural-raised"
+  ],
+  "budgets": {
+    "maxSeconds": 480,
+    "maxFrames": 1085,
+    "noProgressFrames": 180,
+    "minObservedFrames": 900
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    }
+  ],
+  "setup": [
+    {
+      "id": "natural-window",
+      "op": "teleport",
+      "args": {
+        "map": 76,
+        "x": 346,
+        "z": 351,
+        "facing": 1
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "warp-settle",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "current-follower",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "follower-settled",
+          "species": 56,
+          "partySlot": 2,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "bind-current-field",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "natural-1",
+      "op": "step",
+      "args": {
+        "frames": 150,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 150,
+        "noProgressFrames": 150
+      }
+    },
+    {
+      "id": "natural-2",
+      "op": "step",
+      "args": {
+        "frames": 150,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 150,
+        "noProgressFrames": 150
+      }
+    },
+    {
+      "id": "natural-3",
+      "op": "step",
+      "args": {
+        "frames": 150,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 150,
+        "noProgressFrames": 150
+      }
+    },
+    {
+      "id": "natural-4",
+      "op": "step",
+      "args": {
+        "frames": 150,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 150,
+        "noProgressFrames": 150
+      }
+    },
+    {
+      "id": "natural-5",
+      "op": "step",
+      "args": {
+        "frames": 150,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 150,
+        "noProgressFrames": 150
+      }
+    },
+    {
+      "id": "natural-6",
+      "op": "step",
+      "args": {
+        "frames": 150,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 150,
+        "noProgressFrames": 150
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "goldenrod-natural-raised-v1",
+      "when": "final"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "goldenrod-natural-raised-v1",
+      "subject": "mankey"
+    }
+  ]
+}

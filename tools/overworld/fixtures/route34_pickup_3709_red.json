@@ -1,0 +1,36 @@
+{
+  "sourceRecordingSha256": "0045908c407043da0dfdbc4e1efc925cfa25b118a8c312b8aa5bbd988e1d2ac1",
+  "romSha256": "9f3476ed8986c83b0a68c236f01b59fa3639920d13e65342bbb86a12a4d72d6c",
+  "handle": {
+    "slot": 7,
+    "generation": 1,
+    "fieldEpoch": 3,
+    "mapGeneration": 3,
+    "encounterGeneration": 1,
+    "value": 65543
+  },
+  "event": {
+    "frame": 1066,
+    "kind": "native-observation",
+    "data": {
+      "observation": "throw-cargo-query",
+      "subject": {
+        "slot": 7,
+        "generation": 1,
+        "fieldEpoch": 3,
+        "mapGeneration": 3,
+        "encounterGeneration": 1,
+        "value": 65543
+      },
+      "status": "RESOURCE_LIMIT",
+      "returnValue": 4,
+      "imageIdentity": {
+        "elfSha256": "bfcc0a8e0af384c4010e33799f4c0588ea9b298a659954a71c541128d9716507",
+        "packageSha256": "839da93fb0410322ae33c2de732916e7b728c729bf8a9900d2d3ebae5667781e",
+        "loadedEntry": 36413508,
+        "tickEntry": 36463316,
+        "loaderOwner": "04a02b02ec11010044a02b025c122b02030003001500000001000000"
+      }
+    }
+  }
+}

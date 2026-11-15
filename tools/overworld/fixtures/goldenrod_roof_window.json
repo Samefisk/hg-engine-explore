@@ -1,0 +1,1017 @@
+{
+  "center": [
+    346,
+    351
+  ],
+  "nativeWord": 1536,
+  "roof": 107,
+  "canopy": 0,
+  "loadedCells": [
+    {
+      "block": [
+        10,
+        10
+      ],
+      "land": 38,
+      "map": 76
+    },
+    {
+      "block": [
+        10,
+        11
+      ],
+      "land": 40,
+      "map": 76
+    },
+    {
+      "block": [
+        11,
+        10
+      ],
+      "land": 39,
+      "map": 76
+    },
+    {
+      "block": [
+        11,
+        11
+      ],
+      "land": 41,
+      "map": 76
+    }
+  ],
+  "searchRing": {
+    "minChebyshevDistance": 4,
+    "maxChebyshevDistance": 8,
+    "candidateCount": 240,
+    "loadedCandidateCount": 240,
+    "goldenrodCandidateCount": 240
+  },
+  "roofPoints": [
+    {
+      "tile": [
+        339,
+        343
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 327680
+    },
+    {
+      "tile": [
+        340,
+        343
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 327680
+    },
+    {
+      "tile": [
+        341,
+        343
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 327680
+    },
+    {
+      "tile": [
+        342,
+        343
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        343,
+        343
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 327680
+    },
+    {
+      "tile": [
+        344,
+        343
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 327680
+    },
+    {
+      "tile": [
+        345,
+        343
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 327680
+    },
+    {
+      "tile": [
+        339,
+        344
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 327680
+    },
+    {
+      "tile": [
+        340,
+        344
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        341,
+        344
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        342,
+        344
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        343,
+        344
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        344,
+        344
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        345,
+        344
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 327680
+    },
+    {
+      "tile": [
+        346,
+        344
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 406640
+    },
+    {
+      "tile": [
+        347,
+        344
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 481568
+    },
+    {
+      "tile": [
+        348,
+        344
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 515744
+    },
+    {
+      "tile": [
+        349,
+        344
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 526928
+    },
+    {
+      "tile": [
+        350,
+        344
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 532512
+    },
+    {
+      "tile": [
+        351,
+        344
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 521344
+    },
+    {
+      "tile": [
+        352,
+        344
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 502432
+    },
+    {
+      "tile": [
+        353,
+        344
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 460688
+    },
+    {
+      "tile": [
+        339,
+        345
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 327680
+    },
+    {
+      "tile": [
+        340,
+        345
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        341,
+        345
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        342,
+        345
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        343,
+        345
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        344,
+        345
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        345,
+        345
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 327680
+    },
+    {
+      "tile": [
+        346,
+        345
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 488144
+    },
+    {
+      "tile": [
+        347,
+        345
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 466016
+    },
+    {
+      "tile": [
+        348,
+        345
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 504368
+    },
+    {
+      "tile": [
+        349,
+        345
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 515552
+    },
+    {
+      "tile": [
+        350,
+        345
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 521136
+    },
+    {
+      "tile": [
+        351,
+        345
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 509968
+    },
+    {
+      "tile": [
+        352,
+        345
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 486880
+    },
+    {
+      "tile": [
+        353,
+        345
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 474112
+    },
+    {
+      "tile": [
+        354,
+        345
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 494528
+    },
+    {
+      "tile": [
+        339,
+        346
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 327680
+    },
+    {
+      "tile": [
+        340,
+        346
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        341,
+        346
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        342,
+        346
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        343,
+        346
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        344,
+        346
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        345,
+        346
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 327680
+    },
+    {
+      "tile": [
+        346,
+        346
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 522928
+    },
+    {
+      "tile": [
+        347,
+        346
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 513824
+    },
+    {
+      "tile": [
+        348,
+        346
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 492928
+    },
+    {
+      "tile": [
+        349,
+        346
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 482000
+    },
+    {
+      "tile": [
+        350,
+        346
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 487600
+    },
+    {
+      "tile": [
+        351,
+        346
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 477376
+    },
+    {
+      "tile": [
+        352,
+        346
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 504528
+    },
+    {
+      "tile": [
+        353,
+        346
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 519200
+    },
+    {
+      "tile": [
+        354,
+        346
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 524224
+    },
+    {
+      "tile": [
+        339,
+        347
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 327680
+    },
+    {
+      "tile": [
+        340,
+        347
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        341,
+        347
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        342,
+        347
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        343,
+        347
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        344,
+        347
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        345,
+        347
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 327680
+    },
+    {
+      "tile": [
+        346,
+        347
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 523440
+    },
+    {
+      "tile": [
+        347,
+        347
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 515840
+    },
+    {
+      "tile": [
+        348,
+        347
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 495552
+    },
+    {
+      "tile": [
+        349,
+        347
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 475536
+    },
+    {
+      "tile": [
+        350,
+        347
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 481120
+    },
+    {
+      "tile": [
+        351,
+        347
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 480432
+    },
+    {
+      "tile": [
+        352,
+        347
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 507888
+    },
+    {
+      "tile": [
+        353,
+        347
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 522480
+    },
+    {
+      "tile": [
+        354,
+        347
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 526720
+    },
+    {
+      "tile": [
+        339,
+        348
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 327680
+    },
+    {
+      "tile": [
+        340,
+        348
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 327680
+    },
+    {
+      "tile": [
+        341,
+        348
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        342,
+        348
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 655360
+    },
+    {
+      "tile": [
+        350,
+        348
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 518256
+    },
+    {
+      "tile": [
+        351,
+        348
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 507072
+    },
+    {
+      "tile": [
+        352,
+        348
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 482944
+    },
+    {
+      "tile": [
+        353,
+        348
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 486272
+    },
+    {
+      "tile": [
+        354,
+        348
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 502784
+    },
+    {
+      "tile": [
+        340,
+        349
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 304832
+    },
+    {
+      "tile": [
+        341,
+        349
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 304832
+    },
+    {
+      "tile": [
+        342,
+        349
+      ],
+      "source": "T81-complex",
+      "model": 86,
+      "heightFx32": 304832
+    },
+    {
+      "tile": [
+        350,
+        349
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 531600
+    },
+    {
+      "tile": [
+        351,
+        349
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 520416
+    },
+    {
+      "tile": [
+        352,
+        349
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 501184
+    },
+    {
+      "tile": [
+        353,
+        349
+      ],
+      "source": "T81-complex",
+      "model": 88,
+      "heightFx32": 459440
+    },
+    {
+      "tile": [
+        348,
+        357
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 262144
+    },
+    {
+      "tile": [
+        349,
+        357
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 262144
+    },
+    {
+      "tile": [
+        350,
+        357
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 262144
+    },
+    {
+      "tile": [
+        351,
+        357
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 309328
+    },
+    {
+      "tile": [
+        352,
+        357
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 262144
+    },
+    {
+      "tile": [
+        353,
+        357
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 262144
+    },
+    {
+      "tile": [
+        354,
+        357
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 262144
+    },
+    {
+      "tile": [
+        348,
+        358
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 262144
+    },
+    {
+      "tile": [
+        349,
+        358
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 262144
+    },
+    {
+      "tile": [
+        350,
+        358
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 262144
+    },
+    {
+      "tile": [
+        351,
+        358
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 330432
+    },
+    {
+      "tile": [
+        352,
+        358
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 262144
+    },
+    {
+      "tile": [
+        353,
+        358
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 262144
+    },
+    {
+      "tile": [
+        354,
+        358
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 262144
+    },
+    {
+      "tile": [
+        348,
+        359
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 262144
+    },
+    {
+      "tile": [
+        349,
+        359
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 262144
+    },
+    {
+      "tile": [
+        350,
+        359
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 262144
+    },
+    {
+      "tile": [
+        351,
+        359
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 330432
+    },
+    {
+      "tile": [
+        352,
+        359
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 262144
+    },
+    {
+      "tile": [
+        353,
+        359
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 262144
+    },
+    {
+      "tile": [
+        354,
+        359
+      ],
+      "source": "T81-safe",
+      "model": 79,
+      "heightFx32": 262144
+    }
+  ],
+  "canopyPoints": [],
+  "expectationSource": "Independent native mesh roof masks and native loaded land/Canopy survey, preserved before TKT-0081 generator edits. Exact production Chebyshev ring 4..8."
+}

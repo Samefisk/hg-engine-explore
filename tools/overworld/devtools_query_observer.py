@@ -16,23 +16,35 @@ MAX_RECEIPTS = 256
 # Full image discovery is a separate bounded check. Every Tick still reads
 # the current Cargo ABI, full Cargo prefix and complete moved CargoWild module within this same cap.
 READ_BUDGET = 0x9000
-TICK_MAX_METADATA = 2337  # Original661 + typed packet/receipt284 + constructor1390 + aligned prefix2.
+# Largest legal path is Commit return: ordinary return535 + native packet/Ops212
+# + current constructor1204 + Thumb alignment2 + admitted serial4. Cargo's
+# unused state gaps are not read; no reported or ownership field is omitted.
+TICK_MAX_METADATA = 1957
 INITIAL_READ_BUDGET = MAX_IMAGE + 37  # Image plus the existing loader/owner reads.
-CARGO_CODE_START, CARGO_CODE_END = 196, 24156
-CARGO_WILD_START, CARGO_WILD_END = 0xB0D8, 0xD83C
-CARGO_WILD_SHA256 = "23d391c7271973087bffb3c8db9d7583e3587b77004f5e6d585aada0d8a1b54d"
+CARGO_CODE_START, CARGO_CODE_END = 196, 24532
+CARGO_WILD_START, CARGO_WILD_END = 0xb238, 0xda2c
+CARGO_WILD_SHA256 = 'c8d6968fd2a2093ea81d34b928ef7c376fdb8955ecbc6e67ad6772ae08acf0e3'
 CARGO_ABI_OFFSET, CARGO_ABI_SIZE = 100, 16
-ELF_SHA = "f65d43d7de5d1345bfe86582a595a410abfc4865f22e1f67a8c34dfd94d83292"
-PACKAGE_SHA = "715af802ec759a66db57fbed0f429060f77c985267f7545f1d9bdd1b31072d10"
-CARGO_CODE_SHA256 = "365333b96d5c6a958250f01bb08a8bb307f400e5528f77e3a46380693f12348e"
-TICK_OFFSET, TICK_SIZE = 0xC274, 0x15B0
+ELF_SHA = '6d2fdb34f79c771765d78afcac1118047c039da7fc368bb4072de6335146b3b6'
+PACKAGE_SHA = '835eebd83aec1322a07746fa8dd6d42cfbe2cdd84bce2b14621811996150b53c'
+CARGO_CODE_SHA256 = '4602e5b34ea9aa66ccda247d48e28aa5b09351a187d962c4ebef0168f0aefca7'
+TICK_OFFSET, TICK_SIZE = 0xc47c, 0x1598
 RUNTIME_CONDITIONS, RUNTIME_QUERY = 0x514, 0x518
 FRAME_WORLD, FRAME_VALID, BINDINGS = 0x6BC, 0x857, 0x998
 QUERY_STATE_SIZE = 424
-QUERY_SIZE, QUERY_OWNER, QUERY_VALID = 43516, 28408, 28588
-QUERY_WAITING = 28590
-QUERY_ENTRY_ACTIVE = 30250
+QUERY_SIZE, QUERY_AUX_SIZE = 16600, 11268
+QUERY_ALLOCATION_VERSION = 0x3251574F
+QUERY_STATE_OFFSET, QUERY_STORAGE = 12, 436
+QUERY_OWNER, QUERY_VALID, QUERY_WAITING = 12432, 12612, 12614
+QUERY_ENTRY_ACTIVE = 14014
+QUERY_CORE_HEAP, QUERY_AUX_HEAP = 11, 4
+QUERY_CACHED_EDGES = 476
+QUERY_VISITED, QUERY_AUX_NODES, QUERY_AUX_VISITED_VALID = 8668, 640, 6784
+QUERY_AUX_CHANGES, QUERY_AUX_CHANGES_VALID = 6848, 10944
 QUERY_PREFIX_SIZE = 384
+QUERY_STATE_READ_SPANS = ((4,12),(68,4),(148,2),(156,4),(172,2),(176,5),
+                          (192,76),(280,2),(288,16),(308,36),(364,14),(380,1))
+QUERY_STATE_READ_BYTES = 174
 WORLD_VERSION, WORLD_SIZE, OPS_SIZE = 3, 84, 84
 RUNTIME_SIZE = 2856
 CONDITION_ACTOR_SIZE, CONDITION_ACTIVE_MASKS = 88, 2332
@@ -123,9 +135,9 @@ ENTRY_LAYOUT = {
     "Runtime_entryRouteReceipt": 2752,
     "Runtime_entryRouteSerial": 2816
 }
-ENTRY_NATIVE_OWNERS = {'ops': (37584708, 72, 'c7ef0e58f4394f9749d318b3daeff1727c1e5d0f3dd81b870b6b1828a25747a5'),
- 'remove': (37560688, 52, 'd6f2f1f7d670b79aa49e26f72b2c02a5b63d9a3a5c2c769f6daa89965e81019a'),
- 'spawn': (37566040, 1204, 'b18d2a881d1c8e2eda67ea16de97009b32b3d24a1e208b1d2fe04e69b593e10c')}
+ENTRY_NATIVE_OWNERS = {'ops': (37584716, 72, '84b99e0dc556adff6c5a14803bcbf08df9433fa53e990729cc3fb8f33154288e'),
+ 'remove': (37560684, 52, '7dc425b6dbba51d1e550fd462ed46d3a0d1bd37c5570f9299ac589f7cc07f38c'),
+ 'spawn': (37566036, 1204, '8a0ce24d203e6f65330bf8487236db61b0cbdd71886acdc3117cbe96461ab934')}
 # Each offset is measured from the actual ARM types; route and saved-query
 # fields grow at different boundaries. See the T65 native layout receipt.
 STATE_OFFSETS = {
@@ -186,6 +198,54 @@ def handle(raw):
     return dict(zip(HANDLE_KEYS, values[:5]), value=values[0] | values[1] << 16)
 
 
+def workspace_allocation(read, query, destroy):
+    """Read the actual versioned two-heap owner and its exact array bindings.
+
+    The caller authenticates the current relocated DestroyQuery body before
+    supplying its Thumb pointer. Reads use that caller's unchanged budget.
+    """
+    need(type(query) is int and query % 4 == 0
+         and 0x02000010 <= query <= 0x02400000 - QUERY_SIZE,
+         "workspace allocation range differs")
+    raw = read(query, 12)
+    auxiliary, callback, version = struct.unpack("<3I", raw)
+    need(version == QUERY_ALLOCATION_VERSION and callback == destroy and callback & 1,
+         "workspace version/destructor owner differs")
+    need(auxiliary % 4 == 0 and 0x02000010 <= auxiliary <= 0x02400000 - QUERY_AUX_SIZE
+         and (auxiliary + QUERY_AUX_SIZE <= query - 16 or query + QUERY_SIZE <= auxiliary - 16),
+         "workspace auxiliary allocation range differs")
+    need(read(query - 16, 16)[12] == QUERY_CORE_HEAP
+         and read(auxiliary - 16, 16)[12] == QUERY_AUX_HEAP,
+         "workspace core/auxiliary heap ownership differs")
+    storage = read(query + QUERY_STORAGE, 40)
+    nodes, edges, visited, node_count, edge_count, visited_count, generation, valid, change_generation, changes, changes_valid = struct.unpack("<3I2H6I", storage)
+    need((nodes, edges, visited, node_count, edge_count, visited_count, valid, changes, changes_valid)
+         == (auxiliary + QUERY_AUX_NODES, query + QUERY_CACHED_EDGES, query + QUERY_VISITED,
+             256, 512, 512, auxiliary + QUERY_AUX_VISITED_VALID,
+             auxiliary + QUERY_AUX_CHANGES, auxiliary + QUERY_AUX_CHANGES_VALID),
+         "workspace split arrays/capacities differ")
+    return dict(version=version, rawHex=raw.hex(), core=query, coreBytes=QUERY_SIZE,
+                coreHeapId=QUERY_CORE_HEAP, auxiliary=auxiliary, auxiliaryBytes=QUERY_AUX_SIZE,
+                auxiliaryHeapId=QUERY_AUX_HEAP, destroy=callback, storage=query + QUERY_STORAGE,
+                nodes=nodes, edges=edges, visited=visited, visitedValid=valid,
+                changes=changes, changesValid=changes_valid, generation=generation,
+                changeGeneration=change_generation)
+
+
+def workspace_state_fields(read, address):
+    """Read only the named Cargo fields; an unobserved gap is never zero data."""
+    spans = [(offset, read(address + offset, size)) for offset, size in QUERY_STATE_READ_SPANS]
+    need(sum(len(raw) for _offset, raw in spans) == QUERY_STATE_READ_BYTES,
+         "workspace measured state read plan differs")
+    def field(name, size):
+        at = STATE_OFFSETS[name]
+        for offset, raw in spans:
+            if offset <= at and at + size <= offset + len(raw):
+                return raw[at-offset:at-offset+size]
+        need(False, "workspace field is outside the measured read plan: " + name)
+    return field
+
+
 def sealed_package(elf, staged, member):
     need(hashlib.sha256(elf).hexdigest() == ELF_SHA, "private ARM layout seal differs")
     blob, receipt = package(elf)
@@ -203,13 +263,16 @@ def sealed_package(elf, staged, member):
     need(hashlib.sha256(image[CARGO_WILD_START:CARGO_WILD_END]).hexdigest() == CARGO_WILD_SHA256
          and CARGO_WILD_START <= TICK_OFFSET < TICK_OFFSET + TICK_SIZE <= CARGO_WILD_END,
          "private CargoWild module seal differs")
-    need(struct.unpack_from("<6H", image, 100) == (2, QUERY_STATE_SIZE, 40, 140, 24604, 0)
+    need(struct.unpack_from("<6H", image, 100) == (2, QUERY_STATE_SIZE, 40, 140, 40, 0)
          and struct.unpack_from("<I", image, 112)[0] == (BASE + TICK_OFFSET | 1),
          "typed Cargo callback/layout differs")
     # These native literals prove the current conditions, valid-frame and sole
     # workspace-owner offsets before any private pointer is followed.
+    # QueryTurn owns all four core offsets; Tick owns frame.valid;
+    # AcquireQuery owns the exact core allocation size. Each word has a
+    # native Thumb literal-load reference inside that same current function.
     need(tuple(struct.unpack_from("<I", image, offset)[0]
-               for offset in (0xC25C, 0xD32C, 0xC264, 0xC258, 0xC268, 0xBFB8))
+               for offset in (0xc464, 0xd534, 0xc46c, 0xc460, 0xc470, 0xc190))
          == (RUNTIME_CONDITIONS, FRAME_VALID, QUERY_OWNER, QUERY_VALID,
              QUERY_WAITING, QUERY_SIZE), "native Tick/turn layout literals differ")
     return blob, image, dict(receipt, cargoWildRange=(CARGO_WILD_START, CARGO_WILD_END))
@@ -324,6 +387,12 @@ class NativeQueryObserver:
         member = ndspy.narc.NARC(rom.getFileByName("a/0/2/8")).files[21]
         self.blob, self.image, self.receipt = sealed_package(
             (directory / "image.elf").read_bytes(), (directory / "query.bin").read_bytes(), member)
+        address, size, body = symbol((directory / "image.elf").read_bytes(), "DestroyQuery", 2)
+        self.workspace_destroy_offset = address - BASE
+        need(CARGO_WILD_START <= self.workspace_destroy_offset
+             and self.workspace_destroy_offset + size <= CARGO_WILD_END
+             and body == self.image[self.workspace_destroy_offset:self.workspace_destroy_offset + size],
+             "workspace destructor is outside authenticated CargoWild")
         selector = build / "overworld_follower_selector_overlay_linked.o"
         data = selector.read_bytes()
         self.service = symbol(data, "gOverworldQueryCodeAddonServiceEntry", 1, expected_size=24)[0]
@@ -596,43 +665,43 @@ class NativeQueryObserver:
                           worldFrame=None, worldSubject=None)
         if query == 0:
             return result
-        need(0x02000000 <= query <= 0x02400000 - QUERY_SIZE, "workspace allocation range differs")
-        prefix = self._read(query, QUERY_PREFIX_SIZE)
+        allocation = workspace_allocation(self._read, query, owner["entry"] + self.workspace_destroy_offset | 1)
+        state_field = workspace_state_fields(self._read, query + QUERY_STATE_OFFSET)
         qowner = handle(self._read(query + QUERY_OWNER, 12))
         valid = self._read(query + QUERY_VALID, 4)
         entry_active = self._read(query + (QUERY_ENTRY_ACTIVE & ~3), 4)[QUERY_ENTRY_ACTIVE & 3]
-        o = STATE_OFFSETS
-        u16 = lambda name: struct.unpack_from("<H", prefix, o[name])[0]
-        u32 = lambda name: struct.unpack_from("<I", prefix, o[name])[0]
+        byte = lambda name: state_field(name, 1)[0]
+        u16 = lambda name: struct.unpack("<H", state_field(name, 2))[0]
+        u32 = lambda name: struct.unpack("<I", state_field(name, 4))[0]
         position = lambda name: dict(zip(("x", "y", "baseY", "surfaceId", "reserved"),
-                                        struct.unpack_from("<hhiHH", prefix, o[name])))
+                                        struct.unpack("<hhiHH", state_field(name, 12))))
         need((u16("version"), u16("size")) == (2, QUERY_STATE_SIZE)
-             and u32("storage") == query + QUERY_STATE_SIZE
-             and valid[0] in (0, 1) and prefix[o["started"]] in (0, 1)
+             and u32("storage") == query + QUERY_STORAGE
+             and valid[0] in (0, 1) and byte("started") in (0, 1)
              and entry_active in (0, 1) and u16("route_nodeCount") <= 256,
              "workspace layout/header differs")
         owner_current = self._current_handle(qowner)
-        result["workspace"] = dict(owner=qowner, ownerCurrent=owner_current,
+        result["workspace"] = dict(allocation=allocation, owner=qowner, ownerCurrent=owner_current,
             cargoOwnerCredited=route_operation == 0 and bool(valid[0]) and owner_current,
-            entryActive=bool(entry_active), valid=bool(valid[0]), started=bool(prefix[o["started"]]),
-            phase=prefix[o["route_phase"]], nodeCount=u16("route_nodeCount"),
-            routeSubject=handle(prefix[o["route_query_subject"]:o["route_query_subject"]+12]),
-            stateSubject=handle(prefix[o["query_subject"]:o["query_subject"]+12]),
-            edgeQueries=prefix[o["work_edgeQueries"]], goalQueries=prefix[o["work_goalQueries"]],
-            compatibility=dict(cargo=handle(prefix[o["query_cargo"]:o["query_cargo"]+12]),
-                bounds=dict(zip(("minX", "minY", "maxX", "maxY"), struct.unpack_from("<4h", prefix, o["query_bounds"]))),
+            entryActive=bool(entry_active), valid=bool(valid[0]), started=bool(byte("started")),
+            phase=byte("route_phase"), nodeCount=u16("route_nodeCount"),
+            routeSubject=handle(state_field("route_query_subject",12)),
+            stateSubject=handle(state_field("query_subject",12)),
+            edgeQueries=byte("work_edgeQueries"), goalQueries=byte("work_goalQueries"),
+            compatibility=dict(cargo=handle(state_field("query_cargo",12)),
+                bounds=dict(zip(("minX", "minY", "maxX", "maxY"), struct.unpack("<4h", state_field("query_bounds",8)))),
                 scopeRevision=u32("query_scopeRevision"), movementPolicyRevision=u32("query_movementPolicyRevision"),
                 edges=u32("query_edges"), edgeCount=u16("query_edgeCount"), requestKey=u32("requestKey"),
-                roleMask=prefix[o["roleMask"]], pickupDistance=prefix[o["distance"]], required=prefix[o["required"]]),
+                roleMask=byte("roleMask"), pickupDistance=byte("distance"), required=byte("required")),
             origin=position("query_origin"), dynamicRevision=u32("query_dynamicRevision"),
-            storage=u32("storage"), stateFrame=u32("frame"), candidate=prefix[o["candidate"]],
-            scan=prefix[o["scan"]], active=prefix[o["active"]],
+            storage=u32("storage"), stateFrame=u32("frame"), candidate=byte("candidate"),
+            scan=byte("scan"), active=byte("active"),
             routeProgress=dict(goal=position("goal"), cargoPosition=position("query_cargoPosition"),
                 goalRevision=u32("query_goalRevision"), routeGoalRevision=u32("route_query_goalRevision"),
                 goalNode=u16("route_goalNode"), proofNode=u16("route_proofNode"), proofLength=u16("route_proofLength"),
-                probeNeeded=prefix[o["route_probeNeeded"]], edgeOwed=prefix[o["edgeOwed"]],
-                goalValid=prefix[o["goalValid"]], goalDirty=prefix[o["goalDirty"]]),
-            lastWorkHex=prefix[o["lastWork"]:o["lastWork"]+28].hex())
+                probeNeeded=byte("route_probeNeeded"), edgeOwed=byte("edgeOwed"),
+                goalValid=byte("goalValid"), goalDirty=byte("goalDirty")),
+            lastWorkHex=state_field("lastWork",28).hex())
         return result
 
     def _entry_packet(self, call, world, owner):

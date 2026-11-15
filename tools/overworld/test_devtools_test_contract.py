@@ -49,7 +49,19 @@ class D1WarmupTests(unittest.TestCase):
     names = ("population.spawn-work-budget", "world.unmounted.spawn-zero-stutter")
 
     def load(self, name):
-        return json.loads((self.root / "tests/overworld/test-recipes" / (name + ".json")).read_text())
+        # These historical controls retain the exact old Cherrygrove path.
+        # The canonical Goldenrod recipes have separate route controls.
+        from tools.overworld.devtools_d1_routes import cherrygrove_actions
+        from tools.overworld.devtools_test_contract import _d1_warmup_setup
+        value = json.loads((self.root / "tests/overworld/test-recipes" / (name + ".json")).read_text())
+        kind = value["measurements"][0]["kind"]
+        value["measurements"][0].pop("route", None)
+        value["setup"] = _d1_warmup_setup() + value["setup"][-2:]
+        value["actions"] = cherrygrove_actions(kind)
+        if kind == "unmounted-zero-stutter-v1":
+            value["assertions"][-1] = {"kind": "player-settled-at", "map": 67,
+                                       "x": 555, "z": 393}
+        return value
 
     def warmup(self):
         subject = {"active": True, "species": 56, "role": "FOLLOWER",

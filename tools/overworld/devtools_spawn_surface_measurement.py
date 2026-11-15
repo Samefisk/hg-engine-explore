@@ -284,7 +284,7 @@ def check_pool_spawn_surface(spawn, terminal_snapshot, *, source_sha256, authore
         raise ValueError("incomplete spawn surface evidence") from error
 
 
-def _check_natural_appear_hop_surface(spawn, terminal_snapshot, *, species, terrain, prepared):
+def _check_natural_appear_hop_surface(spawn, terminal_snapshot, *, species, terrain, prepared, surface_type=None, land_behaviors=LAND_BEHAVIORS):
     """Validate the first native height read for one natural Appear Hop.
 
     This is the current recorder-calibration path. It deliberately does not
@@ -357,13 +357,25 @@ def _check_natural_appear_hop_surface(spawn, terminal_snapshot, *, species, terr
                   "landing clocks are missing or after terminal")
         query, refresh = h.get("surfaceQuery"), h.get("heightRefresh")
         _need(isinstance(query, dict) and query.get("kind") == "surface"
-              and query.get("point") == target
-              and query.get("returnValue") == 0 and query.get("hit") is None,
-              "natural landing uses an unknown or authored surface")
+              and query.get("point") == target,
+              "natural landing surface query differs")
+        if surface_type is None:
+            _need(query.get("returnValue") == 0 and query.get("hit") is None,
+                  "natural landing uses an unknown or authored surface")
+        else:
+            hit = query.get("hit", {})
+            _need(surface_type in (0, 4) and query.get("returnValue") == 1
+                  and isinstance(hit, dict) and hit.get("surfaceType") == surface_type
+                  and _int(hit.get("height")) and hit["height"] > 0
+                  and _int(hit.get("surfaceId")) and 0 <= hit["surfaceId"] < 0xFFFF
+                  and _int(hit.get("nodeId")) and hit["nodeId"] >= 0,
+                  "raised natural landing lacks its expected native catalog surface")
         _need(isinstance(refresh, dict) and refresh.get("kind") == "height-refresh"
               and refresh.get("objectPointer") == source["object"]
               and refresh.get("returnValue") == 1
-              and h.get("heightSource") == "native-refresh",
+              and h.get("heightSource") == (
+                  "native-refresh" if surface_type is None else
+                  "catalog-surface" if surface_type == 0 else "native-plus-catalog-offset"),
               "native height refresh did not succeed")
         flags = refresh.get("positionBefore", {}).get("flags")
         _need(_int(flags) and not flags & IGNORE_HEIGHTS,
@@ -378,7 +390,10 @@ def _check_natural_appear_hop_surface(spawn, terminal_snapshot, *, species, terr
         before, after, terminal = h["positionBefore"], h["positionAfter"], actor["engineObject"]
         _need(all(_int(pose.get("pos_y")) for pose in (before, after, terminal)),
               "native Y is missing")
-        _need(refresh.get("positionAfter", {}).get("pos_y") == after["pos_y"]
+        refreshed_y = refresh.get("positionAfter", {}).get("pos_y")
+        expected_y = (refreshed_y if surface_type is None else hit["height"]
+                      if surface_type == 0 else refreshed_y + hit["height"])
+        _need(_int(refreshed_y) and expected_y == after["pos_y"]
               == terminal["pos_y"], EXPECTED_HEIGHT_REASON)
         _need(terminal.get("unk88_y") == 0,
               "terminal retains a separate jump offset")
@@ -416,8 +431,9 @@ def _check_natural_appear_hop_surface(spawn, terminal_snapshot, *, species, terr
                   and cell["collision"] == bool(raw & 0x8000)
                   and cell.get("terrain_class") == (raw >> 8) & 127,
                   "terrain decode differs")
-            _need(not cell["collision"] and cell["behavior"] in (LAND_BEHAVIORS if terrain == 0 else SURF_BEHAVIORS),
-                  "natural landing target is blocked or has the wrong encounter terrain")
+            if surface_type is None:
+                _need(not cell["collision"] and cell["behavior"] in (land_behaviors if terrain == 0 else SURF_BEHAVIORS),
+                      "natural landing target is blocked or has the wrong encounter terrain")
             cells.append(cell)
         _need(cells[0] == cells[1],
               "loaded terrain changed during landing height resolution")
@@ -444,6 +460,12 @@ def check_natural_water_surface(spawn, terminal_snapshot, *, species):
     """
     return _check_natural_appear_hop_surface(spawn, terminal_snapshot,
         species=species, terrain=1, prepared=True)
+
+
+def check_natural_raised_surface(spawn, terminal_snapshot, *, species, surface_type):
+    """Natural bird placement on Roof or Canopy, with native terminal height."""
+    return _check_natural_appear_hop_surface(spawn, terminal_snapshot,
+        species=species, terrain=0, prepared=True, surface_type=surface_type)
 
 
 EXPECTED_HEIGHT_REASON = "terminal Y differs from native landing height"

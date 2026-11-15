@@ -20,6 +20,7 @@
 .include "armips/asm/overworld_wild_movement.s" // custom movement descriptor for visible wild Pokemon
 .include "armips/asm/overworld_wild_shadow.s" // prevent stock callbacks from restoring policy-suppressed shadows
 .include "armips/asm/field_heap_budget.s" // move 48 KB from FIELD1 to the FIELD2 script heap
+.include "armips/asm/vblank_task_queue.s" // 64-slot VBlank task queue so field init cannot drop the map-object transfer task
 .include "armips/asm/disable_follower_pokemon.s" // disable the vanilla walking follower presentation and gameplay
 .include "armips/asm/overworld_follower_release_overlay2.s" // reuse retired follower task for release presentation
 .include "armips/asm/overworld_follower_selector.s" // reserve physical Y from registered items
@@ -33,7 +34,6 @@
 .include "armips/asm/overworlds.s" // code for overworlds, specifically repointing gOWTagToFileNum and making dimorphism a byte instead of a halfword.
 .include "armips/asm/overworld_field_capsule.s" // shared field code in the retired stock graphics table
 .include "armips/asm/swarms.s" // modify swarms
-.include "armips/asm/map_header_expansion.s" // map IDs 540+; after pokedex.s (shares its retired-table block)
 
 .include "armips/data/starters.s" // data definitions for which species to use for the starter Pokemon
 .include "armips/asm/tm_palettes.s" // allows editing of pallete table for TMs

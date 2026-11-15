@@ -87,6 +87,7 @@ OVERWORLD_FIELD_CAPSULE_OBJS := \
 	$(BUILD)/overworld_field_capsule/overworld_actor_appearance_native.o \
 	$(BUILD)/overworld_field_capsule/overworld_appearance_policy.o \
 	$(BUILD)/overworld_field_capsule/overworld_condition_subject_native.o \
+	$(BUILD)/overworld_field_capsule/overworld_field_model_alloc.o \
 	$(BUILD)/overworld_field_capsule/overworld_world_effect_delivery.o
 CODE_BUILD_DIRS += $(BUILD)/overworld_field_capsule
 LINKED_OUTPUTS += $(BUILD)/overworld_field_capsule_linked.o

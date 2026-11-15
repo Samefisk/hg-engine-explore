@@ -18,12 +18,29 @@
 #define DEFERRED OVERWORLD_PICKUP_ROUTE_EDGE_DEFERRED
 
 typedef struct Footprint { s16 x,y; s32 height; u32 flags; s32 identity; } Footprint;
+typedef struct NativeAuxiliary {
+    OverworldCargoQueryChangedTile changed[CHANGES];
+    OverworldPickupRouteNode nodes[OVERWORLD_CARGO_QUERY_NODES];
+    u8 visitedValid[OVERWORLD_CARGO_QUERY_HASH/8];
+    OverworldCargoQueryTileStamp changes[OVERWORLD_CARGO_QUERY_CHANGES];
+    u8 changesValid[OVERWORLD_CARGO_QUERY_CHANGES/8];
+    union {
+        OverworldWildPreparedSpawn prepared;
+        OverworldWildBehaviorProfile profile;
+    } packet;
+} NativeAuxiliary;
+/* The catalog's FIELD1 admission reserve must leave room for this array. */
+_Static_assert(sizeof(NativeAuxiliary) + OVERWORLD_FIELD_PICKUP_QUERY_HEAP_RESERVE
+        + OVERWORLD_FIELD_QUERY_ALLOCATION_MARGIN <= OVERWORLD_FIELD_QUERY_HEAP_RESERVE,
+    "catalog reserve must cover the lazy Cargo array and its reserve");
 typedef struct NativeQuery {
+    OverworldCargoQueryWildAllocation allocation;
     OverworldCargoQueryState state;
     OverworldCargoQueryStorage storage;
+    OverworldPickupRouteCachedEdge cachedEdges[OVERWORLD_CARGO_QUERY_EDGES];
+    OverworldPickupRouteVisited visited[OVERWORLD_CARGO_QUERY_HASH];
     OverworldPickupRouteEdge edges[EDGES];
     Footprint objects[OBJECTS], reservations[OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS], front;
-    OverworldCargoQueryChangedTile changed[CHANGES];
     MapObjectMan *manager;
     OverworldActorHandle owner;
     OverworldCargoQueryResult cached;
@@ -38,12 +55,11 @@ typedef struct NativeQuery {
     /* Entry rejects the follower slot before path access. Keep one full
      * 96-step record for each of the nine admitted Wild slots. */
     OverworldEntryRoutePath entryPaths[OVERWORLD_ACTOR_SYSTEM_MAX_ACTORS-1];
-    OverworldWildPreparedSpawn prepared;
-    OverworldWildBehaviorProfile entryProfile;
     u32 entryFrame, entryLifeSerial, entryLifeFrame;
     u16 entryLifeUpdates;
     u8 entryRootReady, entryFrameValid, entryLifeSlot, entryLifeFrameValid;
 } NativeQuery;
+#define AUX(q) ((NativeAuxiliary *)(q)->allocation.auxiliary)
 
 /* Caller has already rejected slot7 and slots outside the Actor table.
  * This is storage indexing only; full slot identities remain unchanged. */
@@ -60,8 +76,8 @@ static void Change(NativeQuery *q,const Footprint *old,const Footprint *now,u8 i
     q->dynamicRevision++;
     if(ignored) return;
     if(q->changeCount+2>CHANGES) { q->changesComplete=0;return; }
-    if(old->flags) q->changed[q->changeCount++]=(OverworldCargoQueryChangedTile){old->x,old->y};
-    if(now->flags) q->changed[q->changeCount++]=(OverworldCargoQueryChangedTile){now->x,now->y};
+    if(old->flags) AUX(q)->changed[q->changeCount++]=(OverworldCargoQueryChangedTile){old->x,old->y};
+    if(now->flags) AUX(q)->changed[q->changeCount++]=(OverworldCargoQueryChangedTile){now->x,now->y};
 }
 /* All native occupancy readers use current XY and rendered height. Player
  * front and Actor's current destination reservations are separate dependencies.
@@ -423,6 +439,7 @@ static __attribute__((noinline)) u8 QueryTurn(NativeQuery *q,
                 priority=idle && (((q->cached.status==LIMIT || q->cached.status==UNREACHABLE)
                     && Unclaimed(world,actors,bindings,runtime))
                     || (call->options->usesBinding==OVERWORLD_TARGET_SELECT_OBJECT_OF_INTEREST
+                    && !(q->waitingMask&(1u<<world->slot))
                     && actors->slots[world->slot].snapshot.role==OVERWORLD_ACTOR_ROLE_FOLLOWER
                     && CurrentActor(world,actors,&bindings->subject)
                     && world->subjectObject==world->state->spawns[world->slot].object
@@ -440,24 +457,39 @@ static __attribute__((noinline)) u8 QueryTurn(NativeQuery *q,
                 }
                 if(!priority) return 0;
             }
+            q->waitingMask|=1u<<q->owner.slot;
         }
-        q->waitingMask&=~(1u<<world->slot);
         Restart(q);
     }
+    q->waitingMask&=~(1u<<world->slot);
     return 1;
 }
 
+static void DestroyQuery(void *raw)
+{
+    NativeQuery *q=raw;
+    void *auxiliary=q->allocation.auxiliary;
+    q->allocation=(OverworldCargoQueryWildAllocation){0};
+    sys_FreeMemoryEz(auxiliary);sys_FreeMemoryEz(q);
+}
 static NativeQuery *AcquireQuery(const OverworldCargoQueryWildCall *call)
 {
     OverworldWildOverlayRuntimeState *runtime=call->world->state->movementRuntimeState;
     NativeQuery *q=runtime->pickupQuery;
     if (q!=NULL) return q;
     if (call->allocate==NULL || call->freeSize==NULL
-        || call->freeSize(call->heapId)<sizeof(*q)+OVERWORLD_FIELD_PICKUP_QUERY_HEAP_RESERVE) return NULL;
-    q=call->allocate(call->heapId,sizeof(*q));if(q==NULL) return NULL;
-    memset(q,0,sizeof(*q));q->storage.workspace=(OverworldPickupRouteWorkspace){
-        q->storage.nodes,q->storage.edges,q->storage.visited,
-        OVERWORLD_CARGO_QUERY_NODES,OVERWORLD_CARGO_QUERY_EDGES,OVERWORLD_CARGO_QUERY_HASH,0};
+        || call->freeSize(call->heapId)<sizeof(NativeAuxiliary)+OVERWORLD_FIELD_PICKUP_QUERY_HEAP_RESERVE+OVERWORLD_FIELD_QUERY_ALLOCATION_MARGIN
+        || call->freeSize(OVERWORLD_FIELD_QUERY_CORE_HEAP_ID)<sizeof(*q)+OVERWORLD_FIELD_QUERY_CORE_HEAP_RESERVE+OVERWORLD_FIELD_QUERY_ALLOCATION_MARGIN) return NULL;
+    q=call->allocate(OVERWORLD_FIELD_QUERY_CORE_HEAP_ID,sizeof(*q));if(q==NULL) return NULL;
+    NativeAuxiliary *auxiliary=call->allocate(call->heapId,sizeof(*auxiliary));
+    if(auxiliary==NULL) { sys_FreeMemoryEz(q);return NULL; }
+    memset(q,0,sizeof(*q));memset(auxiliary,0,sizeof(*auxiliary));
+    q->allocation=(OverworldCargoQueryWildAllocation){auxiliary,DestroyQuery,OVERWORLD_FIELD_QUERY_ALLOCATION_VERSION};
+    q->storage=(OverworldCargoQueryStorage){
+        {auxiliary->nodes,q->cachedEdges,q->visited,
+         OVERWORLD_CARGO_QUERY_NODES,OVERWORLD_CARGO_QUERY_EDGES,
+         OVERWORLD_CARGO_QUERY_HASH,0,auxiliary->visitedValid},
+        0,auxiliary->changes,auxiliary->changesValid};
     OverworldCargoQuery_Init(&q->state,&q->storage);runtime->pickupQuery=q;return q;
 }
 static u8 EntryCurrent(void *raw,const OverworldEntryRouteRequest *r)
@@ -476,7 +508,7 @@ static u8 EntryCurrent(void *raw,const OverworldEntryRouteRequest *r)
             && !world->state->spawns[r->slot].active
             && !actors->slots[r->slot].snapshot.active
             && actors->slots[r->slot].snapshot.handle.generation==r->expectedSlotGeneration
-            && Same(&q->prepared,&runtime->queuedSpawn,sizeof(q->prepared));
+            && Same(&AUX(q)->packet.prepared,&runtime->queuedSpawn,sizeof(AUX(q)->packet.prepared));
     }
     return CurrentActor(world,actors,&r->actor)
         && world->subjectObject==world->state->spawns[r->slot].object
@@ -497,7 +529,7 @@ static u8 EntryRootMemoCurrent(NativeQuery *q,u32 scope,u32 policy,
     const OverworldPickupRoutePosition *root)
 {
     q->state.query.dynamicRevision=q->dynamicRevision;
-    OverworldCargoQueryInput observed={0};observed.changedTiles=q->changed;
+    OverworldCargoQueryInput observed={0};observed.changedTiles=AUX(q)->changed;
     observed.changedTileCount=q->changeCount;observed.changesComplete=q->changesComplete;
     if (!OverworldCargoQuery_ObserveChanges(&q->state,&observed)) return 0;
     OverworldEntryRouteMemo *m=&q->entry.memo;
@@ -623,9 +655,9 @@ static OverworldPickupRouteStatus EntryTick(const OverworldCargoQueryWildCall *c
             || q->entry.receipt.serial!=request->serial)) return PENDING;
     if (!q->entry.active) {
         if (request->operation==OVERWORLD_ENTRY_ROUTE_PREPARE)
-            q->prepared=runtime->queuedSpawn; /* Runtime owns the packet before caller frees. */
+            AUX(q)->packet.prepared=runtime->queuedSpawn; /* Runtime owns the packet before caller frees. */
         Restart(q);q->entry=(OverworldEntryRouteSearch){0};q->entry.active=1;
-        if(request->operation!=OVERWORLD_ENTRY_ROUTE_PREPARE && call->profile!=NULL) q->entryProfile=*call->profile;
+        if(request->operation!=OVERWORLD_ENTRY_ROUTE_PREPARE && call->profile!=NULL) AUX(q)->packet.profile=*call->profile;
         q->entry.receipt=*request;q->entry.world=*world;q->entry.physical=request->physical;
         q->entry.world.preparedPhysical=request->operation==OVERWORLD_ENTRY_ROUTE_PREPARE?&q->entry.physical:NULL;
         q->entry.world.entryMemo=&q->entry.memo;q->entryRootReady=0;q->entryFrameValid=0;
@@ -635,7 +667,7 @@ static OverworldPickupRouteStatus EntryTick(const OverworldCargoQueryWildCall *c
     }
     if (!EntryCurrent(q,&q->entry.receipt)) { q->entry.active=0;Restart(q);return out->status=INVALID; }
     if(request->operation==OVERWORLD_ENTRY_ROUTE_GUIDE && (call->profile==NULL
-            || !Same(call->profile,&q->entryProfile,sizeof(q->entryProfile)))) {
+            || !Same(call->profile,&AUX(q)->packet.profile,sizeof(AUX(q)->packet.profile)))) {
         q->entry.active=0;Restart(q);return PENDING;
     }
     if (q->entryFrameValid && q->entryFrame==actors->frame) return PENDING;
@@ -659,8 +691,8 @@ static OverworldPickupRouteStatus EntryTick(const OverworldCargoQueryWildCall *c
         q->entry.active=0;Restart(q);return PENDING;
     }
     OverworldCargoQueryWildCall local=*call;local.world=&q->entry.world;
-    if (request->operation==OVERWORLD_ENTRY_ROUTE_PREPARE) local.profile=&q->prepared.behaviorResolution.profile;
-    else local.profile=&q->entryProfile;
+    if (request->operation==OVERWORLD_ENTRY_ROUTE_PREPARE) local.profile=&AUX(q)->packet.prepared.behaviorResolution.profile;
+    else local.profile=&AUX(q)->packet.profile;
     OverworldPickupRouteNativePolicy policy;
     if (!Policy(q,&local,&policy)) { q->entry.active=0;return out->status=LIMIT; }
     if (!q->entryRootReady) {
@@ -710,7 +742,7 @@ static OverworldPickupRouteStatus EntryTick(const OverworldCargoQueryWildCall *c
         && path->scope==q->scopeRevision && path->policy==q->policyRevision
         && Same(&currentPose,&path->expected,sizeof(currentPose)) && path->next<path->count) {
         OverworldPickupRouteStatus status=OverworldEntryRoute_ValidateStep(&q->entry,path,q->dynamicRevision,
-            q->changed,q->changeCount,q->changesComplete,out);
+            AUX(q)->changed,q->changeCount,q->changesComplete,out);
         q->changeCount=0;q->changesComplete=1;
         if(status==OVERWORLD_PICKUP_ROUTE_REACHABLE) {
             result->route.subject=request->actor;result->route.origin=path->expected;
@@ -719,7 +751,7 @@ static OverworldPickupRouteStatus EntryTick(const OverworldCargoQueryWildCall *c
         return out->status=status;
     }
     OverworldPickupRouteStatus status=OverworldEntryRoute_Resume(&q->entry,q->dynamicRevision,
-        q->changed,q->changeCount,q->changesComplete,path,out);
+        AUX(q)->changed,q->changeCount,q->changesComplete,path,out);
     q->changeCount=0;q->changesComplete=1;
     if (status!=PENDING && !(request->operation==OVERWORLD_ENTRY_ROUTE_PREPARE
             && status==OVERWORLD_PICKUP_ROUTE_REACHABLE)) { q->entry.active=0;Restart(q); }
@@ -760,7 +792,12 @@ OverworldPickupRouteStatus OverworldCargoQueryWild_Tick(
     if(conditions==NULL || !conditions->frame.valid || actors==NULL
         || conditions->frame.world.actorCount>OVERWORLD_BEHAVIOR_CONDITION_MAX_ACTORS) return INVALID;
     NativeQuery *q=runtime->pickupQuery;
-    if(q!=NULL) q->waitingMask&=~(1u<<world->slot);
+    u16 waiting=0;
+    if(q!=NULL) {
+        waiting=q->waitingMask&(1u<<world->slot);
+        /* Retire this known-set request until all caller checks pass. */
+        q->waitingMask^=waiting;
+    }
     if(call->options==NULL) {
         if(q!=NULL && q->owner.slot==world->slot) Restart(q);
         return INVALID;
@@ -806,6 +843,7 @@ OverworldPickupRouteStatus OverworldCargoQueryWild_Tick(
     if(q==NULL) { q=AcquireQuery(call);if(q==NULL) return LIMIT; }
     DiscardStaleEntry(q);
     if(q->entry.active) return Pending(call,actors,conditions,result);
+    q->waitingMask|=waiting;
     if(!QueryTurn(q,call,actors)) return Pending(call,actors,conditions,result);
     if(nearest && (!q->state.frameValid || q->state.frame!=conditions->frame.world.frame)
         && (!boundCargo->flags || q->checkingTargets
@@ -854,7 +892,7 @@ OverworldPickupRouteStatus OverworldCargoQueryWild_Tick(
     OverworldCargoQueryInput input={0};
     input.version=OVERWORLD_CARGO_QUERY_VERSION;input.size=sizeof(input);
     input.runtime=&native;input.bindingsWorld=&view;input.seed=&seed;
-    input.readPosition=Position;input.changedTiles=q->changed;input.changedTileCount=q->changeCount;
+    input.readPosition=Position;input.changedTiles=AUX(q)->changed;input.changedTileCount=q->changeCount;
     input.changesComplete=q->changesComplete;
     for(u8 n=0;n<view.actorCount;n++)
         if(view.actors[n].valid && view.actors[n].actor.slot<OW_WILD_MAX_SPAWNS
@@ -879,7 +917,6 @@ OverworldPickupRouteStatus OverworldCargoQueryWild_Tick(
         if(cargo->target.kind==OVERWORLD_BEHAVIOR_TARGET_REFERENCE_ACTOR)
             input.requiredCargo=&cargo->target.actor;
     }
-    q->owner=bindings->subject;q->valid=1;
     /* The condition observation and its admitted START can share one completed
      * frame. Reuse only that exact current receipt; never run a second search. */
     OverworldPickupRoutePosition currentCargo;

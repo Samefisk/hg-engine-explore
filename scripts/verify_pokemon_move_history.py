@@ -91,7 +91,9 @@ ACTOR_PLANNER_IMPORTS = {
     "OverworldActorHopPlanner_Plan": 0x023BD4F0,
     "OverworldActorTeleportPlanner_Plan": 0x023BD4F8,
 }
-MOUNT_ARCHIVE_GUARD = 0xC00
+# Spare FNT/FAT growth below overlay 158. Reduced from 0xC00 when the VBlank
+# task queue grew from 32 to 64 slots (1024 arena bytes; field-init overflow).
+MOUNT_ARCHIVE_GUARD = 0x800
 MAIN_RAM_START = 0x02000000
 MAIN_ARENA_HIGH = 0x023E0000
 ITCM_STATIC_END = 0x01FF8620
@@ -1811,7 +1813,20 @@ def main() -> None:
     archive_start = align4(archive_start + heap_metadata_size)
     for heap_size in (0xD200, full_save_size, 0x10, heap3_size):
         archive_start = align4(archive_start + heap_size)
-    for task_count in (160, 32, 32, 4):
+    # InitSystemForTheGame queue sizes: main, VBlank, VWait, print. The VBlank
+    # count comes from the two patched "movs r0, #N" (armips/asm/vblank_task_queue.s)
+    # so a size change cannot drift away from this arena model.
+    vblank_size_insns = {
+        arm9[address - arm9_ram:address - arm9_ram + 2]
+        for address in (0x0201A240, 0x0201A252)
+    }
+    require(
+        len(vblank_size_insns) == 1
+        and next(iter(vblank_size_insns))[1] == 0x20,
+        "VBlank task queue size immediates differ",
+    )
+    vblank_task_count = next(iter(vblank_size_insns))[0]
+    for task_count in (160, vblank_task_count, 32, 4):
         archive_start = align4(
             archive_start + task_count * (28 + 4) + 52)
 

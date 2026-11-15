@@ -107,6 +107,9 @@
 .global sub_02068D98
 .type sub_02068D98, %function
 .set sub_02068D98,0x02068D99
+.global sub_02068D90
+.type sub_02068D90, %function
+.set sub_02068D90,0x02068D91
 .global sub_02068DB8
 .type sub_02068DB8, %function
 .set sub_02068DB8,0x02068DB9

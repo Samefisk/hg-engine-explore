@@ -11,7 +11,8 @@ from tools.overworld.devtools_emote_vram_diagnostics import (
     STOCK_SEALS, decode_emote_owner, observe_emote_vram_diagnostics)
 from tools.overworld.devtools_records import select_current_actor
 
-QUIET = (0x01FFF3B0, 34, '6bcdc6654759ee28e034fafb4ce2787c7d699f4a0e0b4cd93cdfd89e9f315fef')
+QUIET = (0x01FFF3B0, 22, 'c590c182ebfb179f44b2acb567f1c8b19db425e2590534fa3da3dadb6059ee40')
+QUIET_MODE = 0x80
 EXTRA_SEALS = (
     (0x020205D8, 76, '2eafcbb790f66a15407db8d240e60bdfec8399e56527d6d386390dba0b2e3065', 'transfer'),
     (0x02020638, 28, '1e51a5923bec99a80e41e91973624dd3cc89987e3a8f417e35c6fcabb574f206', 'pending'),
@@ -120,11 +121,14 @@ class EmoteThreeProbe:
               (slot_words[7]&0xFFFF)<<3,512), 'native frame assets/destination differ')
         name = next((name for name,obj in self.objects.items() if obj==words[14]),None)
         need(name is not None, 'effect object is not a full bound subject')
+        mode = self.word(effect+4)
+        need(mode == (next(icon for subject,icon in ORDER if subject==name) | QUIET_MODE),
+             'native effect quiet mode differs')
         return dict(subject=name, handle=deepcopy(self.subjects[name]['handle']), effect=effect,
             dataPointer=data_pointer, dataHex=raw.hex(), slot=slot, model=model,
             textureKey=keys[0],paletteKey=keys[2],textureDestination=words[23],
             paletteDestination=(keys[2]&0xFFFF)<<3,frameBytes=words[24],
-            modelActive=active, modelKeys=list(keys), owner=self.owner, object=words[14])
+            modelActive=active, modelKeys=list(keys), owner=self.owner, object=words[14],mode=mode)
 
     def owned_release_slot(self, pointer):
         """A slot address can be reused after the burst's own effect retires."""
@@ -175,7 +179,7 @@ class EmoteThreeProbe:
             if r.r1 not in self.objects.values(): return None
             need(len(self.requests)<6 and self.trigger_done is False, 'foreign/repeated admission')
         elif kind in ('init','transfer','play','stop'):
-            if kind=='stop':
+            if kind in ('play','stop'):
                 if not self.active_request: return None
             elif not self.active: return None
         elif kind in ('update','draw','destroy'):
@@ -194,15 +198,17 @@ class EmoteThreeProbe:
         self.sequence+=1
         value=dict(kind=kind,sequence=self.sequence,entry=self.clock(),args=[r.r0,r.r1,r.r2,r.r3],caller=r.lr,
                    parent=self.active[-1]['kind'] if self.active else None)
-        if kind=='stop':value['request']=self.active_request-1
+        if kind in ('play','stop'):value['request']=self.active_request-1
         if kind=='admit':
             idx=len(self.requests);subject,icon=ORDER[idx]
-            need((r.r0,r.r1,r.r2)==(self.context,self.objects[subject],icon), 'fixed admission args differ')
+            need((r.r0,r.r1,r.r2)==(self.context,self.objects[subject],icon|QUIET_MODE), 'fixed admission args differ')
             value.update(request=idx,subject=subject,handle=deepcopy(self.subjects[subject]['handle']))
             self.requests.append(value)
         elif kind=='init':
             need(self.active[-1]['kind']=='admit', 'init not nested in exact admission')
-            value.update(effect=r.r0,dataPointer=r.r1,request=self.active[-1]['request'])
+            mode=self.word(r.r0+4)
+            need(mode==self.active[-1]['args'][2], 'constructor lost the admitted quiet mode')
+            value.update(effect=r.r0,dataPointer=r.r1,request=self.active[-1]['request'],mode=mode)
         elif kind in ('update','draw'):
             value['binding']=self.binding(r.r0,r.r1)
         elif kind=='destroy':

@@ -2,14 +2,28 @@
 #define OVERWORLD_CARGO_QUERY_WILD_H
 #include "overworld_cargo_query.h"
 #include "overworld_pickup_route_wild.h"
-/* Query code and the sole work buffer share stock Field resource heap4.
- * Both must drain before parent Field exit, leaving32KiB for stock work. */
+/* The stock Field owner drains both workspace blocks before code/heap exit.
+ * Code/catalog cold admission keeps 28 KiB on their respective heaps. On
+ * FIELD1 that is the measured need after the catalog: the lazy 11268-byte
+ * Cargo array plus its own 16 KiB reserve and margin (checked in
+ * overworld_cargo_query_wild.c). 32 KiB kept Olivine, Cianwood and Routes
+ * 38/39 (70.9-71.8 KB free) without Wild. FIELD2 keeps more than 20 KiB. */
 #define OVERWORLD_FIELD_QUERY_HEAP_ID 4
-#define OVERWORLD_FIELD_QUERY_HEAP_RESERVE 0x8000
-/* The lazy work buffer keeps16KiB of heap4 free. FIELD1 now also holds the
- * behavior catalog and sits near63KiB free on a populated route, so the
- * blob reserve would refuse every pickup and entry route. */
+#define OVERWORLD_FIELD_QUERY_HEAP_RESERVE 0x7000
+/* Lazy arrays keep16KiB on heap4; owner/cache/path state keeps20KiB on11
+ * for stock scripts. Each allocation also keeps64 bytes for heap overhead. */
 #define OVERWORLD_FIELD_PICKUP_QUERY_HEAP_RESERVE 0x4000
+#define OVERWORLD_FIELD_QUERY_CORE_HEAP_ID 11
+#define OVERWORLD_FIELD_QUERY_CORE_HEAP_RESERVE (20u*1024u)
+#define OVERWORLD_FIELD_QUERY_ALLOCATION_MARGIN 64u
+/* Published only after both blocks are owned. Teardown reads this common
+ * prefix before freeing either block; no addon callback survives the drain. */
+#define OVERWORLD_FIELD_QUERY_ALLOCATION_VERSION 0x3251574Fu /* OWQ2 */
+typedef struct OverworldCargoQueryWildAllocation {
+    void *auxiliary;
+    void (*destroy)(void *);
+    u32 version;
+} OverworldCargoQueryWildAllocation;
 struct OverworldConditionNativeCall;
 struct OverworldEntryRouteCommand;
 /* Synchronous native setup for the sole Field query. It never owns movement.

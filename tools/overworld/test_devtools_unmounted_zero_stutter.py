@@ -1,6 +1,10 @@
 import unittest
 from copy import deepcopy
 from pathlib import Path
+import json
+import re
+import subprocess
+import tempfile
 
 from tools.overworld.devtools_main_loop_probe import (
     NORMAL_MAIN_LOOP_ARM9_TICKS,
@@ -17,6 +21,7 @@ from tools.overworld.devtools_unmounted_zero_stutter_measurement import (
 from tools.overworld.devtools_unmounted_zero_stutter_proof import (
     FAULTS,
     UnmountedZeroStutterNegative,
+    contract,
     measurements,
     validate_negative_result,
 )
@@ -210,6 +215,178 @@ def run(fault=None):
 
 
 class UnmountedZeroStutterTests(unittest.TestCase):
+    def refill_interval(self, raw_delay, gap):
+        meter = UnmountedZeroStutterMeasurement(
+            recipe(), {"schema": SCHEMA, "sourceSha256": SOURCE}, max_frames=4000)
+        sample, events = creation_fixture(320, sample=snapshot(320))
+        entry = events[-1]["data"]["entry"]
+        entry.update(refillDelay=raw_delay, value=3 | (raw_delay << 8))
+        meter._observe_refill_interval(sample, events)
+        meter._observe_refill_interval(snapshot(320 + gap), [refill_event(320 + gap, 2)])
+        return meter.result()["refillIntervals"]
+
+    def test_sparse_refill_uses_eight_frames_and_rejects_seven(self):
+        for raw_delay in (60, 120, 180):
+            with self.subTest(raw_delay=raw_delay):
+                result = self.refill_interval(raw_delay, 8)
+                self.assertEqual(result["count"], 1)
+                self.assertEqual(result["minimumActorFrames"], 8)
+                self.assertEqual(result["witnesses"][0]["rawRefillDelay"], raw_delay)
+                self.assertEqual(result["witnesses"][0]["requiredActorFrames"], 8)
+                with self.assertRaisesRegex(ValueError, "bypassed its base interval"):
+                    self.refill_interval(raw_delay, 7)
+
+    def test_dense_refill_keeps_its_full_native_delay(self):
+        for raw_delay in (240, 300, 360):
+            with self.subTest(raw_delay=raw_delay):
+                result = self.refill_interval(raw_delay, raw_delay)
+                self.assertEqual(result["witnesses"][0]["requiredActorFrames"], raw_delay)
+                with self.assertRaisesRegex(ValueError, "bypassed its base interval"):
+                    self.refill_interval(raw_delay, raw_delay - 1)
+
+    def test_refill_mapping_matches_current_resident_schedule(self):
+        source = SPAWNER_SOURCE.read_text()
+        names = ("OW_WILD_REFILL_BASE_INTERVAL_FRAMES",
+                 "OW_WILD_REFILL_FULL_DENSITY_COUNT",
+                 "OW_WILD_REFILL_SPARSE_INTERVAL_FRAMES")
+        constants = []
+        for name in names:
+            found = re.findall(r"^#define " + name + r" \d+$", source, re.M)
+            self.assertEqual(len(found), 1)
+            constants.extend(found)
+        function = extract_function(source, "OverworldWildSpawns_ApplyRefillDelay", "void")
+        native = "\n".join(constants) + r'''
+#include <stdio.h>
+typedef unsigned short u16;
+#define OVERWORLD_ACTOR_POPULATION_CONTROL_SCHEDULE_REFILL 1
+static unsigned scheduled;
+static int OverworldWildSpawns_PopulationControl(int operation, unsigned value)
+{ if (operation != 1) return 0; scheduled = value; return 1; }
+''' + function + r'''
+int main(void) {
+    for (unsigned raw = 60; raw <= 360; raw += 60) {
+        OverworldWildSpawns_ApplyRefillDelay(raw);
+        printf("%u\n", scheduled + 1);
+    }
+    return 0;
+}
+'''
+        with tempfile.TemporaryDirectory(prefix="zero-refill-policy-") as temp:
+            source_path, binary = Path(temp) / "check.c", Path(temp) / "check"
+            source_path.write_text(native)
+            subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
+                            str(source_path), "-o", str(binary)],
+                           check=True, capture_output=True, text=True)
+            scheduled = list(map(int, subprocess.run(
+                [str(binary)], check=True, capture_output=True, text=True).stdout.split()))
+        self.assertEqual(scheduled, [8, 8, 8, 240, 300, 360])
+        for raw_delay, interval in zip(range(60, 361, 60), scheduled):
+            self.assertEqual(self.refill_interval(raw_delay, interval)["witnesses"][0][
+                "requiredActorFrames"], interval)
+
+    def test_refill_anchor_stays_strict_for_raw_delay_owner_and_constructor(self):
+        faults = {
+            "retry-delay": lambda d: d["entry"].update(refillDelay=15, value=3 | (15 << 8)),
+            "non-density-delay": lambda d: d["entry"].update(refillDelay=8, value=3 | (8 << 8)),
+            "packed-delay": lambda d: d["entry"].update(refillDelay=120),
+            "wrong-owner": lambda d: d["admission"]["actor"].update(fieldEpoch=3),
+            "missing-constructor": lambda d: d["admission"].update(constructorSequence=0),
+        }
+        for name, mutate in faults.items():
+            with self.subTest(fault=name):
+                meter = UnmountedZeroStutterMeasurement(
+                    recipe(), {"schema": SCHEMA, "sourceSha256": SOURCE}, max_frames=4000)
+                sample, events = creation_fixture(320, sample=snapshot(320))
+                mutate(events[-1]["data"])
+                with self.assertRaisesRegex(ValueError, "creation refill anchor"):
+                    meter._observe_refill_interval(sample, events)
+
+    def test_short_refill_fault_applies_seven_frame_copied_clock(self):
+        negative = UnmountedZeroStutterNegative("zero-stutter-short-refill-interval")
+        negative.active = True
+        sample, events = creation_fixture(320, sample=snapshot(320))
+        birth = {"phase": "observe", "samples": [sample], "events": events}
+        self.assertEqual(negative.mutate(birth, {}), birth)
+        queued = {"phase": "observe", "samples": [snapshot(380)],
+                  "events": [refill_event(380, 2)]}
+        changed = negative.mutate(queued, {})
+        self.assertTrue(negative.applied)
+        self.assertEqual(changed["samples"][0]["actorFrame"], 327)
+        self.assertEqual(changed["events"][0]["data"]["entryActorFrame"], 327)
+        self.assertEqual(changed["events"][0]["data"]["returnActorFrame"], 327)
+        self.assertEqual(changed["samples"][0]["nativeCycle"], queued["samples"][0]["nativeCycle"])
+        self.assertEqual(queued["samples"][0]["actorFrame"], 380)
+        meter = UnmountedZeroStutterMeasurement(
+            recipe(), {"schema": SCHEMA, "sourceSha256": SOURCE}, max_frames=4000)
+        meter._observe_refill_interval(sample, events)
+        with self.assertRaisesRegex(ValueError, "bypassed its base interval"):
+            meter._observe_refill_interval(changed["samples"][0], changed["events"])
+
+    def test_registered_refill_contract_matches_checked_rows(self):
+        table = json.loads((ROOT / "tools/overworld/runtime_proof_registry.json").read_text())
+        self.assertEqual(table["sharedTests"]["world.unmounted.spawn-zero-stutter"][
+            "measurementContract"], contract())
+
+    def test_refill_fault_ignores_nonordinary_success_until_real_constructor(self):
+        for fault in ("zero-stutter-short-refill-interval", "zero-stutter-stale-refill-owner"):
+            with self.subTest(fault=fault):
+                negative = UnmountedZeroStutterNegative(fault)
+                negative.active = True
+                nonordinary = {"phase": "observe", "samples": [snapshot(300)], "events": [{
+                    "frame": 300, "kind": "native-observation", "data": {
+                        "observation": "entry-native-control", "returnActorFrame": 300,
+                        "entry": {"operation": 7, "outcome": 3, "value": 3, "refillDelay": 0}}}]}
+                self.assertEqual(negative.mutate(nonordinary, {}), nonordinary)
+                queue = {"phase": "observe", "samples": [snapshot(301)],
+                         "events": [refill_event(301, 1)]}
+                self.assertEqual(negative.mutate(queue, {}), queue)
+                self.assertFalse(negative.applied)
+                self.assertIsNone(negative.refill_success_frame)
+                sample, events = creation_fixture(320, sample=snapshot(320))
+                with self.assertRaisesRegex(ValueError, "lacks its exact constructor"):
+                    negative.mutate({"phase": "observe", "samples": [sample],
+                                     "events": [events[-1]]}, {})
+                self.assertFalse(negative.applied)
+                self.assertIsNone(negative.refill_success_frame)
+                negative.mutate({"phase": "observe", "samples": [sample], "events": events}, {})
+                queue = {"phase": "observe", "samples": [snapshot(380)],
+                         "events": [refill_event(380, 2)]}
+                changed = negative.mutate(queue, {})
+                self.assertTrue(negative.applied)
+                self.assertNotEqual(changed, queue)
+                self.assertEqual(negative.refill_success_frame, 320)
+
+    def test_proof_checks_each_native_density_wait_and_its_summary(self):
+        result = run()
+        record = {"sessionId": "test", "sessionCleanup": {
+            "sessionId": "test", "closed": True, "errors": []}}
+        def checked(refill):
+            copied = deepcopy(result)
+            copied["refillIntervals"] = refill
+            return measurements({"passed": True, "failures": [],
+                                 "measurements": {KIND: copied}}, record)
+        for raw_delay, gap in ((60, 8), (120, 8), (180, 8), (240, 240)):
+            self.assertTrue(all(row["passed"] for row in checked(
+                self.refill_interval(raw_delay, gap))))
+        valid = self.refill_interval(240, 240)
+        faults = {
+            "missing-native-delay": lambda r: r["witnesses"][0].pop("rawRefillDelay"),
+            "retry-delay": lambda r: r["witnesses"][0].update(rawRefillDelay=15),
+            "invented-sparse-delay": lambda r: r["witnesses"][0].update(rawRefillDelay=8),
+            "dense-as-sparse": lambda r: r["witnesses"][0].update(requiredActorFrames=8),
+            "dense-early": lambda r: r["witnesses"][0].update(
+                actorFrames=239, nextEntryActorFrame=559),
+            "false-actor-gap": lambda r: r["witnesses"][0].update(nextEntryActorFrame=561),
+            "false-minimum": lambda r: r.update(minimumActorFrames=241),
+            "missing-witness": lambda r: r.update(witnesses=[]),
+        }
+        for name, mutate in faults.items():
+            with self.subTest(fault=name):
+                copied = deepcopy(valid)
+                mutate(copied)
+                with self.assertRaisesRegex(ValueError, "zero-stutter refill"):
+                    checked(copied)
+
     def test_due_actor_choices_are_not_round_robin_serialized(self):
         source = SPAWNER_SOURCE.read_text()
         function = extract_function(

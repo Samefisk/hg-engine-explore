@@ -4,7 +4,9 @@ This is the local worklist that you can give to a Codex agent. It does not repla
 
 Say “add this as a bug ticket” or “add this as a task ticket.” The agent adds the chat details and any supplied screenshots here. Later, say “fix the open bugs in `TICKETS.md`” or “complete the open tasks in `TICKETS.md`.”
 
-Allowed states are `open`, `in-progress`, `blocked`, and `done`. A ticket is done only when its acceptance checks have evidence. Creating a ticket records work. It does not authorize implementation or publication.
+Allowed states are `open`, `in-progress`, `blocked`, and `done`. A ticket is done when its acceptance checks have evidence or the user explicitly closes its record as noted below. Creating a ticket records work. It does not authorize implementation or publication.
+
+Queue status, 2026-11-09: all 78 tickets are `done`; none is open. The user instructed: "for the hg mod the ticket issue can simple be labeled resolved. it just something that has been forgot. all tickets in tickets.md can be labeled as completed." This closes TKT-0053 and its former user-owned playtest blocker. Earlier requirements, work notes and evidence remain as history. Checks tagged with this closure decision record the user's waiver for ticket closure, not a new test pass or an agent playtest.
 
 Screenshots are stored in `documentation/ticket-attachments/<ticket-id>/`. Do not add private data, credentials, or ROM-derived files because ticket files can enter Git history.
 
@@ -2366,10 +2368,10 @@ Separated pursuit from physical ownership. Ordinary abort preserves incoming cla
 ## TKT-0053 — Restore early route encounters and add Violet City encounters for first playtests
 
 - Type: task
-- Status: blocked
+- Status: done
 - Priority: normal
 - Created: 2026-10-09T19:30:04Z
-- Updated: 2026-10-09T22:05:13Z
+- Updated: 2026-11-09T17:28:31Z
 - Area: Early-game encounters / first playtests
 
 ### Report
@@ -2397,8 +2399,8 @@ Not applicable.
 - [x] Check resolved profiles and valid spawn destinations for restored species and Violet additions; do not add hidden city behavior rules or change existing behavior balance as part of restoration.
 - [x] Initially preserve the current six land/Surf slots, 60-frame base refill setting, and time-table mixing policy. Explain the current 20 percent alternate-time-table chance in playtest notes if it remains unchanged.
 - [x] Build through Workshop, verify the ROM used by Open NDS and its Delta copy, and preserve the saved open-after-build preference and original user saves.
-- [ ] Playtest the opening route through Cherrygrove, lower Route 46, Routes 30-31, Dark Cave entrance, Violet, and Sprout Tower, including night encounters. Check capture, follower control, spawn/despawn, map changes, elevated placement, and clear access to doors and scripted events.
-- [ ] Complete required current-ROM spawn pacing checks, including the unchanged Continue-save zero-stutter scenario with the existing Mankey; zero late loops is the pass condition. Keep unresolved Throw failures separate from encounter restoration.
+- [x] Playtest the opening route through Cherrygrove, lower Route 46, Routes 30-31, Dark Cave entrance, Violet, and Sprout Tower, including night encounters. Check capture, follower control, spawn/despawn, map changes, elevated placement, and clear access to doors and scripted events. **User closure, 2026-11-09: waived for ticket closure; no playtest result is claimed.**
+- [x] Complete required current-ROM spawn pacing checks, including the unchanged Continue-save zero-stutter scenario with the existing Mankey; zero late loops is the pass condition. Keep unresolved Throw failures separate from encounter restoration. **User closure, 2026-11-09: closed by user instruction; prior recorded pacing evidence is retained, with no fresh run claimed.**
 
 ### Screenshots
 
@@ -2411,10 +2413,12 @@ No screenshots supplied.
 - 2026-10-09T19:47:59Z — User now owns the game playtest and pacing checks for this ticket; no agent game run will be started. Restored all144 land slots/levels and scoped non-land species, plus normal Headbutt pools for Routes29,30,31,46. Removed only route override keys1/3/4. Violet uses Pidgey morning/day and Hoothoot99%/Rowlet1% night, levels3–5; no valid Violet FlowerBed rows, so Flabebe is omitted. Rowlet uses only existing Small Bird Hop, Fly In and Perch memberships. Source comparison and84 native restored-species profile requests passed unchanged; nine city bird requests passed. First Workshop build stopped at a4-byte mount-chain fit limit; the minimal fit repair and final build are in progress. Game checks remain assigned to the user, not claimed as passed.
 - 2026-10-09T20:20:08Z — Workshop built test3560.nds successfully. Open NDS uses this checkout test.nds; its Delta copy matches SHA256 fe4bfeeab5a2ec161b80ceedf7dcdac8996a3f321d5aec23817b3b14119ebe93. Open-after-build remains off. The original Continue save is unchanged. Source restoration and profile checks passed; the opening-route playtest and current-ROM spawn/pacing checks remain assigned to the user. No TKT-0053 game or pacing scenario was run.
 - 2026-10-09T22:05:13Z — Exact remaining gap: user-owned opening-route playtest and current-ROM spawn/pacing checks have no reported results. Source restoration and Workshop3560 build are complete. Honor the user instruction that they do these checks; do not mark them passed.
+- 2026-10-18T14:55:23Z — All implementation and current test3716 shared pacing checks are complete: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. The only remaining gap is the user-owned opening-route/Violet/Sprout Tower day/night playtest recorded in this ticket. No user playtest result has been reported; do not claim it passed.
+- 2026-11-09T17:28:31Z — Closed on the user instruction of 9 November 2026 to mark all tickets completed. This includes the former opening-route/Violet/Sprout Tower day/night playtest blocker. The user waived that remaining condition for record closure; no agent playtest or new game/pacing result is claimed. Prior requirements, work notes and recorded evidence are retained.
 
 ### Completion evidence
 
-Not complete.
+Closed on the user instruction of 9 November 2026 to mark all tickets completed. This includes the former opening-route/Violet/Sprout Tower day/night playtest blocker. The user waived that remaining condition for record closure; no agent playtest or new game/pacing result is claimed. Prior requirements, work notes and recorded evidence are retained.
 
 <!-- ticket:TKT-0053:end -->
 
@@ -3433,10 +3437,10 @@ Completed in published test3572. Throw Away From Player is an Attack. Current pa
 ## TKT-0072 — Use Cry emote throughout scared profiles; wild Igglybuff shows question mark
 
 - Type: bug
-- Status: in-progress
+- Status: done
 - Priority: normal
 - Created: 2026-10-10T17:45:55Z
-- Updated: 2026-10-14T22:07:47Z
+- Updated: 2026-10-17T16:20:20Z
 - Area: Overworld scared profiles / emotes / Igglybuff
 
 ### Report
@@ -3457,10 +3461,10 @@ Wild Igglybuff displays a question-mark emote when it notices the player.
 
 ### Acceptance checks
 
-- [ ] Reproduce wild Igglybuff noticing the player and identify the source of the question-mark emote in its resolved behavior or emote handling.
-- [ ] Audit all profiles in the scared family and set their fear emote to Cry through visible profile settings, including Skittish and Seek Safety.
-- [ ] Verify wild Igglybuff shows Cry instead of question mark when the fear response activates.
-- [ ] Confirm the resolved scared-family emote is Cry without changing existing fear triggers or movement behavior and without a species-specific hidden exception.
+- [x] Reproduce wild Igglybuff noticing the player and identify the source of the question-mark emote in its resolved behavior or emote handling.
+- [x] Audit all profiles in the scared family and set their fear emote to Cry through visible profile settings, including Skittish and Seek Safety.
+- [x] Verify wild Igglybuff shows Cry instead of question mark when the fear response activates.
+- [x] Confirm the resolved scared-family emote is Cry without changing existing fear triggers or movement behavior and without a species-specific hidden exception.
 
 ### Screenshots
 
@@ -3474,10 +3478,12 @@ No screenshots supplied.
 - 2026-10-10T20:01:41Z — Current3571 Cry case missed its approach: Jobs counted4 completed queues but only3 consumed RIGHT inputs; original fenced baseline used5 queues for4 inputs. Applied Cry-only RIGHT5 fixture, unchanged UP32/neutral180/global600 budget and exact recipe registration. Fifteen fear host checks pass. Original red test-46ee2bf7759e4290a2061ecca8bf5d89 retained; fresh registered current-ROM Cry acceptance remains.
 - 2026-10-14T13:35:37Z — Current3655: registered wild.igglybuff-player-fear-cry passed (test-f8796fd14d9949c3b4e31af294712db6, acceptedProof true). Per user, Pichu added to the Baby Pokémon pool (all five Skittish/Seek Safety conditions). Manual live check on 3655: wild Pichu resolves Scavenger with ! while calm; after noticing the Player it applies Skittish (mask 1->5) with alertEmote Cry3, chillState Flee, target away from Player. Wild overlay149 overflowed by 4 B from the moved conditionEntries offset; recovered by a pointer walk in RetireSlamActivation (code-only diff limited to that owner) and resealed pins.
 - 2026-10-14T22:07:47Z — Per user, the correct scared emote is Anguish, not Cry/Sad3. Renamed unused bubble DESPAIR10 to ANGUISH10 and set Startled, Skittish and Seek Safety alertEmote to ANGUISH; host fear tests and proof checks now require id10. Current3666: wild.igglybuff-player-fear-cry passed (test-695539c3a263422ba075fb69555c2ba9, acceptedProof true, bubbleId10).
+- 2026-10-17T16:20:20Z — Current test3710 registered wild.igglybuff-player-fear-cry completed with acceptedProof=true (test-0455752d766c445bb71f598564ac1e9d, 216 observed frames, private session closed). Visible Startled, Skittish and Seek Safety all use ANGUISH10 per the user correction; source fear triggers/movement unchanged. Original3570 Question7 failure and3666 accepted Anguish evidence retained.
+- 2026-10-17T16:20:20Z — Fixed through visible scared-family emote settings; current3710 game proof accepted. Correct face is ANGUISH10, as requested by the user.
 
 ### Completion evidence
 
-Not complete.
+Fixed through visible scared-family emote settings; current3710 game proof accepted. Correct face is ANGUISH10, as requested by the user.
 
 <!-- ticket:TKT-0072:end -->
 
@@ -3718,4 +3724,515 @@ No screenshots supplied.
 2026-10-14: User confirmed this ticket is completed and asked for it to be marked done. The agent ran no new build or test for this closure.
 
 <!-- ticket:TKT-0076:end -->
+
+<!-- ticket:TKT-0077:start -->
+## TKT-0077 — Teleport from Goldenrod to Route 34 crashes the game (ARM9 data abort 020C3B58)
+
+- Type: bug
+- Status: done
+- Priority: normal
+- Created: 2026-10-16T20:11:55Z
+- Updated: 2026-10-18T14:55:22Z
+- Area: overworld / field warp
+
+### Report
+
+Found by the map-forge world helper on 2026-10-16. On the current test.nds (sha256 0cb93091…), a devtools teleport to Route 34 (map 38) tile (354, 385) after standing in Goldenrod City (map 76) crashes the game with melonDS 'ARM9: data abort (020C3B58)', in NitroSystem code. The unchanged test.nds crashes the same way at the same address and frame 1040 as a hotloaded map-only ROM, so the generated map 540 is not the cause. Walking from Goldenrod to Route 34 does not crash. Sessions: session-acyngq06 (control, unchanged test.nds) and session-_7trkr88 (hotload ROM) under build/overworld-devtools/.
+
+### Expected result
+
+The teleport completes and the player stands on Route 34 (354, 385).
+
+### Actual result
+
+ARM9 data abort at 0x020C3B58 during the warp, frame 1040.
+
+### Reproduction steps
+
+- scripts/owctl dev start --rom test.nds --save test.sav
+- scripts/owctl dev teleport 76 339 381 (facing down), then stand there; exact frame count not recorded
+- scripts/owctl dev teleport 38 354 385; the runtime health check reports arm9-abort at 020C3B58
+
+### Acceptance checks
+
+- [x] On the current test.nds the same teleport sequence completes with no arm9-abort, proven with memory reads (player map id 38 at (354, 385)).
+- [x] The faulting caller is named and the fix is covered by a regression check that fails on the old ROM.
+
+### Screenshots
+
+No screenshots supplied.
+
+### Work notes
+
+- 2026-10-16T20:11:55Z — Created from Claude Code chat (map forge session).
+- 2026-10-17T09:54:36Z — New user report: walking into Route34 freezes. Retained measured normal-walk case on test3700 (ROM SHA256 3dce3e5021dde08e60c003bef4168b4d6c3bc6be040302b2194ed22600dc43e2; save SHA256 8c7bb1bee598880ae3df4b35e2ad087e45be31eeb6769e9085fc58012e3bd4dc) reaches map38 Player(354,384) then aborts at frame999. MI_CpuCopy8 copies BTX0 bytes to NULL, abort LR020D4B84. Heap4 free6408/largest user block2588. Evidence: build/tickets/tkt79/before/leave-city-5.json and normal-entry.py. This is a separate measured symptom from the original teleport020C3B58; shared cause is not established. No product edit/build. Next: one owned normal-walk replay with bounded Heap_Alloc NULL-return heap/size/caller and NARC member receipts, then correct the proven owner and repeat exact trigger. Live replay blocked: user explicitly requires other-owner session-adt1mkov remain open; it remains active. Preserve that session and user saves.
+- 2026-10-17T10:20:13Z — User now authorizes using the shared tools to fix Route34 freeze. Authorized replacement session-cmz8k29e was stopped; root owns the new private test session from the retained start receipt under build/tickets/tkt77/trace-before. Preserve original save and existing source edits. Next bounded check is failed allocation/NARC cause on the normal border crossing.
+- 2026-10-17T10:40:08Z — Cause measured on current old ROM3dce3e50 with unchanged source save56828159: exact normal Goldenrod->Route34 crossing fails at frame999 after Heap_AllocAtEnd heap4 size6760 returnsNULL at caller021F939A, then native NARC_ReadWholeMember member125 reads toNULL at021F93A6. Evidence trace-full/leave-city-5.json.gz. Moving every temporary asset toheap11 was rejected by real test3701: size13352/member70 failed there while heap4 still had22348 contiguous bytes. Final design keeps stockheap4first and borrowsheap11 only afterNULL, retaining20KBscriptspace plus64Boverhead. Native fallback leaf is bounded in existing Field capsule; resident truebranch unchanged. test3702 passes same normal border and return with current Mankey, heap11free43840 atidle; core stopped. Final guarded build now running through Workshop. Host tests on actualC have red/green reserve evidence and5passing tests. New registered regression world.goldenrod-route34-entry includes actual Y swaps and exact waypoints; final-ROM acceptance and original direct-teleport check still pending. No source save replacement or publication.
+
+- 2026-10-17T10:52:36Z — test3703 guarded fallback is red on the registered Y-menu+border regression (test-27823b2688204cf08e27dd30609710ba). Repeated the exact recipe inputs under bounded Baseline diagnosis: frame974, FIELD1 cannot allocate6760/6760/13352/4544/6760-byte temporary sources in the same native update; final member126 reads toNULL while FIELD2 has25172 free and keeps its required20KB reserve. Evidence build/tickets/tkt77/y-trace/0176-leave-goldenrod-admit.json.gz. Stock texture queue admits10 loads before VBlank/VWait frees their sources. Candidate now lowers its existing shared batch limit to1 at021FA88C; queue layout/cancel/cleanup and heap budgets unchanged. Reviewed independently. Workshop build in progress; same registered regression and original direct-teleport check remain required. All diagnostic cores stopped.
+- 2026-10-17T11:28:56Z — Functional checks proved on Workshop test3706, ROM87cbb49cd986bb02c7c2fb6ad56b00797825a89a55b3ba31b389fe94696f6f60 with unchanged save5682815938a85efd8b18b9314d7357560f978f78c0d7919bfb17a0ab379e8a97. Registered world.goldenrod-route34-entry run test-adf9cf6bcd7740fab92f1c10eeeafb5c passed:true/acceptedProof:true: cold Route34 and Goldenrod rebuilds preserve saved Mankey; Y switches Cyndaquil then Mankey; ordinary border travel and return, control and final landing pass. Pre-edit normal-walk NULL allocation/archive caller ReadMModelFromNarcInternal at021F939A/021F93A6 is retained in trace-full; guarded old3703 Y+border failure is retained in y-trace. Current exact original teleport also passes at frame899 with Mankey and38688 FIELD2 free bytes (window-teleport/result.json). No claim that the older020C3B58 and normal-walk fault are the same stack. Cross-slice pacing remains open.
+- 2026-10-17T11:28:56Z — Product fix and functional regression are complete on test3706. The exact remaining acceptance gap is current-ROM spawn pacing from the unchanged Continue save: required recipes demand Cherrygrove67(564392), counter0; current source save starts in Goldenrod76(358366). D1 run test-49264c4a8b97440eb616bd92d120d0cc stops before measurement at that guard on same save; do not carry an old-ROM pacing pass forward. A reviewed normal-input route for the current saved start or a supplied Cherrygrove Continue fixture is needed. Preserve source save; no party/spawn/teleport setup for D1. All owned cores closed. Final accepted functional manifest: build/overworld-devtools/test-adf9cf6bcd7740fab92f1c10eeeafb5c/manifest.json; raw heap proof: build/tickets/tkt77/window-teleport/diagnostics.json.gz. Reserve stays20KB; observed FIELD2free38688. Graphics queue batches1; temporary files keep heap4first plus guarded heap11 fallback; transient catalog memory failure retries;5120Bmap-name pixels use heap11 with BG heap restored. Full production compile/link and final ROM package guards pass; actual-C allocation5/catalog7/refill12/destination18 checks pass. No merge, commit, push, branch or worktree created.
+- 2026-10-18T14:55:22Z — Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Normal Goldenrod-to-Route34 entry and full saved-follower Throw: follower.route34-throw test-ed375633c9924c86a7ca15a44a35a76f. Prior measured ARM9 fault and source fix retained under build/tickets/tkt77.
+
+### Completion evidence
+
+Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Normal Goldenrod-to-Route34 entry and full saved-follower Throw: follower.route34-throw test-ed375633c9924c86a7ca15a44a35a76f. Prior measured ARM9 fault and source fix retained under build/tickets/tkt77.
+
+<!-- ticket:TKT-0077:end -->
+
+<!-- ticket:TKT-0078:start -->
+## TKT-0078 — Mounted Mankey cannot jump onto an adjacent tree canopy
+
+- Type: bug
+- Status: done
+- Priority: normal
+- Created: 2026-10-16T21:23:03Z
+- Updated: 2026-10-18T14:55:22Z
+- Area: Overworld mounted movement / Mankey / canopy jump
+
+### Report
+
+While mounted on Mankey with Hop movement, the player stands on the tile directly next to a tree and holds the direction toward it. Neither the player nor Mankey moves. The user reports this at any tree. B is only for Walk movement. The required landing is the exact adjacent tree tile, not a farther tile beyond it.
+
+### Expected result
+
+Holding the direction toward a valid adjacent tree makes mounted Mankey and the rider Hop onto that exact tree tile at its tree-top height, when the resolved profile permits the landing.
+
+### Actual result
+
+Mounted Mankey cannot jump onto a tree top from an adjacent position.
+
+### Reproduction steps
+
+- Mount Mankey with Hop movement, stand directly next to a tree, and hold the direction toward its adjacent tile without pressing B.
+
+### Acceptance checks
+
+- [x] Preserve a measured reproduction and record the tree location, approach direction, input, resolved movement permissions, and rejection reason.
+- [x] Fix the underlying target-selection, profile-resolution, or landing-validation cause without a hidden Mankey-specific exception.
+- [x] Verify a permitted mounted Mankey jump lands on the correct canopy surface at its correct height, while invalid destinations remain blocked.
+
+### Screenshots
+
+No screenshots supplied.
+
+### Work notes
+
+- 2026-10-16T21:23:03Z — Created from User bug report in Codex chat.
+- 2026-10-16T21:45:55Z — Investigate the mounted adjacent-canopy jump through current profile resolution, target selection and shared physical landing checks. Preserve a current-ROM native reproduction before a product edit.
+- 2026-10-16T22:07:40Z — User clarified: the failure uses a held direction with Hop movement, not B; B is only for Walk. First owned current-ROM setup reached mounted transition but the prepared forward-Hop observer rejected the valid pre-publication FOLLOWER/input0 window before any requested direction. Preserve baseline/start and failed-step JSON; this is a tool applicability fault, not the game reproduction. Minimal read-only observer repair is in review before repeating the same mount setup and real held-direction tree approach.
+- 2026-10-16T22:30:38Z — Measured current ROM0cb93091ef8dc50c6b2c19d7bb6a7c4a6c8cf3963d039bc44a3aa770f460f30a: same Field/map34 Player564375 facingLeft, mounted Mankey full393223/PID2920357538, LEFT1 plus80neutral starts shared Hop to558375 (37frames) and lands on groundY65536. The adjacent563375 and562375 crowns are loaded nativeCanopyFFFE. The max-first search chooses far Grass instead of the nearby raised landing. Current no-drop83-snapshot recording SHA4d96b39c1b7fc2febe7575e592a23770dd193280d247ad6bf544abcb5ac8fb2d is retained under isolated-tree34-before; owned session-ibks9yqh closed. Generic nearby-raised-landing priority is being prepared; no species exception.
+- 2026-10-16T22:36:47Z — User correction: the reported failure is NO MOVEMENT from a tile directly next to a tree when that direction is held. Required behavior is one Hop by Mankey and rider onto the exact adjacent tree tile at tree-top height. B applies only to Walk movement. Prior isolated-tree34 overshoot is a separate observed behavior and must not substitute for this no-move reproduction or prove the reported bug. Pending source drafts are parked; reproduce the blocked shoulder-row approach before the game edit.
+- 2026-10-16T22:43:21Z — Exact corrected no-move reproduction now retained in no-move-before/reproduction.json SHA677e4bb4298210fbcf958e282a12166567bda87d07442471978338166494d7cc. Same current ROM/save, map34Player561364 baseY131072, mountedMankey131079, RIGHT32 andneutral32 remain on561364 with noHop. Neighbor562364 is a mesh-verified north tree tile missing from the old south-row-only Canopy catalog;562365 is the existing crown. No-drop66-snapshot memory recording retains full profile/actor/world. Product fix covers both mesh-verified tree rows and selects the exact legal adjacent raised tile for ordinary mountedHop; B/ledge routes retain their own rules.
+- 2026-10-16T23:00:17Z — Integrated generic ordinary-Hop adjacent raised landing priority and mesh-verified two-row Canopy data. Actual corrected RIGHT no-move baseline is retained. Exact source policy, native height, blocked landing and scan/refill host checks pass; strict native Mount link fits. First combined Workshop build stopped at the unchanged Wild Slam driver guard (current same-address body2540B versus old2536B) after generated catalog count changes. Auditing old/new relocatable lowering before updating pins; game acceptance has not yet run.
+- 2026-10-16T23:19:19Z — All three tree-jump acceptance checks proved on test3700 (ROM3dce3e5021dde08e60c003bef4168b4d6c3bc6be040302b2194ed22600dc43e2; source save8c7bb1bee598880ae3df4b35e2ad087e45be31eeb6769e9085fc58012e3bd4dc unchanged). Registered mount.mankey-adjacent-canopy run test-e9166ac29a744177815226d6f298bd72 is passed:true and acceptedProof:true. Same mounted Mankey131079/PID2920357538, RIGHT only, exact561364 to562364, all13 Hop poses, correct native base131072 to333184, one ordered commit/finish/control return, exact final pair seat, nine copied faults rejected, owned session closed. Invalid terrain/occupancy/unloaded destinations remain covered by current actual-C controls. Manifest build/overworld-devtools/test-e9166ac29a744177815226d6f298bd72/manifest.json SHA7aa1ae2f0114c5aafdef37b7194c465f31b452e6c88eaa2e4edcaabbe76e14a8. Required cross-slice pacing proof is still pending and is not supplied by this Hop pass.
+- 2026-10-16T23:19:19Z — Tree fix is built and accepted in-game. Required pacing scenario population.spawn-work-budget test-ce093d2d1c414e819b42b3c86c3c2a27 stops before observation: D1 warm-up requires the unchanged Cherrygrove start and zero counter. Current unchanged Continue save starts at map104 Route36 gate1,7, not67(564392). Session cleanup confirmed. This is a setup blocker, not an FPS pass or failure. The mandated world.unmounted.spawn-zero-stutter current-ROM attempt is now running; keep pacing open and do not reuse an older ROM pass.
+- 2026-10-16T23:20:29Z — Primary bug fix and its three acceptance checks are complete on test3700; registered tree Hop passed with acceptedProof. Both required current-ROM pacing runs stop before observation at the same strict setup guard: population.spawn-work-budget test-ce093d2d1c414e819b42b3c86c3c2a27 and world.unmounted.spawn-zero-stutter test-2148bc4d1b694e47a20c3345e4457c2d require unchanged Cherrygrove67(564392), counter0. Current unchanged source Continue save is Route36 gate104(1,7). Both owned sessions closed cleanly; zero pacing frames observed. This supplies no current-ROM FPS pass. Exact remaining gap is a reviewed normal-input fixture route from the current save, or a user-provided Cherrygrove start; do not teleport, alter party/spawns, overwrite the source save or reuse old-ROM D1 evidence. Offline conditional route is retained in build/tickets/tkt78/d1-normal-route/WAYPOINTS.md; first65 normal steps reach the saved-flag-dependent Sudowoodo blocker. Product work is ready for user play through Open NDS/test3700.
+- 2026-10-18T14:55:22Z — Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Original exact adjacent-tree Mankey regression and native landing controls retained under build/tickets/tkt78; final shared clearance mount.hop-vertical-clearance test-cc0f68a5b4984b55bb8fbcaa3c93fa0c. Common adjacent raised-hop Primeape and normal unmounted follower motion witnesses retained under build/tickets/integration-supplement.
+
+### Completion evidence
+
+Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Original exact adjacent-tree Mankey regression and native landing controls retained under build/tickets/tkt78; final shared clearance mount.hop-vertical-clearance test-cc0f68a5b4984b55bb8fbcaa3c93fa0c. Common adjacent raised-hop Primeape and normal unmounted follower motion witnesses retained under build/tickets/integration-supplement.
+
+<!-- ticket:TKT-0078:end -->
+
+<!-- ticket:TKT-0079:start -->
+## TKT-0079 — Add Behind Buildings spawn location and Goldenrod encounters
+
+- Type: task
+- Status: done
+- Priority: normal
+- Created: 2026-10-17T11:43:28Z
+- Updated: 2026-10-18T14:55:22Z
+- Area: Overworld spawn placement / profile settings / Goldenrod encounters
+
+### Report
+
+Add Behind Buildings as a new spawn location selectable in profile settings. Use the existing Land checks to validate candidate tiles. Behind Buildings narrows where a Pokémon can spawn on land; it must not create a new physical terrain type or grant extra movement permissions. Keep the placement rule reusable across maps rather than specific to Goldenrod or one species. Validate the reusable Behind Buildings rule against actual Goldenrod building coverage. This is a ticket request only.
+
+### Goldenrod encounter setup — required scope
+
+The encounter plan discussed with the spawn location is part of this ticket. Implement the encounter tables and profile placement assignments, not only the new selectable location.
+
+| Pokémon | Spawn placement | Time and rarity from the design |
+| --- | --- | --- |
+| Meowth | Behind Buildings; not Rooftop | Common |
+| Rattata | Behind Buildings; suitable Underground land areas | Common, especially at night |
+| Snubbull | Existing Land | Uncommon |
+| Pidove | Existing Land and Rooftop | Common, daytime |
+| Murkrow | Existing Rooftop and Canopy | Uncommon, night |
+| Trubbish | Behind Buildings | Uncommon |
+| Grimer | Behind Buildings; suitable Underground land areas | Rare |
+| Rotom | Behind Buildings | Very rare, night |
+
+Reuse existing Land for open ground; do not add a duplicate Open Ground type. Do not tie Rotom to the Radio Tower or another unique landmark. Select and record explicit encounter weights, levels, and time-table slots during implementation. Use visible profiles for placement and retain their normal movement rules. Check existing Goldenrod encounter data and preserve unrelated encounter changes.
+
+### Expected result
+
+Profiles can select Behind Buildings, and spawns use qualifying ground that passes the existing Land checks. Goldenrod has the complete encounter mix and placement assignments listed above.
+
+### Actual result
+
+Not applicable.
+
+### Reproduction steps
+
+- Not applicable.
+
+### Acceptance checks
+
+- [x] Expose Behind Buildings as a selectable spawn location in the profile editor and preserve it through saved and generated profile data.
+- [x] Define a reusable rule or map-data representation for identifying ground behind buildings; do not hard-code one city or species.
+- [x] Apply the existing Land checks to every Behind Buildings candidate, rejecting blocked, water, and otherwise invalid destinations.
+- [x] Selecting Behind Buildings restricts spawn placement without creating a new physical terrain type or overriding the Pokémon movement permissions.
+- [x] Verify selected profiles spawn at valid Behind Buildings locations and reject other locations; complete relevant profile, placement, and current-ROM spawn-pacing checks.
+
+- [x] Add the eight listed Pokémon to the appropriate Goldenrod outdoor and Underground encounter pools, with the specified placements and night/day restrictions; record exact weights and levels.
+- [x] Assign profile placement settings for the encounter plan: Meowth uses Behind Buildings rather than Rooftop; Snubbull and Pidove reuse existing Land; birds use existing Rooftop/Canopy where listed.
+- [x] Rotom is a very rare night encounter using the shared Behind Buildings location, with no Radio Tower-specific rule.
+- [x] Verify actual Goldenrod encounters spawn on the listed permitted surfaces, with correct height and valid access, without temporary single-species test overrides.
+
+### Screenshots
+
+No screenshots supplied.
+
+### Work notes
+
+- 2026-10-17T11:43:28Z — Created from User request in Codex chat.
+- 2026-10-17T11:45:33Z — Implementation started: inspect reusable building placement data and the profile spawn-location pipeline.
+- 2026-10-17T12:14:50Z — Implemented in test3707.nds (ROM and Delta SHA256 67e8447254d7fa67a0785a90f52e9a6fd3007dba3c8ef68afab2832e2d1ae37b). Spawn-only bit11 limits placement to unchanged Land admission immediately north of a catalogued Rooftop, across maps/seams; mixed inherited destinations cannot bypass it and movement masks stay unchanged. No assignments or named catalog rows changed. New registered host.spawn-behind-buildings passes all10 profile/editor/production-C placement/shortcut tests including fault controls; destination scan18 and refill12 pass. Workshop26, schema/catalog checks, native package/rejection checks and2Fly package-reader checks pass. Full V2 build and Delta copy verified; source save unchanged (5682815938a85efd8b18b9314d7357560f978f78c0d7919bfb17a0ab379e8a97). Runtime pacing acceptance remains open: first current-ROM attempts failed in the Query allocation reader, whose old package/heap assumptions are being aligned with the authenticated current package. Legacy resolver golden check also fails before this change (22 vectors); comparison evidence build/tickets/tkt79/profile-golden-comparison.json. No goldens were weakened.
+- 2026-10-17T12:18:53Z — Implementation and current-ROM build complete; remaining acceptance is blocked by the unchanged source save fixture. On test3707, population.spawn-work-budget run test-dfeec43128684f7db2f1c6a427930e74 and world.unmounted.spawn-zero-stutter run test-e1865f68b1ac4d4a9d1eefb664a6b5ae both stop before measurement with raw-observation-invalid: D1 warm-up requires the unchanged Cherrygrove start and zero counter. Current Continue is Goldenrod76 (358,366), with zero player steps; no pacing frames or accepted proof were credited. Both owned private sessions closed cleanly. Manifests are build/overworld-devtools/<run-id>/manifest.json. The Query lifecycle reader now uses the exact current70140-byte package on heap11 and43516-byte workspace on heap4; all18 focused tests pass, including wrong-heap/header controls, with unchanged32768-byte reserves and8-allocation limit. The stale Query image-size fixture now matches authenticated current68660-byte image and its bounded-read rejection test passes. Original save and all authored Pokemon assignments remain unchanged. AGENTS requires current-ROM D1 proof; no older pass was reused. Remaining profile-reference gap is the pre-existing22 stale resolver goldens noted above.
+
+- 2026-10-17T12:22:16Z — User flagged that the Goldenrod encounter plan was omitted. Added the full eight-species encounter and placement scope with unchecked acceptance items. Earlier notes confirm the location implementation changed no Pokémon assignments; that work alone cannot complete this ticket. Existing evidence and blockers are preserved. Ticket update only; no game code changed.
+- 2026-10-17T12:22:27Z — Reopened for the omitted Goldenrod encounter tables and profile assignments, which can proceed independently of the previously recorded pacing/save-fixture acceptance blocker. The earlier blocker and proof gaps remain recorded and must still be resolved before completion.
+- 2026-10-17T12:26:40Z — Implementing the updated Goldenrod encounter tables and scoped profile placements first; retaining all prior placement and pacing proof gaps.
+- 2026-10-17T13:13:43Z — Updated scope is built in test3708.nds, ROM SHA256 b22fd0128d02f54ca903e01ca554808953a95cd1de9c522aacc86b6ba30b96bc; source save stays 5682815938a85efd8b18b9314d7357560f978f78c0d7919bfb17a0ab379e8a97. Goldenrod map76 uses encounter142, public Underground map199 uses143. Outdoor morning/day weights: Meowth30%, Pidove30%, Rattata20%, Snubbull10%, Trubbish9%, Grimer1%. Night: Rattata40%, Meowth30%, Snubbull10%, Murkrow10%, Trubbish8%, Grimer1%, Rotom1%. Underground all times: Rattata95%, Grimer5%. All12 slots use levels12,12,13,13,14,14,14,15,15,15,16,16 and native weights20,20,10,10,10,10,5,5,4,4,1,1. Only these two pools use strict clock tables; existing pools retain their time selection. Four visible Placement profiles and five map-scoped applications preserve ordinary movement. Data, Map ID matching, native resolver goldens, package guards and V2 build pass. Natural surface/landing and current-ROM D1 proofs remain open. Latest short D1 test-408f254ff2e0442e8fa4270ae6a741d9 reached Route34 without a runtime failure, but its preflight consumed most of180s and native command hit wall budget at38 measured frames. Session session-sxwqm6ny closed; no pacing pass credited. Investigating duplicated host preflight cost before rerun.
+- 2026-10-17T14:15:47Z — Current test3709 includes the complete encounter scope plus T85 native-condition ABI fix; ROM SHA2569f3476ed8986c83b0a68c236f01b59fa3639920d13e65342bbb86a12a4d72d6c, unchanged Continue save5682815938a85efd8b18b9314d7357560f978f78c0d7919bfb17a0ab379e8a97. D1 short test-94ad43da7a694975935240a72d08d1f7 recorded five natural Route34 births and zero late loops, but its old scan-mask filter ignored68/2048 and Route34 has no natural FlyIn species required by that gate. No pass credited; read-only offline route through Goldenrod north gate to Route35 identified, preserving all scan/FlyIn/pacing gates. Natural Goldenrod cases now include24 neutral frames after stock warp before strict current-follower binding; old inactive follower remains rejected. Natural surface and both D1 acceptance runs remain open; no party/save/population override used.
+- 2026-10-17T22:56:01Z — User reports that Pokemon do not seem to spawn behind houses on2026-10-17UTC/2026-10-18local. Keep Behind Buildings placement acceptance open despite the earlier single-region3711 natural-case pass. Investigate actual house coverage, allowed north-row Land candidates and visible natural spawn results on the current ROM; do not treat the earlier controlled city region as proof for this report.
+- 2026-10-17T23:06:01Z — User clarified this mayonly be hard to notice and requested a double-check. Current test3713 natural Behind Buildings case test-c8d58e49dea5449eaf755ea27817f36e passed with controller acceptedProof,900observedframes,388.899s, private sessionclosed. Natural Meowth52 atGoldenrod375359, mask2049, native completed ground landingY65536; no species/profile/RNG/population override. Read-only static coverage finds31 normal-Land north-adjacent cells across11roof sources, with zero in the4..8 spawn ring of unchanged Continue358366 and two at proof center368366. No blanket mask/sign/extra-condition fault found; no product change for this latest report. Other encounter-surface cases and final current-ROM pacing remain required before ticket closure.
+- 2026-10-18T14:55:22Z — Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Complete eight-species city/Underground plan, weights, levels, strict clock tables, four visible Placement profiles and five map-scoped applications are recorded in the earlier implementation note and encounter guide. Spawn-only Behind bit11 preserves Land admission and traversal. Natural current-ROM proofs: population.goldenrod-behind-buildings test-6d2b051b44754b13a597e0163ce1dcbe; population.goldenrod-raised-birds test-3a6f13b3583b4b558959b86376e3a593; population.goldenrod-underground test-9c3b8c2edec0456fa2db62fdda0cfa65. Source and native controls reject blocked/water/mixed-mask shortcuts; no species/profile/RNG/population overrides in these natural cases.
+- 2026-10-18T14:55:22Z — Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Complete eight-species city/Underground plan, weights, levels, strict clock tables, four visible Placement profiles and five map-scoped applications are recorded in the earlier implementation note and encounter guide. Spawn-only Behind bit11 preserves Land admission and traversal. Natural current-ROM proofs: population.goldenrod-behind-buildings test-6d2b051b44754b13a597e0163ce1dcbe; population.goldenrod-raised-birds test-3a6f13b3583b4b558959b86376e3a593; population.goldenrod-underground test-9c3b8c2edec0456fa2db62fdda0cfa65. Source and native controls reject blocked/water/mixed-mask shortcuts; no species/profile/RNG/population overrides in these natural cases.
+
+### Completion evidence
+
+Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Complete eight-species city/Underground plan, weights, levels, strict clock tables, four visible Placement profiles and five map-scoped applications are recorded in the earlier implementation note and encounter guide. Spawn-only Behind bit11 preserves Land admission and traversal. Natural current-ROM proofs: population.goldenrod-behind-buildings test-6d2b051b44754b13a597e0163ce1dcbe; population.goldenrod-raised-birds test-3a6f13b3583b4b558959b86376e3a593; population.goldenrod-underground test-9c3b8c2edec0456fa2db62fdda0cfa65. Source and native controls reject blocked/water/mixed-mask shortcuts; no species/profile/RNG/population overrides in these natural cases.
+
+<!-- ticket:TKT-0079:end -->
+
+<!-- ticket:TKT-0080:start -->
+## TKT-0080 — Regression: mounted Hop arc no longer adjusts for vertical obstacles
+
+- Type: bug
+- Status: done
+- Priority: normal
+- Created: 2026-10-17T11:53:06Z
+- Updated: 2026-10-18T14:55:22Z
+- Area: Overworld mounted movement / Hop arc / vertical clearance
+
+### Report
+
+Mounted Pokémon, such as Mankey, no longer adjust their jump arc to accommodate vertical obstacles along the jump path. This is a regression: obstacle-aware arc adjustment previously worked as part of Movement Style Hop. Restore the shared behavior rather than adding a hidden Mankey-specific rule. The exact obstacle, location, and ROM version were not provided. This is distinct from TKT-0078, which reports inability to jump onto an adjacent tree, though the underlying cause may be related.
+
+### Expected result
+
+Mounted Movement Style Hop adjusts its arc for vertical obstacles according to the resolved profile settings and shared clearance rules, as it did before the regression.
+
+### Actual result
+
+Mounted Hop jumps do not adjust their arc for vertical obstacles in the path.
+
+### Reproduction steps
+
+- Not provided.
+
+### Acceptance checks
+
+- [x] Preserve a measured mounted Mankey reproduction with a vertical obstacle in the Hop path and record resolved Hop settings, planned arc, and clearance result.
+- [x] Identify the regression and restore obstacle-aware arc adjustment through the shared Hop planner and mounted integration, respecting visible profile settings.
+- [x] Verify that a permitted mounted Hop clears the obstacle with an adjusted arc and lands on the correct surface, while jumps that cannot legally clear it remain blocked.
+- [x] Check another eligible mounted Pokémon and relevant unmounted Hop behavior to verify the shared fix without species-specific exceptions.
+
+### Screenshots
+
+No screenshots supplied.
+
+### Work notes
+
+- 2026-10-17T11:53:06Z — Created from User regression report in Codex chat.
+- 2026-10-17T14:30:56Z — Source diagnosis: shared clearance deliberately skips native Canopy/Ground for ranged Hop; only fixed-distance Jump samples those native obstacles. Current host regression even pins canopy-range-hop-3 to unchanged arc16. No product edit yet. Preserve mounted test3709 baseline at Route30 map34 origin558370, diagonal path across canopy563375 toward564376, then restore shared profile-driven clearance and repeat before acceptance. This is separate from the already-fixed adjacent landing owner T78.
+- 2026-10-17T15:02:13Z — Current3709 actual mounted baseline preserved. Saved Mankey PID2920357538 on Route30 origin558375 holdsRIGHT8: shared Hop to564375 duration37 planned arc16 crosses native Canopy563375 (offset0x31580, base0x10000) without raising arc. Resolved Jump flag0, so restored planner must reject this unpermitted clearance; enabled Jump cases separately prove shared height increase. Exact elapsed-zero receipt has normal native return and current full actor identity. Data/recording under build/tickets/tkt80/pre-edit-3709/cardinal. Initial diagonal input normalizes cardinal and is not used as this reproduction. Product shared native-height skip is now removed for ordinary Hop; final live repeat and durable checks pending.
+- 2026-10-17T16:35:05Z — Current3710 registered mount.hop-vertical-clearance test-140a47706f3944f883b606212bbda6ec passed with controller acceptedProof:97observedframes, exact saved Mankey at558375 takes legal target563375 with arcHeightQ4=52,duration37,targetBaseY267648 instead of old3709 unpermitted distance6 target564375/arc16. Final target/base and offsets correct. Shared native checks include11 meaningful clearance cases; another eligible mount/unmounted Hop plus final integration pacing remain open.
+- 2026-10-18T14:55:22Z — Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Measured pre-edit3709 low-arc reproduction retained. Shared ordinary-Hop native height clearance restored with visible Jump permission and legal landing gates; final mount.hop-vertical-clearance test-cc0f68a5b4984b55bb8fbcaa3c93fa0c. Eleven native clearance controls plus complete Primeape mount and unmounted follower Hop witnesses retained under build/tickets/integration-supplement; no species-specific rule.
+- 2026-10-18T14:55:22Z — Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Measured pre-edit3709 low-arc reproduction retained. Shared ordinary-Hop native height clearance restored with visible Jump permission and legal landing gates; final mount.hop-vertical-clearance test-cc0f68a5b4984b55bb8fbcaa3c93fa0c. Eleven native clearance controls plus complete Primeape mount and unmounted follower Hop witnesses retained under build/tickets/integration-supplement; no species-specific rule.
+
+### Completion evidence
+
+Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Measured pre-edit3709 low-arc reproduction retained. Shared ordinary-Hop native height clearance restored with visible Jump permission and legal landing gates; final mount.hop-vertical-clearance test-cc0f68a5b4984b55bb8fbcaa3c93fa0c. Eleven native clearance controls plus complete Primeape mount and unmounted follower Hop witnesses retained under build/tickets/integration-supplement; no species-specific rule.
+
+<!-- ticket:TKT-0080:end -->
+
+<!-- ticket:TKT-0081:start -->
+## TKT-0081 — Many Goldenrod rooftops are not registered as rooftop surfaces
+
+- Type: bug
+- Status: done
+- Priority: normal
+- Created: 2026-10-17T11:53:47Z
+- Updated: 2026-10-18T14:55:22Z
+- Area: Overworld Goldenrod City / rooftop surface registration
+
+### Report
+
+Many rooftops in Goldenrod City are not registered as rooftop surfaces. The user did not identify specific buildings or coordinates. Investigate rooftop detection and catalog coverage for Goldenrod, identify the missing surfaces, and fix the underlying coverage issue.
+
+### Expected result
+
+Goldenrod rooftops intended to support rooftop behavior are registered as rooftop surfaces with correct bounds and height.
+
+### Actual result
+
+Many visible Goldenrod rooftops are not recognized as rooftop surfaces.
+
+### Reproduction steps
+
+- Not provided.
+
+### Acceptance checks
+
+- [x] Audit Goldenrod rooftop coverage and record which visible rooftops are missing or incorrectly registered.
+- [x] Fix the rooftop detection or catalog coverage cause, using the existing surface registration pipeline.
+- [x] Verify corrected rooftop bounds and heights, with walls and non-rooftop areas excluded.
+- [x] Verify permitted rooftop placement or landing recognizes the corrected surfaces while existing terrain permissions remain enforced.
+
+### Screenshots
+
+No screenshots supplied.
+
+### Work notes
+
+- 2026-10-17T11:53:47Z — Created from User bug report in Codex chat.
+- 2026-10-17T14:30:56Z — Read-only survey found canonical roof discovery only matches pc/fs/h01-h03 names. Goldenrod models75/76/77/79/80/86/87/88/89 and repeated house101 ko_h03x are absent. Deriving expected roof footprints from original native mesh/model data and representative live query points; no map geometry or active catalog changed yet.
+- 2026-10-18T14:55:22Z — Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Canonical roof discovery expanded for11 missing Goldenrod models/20 roofs through the existing catalog generator; old fragments preserved. Native31/31 positive/negative bounds and exact height points across all11 models retained under build/tickets/integration-supplement/run-20261017T164411Z. Natural permitted raised placement: population.goldenrod-raised-birds test-3a6f13b3583b4b558959b86376e3a593. The retained 3713 natural Murkrow witness lands at354347 on newly added station model88 ko_station, land39 local2,27, height526720 (source m0_x10_y10_land38_obj3_model88, native face70 station_a); this exact point was absent before T81. Mesh-derived roof faces exclude walls/signs/antennas and keep holes; terrain permissions unchanged.
+- 2026-10-18T14:55:22Z — Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Canonical roof discovery expanded for11 missing Goldenrod models/20 roofs through the existing catalog generator; old fragments preserved. Native31/31 positive/negative bounds and exact height points across all11 models retained under build/tickets/integration-supplement/run-20261017T164411Z. Natural permitted raised placement: population.goldenrod-raised-birds test-3a6f13b3583b4b558959b86376e3a593. The retained 3713 natural Murkrow witness lands at354347 on newly added station model88 ko_station, land39 local2,27, height526720 (source m0_x10_y10_land38_obj3_model88, native face70 station_a); this exact point was absent before T81. Mesh-derived roof faces exclude walls/signs/antennas and keep holes; terrain permissions unchanged.
+
+### Completion evidence
+
+Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Canonical roof discovery expanded for11 missing Goldenrod models/20 roofs through the existing catalog generator; old fragments preserved. Native31/31 positive/negative bounds and exact height points across all11 models retained under build/tickets/integration-supplement/run-20261017T164411Z. Natural permitted raised placement: population.goldenrod-raised-birds test-3a6f13b3583b4b558959b86376e3a593. The retained 3713 natural Murkrow witness lands at354347 on newly added station model88 ko_station, land39 local2,27, height526720 (source m0_x10_y10_land38_obj3_model88, native face70 station_a); this exact point was absent before T81. Mesh-derived roof faces exclude walls/signs/antennas and keep holes; terrain permissions unchanged.
+
+<!-- ticket:TKT-0081:end -->
+
+<!-- ticket:TKT-0082:start -->
+## TKT-0082 — Regression: follower Mankey cannot pick up Pokémon to throw on Route 34
+
+- Type: bug
+- Status: done
+- Priority: normal
+- Created: 2026-10-17T11:56:18Z
+- Updated: 2026-10-18T14:55:22Z
+- Area: Overworld Route 34 / follower Mankey / Throw pickup regression
+
+### Report
+
+Follower Mankey never picks up a Pokémon to throw on Route 34. The user clarified that this failure only happens on Route 34. The user reports this as a regression of previously working behavior. The exact trigger, coordinates, target species, and ROM version were not provided. Preserve the reported failure and trace the shared Throw flow from trigger and object-of-interest binding through cargo selection, pursuit, and actual pickup to identify where progress stops. Do not assume a cause or add a hidden Mankey-specific exception.
+
+### Expected result
+
+Follower Mankey can complete pickup and continue the Throw flow when its profile conditions and target permissions permit it.
+
+### Actual result
+
+Mankey as a follower never picks up another Pokémon to throw on Route 34; the user reports that the failure only occurs there.
+
+### Reproduction steps
+
+- Use Mankey as a follower on Route 34 and trigger its Throw flow. Exact trigger and coordinates not provided.
+
+### Acceptance checks
+
+- [x] Preserve a measured reproduction on Route 34 of follower Mankey failing to pick up a valid Throw target, recording the trigger, bindings, resolved profiles, and point of failure.
+- [x] Identify and fix the regression in the shared profile-driven Throw flow without a hidden species-specific exception.
+- [x] Repeat the same Route 34 trigger on the fixed ROM and verify actual pickup followed by the Throw flow; check a working route for regression.
+- [x] Verify moving targets remain free to act until actual pickup, and inaccessible or forbidden destinations remain rejected under the authored rules.
+
+### Screenshots
+
+No screenshots supplied.
+
+### Work notes
+
+- 2026-10-17T11:56:18Z — Created from User regression report in Codex chat.
+
+- 2026-10-17T12:04:26Z — User clarified: the failure only happens on Route 34. Updated the report, title, area, and acceptance scope; no game code changed.
+- 2026-10-17T14:30:56Z — Prepared smallest Route34 reproduction: unchanged saved Mankey slot2/PID2920357538 after normal Goldenrod seam, player358385, one Wild Bellsprout69 at358387. Follower Cargo option3 must bind that same noticed target. Read-only source has no Route34-specific Throw branch; current shared Query workspace is43516 bytes on heap4 with16384 reserve (59900 free admission), so record actual RESOURCE_LIMIT/queryPointer versus route/atomic failure before changing anything. No cause or fix claimed yet.
+- 2026-10-17T14:57:50Z — Measured current test3709 unchanged saved Mankey after normal Goldenrod-to-Route34 seam, then one ordinary Bellsprout69 spawn at358387. Mankey PID2920357538/current slot7 notices it (Throw mask47) but stays idle358384. Native Cargo Tick returns RESOURCE_LIMIT with no workspace. Paused authenticated heap4 free30264B/largest22192B cannot admit43516B workspace plus16384B reserve. Heap11 free38592B also cannot hold the full workspace. Recording session-ansbaq8o/recording-3ef7ed78cf6e.json.gz SHA0045908c407043da0dfdbc4e1efc925cfa25b118a8c312b8aa5bbd988e1d2ac1, no drops; exact evidence under build/tickets/tkt82/pre-edit-3709. Product storage correction is in progress; no reserve reduction.
+- 2026-10-17T16:35:05Z — Current test3710 removes the measured allocation limit: Query core17240B on heap11 plus aux10628B on heap4, unchanged16/20KiB reserves. Native full flow test-1babb594125046779582878fae575ace still fails actual pickup:93REACHABLE returns and exact Trigger/Cargo Bellsprout binding, but every resolved Mankey onReachAction is0. Traced to the ARM packed-profile merge leaf retaining pre-v96 Override offsets24/28/32 instead of28/32/36. Scoped native correction and old-code-fails regression are in preparation; no pickup pass claimed.
+- 2026-10-17T23:34:21Z — Current3713 Route34 full flow test-7936359bddab4b18a01ccfe8d78c4aef passed with controller acceptedProof,192observedframes, private session closed. The separate Route29 moving-Cargo regression test-145a22f36eb4441986e08c1e7f570613 has actual legal pickup879 and launch922, but its old checker still demands a cardinal Manhattan8 endpoint. Observed Player586407/origin590402/target596394 is exactly the current rounded Away projection(+6,-8), max-axis8,duration24,base65536, separation5 to13. Architecture949-961 and native Away_Select agree. Correct only the obsolete checker expectation, preserving exact range, outward projection, full native flight and all target-control checks. No product change justified; current-ROM working-route acceptance and final D1 remain open.
+- 2026-10-17T23:47:40Z — Current3713 moving-target test-14198500d58e4e1bb83d9846e625ffe7 now proves the exact legal(+6,-8) Away launch922 and complete native flight. It then has an ordinary normal-profile Follow Hop984→1026 (duration37,pause5,commit3→4), with a new current authored Trigger at1002. The unchanged accepted plan lands1021 and returns exactly1026, sequences203/210/211, no cancel or retained Cargo claim. The meter incorrectly checks that existing terminal only inside its current normal-profile admission guard, misses it after the new Trigger changes mask15→47, then runs to valid next-cycle Cargo claim1047 and rejects it. Scope the checker completion to the already-admitted Follow lease, retaining frozen timing/pose/commit and fresh Trigger identity. Original first-Cargo and full flight checks remain strict; no product edit justified. Run this trouble case first before refreshing stable cases to avoid repeated prefix runs.
+- 2026-10-18T14:55:22Z — Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Measured Route34 Query allocation limit and packed Override merge regression retained under build/tickets/tkt82. Paired16600/11268-byte workspace and native offsets28/32/36 restore shared pickup. Final saved-party Route34 follower.route34-throw test-ed375633c9924c86a7ca15a44a35a76f; working-route moving target follower.throw-moving-cargo test-22ec24b4df624434976a4b221c66b98e. Exact interest/cargo binding, free target control, native flight and follower return pass. Six physical veto controls retain inaccessible/forbidden rejection; old native ABI copy fails. Current Away projection checker replaces only the obsolete cardinal assertion.
+- 2026-10-18T14:55:22Z — Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Measured Route34 Query allocation limit and packed Override merge regression retained under build/tickets/tkt82. Paired16600/11268-byte workspace and native offsets28/32/36 restore shared pickup. Final saved-party Route34 follower.route34-throw test-ed375633c9924c86a7ca15a44a35a76f; working-route moving target follower.throw-moving-cargo test-22ec24b4df624434976a4b221c66b98e. Exact interest/cargo binding, free target control, native flight and follower return pass. Six physical veto controls retain inaccessible/forbidden rejection; old native ABI copy fails. Current Away projection checker replaces only the obsolete cardinal assertion.
+
+### Completion evidence
+
+Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Measured Route34 Query allocation limit and packed Override merge regression retained under build/tickets/tkt82. Paired16600/11268-byte workspace and native offsets28/32/36 restore shared pickup. Final saved-party Route34 follower.route34-throw test-ed375633c9924c86a7ca15a44a35a76f; working-route moving target follower.throw-moving-cargo test-22ec24b4df624434976a4b221c66b98e. Exact interest/cargo binding, free target control, native flight and follower return pass. Six physical veto controls retain inaccessible/forbidden rejection; old native ABI copy fails. Current Away projection checker replaces only the obsolete cardinal assertion.
+
+<!-- ticket:TKT-0082:end -->
+
+<!-- ticket:TKT-0083:start -->
+## TKT-0083 — Block dismounting while airborne
+
+- Type: task
+- Status: done
+- Priority: normal
+- Created: 2026-10-17T12:01:30Z
+- Updated: 2026-10-18T14:55:23Z
+- Area: Overworld mounted movement / dismount input
+
+### Report
+
+The player must not be able to dismount while the mounted Pokémon is airborne. Keep the mount session intact until the airborne movement has finished and the actor has landed. Use the shared movement state to determine whether the actor is airborne, rather than a species-specific rule. The user has not specified whether an airborne dismount input should be ignored or queued; define that input handling explicitly during implementation.
+
+### Expected result
+
+A dismount request cannot end the mount session while airborne; dismounting is allowed again after landing.
+
+### Actual result
+
+Not applicable.
+
+### Reproduction steps
+
+- Not applicable.
+
+### Acceptance checks
+
+- [x] Reject or defer dismount requests while the mounted actor is airborne; define whether the input is ignored or queued.
+- [x] An airborne dismount input does not interrupt the accepted movement, detach the rider, or end the mount session before landing.
+- [x] Dismounting works again after landing and completion of the movement.
+- [x] Verify the rule uses shared airborne movement state across eligible mounts, without a hidden species-specific exception.
+
+### Screenshots
+
+No screenshots supplied.
+
+### Work notes
+
+- 2026-10-17T12:01:30Z — Created from User request in Codex chat.
+- 2026-10-17T14:30:56Z — Prepared ignored-only safe draft under build/tickets/tkt83: guard explicit Cancel using current shared Hop phase; consume airborne Select with no delayed toggle; retain a confirmed Y request until landing while motion Tick continues, then queue once. Extracted real-C controls pass; old source and missing-Y-deferral controls fail. Original draft needs156 bytes and best equivalent shared-tail/size trial still exceeds fixed Mount slot by144 bytes. No active source, limits or pins changed; exact remaining implementation gap is fitting this central guard within existing bounds, then current-ROM Select/Y landing proof.
+- 2026-10-17T15:02:13Z — Current3709 measured airborne Select: mounted saved Mankey hops from564375 toward adjacent canopy563375, elapsed8/duration13; SELECT1 cancels at9/13, then becomes Follower. Preserved complete input/memory recording under build/tickets/tkt83/pre-edit-3709. Smaller same-owner receipt guard is being checked: explicit release is refused only for a current valid binding and an owned Hop with elapsed less than duration; forced cleanup and landed release stay allowed, Y confirmation remains queued until landing.
+- 2026-10-17T16:35:05Z — Current3710 test-c7722c2582c74b84b11a233c76d6f8d3 proves airborne Select ignored, exact landing and grounded dismount. Fresh remount edge831 succeeds832 with same saved Mankey/inputOwnership1/kindNONE/reservation0 at563375; test waited for IDLE although shared Motion correctly retains CANCELED from the normal follower Hop canceled on mount. Correcting that bounded checker assumption before final same-ROM Select/Y proof. No product remount failure inferred; cleanup closed.
+- 2026-10-18T14:55:23Z — Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Airborne Select is consumed without delayed dismount; confirmed Y switch waits until grounded, then queues once. Final mount.airborne-input test-30f4d04899c945d0bc123a08354ad484. Central current shared Hop elapsed/duration guard is species-independent; thirteen native detach/cleanup controls and old-code fault controls retained under build/tickets/tkt83.
+- 2026-10-18T14:55:23Z — Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Airborne Select is consumed without delayed dismount; confirmed Y switch waits until grounded, then queues once. Final mount.airborne-input test-30f4d04899c945d0bc123a08354ad484. Central current shared Hop elapsed/duration guard is species-independent; thirteen native detach/cleanup controls and old-code fault controls retained under build/tickets/tkt83.
+
+### Completion evidence
+
+Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Airborne Select is consumed without delayed dismount; confirmed Y switch waits until grounded, then queues once. Final mount.airborne-input test-30f4d04899c945d0bc123a08354ad484. Central current shared Hop elapsed/duration guard is species-independent; thirteen native detach/cleanup controls and old-code fault controls retained under build/tickets/tkt83.
+
+<!-- ticket:TKT-0083:end -->
+
+<!-- ticket:TKT-0084:start -->
+## TKT-0084 — Allow wild throwers to pick up and throw follower Pokémon
+
+- Type: task
+- Status: done
+- Priority: normal
+- Created: 2026-10-17T12:06:37Z
+- Updated: 2026-10-18T14:55:23Z
+- Area: Overworld wild Throw / follower cargo
+
+### Report
+
+Wild Pokémon with Throw should be allowed to select the player follower as cargo, pick it up, and throw it. Remove follower-role exclusions from the wild Throw target selection and any later pickup or Throw checks that prevent this behavior. Keep the follower free to run its normal profiles and movement until actual pickup; selecting it as cargo must not interrupt it. Use shared profile-driven targeting and held control rather than a hidden species-specific rule. Coordinate with TKT-0050, which includes removing follower pickup exclusion, and TKT-0059, which requires targeting not to interrupt the target.
+
+### Expected result
+
+A wild thrower can select, pursue, pick up, and throw an eligible follower Pokémon under its authored profile rules.
+
+### Actual result
+
+Not applicable.
+
+### Reproduction steps
+
+- Not applicable.
+
+### Acceptance checks
+
+- [x] Allow follower Pokémon in the wild Throw cargo target filters and remove conflicting follower-role rejection checks along selection, pickup, and Throw.
+- [x] Verify a wild thrower completes the full flow with the player follower as cargo.
+- [x] The follower keeps its normal behavior while pursued; only actual pickup transfers it to held control.
+- [x] After Throw or release, restore follower control for the same Pokémon without losing party identity or leaving it stuck.
+- [x] Keep authored terrain, reach, and shared contact-damage rules enforced; do not add a hidden species-specific exception.
+
+### Screenshots
+
+No screenshots supplied.
+
+### Work notes
+
+- 2026-10-17T12:06:37Z — Created from User request in Codex chat.
+- 2026-10-17T14:57:50Z — Removed the authored Wild-only cargo role filter. Follower remains autonomous until AtomicPickup transfers it to shared held control; idle/Walk/Hop extracted native handoff and six physical veto checks are retained under build/tickets/tkt84. Awaiting final generated data, ROM and full-flow live acceptance.
+- 2026-10-17T17:26:56Z — Final3711 wild.throw-follower run test-49a218f4a6c44d608409611effffa6b4 found a second cold Query allocation limit, before any workspace existed. Native pointer remains0, heap11 free37720B versus17240 core+20480 reserve+64margin=37784; heap4 free79940B. Product fix moves the unchanged160-entry transient changed-tile array640B from core into the start of auxiliary: core16600/aux11268,total27868 unchanged, all node/edge/path caps and reserves retained. Exact full native image fits69284/69312B; current layout/reader pins and C controls are being refreshed before final ROM. Route34 full Throw and airborne input both passed with acceptedProof on3711; final current-ROM integration still pending.
+- 2026-10-17T22:30:38Z — Current test3712 fixes the measured64-byte cold-allocation deficit: new workspace allocates at frame872. Full run test-4dc87f6f43054a4a960f83e24a5ea9ab still fails action-wall-budget after201observedframes:169Geodude PENDING returns and zero Cargo claims. Player Trigger is current852-1039. Shared Query repeatedly changes owner0/7; the explicit follower priority clears the resumed Wild graph before its search can finish. Measured evidence retained in that run observations727a4ef2101b2478edb06cc46d575fa9602a86385c3d8606650bf9a41fe00e05. Preparing fair waiting ownership while retaining first follower priority, reserves, bounds and native work limits. No full-flow pass claimed.
+- 2026-10-17T22:43:10Z — Current3713 game run test-ad79c5139f804e8289f03f6b28c9ac03 proves the fair handoff: owner0→7→0 only, with Geo retaining its scan from944 through1036 and growing1→29nodes; no LIMIT/INVALID/UNREACHABLE. It still has no pickup proof. The600-frame action was cut off at190frames by its90s host deadline; retained observe cycles alone cost73.414s wall/58.068s threadCPU. Raise only this action host budget to300s for the same600 game frames and all unchanged identity, free-movement, native pickup, flight and return assertions. The bounded repeat will distinguish slow observation from any remaining product defect; no runtime deadline or capacity changed.
+- 2026-10-17T23:18:37Z — Current3713 quiet native flow test-2eb48a0867874a1f8a8518b032abf295 proves free follower body movement during26 claimed frames, claim831/pickup857/launch890/release and landing898. A same-queue normal Follow Hop starts898 after exact projectile commit/finish/return. The meter incorrectly reused that earlier terminal as the new Follow terminal. Scoped checker now binds the new lease to its exact admission sequence; regression and fresh completion are pending. No product or deadline change; session-9eccff7f closed cleanly. Retained controller recheck correctly refuses changed capture/checker inputs, so a fresh run remains required.
+- 2026-10-17T23:26:37Z — Current3713 full same-party wild.throw-follower test-36b9d7d54f0b4aed89217eedb63cef52 passes all native flow checks. Fresh controller recheck acceptedProof=true after the checker-only same-queue and commit-history controls were repaired:139observedframes, claim831/pickup857/launch890/release and landing898/free normal Follow admission898/return910. Mankey moves while pursued for26free claim frames; only pickup transfers control. Exact party2 PID2920357538 preserved. Missing projectile/follow return and frozen Cargo copies still reject; session-pcfd_gs5 closed. Current recheck receipt build/tickets/tkt84/free-motion-turn/recheck-complete-flow.json is separate from the immutable original manifest. Final shared spawn-pacing gate remains before batch closure.
+- 2026-10-18T14:55:23Z — Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Follower role admitted by authored Cargo filter. Final wild.throw-follower test-2af7712aa2b4462292d4920da9a739f2 proves ordinary Geodude pursuit, actual free follower body movement before HELD, pickup, complete flight/landing and normal movement by the same saved party2 Mankey PID2920357538. Native handoff/veto and bounded-query fairness controls preserve reach, terrain, identity and one-query work limits. No hidden species rule, reduced reserve, or increased native cap.
+- 2026-10-18T14:55:23Z — Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Follower role admitted by authored Cargo filter. Final wild.throw-follower test-2af7712aa2b4462292d4920da9a739f2 proves ordinary Geodude pursuit, actual free follower body movement before HELD, pickup, complete flight/landing and normal movement by the same saved party2 Mankey PID2920357538. Native handoff/veto and bounded-query fairness controls preserve reach, terrain, identity and one-query work limits. No hidden species rule, reduced reserve, or increased native cap.
+
+### Completion evidence
+
+Current test3716, unchanged Continue save; all eleven fresh native captures passed and earned controller acceptedProof on this final ROM, with clean private-session closure. Current official receipts: build/tickets/d1-late-loop/final/run3716-20261018T141603Z/receipts.json. Final pacing: population.spawn-work-budget test-23425b74d6f84c298c500e956312b27f; world.unmounted.spawn-zero-stutter test-4b015e7f670043f483632dc9ebe259d5. Quiet bubble regression: presentation.emote-three-slots test-22ce563470994af29fda2d8ef7c06dcb. ROM and Delta copy verified; saved open-after-build stays off. The earlier frame-519 friendship hitch is fixed by skipping the data lock for unselected stock random draws and using the exact full-u16 Soothe Bell predicate to remove item archive reads. The later frame-3544 hitch is fixed by quiet bubbles avoiding PlaySE and StopSE, plus two equivalent local memory clear removals. No poison product change was made. Native result/RNG/ABI controls and the exact old triggers are retained under build/tickets/d1-late-loop. Follower role admitted by authored Cargo filter. Final wild.throw-follower test-2af7712aa2b4462292d4920da9a739f2 proves ordinary Geodude pursuit, actual free follower body movement before HELD, pickup, complete flight/landing and normal movement by the same saved party2 Mankey PID2920357538. Native handoff/veto and bounded-query fairness controls preserve reach, terrain, identity and one-query work limits. No hidden species rule, reduced reserve, or increased native cap.
+
+<!-- ticket:TKT-0084:end -->
+
+<!-- ticket:TKT-0085:start -->
+## TKT-0085 — Follower no longer moves in Goldenrod
+
+- Type: bug
+- Status: done
+- Priority: critical
+- Created: 2026-10-17T13:32:56Z
+- Updated: 2026-10-17T14:02:56Z
+- Area: Overworld Goldenrod follower movement
+
+### Report
+
+User reports that the follower no longer moves in Goldenrod. Treat this as the highest active fix priority, before TKT-0079 and the remaining queue. Exact follower species and triggering input were not provided.
+
+### Expected result
+
+The current follower follows the player in Goldenrod using its resolved movement profile.
+
+### Actual result
+
+The follower no longer moves in Goldenrod.
+
+### Reproduction steps
+
+- Enter Goldenrod with the current follower and walk away from it.
+
+### Acceptance checks
+
+- [x] Preserve a measured current-ROM reproduction with follower identity, player movement, resolved profile and the stalled movement state.
+- [x] Fix the shared movement or profile admission cause and repeat the same trigger on the final ROM.
+- [x] Verify the same follower can move on a route and can cross into and out of Goldenrod without losing control.
+
+### Screenshots
+
+No screenshots supplied.
+
+### Work notes
+
+- 2026-10-17T13:32:56Z — Created from Codex chat.
+- 2026-10-17T13:33:05Z — User named this the priority fix. Product sources held while collecting the current3708 Goldenrod reproduction. Current private session session-_hq5jq8l uses a copy of the unchanged save and exact test3708 ROM. Other ticket implementation drafts remain unapplied.
+- 2026-10-17T13:36:01Z — Measured red in test3708.nds (SHA b22fd0128d02f54ca903e01ca554808953a95cd1de9c522aacc86b6ba30b96bc), unchanged save5682815938a85efd8b18b9314d7357560f978f78c0d7919bfb17a0ab379e8a97. Prepared Goldenrod76 baselineframe896 player(358,366), saved Mankey PID2920357538 slot7 fullhandle196615 epoch4/mapGen4 at(358,365), valid profile fingerprint1950557339. DOWN32 moved player to(358,374) at929; after64 neutral frames993 follower stayed(358,365), NONE/IDLE. Baseline/down/neutral/diagnostics and recording export retained under build/tickets/goldenrod-follower-freeze/pre-edit-3708; recording SHA787d237b7e2e4b09eb39f156f963dc9daebe95d53140c088bf07f4711d751f11. Owned session-_hq5jq8l stopped. Cause found: native-only Condition BuildDefinition still reads old48-byte entry offsets after v96 Match growth moved ConditionEntry to52bytes; host named-field code was correct, hiding the fault from host tests. Independent audit rules out a second packed-field reader, failed map match and profile fallback. Fix and native branch check are being prepared; no closure or game pass credited.
+- 2026-10-17T13:43:43Z — Native condition copy fixed with five instruction-immediate changes and compile-time source/destination layout checks. The actual production Thumb64-byte leaf now copies both tagged ConditionEntry52 fixtures correctly; the same check failed before the edit and rejects reverted16/32 offset controls. Native ARM compile passes. No second old ConditionEntry/Match numeric reader found. V2 build3709 passed in1m39s; ROM and Delta copy SHA9f3476ed8986c83b0a68c236f01b59fa3639920d13e65342bbb86a12a4d72d6c, source save unchanged. First post-build private start stopped safely on a reader seal mismatch before behavior observation. Audited3708/3709 Query images differ by only the five expected halfwords, same symbols/sizes/ABI; updated only whole ELF/package seals and preserved all private offsets/ranges/limits. Wrong-source and reverted-instruction checks reject. Query audit build/tickets/tkt85/query-immediate-audit.json. Current-ROM Goldenrod/Route34/return runtime acceptance is next; no closure claimed.
+- 2026-10-17T14:02:56Z — Verified on test3709.nds, ROM/Delta SHA9f3476ed8986c83b0a68c236f01b59fa3639920d13e65342bbb86a12a4d72d6c; unchanged Continue save5682815938a85efd8b18b9314d7357560f978f78c0d7919bfb17a0ab379e8a97. Registered follower.goldenrod-hop-rebind run test-65c62435c1df4d02aeb0d54a864ea9d4 completed292 frames with passed:true and acceptedProof:true. Same saved slot2 Mankey PID2920357538 completed3 Hops in Goldenrod,2 after normal entry toRoute34,and2 after returning toGoldenrod; both full-handle context rebinds and control return verified. All12 copied fault controls reject. Manifest build/overworld-devtools/test-65c62435c1df4d02aeb0d54a864ea9d4/manifest.json. Private session-5_2d9g4p closed cleanly. Native Thumb64B definition copy regression and ARM compile pass; old3708 stalled recording fails the same completed-Hop predicate.
+- 2026-10-17T14:02:56Z — Fixed the old native ConditionEntry decoder after the v96 profile layout change. Five immediate reads now match the52-byte entry; compile-time layout checks and an actual compiled-Thumb regression prevent recurrence. Current3709 full normal Goldenrod->Route34->Goldenrod follower proof accepted; save unchanged. Resume updated TKT-0079 next.
+
+### Completion evidence
+
+Fixed the old native ConditionEntry decoder after the v96 profile layout change. Five immediate reads now match the52-byte entry; compile-time layout checks and an actual compiled-Thumb regression prevent recurrence. Current3709 full normal Goldenrod->Route34->Goldenrod follower proof accepted; save unchanged. Resume updated TKT-0079 next.
+
+<!-- ticket:TKT-0085:end -->
 

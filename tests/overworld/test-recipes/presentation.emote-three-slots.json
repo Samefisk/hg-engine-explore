@@ -60,6 +60,19 @@
       }
     },
     {
+      "id": "emote-owner-ready",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
       "id": "spawn-a",
       "op": "spawn",
       "args": {

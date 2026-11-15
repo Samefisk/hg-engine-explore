@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the real no-item record and extracted GetItemArcData ownership."""
+"""Check item allocation ownership and the native friendship item predicate."""
 from pathlib import Path
 import argparse
 import hashlib
@@ -40,7 +40,7 @@ def authored_unit():
             + "const ITEMDATA authoredNone = " + initializer + ";\n")
 
 
-def narc_none(data):
+def narc_records(data):
     if len(data) < 16 or data[:4] != b"NARC":
         raise ValueError("current item-data NARC header differs")
     bom, version, size, header, count = struct.unpack_from("<HHIHH", data, 4)
@@ -58,10 +58,55 @@ def narc_none(data):
     fat, image = chunks[b"BTAF"], chunks[b"GMIF"]
     if len(fat) < 12 or struct.unpack_from("<H", fat)[0] == 0:
         raise ValueError("current item-data NONE entry is absent")
-    start, end = struct.unpack_from("<II", fat, 4)
-    if not 0 <= start <= end <= len(image):
-        raise ValueError("current item-data NONE entry exceeds its image")
-    return image[start:end]
+    count = struct.unpack_from("<H", fat)[0]
+    if len(fat) != 4 + count * 8:
+        raise ValueError("current item-data record directory differs")
+    records = []
+    for index in range(count):
+        start, end = struct.unpack_from("<II", fat, 4 + index * 8)
+        if not 0 <= start <= end <= len(image):
+            raise ValueError("current item-data record exceeds its image")
+        records.append(image[start:end])
+    return records
+
+
+def narc_none(data):
+    return narc_records(data)[0]
+
+
+def friendship_item_rule(records):
+    if not records or any(len(record) != 36 for record in records):
+        raise ValueError("friendship item-data record size differs")
+    if [index for index, record in enumerate(records) if record[2] == 53] != [218]:
+        raise ValueError("friendship effect53 must be exactly SOOTHE_BELL218")
+
+
+def authored_item_records():
+    """Compile the actual complete initializer with its real item layout."""
+    prefix = authored_unit().split("const ITEMDATA authoredNone =", 1)[0]
+    types = "\n".join(re.findall(r"^#define TYPE_\w+\s+[^\n]+",
+                                (ROOT / "include/battle.h").read_text(), re.M))
+    table = (ROOT / "data/itemdata/itemdata.c").read_text().split(
+        "const ITEMDATA __data[] =", 1)[1]
+    program = ("#include <stdio.h>\n#include <stddef.h>\n#define TRUE 1\n" + prefix
+        + "\n" + types + '\n#include "constants/hold_item_effects.h"\n'
+        + "const ITEMDATA __data[] =" + table + "\n"
+        + '_Static_assert(sizeof(ITEMDATA)==36,"item ABI");\n'
+        + '_Static_assert(offsetof(ITEMDATA,holdEffect)==2,"hold effect ABI");\n'
+        + '_Static_assert(ITEM_SOOTHE_BELL==218,"native friendship item immediate");\n'
+        + '_Static_assert(HOLD_EFFECT_FRIENDSHIP_UP==53,"native friendship effect");\n'
+        + "int main(void){return fwrite(__data,sizeof(__data),1,stdout)!=1;}\n")
+    with tempfile.TemporaryDirectory(prefix="friendship-item-data-") as temporary:
+        directory = Path(temporary)
+        path, executable = directory / "items.c", directory / "items"
+        path.write_text(program)
+        subprocess.run([shutil.which("cc") or "cc", "-std=c11", "-O2", "-Wall",
+            "-Wextra", "-Werror", "-I", str(ROOT / "include"), str(path), "-o",
+            str(executable)], check=True, capture_output=True)
+        data = subprocess.run([str(executable)], check=True, capture_output=True).stdout
+    if len(data) % 36:
+        raise ValueError("authored item array size differs")
+    return [data[offset:offset + 36] for offset in range(0, len(data), 36)]
 
 
 DRIVER = r'''
@@ -123,6 +168,27 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=ROOT / "src/item.c")
     args = parser.parse_args()
+    authored = authored_item_records()
+    friendship_item_rule(authored)
+    for name in ("build/narc/itemdata.narc", "base/root/a/0/1/7"):
+        built = narc_records((ROOT / name).read_bytes())
+        friendship_item_rule(built)
+        if built != authored:
+            raise SystemExit("authored/current full item array differs: " + name)
+    # Either another friendship item or a changed Soothe Bell must stop this
+    # native predicate before packaging. Include a >255 low-byte alias too.
+    for item, effect in ((193, 53), (474, 53), (218, 0)):
+        changed = list(authored)
+        record = bytearray(changed[item])
+        record[2] = effect
+        changed[item] = bytes(record)
+        try:
+            friendship_item_rule(changed)
+        except ValueError:
+            pass
+        else:
+            raise SystemExit("changed friendship item rule passed admission")
+    print("PASS full authored/current item equality; friendship effect53 only218; future item changes rejected")
     source = args.source.read_text()
     start = source.index("void *GetItemArcData(u16 item, u16 type, u32 heap_id)\n{")
     _, end = braced(source, start)

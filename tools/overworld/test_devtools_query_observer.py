@@ -9,10 +9,12 @@ from tools.overworld.devtools_engine import Hooks
 from tools.overworld.devtools_observer import NativeObservation, NativeObservationError
 from tools.overworld.devtools_query_observer import (
     NativeQueryObserver, LABEL, TICK_OFFSET, FRAME_WORLD, FRAME_VALID, BINDINGS,
-    QUERY_OWNER, QUERY_VALID, QUERY_STATE_SIZE, RUNTIME_QUERY, RUNTIME_CONDITIONS, sealed_package,
+    QUERY_OWNER, QUERY_VALID, QUERY_STATE_SIZE, QUERY_STATE_OFFSET, QUERY_STORAGE, QUERY_AUX_SIZE, QUERY_ALLOCATION_VERSION,
+    QUERY_CACHED_EDGES, QUERY_VISITED, QUERY_AUX_NODES, QUERY_AUX_VISITED_VALID, QUERY_AUX_CHANGES, QUERY_AUX_CHANGES_VALID,
+    workspace_allocation, RUNTIME_QUERY, RUNTIME_CONDITIONS, sealed_package,
     relocated_image, READ_BUDGET, INITIAL_READ_BUDGET, CARGO_CODE_START,
     CARGO_CODE_END, CARGO_ABI_OFFSET, CARGO_ABI_SIZE, native_unload_binding,
-    CARGO_WILD_START, CARGO_WILD_END, ENTRY_LABEL, ENTRY_CONTROL_LABEL, QUERY_PREFIX_SIZE, QUERY_ENTRY_ACTIVE, ENTRY_LAYOUT)
+    CARGO_WILD_START, CARGO_WILD_END, ENTRY_LABEL, ENTRY_CONTROL_LABEL, QUERY_PREFIX_SIZE, QUERY_ENTRY_ACTIVE, ENTRY_LAYOUT, QUERY_STATE_READ_BYTES, QUERY_STATE_READ_SPANS, workspace_state_fields)
 from tools.overworld.devtools_runtime import DevtoolsSession
 from tools.overworld.pack_query_code_addon import CARGO_PREFIX_CAP
 
@@ -34,6 +36,7 @@ class Fixture:
         self.memory, self.callbacks, self.reads = {}, {}, []
         self.entry, self.field, self.runtime = 0x02250040, 0x02220000, 0x02248000
         self.conditions, self.q, self.wild = 0x02249000, 0x02150000, 0x023DA000
+        self.aux = 0x02160000
         self.call, self.world, self.output = 0x027E1000, 0x027E1100, 0x027E1200
         self.full = struct.pack("<6H", 1, 2, 3, 3, 1, 0)
         self.other = struct.pack("<6H", 7, 2, 3, 3, 1, 0)
@@ -75,6 +78,9 @@ class Fixture:
         r.service_bytes=struct.pack("<IHH4I",0x53444F57,2,24,r.state,0x023C2401,0x023C2501,0x023C2601)
         r.discovery_bytes=b"D"*32
         r.blob,r.image,r.receipt=current_package()
+        from tools.overworld.devtools_field_cleanup import symbol
+        from tools.overworld.pack_query_code_addon import BASE
+        r.workspace_destroy_offset=symbol((PACKAGE_DIRECTORY/"image.elf").read_bytes(),"DestroyQuery",2)[0]-BASE
         self.put(r.discovery,r.discovery_bytes)
         self.put(r.unload,r.unload_bytes)
         self.put(r.service,r.service_bytes)
@@ -92,10 +98,16 @@ class Fixture:
         prefix[4:16]=prefix[192:204]=self.full
         struct.pack_into("<H",prefix,148,3)
         prefix[178]=10
-        struct.pack_into("<I",prefix,300,self.q+QUERY_STATE_SIZE)
+        struct.pack_into("<I",prefix,300,self.q+QUERY_STORAGE)
         struct.pack_into("<HH",prefix,364,2,QUERY_STATE_SIZE)
         prefix[375]=1;prefix[327]=1
-        self.put(self.q,prefix)
+        self.put(self.q+QUERY_STATE_OFFSET,prefix)
+        self.put(self.q,struct.pack("<3I",self.aux,self.entry+r.workspace_destroy_offset|1,QUERY_ALLOCATION_VERSION))
+        self.put(self.q-16,bytes(12)+bytes((11,0,0,0)))
+        self.put(self.aux-16,bytes(12)+bytes((4,0,0,0)))
+        self.put(self.q+QUERY_STORAGE,struct.pack("<3I2H6I",self.aux+QUERY_AUX_NODES,self.q+QUERY_CACHED_EDGES,
+            self.q+QUERY_VISITED,256,512,512,0,self.aux+QUERY_AUX_VISITED_VALID,
+            0,self.aux+QUERY_AUX_CHANGES,self.aux+QUERY_AUX_CHANGES_VALID))
         self.put(self.q+QUERY_OWNER,self.full)
         self.put(self.q+QUERY_VALID,b"\x01\x01\0\0")
         self.put(self.call,struct.pack("<8I",self.world,0x023B0000,0x023B0100,0,0,4,1,0))
@@ -108,7 +120,7 @@ class Fixture:
         self.put(r.discovery,r.discovery_bytes)
         self.packaged_code=lambda address,size:self.read(address,size)
         if ENTRY_LAYOUT:
-            r.native_ops_address=0x023B1200;r.native_spawn_address=0x023D0802;r.native_spawn_bytes=b"S"*1390
+            r.native_ops_address=0x023B1200;r.native_spawn_address=0x023D0802;r.native_spawn_bytes=b"S"*1204
             r.remove_address=0x023D1000;r.remove_bytes=b"R"*32
             native_ops=bytearray(ENTRY_LAYOUT["ControlOps"])
             struct.pack_into("<IHH",native_ops,0,0x4E454F57,1,len(native_ops))
@@ -347,7 +359,7 @@ class QueryObserverTests(unittest.TestCase):
                 if fault=="duplicate":f.observer.pending.append(dict(event))
                 if fault=="missing-adopt":event["startup"]["locomotion"]=3
                 if fault=="wrong-hook":f.observer.calls["spawn-prepared"]["address"]+=2
-                if fault=="changed-body":f.put(f.reader.native_spawn_address+1390-1,b"!")
+                if fault=="changed-body":f.put(f.reader.native_spawn_address+len(f.reader.native_spawn_bytes)-1,b"!")
                 f.control_return()
                 self.assertIsNotNone(f.hooks.error);self.assertEqual(f.rows,[])
 
@@ -597,7 +609,7 @@ class QueryObserverTests(unittest.TestCase):
                 if fault=="active":f.active_slots.add(0)
                 if fault=="world":f.put(f.world+4,struct.pack("<I",f.field+4))
                 if fault=="ops":f.put(0x023B1000,struct.pack("<HH",2,76))
-                if fault=="workspace":f.put(f.q+364,bytes(4))
+                if fault=="workspace":f.put(f.q+QUERY_STATE_OFFSET+364,bytes(4))
                 f.discover();f.start()
                 if f.hooks.error is None:
                     if fault=="changed-command":f.put(f.command+o["Request_serial"],struct.pack("<I",92))
@@ -864,7 +876,7 @@ class QueryObserverTests(unittest.TestCase):
                 elif fault=="unavailable":f._field_actor_availability=lambda _:dict(authenticated=True,reason="transition")
                 elif fault=="prefix":f.put(f.entry+120,b"!")
                 elif fault=="tail":f.put(f.entry+len(f.reader.image)-1,b"!")
-                elif fault=="named-owner":f.put(f.entry+0xDD0C,b"!")
+                elif fault=="named-owner":f.put(f.entry+0xE0DC,b"!")
                 with self.assertRaises((NativeObservationError,ValueError)):
                     authenticate_loaded_query_functions(f,elf,f.reader.blob,f.reader.blob,ENTRY_SPAWN_QUERY_OWNERS)
 
@@ -1190,8 +1202,8 @@ class QueryObserverTests(unittest.TestCase):
 
     def test_real_return_is_distinct_from_pending_buffer_and_before_after_are_current(self):
         f=Fixture();f.discover();f.start()
-        f.put(f.q+327,b"\0\x01")
-        f.put(f.q+148,struct.pack("<H",4));f.put(f.conditions+FRAME_VALID-3,b"\x82\0\0\0")
+        f.put(f.q+QUERY_STATE_OFFSET+327,b"\0\x01")
+        f.put(f.q+QUERY_STATE_OFFSET+148,struct.pack("<H",4));f.put(f.conditions+FRAME_VALID-3,b"\x82\0\0\0")
         f.returned(3)
         row=f.rows[-1]["data"]
         self.assertEqual(row["status"],"INVALID");self.assertEqual(row["resultStatus"],0)
@@ -1205,15 +1217,15 @@ class QueryObserverTests(unittest.TestCase):
 
     def test_current_callback_read_extent_and_overbudget_reject_before_native_read(self):
         f=Fixture();row=f.capture()
-        self.assertEqual(len(f.reader.image),68172)
-        self.assertEqual(row["readBytes"],dict(entry=CARGO_CODE_END+(CARGO_WILD_END-CARGO_WILD_START)+609,
-                         returned=CARGO_CODE_END+(CARGO_WILD_END-CARGO_WILD_START)+661))
+        self.assertEqual(len(f.reader.image),69312)
+        self.assertEqual(row["readBytes"],dict(entry=CARGO_CODE_END+(CARGO_WILD_END-CARGO_WILD_START)+483,
+                         returned=CARGO_CODE_END+(CARGO_WILD_END-CARGO_WILD_START)+535))
         self.assertEqual(READ_BUDGET,0x9000)
         # Full prefix plus entire CargoWild module and measured return
         # metadata must stay below the unchanged 36 KiB cap.
-        self.assertEqual(max(row["readBytes"].values()),CARGO_CODE_END+(CARGO_WILD_END-CARGO_WILD_START)+661)
+        self.assertEqual(max(row["readBytes"].values()),CARGO_CODE_END+(CARGO_WILD_END-CARGO_WILD_START)+535)
         self.assertEqual(CARGO_PREFIX_CAP,0x8800)
-        self.assertLessEqual(CARGO_CODE_END+(CARGO_WILD_END-CARGO_WILD_START)+661,READ_BUDGET)
+        self.assertLessEqual(CARGO_CODE_END+(CARGO_WILD_END-CARGO_WILD_START)+535,READ_BUDGET)
         f.reader.read_bytes=READ_BUDGET-4;f.reads.clear()
         self.assertEqual(len(f.reader._read(f.output,4)),4)
         self.assertEqual(f.reader.read_bytes,READ_BUDGET)
@@ -1289,22 +1301,24 @@ class QueryObserverTests(unittest.TestCase):
 
     def test_standing_goal_and_proof_progress_use_existing_sealed_read(self):
         f=Fixture()
-        f.put(f.q+288,struct.pack("<hhiHH",586,409,32768,3,0))
-        f.put(f.q+236,struct.pack("<hhiHH",587,410,16384,2,0))
-        f.put(f.q+256,struct.pack("<I",17))
-        f.put(f.q+68,struct.pack("<I",16))
-        f.put(f.q+156,struct.pack("<HH",4,2))
-        f.put(f.q+172,struct.pack("<H",3))
-        f.put(f.q+180,b"\x01")
-        f.put(f.q+369,b"\x02")
-        f.put(f.q+376,b"\x01\x01")
+        f.put(f.q+QUERY_STATE_OFFSET+288,struct.pack("<hhiHH",586,409,32768,3,0))
+        f.put(f.q+QUERY_STATE_OFFSET+236,struct.pack("<hhiHH",587,410,16384,2,0))
+        f.put(f.q+QUERY_STATE_OFFSET+256,struct.pack("<I",17))
+        f.put(f.q+QUERY_STATE_OFFSET+68,struct.pack("<I",16))
+        f.put(f.q+QUERY_STATE_OFFSET+156,struct.pack("<HH",4,2))
+        f.put(f.q+QUERY_STATE_OFFSET+172,struct.pack("<H",3))
+        f.put(f.q+QUERY_STATE_OFFSET+180,b"\x01")
+        f.put(f.q+QUERY_STATE_OFFSET+369,b"\x02")
+        f.put(f.q+QUERY_STATE_OFFSET+376,b"\x01\x01")
         row=f.capture()
         self.assertEqual(row["after"]["workspace"]["routeProgress"],dict(
             goal=dict(x=586,y=409,baseY=32768,surfaceId=3,reserved=0),
             cargoPosition=dict(x=587,y=410,baseY=16384,surfaceId=2,reserved=0),
             goalRevision=17,routeGoalRevision=16,goalNode=4,proofNode=2,
             proofLength=3,probeNeeded=1,edgeOwed=2,goalValid=1,goalDirty=1))
-        self.assertEqual(sum(address==f.q and size==QUERY_PREFIX_SIZE for address,size in f.reads),2)
+        self.assertEqual([size for address,size in f.reads if address==f.q],[12,12])
+        self.assertEqual([(address-(f.q+QUERY_STATE_OFFSET),size) for address,size in f.reads
+            if f.q+QUERY_STATE_OFFSET<=address<f.q+QUERY_STATE_OFFSET+QUERY_PREFIX_SIZE],list(QUERY_STATE_READ_SPANS)*2)
         self.assertTrue(all(r["data"]["readBytes"]["returned"]<=READ_BUDGET for r in f.rows))
 
     def test_different_singleton_owner_and_missing_workspace_are_visible(self):
@@ -1316,18 +1330,18 @@ class QueryObserverTests(unittest.TestCase):
 
     def test_saved_compatibility_and_origin_decode_without_more_memory_reads(self):
         f=Fixture()
-        f.put(f.q+204,f.other)
-        f.put(f.q+216,struct.pack("<4h",544,384,607,447))
-        f.put(f.q+224,struct.pack("<hhiHH",585,404,-65536,0xFFFF,0))
-        f.put(f.q+248,struct.pack("<4I",0x10203040,0x50607080,11,12))
-        f.put(f.q+264,struct.pack("<I",f.q+25000))
-        f.put(f.q+280,struct.pack("<H",4))
-        f.put(f.q+336,struct.pack("<2I",0x20002,345))
-        f.put(f.q+370,bytes((2,3,1,2,1)))
-        f.put(f.q+380,b"\1")
+        f.put(f.q+QUERY_STATE_OFFSET+204,f.other)
+        f.put(f.q+QUERY_STATE_OFFSET+216,struct.pack("<4h",544,384,607,447))
+        f.put(f.q+QUERY_STATE_OFFSET+224,struct.pack("<hhiHH",585,404,-65536,0xFFFF,0))
+        f.put(f.q+QUERY_STATE_OFFSET+248,struct.pack("<4I",0x10203040,0x50607080,11,12))
+        f.put(f.q+QUERY_STATE_OFFSET+264,struct.pack("<I",f.q+25000))
+        f.put(f.q+QUERY_STATE_OFFSET+280,struct.pack("<H",4))
+        f.put(f.q+QUERY_STATE_OFFSET+336,struct.pack("<2I",0x20002,345))
+        f.put(f.q+QUERY_STATE_OFFSET+370,bytes((2,3,1,2,1)))
+        f.put(f.q+QUERY_STATE_OFFSET+380,b"\1")
         f.discover();f.start()
-        f.put(f.q+224,struct.pack("<hhiHH",585,405,-65536,0xFFFF,0))
-        f.put(f.q+252,struct.pack("<I",0x50607081))
+        f.put(f.q+QUERY_STATE_OFFSET+224,struct.pack("<hhiHH",585,405,-65536,0xFFFF,0))
+        f.put(f.q+QUERY_STATE_OFFSET+252,struct.pack("<I",0x50607081))
         f.returned(0)
         row=f.rows[-1]["data"]
         before=row["before"]["workspace"];after=row["after"]["workspace"]
@@ -1342,9 +1356,9 @@ class QueryObserverTests(unittest.TestCase):
         self.assertEqual({k:v for k,v in before["compatibility"].items() if k!="movementPolicyRevision"},
                          {k:v for k,v in after["compatibility"].items() if k!="movementPolicyRevision"})
         self.assertEqual((before["dynamicRevision"],before["storage"],before["stateFrame"],
-            before["candidate"],before["scan"],before["active"]),(12,f.q+QUERY_STATE_SIZE,345,2,3,1))
-        self.assertEqual(sum(size for address,size in f.reads if f.q<=address<f.q+QUERY_PREFIX_SIZE),QUERY_PREFIX_SIZE*2)
-        self.assertEqual([size for address,size in f.reads if address==f.q],[QUERY_PREFIX_SIZE]*2)
+            before["candidate"],before["scan"],before["active"]),(12,f.q+QUERY_STORAGE,345,2,3,1))
+        self.assertEqual(sum(size for address,size in f.reads if f.q+QUERY_STATE_OFFSET<=address<f.q+QUERY_STATE_OFFSET+QUERY_PREFIX_SIZE),QUERY_STATE_READ_BYTES*2)
+        self.assertEqual([size for address,size in f.reads if address==f.q],[12,12])
 
     def test_discovery_adopts_only_authenticated_same_image_rebind(self):
         def owner(f, epoch, generation):
@@ -1398,6 +1412,7 @@ class QueryObserverTests(unittest.TestCase):
         f.put(f.reader.state,struct.pack("<4I2HIB3s",f.entry-64,len(f.reader.blob),f.entry,f.field,4,4,21,1,bytes(3)))
         f.put(f.entry,relocated_image(f.reader.image,f.reader.receipt,f.entry))
         f.put(0x023BA170+12,struct.pack("<I",4));f.put(0x023BA170+44,struct.pack("<HH",0,4))
+        f.put(f.q+4,struct.pack("<I",f.entry+f.reader.workspace_destroy_offset|1))
         f.discover()
         self.assertIsNone(f.hooks.error)
         self.assertEqual(f.reader.loaded["entry"],f.entry)
@@ -1452,7 +1467,7 @@ class QueryObserverTests(unittest.TestCase):
                 if fault=="epoch":f.put(f.reader.state+16,struct.pack("<H",4))
                 if fault=="generation":f.put(f.reader.state+18,struct.pack("<H",4))
                 if fault=="unloaded":f.put(0x023C8148,b"\0")
-                if fault=="workspace":f.put(f.q+364,struct.pack("<HH",9,QUERY_STATE_SIZE))
+                if fault=="workspace":f.put(f.q+QUERY_STATE_OFFSET+364,struct.pack("<HH",9,QUERY_STATE_SIZE))
                 if fault=="subject":f.put(f.conditions+BINDINGS+60,struct.pack("<6H",1,3,3,3,1,0))
                 f.returned(0)
                 self.assertIsNotNone(f.hooks.error);self.assertEqual(f.rows,[])
@@ -1485,4 +1500,95 @@ class QueryObserverTests(unittest.TestCase):
             self.assertEqual(calls,["enabled","closed"])
 
 
-if __name__=="__main__":unittest.main()
+
+
+    def test_commit_callback_counts_the_true_largest_legal_metadata_path(self):
+        # Keep full code/constructor authentication. The native Commit path
+        # also reads its complete packet/Ops and post-constructor serial.
+        f=Fixture();f.native_control(7,slot=0)
+        f.put(f.runtime+ENTRY_LAYOUT["Runtime_queuedSpawnSlotPlusOne"],b"\1")
+        f.put(f.runtime+ENTRY_LAYOUT["Runtime_queuedSpawnSerial"],struct.pack("<I",91))
+        f.discover();f.start();f.publish_actor(0);f.constructor_event(slot=0)
+        f.control_return(value=3)
+        self.assertIsNone(f.hooks.error)
+        cost=f.rows[-1]["data"]["readBytes"]
+        code=CARGO_CODE_END+CARGO_WILD_END-CARGO_WILD_START
+        self.assertEqual(cost,dict(entry=code+1909,returned=code+1957))
+        self.assertLessEqual(max(cost.values()),READ_BUDGET)
+        self.assertTrue(f.rows[-1]["data"]["admission"])
+        # Every code byte and every constructor byte is still checked at
+        # each boundary; a copied partial-code sample cannot earn the budget.
+        self.assertGreaterEqual(sum(n for a,n in f.reads if a==f.reader.native_spawn_address-2),2*1206)
+
+
+
+class QueryWorkspaceLayoutTests(unittest.TestCase):
+    """Read the exact new ABI without relying on an unfinished ROM build."""
+    def fixture(self):
+        memory={};core,aux,destroy=0x02150010,0x02230010,0x0225C001
+        def write(address,data):memory.update({address+i:byte for i,byte in enumerate(data)})
+        def read(address,size):return bytes(memory.get(address+i,0) for i in range(size))
+        write(core,struct.pack('<3I',aux,destroy,QUERY_ALLOCATION_VERSION))
+        write(core-16,bytes(12)+bytes((11,0,0,0)))
+        write(aux-16,bytes(12)+bytes((4,0,0,0)))
+        write(core+QUERY_STORAGE,struct.pack('<3I2H6I',aux+QUERY_AUX_NODES,core+QUERY_CACHED_EDGES,
+            core+QUERY_VISITED,256,512,512,9,aux+QUERY_AUX_VISITED_VALID,
+            12,aux+QUERY_AUX_CHANGES,aux+QUERY_AUX_CHANGES_VALID))
+        return core,aux,destroy,read,write
+
+    def test_native_split_owner_and_bitmap_arrays_are_read_exactly(self):
+        core,aux,destroy,read,_write=self.fixture()
+        view=workspace_allocation(read,core,destroy)
+        self.assertEqual((view['coreBytes'],view['auxiliaryBytes']),(16600,11268))
+        self.assertEqual((view['coreHeapId'],view['auxiliaryHeapId']),(11,4))
+        self.assertEqual(view['nodes'],aux+640)
+        self.assertEqual(view['visitedValid'],aux+6784)
+        self.assertEqual(view['changesValid'],aux+10944)
+        self.assertEqual((view['generation'],view['changeGeneration']),(9,12))
+
+    def test_sparse_state_plan_preserves_named_bytes_and_rejects_unread_gaps(self):
+        raw=bytes((i*17+3)&255 for i in range(QUERY_PREFIX_SIZE));reads=[]
+        def read(address,size):
+            reads.append((address,size));return raw[address:address+size]
+        fields=workspace_state_fields(read,0)
+        self.assertEqual(reads,list(QUERY_STATE_READ_SPANS))
+        self.assertEqual(sum(n for _a,n in reads),174)
+        from tools.overworld.devtools_query_observer import STATE_OFFSETS
+        widths={'route_query_subject':12,'query_subject':12,'query_cargo':12,'query_bounds':8,
+            'query_origin':12,'query_cargoPosition':12,'goal':12,'lastWork':28,
+            'storage':4,'requestKey':4,'frame':4,'query_scopeRevision':4,'query_movementPolicyRevision':4,
+            'query_goalRevision':4,'query_dynamicRevision':4,'query_edges':4,'route_query_goalRevision':4,
+            'version':2,'size':2,'query_edgeCount':2,'route_nodeCount':2,'route_goalNode':2,
+            'route_proofNode':2,'route_proofLength':2}
+        for name in ('started','route_phase','work_edgeQueries','work_goalQueries','roleMask','distance',
+                     'required','candidate','scan','active','route_probeNeeded','edgeOwed','goalValid','goalDirty'):
+            widths[name]=1
+        for name,size in widths.items():
+            at=STATE_OFFSETS[name]
+            self.assertEqual(fields(name,size),raw[at:at+size],name)
+        with self.assertRaisesRegex(NativeObservationError,'outside the measured read plan'):fields('route',4)
+
+    def test_old_inline_owner_foreign_chunk_and_each_array_fail_closed(self):
+        for fault in ('old-inline','version','destructor','core-heap','aux-heap','overlap','unaligned',
+                      'nodes','old-aux-nodes','edges','visited','node-capacity','edge-capacity','hash-capacity',
+                      'visited-bitmap','changes','changes-bitmap'):
+            with self.subTest(fault=fault):
+                core,aux,destroy,read,write=self.fixture()
+                if fault=='old-inline':write(core,bytes(12))
+                elif fault=='version':write(core+8,struct.pack('<I',1))
+                elif fault=='destructor':write(core+4,struct.pack('<I',destroy+2))
+                elif fault=='core-heap':write(core-4,bytes((4,0,0,0)))
+                elif fault=='aux-heap':write(aux-4,bytes((11,0,0,0)))
+                elif fault=='overlap':write(core,struct.pack('<I',core+16))
+                elif fault=='unaligned':write(core,struct.pack('<I',aux+1))
+                elif fault=='old-aux-nodes':write(core+QUERY_STORAGE,struct.pack('<I',aux))
+                else:
+                    offset,size={'nodes':(0,4),'edges':(4,4),'visited':(8,4),
+                        'node-capacity':(12,2),'edge-capacity':(14,2),'hash-capacity':(16,4),
+                        'visited-bitmap':(24,4),'changes':(32,4),'changes-bitmap':(36,4)}[fault]
+                    write(core+QUERY_STORAGE+offset,bytes(size))
+                with self.assertRaises(NativeObservationError):workspace_allocation(read,core,destroy)
+
+
+if __name__ == "__main__":
+    unittest.main()

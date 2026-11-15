@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 1,
+  "id": "follower.goldenrod-hop-rebind",
+  "title": "Saved Mankey follows through Goldenrod and Route 34",
+  "mode": "normal",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "TICKETS.md#tkt-0085--follower-no-longer-moves-in-goldenrod",
+  "requirements": [
+    "current.goldenrod-follower-hop-rebind"
+  ],
+  "budgets": {
+    "maxSeconds": 240,
+    "maxFrames": 600,
+    "noProgressFrames": 96,
+    "minObservedFrames": 224
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    }
+  ],
+  "setup": [
+    {
+      "id": "saved-start",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 76,
+          "x": 358,
+          "z": 366,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "saved-follower",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "follower-settled",
+          "species": 56,
+          "partySlot": 2,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "bind-saved-mankey",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "gold-walk",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "gold-rest",
+      "op": "step",
+      "args": {
+        "frames": 64,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "route-down",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 385,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 128,
+        "noProgressFrames": 96
+      }
+    },
+    {
+      "id": "route-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 38,
+          "x": 358,
+          "z": 385,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "route-rest",
+      "op": "step",
+      "args": {
+        "frames": 64,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "gold-up",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 380,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 128,
+        "noProgressFrames": 96
+      }
+    },
+    {
+      "id": "gold-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 76,
+          "x": 358,
+          "z": 380,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "gold-return-rest",
+      "op": "step",
+      "args": {
+        "frames": 64,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "goldenrod-follower-hop-rebind-v1",
+      "when": "final"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "goldenrod-follower-hop-rebind-v1",
+      "subject": "mankey"
+    }
+  ]
+}

@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "id": "world.goldenrod-route34-entry",
+  "title": "Goldenrod cold Route 34 load, Y summon and normal entry return with the saved follower",
+  "status": "active",
+  "capabilities": [
+    "world.transition",
+    "mount.lifecycle"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/overworld-system/architecture.md#field-transition-protocol",
+    "actor": "Saved party-slot-2 Mankey (species56, personality2920357538). Temporarily select the saved slot-1 Cyndaquil (species155, personality2046726716), then summon that Mankey through normal Y input in Goldenrod. Each boundary checks the current native follower against that saved party identity.",
+    "trigger": "Native prepared teleport to Goldenrod76(339,381) and existing saved-Mankey/release/queue checks. Cold-load preflight teleports to Route34 map38(354,385) and back to Goldenrod76(339,381), each with64 neutral frames and bounded player/current saved-Mankey checks; return release queues must drain with zero admitted route steps. Then normal Y/L/release summons Cyndaquil, and two R presses while holding Y/release summons Mankey. Walk normally through340381,340383,354383 into Route34 map38(354,385), reverse to Goldenrod354383, then step left to353383.",
+    "observable": "Requirement current.goldenrod-route34-entry: the cold-load preflight preserves the current saved-party2 Mankey after both native prepared teleports. Its return queues finish before the unchanged normal-input test. Both normal Y release queues finish. Each route action reaches its exact admitted stock-step count and settled map/tile and rendered center. Saved Mankey has a verified current native identity and attached presentation in Goldenrod, Route34 and after return. Bind only after the route, then retain16 current full-identity frames and wait for the normal follower hop to finish.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Copy the current ROM and unchanged Continue save into a private session. Use the shared native teleport for Goldenrod76(339381), cold Route34 map38(354385), then Goldenrod76(339381). Warm up64 neutral frames after each teleport; require settled player/current saved-Mankey checks with120-frame follower waits and drained return release queues. Do not edit party, HP, follower choice, spawn state, movement timers or heap state."
+      },
+      {
+        "phase": "during-observation",
+        "target": "observation",
+        "change": "Read completed-main-queue snapshots and native player-step admissions. Follower-settled checks compare the current full handle, source and engine object/manager, role, species/form/level and personality with saved party slot2. Normal Y/L/R/release owns all selection changes. Bind the final current full handle only after both borders and the recovery step."
+      }
+    ],
+    "limits": [
+      "The registered live-actor-identity adapter accepts16 final current-subject frames after the exact recipe route and all mandatory summon/waypoint assertions pass. Missing or stale final subjects are rejected by existing controller copied-data controls.",
+      "This coarse regression catches the real abort/freeze through shared bounded stepping and cold-load follower absence through mandatory bounded saved-identity checks; it uses no injected fault. The old-ROM normal-walk reproduction aborted at354384 before the Route34 waypoint. A retained test3705 cold-load reproduction left no follower after the required native Route34 entry despite240 additional neutral frames.",
+      "It does not prove continuous follower actor lifetime, native motion presentation or exact rebind-event order across the border. Each boundary authenticates the same saved party Pokemon against its then-current full handle.",
+      "The fixture requires the existing living Mankey in slot2 and Cyndaquil in slot1 with the recorded saved personalities. A changed save/party is setup failure. Prepared teleport is not evidence for normal teleport behavior.",
+      "No FPS, long-run stability, all-city or all-party-species claim. No image capture."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": false,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Native prepared Goldenrod street setup with existing saved Mankey, then cold Route34 and Goldenrod return teleports. Each requires bounded current saved-follower checks; no normal player steps are admitted. The saved party remains unchanged."
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Hold Y and L, then release Y to summon saved Cyndaquil; hold Y, press and release R twice, then release Y to summon saved Mankey. Require both queues to finish."
+    },
+    {
+      "at": 2,
+      "kind": "input",
+      "value": "Normal stock-step-count-bound walking into Route34 and back, with exact settled positions and saved follower identity at each boundary."
+    },
+    {
+      "at": 3,
+      "kind": "lifecycle",
+      "value": "Take one recovery step and retain16 current fully bound Mankey frames with attached native presentation."
+    }
+  ],
+  "stop": {
+    "frameBudget": 2400,
+    "condition": "All cold-load preflight, Y queue and exact normal-route assertions, saved-follower boundary checks, recovery step,16 final bound frames and bounded follower-hop completion pass; first abort, invalid observation, missing follower or action timeout fails."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "The source save and saved party identity remain unchanged.",
+      "After the cold prepared Route34 entry and Goldenrod return, the current follower matches saved Mankey before normal Y selection or route steps.",
+      "Both normal Y summons reach releaseState0 with no queue request, pending command or capture owner.",
+      "Enter Route34 map38 at354385 and return toGoldenrod map76 at354383 using only normal input after setup.",
+      "At each boundary the current native follower matches the saved Mankey personality and party slot.",
+      "The final bound Mankey remains current and presentation-attached for16 completed queues."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "world.goldenrod-route34-entry",
+    "claims": [
+      "live-actor-identity"
+    ],
+    "minimumFrames": 16
+  }
+}

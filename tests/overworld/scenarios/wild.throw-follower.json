@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "id": "wild.throw-follower",
+  "title": "Wild Geodude throws the unchanged follower",
+  "status": "active",
+  "capabilities": [
+    "condition.evaluation",
+    "chase"
+  ],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "TICKETS.md",
+    "actor": "The unchanged saved party2 Mankey and one current ordinary Wild actor",
+    "trigger": "After one declared player teleport to the Goldenrod north gatehouse101(5,8), retain the unchanged saved party2 Mankey Follower. Request one ordinary Wild Geodude at(5,4). This existing indoor map has no ambient encounter pool, so the saved follower is the only Pokemon cargo. Normal RIGHT8, LEFT40 and RIGHT32 inputs move the player away during the free Cargo claim. Require actual follower body progress before pickup, then neutral input until launch. Require authored Player Trigger/Follower Cargo bindings, same-party full identity, complete native Throw flight and exact landing, then normal follower movement. No party, profile, binding, controller or population override.",
+    "observable": "Current native Trigger/Cargo bindings, HELD handoff, full shared Motion plan/poses, commit/control return and same-party normal movement",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "position",
+        "change": "One prepared player teleport to the Goldenrod north gatehouse101(5,8)."
+      },
+      {
+        "phase": "before-observation",
+        "target": "actors",
+        "change": "After one declared player teleport to the Goldenrod north gatehouse101(5,8), retain the unchanged saved party2 Mankey Follower. Request one ordinary Wild Geodude at(5,4). This existing indoor map has no ambient encounter pool, so the saved follower is the only Pokemon cargo. Normal RIGHT8, LEFT40 and RIGHT32 inputs move the player away during the free Cargo claim. Require actual follower body progress before pickup, then neutral input until launch. Require authored Player Trigger/Follower Cargo bindings, same-party full identity, complete native Throw flight and exact landing, then normal follower movement. No party, profile, binding, controller or population override."
+      }
+    ],
+    "limits": [
+      "Finite one-throw check; not a population, FPS or soak claim.",
+      "The quiet gatehouse isolates follower eligibility; Route29 competing-search progress is retained separately, with no claim that wild throwers must prefer followers over nearer wild cargo."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    },
+    {
+      "id": "geodude",
+      "species": 74,
+      "role": "WILD",
+      "acquisition": "spawn",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Declare the saved follower and ordinary Wild placement"
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Normal notice, free pursuit, pickup, Throw, landing and follower control"
+    }
+  ],
+  "stop": {
+    "frameBudget": 1800,
+    "condition": "One complete same-identity Throw and subsequent follower move"
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "After one declared player teleport to the Goldenrod north gatehouse101(5,8), retain the unchanged saved party2 Mankey Follower. Request one ordinary Wild Geodude at(5,4). This existing indoor map has no ambient encounter pool, so the saved follower is the only Pokemon cargo. Normal RIGHT8, LEFT40 and RIGHT32 inputs move the player away during the free Cargo claim. Require actual follower body progress before pickup, then neutral input until launch. Require authored Player Trigger/Follower Cargo bindings, same-party full identity, complete native Throw flight and exact landing, then normal follower movement. No party, profile, binding, controller or population override."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "wild.throw-follower",
+    "claims": [
+      "natural-input",
+      "live-actor-identity",
+      "profile-resolution",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumFrames": 2
+  }
+}

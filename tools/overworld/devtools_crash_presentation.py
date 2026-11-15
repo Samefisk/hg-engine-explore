@@ -5,18 +5,21 @@ import struct
 
 from tools.overworld.devtools_field_cleanup import symbol
 
-STATE_SIZE = 944
+STATE_SIZE = 952
 OFFSETS = (714, 724, 764)
 CODE = (
     ("OverworldWildSpawns_StartMovementCrashShake", 72,
-     "f4b00962374934bfeb10cbe154cbab4a0cde6e69820235bce26fc5b6f8ccea15"),
+     "12b2672202b5202501ac3a95123e8b99891fe228225dd3c2a10944d1842f6f43"),
     ("OverworldWildSpawns_RestoreMovementCrashShake", 76,
-     "4b10094df7767748b778037336d0b1431e3c255b7394a80d684524f04fbd06b0"),
+     "2c7bc08df91ea8d9460a45223d8bbb85bf93e679bd79aa37f7a37a39af1d149e"),
 )
-# Reviewed equivalent Start layout from build3096: only these two Thumb BL
-# displacements vary with placement. Every other byte, including state offsets,
-# remains pinned. The prior Start image is not retained; no old-byte parity is
-# inferred. Restore's original full-code digest remains unchanged.
+# Reviewed layout: only the two Thumb BL displacements listed in CALLS vary
+# with placement; every other byte, including the state offsets, is pinned.
+# Size 952 adds movementActorControlModes after followerReleaseState; the
+# crash-shake offsets are 0x2CA/0x2D4/0x2FC. Both digests were re-pinned from
+# the current build after review: Restore differs from the prior pin only in
+# those offsets (the prior pin encoded 734/744/784), and Start additionally
+# bounds slot with an unsigned compare (bhi) where the prior image used bgt.
 CALLS = {
     "OverworldWildSpawns_StartMovementCrashShake": (
         (22, "OverworldWildSpawns_RestoreMovementCrashShake"),

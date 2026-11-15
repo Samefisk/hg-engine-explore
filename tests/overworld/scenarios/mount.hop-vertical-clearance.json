@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.hop-vertical-clearance",
+  "title": "Mounted Hop respects native tree clearance and the Jump switch",
+  "status": "active",
+  "capabilities": [
+    "terrain",
+    "mount.lifecycle"
+  ],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "TICKETS.md",
+    "actor": "Saved party2 Mankey56, current full mounted identity, Route30 map34 at558375 native ground0x10000, ordinary Hop7/LongHop1..6/CanopyAccess, elevation30:150, Jump off.",
+    "trigger": "RIGHT only at most32 completed frames until first normal Hop start, then neutral96.",
+    "observable": "The first admitted Hop may choose any legal distance1..6. Fixed crossed tree cells562375/563375 have independently checked native top0x41580. Check the real plan against those cells and the visible Jump-off switch, all native mount/rider samples, exact selected support and one normal commit/finish/input return.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Disposable Continue save; checked teleport to Route30(558,375), neutral24, native mount of saved party2 Mankey, then bind. No profile, terrain, HP, motion, timer or collision writes."
+      }
+    ],
+    "limits": [
+      "This is the measured cardinal T80 fixture. It accepts a safe shorter legal Hop; no fixed six-tile endpoint is required.",
+      "Fixed native support heights and loaded catalog/terrain are checked independently of the actor rendered Y. Every accepted plan must be applied to the real paired presentation.",
+      "The saved fixture has Jump off. Actual-C shared tests separately cover permitted arc increases, blocked/no-cap clearance, another eligible mount and unmounted planner integration.",
+      "Copied-data controls prove evaluator sensitivity only. The final current-ROM registered run and the separate D1 pacing gate are still required."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Native mount of unchanged saved party2 Mankey at Route30(558,375)."
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "RIGHT to first legal Hop1..6, then neutral96."
+    }
+  ],
+  "stop": {
+    "frameBudget": 520,
+    "condition": "Require one legal RIGHT Hop1..6, full paired native poses, ordered commit/return, and exact support. A six-tile tree underpass or an obstacle arc increase with Jump off fails."
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED",
+      "CONTEXT_CHANGED",
+      "ACTOR_REBOUND",
+      "CONTROL_REBOUND"
+    ],
+    "invariants": [
+      "Same saved current full Mankey and rider binding",
+      "Normal Hop7/LongHop1..6/CanopyAccess with visible Jump off; no B",
+      "No underpass of crossed native tree tops and no unauthorized arc boost",
+      "Every elapsed paired native pose and one ordered commit/finish/input return",
+      "Final selected legal support and zero lasting height offset"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "mount.hop-vertical-clearance",
+    "claims": [
+      "natural-input",
+      "live-actor-identity",
+      "profile-resolution",
+      "rendered-motion",
+      "logical-commit",
+      "control-release"
+    ],
+    "minimumFrames": 24
+  }
+}

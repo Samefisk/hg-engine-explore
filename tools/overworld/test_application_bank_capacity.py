@@ -4,6 +4,7 @@ import copy
 import json
 from pathlib import Path
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -16,6 +17,7 @@ sys.path.insert(0, str(ROOT / "tools/overworld-viewer-v2"))
 import native_resolver
 import overworld_behavior_profile_viewer as authoring
 from overworld_application_bank_compiler import BankCapacityError, compile_bank, _species_values
+import validate_overworld_wild_blobs as blob_validator
 from tools.overworld.test_spawn_spatial import extract_function
 
 
@@ -23,6 +25,159 @@ class ApplicationBankCapacityTests(unittest.TestCase):
     def setUp(self):
         self.catalog = json.loads((ROOT / "data/overworld_behavior_profiles.json").read_text())
         self.species_header = ROOT / "include/constants/species.h"
+
+    def test_generated_shared_blob_validates_and_rejects_bad_slices(self):
+        """Validate the real generated C blob, including its owner sidecars."""
+        with tempfile.TemporaryDirectory(prefix="application-bank-blob-") as name:
+            scratch = Path(name)
+            source, executable = scratch / "dump.c", scratch / "dump"
+            source.write_text('''#include <stddef.h>
+#include <stdio.h>
+#include "overworld_wild_behavior_data.h"
+extern const OverworldWildBehaviorDataBlob gOverworldWildBehaviorDataBlob;
+int main(void){
+    fprintf(stderr,"%zu %zu %zu %u %u %u\\n",
+        offsetof(OverworldWildBehaviorDataBlob,applicationBankDirectory),
+        offsetof(OverworldWildBehaviorDataBlob,applicationBankIndexes),
+        offsetof(OverworldWildBehaviorDataBlob,conditionGlobalApplications),
+        OWBD_APPLICATION_BANK_DIRECTORY_COUNT,OWBD_APPLICATION_BANK_INDEX_COUNT,
+        OWBD_OVERRIDE_PROFILE_COUNT);
+    return fwrite(&gOverworldWildBehaviorDataBlob,1,
+        sizeof(gOverworldWildBehaviorDataBlob),stdout)
+        !=sizeof(gOverworldWildBehaviorDataBlob);
+}
+''')
+            subprocess.run(["cc", "-std=c99", "-DOVERWORLD_BEHAVIOR_HOST",
+                "-I", str(ROOT / "include"), "-I", str(ROOT / "data"),
+                str(ROOT / "data/OverworldWildBehaviorData.c"), str(source),
+                "-o", str(executable)], check=True, capture_output=True)
+            dumped = subprocess.run([str(executable)], check=True, capture_output=True)
+            blob = bytearray(dumped.stdout)
+            directory, indexes, owners, row_count, index_count, app_count = map(
+                int, dumped.stderr.split())
+            rows = [struct.unpack_from("<HHBB", blob, directory + n * 6)
+                    for n in range(row_count)]
+            spans = [(first, count) for _, first, count, _ in rows if count]
+            shared = next(span for span in spans if spans.count(span) > 1 and span[1] > 1)
+            first_shared = next(i for i, row in enumerate(rows) if row[1:3] == shared)
+            later_shared = next(i for i, row in enumerate(rows)
+                                if i > first_shared and row[1:3] == shared)
+            target = scratch / "behavior.bin"
+            header = ROOT / "include/overworld_wild_behavior_data.h"
+
+            def validate(data):
+                target.write_bytes(data)
+                blob_validator.validate_owbd(target, header)
+
+            validate(blob)
+            cases = []
+            bad = blob.copy()
+            struct.pack_into("<H", bad, directory + first_shared * 6 + 2, index_count)
+            cases.append(("range", bad, "application bank row.*invalid"))
+            bad = blob.copy()
+            struct.pack_into("<B", bad, directory + first_shared * 6 + 4, 33)
+            cases.append(("capacity", bad, "application bank row.*invalid"))
+            bad = blob.copy()
+            struct.pack_into("<H", bad, directory + 6, rows[0][0])
+            cases.append(("species-order", bad, "application bank row.*invalid"))
+            bad = blob.copy()
+            struct.pack_into("<H", bad, indexes + shared[0] * 2, app_count)
+            cases.append(("global-id", bad, "invalid global IDs"))
+            bad = blob.copy()
+            struct.pack_into("<H", bad, indexes + (shared[0] + 1) * 2,
+                             struct.unpack_from("<H", bad, indexes + shared[0] * 2)[0])
+            cases.append(("id-order", bad, "invalid global IDs"))
+            bad = blob.copy()
+            struct.pack_into("<HB", bad, directory + later_shared * 6 + 2,
+                             shared[0] + 1, shared[1] - 1)
+            cases.append(("partial-alias", bad, "partially overlaps"))
+            # Redirect every owner of one whole slice to another legal whole
+            # slice. Bounds and IDs still pass, but its old storage is orphaned.
+            lost = next(span for span in spans if span != shared)
+            bad = blob.copy()
+            for n, row in enumerate(rows):
+                if row[1:3] == lost:
+                    struct.pack_into("<HB", bad, directory + n * 6 + 2, *shared)
+            cases.append(("unowned-storage", bad, "index table is incomplete"))
+            bad = blob.copy()
+            struct.pack_into("<H", bad, owners, app_count)
+            cases.append(("condition-owner", bad, "invalid global owner"))
+            for label, broken, error in cases:
+                with self.subTest(fault=label), self.assertRaisesRegex(ValueError, error):
+                    validate(broken)
+
+    def test_equal_ordered_banks_share_storage_and_real_c_selection(self):
+        def subjects(*symbols):
+            return {"mode": "members", "members": list(symbols)}
+
+        catalog = {
+            "profiles": [
+                {"id": "normal", "kind": "normal", "fields": {}},
+                {"id": "conditional", "kind": "conditional", "fields": {},
+                 "conditions": [{"subjects": {"mode": "all"}},
+                                {"subjects": subjects("SPECIES_FARFETCHD")}]},
+            ],
+            "applications": [
+                {"id": "common", "profile": "normal", "target": {"mode": "all"}},
+                {"id": "pair", "profile": "normal",
+                 "target": subjects("SPECIES_PIDGEY", "SPECIES_SPEAROW")},
+                {"id": "different", "profile": "normal",
+                 "target": subjects("SPECIES_MANKEY")},
+                {"id": "conditional", "profile": "conditional"},
+                *({"id": role, "profile": "normal", "target": {"mode": "disabled"}}
+                  for role in ("follower", "mounted", "asleep", "tired")),
+            ],
+            "runtimeBindings": {"followerApplication": "follower",
+                "mountedApplication": "mounted", "forcedAsleepApplication": "asleep",
+                "defaultTiredApplication": "tired"},
+        }
+        bank = compile_bank(catalog, self.species_header)
+        self.assertEqual(bank, compile_bank(catalog, self.species_header))
+        rows = {row[0]: row for row in bank["rows"]}
+        expected = {16: [0, 1, 3, 4, 5, 6], 21: [0, 1, 3, 4, 5, 6],
+                    56: [0, 2, 3, 4, 5, 6], 83: [0, 3, 4, 5, 6],
+                    155: [0, 3, 4, 5, 6]}
+        self.assertEqual([row[0] for row in bank["rows"]], [16, 21, 56, 83, "0xFFFF"])
+        self.assertEqual(rows[16][1], rows[21][1])
+        self.assertNotEqual(rows[16][1], rows[56][1])
+        self.assertEqual(rows[83][1], rows["0xFFFF"][1])
+        self.assertEqual(len(bank["indexes"]), sum(map(len, {tuple(x) for x in expected.values()})))
+        self.assertLess(len(bank["indexes"]), sum(row[2] for row in bank["rows"]))
+
+        with tempfile.TemporaryDirectory(prefix="application-bank-intern-") as name:
+            scratch = Path(name)
+            actual = self._compiled_bank_selection(scratch / "shared", bank,
+                                                   len(catalog["applications"]), expected)
+            self.assertEqual(actual, expected)
+            # The same native selector must return the same full ordered IDs
+            # with the old physical layout, not merely valid slice bounds.
+            unshared = copy.deepcopy(bank)
+            unshared["rows"], unshared["indexes"] = [], []
+            for species, first, count in bank["rows"]:
+                unshared["rows"].append((species, len(unshared["indexes"]), count))
+                unshared["indexes"].extend(bank["indexes"][first:first + count])
+            self.assertEqual(self._compiled_bank_selection(scratch / "unshared", unshared,
+                len(catalog["applications"]), expected), actual)
+
+            wrong_alias = copy.deepcopy(bank)
+            index = next(i for i, row in enumerate(bank["rows"]) if row[0] == 56)
+            wrong_alias["rows"][index] = (56, rows[16][1], rows[56][2])
+            self.assertNotEqual(self._compiled_bank_selection(scratch / "wrong-alias", wrong_alias,
+                len(catalog["applications"]), expected)[56], expected[56])
+            for fault, change in (
+                ("reversed", lambda b: b["indexes"].__setitem__(
+                    slice(rows[16][1], rows[16][1] + rows[16][2]), list(reversed(expected[16])))),
+                ("out-of-range", lambda b: b["rows"].__setitem__(
+                    0, (16, len(b["indexes"]), rows[16][2]))),
+                ("over-capacity", lambda b: b["rows"].__setitem__(0, (16, rows[16][1], 33))),
+                ("bad-global-id", lambda b: b["indexes"].__setitem__(
+                    rows[16][1], len(catalog["applications"]))),
+            ):
+                broken = copy.deepcopy(bank)
+                change(broken)
+                with self.subTest(fault=fault):
+                    self.assertIsNone(self._compiled_bank_selection(scratch / fault, broken,
+                        len(catalog["applications"]), expected)[16])
 
     def test_more_than_255_enabled_apps_and_32_total_conditions_reach_c(self):
         catalog = copy.deepcopy(self.catalog)
@@ -182,8 +337,7 @@ class ApplicationBankCapacityTests(unittest.TestCase):
                         self.assertEqual((old, rejected["status"],
                             rejected["forcedOverrideMask"]), (0, 0, 0))
 
-    def _compiled_role_mask(self, case, bank, application_count, species,
-                            global_id, body):
+    def _bank_fixture(self, case, bank, application_count):
         case.mkdir()
         rows, indexes = bank["rows"], bank["indexes"]
         fake_header = f"""#ifndef OW_FAKE_DATA_H
@@ -211,6 +365,40 @@ typedef struct {{struct {{u16 overrideProfileCount;}} header;
             row[0] if isinstance(row[0], int) else 0xFFFF, row[1], row[2])
             for row in rows)
         index_values = ",".join(map(str, indexes))
+        initializer = ("static const OverworldWildBehaviorDataBlob blob={"
+                       f".header={{{application_count}}},"
+                       f".applicationBankDirectory={{{directory}}},"
+                       f".applicationBankIndexes={{{index_values}}}}};\n")
+        return initializer
+
+    def _compiled_bank_selection(self, case, bank, application_count, species):
+        initializer = self._bank_fixture(case, bank, application_count)
+        source = case / "driver.c"
+        source.write_text("#include <stdio.h>\n#include <stdlib.h>\n"
+            '#include "overworld_application_bank.h"\n' + initializer + """
+int main(int argc,char **argv){
+    for(int i=1;i<argc;i++){
+        unsigned species=(unsigned)strtoul(argv[i],NULL,10);
+        OverworldApplicationBank bank;
+        printf("%u",species);
+        if(!OverworldApplicationBank_Select(&blob,(u16)species,&bank)) printf(" invalid");
+        else for(unsigned n=0;n<bank.count;n++) printf(" %u",bank.globalIds[n]);
+        putchar('\\n');
+    }
+    return 0;
+}
+""")
+        executable = case / "driver"
+        subprocess.run(["cc", "-std=c99", "-O0", "-Wall", "-Wextra", "-I",
+                        str(case), str(source), "-o", str(executable)],
+                       check=True, capture_output=True, text=True)
+        output = subprocess.check_output([str(executable), *map(str, species)], text=True)
+        return {int(parts[0]): None if parts[1:] == ["invalid"] else list(map(int, parts[1:]))
+                for line in output.splitlines() if (parts := line.split())}
+
+    def _compiled_role_mask(self, case, bank, application_count, species,
+                            global_id, body):
+        initializer = self._bank_fixture(case, bank, application_count)
         prelude = """#include <stdio.h>
 #include <string.h>
 #include "overworld_application_bank.h"
@@ -224,10 +412,7 @@ typedef struct {u32 activeApplicationMask;u16 winningConditionId,resolvedTargetC
     u8 resolvedTargetSourceApplication;Target resolvedTarget;} Result;
 typedef struct {Context context;Request request;Result result;} OverworldWildBehaviorConditionRuntime;
 """
-        driver = ("static const OverworldWildBehaviorDataBlob blob={"
-                  f".header={{{application_count}}},"
-                  f".applicationBankDirectory={{{directory}}},"
-                  f".applicationBankIndexes={{{index_values}}}}};\n"
+        driver = (initializer +
                   "int main(void){OverworldWildBehaviorConditionRuntime runtime={0};"
                   f"runtime.context.species={species};"
                   f"int ok=OverworldBehaviorCondition_BuildRequest(&runtime,{global_id},&blob);"

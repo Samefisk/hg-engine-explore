@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Generate the compact overworld-wild surface catalog from approved model templates.
 
-The manifest describes reviewed, model-local roof planes or conservative authored
-roof bounds or point perches. This script discovers every matching placement, samples
+The manifest describes reviewed, model-local roof planes, native face selections,
+conservative authored roof bounds or point perches. This script discovers every matching placement, samples
 the rendered height at each authored tile center, coalesces equal-height nodes,
 clips rectangles at 32x32 block boundaries, and emits compact runtime-compatible
 catalog rows. Cross-block identity is encoded as an anchor-block delta.
@@ -417,10 +417,12 @@ def verify_model_template(
 ) -> dict[str, Any]:
     model_id = parse_int(spec["model_id"], "model_id")
     expected_name = str(spec["model_name"])
-    relative_height = parse_int(spec["relative_height_fx32"], f"model {model_id} relative height")
     generation = str(spec.get("generation", "mesh_plane"))
+    relative_height = None if generation == "mesh_faces" else parse_int(
+        spec["relative_height_fx32"], f"model {model_id} relative height"
+    )
     require(
-        generation in ("mesh_plane", "authored_model_bounds", "authored_node"),
+        generation in ("mesh_plane", "mesh_faces", "authored_model_bounds", "authored_node"),
         f"model {model_id}: invalid generation mode {generation}",
     )
     model_name, position_scale, faces = model_geometry(building_models, model_id)
@@ -429,8 +431,8 @@ def verify_model_template(
     confidence = str(spec["confidence"])
     require(confidence in ("mesh_verified", "authored_approximation"), f"model {model_id}: invalid confidence")
     require(
-        (generation == "mesh_plane" and confidence == "mesh_verified")
-        or (generation != "mesh_plane" and confidence == "authored_approximation"),
+        (generation in ("mesh_plane", "mesh_faces") and confidence == "mesh_verified")
+        or (generation in ("authored_model_bounds", "authored_node") and confidence == "authored_approximation"),
         f"model {model_id}: generation mode and confidence disagree",
     )
     surface_type_name = str(spec.get("surface_type", "rooftop"))
@@ -442,6 +444,26 @@ def verify_model_template(
     all_name, all_position_scale, all_faces = model_all_faces(building_models, model_id)
     require(all_name == model_name and all_position_scale == position_scale, f"model {model_id}: inconsistent model parse")
     component_faces: list[tuple[list[tuple[int, int, int]], str]] = []
+    native_face_indices: list[int] = []
+    if generation == "mesh_faces":
+        native_face_indices = [parse_int(value, f"model {model_id} native face")
+                               for value in spec["native_face_indices"]]
+        require(native_face_indices and len(set(native_face_indices)) == len(native_face_indices),
+                f"model {model_id}: native face selection is empty or repeats a face")
+        require(parse_int(spec["expected_face_count"], "expected face count") == len(all_faces),
+                f"model {model_id}: native face count changed; review the selection")
+        require(all(0 <= index < len(all_faces) for index in native_face_indices),
+                f"model {model_id}: native face index is out of range")
+        component_faces = [all_faces[index] for index in native_face_indices]
+        excluded = [str(value).lower() for value in spec.get("exclude_material_contains", ["kage"])]
+        require(all(face_has_projected_area(face) and not any(
+                    fragment in material.lower() for fragment in excluded)
+                    for face, material in component_faces),
+                f"model {model_id}: selected native face is vertical or excluded")
+        require(sorted({material for _face, material in component_faces}) == sorted(spec["expected_material_names"]),
+                f"model {model_id}: native roof materials changed; review the selection")
+        require(spec.get("require_topmost_mesh") is True,
+                f"model {model_id}: native face selection must exclude occluded roof nodes")
     if generation == "mesh_plane":
         component_scale, component_faces = connected_roof_component_faces(
             building_models,
@@ -478,7 +500,7 @@ def verify_model_template(
             for vertex in face
         ]
         plane_polygons.append((polygon, material))
-    if generation not in ("authored_model_bounds", "authored_node"):
+    if generation == "mesh_plane":
         require(plane_polygons, f"model {model_id}: no horizontal faces at {relative_height:#x}")
 
     verified_offsets = []
@@ -495,7 +517,7 @@ def verify_model_template(
 
     rectangle = spec.get("rectangle")
     min_x_q16 = min_z_q16 = width = height = None
-    if generation not in ("authored_model_bounds", "authored_node"):
+    if generation == "mesh_plane":
         require(isinstance(rectangle, dict), f"model {model_id}: rectangle is required")
         min_x_q16 = parse_int(rectangle["min_center_x_q16"], f"model {model_id} rectangle x")
         min_z_q16 = parse_int(rectangle["min_center_z_q16"], f"model {model_id} rectangle z")
@@ -525,7 +547,7 @@ def verify_model_template(
     ]
     require(allowed_widths and allowed_heights, f"model {model_id}: allowed dimensions are required")
 
-    return {
+    verified = {
         "model_id": model_id,
         "model_name": model_name,
         "generation": generation,
@@ -555,6 +577,12 @@ def verify_model_template(
         "allowed_heights": allowed_heights,
         "exclude_material_contains": [str(value).lower() for value in spec.get("exclude_material_contains", ["kage"])],
     }
+    if generation == "mesh_faces":
+        verified.update(native_face_indices=native_face_indices,
+                        expected_face_count=len(all_faces),
+                        expected_material_names=sorted(spec["expected_material_names"]),
+                        require_topmost_mesh=True)
+    return verified
 
 
 def mesh_rectangle_for_placement(
@@ -691,8 +719,9 @@ def roof_triangles_for_model(
         excluded = spec["exclude_material_contains"]
         faces = [
             (face, material)
-            for face, material in all_faces
+            for index, (face, material) in enumerate(all_faces)
             if not any(fragment in material.lower() for fragment in excluded)
+            and (spec["generation"] != "mesh_faces" or index in spec["native_face_indices"])
         ]
 
     factor = Fraction(position_scale, 4096)
@@ -729,6 +758,52 @@ def sample_triangle_height(
 
 def ceil_fraction(value: Fraction) -> int:
     return -(-value.numerator // value.denominator)
+
+
+def sample_native_roof_nodes_q4(
+    building_models: NarcArchive,
+    spec: dict[str, Any],
+    placement: BuildingPlacement,
+) -> tuple[dict[tuple[int, int], int], int]:
+    """Sample reviewed native roof faces without filling holes or occlusions.
+
+    Face selectors are model-local and reused at every placement. A higher
+    native sign, antenna or ornament blocks a roof node beneath it.
+    """
+
+    roof = roof_triangles_for_model(building_models, spec)
+    native = roof_triangles_for_model(building_models, dict(spec, generation="authored_model_bounds"))
+    origin_x = 16 * FX32_PER_TILE + placement.x_fx32
+    origin_y = 16 * FX32_PER_TILE + placement.z_fx32
+    min_x = ceil_fraction((origin_x + min(v[0] for t in roof for v in t)) / FX32_PER_TILE - Fraction(1, 2))
+    max_x = math.floor((origin_x + max(v[0] for t in roof for v in t)) / FX32_PER_TILE - Fraction(1, 2))
+    min_y = ceil_fraction((origin_y + min(v[2] for t in roof for v in t)) / FX32_PER_TILE - Fraction(1, 2))
+    max_y = math.floor((origin_y + max(v[2] for t in roof for v in t)) / FX32_PER_TILE - Fraction(1, 2))
+    nodes: dict[tuple[int, int], int] = {}
+    occluded = 0
+    for y in range(min_y, max_y + 1):
+        for x in range(min_x, max_x + 1):
+            qx = Fraction(x * FX32_PER_TILE + FX32_PER_TILE // 2 - origin_x)
+            qy = Fraction(y * FX32_PER_TILE + FX32_PER_TILE // 2 - origin_y)
+            hits = [height for triangle in roof
+                    if (height := sample_triangle_height(qx, qy, triangle)) is not None]
+            if not hits:
+                continue
+            height = max(hits)
+            top = max(sample for triangle in native
+                      if (sample := sample_triangle_height(qx, qy, triangle)) is not None)
+            if top > height:
+                occluded += 1
+                continue
+            nodes[(x, y)] = ceil_fraction((placement.y_fx32 + height) / 16)
+    require(nodes, f"land {placement.land_data_id} object {placement.object_index}: selected roof has no visible tile centers")
+    width = max(x for x, _y in nodes) - min(x for x, _y in nodes) + 1
+    height = max(y for _x, y in nodes) - min(y for _x, y in nodes) + 1
+    require(width in spec["allowed_widths"] and height in spec["allowed_heights"],
+            f"land {placement.land_data_id} object {placement.object_index}: unexpected native roof dimensions {width}x{height}")
+    require(1 <= width <= 32 and 1 <= height <= 32 and len(nodes) <= 255,
+            f"model {placement.model_id}: native roof footprint exceeds catalog bounds")
+    return nodes, occluded
 
 
 def sample_roof_height_grid_q4(
@@ -1001,11 +1076,10 @@ def canopy_surface_tiles(
     repeat_height: int,
     surface_rows_from_bottom: int,
 ) -> tuple[set[tuple[int, int]], set[str], dict[str, Any]]:
-    """Extract crown supports from flat repeated tree footprints.
+    """Extract tree-top support from complete mesh-verified tree footprints.
 
-    The flat material records each tree as a two-by-two footprint. Its bottom
-    row aligns with the high edge of the paired tree billboard. The other row
-    is the visible tree shoulder, not a standing surface.
+    Every tile of the two-by-two footprint can receive an adjacent Hop.
+    Collision alone does not identify a tree or grant a landing surface.
     """
 
     polygons = {polygon["index"]: polygon for polygon in model["polygons"]}
@@ -1195,14 +1269,14 @@ def generate_catalog(
         "native canopy repeat height",
     )
     canopy_surface_rows_from_bottom = parse_int(
-        raw_native_canopy.get("surface_rows_from_bottom", 1),
+        raw_native_canopy.get("surface_rows_from_bottom", 2),
         "native canopy surface rows from bottom",
     )
     require(
         canopy_repeat_width == 2
         and canopy_repeat_height == 2
-        and canopy_surface_rows_from_bottom == 1,
-        "native canopy meshes must expose one bottom support row from each two-by-two footprint",
+        and canopy_surface_rows_from_bottom == canopy_repeat_height,
+        "native canopy meshes must expose the complete two-by-two footprint",
     )
     native_canopy_height_offset_fx32 = parse_int(
         raw_native_canopy["height_above_ground_fx32"],
@@ -1256,18 +1330,18 @@ def generate_catalog(
         str(manifest.get("common_model_name_pattern", r"(^|_)(pc|fs|h0[123])($|_)")),
         re.IGNORECASE,
     )
+    roof_model_ids = {spec["model_id"] for spec in roof_specs}
     discovered_common: dict[int, dict[str, Any]] = {}
     for source_cell in cells:
         for placement in placements[source_cell.land_data_id]:
             model_name, _position_scale, _faces = model_geometry(building_models, placement.model_id)
-            if common_pattern.search(model_name):
+            if common_pattern.search(model_name) or placement.model_id in roof_model_ids:
                 row = discovered_common.setdefault(
                     placement.model_id,
                     {"model_id": placement.model_id, "model_name": model_name, "placements": 0},
                 )
                 row["placements"] += 1
 
-    roof_model_ids = {spec["model_id"] for spec in roof_specs}
     missing_common = sorted(set(discovered_common) - roof_model_ids)
     require(
         not missing_common,
@@ -1349,6 +1423,8 @@ def generate_catalog(
                 f"m{source_cell.matrix_id}_x{source_cell.matrix_x}_y{source_cell.matrix_y}_"
                 f"land{source_cell.land_data_id}_obj{placement.object_index}_model{placement.model_id}"
             )
+            native_nodes: dict[tuple[int, int], int] = {}
+            occluded_node_count = 0
             if spec["generation"] == "mesh_plane":
                 (
                     local_min_x,
@@ -1357,6 +1433,15 @@ def generate_catalog(
                     rectangle_height,
                     mesh_component_added_node_count,
                 ) = mesh_rectangle_for_placement(building_models, spec, placement)
+                world_min_x = source_cell.matrix_x * CELL_SIZE + local_min_x
+                world_min_y = source_cell.matrix_y * CELL_SIZE + local_min_y
+            elif spec["generation"] == "mesh_faces":
+                native_nodes, occluded_node_count = sample_native_roof_nodes_q4(building_models, spec, placement)
+                local_min_x = min(x for x, _y in native_nodes)
+                local_min_y = min(y for _x, y in native_nodes)
+                rectangle_width = max(x for x, _y in native_nodes) - local_min_x + 1
+                rectangle_height = max(y for _x, y in native_nodes) - local_min_y + 1
+                mesh_component_added_node_count = 0
                 world_min_x = source_cell.matrix_x * CELL_SIZE + local_min_x
                 world_min_y = source_cell.matrix_y * CELL_SIZE + local_min_y
             elif spec["generation"] == "authored_model_bounds":
@@ -1379,7 +1464,17 @@ def generate_catalog(
                     f"model {placement.model_id}: unsupported generation mode {spec['generation']}"
                 )
 
-            if spec["generation"] == "authored_node":
+            if spec["generation"] == "mesh_faces":
+                height_rectangles = [
+                    (x - local_min_x, y - local_min_y, width, height, value)
+                    for value in sorted(set(native_nodes.values()))
+                    for x, y, width, height in partition_tile_rectangles(
+                        {tile for tile, sampled in native_nodes.items() if sampled == value}
+                    )
+                ]
+                fallback_nodes = []
+                sampled_heights = list(native_nodes.values())
+            elif spec["generation"] == "authored_node":
                 height_grid_q4 = [[
                     (placement.y_fx32 + spec["relative_height_fx32"] + 15) // 16
                 ]]
@@ -1397,7 +1492,9 @@ def generate_catalog(
                     rectangle_width,
                     rectangle_height,
                 )
-            height_rectangles = partition_constant_height_rectangles(height_grid_q4)
+            if spec["generation"] != "mesh_faces":
+                height_rectangles = partition_constant_height_rectangles(height_grid_q4)
+                sampled_heights = [value for row in height_grid_q4 for value in row]
             logical_groups.append(
                 {
                     "id": group_id,
@@ -1414,11 +1511,14 @@ def generate_catalog(
                     "mesh_fallback_node_count": len(fallback_nodes),
                     "mesh_fallback_nodes": [list(node) for node in fallback_nodes],
                     "mesh_component_added_node_count": mesh_component_added_node_count,
-                    "minimum_height_fx32": min(min(row) for row in height_grid_q4) << 4,
-                    "maximum_height_fx32": max(max(row) for row in height_grid_q4) << 4,
+                    "minimum_height_fx32": min(sampled_heights) << 4,
+                    "maximum_height_fx32": max(sampled_heights) << 4,
                     "confidence": spec["confidence"],
                 }
             )
+            if spec["generation"] == "mesh_faces":
+                logical_groups[-1].update(node_count=len(native_nodes),
+                                          mesh_occluded_node_count=occluded_node_count)
 
             for rectangle_x, rectangle_y, rectangle_width, rectangle_height, full_height_q4 in height_rectangles:
                 require(0 < full_height_q4 <= 0xFFFFFF, f"{group_name}: Q4 height does not fit paged encoding")
@@ -2110,6 +2210,8 @@ def render_outputs(
             "mesh_footprint_method": "edge_connected_projected_faces_seeded_from_reviewed_plane",
             "mesh_triangle_source": "connected_roof_component",
             "authored_bounds_triangle_source": "all_non_shadow_faces",
+            "selected_faces_triangle_source": "reviewed_native_face_indices",
+            "selected_faces_missing_mesh_policy": "omit_missing_or_occluded_nodes",
         },
         "models": [
             {key: value for key, value in spec.items()}
@@ -2127,7 +2229,7 @@ def render_outputs(
             "templates": len(template_shapes),
             "logical_groups": len(logical_groups),
             "authored_nodes": sum(
-                group["width"] * group["height"] for group in logical_groups
+                group.get("node_count", group["width"] * group["height"]) for group in logical_groups
             ),
             "height_rectangles": sum(
                 group["height_rectangle_count"] for group in logical_groups

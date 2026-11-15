@@ -620,11 +620,15 @@ def _run_follower_mounted_parity_scenario(
 def verify_acceleration_mode_compatibility(root, blob, adapter, executable):
     """Exercise retained numeric masks through the real C resolver."""
     original = bytearray(blob.read_bytes())
+    blob_version = struct.unpack_from("<H", original, 4)[0]
     class_offset = struct.unpack_from("<I", original, 12)[0]
     class_size = struct.unpack_from("<H", original, 18)[0]
     override_offset, count, override_size = struct.unpack_from("<IHH", original, 36)
-    if class_size != 80 or override_size != 228 or count == 0:
+    override_layouts = {95: (228, 0), 96: (232, 4)}
+    layout = override_layouts.get(blob_version)
+    if class_size != 80 or layout is None or override_size != layout[0] or count == 0:
         raise AssertionError("acceleration fixture blob layout differs")
+    match_delta = layout[1]
     # Keep the validated header and all unrelated sections. Disable all old
     # applications, then force one test application for both resolved lanes.
     original[override_offset:override_offset + count * override_size] = bytes(count * override_size)
@@ -654,7 +658,9 @@ def verify_acceleration_mode_compatibility(root, blob, adapter, executable):
             data = bytearray(original)
             data[class_offset + 71] = parent
             data[class_offset + 50] = 120
-            start = override_offset + application_index * override_size
+            # Offsets below use the v95 match prefix. v96 adds map scope and
+            # padding before every override field, without changing profiles.
+            start = override_offset + application_index * override_size + match_delta
             # Also replace the following packed field. Skipping field67 must
             # still advance its masks and must not skip this neighbour.
             struct.pack_into("<I", data, start + 28, bit | (1 << 26))

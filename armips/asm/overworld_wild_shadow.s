@@ -92,6 +92,19 @@ overworld_wild_native_shadow_filter equ 0x023BF36C
 .org 0x020602A2
     bl 0x022500B0
 
+// sub_02060698 (move start) and sub_020606CC (move end) raise the
+// very-tall-grass effect (ov01_021FF8F0) the same way. Each one holds a slot
+// in the 48-record effect pool until the object leaves its tile; when the pool
+// is full the stock init writes through a NULL sprite (National Park crash).
+// Pass mode | 2 so the same gate rustles once per tile and calls
+// ov01_021FF8F0 with the stock mode.
+.org 0x020606C2
+    mov r1, #2
+    bl 0x022500B0
+.org 0x020606F6
+    mov r1, #3
+    bl 0x022500B0
+
 // sub_0205DA34 (player step collision) ends with "add r0, r4, #0; pop
 // {r3-r7, pc}". Overlay 2's water sink takes that return (player object in
 // r6, facing in r7): a deep-water step is open while riding a Water Runner

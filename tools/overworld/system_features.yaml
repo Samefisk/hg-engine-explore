@@ -2125,6 +2125,32 @@
       ]
     },
     {
+      "id": "host.spawn-behind-buildings",
+      "title": "Verify Behind Buildings placement, profile persistence and shortcut rejection",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_spawn_behind_buildings.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "tools/overworld/behavior_schema.json",
+        "include/overworld_wild_behavior_data.h",
+        "lib/overworld/overworld_behavior_resolver.c",
+        "lib/overworld/overworld_pickup_landing_wild.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "scripts/overworld_behavior_profile_viewer.py",
+        "scripts/validate_overworld_wild_blobs.py",
+        "tools/overworld-viewer-v2/static/profiles.js",
+        "tools/overworld/test_behind_buildings_profile.py",
+        "tools/overworld/test_spawn_behind_buildings.py",
+        "tools/overworld/test_spawn_behind_shortcuts.py"
+      ]
+    },
+    {
       "id": "host.spawn-destination-budget",
       "title": "Verify profile destination scan parity and per-update budget",
       "proofLevel": "S1",
@@ -4701,6 +4727,611 @@
         "tests/overworld/test-recipes/population.route30.saturated-headroom.json",
         "tests/overworld/scenarios/population.route30.saturated-headroom.json"
       ]
+    },
+    {
+      "id": "runtime.mounted-mankey-adjacent-canopy",
+      "title": "Check exact directional mounted Mankey tree-top Hop",
+      "proofLevel": "S3",
+      "costTier": 2,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "mount.mankey-adjacent-canopy"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_mount*.h",
+        "include/overworld_actor*.h",
+        "include/overworld_motion*.h",
+        "src/overworld_mount*overlay/**",
+        "src/overworld_actor_system_overlay/**",
+        "src/pokemon_move_history_task6_overlay/**",
+        "lib/overworld/overworld_motion_model.c",
+        "tools/overworld/devtools_mounted_canopy_hop*.py",
+        "tools/overworld/test_devtools_mounted_canopy_hop_measurement.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/mount.mankey-adjacent-canopy.json",
+        "tests/overworld/scenarios/mount.mankey-adjacent-canopy.json",
+        "data/overworld_wild_roof_catalog_manifest.json",
+        "data/generated/overworld_wild_roof_catalog.*",
+        "tools/generate_overworld_wild_roof_catalog.py",
+        "src/overworld_wild_runtime_overlay/**"
+      ]
+    },
+    {
+      "id": "runtime.world.goldenrod-route34-entry",
+      "title": "Goldenrod Y summon and normal Route 34 entry return with the saved follower",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "world.goldenrod-route34-entry"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "armips/asm/field_heap_budget.s",
+        "overlays.mk",
+        "lib/overworld/overworld_field_model_alloc.c",
+        "lib/overworld/overworld_field_capsule.ld",
+        "scripts/verify_overworld_field_capsule.py",
+        "scripts/pokemon_move_history_build_manifest.py",
+        "src/field/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/overworld_follower_selector_overlay/**",
+        "src/overworld_follower_release_overlay2/**",
+        "src/overworld_follower_selector_icons_overlay2/**",
+        "src/overworld_mount_overlay/**",
+        "src/overworld_actor_system_overlay/**",
+        "lib/overworld/overworld_query_code_addon*.c",
+        "lib/overworld/overworld_cargo_query_wild.c",
+        "include/overworld*.h",
+        "data/OverworldWildBehaviorData.c",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_movement_predicates.py",
+        "tools/overworld/devtools_records.py",
+        "tools/overworld/devtools_runtime.py",
+        "tools/overworld/devtools_engine.py",
+        "tools/overworld/control.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/world.goldenrod-route34-entry.json",
+        "tests/overworld/scenarios/world.goldenrod-route34-entry.json"
+      ]
+    },
+    {
+      "id": "runtime.population.goldenrod-behind-buildings",
+      "title": "Goldenrod natural Behind Buildings births",
+      "proofLevel": "S3",
+      "costTier": 2,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "population.goldenrod-behind-buildings"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "armips/data/encounters.s",
+        "data/OverworldWildEncounterLookupData.c",
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "data/overworld_wild_roof_catalog_manifest.json",
+        "data/generated/overworld_wild_roof_catalog.json",
+        "include/overworld_wild_behavior_data.h",
+        "lib/overworld/overworld_behavior_resolver.c",
+        "src/overworld_wild_behavior_data_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "lib/overworld/overworld_pickup_landing_wild.c",
+        "tools/overworld/devtools_goldenrod_spawn_*.py",
+        "tools/overworld/devtools_spawn_surface_measurement.py",
+        "tools/overworld/devtools_spawn_outcome_records.py",
+        "tests/overworld/test-recipes/population.goldenrod-behind-buildings.json",
+        "include/overworld_behavior_resolver.h",
+        "armips/include/macros.s",
+        "tools/overworld/behavior_schema.json",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/control.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/runtime_proof_registry.json"
+      ]
+    },
+    {
+      "id": "runtime.population.goldenrod-raised-birds",
+      "title": "Goldenrod natural rooftop bird births",
+      "proofLevel": "S3",
+      "costTier": 2,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "population.goldenrod-raised-birds"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "armips/data/encounters.s",
+        "data/OverworldWildEncounterLookupData.c",
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "data/overworld_wild_roof_catalog_manifest.json",
+        "data/generated/overworld_wild_roof_catalog.json",
+        "include/overworld_wild_behavior_data.h",
+        "lib/overworld/overworld_behavior_resolver.c",
+        "src/overworld_wild_behavior_data_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "lib/overworld/overworld_pickup_landing_wild.c",
+        "tools/overworld/devtools_goldenrod_spawn_*.py",
+        "tools/overworld/devtools_spawn_surface_measurement.py",
+        "tools/overworld/devtools_spawn_outcome_records.py",
+        "tests/overworld/test-recipes/population.goldenrod-raised-birds.json",
+        "include/overworld_behavior_resolver.h",
+        "armips/include/macros.s",
+        "tools/overworld/behavior_schema.json",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/control.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tools/overworld/fixtures/goldenrod_native_roofs.json",
+        "tools/overworld/fixtures/goldenrod_roof_window.json",
+        "tools/generate_overworld_wild_roof_catalog.py"
+      ]
+    },
+    {
+      "id": "runtime.population.goldenrod-underground",
+      "title": "Goldenrod Underground natural Land births",
+      "proofLevel": "S3",
+      "costTier": 2,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "population.goldenrod-underground"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "armips/data/encounters.s",
+        "data/OverworldWildEncounterLookupData.c",
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "data/overworld_wild_roof_catalog_manifest.json",
+        "data/generated/overworld_wild_roof_catalog.json",
+        "include/overworld_wild_behavior_data.h",
+        "lib/overworld/overworld_behavior_resolver.c",
+        "src/overworld_wild_behavior_data_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "lib/overworld/overworld_pickup_landing_wild.c",
+        "tools/overworld/devtools_goldenrod_spawn_*.py",
+        "tools/overworld/devtools_spawn_surface_measurement.py",
+        "tools/overworld/devtools_spawn_outcome_records.py",
+        "tests/overworld/test-recipes/population.goldenrod-underground.json",
+        "include/overworld_behavior_resolver.h",
+        "armips/include/macros.s",
+        "tools/overworld/behavior_schema.json",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/control.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/runtime_proof_registry.json"
+      ]
+    },
+    {
+      "id": "host.goldenrod-encounters",
+      "title": "Goldenrod encounter slots, clocks, map scoping and normal movement",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_goldenrod_encounters.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "armips/data/encounters.s",
+        "armips/include/macros.s",
+        "data/OverworldWildEncounterLookupData.c",
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_wild_behavior_data.h",
+        "include/overworld_behavior_resolver.h",
+        "lib/overworld/overworld_behavior_resolver.c",
+        "src/overworld_wild_helper_overlay/**",
+        "src/overworld_wild_behavior_data_overlay/**",
+        "scripts/build_overworld_wild_encounter_data.py",
+        "scripts/validate_overworld_wild_blobs.py",
+        "tools/overworld/test_goldenrod_encounters.py",
+        "tools/overworld/test_devtools_goldenrod_spawn.py",
+        "tools/overworld/devtools_goldenrod_spawn_*.py",
+        "tools/overworld/devtools_spawn_surface_measurement.py"
+      ]
+    },
+    {
+      "id": "host.goldenrod-spawn-proof",
+      "title": "Goldenrod natural native landing and copied failure controls",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_devtools_goldenrod_spawn.py"
+      ],
+      "requires": [
+        "source"
+      ],
+      "sourcePatterns": [
+        "armips/data/encounters.s",
+        "armips/include/macros.s",
+        "data/OverworldWildEncounterLookupData.c",
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_wild_behavior_data.h",
+        "include/overworld_behavior_resolver.h",
+        "lib/overworld/overworld_behavior_resolver.c",
+        "src/overworld_wild_helper_overlay/**",
+        "src/overworld_wild_behavior_data_overlay/**",
+        "scripts/build_overworld_wild_encounter_data.py",
+        "scripts/validate_overworld_wild_blobs.py",
+        "tools/overworld/test_goldenrod_encounters.py",
+        "tools/overworld/test_devtools_goldenrod_spawn.py",
+        "tools/overworld/devtools_goldenrod_spawn_*.py",
+        "tools/overworld/devtools_spawn_surface_measurement.py"
+      ]
+    },
+    {
+      "id": "runtime.follower.goldenrod-hop-rebind",
+      "title": "Saved Mankey follows through Goldenrod and Route 34",
+      "proofLevel": "S3",
+      "costTier": 3,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "follower.goldenrod-hop-rebind"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "dsv",
+        "emulator"
+      ],
+      "sourcePatterns": [
+        "src/overworld_actor_system_overlay/**",
+        "src/overworld_wild_spawns_overlay/**",
+        "lib/overworld/overworld_behavior_condition_runtime.c",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_goldenrod_follower_*.py"
+      ]
+    },
+    {
+      "id": "runtime.mount-airborne-input",
+      "title": "Check ignored airborne Select and one landed Y switch",
+      "proofLevel": "S3",
+      "costTier": 2,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "mount.airborne-input"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_mount*.h",
+        "include/overworld_actor*.h",
+        "include/overworld_motion*.h",
+        "src/overworld_mount*overlay/**",
+        "src/overworld_follower_selector_overlay/**",
+        "src/field/overworld_mount_field_input.c",
+        "src/overworld_actor_system_overlay/**",
+        "src/pokemon_move_history_task6_overlay/**",
+        "lib/overworld/overworld_motion_model.c",
+        "tools/overworld/devtools_mount_airborne*.py",
+        "tools/overworld/test_devtools_mount_airborne.py",
+        "tools/overworld/fixtures/mount_airborne_3709_red.json",
+        "tools/overworld/devtools_mounted_canopy_hop_measurement.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/mount.airborne-input.json",
+        "tests/overworld/scenarios/mount.airborne-input.json"
+      ]
+    },
+    {
+      "id": "runtime.follower.route34-throw",
+      "title": "Saved follower Throw flow on Route34",
+      "proofLevel": "S3",
+      "costTier": 2,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "follower.route34-throw"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/overworld_target_bindings.h",
+        "include/overworld_cargo_query.h",
+        "include/overworld_cargo_query_wild.h",
+        "include/overworld_cargo_read_wild.h",
+        "include/overworld_pickup_route*.h",
+        "lib/overworld/overworld_target_bindings.c",
+        "lib/overworld/overworld_cargo*.c",
+        "lib/overworld/overworld_pickup*.c",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/player_health_overlay/player_health_throw_observation.c",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_follower_throw*.py",
+        "tools/overworld/test_devtools_follower_throw_measurement.py",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tests/overworld/test-recipes/follower.throw-moving-cargo.json",
+        "tests/overworld/scenarios/follower.throw-moving-cargo.json",
+        "src/pokemon_move_history_task6_overlay/overworld_actor_hop_planner.c",
+        "src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.c",
+        "tools/overworld/devtools_walk_matrix_observer.py",
+        "lib/overworld/overworld_cargo_query_wild.c",
+        "tools/overworld/devtools_cargo_route_continuity.py",
+        "tools/overworld/test_devtools_cargo_route_continuity.py",
+        "tools/overworld/devtools_query_observer.py",
+        "include/overworld_throw_away*.h",
+        "lib/overworld/overworld_throw_away*.c",
+        "include/overworld_behavior_condition_adapter.h",
+        "include/overworld_wild_runtime_state_internal.h",
+        "include/overworld_query_code_addon.h",
+        "lib/overworld/overworld_query_code_addon_entry.c",
+        "lib/overworld/overworld_query_code_addon_condition_delegate.c",
+        "lib/overworld/overworld_query_code_addon_field.c",
+        "lib/overworld/overworld_player_damage_condition.c",
+        "include/overworld_throw_held_wild.h",
+        "lib/overworld/overworld_throw_held_wild.c",
+        "include/overworld_contact_geometry.h",
+        "lib/overworld/overworld_contact_geometry.c",
+        "include/overworld_throw_observation_native.h",
+        "lib/overworld/overworld_throw_observation_query.c",
+        "lib/overworld/overworld_throw_observation_native.c",
+        "lib/overworld/overworld_query_code_addon.ld",
+        "tools/overworld/pack_query_code_addon.py",
+        "overlays.mk",
+        "tools/overworld/devtools_moving_cargo_pickup.py",
+        "tools/overworld/devtools_application_bank.py",
+        "tools/overworld/test_devtools_cargo_autonomy.py",
+        "tools/overworld/devtools_party_throw_flow*.py",
+        "tools/overworld/test_devtools_party_throw_flow.py",
+        "tools/overworld/fixtures/route34_pickup_3709_red.json",
+        "lib/overworld/overworld_cargo_query*.c",
+        "lib/overworld/overworld_entry_route*.c",
+        "lib/overworld/overworld_pickup_route*.c",
+        "include/overworld_cargo_query*.h",
+        "include/overworld_entry_route.h",
+        "tests/overworld/test-recipes/follower.route34-throw.json",
+        "tests/overworld/scenarios/follower.route34-throw.json"
+      ]
+    },
+    {
+      "id": "runtime.wild.throw-follower",
+      "title": "Wild Geodude throws the unchanged follower",
+      "proofLevel": "S3",
+      "costTier": 2,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "wild.throw-follower"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "include/overworld_target_bindings.h",
+        "include/overworld_cargo_query.h",
+        "include/overworld_cargo_query_wild.h",
+        "include/overworld_cargo_read_wild.h",
+        "include/overworld_pickup_route*.h",
+        "lib/overworld/overworld_target_bindings.c",
+        "lib/overworld/overworld_cargo*.c",
+        "lib/overworld/overworld_pickup*.c",
+        "lib/overworld/overworld_behavior_condition*.c",
+        "src/overworld_wild_spawns_overlay/**",
+        "src/overworld_wild_helper_overlay/**",
+        "src/player_health_overlay/player_health_throw_observation.c",
+        "data/overworld_behavior_profiles.json",
+        "tools/overworld/devtools_follower_throw*.py",
+        "tools/overworld/test_devtools_follower_throw_measurement.py",
+        "tools/overworld/devtools_pokemon_combat_observer.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tests/overworld/test-recipes/follower.throw-moving-cargo.json",
+        "tests/overworld/scenarios/follower.throw-moving-cargo.json",
+        "src/pokemon_move_history_task6_overlay/overworld_actor_hop_planner.c",
+        "src/overworld_wild_behavior_data_overlay/overworld_wild_behavior_data_overlay.c",
+        "tools/overworld/devtools_walk_matrix_observer.py",
+        "lib/overworld/overworld_cargo_query_wild.c",
+        "tools/overworld/devtools_cargo_route_continuity.py",
+        "tools/overworld/test_devtools_cargo_route_continuity.py",
+        "tools/overworld/devtools_query_observer.py",
+        "include/overworld_throw_away*.h",
+        "lib/overworld/overworld_throw_away*.c",
+        "include/overworld_behavior_condition_adapter.h",
+        "include/overworld_wild_runtime_state_internal.h",
+        "include/overworld_query_code_addon.h",
+        "lib/overworld/overworld_query_code_addon_entry.c",
+        "lib/overworld/overworld_query_code_addon_condition_delegate.c",
+        "lib/overworld/overworld_query_code_addon_field.c",
+        "lib/overworld/overworld_player_damage_condition.c",
+        "include/overworld_throw_held_wild.h",
+        "lib/overworld/overworld_throw_held_wild.c",
+        "include/overworld_contact_geometry.h",
+        "lib/overworld/overworld_contact_geometry.c",
+        "include/overworld_throw_observation_native.h",
+        "lib/overworld/overworld_throw_observation_query.c",
+        "lib/overworld/overworld_throw_observation_native.c",
+        "lib/overworld/overworld_query_code_addon.ld",
+        "tools/overworld/pack_query_code_addon.py",
+        "overlays.mk",
+        "tools/overworld/devtools_moving_cargo_pickup.py",
+        "tools/overworld/devtools_application_bank.py",
+        "tools/overworld/test_devtools_cargo_autonomy.py",
+        "tools/overworld/devtools_party_throw_flow*.py",
+        "tools/overworld/test_devtools_party_throw_flow.py",
+        "tools/overworld/fixtures/route34_pickup_3709_red.json",
+        "lib/overworld/overworld_cargo_query*.c",
+        "lib/overworld/overworld_entry_route*.c",
+        "lib/overworld/overworld_pickup_route*.c",
+        "include/overworld_cargo_query*.h",
+        "include/overworld_entry_route.h",
+        "tests/overworld/test-recipes/wild.throw-follower.json",
+        "tests/overworld/scenarios/wild.throw-follower.json"
+      ]
+    },
+    {
+      "id": "runtime.mounted-hop-vertical-clearance",
+      "title": "Check mounted Hop native vertical clearance and visible Jump switch",
+      "proofLevel": "S3",
+      "costTier": 2,
+      "command": [
+        "{python}",
+        "scripts/owctl",
+        "scenario",
+        "run",
+        "mount.hop-vertical-clearance"
+      ],
+      "requires": [
+        "build",
+        "rom",
+        "sav",
+        "emulator",
+        "debugDescriptor"
+      ],
+      "sourcePatterns": [
+        "data/overworld_behavior_profiles.json",
+        "data/OverworldWildBehaviorData.c",
+        "include/overworld_mount*.h",
+        "include/overworld_actor*.h",
+        "include/overworld_motion*.h",
+        "src/overworld_mount*overlay/**",
+        "src/overworld_actor_system_overlay/**",
+        "src/pokemon_move_history_task6_overlay/**",
+        "lib/overworld/overworld_motion_model.c",
+        "tools/overworld/devtools_mounted_canopy_hop*.py",
+        "tools/overworld/test_devtools_mounted_canopy_hop_measurement.py",
+        "tools/overworld/devtools_jobs.py",
+        "tools/overworld/devtools_test_contract.py",
+        "tools/overworld/devtools_test_inputs.py",
+        "tools/overworld/proof_adapters.py",
+        "tools/overworld/runtime_proof_registry.json",
+        "tests/overworld/test-recipes/mount.mankey-adjacent-canopy.json",
+        "tests/overworld/scenarios/mount.mankey-adjacent-canopy.json",
+        "data/overworld_wild_roof_catalog_manifest.json",
+        "data/generated/overworld_wild_roof_catalog.*",
+        "tools/generate_overworld_wild_roof_catalog.py",
+        "src/overworld_wild_runtime_overlay/**",
+        "lib/overworld/overworld_hop_clearance_native.c",
+        "src/pokemon_move_history_overlay/overworld_hop_geometry.c",
+        "src/pokemon_move_history_overlay/overworld_hop_lerp.c",
+        "tools/overworld/devtools_mounted_hop_clearance*.py",
+        "tools/overworld/test_devtools_mounted_hop_clearance_measurement.py",
+        "tools/overworld/fixtures/mounted_hop_clearance_3709.json",
+        "tests/overworld/test-recipes/mount.hop-vertical-clearance.json",
+        "tests/overworld/scenarios/mount.hop-vertical-clearance.json",
+        "include/overworld_hop_clearance_native.h",
+        "tools/overworld/devtools_raw_chunk.py",
+        "tools/overworld/devtools_records.py",
+        "tools/overworld/devtools_walk_matrix_observer.py",
+        "tools/overworld/normal_play_observer.py"
+      ]
+    },
+    {
+      "id": "host.mounted-hop-vertical-clearance",
+      "title": "Reject the actual old mounted native underpass and copied clearance faults",
+      "proofLevel": "S1",
+      "costTier": 1,
+      "command": [
+        "{python}",
+        "tools/overworld/test_devtools_mounted_hop_clearance_measurement.py"
+      ],
+      "requires": [],
+      "sourcePatterns": [
+        "tools/overworld/devtools_mounted_hop_clearance*.py",
+        "tools/overworld/test_devtools_mounted_hop_clearance_measurement.py",
+        "tools/overworld/fixtures/mounted_hop_clearance_3709.json"
+      ]
     }
   ],
   "capabilities": [
@@ -4992,7 +5623,12 @@
         "runtime.ram-brief-notice",
         "runtime.throw-notice-walk-commit",
         "host.follower-throw-hit-abort-proof",
-        "runtime.follower-throw-hit-abort"
+        "runtime.follower-throw-hit-abort",
+        "runtime.population.goldenrod-behind-buildings",
+        "runtime.population.goldenrod-raised-birds",
+        "runtime.population.goldenrod-underground",
+        "host.goldenrod-encounters",
+        "host.goldenrod-spawn-proof"
       ],
       "scenarios": [
         "profile.resolve.override-order",
@@ -5010,7 +5646,10 @@
         "profile.basic-attack",
         "profile.ram.brief-notice",
         "wild.throw-notice-walk-commit",
-        "follower.throw-hit-abort"
+        "follower.throw-hit-abort",
+        "population.goldenrod-behind-buildings",
+        "population.goldenrod-raised-birds",
+        "population.goldenrod-underground"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md",
@@ -5301,7 +5940,8 @@
         "runtime.basic-attack",
         "runtime.stomp-slam-player-contact",
         "runtime.stomp-slam-mounted-player-contact",
-        "runtime.wild.igglybuff-player-fear-cry"
+        "runtime.wild.igglybuff-player-fear-cry",
+        "runtime.follower.goldenrod-hop-rebind"
       ],
       "scenarios": [
         "player-hp.hop-contact",
@@ -5319,7 +5959,8 @@
         "profile.basic-attack",
         "profile.stomp-slam.player-contact",
         "profile.stomp-slam.mounted-player-contact",
-        "wild.igglybuff-player-fear-cry"
+        "wild.igglybuff-player-fear-cry",
+        "follower.goldenrod-hop-rebind"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -5488,7 +6129,12 @@
         "runtime.mounted-smoothness",
         "runtime.cyndaquil-control",
         "runtime.stomp-slam-mounted-player-contact",
-        "runtime.mounted-rattata-walking-ledge"
+        "runtime.mounted-rattata-walking-ledge",
+        "runtime.mounted-mankey-adjacent-canopy",
+        "runtime.world.goldenrod-route34-entry",
+        "runtime.mount-airborne-input",
+        "host.mounted-hop-vertical-clearance",
+        "runtime.mounted-hop-vertical-clearance"
       ],
       "scenarios": [
         "profile.resolve.follower-mounted-parity",
@@ -5508,7 +6154,11 @@
         "mount.stantler-sprint-full-speed",
         "mount.stantler-running-ledge",
         "profile.stomp-slam.mounted-player-contact",
-        "mount.rattata-walking-ledge"
+        "mount.rattata-walking-ledge",
+        "mount.mankey-adjacent-canopy",
+        "world.goldenrod-route34-entry",
+        "mount.airborne-input",
+        "mount.hop-vertical-clearance"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -5650,14 +6300,18 @@
         "runtime.follower-transition",
         "runtime.mount-walk-transition",
         "runtime.world.transition.wild-roof-height",
-        "runtime.world.transition.wild-signpost-height"
+        "runtime.world.transition.wild-signpost-height",
+        "runtime.world.goldenrod-route34-entry",
+        "runtime.follower.goldenrod-hop-rebind"
       ],
       "scenarios": [
         "world.transition.wild-invalidation",
         "world.transition.follower-rebind",
         "mount.walk-transition-mid-motion",
         "world.transition.wild-roof-height",
-        "world.transition.wild-signpost-height"
+        "world.transition.wild-signpost-height",
+        "world.goldenrod-route34-entry",
+        "follower.goldenrod-hop-rebind"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -5745,7 +6399,12 @@
         "runtime.population.failed-series-retry",
         "runtime.population.natural-water-spawn",
         "runtime.world.route30-sentret-throw-pacing",
-        "runtime.population.route30-saturated-headroom"
+        "runtime.population.route30-saturated-headroom",
+        "runtime.population.goldenrod-behind-buildings",
+        "runtime.population.goldenrod-raised-birds",
+        "runtime.population.goldenrod-underground",
+        "host.goldenrod-encounters",
+        "host.goldenrod-spawn-proof"
       ],
       "scenarios": [
         "population.land-surf-separation",
@@ -5760,7 +6419,10 @@
         "population.distance-despawn-cherrygrove",
         "population.failed-series-retry",
         "population.natural-water-spawn",
-        "world.route30.sentret-throw-pacing"
+        "world.route30.sentret-throw-pacing",
+        "population.goldenrod-behind-buildings",
+        "population.goldenrod-raised-birds",
+        "population.goldenrod-underground"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md",
@@ -5846,7 +6508,9 @@
         "runtime.wild.damage-flee",
         "runtime.stomp-slam-player-contact",
         "runtime.stomp-slam-mounted-player-contact",
-        "runtime.wild.igglybuff-player-fear-cry"
+        "runtime.wild.igglybuff-player-fear-cry",
+        "runtime.follower.route34-throw",
+        "runtime.wild.throw-follower"
       ],
       "scenarios": [
         "profile.condition.packaged-rom-evaluator",
@@ -5874,7 +6538,9 @@
         "profile.stomp-slam.player-contact",
         "profile.stomp-slam.mounted-player-contact",
         "wild.igglybuff-player-fear-cry",
-        "world.route30.sentret-throw-pacing"
+        "world.route30.sentret-throw-pacing",
+        "follower.route34-throw",
+        "wild.throw-follower"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md",
@@ -6036,13 +6702,18 @@
         "data/OverworldWildBehaviorData.c",
         "lib/overworld/overworld_population_model.c",
         "src/overworld_wild_spawns_overlay/**",
-        "src/overworld_wild_helper_overlay/**"
+        "src/overworld_wild_helper_overlay/**",
+        "lib/overworld/overworld_pickup_landing_wild.c",
+        "tools/overworld/test_behind_buildings_profile.py",
+        "tools/overworld/test_spawn_behind_buildings.py",
+        "tools/overworld/test_spawn_behind_shortcuts.py"
       ],
       "checks": [
         "host.behavior-schema",
         "host.behavior-resolver",
         "host.spawn-refill-budget",
         "host.spawn-destination-budget",
+        "host.spawn-behind-buildings",
         "host.appear-hop-completion",
         "host.spawn-fly-in",
         "host.pb9-profile-building-block-scenarios",
@@ -6050,7 +6721,12 @@
         "runtime.land-surf",
         "runtime.population.failed-series-retry",
         "runtime.population.natural-water-spawn",
-        "runtime.spawn.move-entry-arrival"
+        "runtime.spawn.move-entry-arrival",
+        "runtime.population.goldenrod-behind-buildings",
+        "runtime.population.goldenrod-raised-birds",
+        "runtime.population.goldenrod-underground",
+        "host.goldenrod-encounters",
+        "host.goldenrod-spawn-proof"
       ],
       "scenarios": [
         "population.land-surf-separation",
@@ -6062,7 +6738,10 @@
         "population.route30.saturated-headroom",
         "population.failed-series-retry",
         "population.natural-water-spawn",
-        "spawn.move-entry.arrival"
+        "spawn.move-entry.arrival",
+        "population.goldenrod-behind-buildings",
+        "population.goldenrod-raised-birds",
+        "population.goldenrod-underground"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -6133,12 +6812,26 @@
         "host.behavior-resolver",
         "host.canopy-surface-catalog",
         "runtime.land-surf",
-        "runtime.population.natural-water-spawn"
+        "runtime.population.natural-water-spawn",
+        "runtime.mounted-mankey-adjacent-canopy",
+        "runtime.population.goldenrod-behind-buildings",
+        "runtime.population.goldenrod-raised-birds",
+        "runtime.population.goldenrod-underground",
+        "host.goldenrod-encounters",
+        "host.goldenrod-spawn-proof",
+        "host.mounted-hop-vertical-clearance",
+        "runtime.mounted-hop-vertical-clearance"
       ],
       "scenarios": [
         "population.land-surf-separation",
         "walk.wild.blocked-facing",
-        "population.natural-water-spawn"
+        "population.natural-water-spawn",
+        "mount.mankey-adjacent-canopy",
+        "population.goldenrod-behind-buildings",
+        "population.goldenrod-raised-birds",
+        "population.goldenrod-underground",
+        "mount.hop-vertical-clearance",
+        "mount.airborne-input"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"
@@ -6308,7 +7001,9 @@
         "runtime.wild-throw-ground-lock-soak",
         "host.wild-throw-ground-lock-soak-proof",
         "runtime.wild.damage-flee",
-        "runtime.wild.igglybuff-player-fear-cry"
+        "runtime.wild.igglybuff-player-fear-cry",
+        "runtime.follower.route34-throw",
+        "runtime.wild.throw-follower"
       ],
       "scenarios": [
         "profile.stalker.visibility-gate",
@@ -6330,7 +7025,9 @@
         "wild.throw-ground-lock-soak",
         "wild.damage-flee",
         "wild.igglybuff-player-fear-cry",
-        "world.route30.sentret-throw-pacing"
+        "world.route30.sentret-throw-pacing",
+        "follower.route34-throw",
+        "wild.throw-follower"
       ],
       "docs": [
         "documentation/overworld-system/architecture.md"

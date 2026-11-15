@@ -65,7 +65,7 @@
             "sourceIndex": 11
           }
         ],
-        "fingerprint": 4134468016
+        "fingerprint": 3210238198
       }
     },
     {
@@ -82,7 +82,7 @@
         "behaviorClass": 0,
         "requiredMatchedOverrideMask": 1,
         "requiredAppliedOverrideMask": 1,
-        "fingerprint": 1730388763,
+        "fingerprint": 3641710469,
         "profileFields": {
           "owner.chillSpeed": 8,
           "owner.chainPauseAction": 0,
@@ -150,7 +150,7 @@
         "behaviorClass": 0,
         "requiredMatchedOverrideMask": 1,
         "requiredAppliedOverrideMask": 1,
-        "fingerprint": 3597849827,
+        "fingerprint": 577892493,
         "profileFields": {
           "owner.chillSpeed": 14,
           "owner.chainPauseAction": 162,
@@ -212,7 +212,7 @@
         "speciesClassRuleIndex": 1,
         "requiredMatchedOverrideMask": 5,
         "requiredAppliedOverrideMask": 5,
-        "fingerprint": 445252580,
+        "fingerprint": 64216457,
         "profileFields": {
           "owner.spawnState": 4,
           "owner.chillAction": 2,
@@ -277,14 +277,14 @@
         "behaviorLimitKey": 0,
         "requiredMatchedOverrideMask": 1,
         "requiredAppliedOverrideMask": 1,
-        "fingerprint": 1573268740,
+        "fingerprint": 3241338050,
         "profileFields": {
           "owner.overworldLimit": 0,
-          "owner.spawnState": 1,
+          "owner.spawnState": 3,
           "owner.chillAction": 1,
           "owner.chillSpeed": 7,
           "owner.chainPauseAction": 2,
-          "tired.spawnState": 1,
+          "tired.spawnState": 3,
           "owner.turnSkidOneTime": 5,
           "owner.turnSkidTwoTime": 3,
           "owner.stopSkidTime": 4,
@@ -305,7 +305,7 @@
           "tired.chainHopInPlaceCryChance": 0
         },
         "primitiveFields": {
-          "spawnLocomotion": 3,
+          "spawnLocomotion": 7,
           "chillLocomotion": 1
         },
         "traceContains": [
@@ -337,7 +337,7 @@
         "requiredMatchedOverrideMask": 11,
         "requiredAppliedOverrideMask": 11,
         "conditionalOverrideMask": 0,
-        "fingerprint": 430881987,
+        "fingerprint": 4097767536,
         "profileFields": {
           "owner.chillAction": 2,
           "owner.hopPause": 5,
@@ -365,19 +365,19 @@
         },
         "primitiveFields": {
           "chillLocomotion": 2,
-          "spawnLocomotion": 3
+          "spawnLocomotion": 7
         },
         "traceContains": [
           {
             "lane": 0,
             "kind": 3,
-            "sourceIndex": 14,
+            "sourceIndex": 15,
             "requiredFlags": 3
           },
           {
             "lane": 0,
             "kind": 3,
-            "sourceIndex": 19,
+            "sourceIndex": 27,
             "requiredFlags": 3
           }
         ]
@@ -400,7 +400,7 @@
         "requiredMatchedOverrideMask": 11,
         "conditionalOverrideMask": 16,
         "requiredAppliedOverrideMask": 27,
-        "fingerprint": 1314145457,
+        "fingerprint": 89314926,
         "winningConditionId": 3180,
         "profileFields": {
           "owner.chillAction": 2,
@@ -434,30 +434,30 @@
           {
             "lane": 0,
             "kind": 3,
-            "sourceIndex": 14,
+            "sourceIndex": 15,
             "requiredFlags": 3
           },
           {
             "lane": 0,
             "kind": 3,
-            "sourceIndex": 19,
+            "sourceIndex": 27,
             "requiredFlags": 3
           },
           {
             "lane": 0,
             "kind": 4,
-            "sourceIndex": 20,
+            "sourceIndex": 28,
             "requiredFlags": 10
           },
           {
             "lane": 2,
             "kind": 4,
-            "sourceIndex": 20,
+            "sourceIndex": 28,
             "requiredFlags": 10
           }
         ],
         "primitiveFields": {
-          "spawnLocomotion": 3
+          "spawnLocomotion": 7
         }
       }
     },
@@ -476,9 +476,9 @@
         "requiredMatchedOverrideMask": 3,
         "requiredAppliedOverrideMask": 3,
         "conditionalOverrideMask": 0,
-        "fingerprint": 2684969777,
+        "fingerprint": 1173012296,
         "profileFields": {
-          "owner.spawnState": 1,
+          "owner.spawnState": 3,
           "owner.chillAction": 1,
           "owner.hopAllowNonCardinal": 0,
           "owner.hopAllowVerticalObstacles": 0,
@@ -511,7 +511,7 @@
           {
             "lane": 0,
             "kind": 3,
-            "sourceIndex": 14,
+            "sourceIndex": 15,
             "requiredFlags": 3
           }
         ]
@@ -534,7 +534,7 @@
         "requiredMatchedOverrideMask": 3,
         "conditionalOverrideMask": 8,
         "requiredAppliedOverrideMask": 11,
-        "fingerprint": 590505043,
+        "fingerprint": 1049335530,
         "winningConditionId": 3180,
         "profileFields": {
           "owner.chillAction": 2,
@@ -564,20 +564,20 @@
           "tired.chainHopInPlaceCryChance": 0
         },
         "primitiveFields": {
-          "spawnLocomotion": 3,
+          "spawnLocomotion": 7,
           "chillLocomotion": 2
         },
         "traceContains": [
           {
             "lane": 0,
             "kind": 4,
-            "sourceIndex": 20,
+            "sourceIndex": 28,
             "requiredFlags": 10
           },
           {
             "lane": 2,
             "kind": 4,
-            "sourceIndex": 20,
+            "sourceIndex": 28,
             "requiredFlags": 10
           }
         ]
@@ -595,10 +595,10 @@
       "expected": {
         "status": 0,
         "behaviorClass": 0,
-        "behaviorLimitKey": 25,
+        "behaviorLimitKey": 33,
         "requiredMatchedOverrideMask": 5,
         "requiredAppliedOverrideMask": 5,
-        "fingerprint": 2707762868,
+        "fingerprint": 3294976977,
         "profileFields": {
           "owner.chillSpeed": 20,
           "owner.ramAccelerationSteps": 2,
@@ -663,7 +663,7 @@
           {
             "lane": 0,
             "kind": 3,
-            "sourceIndex": 23,
+            "sourceIndex": 31,
             "requiredFlags": 3
           },
           {
@@ -675,7 +675,7 @@
           {
             "lane": 2,
             "kind": 3,
-            "sourceIndex": 23,
+            "sourceIndex": 31,
             "requiredFlags": 3
           }
         ]
@@ -692,7 +692,7 @@
       },
       "expected": {
         "status": 0,
-        "behaviorLimitKey": 25,
+        "behaviorLimitKey": 33,
         "profileFields": {
           "owner.chillSpeed": 16,
           "owner.ramAccelerationSteps": 0,
@@ -727,7 +727,7 @@
           "tired.chainHopInPlaceHeartChance": 0,
           "tired.chainHopInPlaceCryChance": 0
         },
-        "fingerprint": 3216269667
+        "fingerprint": 1627895086
       }
     },
     {
@@ -744,7 +744,7 @@
         "status": 0,
         "forcedOverrideMask": 1,
         "requiredAppliedOverrideMask": 1,
-        "fingerprint": 1617762149,
+        "fingerprint": 1528849531,
         "profileFields": {
           "owner.chillState": 3,
           "owner.chillSpeed": 8,
@@ -780,13 +780,13 @@
           {
             "lane": 0,
             "kind": 3,
-            "sourceIndex": 16,
+            "sourceIndex": 24,
             "requiredFlags": 6
           },
           {
             "lane": 2,
             "kind": 3,
-            "sourceIndex": 16,
+            "sourceIndex": 24,
             "requiredFlags": 6
           }
         ]
@@ -809,7 +809,7 @@
         "requiredMatchedOverrideMask": 5,
         "conditionalOverrideMask": 2,
         "requiredAppliedOverrideMask": 7,
-        "fingerprint": 1194404574,
+        "fingerprint": 2823130379,
         "winningConditionId": 56928,
         "profileFields": {
           "owner.chillState": 3,
@@ -884,7 +884,7 @@
         "behaviorClass": 0,
         "conditionalOverrideMask": 6,
         "requiredAppliedOverrideMask": 6,
-        "fingerprint": 251226984,
+        "fingerprint": 896591848,
         "winningConditionId": 12203,
         "targetSourceApplication": 2,
         "resolvedTargetConditionId": 12203,
@@ -931,13 +931,13 @@
           {
             "lane": 0,
             "kind": 4,
-            "sourceIndex": 31,
+            "sourceIndex": 40,
             "requiredFlags": 10
           },
           {
             "lane": 2,
             "kind": 4,
-            "sourceIndex": 31,
+            "sourceIndex": 40,
             "requiredFlags": 10
           }
         ]
@@ -959,7 +959,7 @@
         "requiredMatchedOverrideMask": 1,
         "forcedOverrideMask": 4,
         "requiredAppliedOverrideMask": 5,
-        "fingerprint": 996428431,
+        "fingerprint": 1029388209,
         "profileFields": {
           "owner.chillSpeed": 6,
           "owner.tilesToAccelerate": 60,
@@ -1001,13 +1001,13 @@
           {
             "lane": 0,
             "kind": 3,
-            "sourceIndex": 34,
+            "sourceIndex": 43,
             "requiredFlags": 6
           },
           {
             "lane": 2,
             "kind": 3,
-            "sourceIndex": 34,
+            "sourceIndex": 43,
             "requiredFlags": 6
           }
         ]
@@ -1028,7 +1028,7 @@
         "behaviorClass": 0,
         "forcedOverrideMask": 4,
         "requiredAppliedOverrideMask": 4,
-        "fingerprint": 982977916,
+        "fingerprint": 1056113202,
         "profileFields": {
           "owner.stamina": 1,
           "owner.restTime": 4,
@@ -1055,13 +1055,13 @@
           {
             "lane": 0,
             "kind": 3,
-            "sourceIndex": 35,
+            "sourceIndex": 44,
             "requiredFlags": 6
           },
           {
             "lane": 2,
             "kind": 3,
-            "sourceIndex": 35,
+            "sourceIndex": 44,
             "requiredFlags": 6
           }
         ]
@@ -1092,7 +1092,7 @@
         "status": 0,
         "conditionalOverrideMask": 2,
         "requiredAppliedOverrideMask": 2,
-        "fingerprint": 593695226,
+        "fingerprint": 1958600679,
         "profileFields": {
           "owner.attacking": 1,
           "owner.minImpactSpeed": 32,
@@ -1130,13 +1130,13 @@
           {
             "lane": 0,
             "kind": 4,
-            "sourceIndex": 25,
+            "sourceIndex": 34,
             "requiredFlags": 10
           },
           {
             "lane": 2,
             "kind": 4,
-            "sourceIndex": 25,
+            "sourceIndex": 34,
             "requiredFlags": 10
           }
         ]
@@ -1167,7 +1167,7 @@
         "status": 0,
         "conditionalOverrideMask": 10,
         "requiredAppliedOverrideMask": 10,
-        "fingerprint": 2108007631,
+        "fingerprint": 1561780017,
         "profileFields": {
           "owner.attacking": 1,
           "owner.minImpactSpeed": 16,
@@ -1206,25 +1206,25 @@
           {
             "lane": 0,
             "kind": 4,
-            "sourceIndex": 21,
+            "sourceIndex": 29,
             "requiredFlags": 10
           },
           {
             "lane": 0,
             "kind": 4,
-            "sourceIndex": 24,
+            "sourceIndex": 33,
             "requiredFlags": 10
           },
           {
             "lane": 2,
             "kind": 4,
-            "sourceIndex": 21,
+            "sourceIndex": 29,
             "requiredFlags": 10
           },
           {
             "lane": 2,
             "kind": 4,
-            "sourceIndex": 24,
+            "sourceIndex": 33,
             "requiredFlags": 10
           }
         ]
@@ -1242,7 +1242,7 @@
       "expected": {
         "status": 0,
         "conditionalOverrideMask": 0,
-        "fingerprint": 3758447716,
+        "fingerprint": 2489222903,
         "profileFields": {
           "owner.attacking": 0,
           "owner.collisionDamage": 0,
@@ -1292,7 +1292,7 @@
         "status": 0,
         "conditionalOverrideMask": 4,
         "requiredAppliedOverrideMask": 4,
-        "fingerprint": 2343332732,
+        "fingerprint": 1050383415,
         "profileFields": {
           "owner.attacking": 1,
           "owner.minImpactSpeed": 16,
@@ -1322,7 +1322,7 @@
           {
             "lane": 0,
             "kind": 4,
-            "sourceIndex": 26,
+            "sourceIndex": 35,
             "requiredFlags": 10
           }
         ]
@@ -1392,29 +1392,29 @@
           {
             "lane": 0,
             "kind": 4,
-            "sourceIndex": 22,
+            "sourceIndex": 30,
             "requiredFlags": 10
           },
           {
             "lane": 0,
             "kind": 4,
-            "sourceIndex": 28,
+            "sourceIndex": 37,
             "requiredFlags": 10
           },
           {
             "lane": 2,
             "kind": 4,
-            "sourceIndex": 22,
+            "sourceIndex": 30,
             "requiredFlags": 10
           },
           {
             "lane": 2,
             "kind": 4,
-            "sourceIndex": 28,
+            "sourceIndex": 37,
             "requiredFlags": 10
           }
         ],
-        "fingerprint": 3688161046
+        "fingerprint": 3997876897
       }
     },
     {
@@ -1485,41 +1485,41 @@
           {
             "lane": 0,
             "kind": 4,
-            "sourceIndex": 22,
+            "sourceIndex": 30,
             "requiredFlags": 10
           },
           {
             "lane": 0,
             "kind": 4,
-            "sourceIndex": 24,
+            "sourceIndex": 33,
             "requiredFlags": 10
           },
           {
             "lane": 0,
             "kind": 4,
-            "sourceIndex": 28,
+            "sourceIndex": 37,
             "requiredFlags": 10
           },
           {
             "lane": 2,
             "kind": 4,
-            "sourceIndex": 22,
+            "sourceIndex": 30,
             "requiredFlags": 10
           },
           {
             "lane": 2,
             "kind": 4,
-            "sourceIndex": 24,
+            "sourceIndex": 33,
             "requiredFlags": 10
           },
           {
             "lane": 2,
             "kind": 4,
-            "sourceIndex": 28,
+            "sourceIndex": 37,
             "requiredFlags": 10
           }
         ],
-        "fingerprint": 615724662
+        "fingerprint": 3608925001
       }
     }
   ]

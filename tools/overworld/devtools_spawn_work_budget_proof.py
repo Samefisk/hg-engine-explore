@@ -1,5 +1,6 @@
 """Acceptance rows and copied-data controls for incremental spawn work."""
 from copy import deepcopy
+from tools.overworld.devtools_d1_routes import CHERRYGROVE, descriptor
 
 from tools.overworld.devtools_spawn_work_budget_measurement import (
     ENTRY_OFFSCREEN_MARGIN_TILES,
@@ -186,6 +187,7 @@ def contract():
 
 def measurements(replay, record):
     meter = replay.get("measurements", {}).get(KIND, {})
+    route = descriptor(meter.get("route", CHERRYGROVE))
     attempt = meter.get("attempt") or {}
     rejected_attempts = meter.get("rejectedAttempts")
     entry = meter.get("entry") or {}
@@ -246,8 +248,8 @@ def measurements(replay, record):
             and attempt.get("metadataReceiptCount") == 1
             and attempt.get("classSelectionReceiptCount") == 1
             and attempt.get("successfulSpawnCount") == 1
-            and meter.get("contextTransition", {}).get("from", {}).get("mapId") == 33
-            and meter.get("contextTransition", {}).get("to", {}).get("mapId") == 67
+            and meter.get("contextTransition", {}).get("from", {}).get("mapId") == route["crossing"][0]
+            and meter.get("contextTransition", {}).get("to", {}).get("mapId") == route["crossing"][1]
             and {key: attempt.get("worldContext", {}).get(key)
                  for key in ("mapId", "fieldEpoch", "mapGeneration")}
                 == meter.get("contextTransition", {}).get("to")
@@ -455,7 +457,8 @@ class SpawnWorkBudgetNegative:
         events = changed.get("events", [])
         strict_window = self.destination_context_seen
         samples = changed.get("samples", [])
-        if any(sample.get("context", {}).get("mapId") == 67
+        destination_map = self.measurement.route["crossing"][1] if self.measurement is not None else 67
+        if any(sample.get("context", {}).get("mapId") == destination_map
                for sample in samples):
             self.destination_context_seen = True
         selected_owner = None
@@ -500,6 +503,16 @@ class SpawnWorkBudgetNegative:
             self.strict_pacing_samples += len(pacing)
         if self.fault == "spawn-work-budget-late-main-loop" \
                 and self.strict_pacing_samples >= 2:
+            if self.measurement is not None:
+                meter = self.measurement
+                # A raw arrival map can precede the admitted Field. Mutate
+                # only an interval the unchanged meter will actually count.
+                if (meter.context_transition is None
+                        or meter.active_context != meter.context_transition["to"]
+                        or meter.setup_scan is not None or meter.pacing_samples < 1
+                        or not samples or any(sample.get("context") != meter.active_context
+                                              for sample in samples)):
+                    return row
             for event in pacing:
                 interval = event["data"].get("intervalFromPrevious")
                 if interval is None:

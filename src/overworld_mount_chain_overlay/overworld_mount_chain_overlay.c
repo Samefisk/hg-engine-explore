@@ -28,7 +28,7 @@ __asm__(
     ".thumb\n"
     ".thumb_func\n.thumb_set OverworldMount_ProcessPlayerControl, 0x023BC2AC\n"
     ".global OverworldMount_TryStartCustomMotion\n"
-    ".thumb_func\n.thumb_set OverworldMount_TryStartCustomMotion, 0x023BB20C\n"
+    ".thumb_func\n.thumb_set OverworldMount_TryStartCustomMotion, 0x023BB24C\n"
     ".thumb_func\n.thumb_set OverworldMount_GetInputDirection, 0x023BB67C\n"
     ".thumb_func\n.thumb_set OverworldWalk_SelectNewestMountedInput, 0x023BF790\n"
     ".thumb_func\n.thumb_set OverworldWalk_ApplyReleaseGrace, 0x023BB5AC\n"
@@ -165,8 +165,9 @@ OverworldMount_ResetMomentum(void)
  * the shared forward Hop at the current Walk time per tile. B Jump reach is
  * OVERWORLD_JUMP_REACH (two to six tiles by Walk time per tile); the
  * shared Jump clearance may raise its arc to its distance cap. When the full
- * reach fails, the longest shorter Jump that clears lands and then crashes.
- * With none, the mount crashes in place. Standing still with a held
+ * reach fails, a Jump one or two tiles longer that clears lands without a
+ * crash; otherwise the longest shorter Jump that clears lands and then
+ * crashes. With none, the mount crashes in place. Standing still with a held
  * direction Jumps two tiles at the mounted Walk speed; with no direction it
  * Hops in place.
  * Returns nonzero when this boundary consumed the input. */
@@ -187,6 +188,7 @@ Chain_StartForwardHop(
     u8 speed = policy->walkMomentum.speed;
     u8 reach;
     u8 distance;
+    s8 i;
     u8 startResult = 0;
     BOOL idle = avatar->state == PLAYER_STATE_WALKING
         && (avatar->unk0 & 1u) == 0
@@ -223,7 +225,9 @@ Chain_StartForwardHop(
     }
     lane->chillAction = OW_WILD_BEHAVIOR_LOCOMOTION_HOP;
     lane->hopTime = speed != 0 ? speed : lane->chillSpeed;
-    for (distance = reach; distance != 0; distance--) {
+    /* Try reach, then reach + 1 and + 2, then reach - 1 down to 1. A
+     * longer Jump that clears lands without a crash. */
+    for (distance = reach, i = 1; distance != 0; distance += i) {
         /* One exact Hop distance selects the Jump clearance model. */
         lane->hopMinDistance = distance;
         lane->hopMaxDistance = distance;
@@ -237,6 +241,10 @@ Chain_StartForwardHop(
         if (!jump || startResult != 0) {
             break;
         }
+        if (distance == reach + 2) {
+            distance = reach;
+            i = -1;
+        }
     }
     lane->chillAction = oldAction;
     lane->hopMinDistance = oldMin;
@@ -247,7 +255,7 @@ Chain_StartForwardHop(
     }
     /* A short Jump crashes once it lands; with no Jump, at the next
      * boundary. A busy terrain stream (2) drops the press without one. */
-    if (startResult != 2 && distance != reach) {
+    if (startResult != 2 && distance < reach) {
         (void)OverworldMountJump_Boundary(state, policy, distance,
             OVERWORLD_MOUNT_JUMP_MARK_CRASH);
     }

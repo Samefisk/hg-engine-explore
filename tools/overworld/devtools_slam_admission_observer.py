@@ -11,12 +11,12 @@ from tools.overworld.devtools_observer import NativeObservationError, MOTION_DEC
 from tools.overworld.devtools_runtime import _elf_function_extent
 
 PINS = {
-    "owner": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_TryStartFrameDrivenOwnerMovementCommand", 0x023D63DC, 2536, "8eb5860708911166cbc604bafccc7d7440c421d57cd240f8648de319ce3dc5c6"),
-    "attempt": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_TryStartBehaviorHopToPlannedTileWithArc", 0x023D0FEC, 484, "21dd25c21572b0de2421764ac1d4de7ce5453283353bff582b42f65e75a8d02b"),
-    "landing": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_ClassifyBehaviorHopLandingTile", 0x023CE52C, 188, "c858a84fae896b163b614aa1bace94c94d8f0795c28d1657f1aadd3c0ea88add"),
+    "owner": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_TryStartFrameDrivenOwnerMovementCommand", 0x023D63E0, 2540, "04dabf441b1c841194cdb70f7c9fc6019e9c22d6c004ae3ef69fe6213329d81d"),
+    "attempt": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_TryStartBehaviorHopToPlannedTileWithArc", 0x023D0FE8, 484, "5e0f8dae5f3e6737ee804387594ce5bd49079b4dc1a2947c2f4d322ac08a4a8a"),
+    "landing": ("overworld_wild_spawns_overlay_linked.o", "OverworldWildSpawns_ClassifyBehaviorHopLandingTile", 0x023CE528, 188, "e4fb260af68c9ce035259797ec5c29b4d852ddc2ad4a71827947e374b281bac7"),
     "occupancy": ("pokemon_move_history_overlay_linked.o", "OverworldWildOccupancy_Query", 0x023C0184, 214, "b09b014858b6e88d9e699d29d9db7eb25a2c1a654c22a0eb45e7f641eb45e78b"),
 }
-QUERY_OCCUPANCY = (9356, 436, 'ce26746f2668f9f511c9d5e8a7ce19e05b75817ccdf9337d24a26e21141004e1')
+QUERY_OCCUPANCY = (9780, 436, '146b0cc2f56b65f10b73afa8991971ef97dcf9ecc4456a9b4a6f6cf3a4f64c75')
 QUERY_OCCUPANCY_CALL = 0x15C
 
 
@@ -138,7 +138,7 @@ class SlamAdmissionObserver:
         if obs._subject(slot).get("species") != 143:
             return None
         self._live("owner")
-        self._direct("owner", 0x023D687E, "attempt")
+        self._direct("owner", 0x023D692E, "attempt")
         subject, source, engine, world = obs._chain_current(slot)
         need((regs.r0 & 0xFFFFFFFF, regs.r1 & 0xFFFFFFFF) ==
              (world["statePointer"], world["fieldPointer"]), "attempt field/state differs")
@@ -166,7 +166,7 @@ class SlamAdmissionObserver:
             return None
         parent = self.attempts[-1]
         self._check(parent)
-        self._direct("attempt", 0x023D0FBA, "landing")
+        self._direct("attempt", 0x023D109E, "landing")
         regs = self.session.emu.memory.register_arm9
         words = list(map(self.observer._chain_signed, self.observer._chain_words(4)))
         need([regs.r0 & 0xFFFFFFFF, regs.r1 & 0xFFFFFFFF, regs.r2 & 0xFFFFFFFF] ==

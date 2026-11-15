@@ -246,6 +246,12 @@ int md_branch(void* h,int n,u32 addr){return checked(h,[&](Bridge& b){if(b.fault
     // The caller may already have assigned r15. JumpTo's old-region check
     // cannot then recover the original region, so refresh explicitly.
     a.SetupCodeMem(addr&~1U);a.JumpTo(addr);a.Cycles=cycles;if(b.callbackCPU==n)b.redirect=true;});}
+// Paused host access to the opened cartridge image (map hotload). The data
+// area starts at 0x8000; the header and secure area stay read-only here.
+static u8* cart_span(Bridge& b,u32 offset,u32 len){if(!b.opened||b.running)throw std::runtime_error("cartridge ROM access requires a paused opened core");auto cart=b.nds->GetNDSCart();if(!cart||!cart->GetROM())throw std::runtime_error("no cartridge ROM");if(offset<0x8000||uint64_t(offset)+len>cart->GetROMLength())throw std::runtime_error("cartridge ROM span outside the data area");return const_cast<u8*>(cart->GetROM())+offset;}
+u32 md_cart_rom_size(void* h){try{auto& b=get(h);if(!b.opened)throw std::runtime_error("cartridge not opened");auto cart=b.nds->GetNDSCart();if(!cart)throw std::runtime_error("no cartridge ROM");return cart->GetROMLength();}catch(const std::exception& e){if(h)get(h).error=e.what();return 0;}}
+int md_read_cart_rom(void* h,u32 offset,void* out,u32 len){return checked(h,[&](Bridge& b){if(len&&!out)throw std::runtime_error("null read buffer");auto p=cart_span(b,offset,len);if(len)std::memcpy(out,p,len);});}
+int md_write_cart_rom(void* h,u32 offset,const void* data,u32 len){return checked(h,[&](Bridge& b){if(b.faulted)throw std::runtime_error("core faulted");if(len&&!data)throw std::runtime_error("null write buffer");auto p=cart_span(b,offset,len);if(len)std::memcpy(p,data,len);});}
 int md_set_keys(void* h,u32 mask){return checked(h,[&](Bridge& b){if(b.faulted)throw std::runtime_error("core faulted");if(mask&~0xfffU)throw std::runtime_error("invalid keys");b.nds->SetKeyMask((~mask)&0xfff);});}
 int md_touch(void* h,u32 x,u32 y){return checked(h,[&](Bridge& b){if(b.faulted)throw std::runtime_error("core faulted");if(x>255||y>191)throw std::runtime_error("touch coordinates outside screen");b.nds->TouchScreen(x,y);});}
 int md_release_touch(void* h){return checked(h,[&](Bridge& b){if(b.faulted)throw std::runtime_error("core faulted");b.nds->ReleaseScreen();});}

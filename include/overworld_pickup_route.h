@@ -66,8 +66,8 @@ typedef struct OverworldPickupRouteQuery {
     u16 edgeCount, goalCount;
     const OverworldPickupRouteExtension *extension;
 } OverworldPickupRouteQuery;
-/* Storage belongs to exactly one query. Caller zeroes table stamps once and
- * initializes generation=0. Begin increments generation without table clear.
+/* Storage belongs to exactly one query. Caller initializes generation=0.
+ * Begin increments generation and clears only the H-bit validity map.
  * Generation wrap fails RESOURCE_LIMIT; caller must explicitly reset storage.
  * Node/edge arrays do not require initialization. No allocation or recursion. */
 typedef struct OverworldPickupRouteNode {
@@ -81,7 +81,7 @@ typedef struct OverworldPickupRouteCachedEdge {
     u8 decision, reserved;
 } OverworldPickupRouteCachedEdge;
 typedef struct OverworldPickupRouteVisited {
-    u32 stamp; u16 node, reserved;
+    u16 node;
 } OverworldPickupRouteVisited;
 typedef struct OverworldPickupRouteWorkspace {
     OverworldPickupRouteNode *nodes;
@@ -89,6 +89,7 @@ typedef struct OverworldPickupRouteWorkspace {
     OverworldPickupRouteVisited *visited;
     u16 nodeCapacity, edgeCapacity;
     u32 visitedCapacity, generation; /* H power of two, >=2N, <=131072. */
+    u8 *visitedValid; /* H bits, cleared by Begin; global wrap still fails. */
 } OverworldPickupRouteWorkspace;
 typedef struct OverworldPickupRouteState {
     OverworldPickupRouteQuery query;
@@ -125,9 +126,10 @@ typedef struct OverworldPickupRouteResult {
  * current-origin/current-revision traversal completes. Capacity is never used
  * as a no-route proof. No shortest-path promise and no distance cutoff.
  *
- * ARM storage: State 188 + Workspace 24 + 24N + 16M + 8H bytes; Result108.
- * Example N256/M512/H512: 18,640 bytes, plus borrowed candidates/goals.
- * Begin/re-root constant work. Each Resume iteration consumes one work unit:
+ * ARM storage: State188 + Workspace28 +24N +16M +2H +ceil(H/8); Result108.
+ * N256/M512/H512 uses15640 bytes, plus borrowed candidates/goals.
+ * Begin clears64 validity bytes at that capacity; re-root stays constant.
+ * Each Resume iteration consumes one work unit:
  * pose-table probe, candidate/cache comparison, goal score, or proof edge.
  * At most one bounded native callback per unit; deferred returns immediately.
  */
@@ -143,6 +145,11 @@ OverworldPickupRouteStatus OverworldPickupRoute_Resume(OverworldPickupRouteState
  * direction and kind, not reverse search tags. Guidance is not an executor. */
 u16 OverworldPickupRoute_CopyForwardWitness(const OverworldPickupRouteState *,
     u16 *edgeTags, OverworldPickupRoutePosition *, u16 capacity);
+/* Same checked witness, retained as native kind/direction/distance commands.
+ * No stored command admits a landing; Entry re-admits its next full endpoint. */
+u16 OverworldPickupRoute_CopyForwardCommands(const OverworldPickupRouteState *,
+    u16 *commands, u16 capacity);
+u8 OverworldPickupRoute_CommandEdge(u16 command, OverworldPickupRouteEdge *);
 /* Read-only witness for the exact legalEdge callback now in progress. This
  * exposes an existing LEGAL memo, never a different candidate or old root.
  * No callback, search mutation, or layout change. The caller may reuse it only
@@ -153,10 +160,10 @@ const OverworldPickupRouteCachedEdge *OverworldPickupRoute_ReadMemo(const Overwo
     const OverworldPickupRoutePosition **destination);
 #ifndef OVERWORLD_ACTOR_SYSTEM_HOST
 typedef char PickupRouteStateMustRemain188[sizeof(OverworldPickupRouteState)==188?1:-1];
-typedef char PickupRouteWorkspaceMustRemain24[sizeof(OverworldPickupRouteWorkspace)==24?1:-1];
+typedef char PickupRouteWorkspaceMustRemain28[sizeof(OverworldPickupRouteWorkspace)==28?1:-1];
 #endif
 typedef char PickupRouteNodeMustRemain24[sizeof(OverworldPickupRouteNode)==24?1:-1];
 typedef char PickupRouteEdgeMustRemain16[sizeof(OverworldPickupRouteCachedEdge)==16?1:-1];
-typedef char PickupRouteVisitedMustRemain8[sizeof(OverworldPickupRouteVisited)==8?1:-1];
+typedef char PickupRouteVisitedMustRemain2[sizeof(OverworldPickupRouteVisited)==2?1:-1];
 typedef char PickupRouteResultMustRemain108[sizeof(OverworldPickupRouteResult)==108?1:-1];
 #endif

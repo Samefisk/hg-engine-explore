@@ -299,8 +299,8 @@ int main(void) {
  Reset();query.bounds=(OverworldPickupRouteBounds){0,0,7,2};world.body[1][1]=world.body[1][2]=1;world.body[1][7]=1;
  static OverworldPickupRouteEdge candidates[]={{1,0,0},{-1,0,1},{0,1,2},{0,-1,3}};
  OverworldPickupRoutePosition goal;CHECK(OverworldPickupRouteNative_PickupGoal(&context,6,1,&goal)==LEGAL);
- OverworldPickupRouteNode nodes[32];OverworldPickupRouteCachedEdge edges[128];OverworldPickupRouteVisited visited[64]={{0}};
- OverworldPickupRouteWorkspace workspace={nodes,edges,visited,32,128,64,0};OverworldPickupRouteState state;OverworldPickupRouteResult route;
+ OverworldPickupRouteNode nodes[32];OverworldPickupRouteCachedEdge edges[128];OverworldPickupRouteVisited visited[64]={{0}};u8 visitedValid[8]={0};
+ OverworldPickupRouteWorkspace workspace={nodes,edges,visited,32,128,64,0,visitedValid};OverworldPickupRouteState state;OverworldPickupRouteResult route;
  query.edges=candidates;query.edgeCount=4;query.goals=&goal;query.goalCount=1;query.legalEdge=OverworldPickupRouteNative_Classify;query.context=&context;
  CHECK(OverworldPickupRoute_Begin(&state,&query,&workspace)==OVERWORLD_PICKUP_ROUTE_PENDING);
  unsigned frames=0;

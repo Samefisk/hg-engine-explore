@@ -309,6 +309,9 @@
         },
         "behaviorClass": {
           "$ref": "#/$defs/expression"
+        },
+        "mapId": {
+          "$ref": "#/$defs/expression"
         }
       }
     },
@@ -787,7 +790,24 @@
           "$ref": "#/$defs/id"
         },
         "match": {
-          "$ref": "#/$defs/match"
+          "allOf": [
+            {
+              "$ref": "#/$defs/match"
+            },
+            {
+              "properties": {
+                "mapId": {
+                  "enum": [
+                    65535,
+                    "65535",
+                    "0xFFFF",
+                    "0xffff",
+                    "OW_WILD_BEHAVIOR_MATCH_ANY_MAP"
+                  ]
+                }
+              }
+            }
+          ]
         },
         "profile": {
           "$ref": "#/$defs/id"

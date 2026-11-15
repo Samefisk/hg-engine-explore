@@ -1,6 +1,10 @@
 """Build-time controls for the native canopy surface catalog."""
 
 import json
+import os
+import shlex
+import subprocess
+import tempfile
 from pathlib import Path
 import struct
 import sys
@@ -15,6 +19,7 @@ from tools.generate_overworld_wild_roof_catalog import (
 )
 from tools.headbutt_tree_visual_model_probe import decode_vtx_10, decode_vtx_diff
 from tools.narc_reader import NarcArchive
+from scripts.verify_overworld_mount import function_body
 
 
 CANOPY_HEIGHT_OFFSET_FX32 = 0x31580
@@ -89,7 +94,7 @@ class CanopySurfaceCatalogTests(unittest.TestCase):
             per_land[row["land_data_id"]] = per_land.get(row["land_data_id"], 0) + 1
         self.assertLessEqual(max(per_land.values()), 0xFF)
 
-    def test_route29_uses_mesh_aligned_crown_rows_not_collision_edges(self):
+    def test_route29_uses_complete_mesh_tree_footprints_not_collision_edges(self):
         report = json.loads(
             (ROOT / "data/generated/overworld_wild_roof_catalog.json").read_text()
         )
@@ -104,20 +109,17 @@ class CanopySurfaceCatalogTests(unittest.TestCase):
             )
 
         # Route 29 land block 1 begins at world (576, 384). In each 2x2 flat
-        # tree footprint, the bottom row aligns with the billboard's high
-        # crown edge. The known tree therefore resolves to world (594,389)
-        # and (595,389), not the shoulder row above it.
+        # tree footprint, both rows must support an adjacent Hop. The old
+        # bottom-row-only mask rejected entry into the north half of a tree.
         self.assertTrue(contains(1, 18, 3))
         self.assertTrue(contains(1, 19, 3))
         self.assertTrue(contains(1, 18, 5))
         self.assertTrue(contains(1, 19, 5))
-        self.assertFalse(contains(1, 18, 4))
+        self.assertTrue(contains(1, 18, 4))
 
-        # The compact-vertex face at the east edge supplies a crown on row 17,
-        # but the behavior-6 shoulder row above it is still not a surface.
-        # This guards against restoring the old collision-only heuristic.
-        self.assertFalse(contains(1, 30, 16))
-        self.assertFalse(contains(1, 31, 16))
+        # Compact-vertex trees also expose their whole verified footprint.
+        self.assertTrue(contains(1, 30, 16))
+        self.assertTrue(contains(1, 31, 16))
         self.assertTrue(contains(1, 30, 17))
         self.assertTrue(contains(1, 31, 17))
         self.assertTrue(all(row["source"].startswith("land") for row in canopy))
@@ -143,6 +145,12 @@ class CanopySurfaceCatalogTests(unittest.TestCase):
         self.assertTrue(contains(6, 10, 3))
         self.assertTrue(contains(7, 17, 7))
         self.assertTrue(contains(8, 2, 15))
+        # TKT-0078: from (561,364), Right enters this exact tree tile. Its
+        # crown row already existed; the adjacent north row was missing.
+        self.assertTrue(contains(8, 18, 12))
+        self.assertTrue(contains(8, 18, 13))
+        self.assertFalse(contains(8, 17, 12))
+
 
         audit = {
             row["land_data_id"]: row["mesh"]
@@ -155,47 +163,73 @@ class CanopySurfaceCatalogTests(unittest.TestCase):
         )
 
 
-    def test_public_type_maps_to_canopy_and_adds_tree_top_height(self):
-        header = (ROOT / "include/overworld_wild_behavior_data.h").read_text()
-        generated_header = (
-            ROOT
-            / "include/constants/generated/overworld_wild_roof_catalog_counts.h"
-        ).read_text()
-        runtime = (
-            ROOT / "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c"
-        ).read_text()
-        spawns = (
-            ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c"
-        ).read_text()
-        hop_planner = (
-            ROOT / "src/pokemon_move_history_task6_overlay/overworld_actor_hop_planner.c"
-        ).read_text()
-        validator = (ROOT / "scripts/validate_overworld_wild_blobs.py").read_text()
-        self.assertIn("OW_WILD_SURFACE_TYPE_CANOPY 4", header)
-        self.assertIn(
-            "OW_WILD_SURFACE_CANOPY_HEIGHT_OFFSET_FX32 0x00031580",
-            generated_header,
-        )
-        self.assertIn("OverworldWildSurfaceInstanceSizeMustRemain8Bytes", header)
-        self.assertIn("u8 heightPageAndSurfaceType;", header)
-        self.assertIn("? OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY", header)
-        self.assertIn("OW_WILD_SURFACE_ID_NATIVE_GROUND\n            - (surfaceType >> 2)", runtime)
-        self.assertIn("(u16)(hit.surfaceId + 2) > 1", runtime)
-        self.assertIn(
-            "return targetPosition.y + hit.height",
-            runtime,
-        )
-        self.assertIn("hit.surfaceType == OW_WILD_SURFACE_TYPE_CANOPY", spawns)
-        self.assertIn("1u << OW_WILD_SURFACE_TYPE_CANOPY", spawns)
-        self.assertIn("targetSurface.height = OverworldWildSpawns_GetObjectGroundBaseYAt", spawns)
-        self.assertIn(
-            "hit.height += (s32)object->posVec[1]",
-            spawns,
-        )
-        self.assertIn("(void)MapObject_RefreshHeightFromTerrain(object);", spawns)
-        self.assertIn("obstacleBaseY = hit.height", hop_planner)
-        self.assertIn("hit.surfaceId == OW_WILD_SURFACE_ID_NATIVE_CANOPY", hop_planner)
-        self.assertIn("OWBD_SURFACE_CANOPY_HEIGHT_OFFSET_Q4 = 0x3158", validator)
+    def run_native_height(self, *, omit_canopy_offset=False):
+        source = (ROOT / "src/overworld_wild_runtime_overlay/overworld_wild_runtime_overlay.c").read_text()
+        body = function_body(source, "OverworldWildRuntime_ResolveBaseYAt")
+        if omit_canopy_offset:
+            correct = "*output=position.y+(knownSurface != NULL ? knownSurface->height : 0);"
+            self.assertEqual(body.count(correct), 1)
+            body = body.replace(correct, "*output=position.y;")
+        unit = r'''
+#include <stdio.h>
+#include <stddef.h>
+typedef unsigned short u16;
+typedef unsigned int u32;
+typedef int s32;
+typedef int BOOL;
+typedef struct { s32 x,y,z; } VecFx32;
+typedef struct { s32 nativeY; int available, calls; } FieldSystem;
+typedef struct { s32 height; u16 surfaceId; } OverworldWildSurfaceHit;
+#define TRUE 1
+#define FALSE 0
+#define MAPOBJECTFLAG_UNK23 (1u << 23)
+#define MAPOBJECTFLAG_UNK29 (1u << 29)
+#define OVERWORLD_PICKUP_ROUTE_SUPPORT_FLAG_MASK (MAPOBJECTFLAG_UNK23 | MAPOBJECTFLAG_UNK29)
+#define OW_WILD_RUNTIME_FX32_ONE 4096
+static BOOL Height(FieldSystem *field,VecFx32 *position,BOOL flag) {
+    (void)flag;
+    ++field->calls;
+    if (!field->available) return FALSE;
+    position->y=field->nativeY;
+    return TRUE;
+}
+#define OW_WILD_RUNTIME_QUERY_NATIVE_HEIGHT Height
+static BOOL Resolve(FieldSystem *fieldSystem,const OverworldWildSurfaceHit *knownSurface,
+    s32 originBaseY,u32 objectFlags,int x,int y,s32 *output) {
+''' + body + r'''
+}
+#define CHECK(x) do { if (!(x)) { fprintf(stderr,"height failure line%d\n",__LINE__);return 1;} } while(0)
+int main(void) {
+    FieldSystem field={0x10000,1,0};
+    OverworldWildSurfaceHit canopy={0x31580,0xFFFE}, roof={0x60000,1};
+    s32 out=-7;
+    CHECK(Resolve(&field,&canopy,0,0,594,388,&out) && out==0x41580 && field.calls==1);
+    field.nativeY=0x20000;
+    CHECK(Resolve(&field,&canopy,0,0,562,364,&out) && out==0x51580 && field.calls==2);
+    CHECK(Resolve(&field,&roof,0,0,562,364,&out) && out==0x60000 && field.calls==2);
+    CHECK(Resolve(&field,NULL,0,0,561,364,&out) && out==0x20000 && field.calls==3);
+    field.available=0;out=-7;
+    CHECK(!Resolve(&field,&canopy,0,0,562,364,&out) && out==-7 && field.calls==4);
+    CHECK(!Resolve(NULL,&canopy,0,0,562,364,&out));
+    return 0;
+}
+'''
+        with tempfile.TemporaryDirectory(prefix="canopy-native-height-") as temp:
+            binary=Path(temp)/"height"
+            compiled=subprocess.run([*shlex.split(os.environ.get("HOST_CC","cc")),
+                "-std=c11","-O1","-x","c","-","-o",str(binary)],
+                input=unit,text=True,capture_output=True,timeout=30)
+            self.assertEqual(compiled.returncode,0,compiled.stderr)
+            return subprocess.run([str(binary)],text=True,capture_output=True,timeout=10)
+
+    def test_native_canopy_height_uses_checked_ground_and_preserves_roof_height(self):
+        result=self.run_native_height()
+        self.assertEqual(result.returncode,0,result.stderr)
+
+    def test_missing_canopy_offset_is_rejected(self):
+        result=self.run_native_height(omit_canopy_offset=True)
+        self.assertNotEqual(result.returncode,0)
+        self.assertIn("height failure",result.stderr)
 
 
 if __name__ == "__main__":

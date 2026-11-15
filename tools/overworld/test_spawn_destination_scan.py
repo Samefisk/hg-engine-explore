@@ -282,7 +282,7 @@ def constants(source):
              "OW_WILD_PROFILE_DESTINATION_CHECKS_PER_UPDATE"]
     lines = []
     for line in joined.splitlines():
-        if re.match(r"#define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_", line) or re.match(
+        if re.match(r"#define OW_WILD_(BEHAVIOR_ALLOWED_TERRAIN_|SPAWN_DESTINATION_MASK_)", line) or re.match(
                 r"#define OW_WILD_SURFACE_TYPE_TERRAIN_MASK\(", line):
             lines.append(line)
     for name in names:
@@ -653,6 +653,7 @@ int main(int argc,char **argv) {
     case 16:field=NULL;break;
     case 17:behavior=OW_WILD_TILE_HEADBUTT;break;
     case 18:behavior=0xFF;break;
+    case 19:profile.spawnDestinationOverrideMask=1;profile.spawnDestinationMask=OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_WATER;behavior=0x10;rng_state=0x12345679;break;
     default:return 3;
     }
     int result=n==18
@@ -738,14 +739,21 @@ class UntouchedPoolAdmissionTests(unittest.TestCase):
             self.assertEqual(self.probe(number)["metatileReads"], 0)
 
     def test_prepared_coordinates_and_rng_are_unchanged(self):
-        for number in range(19):
+        for number in range(20):
             actual = self.probe(number)
             self.assertEqual(actual["position"], [-1, 12] if number == 9 else [12, 12])
-            self.assertEqual((actual["rngCalls"], actual["rngState"]), (0, 0x12345678))
-            if number not in (6, 13, 14):
+            # Untouched Pool and Headbutt consume no new RNG. An explicit
+            # Pool override draws exactly once before its prepared-site gate.
+            seed = 0x12345679 if number == 19 else 0x12345678
+            expected_rng = (1, (seed * 1664525 + 1013904223) & 0xFFFFFFFF) \
+                if number in (13, 19) else (0, seed)
+            self.assertEqual((actual["rngCalls"], actual["rngState"]), expected_rng)
+            if number not in (6, 14, 19):
                 self.assertEqual(actual["scanCalls"], 0)
-        explicit = self.probe(13)
-        self.assertEqual((explicit["result"], explicit["scanCalls"], explicit["scanMask"]), (1, 1, 2))
+        fast = self.probe(13)  # low two random bits are3: keep the legal site.
+        self.assertEqual((fast["result"], fast["scanCalls"], fast["scanMask"]), (1, 0, 0))
+        scan = self.probe(19)  # low two random bits are0: use the same scan.
+        self.assertEqual((scan["result"], scan["scanCalls"], scan["scanMask"]), (1, 1, 2))
 
     def test_existing_follower_failed_destination_exception_is_unchanged(self):
         entry = (ROOT / "lib/overworld/overworld_entry_route.c").read_text()
