@@ -143,6 +143,9 @@ class QueryAllocationLifecycleTests(unittest.TestCase):
         heap = {"heapId": 4, "known": True, "allocated": True, "handle": 0x02200000,
                 "heapStart": 0x02200040, "heapEnd": 0x02300000, "allocationCount": 10,
                 "totalFreeBytes": 200000, "largestUserAllocationBytes": 160000}
+        package_heap = {**heap, "heapId": 11, "handle": 0x02100000,
+                        "heapStart": 0x02100040, "heapEnd": 0x02200000}
+        heaps = {4: heap, 11: package_heap}
         owner = {"known": True, "rawHex": bytes(28).hex(), "phase": 0, "blob": 0,
                  "fieldIdentity": 0x02202000, "entry": 0}
         class Hooks:
@@ -160,15 +163,16 @@ class QueryAllocationLifecycleTests(unittest.TestCase):
             party_getter_hooks=Hooks(), read=read,
             field_pointer=lambda: 0x02202000,
             _query_owner_diagnostics=lambda: deepcopy(owner),
-            _heap_diagnostics=lambda: {"known": True, "heaps": [deepcopy(heap)],
+            _heap_diagnostics=lambda: {"known": True, "heaps": deepcopy(list(heaps.values())),
                                       "bytesRead": 400, "readBudgetBytes": 8192,
                                       "codeIdentity": []})
         session.packaged_code = read
         observer = QueryAllocationLifecycleObserver(session)
+        observer.fixture_heaps = heaps
         observer.installed = True
         observer.bodies = {key: (address, bytes([i + 1]) * 200, False)
             for i, (key, address) in enumerate((("load", 0x023CE000),
-                ("drain", 0x023CE200), ("unload", 0x023C2400), ("acquire", 0x02210080)))}
+                ("drain", 0x023CE200), ("unload", 0x023C2400), ("acquire", 0x02210080), ("destroy", 0x02210180)))}
         for address, body, _dynamic in observer.bodies.values():
             write(address, body)
         observer.ops = (0x023D7E00, bytes(24))
@@ -176,15 +180,18 @@ class QueryAllocationLifecycleTests(unittest.TestCase):
         observer.image = bytes(400)
         observer.receipt = {}
         observer.acquire_owner = (0x02080040, 156, "fixture")
+        observer.destroy_owner = (0x02080100, 36, "fixture")
         write(session.rt.WILD_STATE + 0xE0, struct.pack("<2I", 0x02202000, 0x022F0000))
         write(0x022F0000 + RUNTIME_QUERY, bytes(4))
         return observer, regs, heap, owner, write
 
     def allocated(self, fixture, pointer, size, caller):
-        observer, regs, heap, _owner, write = fixture
-        regs.r0, regs.r1, regs.lr = 4, size, caller | 1
+        observer, regs, _heap, _owner, write = fixture
+        heap_id = 11 if size in (observer.PACKAGE_BYTES,observer.CORE_BYTES) else 4
+        heap = observer.fixture_heaps[heap_id]
+        regs.r0, regs.r1, regs.lr = heap_id, size, caller | 1
         value = observer._allocate_before()
-        write(pointer - 16, bytes(12) + bytes([4, 0, 0, 0]))
+        write(pointer - 16, bytes(12) + bytes([heap_id, 0, 0, 0]))
         heap["totalFreeBytes"] -= size + 32
         heap["allocationCount"] += 1
         regs.r0 = pointer
@@ -195,7 +202,7 @@ class QueryAllocationLifecycleTests(unittest.TestCase):
         observer, regs, _heap, owner, write = fixture
         regs.r0, regs.r1, regs.r2, regs.r3 = 21, observer.PACKAGE_BYTES, 0x027E2000, 0x027E2004
         load = observer._load_before()
-        allocation = self.allocated(fixture, 0x02210010, observer.PACKAGE_BYTES,
+        allocation = self.allocated(fixture, 0x02110010, observer.PACKAGE_BYTES,
                                     observer.bodies["load"][0] + 20)
         write(load["blobOut"], struct.pack("<I", allocation["pointer"]))
         write(load["sizeOut"], struct.pack("<I", observer.PACKAGE_BYTES))
@@ -210,8 +217,7 @@ class QueryAllocationLifecycleTests(unittest.TestCase):
             observer._discover_after({})
         return allocation
 
-    def workspace(self, fixture):
-        from tools.overworld.devtools_query_observer import RUNTIME_QUERY
+    def begin_workspace(self, fixture):
         observer, regs, _heap, _owner, write = fixture
         write(0x027E2100, struct.pack("<6I", 0x027E2200, 0, 0, observer.HEAP_ALLOC | 1,
                                      0x0201ABED, 4) + bytes(8))
@@ -219,16 +225,40 @@ class QueryAllocationLifecycleTests(unittest.TestCase):
         write(0x027E2200, struct.pack("<HH2I", 3, 84, observer.current["field"],
                                      observer.session.rt.WILD_STATE) + bytes(72))
         regs.r0 = 0x027E2100
-        acquired = observer._acquire_before()
-        allocation = self.allocated(fixture, 0x02230010, observer.WORKSPACE_BYTES,
-                                    observer.bodies["acquire"][0] + 20)
-        write(acquired["runtime"] + RUNTIME_QUERY, struct.pack("<I", allocation["pointer"]))
-        regs.r0 = allocation["pointer"]
-        observer._acquire_after(acquired)
-        return allocation
+        return observer._acquire_before()
+
+    def workspace(self, fixture):
+        from tools.overworld.devtools_query_observer import (RUNTIME_QUERY,QUERY_STORAGE,QUERY_CACHED_EDGES,
+            QUERY_VISITED,QUERY_AUX_NODES,QUERY_AUX_VISITED_VALID,QUERY_AUX_CHANGES,QUERY_AUX_CHANGES_VALID,QUERY_ALLOCATION_VERSION)
+        observer,regs,_heap,_owner,write=fixture
+        acquired=self.begin_workspace(fixture)
+        core=self.allocated(fixture,0x02130010,observer.CORE_BYTES,observer.bodies["acquire"][0]+20)
+        aux=self.allocated(fixture,0x02230010,observer.AUXILIARY_BYTES,observer.bodies["acquire"][0]+24)
+        write(core["pointer"],struct.pack("<3I",aux["pointer"],observer.bodies["destroy"][0]|1,QUERY_ALLOCATION_VERSION))
+        write(core["pointer"]+QUERY_STORAGE,struct.pack("<3I2H6I",aux["pointer"]+QUERY_AUX_NODES,core["pointer"]+QUERY_CACHED_EDGES,
+            core["pointer"]+QUERY_VISITED,256,512,512,0,aux["pointer"]+QUERY_AUX_VISITED_VALID,
+            0,aux["pointer"]+QUERY_AUX_CHANGES,aux["pointer"]+QUERY_AUX_CHANGES_VALID))
+        write(acquired["runtime"]+RUNTIME_QUERY,struct.pack("<I",core["pointer"]))
+        regs.r0=core["pointer"];observer._acquire_after(acquired)
+        return core
+
+    def begin_destroy(self, fixture, drain):
+        from tools.overworld.devtools_query_observer import RUNTIME_QUERY
+        observer,regs,_heap,_owner,write=fixture
+        write(drain["runtime"]+RUNTIME_QUERY,bytes(4));regs.r0=drain["allocation"]["pointer"]
+        value=observer._destroy_before();write(regs.r0,bytes(12));return value
+
+    def destroyed(self, fixture, drain):
+        observer,regs,_heap,_owner,_write=fixture
+        value=self.begin_destroy(fixture,drain)
+        self.freed(fixture,drain["auxiliary"],observer.bodies["destroy"][0]+20)
+        self.freed(fixture,drain["allocation"],observer.bodies["destroy"][0]+24)
+        observer._destroy_after(value)
+        return value
 
     def freed(self, fixture, allocation, caller):
-        observer, regs, heap, _owner, _write = fixture
+        observer, regs, _heap, _owner, _write = fixture
+        heap = observer.fixture_heaps[allocation["heapId"]]
         regs.r0, regs.lr = allocation["pointer"], caller | 1
         value = observer._free_before()
         heap["totalFreeBytes"] += allocation["bytes"] + 32
@@ -248,7 +278,7 @@ class QueryAllocationLifecycleTests(unittest.TestCase):
         unload = observer._unload_before()
         regs.r0 = observer.current["runtime"]
         drain = observer._drain_before()
-        self.freed(fixture, workspace, observer.bodies["drain"][0] + 20)
+        self.destroyed(fixture,drain)
         write(drain["runtime"] + RUNTIME_QUERY, bytes(4))
         regs.r0 = 1
         observer._drain_after(drain)
@@ -260,10 +290,15 @@ class QueryAllocationLifecycleTests(unittest.TestCase):
         self.assertTrue(result["known"])
         self.assertTrue(result["complete"])
         self.assertFalse(result["acceptedProof"])
-        self.assertEqual([row["bytes"] for row in result["allocations"]], [70096, 43516])
-        self.assertEqual([row["freeCount"] for row in result["allocations"]], [1, 1])
+        self.assertEqual([row["bytes"] for row in result["allocations"]], [70840, 16600, 11268])
+        self.assertEqual([row["heapId"] for row in result["allocations"]], [11, 11, 4])
+        self.assertEqual(result["packageHeapId"], 11)
+        self.assertEqual(result["workspaceHeapId"], 4)
+        self.assertEqual([row["freeCount"] for row in result["allocations"]], [1, 1, 1])
         self.assertEqual(heap["totalFreeBytes"], 200000)
         self.assertEqual(heap["allocationCount"], 10)
+        self.assertEqual((observer.fixture_heaps[11]["totalFreeBytes"],
+                          observer.fixture_heaps[11]["allocationCount"]), (200000, 10))
         self.assertEqual(package["ownerBeforeLoad"]["rawHex"], bytes(28).hex())
         self.assertEqual(package["heapBeforeLoad"]["boundary"], "native-LoadCodeAddonBlob-entry")
         self.assertEqual((observer.session.completed_frames, observer.session.rt.EXECUTED_FRAME_COUNT), (381, 921))
@@ -354,60 +389,155 @@ class QueryAllocationLifecycleTests(unittest.TestCase):
         for fault in ("reserve", "largest", "heap", "caller", "count-limit"):
             with self.subTest(fault=fault):
                 observer, regs, heap, _owner, _write = fixture = self.fixture()
-                regs.r0, regs.r1, regs.r2, regs.r3 = 21, 70096, 0x027E2000, 0x027E2004
+                heap = observer.fixture_heaps[11]
+                regs.r0, regs.r1, regs.r2, regs.r3 = 21, 70840, 0x027E2000, 0x027E2004
                 observer._load_before()
-                regs.r0, regs.r1, regs.lr = 4, 70096, observer.bodies["load"][0] + 21
-                if fault == "reserve": heap["totalFreeBytes"] = 70096 + 32767
+                regs.r0, regs.r1, regs.lr = 11, 70840, observer.bodies["load"][0] + 21
+                if fault == "reserve": heap["totalFreeBytes"] = 70840 + 32767
                 if fault == "largest": heap["largestUserAllocationBytes"] = 69599
-                if fault == "heap": regs.r0 = 11
+                if fault == "heap": regs.r0 = 4
                 if fault == "caller": regs.lr = 0x0201AAAA
                 if fault == "count-limit": observer.allocations = [{}] * observer.MAX_ALLOCATIONS
                 with self.assertRaises(DevtoolsFailure): observer._allocate_before()
                 if fault in ("heap", "caller", "count-limit"):
                     self.assertIsNone(observer.rejected_allocation_request)
 
-    def test_rejected_workspace_request_keeps_exact_entry_heap_without_success_credit(self):
-        from tools.overworld.devtools_query_observer import RUNTIME_QUERY
-        for fault in ("reserve", "contiguous"):
-            with self.subTest(fault=fault):
-                observer, regs, heap, owner, write = fixture = self.fixture()
-                self.package(fixture)
-                workspace = self.workspace(fixture)
-                owner["phase"] = 2
-                regs.r0 = observer.current["runtime"]
-                drain = observer._drain_before()
-                self.freed(fixture, workspace, observer.bodies["drain"][0] + 20)
-                write(drain["runtime"] + RUNTIME_QUERY, bytes(4))
-                regs.r0 = 1
-                observer._drain_after(drain)
-                owner["phase"] = 1
-                regs.r0 = 0x027E2100
-                acquired = observer._acquire_before()
-                self.assertIsNone(acquired["allocation"])
-                heap.update(totalFreeBytes=100572, largestUserAllocationBytes=48020)
-                if fault == "reserve": heap["totalFreeBytes"] = 43516 + 32767
-                if fault == "contiguous": heap["largestUserAllocationBytes"] = 43515
-                regs.r0, regs.r1, regs.lr = 4, 43516, observer.bodies["acquire"][0] + 21
-                with self.assertRaisesRegex(DevtoolsFailure, "insufficient reserve/contiguous"):
+    def test_each_allocation_rejects_other_heap_at_entry_and_in_header(self):
+        for kind, expected_heap, wrong_heap, pointer in (
+            ("package", 11, 4, 0x02110010), ("workspace-core", 11, 4, 0x02130010),
+            ("workspace-auxiliary", 4, 11, 0x02230010)):
+            for fault in ("call", "header"):
+                with self.subTest(kind=kind, fault=fault):
+                    observer, regs, _heap, _owner, write = fixture = self.fixture()
+                    if kind == "package":
+                        regs.r0, regs.r1, regs.r2, regs.r3 = (
+                            21, observer.PACKAGE_BYTES, 0x027E2000, 0x027E2004)
+                        observer._load_before()
+                    else:
+                        self.package(fixture)
+                        self.begin_workspace(fixture)
+                        if kind == "workspace-auxiliary":
+                            self.allocated(fixture,0x02130010,observer.CORE_BYTES,observer.bodies["acquire"][0]+20)
+                    size = observer.PACKAGE_BYTES if kind == "package" else observer.CORE_BYTES if kind == "workspace-core" else observer.AUXILIARY_BYTES
+                    binding = observer.bodies["load" if kind == "package" else "acquire"]
+                    regs.r0, regs.r1, regs.lr = expected_heap, size, binding[0] + 21
+                    if fault == "call":
+                        regs.r0 = wrong_heap
+                        with self.assertRaisesRegex(DevtoolsFailure, "allocator call/limit"):
+                            observer._allocate_before()
+                    else:
+                        value = observer._allocate_before()
+                        write(pointer - 16, bytes(12) + bytes([wrong_heap, 0, 0, 0]))
+                        heap = observer.fixture_heaps[expected_heap]
+                        heap["totalFreeBytes"] -= size + 32
+                        heap["allocationCount"] += 1
+                        regs.r0 = pointer
+                        with self.assertRaisesRegex(DevtoolsFailure, "allocation/header/reserve"):
+                            observer._allocate_after(value)
+                    self.assertFalse(any(row["kind"] == kind for row in observer.allocations))
+
+    def test_both_workspace_reserves_and_exact_entry_heaps_reject_without_credit(self):
+        for kind in ("workspace-core","workspace-auxiliary"):
+            with self.subTest(kind=kind):
+                observer,regs,_heap,owner,_write=fixture=self.fixture()
+                self.package(fixture);acquired=self.begin_workspace(fixture)
+                if kind=="workspace-core":
+                    size,heap_id,reserve=observer.CORE_BYTES,11,observer.CORE_RESERVE_BYTES
+                else:
+                    self.allocated(fixture,0x02130010,observer.CORE_BYTES,observer.bodies["acquire"][0]+20)
+                    size,heap_id,reserve=observer.AUXILIARY_BYTES,4,observer.AUXILIARY_RESERVE_BYTES
+                heap=observer.fixture_heaps[heap_id]
+                heap["totalFreeBytes"]=size+reserve+observer.ALLOCATION_MARGIN-1
+                regs.r0,regs.r1,regs.lr=heap_id,size,observer.bodies["acquire"][0]+21
+                with self.assertRaisesRegex(DevtoolsFailure,"insufficient reserve/contiguous"):
                     observer._allocate_before()
-                receipt = observer.result()["rejectedAllocationRequest"]
-                self.assertEqual((receipt["kind"], receipt["bytes"], receipt["heapId"]), ("workspace", 43516, 4))
-                self.assertEqual(receipt["callerReturn"], regs.lr)
-                self.assertEqual(receipt["heapBeforeAllocation"]["boundary"], "native-Heap_Alloc-entry")
-                self.assertEqual(receipt["heapBeforeAllocation"]["handle"], heap["handle"])
-                self.assertEqual(receipt["heapBeforeAllocation"]["totalFreeBytes"], heap["totalFreeBytes"])
-                self.assertEqual(receipt["heapBeforeAllocation"]["largestUserAllocationBytes"], heap["largestUserAllocationBytes"])
-                self.assertEqual(receipt["insufficientReserve"], fault == "reserve")
-                self.assertEqual(receipt["insufficientContiguousSpace"], fault == "contiguous")
+                receipt=observer.result()["rejectedAllocationRequest"]
+                self.assertEqual((receipt["kind"],receipt["bytes"],receipt["heapId"]),(kind,size,heap_id))
+                self.assertTrue(receipt["insufficientReserve"])
                 self.assertFalse(receipt["nativeReturnObserved"])
-                self.assertEqual(receipt["ownerBefore"], owner)
-                self.assertEqual([row["kind"] for row in observer.allocations], ["package", "workspace"])
-                self.assertIsNone(acquired["allocation"])
+                self.assertEqual(receipt["ownerBefore"],owner)
                 self.assertFalse(observer.result()["complete"])
-                heap["totalFreeBytes"] = 0
-                self.assertEqual(observer.result()["rejectedAllocationRequest"], receipt)
-                observer.rejected_allocation_request["bytes"] = 1
-                self.assertEqual(receipt["bytes"], 43516)
+                observer.rejected_allocation_request["bytes"]=1
+                self.assertEqual(receipt["bytes"],size)
+
+    def test_measured_cold_route84_heap_admits_core_without_lowering_reserves(self):
+        # The real failed cold call had37,720 free bytes in heap11:64 below
+        # the former17,240-byte core plus20 KiB reserve and64-byte margin.
+        observer,_regs,_heap,_owner,_write=fixture=self.fixture()
+        self.package(fixture);self.begin_workspace(fixture)
+        core_heap=observer.fixture_heaps[11]
+        core_heap.update(totalFreeBytes=37720,largestUserAllocationBytes=37720)
+        core=self.allocated(fixture,0x02130010,observer.CORE_BYTES,observer.bodies["acquire"][0]+20)
+        self.assertEqual(core["heapBeforeAllocation"]["totalFreeBytes"],37720)
+        self.assertGreaterEqual(core["heapAfterAllocation"]["totalFreeBytes"],20480)
+        self.assertEqual((core["reserveBytes"],core["allocationMargin"]),(20480,64))
+        aux_heap=observer.fixture_heaps[4]
+        aux_heap.update(totalFreeBytes=79940,largestUserAllocationBytes=79940)
+        aux=self.allocated(fixture,0x02230010,observer.AUXILIARY_BYTES,observer.bodies["acquire"][0]+24)
+        self.assertGreaterEqual(aux["heapAfterAllocation"]["totalFreeBytes"],16384)
+        self.assertEqual((aux["reserveBytes"],aux["allocationMargin"]),(16384,64))
+
+    def test_allocation_margin_absorbs_headers_without_reducing_either_reserve(self):
+        observer,_regs,_heap,_owner,_write=fixture=self.fixture()
+        self.package(fixture);self.begin_workspace(fixture)
+        for size,heap_id,reserve,pointer in ((observer.CORE_BYTES,11,observer.CORE_RESERVE_BYTES,0x02130010),
+                (observer.AUXILIARY_BYTES,4,observer.AUXILIARY_RESERVE_BYTES,0x02230010)):
+            heap=observer.fixture_heaps[heap_id]
+            heap.update(totalFreeBytes=size+reserve+64,largestUserAllocationBytes=size+64)
+            allocation=self.allocated(fixture,pointer,size,observer.bodies["acquire"][0]+20)
+            self.assertEqual(allocation["heapAfterAllocation"]["totalFreeBytes"],reserve+32)
+            self.assertEqual(allocation["allocationMargin"],64)
+
+    def test_failed_second_allocation_rolls_core_back_and_retry_can_publish(self):
+        from tools.overworld.devtools_query_observer import RUNTIME_QUERY
+        observer,regs,_heap,owner,write=fixture=self.fixture()
+        package=self.package(fixture);acquired=self.begin_workspace(fixture)
+        core=self.allocated(fixture,0x02130010,observer.CORE_BYTES,observer.bodies["acquire"][0]+20)
+        heap=observer.fixture_heaps[4];heap["largestUserAllocationBytes"]=observer.AUXILIARY_BYTES-1
+        regs.r0,regs.r1,regs.lr=4,observer.AUXILIARY_BYTES,observer.bodies["acquire"][0]+25
+        attempt=observer._allocate_before();regs.r0=0;observer._allocate_after(attempt)
+        self.assertEqual(observer._word(acquired["runtime"]+RUNTIME_QUERY),0)
+        self.freed(fixture,core,observer.bodies["acquire"][0]+28)
+        regs.r0=0;observer._acquire_after(acquired)
+        self.assertTrue(core["rolledBack"]);self.assertFalse(core["published"])
+        self.assertEqual(core["freeCount"],1)
+        self.assertEqual(observer.result()["failedAllocations"][0]["pointer"],0)
+        self.assertTrue(observer.result()["rejectedAllocationRequest"]["nativeReturnObserved"])
+        self.assertFalse(observer.result()["complete"])
+        # Native allocators can reuse the same just-freed core address.
+        heap["largestUserAllocationBytes"]=160000
+        current=self.workspace(fixture);owner["phase"]=2
+        regs.r0=observer.current["runtime"];drain=observer._drain_before()
+        self.destroyed(fixture,drain);regs.r0=1;observer._drain_after(drain)
+        self.assertEqual(current["freeCount"],1)
+        self.assertEqual(core["freeCount"],1)
+        self.assertEqual(len(observer.allocations),4)
+
+    def test_repeat_drain_is_noop_and_does_not_follow_freed_prefix(self):
+        observer,regs,_heap,owner,write=fixture=self.fixture()
+        self.package(fixture);core=self.workspace(fixture);owner["phase"]=2
+        regs.r0=observer.current["runtime"];drain=observer._drain_before()
+        self.destroyed(fixture,drain);regs.r0=1;observer._drain_after(drain)
+        write(core["pointer"],b"stale-prefix")
+        regs.r0=observer.current["runtime"];again=observer._drain_before()
+        self.assertIsNone(again["allocation"]);regs.r0=1;observer._drain_after(again)
+        self.assertEqual([a["freeCount"] for a in observer.allocations],[0,1,1])
+
+    def test_nested_destructor_requires_cleared_prefix_auxiliary_first_and_live_code(self):
+        for fault in ("prefix","core-first","foreign-owner","package-first"):
+            with self.subTest(fault=fault):
+                observer,regs,_heap,owner,write=fixture=self.fixture()
+                package=self.package(fixture);core=self.workspace(fixture);owner["phase"]=2
+                regs.r0=observer.current["runtime"];drain=observer._drain_before()
+                self.begin_destroy(fixture,drain)
+                target=drain["auxiliary"]
+                if fault=="prefix":write(core["pointer"],bytes((1,))+bytes(11))
+                if fault=="core-first":target=core
+                if fault=="foreign-owner":owner["fieldIdentity"]+=4
+                if fault=="package-first":target=package
+                regs.r0,regs.lr=target["pointer"],observer.bodies["destroy"][0]+21
+                with self.assertRaises(DevtoolsFailure):observer._free_before()
+
 
     def test_borrowed_world_runtime_and_callback_identity_reject(self):
         for fault in ("world", "field", "state", "swapped", "allocate", "free-size", "runtime"):
@@ -430,21 +560,19 @@ class QueryAllocationLifecycleTests(unittest.TestCase):
                 with self.assertRaises(DevtoolsFailure): observer._acquire_before()
 
     def test_free_cannot_use_wrong_header_heap_caller_owner_or_repeat(self):
-        for fault in ("header", "caller", "owner", "heap-owner", "repeat"):
+        for fault in ("header","caller","owner","heap-owner","repeat"):
             with self.subTest(fault=fault):
-                observer, regs, heap, owner, write = fixture = self.fixture()
-                self.package(fixture)
-                workspace = self.workspace(fixture)
-                owner["phase"] = 2
-                regs.r0 = observer.current["runtime"]
-                observer._drain_before()
-                regs.r0, regs.lr = workspace["pointer"], observer.bodies["drain"][0] + 21
-                if fault == "header": write(workspace["pointer"] - 16, bytes(12) + bytes([11, 0, 0, 0]))
-                if fault == "caller": regs.lr = observer.bodies["unload"][0] + 21
-                if fault == "owner": owner["phase"] = 1
-                if fault == "heap-owner": heap["handle"] += 4
-                if fault == "repeat": workspace["freeCount"] = 1
-                with self.assertRaises(DevtoolsFailure): observer._free_before()
+                observer,regs,heap,owner,write=fixture=self.fixture()
+                self.package(fixture);self.workspace(fixture);owner["phase"]=2
+                regs.r0=observer.current["runtime"];drain=observer._drain_before()
+                self.begin_destroy(fixture,drain);aux=drain["auxiliary"]
+                regs.r0,regs.lr=aux["pointer"],observer.bodies["destroy"][0]+21
+                if fault=="header":write(aux["pointer"]-16,bytes(12)+bytes((11,0,0,0)))
+                if fault=="caller":regs.lr=observer.bodies["drain"][0]+21
+                if fault=="owner":owner["phase"]=1
+                if fault=="heap-owner":heap["handle"]+=4
+                if fault=="repeat":aux["freeCount"]=1
+                with self.assertRaises(DevtoolsFailure):observer._free_before()
 
     def test_named_return_requires_actual_heap_free_and_workspace_clear(self):
         observer, regs, _heap, owner, _write = fixture = self.fixture()

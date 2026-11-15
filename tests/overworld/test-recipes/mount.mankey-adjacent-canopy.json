@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.mankey-adjacent-canopy",
+  "title": "Mounted Mankey hops onto the exact adjacent tree top",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "TICKETS.md",
+  "requirements": [
+    "current.mounted-mankey-adjacent-canopy"
+  ],
+  "budgets": {
+    "maxSeconds": 180,
+    "maxFrames": 480,
+    "noProgressFrames": 120,
+    "minObservedFrames": 24
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "MOUNTED",
+      "acquire": "existing"
+    }
+  ],
+  "setup": [
+    {
+      "id": "route30-tree",
+      "op": "teleport",
+      "args": {
+        "map": 34,
+        "x": 561,
+        "z": 364,
+        "facing": 3
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-field",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "mount-saved-mankey",
+      "op": "spawn",
+      "args": {
+        "species": 56,
+        "form": 0,
+        "role": "mounted",
+        "slot": 2,
+        "level": 3
+      },
+      "budget": {
+        "maxSeconds": 45,
+        "maxFrames": 180,
+        "noProgressFrames": 180
+      }
+    },
+    {
+      "id": "bind-mankey",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "right-to-adjacent-tree",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mounted-mankey-adjacent-canopy-v1",
+          "stage": "started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "release-through-canopy-terminal",
+      "op": "step",
+      "args": {
+        "frames": 64,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "mounted-mankey-adjacent-canopy-v1",
+      "when": "final"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "mounted-mankey-adjacent-canopy-v1",
+      "subject": "mankey"
+    }
+  ]
+}

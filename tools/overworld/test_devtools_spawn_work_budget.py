@@ -676,6 +676,54 @@ class SpawnWorkBudgetTests(unittest.TestCase):
             }}],
         }
 
+    def test_late_loop_fault_waits_for_a_credited_field_interval(self):
+        from tools.overworld.devtools_d1_routes import GOLDENROD35
+        from tools.overworld.test_devtools_unmounted_zero_stutter import pacing_event
+        from tools.overworld.devtools_main_loop_probe import MAX_ZERO_STUTTER_ARM9_TICKS
+        value = recipe()
+        value["measurements"] = [{"kind": KIND, "subject": "mankey", "route": GOLDENROD35}]
+        meter = SpawnWorkBudgetMeasurement(
+            value, {"schema": {}, "sourceSha256": SOURCE_HASH}, max_frames=720)
+        before = {"mapId": 101, "fieldEpoch": 3, "mapGeneration": 3}
+        after = {"mapId": 39, "fieldEpoch": 4, "mapGeneration": 4}
+        meter.active_context = deepcopy(before)
+        negative = SpawnWorkBudgetNegative("spawn-work-budget-late-main-loop", measurement=meter)
+        def row(frame, context):
+            return {"phase": "observe", "samples": [{"frame": frame, "context": deepcopy(context)}],
+                    "events": [pacing_event(frame)]}
+        # Native map publication comes before the checker admits this Field.
+        for frame in range(1000, 1003):
+            arrival = row(frame, after)
+            self.assertEqual(negative.mutate(arrival, {}), arrival)
+            self.assertFalse(negative.applied)
+        meter.context_transition = {"from": before, "to": after}
+        meter.pacing_samples = 1
+        still_old = row(1003, before)
+        self.assertEqual(negative.mutate(still_old, {}), still_old)
+        meter.active_context = deepcopy(after)
+        wrong_owner = row(1004, {**after, "fieldEpoch": 3})
+        self.assertEqual(negative.mutate(wrong_owner, {}), wrong_owner)
+        meter.setup_scan = {"spawnAttemptId": 99}
+        draining = row(1005, after)
+        self.assertEqual(negative.mutate(draining, {}), draining)
+        meter.setup_scan = None
+        meter.pacing_samples = 0
+        first = row(1006, after)
+        self.assertEqual(negative.mutate(first, {}), first)
+        self.assertFalse(negative.applied)
+        meter._observe_pacing(first["samples"][0], first["events"])
+        self.assertEqual(meter.pacing_samples, 1)
+        credited = row(1007, after)
+        changed = negative.mutate(credited, {})
+        self.assertTrue(negative.applied)
+        data = changed["events"][0]["data"]
+        self.assertEqual(data["frameCounter"], 3)
+        self.assertEqual(data["intervalFromPrevious"]["arm9Ticks"], MAX_ZERO_STUTTER_ARM9_TICKS + 1)
+        self.assertEqual(data["intervalFromPrevious"]["nativeCycles"], NORMAL_MAIN_LOOP_NATIVE_CYCLES + 1)
+        self.assertEqual(credited["events"][0]["data"]["frameCounter"], 2)
+        with self.assertRaisesRegex(ValueError, "main loop missed normal frame pace"):
+            meter._observe_pacing(changed["samples"][0], changed["events"])
+
     def test_pacing_controls_begin_after_the_route_transition(self):
         pre = self._control_row(INITIAL_CONTEXT, x=576, x_prev=577, pos_x=576 << 16)
         transition = self._control_row(

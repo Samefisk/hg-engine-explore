@@ -157,7 +157,7 @@ def main() -> int:
         (viewer, "walkPause"),
         (viewer, "walkPauseVariance"),
         (validator, "OWBD_PROFILE_SIZE = 80"),
-        (validator, "OWBD_OVERRIDE_PROFILE_SIZE = 228"),
+        (validator, "OWBD_OVERRIDE_PROFILE_SIZE = 232"),
     ):
         if required not in source:
             raise SystemExit(f"Walk pause consumer is missing: {required}")

@@ -1,5 +1,6 @@
 """Acceptance rows and copied-data controls for unmounted zero stutter."""
 from copy import deepcopy
+from tools.overworld.devtools_d1_routes import CHERRYGROVE, descriptor
 
 from tools.overworld.devtools_main_loop_probe import (
     MAX_ZERO_STUTTER_ARM9_TICKS,
@@ -7,12 +8,14 @@ from tools.overworld.devtools_main_loop_probe import (
 )
 from tools.overworld.devtools_unmounted_zero_stutter_measurement import (
     BASE_REFILL_INTERVAL_FRAMES,
+    FULL_DENSITY_COUNT,
     KIND,
     MAX_DESTINATION_SCAN_FRAME_SPAN,
     MINIMUM_FRAMES,
     MINIMUM_MOVING_FRAMES,
     REQUIREMENT,
-    START,
+    SPARSE_REFILL_INTERVAL_FRAMES,
+    effective_refill_interval,
     require,
 )
 
@@ -55,7 +58,7 @@ def contract():
              "type": "integer", "validator": "meaningful-observation", "minimum": 1},
             {"name": "zero-stutter-minimum-post-success-refill-frames", "operator": "gte",
              "type": "integer", "validator": "meaningful-observation",
-             "minimum": BASE_REFILL_INTERVAL_FRAMES},
+             "minimum": SPARSE_REFILL_INTERVAL_FRAMES},
             {
                 "name": "zero-stutter-spawn-work-witness-count", "operator": "gte",
                 "type": "integer", "validator": "meaningful-observation",
@@ -104,6 +107,7 @@ def contract():
 
 def measurements(replay, record):
     meter = replay.get("measurements", {}).get(KIND, {})
+    route = descriptor(meter.get("route", CHERRYGROVE))
     pacing = meter.get("pacing") or {}
     spawn = meter.get("spawnWork") or {}
     hop = meter.get("hopRhythm") or {}
@@ -114,14 +118,16 @@ def measurements(replay, record):
             and meter.get("closed") is True and meter.get("acceptedProof") is False
             and meter.get("failures") == []
             and meter.get("requirements") == [REQUIREMENT]
-            and meter.get("started", {}).get("mapId") == START["mapId"]
+            and meter.get("started", {}).get("mapId") == route["anchor"][0]
             and meter.get("frames", 0) >= MINIMUM_FRAMES
             and subject.get("species") == 56
             and subject.get("role") == "FOLLOWER"
             and subject.get("identityVerified") is True
             and refill.get("count", 0) >= 1
             and refill.get("baseFrames") == BASE_REFILL_INTERVAL_FRAMES
-            and refill.get("minimumActorFrames", 0) >= BASE_REFILL_INTERVAL_FRAMES
+            and refill.get("sparseFrames") == SPARSE_REFILL_INTERVAL_FRAMES
+            and refill.get("fullDensityCount") == FULL_DENSITY_COUNT
+            and refill.get("minimumActorFrames", 0) >= SPARSE_REFILL_INTERVAL_FRAMES
             and spawn.get("destinationSearchCount", 0) >= 1
             and spawn.get("finalizerCount", 0) >= 1
             and spawn.get("joinedWitnessCount", 0) >= 1
@@ -147,6 +153,22 @@ def measurements(replay, record):
             and pacing.get("maximumArm9Ticks") <= MAX_ZERO_STUTTER_ARM9_TICKS
             and pacing.get("renderStallCount") == 0,
             "zero-stutter proof is not one complete hitch-free spawn-work route")
+    witnesses = refill.get("witnesses")
+    require(isinstance(witnesses, list) and len(witnesses) == refill["count"],
+            "zero-stutter refill interval witnesses are missing")
+    for witness in witnesses:
+        require(isinstance(witness, dict)
+                and type(witness.get("actorFrames")) is int
+                and type(witness.get("createdActorFrame")) is int
+                and type(witness.get("nextEntryActorFrame")) is int
+                and witness["actorFrames"] == witness["nextEntryActorFrame"]
+                    - witness["createdActorFrame"]
+                and witness.get("requiredActorFrames")
+                    == effective_refill_interval(witness.get("rawRefillDelay"))
+                and witness["actorFrames"] >= witness["requiredActorFrames"],
+                "zero-stutter refill interval witness bypassed its native density wait")
+    require(refill["minimumActorFrames"] == min(row["actorFrames"] for row in witnesses),
+            "zero-stutter refill interval minimum differs from its witnesses")
     require(record.get("sessionCleanup") == {
         "sessionId": record.get("sessionId"), "closed": True, "errors": [],
     }, "zero-stutter private session did not close cleanly")
@@ -168,7 +190,7 @@ def measurements(replay, record):
         ("population-bounds", "zero-stutter-post-success-refill-interval-count",
          refill["count"], "gte", 1),
         ("population-bounds", "zero-stutter-minimum-post-success-refill-frames",
-         refill["minimumActorFrames"], "gte", BASE_REFILL_INTERVAL_FRAMES),
+         refill["minimumActorFrames"], "gte", SPARSE_REFILL_INTERVAL_FRAMES),
         ("population-bounds", "zero-stutter-spawn-work-witness-count",
          spawn["joinedWitnessCount"], "gte", 1),
         ("population-bounds", "zero-stutter-spawn-attempt-frame-span",
@@ -197,23 +219,24 @@ def measurements(replay, record):
 
 
 class UnmountedZeroStutterNegative:
-    def __init__(self, fault):
+    def __init__(self, fault, *, measurement=None):
         require(fault in FAULTS, "unknown zero-stutter copied fault")
         self.fault = fault
+        self.route = measurement.route if measurement is not None else descriptor()
         self.applied = False
         self.active = False
         self.previous_pose = None
         self.spawn_attempt_id = None
         self.spawn_attempt_frame = None
         self.refill_success_frame = None
+        self.refill_success_interval = None
 
-    @staticmethod
-    def _anchor(sample):
+    def _anchor(self, sample):
         player = sample.get("player", {})
         return (sample.get("fieldAvailable") is True
-                and sample.get("context", {}).get("mapId") == START["mapId"]
-                and player.get("x") == player.get("x_prev") == START["x"]
-                and player.get("y") == player.get("y_prev") == START["y"])
+                and sample.get("context", {}).get("mapId") == self.route["anchor"][0]
+                and player.get("x") == player.get("x_prev") == self.route["anchor"][1]
+                and player.get("y") == player.get("y_prev") == self.route["anchor"][2])
 
     def mutate(self, row, subjects):
         if row.get("phase") != "observe":
@@ -241,12 +264,23 @@ class UnmountedZeroStutterNegative:
             return row
         if self.fault in ("zero-stutter-short-refill-interval",
                           "zero-stutter-stale-refill-owner"):
+            from tools.overworld.devtools_spawn_outcome_records import creation_delay_anchor
             for event in events:
                 data = event.get("data", {})
                 if data.get("observation") == "entry-native-control" \
                         and data.get("entry", {}).get("operation") == 7 \
                         and data["entry"].get("outcome") == 3:
-                    self.refill_success_frame = data.get("returnActorFrame")
+                    # Nonordinary COMMIT can succeed without owning a refill.
+                    if data["entry"].get("refillDelay") == 0:
+                        continue
+                    sample = next((s for s in samples if s.get("frame") == event.get("frame")), None)
+                    require(sample is not None, "zero-stutter copied refill anchor lacks its snapshot")
+                    birth = creation_delay_anchor(sample, event, events)
+                    if birth is None:
+                        continue
+                    self.refill_success_frame = birth["returnActorFrame"]
+                    self.refill_success_interval = effective_refill_interval(
+                        birth["refillDelay"])
                     continue
                 if data.get("observation") != "spawn-queued":
                     continue
@@ -256,7 +290,7 @@ class UnmountedZeroStutterNegative:
                     else:
                         # Change only copied call clocks and its completed
                         # Actor clock. The next game/native frame stays intact.
-                        short = self.refill_success_frame + BASE_REFILL_INTERVAL_FRAMES - 1
+                        short = self.refill_success_frame + self.refill_success_interval - 1
                         data["entryActorFrame"] = data["returnActorFrame"] = short
                         for sample in samples:
                             if sample.get("frame") == event.get("frame"):

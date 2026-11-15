@@ -218,7 +218,8 @@ typedef struct OverworldWildHelperEncounterData {
     u8 oldRodRate;
     u8 goodRodRate;
     u8 superRodRate;
-    u8 padding[2];
+    u8 overworldTimePolicy;
+    u8 padding;
     OverworldWildHelperLandEncounterData landSlots;
     u16 hoennSoundsSpecies[2];
     u16 sinnohSoundsSpecies[2];
@@ -797,9 +798,11 @@ static BOOL OverworldWildHelper_TryRollHeadbuttEncounter(
 }
 
 static const u16 *OverworldWildHelper_GetTimeOfDaySpeciesTable(
-    const OverworldWildHelperLandEncounterData *landSlots)
+    const OverworldWildHelperLandEncounterData *landSlots,
+    u8 timePolicy)
 {
-    if ((gf_rand() % 100) < OW_WILD_HELPER_RANDOM_TIME_TABLE_CHANCE_PERCENT) {
+    if ((timePolicy & 1) == 0
+        && (gf_rand() % 100) < OW_WILD_HELPER_RANDOM_TIME_TABLE_CHANCE_PERCENT) {
         switch (gf_rand() % 3) {
         case 0:
             return landSlots->morningSpecies;
@@ -829,7 +832,8 @@ static BOOL OverworldWildHelper_TryRollLandEncounter(
     int attempts;
     const u16 *speciesTable;
 
-    speciesTable = OverworldWildHelper_GetTimeOfDaySpeciesTable(&encounterData->landSlots);
+    speciesTable = OverworldWildHelper_GetTimeOfDaySpeciesTable(
+        &encounterData->landSlots, encounterData->overworldTimePolicy);
 
     for (attempts = 0; attempts < OW_WILD_HELPER_GRASS_SLOTS; attempts++) {
         u8 slot = OverworldWildHelper_RollWeightedSlot(

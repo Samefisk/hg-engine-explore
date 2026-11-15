@@ -150,7 +150,7 @@ class WildStagedMotionTests(unittest.TestCase):
         real = fresh_engine()
         real.WILD_STATE = engine.WILD_STATE
         with patch("tools.overworld.devtools_field_cleanup.symbol", side_effect=[
-                (engine.WILD_STATE, 944, None), (0x02310000, 108, bytes(108))]), \
+                (engine.WILD_STATE, 952, None), (0x02310000, 108, bytes(108))]), \
                 patch.object(Path, "read_bytes", return_value=b"unused fixture"):
             value = real.wild_staged_motion(emu, 0)
         self.assertFalse(value["known"])

@@ -73,16 +73,26 @@ def validate_recipe(test):
             "Follower Throw fixture or bounded natural input differs")
 
 
-def require_non45_away(origin, target, player):
+def require_away_endpoint(origin, target, player, *, non45=False):
     outward = tuple(a-b for a,b in zip(origin, player))
     radius = max(abs(v) for v in outward)
     delta = tuple(a-b for a,b in zip(target, origin))
-    require(radius > 0 and all(delta) and abs(delta[0]) != abs(delta[1])
-            and max(abs(v) for v in delta) == THROW_RANGE
-            and delta == tuple((1 if v >= 0 else -1) * ((abs(v)*THROW_RANGE + radius//2)//radius)
-                               for v in outward)
+    noncardinal = all(delta)
+    projected = radius > 0 and delta == tuple(
+        (1 if v >= 0 else -1) * ((abs(v)*THROW_RANGE + radius//2)//radius)
+        for v in outward)
+    # A noncardinal aim is the exact rounded outward projection. Existing
+    # cardinal fallbacks retain their exact range and separation checks.
+    require(max(abs(v) for v in delta) == THROW_RANGE
+            and (projected and abs(delta[0]) != abs(delta[1]) if non45 else not noncardinal or projected)
+            and (not non45 or noncardinal)
             and max(abs(a-b) for a,b in zip(target,player)) > radius,
-            "Follower Throw non45 Away projection differs from the authored outward vector")
+            "Follower Throw non45 Away projection differs from the authored outward vector" if non45 else
+            "Follower Throw native launch is not an exact-range Away endpoint away from Player")
+
+
+def require_non45_away(origin, target, player):
+    require_away_endpoint(origin, target, player, non45=True)
 
 
 def tile(actor, field="logical"):
@@ -520,24 +530,27 @@ class FollowerThrowMeasurement:
                             "Follower Throw did not clear its old bindings before normal follow")
                     self.follow_motion=dict(commit=mankey["commitSequence"],origin=tile(mankey,"origin"),target=tile(mankey,"target"),frame=frame)
                     self.frames["followStart"]=frame
-                if self.follow_motion is not None and mankey["commitSequence"]==self.follow_motion["commit"]+1 \
-                        and any(e.get("event")=="CONTROL_RETURNED" for e in follower_events):
-                    require(tile(mankey)==self.follow_motion["target"]
-                            and any(e.get("event")=="CONTROL_RETURNED" and e.get("valueB")==mankey["commitSequence"] for e in follower_events)
-                            and tuple(mankey["engineObject"][k] for k in ("pos_x","pos_z"))==tuple((v<<16)+32768 for v in self.follow_motion["target"]),
-                            "Follower Throw normal follow did not release its prior targets")
-                    fresh=bindings["trigger"]
-                    if fresh["bound"]:
-                        require(fresh["flags"]==1 and fresh["targetCurrent"] is True
-                                and fresh["sourceConditionId"]==TRIGGER_CONDITION and fresh["sourceApplication"]==APPLICATION
-                                and fresh["sourceApplicationLocal"]==APPLICATION_LOCAL
-                                and fresh["lifetime"]==0 and fresh["target"]["kind"]=="ACTOR",
-                                "Follower Throw new Trigger is not a current authored binding")
-                        candidates=[a for a in sample["actors"] if a.get("handle")==fresh["target"]["actor"]]
-                        require(len(candidates)==1 and candidates[0].get("role")=="WILD",
-                                "Follower Throw new Trigger lacks a current Wild actor")
-                        select_current_actor(sample,candidates[0])
-                    self.frames.setdefault("followReturn",frame)
+            # A later notice can change the current profile while this accepted
+            # normal Follow is still in flight. Finish its frozen lease independently
+            # of the profile gates used to admit it.
+            if self.follow_motion is not None and mankey["commitSequence"]==self.follow_motion["commit"]+1 \
+                    and any(e.get("event")=="CONTROL_RETURNED" for e in follower_events):
+                require(tile(mankey)==self.follow_motion["target"]
+                        and any(e.get("event")=="CONTROL_RETURNED" and e.get("valueB")==mankey["commitSequence"] for e in follower_events)
+                        and tuple(mankey["engineObject"][k] for k in ("pos_x","pos_z"))==tuple((v<<16)+32768 for v in self.follow_motion["target"]),
+                        "Follower Throw normal follow did not release its prior targets")
+                fresh=bindings["trigger"]
+                if fresh["bound"]:
+                    require(fresh["flags"]==1 and fresh["targetCurrent"] is True
+                            and fresh["sourceConditionId"]==TRIGGER_CONDITION and fresh["sourceApplication"]==APPLICATION
+                            and fresh["sourceApplicationLocal"]==APPLICATION_LOCAL
+                            and fresh["lifetime"]==0 and fresh["target"]["kind"]=="ACTOR",
+                            "Follower Throw new Trigger is not a current authored binding")
+                    candidates=[a for a in sample["actors"] if a.get("handle")==fresh["target"]["actor"]]
+                    require(len(candidates)==1 and candidates[0].get("role")=="WILD",
+                            "Follower Throw new Trigger lacks a current Wild actor")
+                    select_current_actor(sample,candidates[0])
+                self.frames.setdefault("followReturn",frame)
         self._flight_sample(sample,cargo,cargo_events)
         self.latest=self.terminal=deepcopy(sample)
 
@@ -549,9 +562,9 @@ class FollowerThrowMeasurement:
         plan=motion["plan"];origin=tile(cargo,"origin");target=tile(cargo,"target")
         player=tuple(sample["player"][k] for k in ("x","y"))
         non45 = self.kind == NON45_KIND
-        distance=max(abs(a-b) for a,b in zip(origin,target)) if non45 else sum(abs(a-b) for a,b in zip(origin,target))
+        distance=max(abs(a-b) for a,b in zip(origin,target))
+        require_away_endpoint(origin, target, player, non45=non45)
         if non45:
-            require_non45_away(origin, target, player)
             prior = self._actor(self.latest, "mankey")
             released = self.profiles.get(prior["behaviorFingerprint"])
             require(released is not None and released["appliedOverrides"] == prior["matchedLayerMask"]
@@ -567,14 +580,13 @@ class FollowerThrowMeasurement:
                 and plan["behaviorFingerprint"]==cargo["behaviorFingerprint"]&65535
                 and plan["origin"]==list(origin) and plan["target"]==list(target)
                 and plan["distance"]==distance==THROW_RANGE
-                and (non45 or origin[0]==target[0] or origin[1]==target[1])
                 and max(abs(a-b) for a,b in zip(target,player))>max(abs(a-b) for a,b in zip(origin,player))
                 and motion["phase"]=="MOVING" and motion["elapsed"]==0
                 and plan["duration"]==cargo["motionDuration"]>0
                 and plan["reservationId"]==cargo["reservationId"]!=0
                 and [(e["event"],e["valueA"],e["valueB"]) for e in events if e.get("event")=="MOTION_STARTED"]
                     ==[("MOTION_STARTED",2,plan["duration"])],
-                "Follower Throw native launch is not an exact-range " + ("non45" if non45 else "cardinal") + " endpoint away from Player")
+                "Follower Throw native launch is not an exact-range " + ("non45" if non45 else "Away") + " endpoint away from Player")
         self.launch_endpoint=dict(frame=sample["frame"],origin=list(origin),target=list(target),player=list(player),
             distance=distance,targetBaseY=plan["targetBaseY"],plan=deepcopy(plan))
         if non45:

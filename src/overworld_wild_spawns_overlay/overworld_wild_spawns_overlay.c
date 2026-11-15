@@ -96,6 +96,7 @@ extern void OverworldWildSpawns_NARC_dtor(void *narc);
 extern u16 OverworldWildSpawns_NARC_GetFileCount(void *narc);
 extern u32 OverworldWildSpawns_NARC_GetMemberSize(void *narc, u32 member);
 extern void OverworldWildSpawns_NARC_ReadWholeMember(void *narc, u32 member, void *dest);
+extern u32 OverworldWildSpawns_FreeHeapBytes(u32 heapId);
 extern BOOL OverworldWildSpawns_IsSingleMovementActive(LocalMapObject *object);
 /* Same resident getter ABI; direct Thumb calls fit this overlay's BL range
  * and avoid long-call veneers in its fixed code slot. */
@@ -134,6 +135,7 @@ __asm__(
     ".global OverworldWildSpawns_NARC_GetFileCount\n.thumb_func\n.thumb_set OverworldWildSpawns_NARC_GetFileCount, 0x020078E8\n"
     ".global OverworldWildSpawns_NARC_GetMemberSize\n.thumb_func\n.thumb_set OverworldWildSpawns_NARC_GetMemberSize, 0x020077E8\n"
     ".global OverworldWildSpawns_NARC_ReadWholeMember\n.thumb_func\n.thumb_set OverworldWildSpawns_NARC_ReadWholeMember, 0x0200778C\n"
+    ".global OverworldWildSpawns_FreeHeapBytes\n.thumb_func\n.thumb_set OverworldWildSpawns_FreeHeapBytes, 0x0201ABEC\n"
     ".global OverworldWildSpawns_IsSingleMovementActive\n.thumb_func\n.thumb_set OverworldWildSpawns_IsSingleMovementActive, 0x0205F648\n"
     ".thumb_func\n.thumb_set OverworldWalk_ClampTime, 0x023BF488\n"
     ".thumb_func\n.thumb_set OverworldWalk_SkidTiles, 0x023BF4D6\n"
@@ -1087,6 +1089,7 @@ static void OverworldWildSpawns_InitBehaviorResolveRequest(
     request = memset(request, 0, sizeof(*request));
     request->requestVersion = BEHAVIOR_RESOLVE_REQUEST_VERSION;
     request->winningConditionId = BEHAVIOR_RESOLVER_NO_CONDITION;
+    request->behaviorClass = BEHAVIOR_RESOLVER_CLASS_AUTO;
     request->targetSourceApplication = BEHAVIOR_RESOLVER_NO_APPLICATION;
     request->resolvedTargetConditionId = BEHAVIOR_RESOLVER_NO_CONDITION;
 }
@@ -1137,8 +1140,11 @@ static BOOL OverworldWildSpawns_DrainQuery(void *raw)
     OverworldWildOverlayRuntimeState *runtime = raw;
     if (runtime == NULL) return TRUE;
     if (runtime->pickupQuery != NULL) {
-        sys_FreeMemoryEz(runtime->pickupQuery);
+        OverworldCargoQueryWildAllocation *allocation=runtime->pickupQuery;
+        if(allocation->version!=OVERWORLD_FIELD_QUERY_ALLOCATION_VERSION
+            || allocation->auxiliary==NULL || allocation->destroy==NULL) return FALSE;
         runtime->pickupQuery = NULL;
+        allocation->destroy(allocation);
     }
     /* The last public receipt is not queue ownership: a live trip can return
      * another receipt. Only the exact Entry stages own this pending packet. */
@@ -1149,15 +1155,19 @@ static BOOL OverworldWildSpawns_DrainQuery(void *raw)
             || stage==OW_WILD_SPAWN_ROUTE_PENDING)) {
         runtime->queuedSpawnSlotPlusOne=0;
         runtime->refillPositionChecksRemaining=0;
-        memset(&runtime->queuedSpawn,0,sizeof(runtime->queuedSpawn));
-        memset(&runtime->queuedSpawnGuard,0,sizeof(runtime->queuedSpawnGuard));
+        _Static_assert(offsetof(OverworldWildOverlayRuntimeState, queuedSpawnGuard)
+            == offsetof(OverworldWildOverlayRuntimeState, queuedSpawn) + sizeof(runtime->queuedSpawn),
+            "queued spawn and guard must remain adjacent");
+        memset(&runtime->queuedSpawn,0,sizeof(runtime->queuedSpawn) + sizeof(runtime->queuedSpawnGuard));
     }
     if (!runtime->queuedSpawnSlotPlusOne) {
         runtime->queuedSpawnSerial=0;
         runtime->refillQueuedSerial=0;
     }
-    memset(&runtime->entryRouteReceipt,0,sizeof(runtime->entryRouteReceipt));
-    memset(runtime->entryRouteSerial,0,sizeof(runtime->entryRouteSerial));
+    _Static_assert(offsetof(OverworldWildOverlayRuntimeState, entryRouteSerial)
+        == offsetof(OverworldWildOverlayRuntimeState, entryRouteReceipt) + sizeof(runtime->entryRouteReceipt),
+        "entry receipt and serials must remain adjacent");
+    memset(&runtime->entryRouteReceipt,0,sizeof(runtime->entryRouteReceipt) + sizeof(runtime->entryRouteSerial));
     if (runtime->conditions != NULL) {
         memset(runtime->conditions->bindings, 0, sizeof(runtime->conditions->bindings));
         runtime->conditions->frame.world.bindings = NULL;
@@ -1264,7 +1274,6 @@ OverworldWildSpawns_CleanupResidentData(void)
 static BOOL OverworldWildSpawns_LoadCodeAddonBlob(u32 memberId, u32 expectedSize, void **blob, u32 *loadedSize)
 {
     void *narc;
-    u32 size;
     u32 heapId = memberId == OVERWORLD_QUERY_CODE_ADDON_MEMBER_ID
         ? HEAPID_WORLD
         : OVERWORLD_WILD_BEHAVIOR_DATA_HEAP_ID;
@@ -1272,43 +1281,50 @@ static BOOL OverworldWildSpawns_LoadCodeAddonBlob(u32 memberId, u32 expectedSize
 
     /* Both blobs keep a reserve: FIELD2 for stock scripts, FIELD1 for field
      * effects and models. A map that cannot spare it runs without Wild. */
-    if (!expectedSize || GF_ExpHeap_FndGetTotalFreeSize(heapId)
-            < expectedSize + OVERWORLD_FIELD_QUERY_HEAP_RESERVE) {
+    if (!expectedSize) {
         return FALSE;
+    }
+    if (OverworldWildSpawns_FreeHeapBytes(heapId)
+            < expectedSize + OVERWORLD_FIELD_QUERY_HEAP_RESERVE) {
+        goto retry_after_graphics;
     }
 
     narc = NARC_ctor(
         ARC_CODE_ADDONS,
         heapId);
     if (narc == NULL) {
-        return FALSE;
+        goto retry_after_graphics;
     }
-    if (NARC_GetFileCount(narc) <= memberId) {
-        NARC_dtor(narc);
-        return FALSE;
-    }
-
-    size = NARC_GetMemberSize(narc, memberId);
-    if (size == 0 || (expectedSize != 0 && size != expectedSize)) {
+    if (NARC_GetFileCount(narc) <= memberId
+        || NARC_GetMemberSize(narc, memberId) != expectedSize) {
         NARC_dtor(narc);
         return FALSE;
     }
 
     loadedBlob = sys_AllocMemory(
         heapId,
-        size);
+        expectedSize);
     if (loadedBlob == NULL) {
         NARC_dtor(narc);
-        return FALSE;
+        goto retry_after_graphics;
     }
 
     NARC_ReadWholeMember(narc, memberId, loadedBlob);
     NARC_dtor(narc);
     *blob = loadedBlob;
     if (loadedSize != NULL) {
-        *loadedSize = size;
+        *loadedSize = expectedSize;
     }
     return TRUE;
+
+retry_after_graphics:
+    /* Native texture sources survive until VBlank/VWait. A temporary heap
+     * shortage must not disable the behavior catalog for the whole field.
+     * Invalid archive data and decode failures remain latched by the caller. */
+    if (memberId == CODE_ADDON_OVERWORLD_WILD_BEHAVIOR_DATA) {
+        sOverworldWildBehaviorDataLoadAttempted = FALSE;
+    }
+    return FALSE;
 }
 
 static BOOL OverworldWildSpawns_DecodeBehaviorDataBlob(void)
@@ -1320,7 +1336,6 @@ static BOOL OverworldWildSpawns_DecodeBehaviorDataBlob(void)
         return FALSE;
     }
     OverworldWildSpawns_InitBehaviorResolveRequest(&request);
-    request.behaviorClass = BEHAVIOR_RESOLVER_CLASS_AUTO;
     return OVERWORLD_ACTOR_SYSTEM_RESOLVER_ENTRY->inspectClass(
             sOverworldWildBehaviorDataBlob,
             sizeof(OverworldWildBehaviorDataBlob),
@@ -3433,20 +3448,23 @@ static void OverworldWildSpawns_BuildBehaviorContext(
     u8 terrain,
     u8 shiny)
 {
+    u16 mapId = OW_WILD_BEHAVIOR_MATCH_ANY_MAP;
+
     if (spawn != NULL && spawn->active) {
+        mapId = spawn->mapId;
         species = spawn->species;
         level = spawn->level;
         terrain = spawn->terrain;
         shiny = spawn->shiny;
     }
 
+    context->mapId = mapId;
     context->species = species;
     context->groupFlags = OverworldWildSpawns_GetBehaviorGroupFlags(species);
     context->level = level;
     context->terrain = terrain;
     context->shiny = shiny;
     context->behaviorClass = OW_WILD_BEHAVIOR_CLASS_DEFAULT;
-    context->reserved = 0;
 }
 
 typedef char OverworldWildBehaviorTerrainMaskOffsetMustRemain32[
@@ -3501,17 +3519,13 @@ static u8 OverworldWildSpawns_GetBehaviorClassForContext(const OverworldWildBeha
     BehaviorResolveRequest request;
     BehaviorClassSelection selection;
 
-    if (context == NULL) {
-        return OW_WILD_BEHAVIOR_CLASS_DEFAULT;
-    }
-
+    /* Both callers pass a complete stack context. */
     behaviorData = OverworldWildSpawns_GetBehaviorDataBlob();
     if (behaviorData == NULL) {
         return OW_WILD_BEHAVIOR_CLASS_DEFAULT;
     }
     OverworldWildSpawns_InitBehaviorResolveRequest(&request);
     request.context = *context;
-    request.behaviorClass = BEHAVIOR_RESOLVER_CLASS_AUTO;
     if (OVERWORLD_ACTOR_SYSTEM_RESOLVER_ENTRY->inspectClass(
             behaviorData,
             sizeof(*behaviorData),
@@ -4110,7 +4124,6 @@ OverworldWildSpawns_GetBehaviorProfileAndPrimitivesForSlot(
         behaviorClass = OverworldWildSpawns_GetBehaviorClassForContext(&context);
     }
     context.behaviorClass = behaviorClass;
-    context.reserved = 0;
 #if !OW_WILD_SPAWNER_PROFILE_CACHE_FAST_HIT
     if (spawn->active
         && cache != NULL
@@ -4126,7 +4139,7 @@ OverworldWildSpawns_GetBehaviorProfileAndPrimitivesForSlot(
     {
 #endif
         OW_WILD_PERF_INC(sOverworldWildPerfProfileResolvesThisFrame);
-        memset(&resolution, 0, sizeof(resolution));
+        /* Resolve and its fallback each initialize the complete result. */
         OverworldWildSpawns_ResolveBehaviorProfileForContext(
             &context,
             slot == OW_WILD_FOLLOWER_SLOT
@@ -16511,8 +16524,8 @@ static BOOL __attribute__((noinline, optimize("Os"))) OverworldWildSpawns_TryPic
 static u16 OverworldWildSpawns_GetSpawnDestinationMask(
     const OverworldWildBehaviorProfile *profile)
 {
-    return profile->spawnDestinationMask
-        & OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL;
+    /* The resolver has already normalized this immutable prepared profile. */
+    return profile->spawnDestinationMask;
 }
 
 static BOOL OverworldWildSpawns_TryApplySpawnDestination(
@@ -16526,22 +16539,25 @@ static BOOL OverworldWildSpawns_TryApplySpawnDestination(
     OverworldWildSpawnDestination legacyDestination;
     int directionScale;
     int exactDistance;
-    BOOL resumable;
     BOOL resuming;
 
-    /* Headbutt encounters remain anchored to their canopy source regardless
-     * of the independently configured ordinary spawn-destination pool. */
+    candidateMask = OverworldWildSpawns_GetSpawnDestinationMask(profile);
+    /* Headbutt keeps its canopy source; a Land-only restriction cannot fit. */
     if (terrain == OW_WILD_SPAWN_TERRAIN_HEADBUTT) {
-        return OverworldWildSpawns_TryPickSpawnDestinationMask(
-            state, fieldSystem, OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY, position);
+        if (candidateMask & OW_WILD_SPAWN_DESTINATION_MASK_BEHIND_BUILDINGS)
+            return FALSE;
+        candidateMask = OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY;
+        goto destinationScan;
+    }
+    if (candidateMask & OW_WILD_SPAWN_DESTINATION_MASK_BEHIND_BUILDINGS) {
+        candidateMask = OW_WILD_SPAWN_DESTINATION_MASK_BEHIND_BUILDINGS;
+        goto destinationScan;
     }
 
-    candidateMask = OverworldWildSpawns_GetSpawnDestinationMask(profile);
     legacyDestination = (OverworldWildSpawnDestination)profile->spawnDestination;
-    resumable = state != NULL
+    resuming = state != NULL
         && state->movementRuntimeState != NULL
-        && position == &OW_WILD_RUNTIME(state)->queuedSpawn.position;
-    resuming = resumable
+        && position == &OW_WILD_RUNTIME(state)->queuedSpawn.position
         && OW_WILD_RUNTIME(state)->refillPositionChecksRemaining
             == OW_WILD_PROFILE_DESTINATION_SCAN_PENDING;
 
@@ -16601,17 +16617,10 @@ static BOOL OverworldWildSpawns_TryApplySpawnDestination(
             return TRUE;
         }
     }
-    if (OverworldWildSpawns_TryPickSpawnDestinationMask(
-            state, fieldSystem, candidateMask, position)) {
-        return TRUE;
-    }
-
-    /*
-     * The untouched legacy Pool returned its prepared position above. Once a
-     * destination policy is explicit, failure to find one of its destinations
-     * must reject the spawn instead of leaking back to the rolled terrain.
-     */
-    return FALSE;
+destinationScan:
+    /* An explicit destination cannot fall back to the original pool site. */
+    return OverworldWildSpawns_TryPickSpawnDestinationMask(
+        state, fieldSystem, candidateMask, position);
 }
 
 static int OverworldWildSpawns_GetSpawnHopVisibleTravelScore(
@@ -16779,6 +16788,8 @@ static void OverworldWildSpawns_ResolveSpawnBehaviorProfile(
     u8 personal[OW_WILD_PLAYER_BALL_PERSONAL_RECORD_SIZE];
     const OverworldWildRolledEncounter *encounter = &prepared->encounter;
 
+    behaviorContext.species = encounter->species;
+    behaviorContext.mapId = (u16)sOverworldWildSpawnState.mapId;
     if (OVERWORLD_WILD_SPAWN_METADATA_ENTRY->tryGet(
             encounter->species,
             encounter->form,
@@ -16796,12 +16807,10 @@ static void OverworldWildSpawns_ResolveSpawnBehaviorProfile(
             personal[OW_WILD_PLAYER_BALL_PERSONAL_CATCH_RATE_OFFSET]);
         behaviorContext.groupFlags = 0;
     }
-    behaviorContext.species = encounter->species;
     behaviorContext.level = encounter->level;
     behaviorContext.terrain = terrain;
     behaviorContext.shiny = prepared->shiny;
     behaviorContext.behaviorClass = OW_WILD_BEHAVIOR_CLASS_DEFAULT;
-    behaviorContext.reserved = 0;
     behaviorContext.behaviorClass = OverworldWildSpawns_GetBehaviorClassForContext(
         &behaviorContext);
     OverworldWildSpawns_ResolveBehaviorProfileForContext(
@@ -18092,6 +18101,13 @@ static BOOL __attribute__((noinline, optimize("Os"))) OverworldWildSpawns_TryRef
                 state,
                 fieldSystem,
                 &followerCandidate)) {
+            /* The follower spent this maintenance pass. After a population
+             * reset (two map changes with no update between) no refill wait
+             * is armed, so a standing player never got an ordinary refill.
+             * Queue one more pass; it still obeys any armed wait. */
+            (void)OverworldWildSpawns_PopulationControl(
+                OVERWORLD_ACTOR_POPULATION_CONTROL_REQUEST_MAINTENANCE,
+                0);
             return TRUE;
         }
         if (followerCandidate) {

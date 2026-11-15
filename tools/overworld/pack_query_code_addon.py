@@ -6,9 +6,10 @@ from pathlib import Path
 import struct
 
 MAGIC, VERSION, HEADER, ENTRY = 0x51444F57, 9, 64, 196
-BASE, MAX_IMAGE, MAX_BLOB, MAX_RECORDS = 0x02080000, 0x10C38, 0x11200, 256
+BASE, MAX_IMAGE, MAX_BLOB, MAX_RECORDS = 0x02080000, 0x10EC0, 0x114B8, 256
 CARGO_PREFIX_CAP = 0x8800
 IMPORTS = {"memset": 0x023DEEA3, "memcpy": 0x023DEEBF, "__aeabi_uidivmod": 0x023DEE4D,
+    "sys_FreeMemoryEz": 0x0201AB0D,
     "OverworldConditionPublication_InitResult": 0x01FF9A49,
     "OverworldConditionPublication_FoldResult": 0x01FF9C95,
     "OverworldConditionPublication_BlobValid": 0x01FFA39D,
@@ -114,14 +115,14 @@ def package(data):
         require(index == text_index or not (row[2] & 2 and row[5]),
                 "mutable data, BSS or another allocated section is unsupported")
     image = _span(data, text[4], text[5])
-    require(struct.unpack_from("<I8H", image) == (MAGIC, VERSION, ENTRY, 60, 188, 24, 108, 36, 3),
+    require(struct.unpack_from("<I8H", image) == (MAGIC, VERSION, ENTRY, 60, 188, 28, 108, 36, 3),
             "typed entry or native value layouts differ")
     # The native shared layout is explicitly published by the built entry.
     # Caller/package validators bind its version and sizes to current headers.
     condition_version, world_size, prepared_size, result_size = struct.unpack_from("<4H", image, 76)
     require(condition_version == 13 and world_size == 248 and prepared_size == 88 and result_size == 540,
             "condition value layouts differ")
-    require(struct.unpack_from("<6H", image, 100) == (2, 424, 40, 140, 24604, 0),
+    require(struct.unpack_from("<6H", image, 100) == (2, 424, 40, 140, 40, 0),
             "Cargo query value layouts differ")
     symbols_tables = [row for row in sections if row[1] == 2]
     require(len(symbols_tables) == 1, "expected one full symbol table")

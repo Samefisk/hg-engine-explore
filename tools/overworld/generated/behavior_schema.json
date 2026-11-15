@@ -965,7 +965,7 @@
         "key": "spawnDestinationMask",
         "label": "Spawn destinations",
         "lane": "profile",
-        "max": 1023,
+        "max": 3071,
         "min": 0,
         "numeric": true,
         "operators": [
@@ -981,7 +981,7 @@
         "key": "spawnDestinationOverrideMask",
         "label": "Spawn destination override mask",
         "lane": "profile",
-        "max": 1023,
+        "max": 3071,
         "min": 0,
         "numeric": true,
         "operators": [
@@ -3127,7 +3127,7 @@
       }
     ]
   },
-  "sourceSha256": "6d6630f6846975562a897c1ac6e2af1f8057795cc9978d51af5e6181aefb1353",
+  "sourceSha256": "342e27ec40b83c948df4a686bb92ad8802a57238a2b741a3e9e4fe48c70f4c57",
   "trace": {
     "labels": [
       {
@@ -4528,7 +4528,7 @@
         "key": "spawnDestinationMask",
         "maskBit": 8,
         "maskWord": 3,
-        "max": 1023,
+        "max": 3071,
         "min": 0,
         "offset": 52,
         "reserved": false,
@@ -4542,7 +4542,7 @@
         "key": "spawnDestinationOverrideMask",
         "maskBit": 9,
         "maskWord": 3,
-        "max": 1023,
+        "max": 3071,
         "min": 0,
         "offset": 54,
         "reserved": false,

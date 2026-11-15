@@ -320,36 +320,46 @@ OverworldPickupRouteStatus OverworldEntryRoute_Resume(OverworldEntryRouteSearch 
         OverworldPickupRoute_Begin(&s->ledger->route,&s->query,&s->ledger->storage->workspace);
         return out->status=OVERWORLD_PICKUP_ROUTE_PENDING;
     }
-    u16 count=OverworldPickupRoute_CopyForwardWitness(&s->ledger->route,path->edgeTags,path->endpoints,OVERWORLD_ENTRY_ROUTE_MAX_STEPS);
+    u16 count=OverworldPickupRoute_CopyForwardCommands(&s->ledger->route,path->commands,OVERWORLD_ENTRY_ROUTE_MAX_STEPS);
     if (count==NONE) return out->status=OVERWORLD_PICKUP_ROUTE_RESOURCE_LIMIT;
     u8 sameTrip=path->valid && path->serial==s->receipt.serial
         && Same(&path->actor,&s->receipt.actor,sizeof(path->actor));
     if (!sameTrip) path->noProgress=0;
     path->actor=s->receipt.actor;path->serial=s->receipt.serial;path->policy=s->query.movementPolicyRevision;path->scope=s->query.scopeRevision;
     path->origin=s->ledger->route.workspace->nodes[s->reverse?s->ledger->route.goalNode:s->ledger->route.rootNode].position;
-    path->target=s->goal;path->expected=path->origin;path->count=count;path->next=0;path->accepted=0;path->valid=1;
+    path->target=s->goal;path->expected=path->origin;path->count=count;path->next=0;path->accepted=0;path->valid=1;path->stepRead=0;
     out->origin=path->origin;out->actor=path->actor;out->stepsRemaining=count;
-    if (count) { out->hasNextStep=1;out->nextStep=path->endpoints[0];out->edgeTag=path->edgeTags[0]; }
     return status;
 }
+static u8 StepEdge(const OverworldEntryRoutePath *path,OverworldPickupRouteEdge *edge)
+{
+    return path->valid && path->count<=OVERWORLD_ENTRY_ROUTE_MAX_STEPS && path->next<path->count
+        && !path->expected.reserved && !path->target.reserved
+        && OverworldPickupRoute_CommandEdge(path->commands[path->next],edge);
+}
 OverworldPickupRouteStatus OverworldEntryRoute_ValidateStep(OverworldEntryRouteSearch *s,
-    const OverworldEntryRoutePath *path,u32 dynamic,const OverworldCargoQueryChangedTile *changes,
+    OverworldEntryRoutePath *path,u32 dynamic,const OverworldCargoQueryChangedTile *changes,
     u16 count,u8 complete,OverworldEntryRouteReceipt *out)
 {
     if (s==NULL || path==NULL || out==NULL || !Current(s) || s->reverse
         || !path->valid || path->next>=path->count) return OVERWORLD_PICKUP_ROUTE_INVALID;
-    s32 dx=(s32)path->endpoints[path->next].x-path->expected.x;
-    s32 dy=(s32)path->endpoints[path->next].y-path->expected.y;
-    if ((((u32)dx + 32768u) | ((u32)dy + 32768u)) > 65535u)
-        return OVERWORLD_PICKUP_ROUTE_INVALID;
-    OverworldPickupRouteEdge edge={(s16)dx,(s16)dy,path->edgeTags[path->next]};
+    OverworldPickupRouteEdge edge;
+    if (!StepEdge(path,&edge) || path->serial!=s->receipt.serial
+        || !Same(&path->actor,&s->receipt.actor,sizeof(path->actor))
+        || path->scope!=s->query.scopeRevision || path->policy!=s->query.movementPolicyRevision
+        || !Same(&path->target,&s->goal,sizeof(path->target))) return OVERWORLD_PICKUP_ROUTE_INVALID;
+    s32 x=(s32)path->expected.x+edge.dx,y=(s32)path->expected.y+edge.dy;
+    if ((((u32)x+32768u)|((u32)y+32768u))>65535u) return OVERWORLD_PICKUP_ROUTE_INVALID;
+    OverworldPickupRoutePosition target={(s16)x,(s16)y,0,0,0};
     if (++s->updates>OVERWORLD_ENTRY_ROUTE_MAX_UPDATES) return OVERWORLD_PICKUP_ROUTE_RESOURCE_LIMIT;
     s->ledger->query.dynamicRevision=dynamic;
     OverworldCargoQueryInput observed={0};observed.changedTiles=changes;
     observed.changedTileCount=count;observed.changesComplete=complete;
     if (!OverworldCargoQuery_ObserveChanges(s->ledger,&observed)) return OVERWORLD_PICKUP_ROUTE_INVALID;
-    if (s->memo.valid && !OverworldCargoQuery_Unchanged(s->ledger,&path->expected,
-            &path->endpoints[path->next],s->memo.dynamic)) OverworldEntryRoute_ResetMemo(s);
+    if (s->memo.valid && (!Same(&s->memo.from,&path->expected,sizeof(path->expected))
+            || !Same(&s->memo.edge,&edge,sizeof(edge))
+            || !OverworldCargoQuery_Unchanged(s->ledger,&path->expected,&target,s->memo.dynamic)))
+        OverworldEntryRoute_ResetMemo(s);
     s->memo.native=OverworldPickupRouteWild_GetSeams(&s->world);
     if (s->memo.native==NULL) return OVERWORLD_PICKUP_ROUTE_INVALID;
     s->query.dynamicRevision=dynamic;s->world.dynamicRevision=dynamic;s->memo.dynamic=dynamic;
@@ -358,14 +368,16 @@ OverworldPickupRouteStatus OverworldEntryRoute_ValidateStep(OverworldEntryRouteS
         return OverworldEntryRoute_Guide(path,&path->actor,&path->expected,
             s->query.movementPolicyRevision,out)?OVERWORLD_PICKUP_ROUTE_REACHABLE:OVERWORLD_PICKUP_ROUTE_INVALID;
     }
+    path->stepRead=0;
     OverworldPickupRoutePosition endpoint;
     OverworldPickupRouteEdgeResult decision=Edge(s,&path->expected,&edge,&endpoint);
     out->readsUsed=s->memo.used;
     if (decision==DEFERRED) return OVERWORLD_PICKUP_ROUTE_PENDING;
     if (decision!=LEGAL) return decision==BLOCKED?OVERWORLD_PICKUP_ROUTE_UNREACHABLE:
         decision==LIMIT?OVERWORLD_PICKUP_ROUTE_RESOURCE_LIMIT:OVERWORLD_PICKUP_ROUTE_INVALID;
-    if (!Same(&endpoint,&path->endpoints[path->next],sizeof(endpoint))) return OVERWORLD_PICKUP_ROUTE_UNREACHABLE;
-    s->memo.guideReady=1;
+    if (path->next+1==path->count && !Same(&endpoint,&path->target,sizeof(endpoint)))
+        return OVERWORLD_PICKUP_ROUTE_UNREACHABLE;
+    path->nextStep=endpoint;path->stepRead=1;s->memo.guideReady=1;
     /* The final proof update never also runs START. The next current update
      * observes changes again, then publishes a zero-read ready receipt. */
     return OVERWORLD_PICKUP_ROUTE_PENDING;
@@ -373,30 +385,33 @@ OverworldPickupRouteStatus OverworldEntryRoute_ValidateStep(OverworldEntryRouteS
 u8 OverworldEntryRoute_Guide(const OverworldEntryRoutePath *p,const OverworldActorHandle *actor,
     const OverworldPickupRoutePosition *pose,u32 policy,OverworldEntryRouteReceipt *out)
 {
-    if (p==NULL || actor==NULL || pose==NULL || out==NULL || !p->valid
+    OverworldPickupRouteEdge edge;
+    if (p==NULL || actor==NULL || pose==NULL || out==NULL || !p->stepRead || !StepEdge(p,&edge)
         || !Same(actor,&p->actor,sizeof(*actor)) || !Same(pose,&p->expected,sizeof(*pose))
-        || policy!=p->policy || p->next>=p->count) return 0;
+        || policy!=p->policy || p->nextStep.reserved
+        || p->nextStep.x!=(s32)p->expected.x+edge.dx || p->nextStep.y!=(s32)p->expected.y+edge.dy
+        || (p->next+1==p->count && !Same(&p->nextStep,&p->target,sizeof(p->target)))) return 0;
     *out=(OverworldEntryRouteReceipt){0};out->version=OVERWORLD_ENTRY_ROUTE_VERSION;out->size=sizeof(*out);
-    out->serial=p->serial;out->actor=p->actor;out->target=p->target;out->nextStep=p->endpoints[p->next];
-    out->edgeTag=p->edgeTags[p->next];out->stepsRemaining=p->count-p->next;out->hasNextStep=1;
+    out->serial=p->serial;out->actor=p->actor;out->target=p->target;out->nextStep=p->nextStep;
+    out->edgeTag=edge.tag;out->stepsRemaining=p->count-p->next;out->hasNextStep=1;
     out->status=OVERWORLD_PICKUP_ROUTE_REACHABLE;return 1;
 }
 u8 OverworldEntryRoute_Confirm(OverworldEntryRoutePath *p,const OverworldActorHandle *actor,
     const OverworldPickupRoutePosition *pose,const OverworldActorRuntimeSlot *slot)
 {
-    if (p==NULL || !p->valid || actor==NULL || pose==NULL || slot==NULL || !p->accepted
+    if (p==NULL || !p->valid || actor==NULL || pose==NULL || slot==NULL || !p->accepted || !p->stepRead
         || !Same(actor,&p->actor,sizeof(*actor)) || !Same(actor,&slot->snapshot.handle,sizeof(*actor))
-        || p->next>=p->count) return 0;
+        || p->count>OVERWORLD_ENTRY_ROUTE_MAX_STEPS || p->next>=p->count) return 0;
     const OverworldMotionState *motion=&slot->motion;
     const OverworldMotionPlan *plan=&motion->plan;
     if (slot->snapshot.motionPhase!=OVERWORLD_ACTOR_PHASE_IDLE || slot->snapshot.reservationId) return 0;
     p->accepted=0;
     if (!motion->commitPublished || slot->snapshot.commitSequence<=p->acceptedSequence
         || plan->startX!=p->expected.x || plan->startY!=p->expected.y || plan->startBaseY!=p->expected.baseY
-        || plan->targetX!=p->endpoints[p->next].x || plan->targetY!=p->endpoints[p->next].y
-        || plan->targetBaseY!=p->endpoints[p->next].baseY
-        || !Same(pose,&p->endpoints[p->next],sizeof(*pose))) return 0;
-    p->expected=*pose;p->next++;p->noProgress=0;return 1;
+        || plan->targetX!=p->nextStep.x || plan->targetY!=p->nextStep.y
+        || plan->targetBaseY!=p->nextStep.baseY
+        || !Same(pose,&p->nextStep,sizeof(*pose))) return 0;
+    p->expected=*pose;p->next++;p->noProgress=0;p->stepRead=0;return 1;
 }
 u8 OverworldEntryRoute_IdleStall(OverworldEntryRoutePath *p,const OverworldActorHandle *actor,
     u8 idle,u8 offscreen)
@@ -911,12 +926,21 @@ static u32 NativeCommitOnce(const OverworldCargoQueryWildCall *base,const Overwo
 
     x = prepared->startup.targetX;
     y = prepared->startup.targetY;
+    /* READY was proved before a yield. Player and physical occupancy can
+     * change before construction, so read the existing admission again. */
+    BOOL originReady=TRUE;
+    if(prepared->behaviorResolution.primitives.spawnLocomotion
+            ==OW_WILD_BEHAVIOR_LOCOMOTION_MOVE_FROM_OFF_SCREEN) {
+        OverworldEntryRouteNativeControl ready=*c;
+        ready.field=fieldSystem;ready.prepared=prepared;
+        originReady=NativeReady(&ready);
+    }
 
     /* Consume before calling any engine work: cancel/failure cannot retry the
      * same value or clear another encounter's saved shiny record. */
     runtime->queuedSpawnSlotPlusOne = 0;
     runtime->refillPositionChecksRemaining = 0;
-    if ((u32)slot >= OW_WILD_MAX_SPAWNS || slot == OW_WILD_FOLLOWER_SLOT
+    if (!originReady || (u32)slot >= OW_WILD_MAX_SPAWNS || slot == OW_WILD_FOLLOWER_SLOT
         || !c->ops->guard(state, fieldSystem, prepared, slot,&guard)) {
         return OVERWORLD_ENTRY_COMMIT_FAILED;
     }

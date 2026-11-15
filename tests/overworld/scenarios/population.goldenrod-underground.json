@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "id": "population.goldenrod-underground",
+  "title": "Goldenrod Underground natural Land births",
+  "status": "active",
+  "capabilities": [
+    "population",
+    "spawn",
+    "terrain",
+    "profile.composition"
+  ],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "documentation/encounter-rebalance-player-guide.md#goldenrod-encounter-plan--october-2026",
+    "actor": "Naturally selected Wild Pokemon; the unchanged saved Mankey anchors current field identity only",
+    "trigger": "Exactly900 neutral frames on map199 at(6,19), with only a declared player teleport and unchanged saved Mankey. No species, party, follower, profile, RNG or population override. Bind natural finalizer, one native object constructor, exact current map-scoped placement bytes and full actor handle to its native loaded-cell height and same-handle settled terminal pose. Require at least one Rattata or Grimer Land birth in the independently declared public floor; every observed birth must be on legitimate room floor, never padding void.",
+    "observable": "Exact native finalizer/profile/constructor/loaded-height receipts and same-handle completed landing",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "position",
+        "change": "One prepared teleport to map199(6,19); allow24 neutral setup frames for the native warp rebind, then wait for and bind the same saved party-slot2 Mankey. No actor, encounter, profile, RNG or population setup."
+      }
+    ],
+    "limits": [
+      "Exactly900 neutral frames on map199 at(6,19), with only a declared player teleport and unchanged saved Mankey. No species, party, follower, profile, RNG or population override. Bind natural finalizer, one native object constructor, exact current map-scoped placement bytes and full actor handle to its native loaded-cell height and same-handle settled terminal pose. Require at least one Rattata or Grimer Land birth in the independently declared public floor; every observed birth must be on legitimate room floor, never padding void.",
+      "This finite natural sample does not require every rare species to appear and does not close either current-ROM pacing gate."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": false,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Enter the declared prepared player view with normal encounter state"
+    },
+    {
+      "at": 1,
+      "kind": "lifecycle",
+      "value": "Observe natural birth, scoped placement, native height and full-handle landing"
+    }
+  ],
+  "stop": {
+    "frameBudget": 1085,
+    "condition": "900 neutral frames and the required natural birth/landing complete"
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Exactly900 neutral frames on map199 at(6,19), with only a declared player teleport and unchanged saved Mankey. No species, party, follower, profile, RNG or population override. Bind natural finalizer, one native object constructor, exact current map-scoped placement bytes and full actor handle to its native loaded-cell height and same-handle settled terminal pose. Require at least one Rattata or Grimer Land birth in the independently declared public floor; every observed birth must be on legitimate room floor, never padding void."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "population.goldenrod-underground",
+    "claims": [
+      "live-actor-identity",
+      "profile-resolution",
+      "terrain-selection"
+    ],
+    "minimumFrames": 900
+  }
+}

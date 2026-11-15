@@ -9,7 +9,7 @@ import hashlib
 import struct
 from pathlib import Path
 
-RESOLVER_BLOB_VERSION = 95
+RESOLVER_BLOB_VERSION = 96
 RESOLVER_SERVICE_VERSION = 3
 QUERY_CALLBACK_OFFSET = 68
 
@@ -51,7 +51,7 @@ def raw_hex(value, size):
 
 def request_bytes(request):
     """Public request layout plus the Workshop adapter's defaults."""
-    allowed = {"species", "groupFlags", "level", "terrain", "shiny",
+    allowed = {"species", "mapId", "groupFlags", "level", "terrain", "shiny",
                "forcedOverrideMask", "behaviorClass", "activeConditionalMask",
                "requestVersion", "resolvedTarget", "winningConditionId",
                "targetSourceApplication", "resolvedTargetConditionId"}
@@ -68,7 +68,7 @@ def request_bytes(request):
         target_kind = {"none": 0, "player": 1, "actor": 2}[target_kind]
     return struct.pack("<HHIBBBBII6HBBHBBBBH2x",
         integer(request.get("species", 0), 65535),
-        0, integer(request.get("groupFlags", 0)),
+        integer(request.get("mapId", 65535), 65535), integer(request.get("groupFlags", 0)),
         integer(request.get("level", 1), 255), integer(request.get("terrain", 0), 255),
         integer(request.get("shiny", 0), 255), 0,
         integer(request.get("forcedOverrideMask", 0)),

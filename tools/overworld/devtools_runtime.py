@@ -224,8 +224,8 @@ ENTRY_SPAWN_OFFSETS = {"prepared": 992, "slot": 240, "stage": 244,
 # preparation and route queries now live in the current Field-owned Query image.
 # Move From Off Screen is gone, so the Wild overlay keeps no QueryEntry owner.
 ENTRY_SPAWN_OWNERS = {}
-ENTRY_SPAWN_QUERY_OWNERS = {'NativeArm.constprop.0.isra.0': (34135672, 172, 'e73050449799974c6972fd1d5457da6154ac2ec2c6f2325b495daa4ef0bc4737'),
- 'NativeQueryEntry': (34135168, 504, '3dcca32c37afdb6a3aa102ad15889e3c0998a11d399dda6c7b4d5704a072611e')}
+ENTRY_SPAWN_QUERY_OWNERS = {'NativeArm.constprop.0.isra.0': (34136284, 172, 'e73050449799974c6972fd1d5457da6154ac2ec2c6f2325b495daa4ef0bc4737'),
+ 'NativeQueryEntry': (34135780, 504, '546ac9c9496f412fad324f1d68050bb2d0c604f4cc8bfb4dedb74f45d48a9cd5')}
 LINKED_CALLS = {
     "corner_landing": ("WILD_SYMBOLS", "OverworldWildSpawns_ValidateHopLandingValue", 8),
     "mount_hop_landing": ("MOUNT_SYMBOLS", "OverworldMount_IsLandingTileAllowed", 2),
@@ -3644,7 +3644,7 @@ class DevtoolsSession:
         return ScriptWarpHeapFreeObserver(self, constructor)
 
     def teleport(self, args):
-        map_id = integer(args.get("mapId", args.get("map")), "mapId", 0, 599)
+        map_id = integer(args.get("mapId", args.get("map")), "mapId", 0, 539)
         x = integer(args.get("x"), "x", 0, 32767)
         z = integer(args.get("z", args.get("y")), "z", 0, 32767)
         facing = integer(args.get("facing", 0), "facing", 0, 3)
@@ -4306,9 +4306,28 @@ class DevtoolsSession:
 
     def emote_three_close(self, args):
         require(args == {} and self.emote_three is not None, "no current emote burst", "emote-three-invalid")
-        self.require_quiescent()
-        self.emote_three.close()
-        receipt = dict(snapshot=self.snapshot(diagnostic_details=False), emotes=self.emote_three.result(),
+        from tools.overworld.devtools_actor_inspect_probe import ENGINE_OWNER_KEYS
+        from tools.overworld.devtools_records import select_current_actor
+        require(self.emu is not None and not any(getattr(self, name, False) for name in (
+            "native_bridge_active", "native_trampoline_in_use", "native_health_exclusion_active")),
+            "emote close during a native call or closed session", "emote-three-invalid")
+        probe = self.emote_three
+        require(self.field_pointer() == probe.field and self.native_heap_generation == probe.heap,
+                "emote field or heap owner changed", "emote-three-invalid")
+        require(struct.unpack("<I", self.read(probe.field + 0x44, 4))[0] == probe.context,
+                "emote effect context changed", "emote-three-invalid")
+        probe.reads = 0
+        probe.owner_now()
+        snapshot = self._snapshot(0, details=False)
+        for subject in probe.subjects.values():
+            current = select_current_actor(snapshot, subject)
+            require(all(key in current["engineIdentity"] and key in subject["engineIdentity"]
+                        and current["engineIdentity"][key] == subject["engineIdentity"][key]
+                        for key in ENGINE_OWNER_KEYS),
+                    "emote subject engine owner changed", "emote-three-invalid")
+        # Passive final reads and hook removal need no idle player or follower.
+        probe.close()
+        receipt = dict(snapshot=self.snapshot(diagnostic_details=False), emotes=probe.result(),
                        advancedFrames=0, acceptedProof=False)
         return self._prepared_result_boundary(receipt)
 

@@ -103,9 +103,16 @@ class WorkshopAuthoringTests(unittest.TestCase):
                 "apply-waddle",
                 # Placements.
                 "apply-fly-in",
-                "apply-canopy-access",
+                "apply-fly-in-insects",
+                "apply-canopy-access-climbers",
                 "apply-flower-bed",
                 "apply-swim",
+                "apply-goldenrod-behind-buildings",
+                "apply-goldenrod-land",
+                "apply-goldenrod-land-rooftop",
+                "apply-goldenrod-rooftop-canopy",
+                "apply-underground-land",
+                "apply-canopy-access",
                 # Follower base, before capabilities.
                 "apply-follower",
                 # Capabilities.
@@ -148,7 +155,7 @@ class WorkshopAuthoringTests(unittest.TestCase):
             ["mood"]
             + ["routine"] * 11
             + ["style"]
-            + ["placement"] * 4
+            + ["placement"] * 11
             + ["follower"]
             + ["capability"] * 8
             + ["attack"] * 6
@@ -627,9 +634,26 @@ import {{
 }} from {json.dumps(module.as_uri())};
 
 const source = JSON.parse(fs.readFileSync({json.dumps(str(catalog_path))}, 'utf8'));
-assert.equal(source.applications.length, 39);
+assert.equal(source.applications.length, 46);
 assert.equal(source.applications.find(item => item.id === 'apply-basic-attack').enabled, false);
-assert.equal(source.applications.filter(item => item.enabled !== false).length, 38);
+assert.equal(source.applications.filter(item => item.enabled !== false).length, 45);
+for (const [applicationId, poolId] of [
+  ['apply-small-bird-hop', 'small-bird-pokemon'],
+  ['apply-fly-in', 'bird-pokemon'],
+  ['apply-canopy-access', 'bird-pokemon'],
+]) {{
+  assert.deepEqual(source.applications.find((item) => item.id === applicationId).target, {{ pool: poolId }});
+}}
+assert.deepEqual(source.profiles.find((item) => item.id === 'perch').conditions.map((item) => item.subjects), [{{ pool: 'bird-pokemon' }}]);
+const namedConditional = setConditionalProfileKind(source, 'apply-small-bird-hop', 'conditional');
+const namedSubjects = namedConditional.profiles.find((item) => item.id === 'small-bird-hop').conditions[0].subjects;
+assert.deepEqual(namedSubjects, {{ pool: 'small-bird-pokemon' }});
+assert.equal(Object.hasOwn(namedConditional.applications.find((item) => item.id === 'apply-small-bird-hop'), 'target'), false);
+assert.ok(resolveProfilePoolSelection(namedSubjects, namedConditional).members.includes('SPECIES_PIDGEY'));
+assert.equal(resolveProfilePoolSelection(namedSubjects, namedConditional).members.includes('SPECIES_MANKEY'), false);
+const namedNormal = setConditionalProfileKind(namedConditional, 'apply-small-bird-hop', 'normal');
+assert.deepEqual(namedNormal.applications.find((item) => item.id === 'apply-small-bird-hop').target, {{ pool: 'small-bird-pokemon' }});
+assert.equal(Object.hasOwn(namedNormal.profiles.find((item) => item.id === 'small-bird-hop'), 'conditions'), false);
 assert.deepEqual(canonicalCatalogStructuralErrors(source).filter((error) => error.includes('applications')), []);
 const activeTiredLink = structuredClone(source);
 activeTiredLink.applications.find((item) => item.id === activeTiredLink.runtimeBindings.defaultTiredApplication).target = {{ mode: 'all', match: {{}}, members: [] }};
@@ -638,7 +662,7 @@ const classProfiles = new Set(source.runtimeBindings.classOrder.map((item) => it
 const conditionalParents = new Set(source.profiles.filter((item) => item.kind === 'conditional').map((item) => item.parent));
 const application = source.applications.find((item) => {{
   const profile = source.profiles.find((candidate) => candidate.id === item.profile);
-  return profile?.kind === 'normal' && item.target?.mode !== 'disabled'
+  return profile?.kind === 'normal' && item.target?.mode === 'members'
     && item.target
     && !classProfiles.has(profile.id) && !conditionalParents.has(profile.id);
 }});
@@ -756,6 +780,7 @@ assert.deepEqual(cleanRule.subjects, {{ mode: 'members', match: {{
   maxLevel: 'OW_WILD_BEHAVIOR_MATCH_LEVEL_ANY',
   shiny: 'OW_WILD_BEHAVIOR_MATCH_ANY_SHINY',
   behaviorClass: 'OW_WILD_BEHAVIOR_MATCH_ANY_CLASS',
+  mapId: 'OW_WILD_BEHAVIOR_MATCH_ANY_MAP',
 }}, members: [] }});
 assert.equal(cleanRule.when.kind, 'notice-target');
 assert.deepEqual(cleanRule.when.vision, {{ mode: 'current' }});
@@ -782,6 +807,8 @@ const authored = JSON.parse(JSON.stringify(draft));
 assert.deepEqual(authored.applications.map((item) => item.id), originalApplications);
 assert.deepEqual(authored.profiles.map((item) => item.id), originalProfiles);
 assert.deepEqual(authored.selectors.map((item) => item.id), originalSelectors);
+assert.deepEqual(authored.profiles.find((item) => item.id === 'perch').conditions.map((item) => item.subjects), [{{ pool: 'bird-pokemon' }}]);
+assert.deepEqual(authored.applications.find((item) => item.id === 'apply-fly-in').target, {{ pool: 'bird-pokemon' }});
 fs.writeFileSync({json.dumps(str(authored_path))}, JSON.stringify(authored, null, 2) + '\\n');
 
 const tooMany = JSON.parse(JSON.stringify(authored));
@@ -821,7 +848,7 @@ draft = setConditionalProfileKind(draft, application.id, 'normal');
 profile = draft.profiles.find((item) => item.id === application.profile);
 assert.equal(profile.kind, 'normal');
 assert.equal(Object.hasOwn(profile, 'conditions'), false);
-assert.deepEqual(draft.applications.find((item) => item.id === application.id).target, application.target);
+assert.deepEqual(draft.applications.find((item) => item.id === application.id).target, {{ ...application.target, match: {{ ...application.target.match, mapId: 'OW_WILD_BEHAVIOR_MATCH_ANY_MAP' }} }});
 assert.throws(() => removeConditionalProfileCondition(setConditionalProfileKind(source, application.id, 'conditional'), application.id, firstId), /at least one condition/);
 """)
         completed = subprocess.run(

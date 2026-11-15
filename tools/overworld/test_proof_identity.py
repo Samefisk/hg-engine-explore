@@ -42,6 +42,17 @@ class ProofContentIdentityTests(unittest.TestCase):
         path.write_text(content)
         return path
 
+    def test_inventory_label_fast_path_keeps_the_exact_source_identity(self) -> None:
+        (self.repo / "src/alias.c").symlink_to("movement.c")
+        original = runs.file_record
+
+        def old_label_record(path, repo, **unused):
+            return original(path, repo)
+
+        with mock.patch.object(runs, "file_record", side_effect=old_label_record):
+            reference = runs.source_record(self.repo)
+        self.assertEqual(runs.source_record(self.repo), reference)
+
     def test_docs_and_work_log_do_not_change_content_identity(self) -> None:
         before = runs.source_record(self.repo)
         self.write("documentation/overworld-system/roadmap-progress.md", "Done\n")

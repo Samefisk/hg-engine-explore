@@ -6,6 +6,7 @@ This fixture does not claim ARM layout or game proof.
 """
 from pathlib import Path
 import importlib.util
+import re
 import shutil
 import subprocess
 import tempfile
@@ -178,14 +179,30 @@ int main(void) {
 '''
 
 
-def source_text(wild=None, landing=None):
+def source_text(wild=None, landing=None, driver=DRIVER):
     prolog = '#define TRUE 1\n#define FALSE 0\n' + fixture.PROLOG.replace(
         "static int nativeHeightReady=1,nativeHeightDelta,nativeOrigin,queryHasHit;",
         "static int nativeHeightReady=1,nativeHeightDelta,nativeOrigin,queryHasHit;\n"
         "static int landAllowed=1,waterAllowed,includeOriginSurface=1;")
     prolog = prolog.replace(
         "*hit=queryHit;return TRUE;", "*hit=queryHit;if(!includeOriginSurface && x==0 && y==1)hit->surfaceId++;return TRUE;")
-    prolog += '\n#include "overworld_application_bank.h"\n'
+    prolog += '\n#include "overworld_application_bank.h"\n#include "overworld_prepared_movement.h"\n'
+    # Current shared tile/support code reads these Entry values even when
+    # this bare-landing fixture leaves its Entry pointers NULL. Extract the
+    # real physical/cursor declarations; the named Memo seam supplies only
+    # the members this selected production reducer can read. No ARM
+    # layout or saved Entry-route behavior is claimed by this fixture.
+    entry = (ROOT / "include/overworld_entry_route.h").read_text()
+    for name in ("OverworldEntryRoutePhysical", "OverworldEntryRouteTerrainCursor"):
+        declaration = re.search(r"typedef struct " + name + r"\s*\{.*?\}\s*" + name + r";", entry, re.S)
+        if declaration is None:
+            raise AssertionError("current Entry declaration changed: " + name)
+        prolog += declaration.group(0) + "\n"
+    prolog += ("typedef struct OverworldEntryRouteMemo {"
+               "u8 budget,used,movementStarted;OverworldEntryRouteTerrainCursor terrain;"
+               "OverworldPreparedMovementInput movementInput;"
+               "OverworldPreparedMovementCursor movement;"
+               "} OverworldEntryRouteMemo;\n")
     runtime = RUNTIME.read_text()
     heights = fixture.function(runtime, "OverworldWildRuntime_ResolveBaseYAt", "BOOL")
     # Bare landing never calls a trajectory. The existing independent Slam
@@ -210,21 +227,29 @@ def source_text(wild=None, landing=None):
     product = product.split("/* Delta uses unsigned subtraction", 1)[0]
     adapter = LANDING.read_text() if landing is None else landing
     adapter = "\n".join(line for line in adapter.splitlines() if not line.startswith("#include"))
-    return prolog + heights + fixture.SEAMS + product + adapter + harness + DRIVER
+    # EdgePolicy now delegates Walk/ledge admission to this same portable
+    # production reducer. Keep its real body, with only private helper names
+    # separated from the Wild unit's own Abs/Finish names.
+    prepared = (ROOT / "lib/overworld/overworld_prepared_movement.c").read_text()
+    prepared = "\n".join(line for line in prepared.splitlines() if not line.startswith("#include"))
+    prepared = re.sub(r"\bAbs\(", "PreparedAbs(", prepared)
+    prepared = re.sub(r"\bFinish\(", "PreparedFinish(", prepared)
+    return prolog + heights + fixture.SEAMS + prepared + product + adapter + harness + driver
 
 
-def run_harness(wild=None, landing=None):
+def run_harness(wild=None, landing=None, driver=DRIVER):
     compiler = shutil.which("cc")
     if compiler is None:
         raise unittest.SkipTest("host C compiler is missing")
     with tempfile.TemporaryDirectory(prefix="bound-interest-") as directory:
         source = Path(directory) / "landing.c"
         binary = Path(directory) / "landing"
-        source.write_text(source_text(wild, landing))
+        source.write_text(source_text(wild, landing, driver))
         compiled = subprocess.run([
             compiler, "-std=c11", "-O2", "-DOVERWORLD_ACTOR_SYSTEM_HOST",
             "-DOVERWORLD_PICKUP_ROUTE_HOST", "-DOVERWORLD_MOTION_HOST",
-            "-I", str(ROOT / "include"), str(source), str(NATIVE), "-o", str(binary),
+            "-I", str(ROOT / "include"), str(source), str(ROOT / "lib/overworld/overworld_pickup_route.c"),
+            str(NATIVE), "-o", str(binary),
         ], text=True, capture_output=True)
         if compiled.returncode:
             raise AssertionError(compiled.stdout + compiled.stderr)
@@ -303,15 +328,15 @@ class BoundInterestLandingTests(unittest.TestCase):
 
     def test_copied_missing_policy_and_terrain_grant_fail(self):
         landing = LANDING.read_text()
-        assignment = "world.landingPolicy = OVERWORLD_PICKUP_ROUTE_WILD_PERMIT_BOUND_OOI_OCCUPANCY;"
+        assignment = "setup.world.landingPolicy = OVERWORLD_PICKUP_ROUTE_WILD_PERMIT_BOUND_OOI_OCCUPANCY;"
         self.assertEqual(landing.count(assignment), 1)
-        old_shape = run_harness(landing=landing.replace(assignment, "world.landingPolicy = 0;"))
+        old_shape = run_harness(landing=landing.replace(assignment, "setup.world.landingPolicy = 0;"))
         self.assertNotEqual(old_shape.returncode, 0)
         self.assertIn("Classify(land,playerKind)", old_shape.stderr)
-        mask = ("    if (world.landingPolicy)\n"
-                "        policy.allowedTerrainMask &= ~OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER;\n")
+        mask = ("    if (allowedTile & OVERWORLD_PICKUP_LANDING_WILD_PERMIT_BOUND_OOI_MARKER)\n"
+                "        setup.policy.allowedTerrainMask &= ~OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_PLAYER;\n")
         wild = WILD.read_text()
-        grant = "if (!world->landingPolicy && (world->subjectObject!=NULL || !world->hitValid))"
+        grant = "if (!world->landingPolicy && (world->subjectObject!=NULL || !c->hitValid))"
         self.assertEqual(landing.count(mask), 1)
         self.assertEqual(wild.count(grant), 1)
         unsafe = run_harness(

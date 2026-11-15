@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.airborne-input",
+  "title": "Airborne Select is ignored and confirmed Y waits for landing",
+  "status": "active",
+  "capabilities": [
+    "terrain",
+    "mount.lifecycle"
+  ],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "TICKETS.md",
+    "actor": "Unchanged saved party-slot2 Mankey56 mounted through the normal native follower lifecycle",
+    "trigger": "Route30 map34 (564,375). LEFT8 then SELECT1 during the actual Hop. Release through landing and at least8 idle frames; require no delayed dismount. A fresh grounded Select dismounts. Observe one explicit neutral frame with Select released, then hold Select for two frames and require exactly one real press edge, allowing only the first queue to remain neutral. Remount the same saved Mankey and start a normal RIGHT Hop. While airborne hold Y, use L to choose saved party-slot1 Cyndaquil155, and release Y. Keep the request with an empty transition queue until the accepted Hop reaches its exact target/base and completes normal or valid landed cleanup; then execute exactly one normal follower switch and remain stable24 frames.",
+    "observable": "Dense completed-queue native raw key edges, current full actor/party identities, decoded shared Motion plan and elapsed samples, paired native poses, ordered semantic receipts, selector pending request/transition queue and final saved Cyndaquil Follower.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "position",
+        "change": "One prepared teleport;24 neutral frames; mount existing saved party2 Mankey through prepared native follower lifecycle. No party edit, species replacement, profile, RNG or population override."
+      }
+    ],
+    "limits": [
+      "Finite 900-frame total cap; two real normal Hop inputs. First exact adjacent canopy target is(563,375); second normal RIGHT target is locked from its accepted native plan within the inherited1..6tile range.",
+      "Normal END is not required for an explicit landed Y cleanup, but it must not rewind the accepted target/base or interrupt in-flight movement. Forced/stale cleanup semantics are covered by the separate extracted-C product tests."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Prepare the saved Mankey at the measured Route30 canopy edge"
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Two finite normal Hops with airborne Select and a deferred Y choice"
+    }
+  ],
+  "stop": {
+    "frameBudget": 900,
+    "condition": "Both Hop endpoints, fresh grounded dismount, one landed Y switch and24 stable frames observed"
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "No airborne detach, lost accepted Hop endpoint, delayed raw Select toggle, dropped Y choice or repeated switch."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "mount.airborne-input",
+    "claims": [
+      "natural-input",
+      "live-actor-identity",
+      "rendered-motion",
+      "control-release"
+    ],
+    "minimumFrames": 70
+  }
+}

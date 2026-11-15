@@ -18,7 +18,7 @@ struct OverworldWildBehaviorPrimitives;
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_MAGIC 0x4F57424F
 #define OVERWORLD_WILD_BEHAVIOR_OVERLAY_VERSION 13
 #define OVERWORLD_WILD_BEHAVIOR_DATA_MAGIC 0x4F574244
-#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 95
+#define OVERWORLD_WILD_BEHAVIOR_DATA_VERSION 96
 #define OVERWORLD_WILD_BEHAVIOR_SEMANTIC_VERSION 95
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_MAGIC 0x4F574544
 #define OVERWORLD_WILD_ENCOUNTER_LOOKUP_DATA_VERSION 2
@@ -49,22 +49,22 @@ struct OverworldWildBehaviorPrimitives;
 #define OWBD_CLASS_PROFILE_COUNT 2
 #define OWBD_CLASS_RULE_COUNT 2
 #define OWBD_SPECIES_CLASS_RULE_COUNT 115
-#define OWBD_OVERRIDE_PROFILE_COUNT 38
+#define OWBD_OVERRIDE_PROFILE_COUNT 45
 #define OWBD_MASKABLE_APPLICATION_COUNT 32
-#define OWBD_APPLICATION_BANK_DIRECTORY_COUNT 333
-#define OWBD_APPLICATION_BANK_INDEX_COUNT 1612
+#define OWBD_APPLICATION_BANK_DIRECTORY_COUNT 428
+#define OWBD_APPLICATION_BANK_INDEX_COUNT 247
 #define OWBD_CONDITION_ENTRY_COUNT 26
 #define OWBD_CONDITION_ENTRY_STORAGE_COUNT \
     ((OWBD_CONDITION_ENTRY_COUNT) ? OWBD_CONDITION_ENTRY_COUNT : 1)
 #define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_REST 11
-#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER 17
-#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_MOUNTED 36
+#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_FOLLOWER 24
+#define OW_WILD_BEHAVIOR_OVERRIDE_PROFILE_MOUNTED 43
 /* Global IDs are separate from each subject's32 local mask slots. */
 typedef char OverworldWildBehaviorOverrideProfileCountMustFitLinkedTable[
     OWBD_OVERRIDE_PROFILE_COUNT <= 65534 ? 1 : -1];
 typedef char OverworldWildBehaviorConditionEntryCountMustFitRuntimeState[
     OWBD_CONDITION_ENTRY_COUNT <= 65535 ? 1 : -1];
-#define OWBD_OVERRIDE_MEMBER_COUNT 745
+#define OWBD_OVERRIDE_MEMBER_COUNT 977
 #define OWBD_SURFACE_MODEL_COUNT OWBD_GENERATED_SURFACE_MODEL_COUNT
 #define OWBD_SURFACE_INSTANCE_COUNT OWBD_GENERATED_SURFACE_INSTANCE_COUNT
 #define OWBD_SURFACE_TEMPLATE_COUNT OWBD_GENERATED_SURFACE_TEMPLATE_COUNT
@@ -84,7 +84,7 @@ typedef char OverworldWildBehaviorConditionEntryCountMustFitRuntimeState[
 #define OW_WILD_MAP_ALTITUDE_HEIGHT_SHIFT 15
 #define OW_WILD_SURFACE_ID_BLOCK_SHIFT 4
 #define OWBD_OVERRIDE_COUNT OWBD_OVERRIDE_PROFILE_COUNT
-#define OWED_ENCOUNTER_AREA_COUNT 150
+#define OWED_ENCOUNTER_AREA_COUNT 147
 #define OWED_ENCOUNTER_LOOKUP_DIRECTORY_ENTRY_SIZE 12
 
 #define OWED_SECTION_LAND_LEVELS (1u << 0)
@@ -156,6 +156,13 @@ typedef enum OverworldWildSpawnDestination {
  * Water surface. Tile matching and destinations use ALL. */
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_POLICY_ALL   0x07FF
 #define OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_DEFAULT      OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_LAND
+
+/* Spawn placement only. This bit narrows Land locations and is never a
+ * traversal or physical-surface permission. Bit 10 remains Water surface. */
+#define OW_WILD_SPAWN_DESTINATION_MASK_BEHIND_BUILDINGS (1u << 11)
+#define OW_WILD_SPAWN_DESTINATION_MASK_ALL \
+    (OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL \
+        | OW_WILD_SPAWN_DESTINATION_MASK_BEHIND_BUILDINGS)
 
 #define OW_WILD_SURFACE_TYPE_ROOFTOP 0
 #define OW_WILD_SURFACE_TYPE_SIGNPOST 1
@@ -702,9 +709,12 @@ typedef char OverworldWildBehaviorProfileSizeMustRemain160Bytes[
 typedef char OverworldWildBehaviorPrimitivesSizeMustRemain8Bytes[
     sizeof(OverworldWildBehaviorPrimitives) == 8 ? 1 : -1];
 
+/* Omitted authoring filters use ANY; map zero remains an explicit map. */
+#define OW_WILD_BEHAVIOR_MATCH_ANY_MAP 0xFFFF
+
 typedef struct OverworldWildBehaviorContext {
     u16 species;
-    u16 reserved;
+    u16 mapId;
     u32 groupFlags;
     u8 level;
     u8 terrain;
@@ -723,7 +733,11 @@ typedef struct OverworldWildBehaviorMatch {
     u8 maxLevel;
     u8 shiny;
     u8 behaviorClass;
+    u16 mapId;
 } OverworldWildBehaviorMatch;
+
+typedef char OverworldWildBehaviorMatchSizeMustRemain16Bytes[
+    sizeof(OverworldWildBehaviorMatch) == 16 ? 1 : -1];
 
 typedef struct OverworldWildBehaviorClassRule {
     OverworldWildBehaviorMatch match;
@@ -760,8 +774,8 @@ typedef struct OverworldWildBehaviorOverrideProfile {
     OverworldWildBehaviorProfileData compoundBoundProfile;
 } OverworldWildBehaviorOverrideProfile;
 
-typedef char OverworldWildBehaviorOverrideProfileSizeMustRemain228Bytes[
-    sizeof(OverworldWildBehaviorOverrideProfile) == 228 ? 1 : -1];
+typedef char OverworldWildBehaviorOverrideProfileSizeMustRemain232Bytes[
+    sizeof(OverworldWildBehaviorOverrideProfile) == 232 ? 1 : -1];
 
 typedef struct OverworldWildBehaviorConditionEntry {
     OverworldWildBehaviorMatch subjectMatch;
@@ -790,8 +804,8 @@ typedef struct OverworldWildBehaviorConditionEntry {
     u8 maxMovementSpeed;
 } OverworldWildBehaviorConditionEntry;
 
-typedef char OverworldWildBehaviorConditionEntrySizeMustRemain48Bytes[
-    sizeof(OverworldWildBehaviorConditionEntry) == 48 ? 1 : -1];
+typedef char OverworldWildBehaviorConditionEntrySizeMustRemain52Bytes[
+    sizeof(OverworldWildBehaviorConditionEntry) == 52 ? 1 : -1];
 
 /* Append-only condition options preserve every existing catalog section.
  * Capture values are0:none,1:Object of interest,2:Cargo. Uses values add3:Object of interest itself.

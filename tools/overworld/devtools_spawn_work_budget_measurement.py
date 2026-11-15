@@ -1,5 +1,6 @@
 """Short live proof for the incremental automatic spawn destination scan."""
 from copy import deepcopy
+from tools.overworld.devtools_d1_routes import GOLDENROD35, descriptor, selected_route
 
 from tools.overworld.devtools_main_loop_probe import (
     MAX_ZERO_STUTTER_ARM9_TICKS,
@@ -12,7 +13,7 @@ from tools.overworld.devtools_main_loop_probe import (
 
 KIND = "spawn-work-budget-v1"
 REQUIREMENT = "shared.spawn-work-budget-v1"
-DESTINATION_MASKS = (8, 15, 448, 512)
+DESTINATION_MASKS = (8, 15, 448, 456, 512)
 EXPECTED_SCAN_CANDIDATES = 240
 MAX_CANDIDATE_QUERIES_PER_UPDATE = 4
 EXPECTED_DESTINATION_UPDATES = (
@@ -64,6 +65,8 @@ class SpawnWorkBudgetMeasurement:
                 and len(source["sourceSha256"]) == 64
                 and type(max_frames) is int and 240 <= max_frames <= 2400,
                 "spawn-work measurement requires one bounded current-profile fixture")
+        self.route_key = selected_route(test, KIND)
+        self.route = descriptor(self.route_key)
         self.max_frames = max_frames
         self._setup_inputs = (test, source)
         self.setup_scan = None
@@ -106,6 +109,9 @@ class SpawnWorkBudgetMeasurement:
         self.entry = None
         self.failures = []
         self.closed = False
+        self.gate_pending = False
+        self.gate_frames = 0
+        self.gate_admitted = False
 
     def _fail(self, reason):
         if not self.failures:
@@ -238,16 +244,16 @@ class SpawnWorkBudgetMeasurement:
                 and snapshot.get("observationBoundary") == "main-task-queue-completion"
                 and snapshot.get("fieldAvailable") is True
                 and snapshot.get("fieldControl", {}).get("taskPointer") == 0
-                and snapshot.get("context", {}).get("mapId") == 33
-                and snapshot.get("player", {}).get("x") == 585
-                and snapshot.get("player", {}).get("y") == 406
+                and snapshot.get("context", {}).get("mapId") == self.route["arm"][0]
+                and snapshot.get("player", {}).get("x") == self.route["arm"][1]
+                and snapshot.get("player", {}).get("y") == self.route["arm"][2]
                 and snapshot.get("nativeObservation", {}).get("coverageComplete") is True
                 and snapshot.get("nativeObservation", {}).get("error") is None
                 and snapshot.get("nativeObservation", {}).get("eventsDropped") == 0
                 and subject.get("species") == 56
                 and subject.get("role") == "FOLLOWER"
                 and subject.get("handle", {}).get("value"),
-                "spawn-work measurement requires the reviewed Route 30 boundary")
+                "spawn-work measurement requires the reviewed D1 arm boundary")
         require(self.setup_unknown is None,
                 "spawn-work setup-origin scan lacks its exact native start")
         if self.setup_scan is not None:
@@ -273,11 +279,11 @@ class SpawnWorkBudgetMeasurement:
                   and actor.get("role") == "FOLLOWER"]
         require(self.attempt is None
                 and self.context_transition is None
-                and self.active_context.get("mapId") == 33
+                and self.active_context.get("mapId") == self.route["crossing"][0]
                 and isinstance(context, dict)
-                and context.get("mapId") == 67
-                and snapshot.get("player", {}).get("x") == 575
-                and snapshot.get("player", {}).get("y") == 398
+                and context.get("mapId") == self.route["crossing"][1]
+                and snapshot.get("player", {}).get("x") == self.route["crossing"][2]
+                and snapshot.get("player", {}).get("y") == self.route["crossing"][3]
                 and len(actors) == 1
                 and actors[0].get("active") is True
                 and actors[0].get("identityVerified") is True,
@@ -693,10 +699,60 @@ class SpawnWorkBudgetMeasurement:
             self.entry["ownerEntryFrames"] += 1
             self.entry["spawnMotionObserved"] = True
 
+    def _gate_warp(self, snapshot, events):
+        """Retain the single normal gate rebuild; it earns no spawn/pacing credit."""
+        from tools.overworld.devtools_records import validate_field_absence
+        if self.route_key != GOLDENROD35 or self.context_transition is not None:
+            return False
+        for event in events:
+            d=event.get("data",{})
+            if d.get("observation")=="player-step-admitted":
+                require(d.get("setupMode")=="normal" and d.get("mapId")==101
+                    and d.get("direction")==0 and d.get("origin")==[5,3] and d.get("target")==[5,2],
+                    "spawn-work gate transition lacks its exact normal admission")
+                self.gate_admitted=True
+        absent=snapshot.get("fieldAvailable") is False
+        context=snapshot.get("context")
+        busy=not absent and snapshot.get("fieldControl",{}).get("taskPointer") != 0
+        followers=[] if absent else [a for a in snapshot.get("actors",[]) if a.get("active") is True
+            and a.get("role")=="FOLLOWER" and a.get("subjectIdentity")==self.subject["subjectIdentity"]]
+        pending=absent or busy or not followers
+        if not pending and not self.gate_pending and context == self.active_context:
+            return False
+        require(self.gate_admitted and snapshot.get("prepared") is False
+            and snapshot.get("frame")==self.last_frame+1
+            and snapshot.get("nativeCycle")>=self.last_native_cycle,
+            "spawn-work field rebuild is outside its admitted normal gate")
+        self.gate_frames+=1
+        require(self.gate_frames<=160,"spawn-work normal gate exceeded its bounded rebuild")
+        if absent:
+            validate_field_absence(snapshot)
+        else:
+            require(isinstance(context,dict) and context.get("mapId") in (101,39),
+                "spawn-work gate returned an unreviewed map")
+            if context.get("mapId")==39:
+                require([snapshot["player"][k] for k in ("x","y")]==[358,316],
+                    "spawn-work gate returned outside its declared arrival")
+        if pending:
+            self.gate_pending=True
+            self.elapsed_frames+=1
+            require(self.elapsed_frames<=self.max_frames,"spawn-work completed-frame ceiling exceeded")
+            self.last_frame=snapshot["frame"];self.last_native_cycle=snapshot["nativeCycle"]
+            return True
+        require(context.get("mapId")==39 and context.get("fieldEpoch")!=self.active_context.get("fieldEpoch")
+            and context.get("mapGeneration")!=self.active_context.get("mapGeneration")
+            and followers[0].get("handle")!=self.subject.get("handle"),
+            "spawn-work gate did not bind the new full follower handle")
+        self.last_actor_frame=snapshot["actorFrame"]
+        self.gate_pending=False
+        return False
+
     def observe(self, snapshot, events):
         if self.failures or self.closed:
             return self.result()
         try:
+            if self._gate_warp(snapshot, events):
+                return self.result()
             field_changed = snapshot.get("context") != self.active_context
             require(self.initial is not None
                     and snapshot.get("observationBoundary") == "main-task-queue-completion"
@@ -813,6 +869,9 @@ class SpawnWorkBudgetMeasurement:
     def result(self):
         return {
             "kind": KIND,
+            "route": self.route_key,
+            "gatePending": self.gate_pending,
+            "gateFrames": self.gate_frames,
             "requirements": [REQUIREMENT],
             "passed": self.closed and self.ready,
             "ready": self.ready,

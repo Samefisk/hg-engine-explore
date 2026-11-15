@@ -97,6 +97,17 @@ SECTIONS {
                 /* Appended in the freed Hop-search reserve; earlier fixed
                  * private leaves keep their addresses. */
                 KEEP(*(.overworld_mount_jump_landed))
+                /* The existing tick forwarding leaf uses only the spare tail;
+                 * all earlier prefix leaves retain their fixed addresses. */
+                ASSERT(. <= ORIGIN(rom) + 0x30C,
+                    "mount prefix overlaps tick forwarding tail");
+                . = ORIGIN(rom) + 0x30C;
+                __mount_tick_latch_tail_start = .;
+                KEEP(*(.overworld_mount_tick_latch_tail))
+                ASSERT(ABSOLUTE(__mount_tick_latch_tail_start) == ORIGIN(rom) + 0x30C,
+                    "mount tick forwarding tail moved");
+                ASSERT(. == ORIGIN(rom) + 0x314,
+                    "mount tick forwarding tail changed size");
                 ASSERT(. <= ORIGIN(rom) + 0x314,
                     "overworld mount precode exceeds reserve");
                 . = ORIGIN(rom) + 0x314;

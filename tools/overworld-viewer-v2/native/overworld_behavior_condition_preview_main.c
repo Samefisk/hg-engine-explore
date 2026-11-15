@@ -6,9 +6,9 @@
 #include <string.h>
 
 #define HOST_TRACE_CAPACITY 96
-#define PREVIEW_HEADER_VALUES 34
+#define PREVIEW_HEADER_VALUES 35
 #define PREVIEW_BINDING_VALUES 13
-#define PREVIEW_CANDIDATE_VALUES 16
+#define PREVIEW_CANDIDATE_VALUES 17
 #define PREVIEW_STATE_VALUES 7
 #define HOST_REQUEST_VERSION 2
 
@@ -260,6 +260,7 @@ int main(void)
 
     memset(&subjectContext, 0, sizeof(subjectContext));
     subjectContext.species = (u16)header[0];
+    subjectContext.mapId = (u16)header[34];
     subjectContext.level = (u8)header[1];
     subjectContext.terrain = (u8)header[2];
     subjectContext.shiny = (u8)header[3];
@@ -332,6 +333,7 @@ int main(void)
             return 2;
         }
         candidates[i].context.species = (u16)values[0];
+        candidates[i].context.mapId = (u16)values[16];
         candidates[i].context.level = (u8)values[1];
         candidates[i].context.terrain = (u8)values[2];
         candidates[i].context.shiny = (u8)values[3];

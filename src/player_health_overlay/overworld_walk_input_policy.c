@@ -28,6 +28,10 @@ __asm__(
     ".thumb_func\n.thumb_set OverworldWalk_IsFortyFiveDegreeTurn, 0x023BF5E2\n");
 
 #if defined(__arm__)
+_Static_assert(__builtin_offsetof(OverworldWildBehaviorOverrideProfile, mask2) == 28
+    && __builtin_offsetof(OverworldWildBehaviorOverrideProfile, mask3) == 32
+    && __builtin_offsetof(OverworldWildBehaviorOverrideProfile, profile) == 36,
+    "packed profile merge requires current Override offsets");
 /* All independent replace slices share the fixed 106-byte resident slot.
  * The immutable triples are (profile byte, source bit + 1, slice mask).
  * Source bits 33..64 select mask3; the other source bits select mask2. */
@@ -49,18 +53,18 @@ __asm__(
     "ldrb r3,[r7,#1]\n"
     "ldrb r5,[r7,#2]\n"
     "adds r7,#3\n"
-    "ldr r6,[r1,#24]\n"
+    "ldr r6,[r1,#28]\n"
     "cmp r3,#32\n"
     "bls 5f\n"
     "subs r3,#32\n"
-    "ldr r6,[r1,#28]\n"
+    "ldr r6,[r1,#32]\n"
     "5:\n"
     "lsrs r6,r3\n"
     "bcc 1b\n"
     "6:\n"
     "ldrb r3,[r0,r2]\n"
     "movs r4,r1\n"
-    "adds r4,#32\n"
+    "adds r4,#36\n"
     "ldrb r4,[r4,r2]\n"
     "eors r4,r3\n"
     "ands r4,r5\n"

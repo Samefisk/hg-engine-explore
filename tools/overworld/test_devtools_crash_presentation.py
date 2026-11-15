@@ -112,7 +112,7 @@ class CrashPresentationTests(unittest.TestCase):
             with self.subTest(fault=fault):
                 def lookup(image,name,kind,**kwargs):
                     if fault=="size": raise ValueError("wrong-symbol-size")
-                    return (0x02200000,944,None) if kind==1 else (0x023CD000,4,code)
+                    return (0x02200000,crash.STATE_SIZE,None) if kind==1 else (0x023CD000,4,code)
                 digest=hashlib.sha256(b"bad" if fault=="layout-code" else code).hexdigest()
                 with patch.object(crash,"symbol",side_effect=lookup), patch.object(crash,"CODE",(("test",4,digest),)):
                     with self.assertRaises(ValueError):

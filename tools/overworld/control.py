@@ -1522,6 +1522,21 @@ def _shared_route_control_contract(registry):
         raise ValidationFailure("route recorder adapter changed its original control contract")
 
 
+def _shared_d1_route_measurements(test, kind):
+    from tools.overworld.devtools_d1_routes import (
+        GOLDENROD, GOLDENROD35, selected_route, goldenrod_actions, route35_actions, cherrygrove_actions,
+    )
+    route = selected_route(test, kind)
+    actions = route35_actions(kind) if route == GOLDENROD35 else (goldenrod_actions(kind) if route == GOLDENROD else cherrygrove_actions(kind))
+    if test["actions"] != actions:
+        raise ValidationFailure("D1 test changed its sealed route actions")
+    expected = dict(kind=kind, subject="mankey")
+    if any(row.get("kind") == kind and "route" in row
+           for row in test.get("measurements", [])):
+        expected["route"] = route
+    return [expected]
+
+
 def _shared_test_registration(test: dict[str, Any], repo: Path) -> tuple[dict[str, Any] | None, str]:
     from tools.overworld.devtools_test_contract import validate_test
     test = validate_test(test)
@@ -2509,9 +2524,9 @@ def _shared_test_registration(test: dict[str, Any], repo: Path) -> tuple[dict[st
                 or registration.get("recorderControlRequirement") is not None \
                 or test["subjects"] != [dict(id="mankey", species=56,
                                               role="FOLLOWER", acquire="existing")] \
-                or test.get("measurements") != [dict(kind=_SPAWN_WORK_BUDGET_KIND,
-                                                      subject="mankey")]:
-            raise ValidationFailure("spawn-work changed its exact Route 30 contract")
+                or test.get("measurements") != _shared_d1_route_measurements(
+                    test, _SPAWN_WORK_BUDGET_KIND):
+            raise ValidationFailure("spawn-work changed its exact sealed D1 contract")
     elif registration.get("evaluator") == _UNMOUNTED_ZERO_STUTTER_KIND:
         from tools.overworld.devtools_unmounted_zero_stutter_proof import contract, CLAIMS
         from tools.overworld.devtools_unmounted_zero_stutter_measurement import REQUIREMENT
@@ -2523,8 +2538,8 @@ def _shared_test_registration(test: dict[str, Any], repo: Path) -> tuple[dict[st
                 or registration.get("recorderControlRequirement") is not None \
                 or test["subjects"] != [dict(id="mankey", species=56,
                                               role="FOLLOWER", acquire="existing")] \
-                or test.get("measurements") != [dict(
-                    kind=_UNMOUNTED_ZERO_STUTTER_KIND, subject="mankey")]:
+                or test.get("measurements") != _shared_d1_route_measurements(
+                    test, _UNMOUNTED_ZERO_STUTTER_KIND):
             raise ValidationFailure("zero-stutter test changed its exact spawn-work route")
     elif registration.get("evaluator") == _POPULATION_FAST_TRAVEL_KIND:
         from tools.overworld.devtools_population_fast_travel_proof import contract, CLAIMS
@@ -2593,6 +2608,8 @@ def _shared_test_registration(test: dict[str, Any], repo: Path) -> tuple[dict[st
             raise ValidationFailure("Appear Hop changed its exact timing contract")
     elif (adapter := get_adapter(registration.get("evaluator"))) is not None:
         expected_measurement = dict(kind=adapter.kind, subject=adapter.subjects[0][0])
+        if adapter.kind in ("party-throw-route34-v1", "party-throw-follower-cargo-v1"):
+            expected_measurement = dict(kind=adapter.kind, subjects=[item[0] for item in adapter.subjects])
         if adapter.kind in ("distance-despawn-route29-v1", "distance-despawn-cherrygrove-v1"):
             expected_measurement["subject"] = "unrelated"
         if adapter.kind == "mounted-speed-slew-v1" and test["id"] in (
@@ -2899,7 +2916,7 @@ def _replay_shared_test(test: dict[str, Any], rows: list[dict[str, Any]], *, fau
         route_control = SpawnWorkBudgetNegative(fault, measurement=evaluator.measurements[_SPAWN_WORK_BUDGET_KIND])
     elif fault is not None and _UNMOUNTED_ZERO_STUTTER_KIND in evaluator.measurements:
         from tools.overworld.devtools_unmounted_zero_stutter_proof import UnmountedZeroStutterNegative
-        route_control = UnmountedZeroStutterNegative(fault)
+        route_control = UnmountedZeroStutterNegative(fault, measurement=evaluator.measurements[_UNMOUNTED_ZERO_STUTTER_KIND])
     elif fault is not None and _POPULATION_FAST_TRAVEL_KIND in evaluator.measurements:
         from tools.overworld.devtools_population_fast_travel_proof import PopulationFastTravelNegative
         route_control = PopulationFastTravelNegative(fault)
@@ -2970,6 +2987,32 @@ def _replay_shared_test(test: dict[str, Any], rows: list[dict[str, Any]], *, fau
                 # never borrow a chain control or silently skip the requested fault.
                 raise ValidationFailure("cadence replay controls are not yet registered")
             def verify_cadence_frame(sample, current):
+                airborne = current.measurements.get("mount-airborne-input-v1")
+                if airborne is not None:
+                    if row.get("phase") == "observe":
+                        if airborne.queue_start is None:
+                            # The declared Select handoff changes the same saved
+                            # Mankey's role and authority, not its native identity.
+                            _verify_shared_subject_observation(sample, current.subjects["mankey"],
+                                allow_mounted_rebound=True)
+                        elif airborne.switched is not None:
+                            _verify_shared_subject_observation(sample, airborne.switched["actor"])
+                        # The leaf proves the landed Y release and exact queue.
+                        # Recall/SPAWN may hide or remove the old body; no new
+                        # selection is credited until the strict switch gate.
+                    return
+                goldenrod = next((current.measurements[k] for k in (
+                    "goldenrod-natural-behind-v1", "goldenrod-natural-raised-v1", "goldenrod-natural-underground-v1",
+                    "goldenrod-follower-hop-rebind-v1")
+                    if k in current.measurements), None)
+                if goldenrod is not None:
+                    if "goldenrod-follower-hop-rebind-v1" in current.measurements and sample.get("fieldAvailable") is False:
+                        return  # The feature meter validates the explicit native seam absence.
+                    if row.get("phase") == "observe":
+                        if goldenrod.subject is None:
+                            raise ValidationFailure("Goldenrod natural replay lacks its current follower bind")
+                        _verify_shared_subject_observation(sample, goldenrod.subject)
+                    return
                 priority = next((current.measurements[k] for k in
                     ("natural-refill-retry-v1", "natural-water-spawn-v1") if k in current.measurements), None)
                 if priority is not None:
@@ -2993,6 +3036,11 @@ def _replay_shared_test(test: dict[str, Any], rows: list[dict[str, Any]], *, fau
                             for actor in sample["actors"]:
                                 if actor.get("active") is True and actor.get("role") == "FOLLOWER":
                                     _verify_shared_subject_observation(sample, actor)
+                    return
+                short = current.measurements.get("spawn-work-budget-v1")
+                if short is not None and short.route_key == "goldenrod-route35-v1" and short.gate_pending:
+                    # The leaf validates the one admitted native gate transition;
+                    # there is no current source/engine body to recheck while absent.
                     return
                 if "pokemon-damage-palette-v1" in current.measurements and appearance_nurse_transition:
                     # The declared nurse warp retired the old Wild/Mounted
@@ -4634,6 +4682,22 @@ _WILD_MOVING_FIXTURE_SHA_PAIRS = {
 }
 
 
+# Only the private Route35 D1 warm-up guard body changed in this exact pair.
+# Neither D1 kind may reuse captures across it; other module bytes are identical.
+_D1_ROUTE35_WARMUP_SHA_PAIR = (
+    "18f7efa7c96072a069f7c0d6a9357764522c8ee47cce8dd871420b81b571db41",
+    "b21b809850b9b347789690580beab8363087ef3b291fd432af90048bb8aa198a",
+)
+
+
+# Only two D1 action-provider bodies and the Route35 anchor changed in this pair.
+# Both D1 kinds stay fresh; every non-D1 capture leaves these routes unselected.
+_D1_ROUTE35_GATE_INPUT_SHA_PAIR = (
+    "9adf9ac2e3d2f566709732c004a0b29908f98173b79d618b12b537da6e887980",
+    "95bbe55fd7a8b7940aeafd48c21fe7d8320618195d2341fa64f94668c09fe086",
+)
+
+
 def _capture_update_is_unselected(test, record, recorded, current, repo):
     """Reuse raw data when only another evaluator's source changed.
 
@@ -4663,6 +4727,16 @@ def _capture_update_is_unselected(test, record, recorded, current, repo):
     for path in paths:
         digest = file_record(repo / path, repo)["sha256"]
         if digest == retained[path]:
+            continue
+        if (path == "tools/overworld/devtools_test_contract.py"
+                and (retained[path], digest) == _D1_ROUTE35_WARMUP_SHA_PAIR):
+            if selected & {_SPAWN_WORK_BUDGET_KIND, _UNMOUNTED_ZERO_STUTTER_KIND}:
+                return False
+            continue
+        if (path == "tools/overworld/devtools_d1_routes.py"
+                and (retained[path], digest) == _D1_ROUTE35_GATE_INPUT_SHA_PAIR):
+            if selected & {_SPAWN_WORK_BUDGET_KIND, _UNMOUNTED_ZERO_STUTTER_KIND}:
+                return False
             continue
         if path in _WILD_MOVING_FIXTURE_SHA_PAIRS:
             if (_WILD_THROW_MOVING_KIND in selected

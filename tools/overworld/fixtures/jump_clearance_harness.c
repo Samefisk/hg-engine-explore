@@ -4,6 +4,7 @@
  * object occupancy, or gameplay feel.
  */
 #include <stdio.h>
+#include <assert.h>
 #include <string.h>
 
 /* @PRELUDE@ */
@@ -13,7 +14,14 @@ static u8 sBlocked[GRID][GRID];
 static u8 sObject[GRID][GRID];
 static u8 sBehavior[GRID][GRID];
 static u8 sNoGround[GRID][GRID];
+/* A native tree canopy: the blocked tree cell carries surface 0xFFFE, whose
+ * top is 0x31580 FX32 (about three tiles) above the ground. */
+static u8 sCanopy[GRID][GRID];
+#define CANOPY_HEIGHT 0x31580
 static s32 sStartY, sTargetY;
+static s32 sGroundHeight[GRID][GRID], sCanopyHeight[GRID][GRID];
+static u8 sNativeGround[GRID][GRID], sStrictHeight;
+static int sExpectedDecision = -1;
 
 static BOOL Blocked(FieldSystem *field, int x, int y)
 {
@@ -31,21 +39,36 @@ static BOOL Occupied(FieldSystem *field, LocalMapObject *ignored,
     (void)field; (void)ignored; (void)collisionIgnored; (void)baseY; (void)mode;
     return x >= 0 && y >= 0 && x < GRID && y < GRID && sObject[y][x];
 }
-static BOOL NoSurface(FieldSystem *field, const OverworldWildSurfaceCatalog *catalog,
+static BOOL Surface(FieldSystem *field, const OverworldWildSurfaceCatalog *catalog,
     int x, int y, OverworldWildSurfaceHit *hit)
 {
-    (void)field; (void)catalog; (void)x; (void)y; (void)hit;
-    return FALSE;
+    (void)field; (void)catalog;
+    if (x < 0 || y < 0 || x >= GRID || y >= GRID || (!sCanopy[y][x] && !sNativeGround[y][x])) {
+        return FALSE;
+    }
+    memset(hit, 0, sizeof(*hit));
+    hit->surfaceId = sCanopy[y][x] ? OW_WILD_SURFACE_ID_NATIVE_CANOPY
+        : OW_WILD_SURFACE_ID_NATIVE_GROUND;
+    hit->height = sCanopy[y][x] ? (sCanopyHeight[y][x] ? sCanopyHeight[y][x] : CANOPY_HEIGHT)
+        : sGroundHeight[y][x];
+    return TRUE;
 }
 static BOOL ResolveBaseY(FieldSystem *field, const OverworldWildSurfaceHit *hit,
     s32 startBaseY, u32 objectFlags, int x, int y, s32 *out)
 {
     (void)field; (void)objectFlags;
+    if (x < 0 || y < 0 || x >= GRID || y >= GRID || sNoGround[y][x]) {
+        return FALSE;
+    }
+    if (hit != NULL) {
+        *out = startBaseY + hit->height;
+        return TRUE;
+    }
     /* A cliff face has no native ground. */
     if (hit == NULL && x >= 0 && y >= 0 && x < GRID && y < GRID && sNoGround[y][x]) {
         return FALSE;
     }
-    *out = startBaseY;
+    *out = startBaseY + sGroundHeight[y][x];
     return TRUE;
 }
 static s32 SlamArc(u16 n, u16 d, u8 p) { (void)n; (void)d; (void)p; return 0; }
@@ -59,7 +82,7 @@ static const OverworldHopClearanceNativeOps sOps = {
     sizeof(OverworldHopClearanceNativeOps), &gOverworldQueryCodeAddonEntry, Current,
     OverworldActorHopGeometry_Init, OverworldActorHopGeometry_NextCell,
     OverworldActorHopPlanner_LerpFx32, SlamArc, SlamPhase,
-    NoSurface, ResolveBaseY,
+    Surface, ResolveBaseY,
     OverworldWildBehavior_CalculateJumpTrajectory, OverworldWildBehavior_CalculateJumpArc,
     UDiv, SDiv, Blocked, Behavior, Occupied,
 };
@@ -93,7 +116,9 @@ static void Plan(const char *label, u8 jump, u8 minDistance, u8 maxDistance,
     call.startBaseY = sStartY;
     call.targetBaseY = sTargetY;
     call.operation = OVERWORLD_ACTOR_HOP_PLAN_TRAJECTORY;
+    call.spotState = sStrictHeight ? OVERWORLD_ACTOR_HOP_PLAN_FLAG_STRICT_HEIGHT : 0;
     decision = OverworldActorHopPlanner_PlanTrajectory(&call, &sOps);
+    if (sExpectedDecision >= 0) { assert(decision == sExpectedDecision); }
     printf("%s %d %u\n", label, decision == OVERWORLD_MOTION_DECISION_ACCEPTED,
         (unsigned)(call.trajectory >> 16));
 }
@@ -104,7 +129,13 @@ static void Clear(void)
     memset(sObject, 0, sizeof(sObject));
     memset(sBehavior, 0, sizeof(sBehavior));
     memset(sNoGround, 0, sizeof(sNoGround));
+    memset(sCanopy, 0, sizeof(sCanopy));
     sStartY = sTargetY = 0;
+    memset(sGroundHeight, 0, sizeof(sGroundHeight));
+    memset(sCanopyHeight, 0, sizeof(sCanopyHeight));
+    memset(sNativeGround, 0, sizeof(sNativeGround));
+    sStrictHeight = 0;
+    sExpectedDecision = -1;
 }
 
 int main(void)
@@ -191,5 +222,51 @@ int main(void)
     sNoGround[10][5] = 1;
     sStartY = sTargetY = 2 << 16;
     Plan("cliff-level-2", 1, 2, 2, 1, 6, 1, 0, 2);
+    /* A ranged Hop must clear the native treetop. Exact Jump keeps its
+     * separate capped model for the grounded tree. */
+    Clear();
+    sBlocked[10][5] = 1;
+    sCanopy[10][5] = 1;
+    Plan("canopy-range-hop-3", 0, 1, 6, 1, 4, 1, 0, 3);
+    Clear();
+    sBlocked[10][6] = 1;
+    sCanopy[10][6] = 1;
+    Plan("canopy-jump-4-2", 1, 4, 4, 1, 2, 1, 0, 4);
+    Clear();
+    sBlocked[10][5] = sCanopy[10][5] = 1;
+    Plan("canopy-enabled-range-3", 1, 1, 6, 1, 7, 1, 0, 3);
+    Clear();
+    sBlocked[15][9] = sCanopy[15][9] = 1;
+    Plan("canopy-diagonal-late-6", 1, 1, 6, 1, 7, 1, 1, 6);
+    Clear();
+    sBlocked[10][6] = sCanopy[10][6] = 1;
+    sCanopyHeight[10][6] = 0x100000;
+    Plan("canopy-too-high", 1, 1, 6, 1, 7, 1, 0, 6);
+    Clear();
+    sGroundHeight[10][6] = 24 << 12;
+    Plan("native-ridge", 1, 1, 6, 1, 7, 1, 0, 6);
+    Plan("native-ridge-disabled", 0, 1, 6, 1, 7, 1, 0, 6);
+    Clear();
+    sNativeGround[10][5] = 1;
+    sGroundHeight[10][5] = 12 << 12;
+    Plan("native-ground-hit", 1, 1, 6, 1, 7, 1, 0, 3);
+    Clear();
+    sCanopy[10][6] = sNoGround[10][6] = 1;
+    sStrictHeight = 1;
+    sExpectedDecision = OVERWORLD_MOTION_DECISION_RETRY_WORLD_BUSY;
+    Plan("canopy-missing-height", 1, 1, 6, 1, 7, 1, 0, 6);
+    Clear();
+    sNoGround[10][6] = 1;
+    sStrictHeight = 1;
+    sExpectedDecision = OVERWORLD_MOTION_DECISION_RETRY_WORLD_BUSY;
+    Plan("native-missing-height", 1, 1, 6, 1, 7, 1, 0, 6);
+    /* The destination support belongs to the landing owner, not the
+     * crossed-cell reducer. The adjacent T78 landing remains legal. */
+    Clear();
+    sCanopy[10][10] = 1;
+    Plan("destination-canopy", 1, 1, 6, 1, 7, 1, 0, 6);
+    Clear();
+    sCanopy[10][5] = 1;
+    Plan("adjacent-canopy", 1, 1, 6, 1, 7, 1, 0, 1);
     return 0;
 }

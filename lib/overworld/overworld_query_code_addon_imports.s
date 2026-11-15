@@ -7,6 +7,9 @@
 .global memcpy
 .thumb_func
 .thumb_set memcpy, 0x023DEEBE
+.global sys_FreeMemoryEz
+.thumb_func
+.thumb_set sys_FreeMemoryEz, 0x0201AB0C
 .global __aeabi_uidivmod
 .thumb_func
 .thumb_set __aeabi_uidivmod, 0x023DEE4C

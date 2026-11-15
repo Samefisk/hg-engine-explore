@@ -2,7 +2,7 @@
 from copy import deepcopy
 import struct
 from tools.overworld.devtools_follower_throw_measurement import (
-    follower_moving_pickup, AWAY, AWAY_TARGET, FIND_CARGO, FIND_POSITION, FOLLOWER, KIND, NON45_KIND, NON45_REQUIREMENT, NORMAL_TIME, REQUIREMENT, RELEASE, SEARCH_TIME, THROW_MASK, THROW_RANGE, require, require_non45_away,
+    follower_moving_pickup, AWAY, AWAY_TARGET, FIND_CARGO, FIND_POSITION, FOLLOWER, KIND, NON45_KIND, NON45_REQUIREMENT, NORMAL_TIME, REQUIREMENT, RELEASE, SEARCH_TIME, THROW_MASK, THROW_RANGE, require, require_away_endpoint, require_non45_away,
 )
 from tools.overworld.devtools_walk_matrix_observer import decode_motion
 from tools.overworld.devtools_records import engine_binding_identity
@@ -128,8 +128,8 @@ def measurements(feature,replay=None,record=None):
     flight=result.get("flightWitness");endpoint=result.get("launchEndpoint")
     require(isinstance(flight,dict) and isinstance(endpoint,dict), "Follower Throw lacks complete native Cargo flight")
     plan=flight["plan"];commit=flight["commitBefore"]+1;duration=flight["duration"]
+    require_away_endpoint(plan["origin"], plan["target"], endpoint["player"], non45=non45)
     if non45:
-        require_non45_away(plan["origin"], plan["target"], endpoint["player"])
         released = endpoint.get("releaseProfile", {})
         lane = bytes.fromhex(released.get("lanes", [""])[0])
         expected = min(65535, SEARCH_TIME + (THROW_RANGE-1)*(SEARCH_TIME-(SEARCH_TIME >> 2))
@@ -145,9 +145,7 @@ def measurements(feature,replay=None,record=None):
             and engine_binding_identity(flight["engineIdentity"])==engine_binding_identity(result["subjects"]["cargo"]["engineIdentity"])
             and endpoint["plan"]==plan and endpoint["targetBaseY"]==plan["targetBaseY"]
             and endpoint["origin"]==plan["origin"] and endpoint["target"]==plan["target"]
-            and (max(abs(a-b) for a,b in zip(plan["origin"],plan["target"])) if non45 else
-                 sum(abs(a-b) for a,b in zip(plan["origin"],plan["target"])))==plan["distance"]==endpoint["distance"]==THROW_RANGE
-            and (non45 or plan["origin"][0]==plan["target"][0] or plan["origin"][1]==plan["target"][1])
+            and max(abs(a-b) for a,b in zip(plan["origin"],plan["target"]))==plan["distance"]==endpoint["distance"]==THROW_RANGE
             and max(abs(a-b) for a,b in zip(plan["target"],endpoint["player"]))>max(abs(a-b) for a,b in zip(plan["origin"],endpoint["player"]))
             and endpoint["frame"]==flight["startFrame"]==frames["launch"]
             and flight["commitAfter"]==commit and flight["returnFrame"]==flight["startFrame"]+duration+flight["pauseFrames"]
@@ -296,11 +294,11 @@ def validate_negative_result(feature,result=None,fault=None):
     require(fault in faults(feature) and result.get("passed") is False and result.get("failures"), "Follower Throw copied control did not fail")
     expected={"missing-interactions":"interactions are absent", "stale-cargo":"different subject or role",
         "binding-loss":"lost or changed its bound trigger", "player-fallback":"used Player fallback",
-        "cargo-motion-replaced":"replaced Cargo's accepted motion", "wrong-launch":"exact-range cardinal endpoint away",
+        "cargo-motion-replaced":"replaced Cargo's accepted motion", "wrong-launch":"exact-range Away endpoint away",
         "flight-frozen":"flight lacks exact landing", "missing-follow-return":"normal follow return", "battle":"entered battle",
         "slow-search":"cargo displayed Hop time", "skipped-position":"authored Away modifier",
         "leakingboost":"normal displayed Hop time", "different-interest":"lost or changed its bound trigger",
-        "short-range":"exact-range cardinal endpoint away", "toward-player":"exact-range cardinal endpoint away",
+        "short-range":"exact-range Away endpoint away", "toward-player":"exact-range Away endpoint away",
         "missing-flight-return":"flight did not return on time",
         "cardinal-fallback":"non45 Away projection", "diagonal45":"non45 Away projection",
         "wrong-support":"native landing support"}[fault.rsplit(":",1)[1]]

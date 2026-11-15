@@ -24,6 +24,7 @@ SPECIES_MASK = 0x7FF
 RATE_OLD_ROD = 3
 RATE_GOOD_ROD = 4
 RATE_SUPER_ROD = 5
+ENTRY_STRICT_TIME_TABLE = 1 << 0
 
 SECTION_LAND_LEVELS = 1 << 0
 SECTION_LAND_MORNING = 1 << 1
@@ -156,6 +157,7 @@ def section_is_present(data: bytes, mask: int, offset: int, size: int, land_has_
 
 def encode_sparse_record(data: bytes) -> bytes:
     require(len(data) >= ENCOUNTER_DATA_SIZE, "encounter record is smaller than expected")
+    encounter_time_policy(data)
     data = data[:ENCOUNTER_DATA_SIZE]
     land_has_species = (
         any_species(data[20:44])
@@ -178,6 +180,13 @@ def encode_sparse_record(data: bytes) -> bytes:
     )) + b"".join(present_sections)
 
 
+def encounter_time_policy(data: bytes) -> int:
+    require(len(data) >= ENCOUNTER_DATA_SIZE, "encounter record is smaller than expected")
+    require(data[6] & ~ENTRY_STRICT_TIME_TABLE == 0 and data[7] == 0,
+            "encounter record has undefined time policy or reserved padding")
+    return data[6]
+
+
 def owed_checksum(blob: bytes) -> int:
     scratch = bytearray(blob)
     struct.pack_into("<I", scratch, OWED_CHECKSUM_OFFSET, 0)
@@ -192,7 +201,8 @@ def build_blob(mappings: list[EncounterMapping], encounter_members: list[bytes])
 
     for mapping in mappings:
         require(mapping.data_id < len(encounter_members), f"data id {mapping.data_id} is outside encounter NARC")
-        record = encode_sparse_record(encounter_members[mapping.data_id])
+        member = encounter_members[mapping.data_id]
+        record = encode_sparse_record(member)
         if record not in record_offsets:
             record_offsets[record] = payload_offset + len(payload)
             payload.extend(record)
@@ -201,7 +211,7 @@ def build_blob(mappings: list[EncounterMapping], encounter_members: list[bytes])
             mapping.data_id,
             record_offsets[record],
             len(record),
-            0,
+            encounter_time_policy(member),
         ))
 
     directory = bytearray()

@@ -8,7 +8,7 @@ import unittest
 
 from tools.overworld.devtools_actor_inspect_probe import ENGINE_OWNER_KEYS, GENERATION_KEYS
 from tools.overworld.devtools_emote_vram_diagnostics import STOCK_SEALS, decode_emote_owner
-from tools.overworld.devtools_emote_three_probe import QUIET, EXTRA_SEALS, ORDER, EmoteThreeProbe
+from tools.overworld.devtools_emote_three_probe import QUIET, QUIET_MODE, EXTRA_SEALS, ORDER, EmoteThreeProbe
 from tools.overworld.devtools_emote_three_measurement import (
     KIND, SUBJECTS, SETUP, ACTIONS, EmoteThreeMeasurement, checked_burst, checked_trigger)
 from tools.overworld.devtools_emote_three_proof import (
@@ -51,7 +51,8 @@ def native_binding(i):
         effect=slot['effect'],dataPointer=0x02280000+i*256,dataHex=struct.pack('<26I',*words).hex(),
         slot=slot['pointer'],model=slot['model'],object=slot['object'],owner=OWNER,
         textureKey=slot['textureKey'],paletteKey=slot['paletteKey'],modelKeys=[slot['textureKey'],0,slot['paletteKey']],
-        modelActive=3,textureDestination=words[23],paletteDestination=(slot['paletteKey']&0xFFFF)<<3,frameBytes=512)
+        modelActive=3,textureDestination=words[23],paletteDestination=(slot['paletteKey']&0xFFFF)<<3,frameBytes=512,
+        mode=QUIET_MODE|i)
 
 
 def burst():
@@ -78,18 +79,16 @@ def burst():
         seq+=1;e.update(returnSequence=seq,returnClock=deepcopy(e['entry']),result=result);return e
     for request,(name,icon) in enumerate(ORDER):
         i='abcd'.index(name);obj=subjects[name]['engineIdentity']['pointer']
-        admit=event('admit',[CONTEXT,obj,icon,0],request=request,subject=name,handle=deepcopy(subjects[name]['handle']))
+        admit=event('admit',[CONTEXT,obj,icon|QUIET_MODE,0],request=request,subject=name,handle=deepcopy(subjects[name]['handle']))
         accepted=request in (0,2,3)
         if accepted:
             b=native_binding(i);init=event('init',[b['effect'],b['dataPointer'],0,0])
-            init.update(parent='admit',request=request,binding=b,effect=b['effect'],dataPointer=b['dataPointer'])
+            init.update(parent='admit',request=request,binding=b,effect=b['effect'],dataPointer=b['dataPointer'],mode=b['mode'])
             for typ,dest,size in ((0,b['textureDestination'],512),(1,b['paletteDestination'],32)):
                 t=event('transfer',[typ,dest,0x022A0000+i*256,size]);t['parent']='init';value['events'].append(returned(t,1))
-            p=event('play',[1501,0,0,0]);p['parent']='init';value['events'].append(returned(p))
             value['events'].append(returned(init,1))
         admit.update(ownerHex=owner(1 if request<2 else 2 if request==2 else 3)['rawHex'])
         returned(admit,native_binding(i)['effect'] if accepted else 0);value['requests'].append(deepcopy(admit));value['events'].append(admit)
-        stop=event('stop',[1501,0,0,0],request=request);value['events'].append(returned(stop))
     for kind,table in (('update','updates'),('draw','draws')):
         for i in range(3):
             b=native_binding(i);e=event(kind,[b['effect'],b['dataPointer'],0,0],11,binding=b)
@@ -124,6 +123,19 @@ def bridge(value):
 def raw_records():
     v=burst();rows=[dict(phase='setup',initialSnapshot=snapshot(1,''))]
     for action,op,_args in SETUP:
+        if op=='step':
+            samples=[]
+            for frame in range(3,11):
+                sample=snapshot(frame,'')
+                sample.update(observationBoundary='main-task-queue-completion',
+                    fieldControl=dict(taskPointer=0),player=dict(x=585,x_prev=585,y=407,y_prev=407))
+                samples.append(sample)
+            rows.append(dict(phase='setup',action=action,samples=samples,
+                requestedInput=dict(frames=8,keys=[],releaseAtEnd=False,diagnosticDetails=False),
+                requestedGameFrames=8,completedGameFrames=8,inputConsumedGameFrames=None,
+                observedFieldFrames=8,nativeCycles=8,events=[],
+                cycleIntervals=[dict(completedGameFrame=f,cpuNs=1,wallNs=1) for f in range(3,11)]))
+            continue
         if op=='bind':receipt=deepcopy(v['subjects'][_args['subject']])
         elif op=='spawn':
             i='abcd'.index(action[-1]);a=snapshot(10)['actors'][i]
@@ -139,7 +151,7 @@ def raw_records():
             receipt=dict(value=dict(slot=i,species=155,personality=a['subjectIdentity']),
                 events=[dict(frame=10,kind='native-observation',data=native)])
         else:receipt={}
-        rows.append(dict(phase='setup',action=action,command=op,receipt=receipt,snapshot=snapshot(10)))
+        rows.append(dict(phase='setup',action=action,command=op,receipt=receipt,snapshot=snapshot(2 if op=='teleport' else 10)))
     arm=bridge(v);arm['emotes']['closed']=False;arm['emotes']['final']=None
     rows.append(dict(phase='observe',action=ACTIONS[0][0],command=ACTIONS[0][1],receipt=arm,snapshot=snapshot(10)))
     rows.append(dict(phase='observe',action=ACTIONS[1][0],samples=[snapshot(f) for f in range(11,251)],
@@ -169,8 +181,36 @@ class EmoteThreeTests(unittest.TestCase):
         v=burst()
         self.assertEqual({(e['entry']['frame'],e['entry']['nativeCycle']) for e in v['events'] if e['kind']=='init'}, {(10,1010)})
         self.assertEqual(checked_burst(v,v['subjects']),240)
-        bad=deepcopy(v);next(e for e in bad['events'] if e['kind']=='play')['sequence']=999999
+        bad=deepcopy(v);next(e for e in bad['events'] if e['kind']=='init')['sequence']=999999
         with self.assertRaisesRegex(ValueError,'sequence|nested'):checked_burst(bad,bad['subjects'])
+
+    def test_pre_bind_neutral_setup_is_exact_and_never_credited(self):
+        self.assertEqual(replay(raw_records())['observedFrames'],240)
+        for fault in ('missing','short','extra','keys','release','consumed','missing-consumed',
+                      'field','pose','clock','repeat','late'):
+            rows=raw_records();index=next(i for i,r in enumerate(rows) if r.get('action')=='emote-owner-ready')
+            row=rows[index]
+            if fault=='missing':rows.pop(index)
+            elif fault in ('short','extra'):
+                count=7 if fault=='short' else 9
+                row['requestedInput']['frames']=count
+                for key in ('requestedGameFrames','completedGameFrames','observedFieldFrames','nativeCycles'):
+                    row[key]=count
+                if fault=='short':row['samples'].pop();row['cycleIntervals'].pop()
+                else:
+                    sample=deepcopy(row['samples'][-1]);sample.update(frame=11,nativeCycle=1011)
+                    row['samples'].append(sample);row['cycleIntervals'].append(dict(completedGameFrame=11,cpuNs=1,wallNs=1))
+            elif fault=='keys':row['requestedInput']['keys']=['A']
+            elif fault=='release':row['requestedInput']['releaseAtEnd']=True
+            elif fault=='consumed':row['inputConsumedGameFrames']=8
+            elif fault=='missing-consumed':row.pop('inputConsumedGameFrames')
+            elif fault=='field':row['samples'][3]['context']['mapGeneration']+=1
+            elif fault=='pose':row['samples'][3]['player']['x']+=1
+            elif fault=='clock':row['samples'][3]['frame']+=1
+            elif fault=='repeat':rows.insert(index+1,deepcopy(row))
+            else:rows[index],rows[index+1]=rows[index+1],rows[index]
+            with self.subTest(fault=fault):
+                result=replay(rows);self.assertFalse(result['passed'],result)
 
     def test_every_copied_controller_fault_rejects(self):
         for fault in FAULTS:
@@ -197,13 +237,34 @@ class EmoteThreeTests(unittest.TestCase):
         v=burst();probe.subjects=v['subjects'];probe.objects={n:a['engineIdentity']['pointer'] for n,a in probe.subjects.items()}
         s.write(OWNER,bytes.fromhex(v['activeOwner']['rawHex']))
         b=native_binding(0);s.write(b['dataPointer'],bytes.fromhex(b['dataHex']))
+        s.write_words(b['effect']+4,b['mode'])
         s.write_words(b['model']+0x94,*b['modelKeys']);s.write_words(b['model']+0xB4,3)
         self.assertEqual(probe.binding(b['effect'],b['dataPointer']),b)
-        for at,word in ((b['model']+0x94,123),(b['dataPointer']+92,999),(b['slot'],OWNER+4),(b['dataPointer']+44,OWNER+29)):
+        for at,word in ((b['model']+0x94,123),(b['dataPointer']+92,999),(b['slot'],OWNER+4),(b['dataPointer']+44,OWNER+29),
+                        (b['effect']+4,0),(b['effect']+4,256)):
             with self.subTest(address=at):
                 old=s.read(at,4);s.write_words(at,word);probe.reads=0
                 with self.assertRaises(ValueError):probe.binding(b['effect'],b['dataPointer'])
                 s.write(at,old)
+
+    def test_quiet_mode_transport_and_forbidden_sound_remain_strict(self):
+        for target,bad_mode in (('request',0),('request',256),('init',0),('init',255),
+                                ('binding',0),('binding',384)):
+            v=burst()
+            if target=='request':v['requests'][0]['args'][2]=bad_mode
+            elif target=='init':next(e for e in v['events'] if e['kind']=='init')['mode']=bad_mode
+            else:next(e for e in v['events'] if e['kind']=='init')['binding']['mode']=bad_mode
+            with self.subTest(target=target,mode=bad_mode),self.assertRaisesRegex(ValueError,'mode|arguments'):
+                checked_burst(v,v['subjects'])
+        mutator=EmoteThreeNegative('rejected-playse')
+        changed=mutator.mutate(dict(command='emote-three.close',receipt=dict(emotes=burst())),{})
+        self.assertTrue(mutator.applied)
+        v=changed['receipt']['emotes']
+        with self.assertRaisesRegex(ValueError,'quiet admission made a PlaySE/StopSE call'):
+            checked_burst(v,v['subjects'])
+        next(e for e in v['events'] if e['kind']=='play')['kind']='stop'
+        with self.assertRaisesRegex(ValueError,'quiet admission made a PlaySE/StopSE call'):
+            checked_burst(v,v['subjects'])
 
     def test_foreign_slot_reuse_and_global_ambient_work_do_not_change_owned_cleanup(self):
         v=burst();original=next(e for e in v['events'] if e['kind']=='release')
@@ -266,9 +327,9 @@ class EmoteThreeTests(unittest.TestCase):
         result=evaluator.finish();self.assertTrue(result['passed'],result)
         self.assertEqual(result['observedFrames'],240)
         self.assertEqual(samples,[(f,f-10) for f in range(11,251)])
-        for mutate in (lambda rows:rows[2]['receipt']['value'].update(personality=999),
-                       lambda rows:rows[2]['receipt']['events'][0]['data']['finalization']['receipt'].update(returnValue=0)):
-            rows=raw_records();mutate(rows);e=TestEvaluator(recipe);e.install_measurements({KIND:dict(contractVersion=1)})
+        for mutate in (lambda row:row['receipt']['value'].update(personality=999),
+                       lambda row:row['receipt']['events'][0]['data']['finalization']['receipt'].update(returnValue=0)):
+            rows=raw_records();mutate(next(r for r in rows if r.get('command')=='spawn'));e=TestEvaluator(recipe);e.install_measurements({KIND:dict(contractVersion=1)})
             for row in rows:e.observe_record(row)
             self.assertFalse(e.finish()['passed'])
 
@@ -281,7 +342,9 @@ class EmoteThreeTests(unittest.TestCase):
         from tools.overworld.validation import validate_feature_manifest,validate_scenario
         p=ROOT/'tests/overworld/test-recipes/presentation.emote-three-slots.json';recipe=json.loads(p.read_text())
         self.assertEqual(validate_test(recipe)['measurements'],[dict(kind=KIND,subject='a')])
-        for mutate in (lambda r:r['setup'][1]['args'].update(species=16),lambda r:r['actions'][0]['args'].update(a='b'),
+        for mutate in (lambda r:next(a for a in r['setup'] if a['id']=='spawn-a')['args'].update(species=16),
+                       lambda r:r['setup'][1]['args'].update(frames=7),
+                       lambda r:r['setup'][1]['args'].update(keys=['A']),lambda r:r['actions'][0]['args'].update(a='b'),
                        lambda r:r['actions'][1]['args'].update(frames=239),lambda r:r['measurements'][0].update(subject='b')):
             bad=deepcopy(recipe);mutate(bad)
             with self.assertRaises(ValueError):validate_test(bad)

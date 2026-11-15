@@ -93,7 +93,8 @@ def harness_source(clearance=None):
               "OverworldActorHopGeometry"),
         _type(data, "OverworldWildSurfaceHit"),
         *(_define(data, name) for name in (
-            "OW_WILD_SURFACE_ID_NATIVE_GROUND", "OW_WILD_BEHAVIOR_JUMP_ARC_HEIGHT_MIN_Q4",
+            "OW_WILD_SURFACE_ID_NATIVE_CANOPY", "OW_WILD_SURFACE_ID_NATIVE_GROUND",
+            "OW_WILD_BEHAVIOR_JUMP_ARC_HEIGHT_MIN_Q4",
             "OW_WILD_BEHAVIOR_SKID_BOOLEAN")),
         *(_define(hop, name) for name in (
             "OVERWORLD_ACTOR_HOP_CLEARANCE_VERSION",
@@ -215,6 +216,27 @@ class JumpClearanceTests(unittest.TestCase):
     def test_model_applies_only_to_exact_distance_jump_lanes(self):
         self.assertEqual(self.rows["no-jump-wall"], (True, 16))
         self.assertEqual(self.rows["range-lane-wall"], (True, 16))
+
+    def test_ranged_hop_clears_native_canopy_when_jump_is_enabled(self):
+        self.assertFalse(self.accepted("canopy-range-hop-3"))
+        for case in ("canopy-enabled-range-3", "canopy-diagonal-late-6"):
+            self.assertTrue(self.accepted(case), case)
+            self.assertGreater(self.arc(case), 16, case)
+        self.assertFalse(self.accepted("canopy-too-high"))
+        # A Jump sees the grounded tree: a centred four-tile Jump clears it.
+        self.assertTrue(self.accepted("canopy-jump-4-2"))
+        self.assertLessEqual(self.arc("canopy-jump-4-2"), 24)
+
+    def test_ranged_hop_reads_native_ground_height(self):
+        for case in ("native-ridge", "native-ground-hit"):
+            self.assertTrue(self.accepted(case), case)
+            self.assertGreater(self.arc(case), 16, case)
+        self.assertFalse(self.accepted("native-ridge-disabled"))
+        # The C fixture asserts RETRY rather than accepting unknown support.
+        self.assertFalse(self.accepted("native-missing-height"))
+        self.assertFalse(self.accepted("canopy-missing-height"))
+        self.assertEqual(self.rows["destination-canopy"], (True, 16))
+        self.assertEqual(self.rows["adjacent-canopy"], (True, 16))
 
     def test_diagonal_jump_crosses_its_diagonal_cell(self):
         self.assertFalse(self.accepted("diagonal-wall-2"))

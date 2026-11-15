@@ -115,6 +115,18 @@ def compile_bank(catalog: dict, species_header: Path) -> dict:
         {numeric[symbol] for symbol in selected} for selected in condition_subjects]
     rows = []
     indexes = []
+    shared_banks: dict[tuple[int, ...], int] = {}
+
+    def bank_start(bank: list[int]) -> int:
+        # Rows borrow immutable ordered ID slices. Equal tuples have the same
+        # local bit meanings and need only one physical copy, including the
+        # wildcard fallback. First occurrence owns deterministic storage.
+        key = tuple(bank)
+        if key not in shared_banks:
+            shared_banks[key] = len(indexes)
+            indexes.extend(bank)
+        return shared_banks[key]
+
     for species in sorted({numeric[symbol] for symbol in mentioned}):
         bank = [global_id for global_id, _, selected in subjects
                 if selected is None or species in selected]
@@ -124,8 +136,7 @@ def compile_bank(catalog: dict, species_header: Path) -> dict:
             for selected in condition_subjects)
         if condition_count > 32:
             raise BankCapacityError(f"species {species} needs {condition_count} local condition entries")
-        rows.append((species, len(indexes), len(bank)))
-        indexes.extend(bank)
+        rows.append((species, bank_start(bank), len(bank)))
     fallback = [global_id for global_id, _, selected in subjects
                 if selected is None]
     if len(fallback) > 32:
@@ -133,8 +144,7 @@ def compile_bank(catalog: dict, species_header: Path) -> dict:
     fallback_condition_count = sum(selected is None for selected in condition_subjects)
     if fallback_condition_count > 32:
         raise BankCapacityError("unlisted species needs more than 32 local condition entries")
-    rows.append(("0xFFFF", len(indexes), len(fallback)))
-    indexes.extend(fallback)
+    rows.append(("0xFFFF", bank_start(fallback), len(fallback)))
     if len(rows) > 65535:
         raise BankCapacityError("bank directory count exceeds u16")
     if len(indexes) > 65535 or any(first > 65535 or first + count > 65535

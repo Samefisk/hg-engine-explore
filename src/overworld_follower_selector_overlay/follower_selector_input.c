@@ -1185,10 +1185,10 @@ static void OverworldFollowerSelectorInput_Close(SysTask *task)
 {
     OverworldFollowerTransitionQueue_Clear();
     OverworldFollowerRecall_Cancel(sFollowerSelectorFieldSystem);
-    if (sFollowerSelectorInputState != FOLLOWER_SELECTOR_INPUT_IDLE
-        || OverworldFollowerSelectorUI_IsOpen()) {
-        OverworldFollowerSelectorUI_Close();
-    }
+    /* Idle preloading owns FIELD2 storage before the UI opens (party
+     * snapshot, or no eligible slot). The overlay's BSS is cleared on
+     * reload, so a field exit must free it in every state. */
+    OverworldFollowerSelectorUI_Close();
     OverworldFollowerSelectorInput_ResetState();
     if (task != NULL) {
         DestroySysTask(task);

@@ -14,11 +14,11 @@ from typing import Optional
 OWBD_MAGIC = 0x4F574244
 OWBD_HEADER_SIZE = 84
 OWBD_PROFILE_SIZE = 80
-OWBD_CLASS_RULE_SIZE = 16
+OWBD_CLASS_RULE_SIZE = 20
 OWBD_SPECIES_RULE_SIZE = 4
-OWBD_OVERRIDE_PROFILE_SIZE = 228
+OWBD_OVERRIDE_PROFILE_SIZE = 232
 OWBD_OVERRIDE_MEMBER_SIZE = 2
-OWBD_CONDITION_ENTRY_SIZE = 48
+OWBD_CONDITION_ENTRY_SIZE = 52
 OWBD_CONDITION_TERRAIN_MASK_ALLOWED = 0x03FF
 OWBD_CONDITION_MOVEMENT_SPEED_MAX = 32
 OWBD_CONDITION_MAX_ENTRIES = 65535
@@ -90,9 +90,10 @@ OWBD_BOUNDED_FIELD_MAXIMUMS = (
     15, 64, 15, 0, 0, 32, 255, 0, 0, 255, 255, 255, 32, 0, 0, 0, 8, 8, 8, 32,
     5, 0, 0, 0, 0, 0, 0, 255, 32, 32, 0, 32, 32, 0, 0,
 )
-OWBD_OVERRIDE_PROFILE_VALUE_OFFSET = 32
-OWBD_OVERRIDE_PROFILE_COMPOUND_BOUND_OFFSET = 148
+OWBD_OVERRIDE_PROFILE_VALUE_OFFSET = 36
+OWBD_OVERRIDE_PROFILE_COMPOUND_BOUND_OFFSET = 152
 OWBD_ALLOWED_TERRAIN_ALL = 0x7FF
+OWBD_SPAWN_DESTINATION_ALL = 0xBFF
 OWBD_ALLOWED_TERRAIN_VALUE_OFFSET = 32
 OWBD_ALLOWED_TERRAIN_OVERRIDE_OFFSET = 34
 OWBD_ALLOWED_TERRAIN_FIELD_BITS = (1 << 5) | (1 << 6)
@@ -438,6 +439,10 @@ def validate_owbd(path: Path, source: Path) -> None:
         surface_template_size,
     ) = fields
 
+    # v96 appends the u16 map selector to the aligned Match prefix.
+    match_delta = 4 if version >= 96 else 0
+    profile_value_offset = 32 + match_delta
+    compound_bound_offset = 148 + match_delta
     require(magic == OWBD_MAGIC, f"{path}: bad OWBD magic")
     require(version == expected_version, f"{path}: bad OWBD version")
     require(header_size == OWBD_HEADER_SIZE, f"{path}: bad OWBD header size")
@@ -454,11 +459,11 @@ def validate_owbd(path: Path, source: Path) -> None:
     require(surface_template_count == expected_surface_template_count, f"{path}: bad surface template count")
     require(surface_template_count <= 256, f"{path}: surface templates exceed byte-addressable range")
     require(class_profile_size == OWBD_PROFILE_SIZE, f"{path}: bad class profile element size")
-    require(class_rule_size == OWBD_CLASS_RULE_SIZE, f"{path}: bad class rule element size")
+    require(class_rule_size == 16 + match_delta, f"{path}: bad class rule element size")
     require(species_rule_size == OWBD_SPECIES_RULE_SIZE, f"{path}: bad species class rule element size")
-    require(override_profile_size == OWBD_OVERRIDE_PROFILE_SIZE, f"{path}: bad override profile element size")
+    require(override_profile_size == 228 + match_delta, f"{path}: bad override profile element size")
     require(override_member_size == OWBD_OVERRIDE_MEMBER_SIZE, f"{path}: bad override member element size")
-    require(condition_entry_size == OWBD_CONDITION_ENTRY_SIZE, f"{path}: bad condition entry element size")
+    require(condition_entry_size == 48 + match_delta, f"{path}: bad condition entry element size")
     require(surface_model_size == OWBD_SURFACE_MODEL_SIZE, f"{path}: bad surface model element size")
     require(surface_instance_size == OWBD_SURFACE_INSTANCE_SIZE, f"{path}: bad surface instance element size")
     require(surface_template_size == OWBD_SURFACE_TEMPLATE_SIZE, f"{path}: bad surface template element size")
@@ -623,7 +628,7 @@ def validate_owbd(path: Path, source: Path) -> None:
         require(
             (struct.unpack_from("<H", blob, profile_offset + OWBD_SPAWN_DESTINATION_VALUE_OFFSET)[0]
              | struct.unpack_from("<H", blob, profile_offset + OWBD_SPAWN_DESTINATION_OVERRIDE_OFFSET)[0])
-            & ~OWBD_ALLOWED_TERRAIN_ALL == 0,
+            & ~OWBD_SPAWN_DESTINATION_ALL == 0,
             f"{path}: class profile {index} has undefined spawn-destination-policy bits",
         )
     profile_condition_slices = []
@@ -632,7 +637,7 @@ def validate_owbd(path: Path, source: Path) -> None:
         profile_kind, condition_start, condition_count = struct.unpack_from(
             "<BBB",
             blob,
-            profile_offset + 17,
+            profile_offset + (17 + match_delta),
         )
         require(
             profile_kind in (OWBD_PROFILE_KIND_NORMAL, OWBD_PROFILE_KIND_CONDITIONAL),
@@ -656,58 +661,58 @@ def validate_owbd(path: Path, source: Path) -> None:
         profile_condition_slices.append(
             (profile_kind, condition_start, condition_count)
         )
-        mask, mask2, mask3 = struct.unpack_from("<III", blob, profile_offset + 20)
+        mask, mask2, mask3 = struct.unpack_from("<III", blob, profile_offset + (20 + match_delta))
         if version >= 92:
-            for value_offset in (OWBD_OVERRIDE_PROFILE_VALUE_OFFSET, OWBD_OVERRIDE_PROFILE_COMPOUND_BOUND_OFFSET):
+            for value_offset in (profile_value_offset, compound_bound_offset):
                 require(valid_on_reach_options(blob[profile_offset + value_offset
                         + OWBD_ON_REACH_ACTION_OFFSET], version),
                         f"{path}: override profile {index} has undefined on-reach option bits")
         if version >= 89:
-            for value_offset in (OWBD_OVERRIDE_PROFILE_VALUE_OFFSET, OWBD_OVERRIDE_PROFILE_COMPOUND_BOUND_OFFSET):
+            for value_offset in (profile_value_offset, compound_bound_offset):
                 require(blob[profile_offset + value_offset + OWBD_CONTROLLER_OPTIONS_OFFSET]
                         & ~(OWBD_CONTROLLER_OPTIONS_ALLOWED if version >= 90 else 0x03) == 0,
                         f"{path}: override profile {index} has undefined controller-option bits")
         if version >= 90 and mask2 & (1 << 26):
-            require((blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+            require((blob[profile_offset + profile_value_offset
                           + OWBD_CONTROLLER_OPTIONS_OFFSET] >> 2) & 15 != 0,
                     f"{path}: override profile {index} Cargo target check interval must be 1..15")
         if mask2 & OWBD_ATTACKING_FIELD_BIT:
             require(
-                blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+                blob[profile_offset + profile_value_offset
                     + OWBD_ATTACKING_OFFSET] <= 1,
                 f"{path}: override profile {index} has an invalid attacking value",
             )
         if mask2 & OWBD_KNOCKBACK_TYPE_FIELD_BIT:
             require(
-                (blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+                (blob[profile_offset + profile_value_offset
                     + OWBD_KNOCKBACK_OFFSET] & OWBD_KNOCKBACK_TYPE_MASK) <= 2,
                 f"{path}: override profile {index} has an invalid knockback type",
             )
         if mask2 & OWBD_KNOCKBACK_DISTANCE_FIELD_BIT:
             require(
-                1 <= (blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+                1 <= (blob[profile_offset + profile_value_offset
                     + OWBD_KNOCKBACK_OFFSET] & OWBD_KNOCKBACK_DISTANCE_MASK)
                     >> OWBD_KNOCKBACK_DISTANCE_SHIFT <= 7,
                 f"{path}: override profile {index} has an invalid knockback distance",
             )
         if mask3 & OWBD_COLLISION_DAMAGE_FIELD_BIT:
             require(
-                blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+                blob[profile_offset + profile_value_offset
                     + OWBD_COLLISION_DAMAGE_OFFSET] <= 50,
                 f"{path}: override profile {index} has invalid collision damage",
             )
-        require(blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + 8] <= 127,
+        require(blob[profile_offset + profile_value_offset + 8] <= 127,
                 f"{path}: override profile {index} one-turn skid time must be 0..127")
-        relative_mask, relative_mask2, relative_mask3 = struct.unpack_from("<III", blob, profile_offset + 112)
-        at_least_mask, at_least_mask2, at_least_mask3 = struct.unpack_from("<III", blob, profile_offset + 124)
-        at_most_mask, at_most_mask2, at_most_mask3 = struct.unpack_from("<III", blob, profile_offset + 136)
+        relative_mask, relative_mask2, relative_mask3 = struct.unpack_from("<III", blob, profile_offset + (112 + match_delta))
+        at_least_mask, at_least_mask2, at_least_mask3 = struct.unpack_from("<III", blob, profile_offset + (124 + match_delta))
+        at_most_mask, at_most_mask2, at_most_mask3 = struct.unpack_from("<III", blob, profile_offset + (136 + match_delta))
         divide_masks = tuple(a & b for a, b in zip(
             (at_least_mask, at_least_mask2, at_least_mask3),
             (at_most_mask, at_most_mask2, at_most_mask3)))
         operator_mask = relative_mask | at_least_mask | at_most_mask
         if mask & OWBD_CHILL_ACTION_FIELD_BIT:
             require(
-                blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + OWBD_CHILL_ACTION_OFFSET]
+                blob[profile_offset + profile_value_offset + OWBD_CHILL_ACTION_OFFSET]
                     <= OWBD_LOCOMOTION_MAX,
                 f"{path}: override profile {index} exact locomotion is invalid",
             )
@@ -715,19 +720,19 @@ def validate_owbd(path: Path, source: Path) -> None:
             require(
                 blob[
                     profile_offset
-                    + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+                    + profile_value_offset
                     + OWBD_MOVEMENT_DIRECTIONS_OFFSET
                 ] <= OWBD_MOVEMENT_DIRECTIONS_MAX,
                 f"{path}: override profile {index} has an invalid movement-direction mode",
             )
         if (mask & (1 << 7)) and not (operator_mask & (1 << 7)):
             require(
-                1 <= blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + 7] <= 32,
+                1 <= blob[profile_offset + profile_value_offset + 7] <= 32,
                 f"{path}: override profile {index} exact Chill Walk time must be between 1 and 32 frames",
             )
         if mask & (1 << 15):
             require(
-                1 <= blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + 15] <= 0xF,
+                1 <= blob[profile_offset + profile_value_offset + 15] <= 0xF,
                 f"{path}: override profile {index} Next-to-player side mask must be between 1 and 15",
             )
         operator_mask3 = relative_mask3 | at_least_mask3 | at_most_mask3
@@ -736,18 +741,18 @@ def validate_owbd(path: Path, source: Path) -> None:
             # This byte can inherit Linear speed from another profile. Validate
             # its stored frame range; the resolver still clamps legacy tiles.
             require(
-                1 <= blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + OWBD_TILES_TO_ACCELERATE_OFFSET] <= 255,
+                1 <= blob[profile_offset + profile_value_offset + OWBD_TILES_TO_ACCELERATE_OFFSET] <= 255,
                 f"{path}: override profile {index} exact acceleration interval must be between 1 and 255",
             )
         if mask3 & OWBD_MAX_WALK_SPEED_FIELD_BIT \
                 and not operator_mask3 & OWBD_MAX_WALK_SPEED_FIELD_BIT:
             require(
-                1 <= blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + OWBD_MAX_WALK_SPEED_OFFSET] <= 32,
+                1 <= blob[profile_offset + profile_value_offset + OWBD_MAX_WALK_SPEED_OFFSET] <= 32,
                 f"{path}: override profile {index} exact fastest Walk time must be between 1 and 32 frames",
             )
         if mask & (1 << OWBD_SPAWN_DESTINATION_OFFSET):
             require(
-                blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + OWBD_SPAWN_DESTINATION_OFFSET]
+                blob[profile_offset + profile_value_offset + OWBD_SPAWN_DESTINATION_OFFSET]
                 <= OWBD_SPAWN_DESTINATION_MAX,
                 f"{path}: override profile {index} has an invalid spawn destination",
             )
@@ -757,22 +762,22 @@ def validate_owbd(path: Path, source: Path) -> None:
                          if version >= 90 else 0x3FFFFFF if version >= 89 else 0x1FFFFFF)
         require((mask2 & ~allowed_mask2) == 0, f"{path}: override profile {index} mask2 has undefined bits")
         if version >= 91 and mask2 & OWBD_CHAIN_HOP_EXTRA_HOPS_FIELD_BIT:
-            require((blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+            require((blob[profile_offset + profile_value_offset
                           + OWBD_CHAIN_REPOSITION_JUMP_COUNT_OFFSET] >> 4) & 3 <= 2,
                     f"{path}: override profile {index} extra in-place Hops must be 0..2")
         if version >= 91 and mask2 & OWBD_CHAIN_HOP_EXTRA_CHANCE_FIELD_BIT:
-            require(blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+            require(blob[profile_offset + profile_value_offset
                          + OWBD_CHAIN_HOP_EXTRA_CHANCE_OFFSET] >> 1 <= 100,
                     f"{path}: override profile {index} extra in-place Hop chance must be 0..100")
         if mask2 & OWBD_ON_REACH_ACTION_FIELD_BIT:
             require(
-                valid_on_reach_options(blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+                valid_on_reach_options(blob[profile_offset + profile_value_offset
                     + OWBD_ON_REACH_ACTION_OFFSET], version),
                 f"{path}: override profile {index} has an invalid on-reach action",
             )
         if mask2 & OWBD_THROW_MAX_RANGE_FIELD_BIT:
             require(
-                1 <= blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+                1 <= blob[profile_offset + profile_value_offset
                     + OWBD_THROW_MAX_RANGE_OFFSET] <= 8,
                 f"{path}: override profile {index} has an invalid throw range",
             )
@@ -780,7 +785,7 @@ def validate_owbd(path: Path, source: Path) -> None:
             require(
                 valid_chain_pause_action(blob[
                     profile_offset
-                    + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+                    + profile_value_offset
                     + OWBD_CHAIN_PAUSE_ACTION_OFFSET
                 ]),
                 f"{path}: override profile {index} chain pause action is invalid",
@@ -790,21 +795,21 @@ def validate_owbd(path: Path, source: Path) -> None:
             f"{path}: override profile {index} must update both terrain-policy fields together",
         )
         require(
-            (struct.unpack_from("<H", blob, profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + OWBD_ALLOWED_TERRAIN_VALUE_OFFSET)[0]
-             | struct.unpack_from("<H", blob, profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + OWBD_ALLOWED_TERRAIN_OVERRIDE_OFFSET)[0])
+            (struct.unpack_from("<H", blob, profile_offset + profile_value_offset + OWBD_ALLOWED_TERRAIN_VALUE_OFFSET)[0]
+             | struct.unpack_from("<H", blob, profile_offset + profile_value_offset + OWBD_ALLOWED_TERRAIN_OVERRIDE_OFFSET)[0])
             & ~OWBD_ALLOWED_TERRAIN_ALL == 0,
             f"{path}: override profile {index} has undefined terrain-policy bits",
         )
         require((mask3 & ~OWBD_MASK3_ALLOWED) == 0, f"{path}: override profile {index} mask3 has undefined bits")
         if mask3 & OWBD_HOP_ALLOW_VERTICAL_OBSTACLES_FIELD_BIT:
             require(
-                (blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + OWBD_HOP_ALLOW_VERTICAL_OBSTACLES_OFFSET] & 1) <= 1,
+                (blob[profile_offset + profile_value_offset + OWBD_HOP_ALLOW_VERTICAL_OBSTACLES_OFFSET] & 1) <= 1,
                 f"{path}: override profile {index} has an invalid vertical-obstacle hop policy",
             )
         if mask3 & OWBD_CHAIN_REPOSITION_JUMP_COUNT_FIELD_BIT \
                 and not operator_mask3 & OWBD_CHAIN_REPOSITION_JUMP_COUNT_FIELD_BIT:
             require(
-                1 <= (blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+                1 <= (blob[profile_offset + profile_value_offset
                            + OWBD_CHAIN_REPOSITION_JUMP_COUNT_OFFSET]
                       & (0x0F if version >= 91 else 0xFF)) <= 8,
                 f"{path}: override profile {index} exact reposition-jump count must be between 1 and 8",
@@ -812,31 +817,31 @@ def validate_owbd(path: Path, source: Path) -> None:
         if mask3 & OWBD_HOP_SWAY_WIDTH_FIELD_BIT \
                 and not operator_mask3 & OWBD_HOP_SWAY_WIDTH_FIELD_BIT:
             require(
-                blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + OWBD_HOP_SWAY_WIDTH_OFFSET] <= 8,
+                blob[profile_offset + profile_value_offset + OWBD_HOP_SWAY_WIDTH_OFFSET] <= 8,
                 f"{path}: override profile {index} exact horizontal sway must be between 0 and 8",
             )
         if mask3 & OWBD_SPAWN_HOP_SWAY_WIDTH_FIELD_BIT \
                 and not operator_mask3 & OWBD_SPAWN_HOP_SWAY_WIDTH_FIELD_BIT:
             require(
-                blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + OWBD_SPAWN_HOP_SWAY_WIDTH_OFFSET] <= 8,
+                blob[profile_offset + profile_value_offset + OWBD_SPAWN_HOP_SWAY_WIDTH_OFFSET] <= 8,
                 f"{path}: override profile {index} exact spawn horizontal sway must be between 0 and 8",
             )
         if mask3 & OWBD_CHAIN_REPOSITION_SPEED_FIELD_BIT \
                 and not operator_mask3 & OWBD_CHAIN_REPOSITION_SPEED_FIELD_BIT:
             require(
-                1 <= blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + OWBD_CHAIN_REPOSITION_SPEED_OFFSET] <= 32,
+                1 <= blob[profile_offset + profile_value_offset + OWBD_CHAIN_REPOSITION_SPEED_OFFSET] <= 32,
                 f"{path}: override profile {index} exact reposition Walk time must be between 1 and 32 frames",
             )
         if mask3 & OWBD_CHAIN_REPOSITION_DISTANCE_FIELD_BIT \
                 and not operator_mask3 & OWBD_CHAIN_REPOSITION_DISTANCE_FIELD_BIT:
             require(
-                1 <= blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + OWBD_CHAIN_REPOSITION_DISTANCE_OFFSET] <= 5,
+                1 <= blob[profile_offset + profile_value_offset + OWBD_CHAIN_REPOSITION_DISTANCE_OFFSET] <= 5,
                 f"{path}: override profile {index} exact reposition distance must be between 1 and 5",
             )
         if mask3 & OWBD_WALK_OPTIONS_FIELD_BIT:
             walk_options = blob[
                 profile_offset
-                + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+                + profile_value_offset
                 + OWBD_WALK_OPTIONS_OFFSET
             ]
             require(
@@ -853,7 +858,7 @@ def validate_owbd(path: Path, source: Path) -> None:
             require(
                 (blob[
                     profile_offset
-                    + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+                    + profile_value_offset
                     + OWBD_TILES_BEFORE_TURN_SKID_OFFSET
                 ] & OWBD_TILES_BEFORE_TURN_SKID_MASK) <= 32,
                 f"{path}: override profile {index} turn-skid buildup must be between 0 and 32",
@@ -863,7 +868,7 @@ def validate_owbd(path: Path, source: Path) -> None:
             require(
                 blob[
                     profile_offset
-                    + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+                    + profile_value_offset
                     + OWBD_WALK_STOMP_TIME_OFFSET
                 ] <= 32,
                 f"{path}: override profile {index} exact stomp time must be 0 (off) or 1..32 frames",
@@ -874,7 +879,7 @@ def validate_owbd(path: Path, source: Path) -> None:
             require(
                 blob[
                     profile_offset
-                    + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+                    + profile_value_offset
                     + OWBD_WALK_ACCELERATION_STEP_OFFSET
                 ] <= maximum,
                 f"{path}: override profile {index} acceleration exceeds {maximum}; Linear speed (34) requires an exact replacement",
@@ -884,7 +889,7 @@ def validate_owbd(path: Path, source: Path) -> None:
             require(
                 ((blob[
                     profile_offset
-                    + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+                    + profile_value_offset
                     + OWBD_WALK_TIME_VARIANCE_OFFSET
                 ] & OWBD_WALK_TIME_VARIANCE_MASK)
                  >> OWBD_WALK_TIME_VARIANCE_SHIFT) <= 32,
@@ -895,7 +900,7 @@ def validate_owbd(path: Path, source: Path) -> None:
             require(
                 ((blob[
                     profile_offset
-                    + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+                    + profile_value_offset
                     + OWBD_WALK_PAUSE_VARIANCE_OFFSET
                 ] & OWBD_WALK_PAUSE_VARIANCE_MASK)
                  >> OWBD_WALK_PAUSE_VARIANCE_SHIFT) <= 32,
@@ -907,7 +912,7 @@ def validate_owbd(path: Path, source: Path) -> None:
         ):
             if mask3 & chance_bit and not operator_mask3 & chance_bit:
                 require(
-                    blob[profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + chance_offset] <= 100,
+                    blob[profile_offset + profile_value_offset + chance_offset] <= 100,
                     f"{path}: override profile {index} {chance_name} chance must be between 0 and 100",
                 )
         for option_bit, option_offset, option_name in (
@@ -917,7 +922,7 @@ def validate_owbd(path: Path, source: Path) -> None:
         ):
             if mask3 & option_bit:
                 option_value = blob[
-                    profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + option_offset
+                    profile_offset + profile_value_offset + option_offset
                 ]
                 if option_bit in (
                     OWBD_CHAIN_REPOSITION_ALLOW_CARDINAL_FIELD_BIT,
@@ -933,9 +938,9 @@ def validate_owbd(path: Path, source: Path) -> None:
             f"{path}: override profile {index} must update both spawn-destination-policy fields together",
         )
         require(
-            (struct.unpack_from("<H", blob, profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + OWBD_SPAWN_DESTINATION_VALUE_OFFSET)[0]
-             | struct.unpack_from("<H", blob, profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET + OWBD_SPAWN_DESTINATION_OVERRIDE_OFFSET)[0])
-            & ~OWBD_ALLOWED_TERRAIN_ALL == 0,
+            (struct.unpack_from("<H", blob, profile_offset + profile_value_offset + OWBD_SPAWN_DESTINATION_VALUE_OFFSET)[0]
+             | struct.unpack_from("<H", blob, profile_offset + profile_value_offset + OWBD_SPAWN_DESTINATION_OVERRIDE_OFFSET)[0])
+            & ~OWBD_SPAWN_DESTINATION_ALL == 0,
             f"{path}: override profile {index} has undefined spawn-destination-policy bits",
         )
         require((relative_mask & ~mask) == 0, f"{path}: override profile {index} relative mask is not active")
@@ -950,7 +955,7 @@ def validate_owbd(path: Path, source: Path) -> None:
                 if operator_mask & (1 << bit):
                     value = owbd_operator_field_value(
                         blob,
-                        profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET,
+                        profile_offset + profile_value_offset,
                         field_index,
                         version,
                     )
@@ -982,9 +987,9 @@ def validate_owbd(path: Path, source: Path) -> None:
                     if operator_mask & (1 << bit):
                         maximum = OWBD_BOUNDED_FIELD_MAXIMUMS[field_index]
                         value_base = (
-                            OWBD_OVERRIDE_PROFILE_COMPOUND_BOUND_OFFSET
+                            compound_bound_offset
                             if compound_word & (1 << bit)
-                            else OWBD_OVERRIDE_PROFILE_VALUE_OFFSET
+                            else profile_value_offset
                         )
                         value = owbd_operator_field_value(
                             blob,
@@ -1009,7 +1014,7 @@ def validate_owbd(path: Path, source: Path) -> None:
             for bit in range(width):
                 if divide_word & (1 << bit):
                     divisor = owbd_operator_field_value(blob,
-                        profile_offset + OWBD_OVERRIDE_PROFILE_VALUE_OFFSET, field_index, version)
+                        profile_offset + profile_value_offset, field_index, version)
                     require(1 <= divisor <= 127,
                         f"{path}: override profile {index} divide divisor must be between 1 and 127")
                 field_index += 1
@@ -1029,7 +1034,7 @@ def validate_owbd(path: Path, source: Path) -> None:
             application_index = blob[
                 condition_entries_offset
                 + entry_index * condition_entry_size
-                + 34
+                + (34 + match_delta)
             ]
             require(
                 application_index == (profile_index if profile_index < 255 else 0xFF),
@@ -1052,7 +1057,7 @@ def validate_owbd(path: Path, source: Path) -> None:
             target_member_start,
             target_member_count,
             condition_id,
-        ) = struct.unpack_from("<9H", blob, offset + 16)
+        ) = struct.unpack_from("<9H", blob, offset + (16 + match_delta))
         (
             application_index,
             subject_mode,
@@ -1067,7 +1072,7 @@ def validate_owbd(path: Path, source: Path) -> None:
             chance_percent,
             min_speed,
             max_speed,
-        ) = struct.unpack_from("<13B", blob, offset + 34)
+        ) = struct.unpack_from("<13B", blob, offset + (34 + match_delta))
         require(condition_id != 0xFFFF and condition_id not in condition_ids, f"{path}: condition entry {index} has an invalid or duplicate id")
         condition_ids.add(condition_id)
         condition_mirrors.append((application_index, subject_application_index))
@@ -1191,7 +1196,7 @@ def validate_owbd(path: Path, source: Path) -> None:
                     and (uses_binding != 3 or capture == 2)
                     and (not capture or (duration != 0 if lifetime == 1 else duration == 0))
                     and (capture != 2 or blob[condition_entries_offset
-                        + index * condition_entry_size + 39] == OWBD_CONDITION_TARGET_ACTOR),
+                        + index * condition_entry_size + (39 + match_delta)] == OWBD_CONDITION_TARGET_ACTOR),
                     f"{path}: condition entry {index} has invalid binding/pickup options",
                 )
                 if version >= 95:
@@ -1201,8 +1206,8 @@ def validate_owbd(path: Path, source: Path) -> None:
                         and (not required or profile_condition_slices[required-1][0]
                             == OWBD_PROFILE_KIND_CONDITIONAL)
                         and (0 <= minimum <= maximum <= 32 and maximum >= 1 and uses_binding == 1
-                            and blob[condition_entries_offset + index * condition_entry_size + 38] == 0
-                            and blob[condition_entries_offset + index * condition_entry_size + 39] != 0
+                            and blob[condition_entries_offset + index * condition_entry_size + (38 + match_delta)] == 0
+                            and blob[condition_entries_offset + index * condition_entry_size + (39 + match_delta)] != 0
                             if bound else minimum == maximum == 0),
                         f"{path}: condition entry {index} has invalid profile/distance options")
             if condition_entry_count == 0:
@@ -1233,7 +1238,7 @@ def validate_owbd(path: Path, source: Path) -> None:
             directory_count = read_define(source,
                 "OWBD_APPLICATION_BANK_DIRECTORY_COUNT")
             index_count = read_define(source, "OWBD_APPLICATION_BANK_INDEX_COUNT")
-            require(directory_count >= 1 and index_count <= 65535,
+            require(1 <= directory_count <= 65535 and index_count <= 65535,
                 f"{path}: invalid application bank dimensions")
             directory_base = arc_end
             indexes_base = directory_base + directory_count * 6
@@ -1251,13 +1256,14 @@ def validate_owbd(path: Path, source: Path) -> None:
             bank_indexes = struct.unpack_from(
                 f"<{index_count}H", blob, indexes_base) if index_count else ()
             prior_species = -1
-            next_first = 0
+            owned_slices = set()
+            covered_indexes = bytearray(index_count)
             for index in range(directory_count):
                 species, first, count, reserved = struct.unpack_from(
                     "<HHBB", blob, directory_base + index * 6)
                 require((species == 0xFFFF) == (index == directory_count - 1)
                     and species > prior_species and reserved == 0
-                    and first == next_first and count <= 32
+                    and count <= 32
                     and first + count <= index_count,
                     f"{path}: application bank row {index} is invalid")
                 globals_for_subject = bank_indexes[first:first + count]
@@ -1266,9 +1272,17 @@ def validate_owbd(path: Path, source: Path) -> None:
                     and all(a < b for a, b in zip(
                         globals_for_subject, globals_for_subject[1:])),
                     f"{path}: application bank row {index} has invalid global IDs")
-                next_first += count
+                # Immutable ordered banks may share an exact slice. Keep the
+                # old disjoint layout valid, reject partial aliasing, and still
+                # require every stored index to belong to a complete bank.
+                span = (first, count)
+                if span not in owned_slices:
+                    require(not any(covered_indexes[first:first + count]),
+                        f"{path}: application bank row {index} partially overlaps another bank")
+                    covered_indexes[first:first + count] = bytes([1]) * count
+                    owned_slices.add(span)
                 prior_species = species
-            require(next_first == index_count,
+            require(all(covered_indexes),
                 f"{path}: application bank index table is incomplete")
             for index, (mirror, subject_mirror) in enumerate(condition_mirrors):
                 owner = struct.unpack_from("<H", blob, owners_base + index * 2)[0]
@@ -1422,7 +1436,7 @@ def validate_owed(path: Path, source: Path, encounter_narc: Optional[Path]) -> N
     for index in range(record_count):
         entry_offset = directory_offset + index * directory_entry_size
         map_id, data_id, offset, size, entry_flags = struct.unpack_from("<HHIHH", blob, entry_offset)
-        require(entry_flags == 0, f"{path}: OWED directory entry {index} has bad flags")
+        require(entry_flags & ~1 == 0, f"{path}: OWED directory entry {index} has bad flags")
         require(map_id not in seen_maps, f"{path}: duplicate OWED map id {map_id}")
         seen_maps.add(map_id)
         require(size >= 4, f"{path}: OWED directory entry {index} has a tiny record")
@@ -1430,12 +1444,19 @@ def validate_owed(path: Path, source: Path, encounter_narc: Optional[Path]) -> N
         require(offset <= total_size and size <= total_size - offset, f"{path}: OWED directory entry {index} extends past blob")
 
         record = blob[offset:offset + size]
-        decoded = decode_sparse_record(path, record)
+        decoded = bytearray(decode_sparse_record(path, record))
+        decoded[6] = entry_flags
         if encounter_members is not None:
             require(data_id < len(encounter_members), f"{path}: OWED dataId {data_id} is outside encounter NARC member count {len(encounter_members)}")
             expected_record = encode_sparse_record(encounter_members[data_id])
             require(record == expected_record, f"{path}: OWED sparse record for dataId {data_id} does not match encounter NARC")
-            require(decoded == decode_sparse_record(path, expected_record), f"{path}: OWED decoded record mismatch for dataId {data_id}")
+            expected_header = encounter_members[data_id]
+            require(len(expected_header) >= 8 and expected_header[6] & ~1 == 0
+                    and expected_header[7] == 0 and entry_flags == expected_header[6],
+                    f"{path}: OWED clock policy mismatch for dataId {data_id}")
+            expected_decoded = bytearray(decode_sparse_record(path, expected_record))
+            expected_decoded[6] = expected_header[6]
+            require(decoded == expected_decoded, f"{path}: OWED decoded record mismatch for dataId {data_id}")
 
 
 def main() -> int:

@@ -32,9 +32,10 @@
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 67,
-          "x": 564,
-          "z": 392
+          "map": 76,
+          "x": 358,
+          "z": 366,
+          "when": "final"
         }
       },
       "budget": {
@@ -44,94 +45,59 @@
       }
     },
     {
-      "id": "warmup-east",
+      "id": "warmup-north-gate",
       "op": "step",
       "args": {
-        "frames": 16,
+        "frames": 256,
         "keys": [
-          "RIGHT",
+          "UP",
           "B"
         ],
         "until": {
           "kind": "player-step-count",
           "operator": "eq",
-          "value": 1
+          "value": 41,
+          "when": "final"
         }
       },
       "budget": {
         "maxSeconds": 30,
-        "maxFrames": 16,
-        "noProgressFrames": 16
+        "maxFrames": 256,
+        "noProgressFrames": 96
       }
     },
     {
-      "id": "warmup-east-settle",
+      "id": "warmup-north-gate-settle",
       "op": "wait",
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 67,
-          "x": 565,
-          "z": 392
-        }
-      },
-      "budget": {
-        "maxSeconds": 10,
-        "maxFrames": 16,
-        "noProgressFrames": 8
-      }
-    },
-    {
-      "id": "warmup-south",
-      "op": "step",
-      "args": {
-        "frames": 40,
-        "keys": [
-          "DOWN",
-          "B"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 7
+          "map": 101,
+          "x": 5,
+          "z": 12,
+          "when": "final"
         }
       },
       "budget": {
         "maxSeconds": 30,
-        "maxFrames": 40,
-        "noProgressFrames": 16
+        "maxFrames": 120,
+        "noProgressFrames": 120
       }
     },
     {
-      "id": "warmup-south-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 67,
-          "x": 565,
-          "z": 398
-        }
-      },
-      "budget": {
-        "maxSeconds": 10,
-        "maxFrames": 16,
-        "noProgressFrames": 8
-      }
-    },
-    {
-      "id": "warmup-east-seam",
+      "id": "warmup-gatehouse",
       "op": "step",
       "args": {
         "frames": 96,
         "keys": [
-          "RIGHT",
+          "UP",
           "B"
         ],
         "until": {
           "kind": "player-step-count",
           "operator": "eq",
-          "value": 27
+          "value": 50,
+          "when": "final"
         }
       },
       "budget": {
@@ -141,52 +107,15 @@
       }
     },
     {
-      "id": "warmup-east-seam-settle",
+      "id": "warmup-gatehouse-settle",
       "op": "wait",
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 33,
-          "x": 585,
-          "z": 398
-        }
-      },
-      "budget": {
-        "maxSeconds": 10,
-        "maxFrames": 16,
-        "noProgressFrames": 8
-      }
-    },
-    {
-      "id": "warmup-south-start",
-      "op": "step",
-      "args": {
-        "frames": 48,
-        "keys": [
-          "DOWN",
-          "B"
-        ],
-        "until": {
-          "kind": "player-step-count",
-          "operator": "eq",
-          "value": 35
-        }
-      },
-      "budget": {
-        "maxSeconds": 30,
-        "maxFrames": 48,
-        "noProgressFrames": 16
-      }
-    },
-    {
-      "id": "warmup-south-start-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 33,
-          "x": 585,
-          "z": 406
+          "map": 101,
+          "x": 5,
+          "z": 3,
+          "when": "final"
         }
       },
       "budget": {
@@ -238,10 +167,66 @@
   ],
   "actions": [
     {
-      "id": "route-up",
+      "id": "route35-gate",
       "op": "step",
       "args": {
-        "frames": 64,
+        "frames": 16,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-step-count",
+          "operator": "eq",
+          "value": 51,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 16
+      }
+    },
+    {
+      "id": "route35-arrival",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 358,
+          "z": 316,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 35,
+        "maxFrames": 144,
+        "noProgressFrames": 96
+      }
+    },
+    {
+      "id": "route35-current-follower",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "follower-settled",
+          "species": 56,
+          "partySlot": 2,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "route35-001",
+      "op": "step",
+      "args": {
+        "frames": 128,
         "keys": [
           "UP"
         ],
@@ -249,24 +234,26 @@
           "kind": "player-field",
           "path": "y",
           "operator": "eq",
-          "value": 398
+          "value": 315,
+          "when": "final"
         }
       },
       "budget": {
         "maxSeconds": 30,
-        "maxFrames": 64,
+        "maxFrames": 128,
         "noProgressFrames": 32
       }
     },
     {
-      "id": "route-up-settle",
+      "id": "route35-001-settle",
       "op": "wait",
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 33,
-          "x": 585,
-          "z": 398
+          "map": 39,
+          "x": 358,
+          "z": 315,
+          "when": "final"
         }
       },
       "budget": {
@@ -276,20 +263,87 @@
       }
     },
     {
-      "id": "route-up-scan-idle",
+      "id": "route35-lap1-east",
       "op": "step",
       "args": {
-        "frames": 36,
-        "keys": []
+        "frames": 128,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "x",
+          "operator": "eq",
+          "value": 360,
+          "when": "final"
+        }
       },
       "budget": {
-        "maxSeconds": 10,
-        "maxFrames": 36,
-        "noProgressFrames": 36
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
       }
     },
     {
-      "id": "route-left-city",
+      "id": "route35-lap1-east-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 360,
+          "z": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap1-north",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap1-north-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 360,
+          "z": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap1-west",
       "op": "step",
       "args": {
         "frames": 128,
@@ -300,100 +354,26 @@
           "kind": "player-field",
           "path": "x",
           "operator": "eq",
-          "value": 565
-        }
-      },
-      "budget": {
-        "maxSeconds": 50,
-        "maxFrames": 128,
-        "noProgressFrames": 32
-      }
-    },
-    {
-      "id": "route-left-city-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 67,
-          "x": 565,
-          "z": 398
-        }
-      },
-      "budget": {
-        "maxSeconds": 10,
-        "maxFrames": 16,
-        "noProgressFrames": 8
-      }
-    },
-    {
-      "id": "route-up-city",
-      "op": "step",
-      "args": {
-        "frames": 64,
-        "keys": [
-          "UP"
-        ],
-        "until": {
-          "kind": "player-field",
-          "path": "y",
-          "operator": "eq",
-          "value": 393
+          "value": 358,
+          "when": "final"
         }
       },
       "budget": {
         "maxSeconds": 30,
-        "maxFrames": 64,
-        "noProgressFrames": 32
-      }
-    },
-    {
-      "id": "route-up-city-settle",
-      "op": "wait",
-      "args": {
-        "predicate": {
-          "kind": "player-settled-at",
-          "map": 67,
-          "x": 565,
-          "z": 393
-        }
-      },
-      "budget": {
-        "maxSeconds": 10,
-        "maxFrames": 16,
-        "noProgressFrames": 8
-      }
-    },
-    {
-      "id": "route-left-window",
-      "op": "step",
-      "args": {
-        "frames": 128,
-        "keys": [
-          "LEFT"
-        ],
-        "until": {
-          "kind": "player-field",
-          "path": "x",
-          "operator": "eq",
-          "value": 543
-        }
-      },
-      "budget": {
-        "maxSeconds": 50,
         "maxFrames": 128,
         "noProgressFrames": 32
       }
     },
     {
-      "id": "route-left-window-settle",
+      "id": "route35-lap1-west-settle",
       "op": "wait",
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 67,
-          "x": 543,
-          "z": 393
+          "map": 39,
+          "x": 358,
+          "z": 314,
+          "when": "final"
         }
       },
       "budget": {
@@ -403,10 +383,10 @@
       }
     },
     {
-      "id": "route-down-window",
+      "id": "route35-lap1-south",
       "op": "step",
       "args": {
-        "frames": 64,
+        "frames": 128,
         "keys": [
           "DOWN"
         ],
@@ -414,24 +394,1146 @@
           "kind": "player-field",
           "path": "y",
           "operator": "eq",
-          "value": 402
+          "value": 315,
+          "when": "final"
         }
       },
       "budget": {
         "maxSeconds": 30,
-        "maxFrames": 64,
+        "maxFrames": 128,
         "noProgressFrames": 32
       }
     },
     {
-      "id": "route-down-window-settle",
+      "id": "route35-lap1-south-settle",
       "op": "wait",
       "args": {
         "predicate": {
           "kind": "player-settled-at",
-          "map": 67,
-          "x": 543,
-          "z": 402
+          "map": 39,
+          "x": 358,
+          "z": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap2-east",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "x",
+          "operator": "eq",
+          "value": 360,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap2-east-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 360,
+          "z": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap2-north",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap2-north-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 360,
+          "z": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap2-west",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "x",
+          "operator": "eq",
+          "value": 358,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap2-west-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 358,
+          "z": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap2-south",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap2-south-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 358,
+          "z": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap3-east",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "x",
+          "operator": "eq",
+          "value": 360,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap3-east-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 360,
+          "z": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap3-north",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap3-north-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 360,
+          "z": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap3-west",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "x",
+          "operator": "eq",
+          "value": 358,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap3-west-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 358,
+          "z": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap3-south",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap3-south-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 358,
+          "z": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap4-east",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "x",
+          "operator": "eq",
+          "value": 360,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap4-east-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 360,
+          "z": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap4-north",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap4-north-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 360,
+          "z": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap4-west",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "x",
+          "operator": "eq",
+          "value": 358,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap4-west-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 358,
+          "z": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap4-south",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap4-south-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 358,
+          "z": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap5-east",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "x",
+          "operator": "eq",
+          "value": 360,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap5-east-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 360,
+          "z": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap5-north",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap5-north-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 360,
+          "z": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap5-west",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "x",
+          "operator": "eq",
+          "value": 358,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap5-west-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 358,
+          "z": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap5-south",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap5-south-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 358,
+          "z": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap6-east",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "x",
+          "operator": "eq",
+          "value": 360,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap6-east-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 360,
+          "z": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap6-north",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap6-north-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 360,
+          "z": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap6-west",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "x",
+          "operator": "eq",
+          "value": 358,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap6-west-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 358,
+          "z": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap6-south",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap6-south-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 358,
+          "z": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap7-east",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "x",
+          "operator": "eq",
+          "value": 360,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap7-east-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 360,
+          "z": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap7-north",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap7-north-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 360,
+          "z": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap7-west",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "x",
+          "operator": "eq",
+          "value": 358,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap7-west-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 358,
+          "z": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap7-south",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap7-south-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 358,
+          "z": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap8-east",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "x",
+          "operator": "eq",
+          "value": 360,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap8-east-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 360,
+          "z": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap8-north",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "UP"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap8-north-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 360,
+          "z": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap8-west",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "LEFT"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "x",
+          "operator": "eq",
+          "value": 358,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap8-west-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 358,
+          "z": 314,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 10,
+        "maxFrames": 16,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "route35-lap8-south",
+      "op": "step",
+      "args": {
+        "frames": 128,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 315,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 128,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "route35-lap8-south-settle",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 39,
+          "x": 358,
+          "z": 315,
+          "when": "final"
         }
       },
       "budget": {
@@ -447,7 +1549,8 @@
         "predicate": {
           "kind": "measurement-stage",
           "measurement": "spawn-work-budget-v1",
-          "stage": "complete"
+          "stage": "complete",
+          "when": "final"
         }
       },
       "budget": {
@@ -467,7 +1570,8 @@
   "measurements": [
     {
       "kind": "spawn-work-budget-v1",
-      "subject": "mankey"
+      "subject": "mankey",
+      "route": "goldenrod-route35-v1"
     }
   ]
 }

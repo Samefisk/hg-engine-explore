@@ -113,22 +113,57 @@ int main(void) {
 '''
 
 
+SHARED_DRIVER = r'''
+int main(void) {
+ Reset();CertifyCatalog();queryHasHit=1;
+ queryHit=(OverworldWildSurfaceHit){12,OW_WILD_SURFACE_ID_NATIVE_CANOPY,OW_WILD_SURFACE_TYPE_CANOPY,0};
+ OverworldPickupRouteWildLandingCall call={.field=&field,.behaviorData=&behaviorData,
+  .ops=&ops,.slot=-1,.allowedTile=OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_CANOPY,
+  .x=20,.y=1,.finalTargetX=20,.finalTargetY=1};
+ /* Padding/out-of-bounds fails before any loaded byte or catalog query. */
+ CHECK(OverworldPickupLandingWild_Classify(&call)==OVERWORLD_MOTION_DECISION_BLOCKED);
+ CHECK(surfaceCalls==0&&behaviorCalls==0&&occupancyCalls==0);
+ call.x=call.finalTargetX=5;missingTileX=5;
+ /* A real canopy hit cannot turn the unloaded0xFF byte into legal terrain. */
+ CHECK(OverworldPickupLandingWild_Classify(&call)==OVERWORLD_MOTION_DECISION_BLOCKED);
+ CHECK(surfaceCalls==1&&behaviorCalls==1&&occupancyCalls==0);
+ missingTileX=-1;
+ CHECK(OverworldPickupLandingWild_Classify(&call)==OVERWORLD_MOTION_DECISION_ACCEPTED);
+ CHECK(surfaceCalls==2&&behaviorCalls==2&&occupancyCalls==1);
+ /* The last playable cell succeeds even though the adjacent cell is padding. */
+ call.x=call.finalTargetX=19;
+ CHECK(OverworldPickupLandingWild_Classify(&call)==OVERWORLD_MOTION_DECISION_ACCEPTED);
+ CHECK(surfaceCalls==3&&behaviorCalls==3&&occupancyCalls==2);
+ puts("current shared Query Landing loaded bounds passed");return 0;
+}
+'''
+
+
 class HopLandingLoadedBoundsTests(unittest.TestCase):
     def test_invalid_native_tile_sentinel_is_not_land(self):
         result = execute()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_shared_hop_classifier_checks_loaded_tile_before_surface_catalog(self):
-        source = SOURCE.read_text()
-        body = function(
-            source,
-            "OverworldWildSpawns_ClassifyBehaviorHopLandingTile",
-            "OverworldMotionDecision",
-        )
-        loaded = body.find("OverworldWildSpawns_TryGetLoadedMetatileBehavior")
-        surface = body.find("OverworldWildSpawns_QuerySurface")
-        self.assertGreaterEqual(loaded, 0, "shared Hop classifier lacks loaded-tile gate")
-        self.assertGreater(surface, loaded, "surface catalog runs before loaded-tile gate")
+    def test_shared_query_landing_rejects_padding_and_unloaded_catalog_hits(self):
+        # The resident wrapper now delegates to the shared Query Landing.
+        # Catalog-only misses may reject early; a real catalog HIT still
+        # requires a playable, loaded native tile before support/occupancy.
+        from tools.overworld import test_bound_interest_landing as landing
+        driver = landing.DRIVER.split("int main(void) {", 1)[0] + SHARED_DRIVER
+        result = landing.run_harness(driver=driver)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("current shared Query Landing loaded bounds passed", result.stdout)
+        wild = landing.WILD.read_text()
+        faults = {
+            "playable": "if (!ops->playable(world->field,c->x,c->y)) return BLOCKED;",
+            "unknown behavior": "if (c->tile.behavior==0xFF) { c->phase=0;return DEFERRED; }",
+        }
+        for name, guard in faults.items():
+            with self.subTest(fault=name):
+                self.assertEqual(wild.count(guard), 1)
+                bad = landing.run_harness(wild=wild.replace(guard, ""), driver=driver)
+                self.assertNotEqual(bad.returncode, 0, "copied loaded-bound guard omission passed")
+                self.assertIn("OVERWORLD_MOTION_DECISION_", bad.stderr)
 
     def test_boundary_surface_does_not_require_adjacent_padding_to_be_playable(self):
         source = SOURCE.read_text()

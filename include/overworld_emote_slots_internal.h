@@ -11,6 +11,9 @@ typedef struct LocalMapObject LocalMapObject;
 typedef struct SysTask SysTask;
 typedef struct OverworldEmoteOwner OverworldEmoteOwner;
 
+/* Private mode in the existing native int effect parameter. */
+#define OVERWORLD_EMOTE_MODE_QUIET 0x80u
+
 typedef struct {
     void *modelFile;
     void *texture;
@@ -95,6 +98,8 @@ void EMOTE_NATIVE ov01_02203CB8(void *, OverworldEmoteNativeData *);
 void EMOTE_NATIVE ov01_02203DC0(void *, OverworldEmoteNativeData *);
 void *EMOTE_NATIVE sub_02068B0C(void *, const OverworldEmoteNativeDescriptor *, const VecFx32 *, int, const void *, int);
 const OverworldEmoteInit *EMOTE_NATIVE sub_02068D98(void *);
+/* The fixed ARM9 Thumb leaf is within the Overlay 1 direct-BL range. */
+int sub_02068D90(void *);
 void EMOTE_NATIVE sub_02068DB8(void *, VecFx32 *);
 void EMOTE_NATIVE sub_02026E18(const void *, void *);
 void EMOTE_NATIVE sub_02023DA4(void *);
@@ -114,7 +119,7 @@ void EMOTE_NATIVE MapObject_CopyFacingVector(LocalMapObject *, VecFx32 *);
 u32 EMOTE_NATIVE MapObject_GetID(LocalMapObject *);
 u32 EMOTE_NATIVE MapObject_GetMapID(LocalMapObject *);
 int EMOTE_NATIVE MapObject_GetPriority(LocalMapObject *);
-void EMOTE_NATIVE PlaySE(u32);
+void PlaySE(u32); /* Same fixed ARM9 Thumb direct-BL range as the mode getter. */
 extern u32 (*NNS_GfdDefaultFuncAllocTexVram)(u32, BOOL, u32);
 extern int (*NNS_GfdDefaultFuncFreeTexVram)(u32);
 extern u32 (*NNS_GfdDefaultFuncAllocPlttVram)(u32, BOOL, u32);

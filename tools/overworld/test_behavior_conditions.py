@@ -6,6 +6,7 @@ import re
 import os
 import shlex
 import shutil
+import struct
 import subprocess
 import tempfile
 import unittest
@@ -1179,6 +1180,109 @@ def run_alert_publication_harness(source, output):
 
 
 class BehaviorConditionTests(unittest.TestCase):
+    def test_native_definition_copy_uses_current_catalog_layout(self):
+        """Execute the production Thumb branch, which host evaluation skips."""
+        compiler = shutil.which("arm-none-eabi-gcc") or "/opt/homebrew/bin/arm-none-eabi-gcc"
+        objcopy = str(Path(compiler).with_name("arm-none-eabi-objcopy"))
+        runtime = ROOT / "lib/overworld/overworld_behavior_condition_runtime.c"
+        fixtures = r'''
+const OverworldWildBehaviorConditionEntry nativeConditionEntries[] = {
+    {.targetGroupMask=0xA1B2C3D4, .terrainMask=1, .terrainOverrideMask=2,
+     .durationFrames=301, .cooldownFrames=47, .targetMemberStart=0x6789,
+     .targetMemberCount=0x2345, .conditionId=0x1234, .applicationIndex=7,
+     .kind=0, .activationMode=1, .targetKind=1, .targetRoleMask=3,
+     .targetSelection=1, .rangeKind=6, .rangeLength=9, .chancePercent=73,
+     .minMovementSpeed=3, .maxMovementSpeed=21},
+    {.targetGroupMask=0x11223344, .terrainMask=0x105, .terrainOverrideMask=0x203,
+     .targetMemberStart=0x3456, .targetMemberCount=0x789A,
+     .conditionId=0x2345, .applicationIndex=11, .kind=2, .targetKind=0,
+     .targetRoleMask=5, .targetSelection=2, .rangeKind=4, .rangeLength=11,
+     .chancePercent=89, .minMovementSpeed=6, .maxMovementSpeed=18}
+};
+const OverworldBehaviorConditionDefinition nativeConditionDefinitions[] = {
+    {.conditionId=0x1234, .durationFrames=301, .cooldownFrames=47,
+     .terrainMask=1, .terrainOverrideMask=2, .applicationIndex=7,
+     .kind=0, .activationMode=1, .targetKind=1, .rangeKind=6, .distance=9,
+     .chance=73, .minMovementSpeed=3, .maxMovementSpeed=21, .reserved=3},
+    {.conditionId=0x2345, .terrainMask=0x105, .terrainOverrideMask=0x203,
+     .applicationIndex=11, .kind=2, .rangeKind=4, .distance=11,
+     .chance=89, .minMovementSpeed=6, .maxMovementSpeed=18}
+};
+'''
+        with tempfile.TemporaryDirectory(prefix="condition-definition-native-") as directory:
+            folder = Path(directory)
+            source, output = folder / "copy.c", folder / "copy.o"
+            source.write_text('#include "' + str(runtime) + '"\n' + fixtures)
+            compiled = subprocess.run([compiler, "-std=c11", "-Os", "-mthumb",
+                "-mcpu=arm946e-s", "-fno-builtin", "-ffunction-sections", "-fdata-sections",
+                "-w", "-Werror=incompatible-pointer-types", "-I", str(ROOT / "include"),
+                "-c", str(source), "-o", str(output)], capture_output=True, text=True)
+            self.assertEqual(compiled.returncode, 0, compiled.stdout + compiled.stderr)
+            def section(name):
+                binary = folder / (name + ".bin")
+                subprocess.run([objcopy, "-O", "binary", "-j", name,
+                    str(output), str(binary)], check=True, capture_output=True)
+                return binary.read_bytes()
+            code = section(".text.OverworldBehaviorCondition_BuildDefinition")
+            entries = section(".rodata.nativeConditionEntries")
+            expected = section(".rodata.nativeConditionDefinitions")
+        self.assertEqual((len(code), len(entries), len(expected)), (64, 104, 40))
+
+        def execute(body, entry):
+            # This leaf has no calls or stack use. Reject every other opcode,
+            # read outside its entry, or write outside its Definition.
+            regs = [0x9000 + i * 4 for i in range(16)]
+            regs[0], regs[1] = 0x1000, 0x2000
+            preserved = regs[4:15]
+            memory = {0x1000+i: value for i, value in enumerate(entry)}
+            memory.update({0x2000+i: 0xA5 for i in range(20)})
+            pc, equal = 0, False
+            for _ in range(40):
+                op = struct.unpack_from("<H", body, pc)[0]
+                pc += 2
+                kind, rd, rn = op & 0xF800, op & 7, (op >> 3) & 7
+                if kind in (0x8800, 0x7800, 0x8000, 0x7000):
+                    size = 2 if kind in (0x8800, 0x8000) else 1
+                    address = regs[rn] + ((op >> 6) & 31) * size
+                    if kind in (0x8800, 0x7800):
+                        self.assertTrue(0x1000 <= address <= 0x1000+len(entry)-size)
+                        regs[rd] = sum(memory[address+i] << (8*i) for i in range(size))
+                    else:
+                        self.assertTrue(0x2000 <= address <= 0x2000+20-size)
+                        for i in range(size):
+                            memory[address+i] = (regs[rd] >> (8*i)) & 255
+                elif kind == 0x3000:
+                    regs[(op >> 8) & 7] += op & 255
+                elif kind == 0x0800:
+                    regs[rd] = regs[rn] >> (((op >> 6) & 31) or 32)
+                elif kind == 0x2800:
+                    equal = regs[(op >> 8) & 7] == (op & 255)
+                elif op & 0xFF00 == 0xD000:
+                    if equal:
+                        offset = (op & 255) - (256 if op & 128 else 0)
+                        pc += 2 + offset * 2
+                elif kind == 0x2000:
+                    regs[(op >> 8) & 7] = op & 255
+                elif op == 0x4770:
+                    self.assertEqual(regs[4:15], preserved)
+                    return bytes(memory[0x2000+i] for i in range(20))
+                else:
+                    self.fail(f"unexpected native definition instruction {op:04x}")
+            self.fail("native definition copy did not return")
+
+        for index in range(2):
+            entry, definition = entries[index*52:(index+1)*52], expected[index*20:(index+1)*20]
+            with self.subTest(fixture=index):
+                self.assertEqual(execute(code, entry), definition)
+                # The two stale v95 reads must fail this same output check.
+                for offset, old_value in ((0, 16), (16, 32)):
+                    stale = bytearray(code)
+                    op = struct.unpack_from("<H", stale, offset)[0]
+                    op = ((op & ~0x7C0) | ((old_value // 2) << 6)) if offset == 0 else ((op & 0xFF00) | old_value)
+                    struct.pack_into("<H", stale, offset, op)
+                    with self.subTest(stale_offset=offset), self.assertRaises(AssertionError):
+                        self.assertEqual(execute(stale, entry), definition)
+
     def test_target_publication_does_not_restart_an_identical_alert(self):
         source = (ROOT / "src/overworld_wild_spawns_overlay/overworld_wild_spawns_overlay.c").read_text()
         with tempfile.TemporaryDirectory(prefix="condition-alert-publication-") as directory:

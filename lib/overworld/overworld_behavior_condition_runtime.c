@@ -216,6 +216,8 @@ static u8 OverworldBehaviorCondition_MatchApplies(
 {
     return (match->species == CONDITION_RUNTIME_MATCH_ANY_SPECIES
             || match->species == context->species)
+        && (match->mapId == OW_WILD_BEHAVIOR_MATCH_ANY_MAP
+            || match->mapId == context->mapId)
         && (match->groupMask == 0
             || (context->groupFlags & match->groupMask) != 0)
         && (match->terrain == CONDITION_RUNTIME_MATCH_ANY_U8
@@ -363,6 +365,43 @@ CONDITION_RUNTIME_LOCAL_CALL OverworldBehaviorCondition_BuildDefinition(
         : 0;
 }
 #else
+/* The naked Thumb leaf uses only fixed immediate loads. Assert both ends of
+ * its packed copy so a catalog layout change cannot leave native evaluation
+ * behind the named-field host implementation. Halfword loads copy adjacent
+ * range/distance and chance/min-speed bytes together. */
+_Static_assert(
+    __builtin_offsetof(OverworldWildBehaviorConditionEntry, terrainMask) == 20
+        && __builtin_offsetof(OverworldWildBehaviorConditionEntry, terrainOverrideMask) == 22
+        && __builtin_offsetof(OverworldWildBehaviorConditionEntry, durationFrames) == 24
+        && __builtin_offsetof(OverworldWildBehaviorConditionEntry, cooldownFrames) == 26
+        && __builtin_offsetof(OverworldWildBehaviorConditionEntry, conditionId) == 36
+        && __builtin_offsetof(OverworldWildBehaviorConditionEntry, applicationIndex) == 38
+        && __builtin_offsetof(OverworldWildBehaviorConditionEntry, kind) == 41
+        && __builtin_offsetof(OverworldWildBehaviorConditionEntry, activationMode) == 42
+        && __builtin_offsetof(OverworldWildBehaviorConditionEntry, targetKind) == 43
+        && __builtin_offsetof(OverworldWildBehaviorConditionEntry, rangeKind) == 46
+        && __builtin_offsetof(OverworldWildBehaviorConditionEntry, rangeLength) == 47
+        && __builtin_offsetof(OverworldWildBehaviorConditionEntry, chancePercent) == 48
+        && __builtin_offsetof(OverworldWildBehaviorConditionEntry, minMovementSpeed) == 49
+        && __builtin_offsetof(OverworldWildBehaviorConditionEntry, maxMovementSpeed) == 50,
+    "native condition copy requires the current catalog entry layout");
+_Static_assert(
+    __builtin_offsetof(OverworldBehaviorConditionDefinition, conditionId) == 0
+        && __builtin_offsetof(OverworldBehaviorConditionDefinition, durationFrames) == 2
+        && __builtin_offsetof(OverworldBehaviorConditionDefinition, cooldownFrames) == 4
+        && __builtin_offsetof(OverworldBehaviorConditionDefinition, terrainMask) == 6
+        && __builtin_offsetof(OverworldBehaviorConditionDefinition, terrainOverrideMask) == 8
+        && __builtin_offsetof(OverworldBehaviorConditionDefinition, applicationIndex) == 10
+        && __builtin_offsetof(OverworldBehaviorConditionDefinition, kind) == 11
+        && __builtin_offsetof(OverworldBehaviorConditionDefinition, activationMode) == 12
+        && __builtin_offsetof(OverworldBehaviorConditionDefinition, targetKind) == 13
+        && __builtin_offsetof(OverworldBehaviorConditionDefinition, rangeKind) == 14
+        && __builtin_offsetof(OverworldBehaviorConditionDefinition, distance) == 15
+        && __builtin_offsetof(OverworldBehaviorConditionDefinition, chance) == 16
+        && __builtin_offsetof(OverworldBehaviorConditionDefinition, minMovementSpeed) == 17
+        && __builtin_offsetof(OverworldBehaviorConditionDefinition, maxMovementSpeed) == 18
+        && __builtin_offsetof(OverworldBehaviorConditionDefinition, reserved) == 19,
+    "native condition copy requires the current evaluation layout");
 static void __attribute__((naked, noinline))
 CONDITION_RUNTIME_LOCAL_CALL OverworldBehaviorCondition_BuildDefinition(
     const OverworldWildBehaviorConditionEntry *entry,
@@ -371,15 +410,15 @@ CONDITION_RUNTIME_LOCAL_CALL OverworldBehaviorCondition_BuildDefinition(
     (void)entry;
     (void)definition;
     __asm__(
-        "ldrh r2, [r0, #16]\n"
-        "strh r2, [r1, #6]\n"
-        "ldrh r2, [r0, #18]\n"
-        "strh r2, [r1, #8]\n"
         "ldrh r2, [r0, #20]\n"
-        "strh r2, [r1, #2]\n"
+        "strh r2, [r1, #6]\n"
         "ldrh r2, [r0, #22]\n"
+        "strh r2, [r1, #8]\n"
+        "ldrh r2, [r0, #24]\n"
+        "strh r2, [r1, #2]\n"
+        "ldrh r2, [r0, #26]\n"
         "strh r2, [r1, #4]\n"
-        "add r0, #32\n"
+        "add r0, #36\n"
         "ldrh r2, [r0, #0]\n"
         "strh r2, [r1, #0]\n"
         "ldrb r2, [r0, #2]\n"

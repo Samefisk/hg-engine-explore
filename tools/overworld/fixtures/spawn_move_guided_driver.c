@@ -81,16 +81,16 @@ static OverworldPickupRouteStatus ProvedGuide(const OverworldCargoQueryWildCall*
 
 static int CompactSlotControls(void){
  _Static_assert(OVERWORLD_ENTRY_ROUTE_MAX_STEPS==96,"trip capacity stays96");
- _Static_assert(sizeof(((OverworldEntryRoutePath*)0)->edgeTags)==192,"exact96 native tags");
- _Static_assert(sizeof(((OverworldEntryRoutePath*)0)->endpoints)==1152,"exact96 full endpoints");
- _Static_assert(sizeof(OverworldEntryRoutePath)==1424,"compact pointer-free path");
+ _Static_assert(sizeof(((OverworldEntryRoutePath*)0)->commands)==192,"exact96 native commands");
+ _Static_assert(sizeof(((OverworldEntryRoutePath*)0)->nextStep)==12,"one fully admitted next endpoint");
+ _Static_assert(sizeof(OverworldEntryRoutePath)==284,"compact pointer-free path");
  _Static_assert(sizeof(((NativeQuery*)0)->entryPaths)/sizeof(OverworldEntryRoutePath)==9,"nine admitted Wild paths retained");
  Reset();call.heapId=4;
- freeBytes=sizeof(NativeQuery)+OVERWORLD_FIELD_PICKUP_QUERY_HEAP_RESERVE-1;
+ freeBytes=0;heap4Free=sizeof(NativeAuxiliary)+OVERWORLD_FIELD_PICKUP_QUERY_HEAP_RESERVE+OVERWORLD_FIELD_QUERY_ALLOCATION_MARGIN-1;heap11Free=100000;
  CHECK(!AcquireQuery(&call) && !allocations && !runtime.pickupQuery);
- freeBytes=sizeof(NativeQuery)+OVERWORLD_FIELD_PICKUP_QUERY_HEAP_RESERVE;
- NativeQuery*one=AcquireQuery(&call);CHECK(one && allocations==1 && runtime.pickupQuery==one);
- CHECK(AcquireQuery(&call)==one && allocations==1);
+ heap4Free++;
+ NativeQuery*one=AcquireQuery(&call);CHECK(one && allocations==2 && runtime.pickupQuery==one);
+ CHECK(AcquireQuery(&call)==one && allocations==2);
  CHECK(one->storage.workspace.nodeCapacity==OVERWORLD_CARGO_QUERY_NODES
   && one->storage.workspace.edgeCapacity==OVERWORLD_CARGO_QUERY_EDGES
   && one->storage.workspace.visitedCapacity==OVERWORLD_CARGO_QUERY_HASH);
@@ -102,7 +102,7 @@ static int CompactSlotControls(void){
   runtime.queuedSpawnSerial=7;runtime.queuedSpawnSlotPlusOne=n+1;
   actors.slots[n].snapshot.handle=(OverworldActorHandle){n,2,3,4,5,0};actors.slots[n].snapshot.active=0;spawns.spawns[n].active=0;
   if(n==7){CHECK(EntryTick(&call,&output,(u8[1]){0})==INVALID && !allocations);continue;}
-  NativeQuery*q=AcquireQuery(&call);CHECK(q);q->entry.world=world;q->prepared=runtime.queuedSpawn;
+  NativeQuery*q=AcquireQuery(&call);CHECK(q);q->entry.world=world;AUX(q)->packet.prepared=runtime.queuedSpawn;
   CHECK(EntryCurrent(q,&c.request));
   c.request.expectedSlotGeneration++;CHECK(!EntryCurrent(q,&c.request));c.request.expectedSlotGeneration--;
   c.request.slot=10;CHECK(!EntryCurrent(q,&c.request));c.request.slot=n;
@@ -116,19 +116,19 @@ static int CompactSlotControls(void){
   spawns.spawns[n]=(OverworldWildSpawn){objects+n,1000,5,1};world.subjectObject=objects+n;
   spawns.movementSpawnRunActive[n]=1;spawns.movementSpawnRunTargetX[n]=spawns.movementSpawnRunTargetY[n]=4;
   OverworldEntryRoutePath*path=EntryPath(q,n);CHECK(path==&q->entryPaths[n-(n>7)]);path->valid=1;path->serial=7;
-  path->origin=path->target=(OverworldPickupRoutePosition){4,4,64,23,0};path->count=96;path->edgeTags[95]=OVERWORLD_PICKUP_ROUTE_NATIVE_ENTRY_TELEPORT|7;
-  path->endpoints[95]=(OverworldPickupRoutePosition){31,31,65536,29,0};
+  path->origin=path->target=(OverworldPickupRoutePosition){4,4,64,23,0};path->count=96;path->commands[95]=(6u<<3)|OVERWORLD_PICKUP_ROUTE_NATIVE_ENTRY_TELEPORT|7;
+  path->nextStep=(OverworldPickupRoutePosition){31,31,65536,29,0};
   runtime.queuedSpawnSlotPlusOne=0;c.request.operation=OVERWORLD_ENTRY_ROUTE_ADOPT;c.request.actor=actors.slots[n].snapshot.handle;
   c.request.physical.rangeX=c.request.physical.rangeY=-1;u8 publish=0;
   CHECK(EntryTick(&call,&output,&publish)==OVERWORLD_PICKUP_ROUTE_REACHABLE && publish && !memcmp(&r.actor,&c.request.actor,sizeof(r.actor)));
   c.request.operation=OVERWORLD_ENTRY_ROUTE_GUIDE;c.request.destination=path->target;call.profile=NULL;
   CHECK(EntryTick(&call,&output,&publish)==OVERWORLD_PICKUP_ROUTE_REACHABLE && !publish && !memcmp(&r.target,&path->target,sizeof(r.target)));
-  CHECK(path->count==96 && path->edgeTags[95]==(OVERWORLD_PICKUP_ROUTE_NATIVE_ENTRY_TELEPORT|7) && path->endpoints[95].baseY==65536 && path->endpoints[95].surfaceId==29);
+  CHECK(path->count==96 && path->commands[95]==((6u<<3)|OVERWORLD_PICKUP_ROUTE_NATIVE_ENTRY_TELEPORT|7) && path->nextStep.baseY==65536 && path->nextStep.surfaceId==29);
   c.request.operation=OVERWORLD_ENTRY_ROUTE_RETIRE;
   CHECK(EntryTick(&call,&output,&publish)==OVERWORLD_PICKUP_ROUTE_REACHABLE && !path->valid);admitted++;
  }
  CHECK(admitted==9);
- puts("compact path ownership: all9 admissible Wild slots including8/9; follower7 rejected; full ADOPT/arrival/RETIRE;96 endpoints and tags retained PASS");return 0;
+ puts("compact path ownership: all9 admissible Wild slots including8/9; follower7 rejected; full ADOPT/arrival/RETIRE;96 commands and exact admitted endpoint retained PASS");return 0;
 }
 
 static int NativeControls(void){
@@ -173,7 +173,7 @@ static int NativeControls(void){
   actors.slots[0].snapshot.logicalX=actors.slots[0].snapshot.logicalY=4;actors.slots[0].snapshot.motionPhase=OVERWORLD_ACTOR_PHASE_IDLE;actors.slots[0].snapshot.commitSequence=10;actors.slots[0].policy.targetSurfaceId=23;
   objects[0].posVec[0]=objects[0].posVec[2]=(4u<<16)+0x8000;
   NativeQuery*q=AcquireQuery(&call);CHECK(q);OverworldEntryRoutePath*path=&q->entryPaths[0];path->valid=1;path->serial=7;path->policy=3;path->actor=actors.slots[0].snapshot.handle;
-  path->origin=path->expected=(OverworldPickupRoutePosition){4,4,64,23,0};path->target=path->endpoints[0]=(OverworldPickupRoutePosition){5,4,64,23,0};path->count=1;path->edgeTags[0]=OVERWORLD_PICKUP_ROUTE_NATIVE_ENTRY_TELEPORT|3;
+  path->origin=path->expected=(OverworldPickupRoutePosition){4,4,64,23,0};path->stepRead=1;path->target=path->nextStep=(OverworldPickupRoutePosition){5,4,64,23,0};path->count=1;path->commands[0]=(1u<<3)|OVERWORLD_PICKUP_ROUTE_NATIVE_ENTRY_TELEPORT|3;
   CHECK(OverworldWildSpawns_TryStartGuidedEntry(&spawns,0,&objects[0],&profile,&primitives)==(mode!=0));CHECK(starts==1 && acceptedCalls==(unsigned)(mode!=0) && !path->next);
   if(!mode){CHECK(!path->accepted && actors.slots[0].snapshot.commitSequence==10);continue;}CHECK(path->accepted && path->acceptedSequence==10);
   if(mode==1){OverworldEntryRouteReceipt r;CHECK(OverworldWildSpawns_QueryEntry(&spawns,&field,0,NULL,2,NULL,0,0,0,&r)==0 && !path->next);PublishEnd();}

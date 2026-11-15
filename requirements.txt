@@ -1,3 +1,4 @@
 ndspy==4.1.0
 pandas
 Pillow
+capstone==5.0.7

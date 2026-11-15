@@ -14779,3 +14779,213 @@ pokemon SPECIES_POLIWAG
 pokemon SPECIES_MAGIKARP
 
 .close
+
+
+encounterdata 142   // Goldenrod City
+
+walkrate 0
+surfrate 0
+rocksmashrate 0
+oldrodrate 0
+goodrodrate 0
+superrodrate 0
+overworldtimepolicy 1
+walklevels 12, 12, 13, 13, 14, 14, 14, 15, 15, 15, 16, 16
+
+// morning encounter slots
+pokemon SPECIES_MEOWTH
+pokemon SPECIES_PIDOVE
+pokemon SPECIES_MEOWTH
+pokemon SPECIES_RATTATA
+pokemon SPECIES_PIDOVE
+pokemon SPECIES_SNUBBULL
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_TRUBBISH
+pokemon SPECIES_TRUBBISH
+pokemon SPECIES_TRUBBISH
+pokemon SPECIES_GRIMER
+
+// day encounter slots
+pokemon SPECIES_MEOWTH
+pokemon SPECIES_PIDOVE
+pokemon SPECIES_MEOWTH
+pokemon SPECIES_RATTATA
+pokemon SPECIES_PIDOVE
+pokemon SPECIES_SNUBBULL
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_TRUBBISH
+pokemon SPECIES_TRUBBISH
+pokemon SPECIES_TRUBBISH
+pokemon SPECIES_GRIMER
+
+// night encounter slots
+pokemon SPECIES_RATTATA
+pokemon SPECIES_MEOWTH
+pokemon SPECIES_RATTATA
+pokemon SPECIES_MEOWTH
+pokemon SPECIES_SNUBBULL
+pokemon SPECIES_MURKROW
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_TRUBBISH
+pokemon SPECIES_TRUBBISH
+pokemon SPECIES_GRIMER
+pokemon SPECIES_ROTOM
+
+// hoenn encounter slots
+pokemon SPECIES_NONE
+pokemon SPECIES_NONE
+
+// sinnoh encounter slots
+pokemon SPECIES_NONE
+pokemon SPECIES_NONE
+
+// surf encounters
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+
+// rock smash encounters
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+
+// old rod encounters
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+
+// good rod encounters
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+
+// super rod encounters
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+
+// swarm grass
+pokemon SPECIES_NONE
+// swarm surf
+pokemon SPECIES_NONE
+// swarm good rod
+pokemon SPECIES_NONE
+// swarm super rod
+pokemon SPECIES_NONE
+
+.close
+
+
+encounterdata 143   // Goldenrod Underground
+
+walkrate 0
+surfrate 0
+rocksmashrate 0
+oldrodrate 0
+goodrodrate 0
+superrodrate 0
+overworldtimepolicy 1
+walklevels 12, 12, 13, 13, 14, 14, 14, 15, 15, 15, 16, 16
+
+// morning encounter slots
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_GRIMER
+pokemon SPECIES_RATTATA
+pokemon SPECIES_GRIMER
+pokemon SPECIES_RATTATA
+
+// day encounter slots
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_GRIMER
+pokemon SPECIES_RATTATA
+pokemon SPECIES_GRIMER
+pokemon SPECIES_RATTATA
+
+// night encounter slots
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_RATTATA
+pokemon SPECIES_GRIMER
+pokemon SPECIES_RATTATA
+pokemon SPECIES_GRIMER
+pokemon SPECIES_RATTATA
+
+// hoenn encounter slots
+pokemon SPECIES_NONE
+pokemon SPECIES_NONE
+
+// sinnoh encounter slots
+pokemon SPECIES_NONE
+pokemon SPECIES_NONE
+
+// surf encounters
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+
+// rock smash encounters
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+
+// old rod encounters
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+
+// good rod encounters
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+
+// super rod encounters
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+encounter SPECIES_NONE, 0, 0
+
+// swarm grass
+pokemon SPECIES_NONE
+// swarm surf
+pokemon SPECIES_NONE
+// swarm good rod
+pokemon SPECIES_NONE
+// swarm super rod
+pokemon SPECIES_NONE
+
+.close

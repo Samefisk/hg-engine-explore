@@ -1,0 +1,322 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.airborne-input",
+  "title": "Airborne Select is ignored and confirmed Y waits for landing",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "TICKETS.md",
+  "requirements": [
+    "current.mount-airborne-input"
+  ],
+  "budgets": {
+    "maxSeconds": 240,
+    "maxFrames": 900,
+    "noProgressFrames": 180,
+    "minObservedFrames": 70
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "MOUNTED",
+      "acquire": "existing"
+    }
+  ],
+  "setup": [
+    {
+      "id": "route30-canopy",
+      "op": "teleport",
+      "args": {
+        "map": 34,
+        "x": 564,
+        "z": 375,
+        "facing": 2
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-field",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    },
+    {
+      "id": "mount-saved-mankey",
+      "op": "spawn",
+      "args": {
+        "species": 56,
+        "form": 0,
+        "role": "mounted",
+        "slot": 2,
+        "level": 3
+      },
+      "budget": {
+        "maxSeconds": 45,
+        "maxFrames": 180,
+        "noProgressFrames": 180
+      }
+    },
+    {
+      "id": "bind-mankey",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 5,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "left-to-tree",
+      "op": "step",
+      "args": {
+        "frames": 8,
+        "keys": [
+          "LEFT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 8,
+        "noProgressFrames": 8
+      }
+    },
+    {
+      "id": "air-select",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": [
+          "SELECT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "land-without-delayed-toggle",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "fresh-ground-select",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": [
+          "SELECT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "wait-dismounted",
+      "op": "step",
+      "args": {
+        "frames": 64,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mount-airborne-input-v1",
+          "stage": "dismounted",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "release-select-before-remount",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "fresh-remount-select",
+      "op": "step",
+      "args": {
+        "frames": 2,
+        "keys": [
+          "SELECT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 2,
+        "noProgressFrames": 2
+      }
+    },
+    {
+      "id": "wait-remounted",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mount-airborne-input-v1",
+          "stage": "remounted",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "right-hop-for-y",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "RIGHT"
+        ],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mount-airborne-input-v1",
+          "stage": "second-started",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "open-y-in-flight",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": [
+          "Y"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "choose-cyndaquil",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": [
+          "Y",
+          "L"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "confirm-y-in-flight",
+      "op": "step",
+      "args": {
+        "frames": 1,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "land-and-switch",
+      "op": "step",
+      "args": {
+        "frames": 180,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "mount-airborne-input-v1",
+          "stage": "switched",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 60,
+        "maxFrames": 180,
+        "noProgressFrames": 180
+      }
+    },
+    {
+      "id": "verify-no-repeat",
+      "op": "step",
+      "args": {
+        "frames": 24,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 30,
+        "maxFrames": 24,
+        "noProgressFrames": 24
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "mount-airborne-input-v1",
+      "when": "final"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "mount-airborne-input-v1",
+      "subject": "mankey"
+    }
+  ]
+}

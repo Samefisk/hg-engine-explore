@@ -344,6 +344,128 @@ class PinnedWildMovingFixtureReuseTests(unittest.TestCase):
         self.assertFalse(self.reuse())
 
 
+class PinnedD1WarmupReuseTests(unittest.TestCase):
+    CONTRACT = "tools/overworld/devtools_test_contract.py"
+    PAIR = (
+        "18f7efa7c96072a069f7c0d6a9357764522c8ee47cce8dd871420b81b571db41",
+        "b21b809850b9b347789690580beab8363087ef3b291fd432af90048bb8aa198a",
+    )
+    READER = "tools/overworld/devtools_pokemon_combat_observer.py"
+    UNCLASSIFIED = "tools/overworld/devtools_jobs.py"
+    D1_KINDS = ("spawn-work-budget-v1", "unmounted-zero-stutter-v1")
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.paths = (self.CONTRACT, self.READER, self.UNCLASSIFIED)
+        self.before = {self.CONTRACT: self.PAIR[0], self.READER: "a" * 64,
+                       self.UNCLASSIFIED: "b" * 64}
+        self.after = {**self.before, self.CONTRACT: self.PAIR[1]}
+        self.record = {"identity": {"toolInputs": [
+            {"path": path, "sha256": self.before[path]} for path in self.paths]}}
+        self.recorded = {"schema": "overworld-scoped-proof-inputs-v1",
+            "capture": {"sha256": "before", "roots": {
+                "game": "same-game", "reader": "same-reader", "actions": "same-actions",
+                "tools": "before", "tests": "same-tests"}},
+            "checker": {"sha256": "before"}}
+        self.current = deepcopy(self.recorded)
+        self.current["capture"].update(sha256="after")
+        self.current["capture"]["roots"]["tools"] = "after"
+        self.current["checker"]["sha256"] = "after"
+
+    def reuse(self, kinds=("follower-throw-player-damage-v1",)):
+        test = {"measurements": [{"kind": kind} for kind in kinds]}
+        def current_file(path, _repo):
+            return {"sha256": self.after[path.relative_to(self.root).as_posix()]}
+        with patch("tools.overworld.devtools_contract.source_paths", return_value=self.paths), \
+                patch.object(control, "file_record", side_effect=current_file):
+            return control._capture_update_is_unselected(
+                test, self.record, self.recorded, self.current, self.root)
+
+    def test_exact_pair_allows_unselected_capture_and_uncached_replay_controls(self):
+        self.assertTrue(self.reuse())
+        # This different exact pair must precede the older Wild-moving pair.
+        self.assertTrue(self.reuse(("wild-throw-moving-candidate-v1",)))
+        f = fixtures.SharedProofTests()
+        f.setUp()
+        self.addCleanup(f.doCleanups)
+        f.record["identity"]["toolInputs"] = deepcopy(self.record["identity"]["toolInputs"])
+        f.record["fixtureProof"]["proofInputs"] = deepcopy(self.recorded)
+        actual_file_record = control.file_record
+        from .devtools_contract import source_paths
+        def fixture_sources(repo):
+            return self.paths if Path(repo) == f.root else source_paths(repo)
+        def current_file(path, repo):
+            relative = path.relative_to(f.root).as_posix()
+            return ({"sha256": self.after[relative]} if relative in self.after
+                    else actual_file_record(path, repo))
+        ACCEPTANCE_CACHE.values.clear()
+        with patch("tools.overworld.devtools_contract.source_paths", side_effect=fixture_sources), \
+                patch("tools.overworld.proof_inputs.proof_inputs", return_value=self.current), \
+                patch.object(control, "file_record", side_effect=current_file), \
+                patch.object(control, "_finalize_shared_test_uncached", wraps=control._finalize_shared_test_uncached) as uncached, \
+                patch.object(control, "_replay_shared_test", wraps=control._replay_shared_test) as replay:
+            result = control.finalize_shared_test(f.test, f.record, f.root)
+        self.assertTrue(result["acceptedProof"], result)
+        uncached.assert_called_once()
+        self.assertGreaterEqual(replay.call_count, 3)
+        self.assertTrue(all(row["rejected"] for row in result["proofAcceptance"]["controls"].values()))
+        self.assertEqual(result["proofAcceptance"]["replayMode"], "checker-update")
+
+    def test_both_selected_d1_kinds_and_mixed_recipes_need_fresh_capture(self):
+        for kind in self.D1_KINDS:
+            with self.subTest(kind=kind):
+                self.assertFalse(self.reuse((kind,)))
+                self.assertFalse(self.reuse(("wild-throw-moving-candidate-v1", kind)))
+        self.assertFalse(self.reuse(self.D1_KINDS))
+
+    def test_wrong_retained_current_or_reversed_sha_pair_rejects(self):
+        saved = self.record["identity"]["toolInputs"][0]
+        # Rechecking original captures must not create a chain of source pairs.
+        for wrong in ("0" * 64,
+                      "f3b4e1f93a3574996ffaceacc87723f97e0a707a6147ec0d0da8641cbf64e278",
+                      "4f21db29a0e38532eb442514331197368214e24be08885bcfe7e9c25cd711e92",
+                      "40288b2dca02dc29eb8a869d84ac6c84ab58eda7aab5570f526a7ec600e51471",
+                      "2fe46225c3ad76c8bfff4814a1b34152dbaadddd1e9361886364d3a7a665ca8f"):
+            saved["sha256"] = wrong
+            self.assertFalse(self.reuse())
+            saved["sha256"] = self.PAIR[0]
+            self.after[self.CONTRACT] = wrong
+            self.assertFalse(self.reuse())
+            self.after[self.CONTRACT] = self.PAIR[1]
+        saved["sha256"], self.after[self.CONTRACT] = self.PAIR[1], self.PAIR[0]
+        self.assertFalse(self.reuse())
+
+    def test_reader_or_unclassified_change_stays_strict(self):
+        for path in (self.READER, self.UNCLASSIFIED):
+            with self.subTest(path=path):
+                self.after[path] = "c" * 64
+                self.assertFalse(self.reuse())
+                self.after[path] = self.before[path]
+
+
+class PinnedD1GateInputReuseTests(PinnedD1WarmupReuseTests):
+    CONTRACT = "tools/overworld/devtools_d1_routes.py"
+    PAIR = (
+        "9adf9ac2e3d2f566709732c004a0b29908f98173b79d618b12b537da6e887980",
+        "95bbe55fd7a8b7940aeafd48c21fe7d8320618195d2341fa64f94668c09fe086",
+    )
+
+    def test_exact_gate_and_guard_pairs_coexist_only_for_non_d1_capture(self):
+        guard = PinnedD1WarmupReuseTests
+        self.paths = (*self.paths, guard.CONTRACT)
+        self.before[guard.CONTRACT] = guard.PAIR[0]
+        self.after[guard.CONTRACT] = guard.PAIR[1]
+        self.record["identity"]["toolInputs"].append(
+            {"path": guard.CONTRACT, "sha256": guard.PAIR[0]})
+        self.assertTrue(self.reuse())
+        for kind in self.D1_KINDS:
+            with self.subTest(kind=kind):
+                self.assertFalse(self.reuse((kind,)))
+                self.assertFalse(self.reuse(("wild-throw-moving-candidate-v1", kind)))
+
+
 class ReuseStorageTests(unittest.TestCase):
     def test_cache_is_bounded_and_never_stores_failed_acceptance(self):
         cache = AcceptanceCache(2)

@@ -319,6 +319,19 @@ struct SaveFixture: NDSCart::CartCommon {
     const u8* GetSaveMemory()const override{return saved.data();}
     u32 GetSaveMemoryLength()const override{return saved.size();}
 };
+struct RomFixture: NDSCart::CartCommon {
+    RomFixture(): CartCommon(std::make_unique<u8[]>(0x10000),0x10000,0,false,{},NDSCart::Default,nullptr){}
+    using CartCommon::ReadROM; // the card-command read path
+};
+void cart_rom_test(){Owned own;auto& b=get(own.h);u8 data[4]{9,8,7,6},back[4]{};
+    CHECK(md_cart_rom_size(own.h)==0);CHECK(md_write_cart_rom(own.h,0x8000,data,4)==-1);
+    b.nds->SetNDSCart(std::make_unique<RomFixture>());b.opened=true;CHECK(md_cart_rom_size(own.h)==0x10000);
+    CHECK(md_write_cart_rom(own.h,0x8000,data,4)==0);CHECK(md_read_cart_rom(own.h,0x8000,back,4)==0);CHECK(std::memcmp(data,back,4)==0);
+    u8 card[4]{};static_cast<RomFixture*>(b.nds->GetNDSCart())->ReadROM(0x8000,4,card,0);CHECK(std::memcmp(data,card,4)==0); // guest card reads see the write
+    CHECK(md_write_cart_rom(own.h,0x7fff,data,4)==-1);CHECK(md_write_cart_rom(own.h,0xfffd,data,4)==-1);CHECK(md_read_cart_rom(own.h,0xfffc,back,4)==0);
+    CHECK(md_write_cart_rom(own.h,0xfffffffe,data,4)==-1);b.running=true;CHECK(md_write_cart_rom(own.h,0x9000,data,4)==-1);b.running=false;
+    md_abort(own.h,"test fault");CHECK(md_write_cart_rom(own.h,0x9000,data,4)==-1);CHECK(md_read_cart_rom(own.h,0x8000,back,4)==0);
+}
 void output_test(){Owned own;auto& b=get(own.h);std::vector<u8> rgba(256*384*4);
     CHECK(md_read_framebuffer(own.h,rgba.data(),rgba.size())==-1);
     // Synthetic buffers only. No image is displayed, saved or taken from a ROM.
@@ -331,4 +344,4 @@ void output_test(){Owned own;auto& b=get(own.h);std::vector<u8> rgba(256*384*4);
     CHECK(md_touch(own.h,0,0)==0);CHECK(md_touch(own.h,255,191)==0);CHECK(md_touch(own.h,256,191)==-1);CHECK(md_touch(own.h,255,192)==-1);CHECK(md_release_touch(own.h)==0);
     md_abort(own.h,"test fault");CHECK(md_touch(own.h,0,0)==-1);CHECK(md_release_touch(own.h)==-1);
 }
-int main(int argc,char** argv){try{CHECK(argc==1||(argc==2&&std::string(argv[1])=="--benchmark"));CHECK(md_run_frame(nullptr)==-1);branch_test(false);branch_test(true);branch_test(false,true);branch_test(true,true);phase_test();guest_clock_test();dispatch_test();profile_test();cache_test();writes_test();bank_test();output_test();std::cout<<"PASS: ARM/Thumb pre-exec, cross-region redirect, guest scheduler clock reads, dispatch counts, ARM9 PC profile, native phase timing, cache mutation, abort latch, ARM9 TCM aliases, CPU writes, banked SPSR, output bytes and touch bounds (no ROM)\n";if(argc==2)benchmark();return 0;}catch(const std::exception& e){std::cerr<<e.what()<<"\n";return 1;}}
+int main(int argc,char** argv){try{CHECK(argc==1||(argc==2&&std::string(argv[1])=="--benchmark"));CHECK(md_run_frame(nullptr)==-1);branch_test(false);branch_test(true);branch_test(false,true);branch_test(true,true);phase_test();guest_clock_test();dispatch_test();profile_test();cache_test();writes_test();bank_test();output_test();cart_rom_test();std::cout<<"PASS: ARM/Thumb pre-exec, cross-region redirect, guest scheduler clock reads, dispatch counts, ARM9 PC profile, native phase timing, cache mutation, abort latch, ARM9 TCM aliases, CPU writes, banked SPSR, output bytes, touch bounds and cartridge-image access (no ROM)\n";if(argc==2)benchmark();return 0;}catch(const std::exception& e){std::cerr<<e.what()<<"\n";return 1;}}

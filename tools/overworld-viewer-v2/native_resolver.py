@@ -373,6 +373,7 @@ def preview_conditions(
         subject.get("roleMask", 1), observation.get("actorFacts", 0),
         observation.get("pickupEligibleMask", 0), observation.get("incomingClaimMask", 0), len(bindings),
         *(binding_owner[key] for key in ("slot", "generation", "fieldEpoch", "mapGeneration", "encounterGeneration")),
+        subject.get("mapId", 65535),
     )
     lines = [" ".join(str(int(value)) for value in header)]
     for candidate in candidates:
@@ -383,7 +384,7 @@ def preview_conditions(
             handle["slot"], handle["generation"], handle["fieldEpoch"],
             handle["mapGeneration"], handle["encounterGeneration"],
             candidate["x"], candidate["y"], candidate["valid"],
-            candidate["facingAndOcclusion"],
+            candidate["facingAndOcclusion"], candidate.get("mapId", subject.get("mapId", 65535)),
         )))
     for state in states:
         lines.append(" ".join(str(int(value)) for value in (
@@ -483,6 +484,8 @@ def resolve(
         str(executable),
         "--species",
         str(request.get("species", 0)),
+        "--map-id",
+        str(request.get("mapId", 65535)),
         "--level",
         str(request.get("level", 1)),
         "--terrain",
@@ -577,7 +580,7 @@ def resolve_many(
             request.get("groupFlags", 0),
             request.get("forcedOverrideMask", 0),
             behavior_class,
-        ) + _condition_request_values(request)
+        ) + _condition_request_values(request) + (request.get("mapId", 65535),)
         try:
             lines.append(" ".join(str(int(value)) for value in values))
         except (TypeError, ValueError) as error:

@@ -19,6 +19,7 @@ STUBS = r'''
 #include <stdio.h>
 #include <string.h>
 typedef unsigned char u8;
+typedef signed char s8;
 typedef unsigned short u16;
 typedef unsigned int u32;
 typedef int s32;
@@ -103,7 +104,7 @@ static FieldSystem field = {&avatar};
 static LocalMapObject avatarObject;
 static int blockedFront, occupiedFront, frontBehavior, behaviorReads, occupancyReads;
 static int expectedDirection=3, expectedNonCardinal=1, expectedTime=4;
-static int crashes, inPlace, lastDistance, startsAt[5], acceptAt[5];
+static int crashes, inPlace, lastDistance, startsAt[9], acceptAt[9];
 static void OverworldMountJump_Crash(OverworldMountRuntimeState *state) {
     (void)state; crashes++;
 }
@@ -185,12 +186,12 @@ static BOOL OverworldMount_TryStartCustomMotion(FIELD_PLAYER_AVATAR *player,
     (void)player; (void)first;
     starts++;
     lastDistance = lane->hopMaxDistance;
-    if (lastDistance < 5) startsAt[lastDistance]++;
+    if (lastDistance < 9) startsAt[lastDistance]++;
     if (direction != expectedDirection || facing != expectedDirection || lane->chillAction != OW_WILD_BEHAVIOR_LOCOMOTION_HOP
         || lane->hopMinDistance != lane->hopMaxDistance || lane->hopTime != expectedTime
         || lane->hopAllowNonCardinal != expectedNonCardinal
         || mountState.walkEndState != OVERWORLD_MOUNT_WALK_END_CHAIN_HOP) wrongLane++;
-    if (acceptAt[0]) result = lastDistance < 5 && acceptAt[lastDistance];
+    if (acceptAt[0]) result = lastDistance < 9 && acceptAt[lastDistance];
     if (result == 1) OverworldMount_ResetMomentum();
     return result;
 }
@@ -298,13 +299,27 @@ int main(int argc, char **argv) {
         CHECK(crashes == 0 && resets == before + 1);
         Tick();
         CHECK(crashes == 0 && resets == before + 1);
+    } else if (!strcmp(argv[1], "jump-longer-lands-without-crash")) {
+        /* Reach 4 is blocked; a Jump up to two tiles longer that clears wins
+         * over a shorter one and lands like a full-reach Jump. */
+        int before;
+        policyState.walkMomentum.speed = 4; expectedTime = 4;
+        acceptAt[0] = 1; acceptAt[3] = 1; acceptAt[6] = 1;
+        Boundary(PAD_BUTTON_B | 16);
+        CHECK(startsAt[4] == 1 && startsAt[5] == 1 && startsAt[6] == 1);
+        CHECK(startsAt[3] == 0 && lastDistance == 6 && wrongLane == 0);
+        mountState.walkEndState = OVERWORLD_MOUNT_WALK_END_NONE;
+        before = resets;
+        Tick();
+        CHECK(crashes == 0 && resets == before);
     } else if (!strcmp(argv[1], "jump-blocked-crashes-in-place")) {
         /* No Jump clears: zero tiles, so the pair only stops. */
         int before;
         policyState.walkMomentum.speed = 4; expectedTime = 4;
         startResult = 0;
         Boundary(PAD_BUTTON_B | 16);
-        CHECK(starts == 4 && ordinary == 0 && crashes == 0);
+        /* Reach 4, then 5 and 6, then 3 down to 1. */
+        CHECK(starts == 6 && ordinary == 0 && crashes == 0);
         CHECK(mountState.walkEndState == OVERWORLD_MOUNT_WALK_END_NONE);
         before = resets;
         Tick();
@@ -543,15 +558,16 @@ class MountChainActionLifecycleTests(unittest.TestCase):
         self.assertIn(retry, body[cooldown:body.index("}", cooldown)])
         self.assertIn(retry, body[missing_follower:body.index("}", missing_follower)])
         self.assertEqual(body.count("? 2 : FALSE"), 2)
-        # Every mounted Hop, including the Hop walking style, takes one exact
-        # forward target per try, from hopMaxDistance down to hopMinDistance.
+        # Ordinary Hop tries a raised adjacent support first. Its fallback
+        # and the exact B/ledge chain request retain max-to-min targets.
         self.assertNotIn("hop_target_found", body)
         self.assertNotIn("TryNextHopLandingCandidate", body)
-        self.assertIn("distance = lane->hopMaxDistance;\nnext_distance:\n"
-                      "        actionCall.action = (u8)distance;", body)
+        self.assertIn("distance = adjacent ? 1 : lane->hopMaxDistance;\nnext_distance:\n"
+                      "        if (!OverworldMount_PlanHopTrajectory(\n"
+                      "                (u8)distance, direction, adjacent, &trajectory)) {", body)
         self.assertIn("if (distance <= lane->hopMinDistance || distance <= 1) {\n"
-                      "                return FALSE;\n            }\n"
-                      "            distance--;\n            goto next_distance;", body)
+                      "                    return FALSE;\n                }\n"
+                      "                distance--;", body)
         rejected = body.index("if (!actorMotionStarted && !OverworldMount_BeginSharedMotion(FALSE))")
         self.assertIn("return FALSE;", body[rejected:body.index("}", rejected)])
 
@@ -596,6 +612,7 @@ class MountChainActionLifecycleTests(unittest.TestCase):
             for case in ("no-automatic-obstacle-hop", "chain-forward-hop-consumed",
                          "jump-reach", "jump-short-lands-then-crashes",
                          "jump-short-under-four-only-stops",
+                         "jump-longer-lands-without-crash",
                          "jump-blocked-crashes-in-place", "jump-stream-busy",
                          "jump-in-place", "jump-standing-held-direction",
                          "jump-needs-ability",

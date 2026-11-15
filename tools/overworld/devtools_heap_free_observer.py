@@ -178,7 +178,11 @@ class QueryAllocationLifecycleObserver:
     call guest code, write keys, or add frames. A missing owner is unknown.
     """
 
-    PACKAGE_BYTES, WORKSPACE_BYTES, RESERVE_BYTES = 70096, 43516, 32768
+    PACKAGE_BYTES, RESERVE_BYTES = 70840, 32768
+    CORE_BYTES, AUXILIARY_BYTES = 16600, 11268
+    WORKSPACE_BYTES = CORE_BYTES + AUXILIARY_BYTES
+    PACKAGE_HEAP_ID, CORE_HEAP_ID, WORKSPACE_HEAP_ID = 11, 11, 4
+    CORE_RESERVE_BYTES, AUXILIARY_RESERVE_BYTES, ALLOCATION_MARGIN = 20480, 16384, 64
     MAX_ALLOCATIONS = 8
     HEAP_ALLOC, HEAP_FREE = 0x0201AA8C, 0x0201AB0C
 
@@ -187,6 +191,8 @@ class QueryAllocationLifecycleObserver:
         self.tokens, self.allocations = [], []
         self.rejected_allocation_request = None
         self.loads, self.acquires, self.drains, self.unloads = [], [], [], []
+        self.destroys, self.allocation_failures = [], []
+        self.destroy_token = None
         self.pending = self.current = None
         self.failure = None
         self.closed = False
@@ -217,12 +223,12 @@ class QueryAllocationLifecycleObserver:
                 "query-allocation-observation")
         return owner
 
-    def _heap(self, boundary):
+    def _heap(self, boundary, heap_id):
         capture = self.session._heap_diagnostics()
-        rows = [row for row in capture.get("heaps", []) if row.get("heapId") == 4]
+        rows = [row for row in capture.get("heaps", []) if row.get("heapId") == heap_id]
         require(capture.get("known") is True and len(rows) == 1 and rows[0].get("known") is True
                 and rows[0].get("allocated") is True,
-                "Query lifecycle heap4 is unknown", "query-allocation-observation")
+                f"Query lifecycle heap{heap_id} is unknown", "query-allocation-observation")
         # The same bounded walker runs while the guest is stopped in a native
         # callback. Do not mislabel this as a completed queue or paused API read.
         return {**deepcopy(rows[0]), **self._clock(), "boundary": boundary,
@@ -303,7 +309,7 @@ class QueryAllocationLifecycleObserver:
         import ndspy.rom
         from tools.overworld.devtools_field_cleanup import symbol
         from tools.overworld.devtools_query_observer import (
-            sealed_package, QUERY_SIZE, READ_BUDGET, CARGO_CODE_END, BASE)
+            sealed_package, QUERY_SIZE, QUERY_AUX_SIZE, READ_BUDGET, CARGO_CODE_END, BASE)
         from tools.overworld.devtools_runtime import _elf_code
 
         require(not self.installed, "Query lifecycle is already installed")
@@ -313,7 +319,7 @@ class QueryAllocationLifecycleObserver:
         self.member = ndspy.narc.NARC(ndspy.rom.NintendoDSRom.fromFile(str(self.session.rom))
                                      .getFileByName("a/0/2/8")).files[21]
         self.blob, self.image, self.receipt = sealed_package(self.elf, self.staged, self.member)
-        require(len(self.blob) == self.PACKAGE_BYTES and QUERY_SIZE == self.WORKSPACE_BYTES
+        require(len(self.blob) == self.PACKAGE_BYTES and QUERY_SIZE == self.CORE_BYTES and QUERY_AUX_SIZE == self.AUXILIARY_BYTES
                 and READ_BUDGET == 0x9000 and CARGO_CODE_END <= 34944,
                 "Query lifecycle final package/layout differs", "query-allocation-observation")
         address, size, body = symbol(self.elf, "AcquireQuery", 2)
@@ -321,6 +327,11 @@ class QueryAllocationLifecycleObserver:
                 and body == self.image[address - BASE:address - BASE + size],
                 "Query lifecycle workspace function owner differs", "query-allocation-observation")
         self.acquire_owner = (address, size, hashlib.sha256(body).hexdigest())
+        address, size, body = symbol(self.elf, "DestroyQuery", 2)
+        require(BASE + 196 <= address <= BASE + len(self.image) - size
+                and body == self.image[address-BASE:address-BASE+size],
+                "Query lifecycle destructor owner differs", "query-allocation-observation")
+        self.destroy_owner = (address,size,hashlib.sha256(body).hexdigest())
         wild = build / "overworld_wild_spawns_overlay_linked.o"
         self.ops = self._linked_ops(wild)
         for key, file, name in (
@@ -362,7 +373,7 @@ class QueryAllocationLifecycleObserver:
         self._watch(self.bodies["unload"], self._unload_before, self._unload_after,
                     scope=lambda: self.current is not None)
         self._watch(self.bodies["free"], self._free_before, self._free_after,
-                    scope=lambda: bool(self.drains or self.unloads))
+                    scope=lambda: bool(self.drains or self.unloads or self.acquires or self.destroys))
         self.installed = True
 
     def _load_before(self):
@@ -372,7 +383,7 @@ class QueryAllocationLifecycleObserver:
                 and self.pending is None and self.current is None,
                 "Query lifecycle load is not cold", "query-allocation-observation")
         value = {"field": self.session.field_pointer(), "ownerBefore": owner,
-                 "heapBeforeLoad": self._heap("native-LoadCodeAddonBlob-entry"),
+                 "heapBeforeLoad": self._heap("native-LoadCodeAddonBlob-entry", self.PACKAGE_HEAP_ID),
                  "blobOut": regs.r2, "sizeOut": regs.r3, "allocation": None, **self._clock()}
         self.loads.append(value)
         self.pending = value
@@ -385,7 +396,8 @@ class QueryAllocationLifecycleObserver:
                 and self._word(value["blobOut"]) == value["allocation"]["pointer"]
                 and self._word(value["sizeOut"]) == self.PACKAGE_BYTES,
                 "Query lifecycle package load did not return its allocation", "query-allocation-observation")
-        value.update(loaded=True, heapAfterLoad=self._heap("native-LoadCodeAddonBlob-return"))
+        value.update(loaded=True, heapAfterLoad=self._heap(
+            "native-LoadCodeAddonBlob-return", self.PACKAGE_HEAP_ID))
         value["allocation"].update(heapBeforeLoad=value["heapBeforeLoad"],
                                    heapAfterLoad=value["heapAfterLoad"], ownerBeforeLoad=value["ownerBefore"])
 
@@ -398,7 +410,7 @@ class QueryAllocationLifecycleObserver:
         require(value.get("loaded") is True, "Query lifecycle cold load did not complete",
                 "query-allocation-observation")
         owner = authenticate_loaded_query_functions(self.session, self.elf, self.staged,
-            self.member, {"AcquireQuery": self.acquire_owner})
+            self.member, {"AcquireQuery": self.acquire_owner, "DestroyQuery": self.destroy_owner})
         require(value is self.pending and self.session.emu.memory.register_arm9.r0 == owner["entry"],
                 "Query lifecycle published return differs", "query-allocation-observation")
         full = self._owner()
@@ -415,6 +427,11 @@ class QueryAllocationLifecycleObserver:
         self.bodies["acquire"] = (owner["entry"] + offset, image[offset:offset + size], True)
         self.dynamic_token = self._watch(self.bodies["acquire"], self._acquire_before,
             self._acquire_after, scope=self._needs_workspace)
+        address,size,_sha=self.destroy_owner
+        offset=address-BASE
+        self.bodies["destroy"]=(owner["entry"]+offset,image[offset:offset+size],True)
+        self.destroy_token=self._watch(self.bodies["destroy"],self._destroy_before,self._destroy_after,
+            scope=lambda: self.current is not None)
 
     def _needs_workspace(self):
         from tools.overworld.devtools_query_observer import RUNTIME_QUERY
@@ -423,109 +440,145 @@ class QueryAllocationLifecycleObserver:
 
     def _acquire_before(self):
         from tools.overworld.devtools_query_observer import RUNTIME_QUERY
-        regs = self.session.emu.memory.register_arm9
-        call = self._read(regs.r0, 32)
-        world, _profile, _options, allocate, free_size, heap = struct.unpack_from("<6I", call)
-        raw = self._read(world, 84)
-        # OverworldPickupRouteWildWorld v3 stores Field at +4, State at +8.
-        version, size, field, state = struct.unpack_from("<HH2I", raw)
-        require((version, size, state, field, heap, allocate, free_size)
-                == (3, 84, self.session.rt.WILD_STATE, self.current["field"], 4,
-                    self.HEAP_ALLOC | 1, 0x0201ABED),
-                "Query lifecycle borrowed allocation call differs", "query-allocation-observation")
-        owner = self._owner()
-        runtime = self._runtime(owner["fieldIdentity"])
-        require(owner["phase"] == 1 and owner["blob"] == self.current["allocation"]["pointer"]
-                and owner["fieldIdentity"] == self.current["field"]
-                and (self.current["runtime"] is None or runtime == self.current["runtime"]),
-                "Query lifecycle workspace owner differs", "query-allocation-observation")
-        self.current["runtime"] = runtime
-        if self._word(self.current["runtime"] + RUNTIME_QUERY):
-            return None
-        value = {"runtime": self.current["runtime"], "ownerBefore": owner, "allocation": None}
+        regs=self.session.emu.memory.register_arm9
+        call=self._read(regs.r0,32)
+        world,_profile,_options,allocate,free_size,heap=struct.unpack_from("<6I",call)
+        version,size,field,state=struct.unpack_from("<HH2I",self._read(world,84))
+        require((version,size,state,field,heap,allocate,free_size)==(3,84,self.session.rt.WILD_STATE,
+            self.current["field"],self.WORKSPACE_HEAP_ID,self.HEAP_ALLOC|1,0x0201ABED),
+            "Query lifecycle borrowed allocation call differs","query-allocation-observation")
+        owner=self._owner();runtime=self._runtime(owner["fieldIdentity"])
+        require(owner["phase"]==1 and owner["blob"]==self.current["allocation"]["pointer"]
+            and owner["fieldIdentity"]==self.current["field"]
+            and (self.current["runtime"] is None or runtime==self.current["runtime"]),
+            "Query lifecycle workspace owner differs","query-allocation-observation")
+        self.current["runtime"]=runtime
+        if self._word(runtime+RUNTIME_QUERY):return None
+        value=dict(runtime=runtime,ownerBefore=owner,allocation=None,auxiliary=None,
+            failedCore=False,failedAuxiliary=False)
         self.acquires.append(value)
         return value
 
-    def _acquire_after(self, value):
-        from tools.overworld.devtools_query_observer import RUNTIME_QUERY
-        require(self.acquires and self.acquires.pop() is value and value["allocation"] is not None,
-                "Query lifecycle workspace allocation is missing", "query-allocation-observation")
-        pointer = value["allocation"]["pointer"]
-        require(self.session.emu.memory.register_arm9.r0 == pointer
-                and self._word(value["runtime"] + RUNTIME_QUERY) == pointer,
-                "Query lifecycle workspace publication differs", "query-allocation-observation")
-        value["allocation"].update(runtime=value["runtime"], published=True,
-            ownerPublished=self._owner())
+    def _acquire_after(self,value):
+        from tools.overworld.devtools_query_observer import RUNTIME_QUERY,workspace_allocation
+        require(self.acquires and self.acquires.pop() is value,
+            "Query lifecycle Acquire interval differs","query-allocation-observation")
+        returned=self.session.emu.memory.register_arm9.r0
+        published=self._word(value["runtime"]+RUNTIME_QUERY)
+        core,aux=value["allocation"],value["auxiliary"]
+        if returned==0:
+            require(published==0 and aux is None and (core is None or
+                value["failedAuxiliary"] and core["freeCount"]==1),
+                "Query lifecycle failed second allocation was published or not rolled back",
+                "query-allocation-observation")
+            if core is not None:core.update(rolledBack=True,published=False)
+            return
+        require(core is not None and aux is not None and not value["failedCore"] and not value["failedAuxiliary"]
+            and returned==published==core["pointer"] and core["freeCount"]==aux["freeCount"]==0,
+            "Query lifecycle both chunks were not owned before publication","query-allocation-observation")
+        prefix=workspace_allocation(self._read,returned,self.bodies["destroy"][0]|1)
+        require(prefix["auxiliary"]==aux["pointer"],
+            "Query lifecycle published a foreign auxiliary","query-allocation-observation")
+        owner=self._owner()
+        require(owner==value["ownerBefore"],"Query lifecycle publication changed its full owner","query-allocation-observation")
+        core.update(runtime=value["runtime"],published=True,ownerPublished=owner,
+                    auxiliary=aux["pointer"],prefix=prefix)
+        aux.update(runtime=value["runtime"],published=True,ownerPublished=owner,core=core["pointer"])
 
     def _allocate_before(self):
-        regs = self.session.emu.memory.register_arm9
-        kind, contexts, expected = ("workspace", self.acquires, self.WORKSPACE_BYTES) if self.acquires \
-            else ("package", self.loads, self.PACKAGE_BYTES)
-        if regs.r1 != expected:
-            return None  # NARC's own small allocation is not this package.
-        binding = self.bodies["acquire" if kind == "workspace" else "load"]
-        require(regs.r0 == 4 and regs.lr & 1
-                and binding[0] <= (regs.lr & ~1) < binding[0] + len(binding[1])
-                and contexts[-1]["allocation"] is None and len(self.allocations) < self.MAX_ALLOCATIONS,
-                "Query lifecycle allocator call/limit differs", "query-allocation-observation")
-        heap = self._heap("native-Heap_Alloc-entry")
-        if (heap["totalFreeBytes"] < expected + self.RESERVE_BYTES
-                or heap["largestUserAllocationBytes"] < expected) and self.rejected_allocation_request is None:
-            # Keep the first exact failed entry boundary, before the guest
-            # allocator runs. This is no allocation/return or success credit.
-            self.rejected_allocation_request = {
-                "kind": kind, "bytes": expected, "heapId": regs.r0, "callerReturn": regs.lr,
-                "heapBeforeAllocation": deepcopy(heap),
-                "ownerBefore": deepcopy(contexts[-1]["ownerBefore"]),
-                "insufficientReserve": heap["totalFreeBytes"] < expected + self.RESERVE_BYTES,
-                "insufficientContiguousSpace": heap["largestUserAllocationBytes"] < expected,
-                "nativeReturnObserved": False, **self._clock()}
-        require(heap["totalFreeBytes"] >= expected + self.RESERVE_BYTES
-                and heap["largestUserAllocationBytes"] >= expected,
-                "Query lifecycle allocation has insufficient reserve/contiguous space",
-                "query-allocation-observation")
-        return {"kind": kind, "bytes": expected, "context": contexts[-1], "heapBeforeAllocation": heap,
-                "callerReturn": regs.lr, **self._clock()}
+        regs=self.session.emu.memory.register_arm9
+        if self.acquires:
+            context=self.acquires[-1]
+            kind,expected,heap_id,reserve=("workspace-core",self.CORE_BYTES,self.CORE_HEAP_ID,self.CORE_RESERVE_BYTES) if context["allocation"] is None else (
+                "workspace-auxiliary",self.AUXILIARY_BYTES,self.WORKSPACE_HEAP_ID,self.AUXILIARY_RESERVE_BYTES)
+            field="allocation" if kind=="workspace-core" else "auxiliary"
+            binding=self.bodies["acquire"];margin=self.ALLOCATION_MARGIN
+        else:
+            context=self.loads[-1];kind,expected,heap_id,reserve="package",self.PACKAGE_BYTES,self.PACKAGE_HEAP_ID,self.RESERVE_BYTES
+            field="allocation";binding=self.bodies["load"];margin=0
+        if regs.r1!=expected:return None
+        require(regs.r0==heap_id and regs.lr&1 and binding[0]<=(regs.lr&~1)<binding[0]+len(binding[1])
+            and context[field] is None and len(self.allocations)+len(self.allocation_failures)<self.MAX_ALLOCATIONS,
+            "Query lifecycle allocator call/limit differs","query-allocation-observation")
+        heap=self._heap("native-Heap_Alloc-entry",heap_id)
+        insufficient=heap["totalFreeBytes"]<expected+reserve+margin
+        fragmented=heap["largestUserAllocationBytes"]<expected
+        if (insufficient or fragmented) and self.rejected_allocation_request is None:
+            self.rejected_allocation_request=dict(kind=kind,bytes=expected,heapId=regs.r0,callerReturn=regs.lr,
+                heapBeforeAllocation=deepcopy(heap),ownerBefore=deepcopy(context["ownerBefore"]),
+                insufficientReserve=insufficient,insufficientContiguousSpace=fragmented,nativeReturnObserved=False,**self._clock())
+        require(not insufficient and (kind!="package" or not fragmented),"Query lifecycle allocation has insufficient reserve/contiguous space","query-allocation-observation")
+        return dict(kind=kind,bytes=expected,heapId=heap_id,reserveBytes=reserve,allocationMargin=margin,
+            context=context,contextField=field,heapBeforeAllocation=heap,callerReturn=regs.lr,**self._clock())
 
-    def _allocate_after(self, value):
-        pointer = self.session.emu.memory.register_arm9.r0
-        heap = self._heap("native-Heap_Alloc-return")
-        require(pointer % 4 == 0 and heap["heapStart"] <= pointer - 16
-                and pointer + value["bytes"] <= heap["heapEnd"]
-                and self._read(pointer - 16, 16)[12] == 4
-                and heap["handle"] == value["heapBeforeAllocation"]["handle"]
-                and heap["allocationCount"] == value["heapBeforeAllocation"]["allocationCount"] + 1
-                and heap["totalFreeBytes"] >= self.RESERVE_BYTES,
-                "Query lifecycle allocation/header/reserve differs", "query-allocation-observation")
-        context = value.pop("context")
-        value.update(pointer=pointer, heapId=4, heapAfterAllocation=heap, freeCount=0,
-                     allocationReturned=self._clock())
-        context["allocation"] = value
-        self.allocations.append(value)
+    def _allocate_after(self,value):
+        pointer=self.session.emu.memory.register_arm9.r0
+        heap=self._heap("native-Heap_Alloc-return",value["heapId"])
+        context=value.pop("context");field=value.pop("contextField")
+        value.update(ownerBefore=deepcopy(context["ownerBefore"]),runtime=context.get("runtime"))
+        if pointer==0:
+            before=value["heapBeforeAllocation"]
+            require(value["kind"]!="package" and heap["handle"]==before["handle"]
+                and heap["allocationCount"]==before["allocationCount"] and heap["totalFreeBytes"]==before["totalFreeBytes"],
+                "Query lifecycle failed allocation changed heap ownership","query-allocation-observation")
+            context["failedCore" if field=="allocation" else "failedAuxiliary"]=True
+            value.update(pointer=0,nativeReturnObserved=True,heapAfterAllocation=heap,allocationReturned=self._clock())
+            self.allocation_failures.append(value)
+            if self.rejected_allocation_request is not None:self.rejected_allocation_request["nativeReturnObserved"]=True
+            return
+        require(pointer%4==0 and heap["heapStart"]<=pointer-16 and pointer+value["bytes"]<=heap["heapEnd"]
+            and self._read(pointer-16,16)[12]==value["heapId"]
+            and heap["handle"]==value["heapBeforeAllocation"]["handle"]
+            and heap["allocationCount"]==value["heapBeforeAllocation"]["allocationCount"]+1
+            and heap["totalFreeBytes"]>=value["reserveBytes"]
+            and (not value["allocationMargin"] or value["heapBeforeAllocation"]["totalFreeBytes"]-heap["totalFreeBytes"]<=value["bytes"]+value["allocationMargin"])
+            and value["heapBeforeAllocation"]["largestUserAllocationBytes"]>=value["bytes"],
+            "Query lifecycle allocation/header/reserve differs","query-allocation-observation")
+        value.update(pointer=pointer,heapAfterAllocation=heap,freeCount=0,allocationReturned=self._clock())
+        context[field]=value;self.allocations.append(value)
 
     def _drain_before(self):
-        from tools.overworld.devtools_query_observer import RUNTIME_QUERY
-        runtime = self.session.emu.memory.register_arm9.r0
-        require(runtime == (self.current["runtime"] or 0), "Query lifecycle drain runtime differs",
-                "query-allocation-observation")
-        pointer = self._word(runtime + RUNTIME_QUERY) if runtime else 0
-        owned = [row for row in self.allocations if row["kind"] == "workspace"
-                 and row["pointer"] == pointer and row["freeCount"] == 0]
-        require(not pointer or len(owned) == 1, "Query lifecycle drain has an unobserved workspace",
-                "query-allocation-observation")
-        value = {"runtime": runtime, "allocation": owned[0] if owned else None, "ownerBefore": self._owner()}
-        self.drains.append(value)
-        return value
+        from tools.overworld.devtools_query_observer import RUNTIME_QUERY,workspace_allocation
+        runtime=self.session.emu.memory.register_arm9.r0
+        require(runtime==(self.current["runtime"] or 0),"Query lifecycle drain runtime differs","query-allocation-observation")
+        pointer=self._word(runtime+RUNTIME_QUERY) if runtime else 0
+        owned=[r for r in self.allocations if r["kind"]=="workspace-core" and r["pointer"]==pointer and r["freeCount"]==0 and r.get("published")]
+        require(not pointer or len(owned)==1,"Query lifecycle drain has an unobserved workspace","query-allocation-observation")
+        core=owned[0] if owned else None;aux=None;prefix=None
+        if core is not None:
+            prefix=workspace_allocation(self._read,pointer,self.bodies["destroy"][0]|1)
+            rows=[r for r in self.allocations if r["kind"]=="workspace-auxiliary" and r["pointer"]==prefix["auxiliary"] and r["freeCount"]==0 and r.get("core")==pointer]
+            require(len(rows)==1,"Query lifecycle drain lost its auxiliary owner","query-allocation-observation")
+            aux=rows[0]
+        value=dict(runtime=runtime,allocation=core,auxiliary=aux,prefix=prefix,ownerBefore=self._owner(),destructorSeen=False,destructorReturned=False)
+        self.drains.append(value);return value
 
-    def _drain_after(self, value):
+    def _drain_after(self,value):
         from tools.overworld.devtools_query_observer import RUNTIME_QUERY
-        require(self.drains and self.drains.pop() is value
-                and self.session.emu.memory.register_arm9.r0 == 1
-                and (not value["runtime"] or self._word(value["runtime"] + RUNTIME_QUERY) == 0)
-                and (value["allocation"] is None or value["allocation"]["freeCount"] == 1),
-                "Query lifecycle drain did not free/clear once", "query-allocation-observation")
-        if value["allocation"] is not None:
-            value["allocation"].update(drained=True, drainReturned=self._clock())
+        require(self.drains and self.drains.pop() is value and self.session.emu.memory.register_arm9.r0==1
+            and (not value["runtime"] or self._word(value["runtime"]+RUNTIME_QUERY)==0)
+            and (value["allocation"] is None or value["destructorSeen"] and value["destructorReturned"]
+                and value["allocation"]["freeCount"]==value["auxiliary"]["freeCount"]==1),
+            "Query lifecycle drain did not destroy both chunks/clear once","query-allocation-observation")
+        for key in ("allocation","auxiliary"):
+            if value[key] is not None:value[key].update(drained=True,drainReturned=self._clock())
+
+    def _destroy_before(self):
+        from tools.overworld.devtools_query_observer import RUNTIME_QUERY,workspace_allocation
+        require(self.drains,"Query lifecycle destructor has no native drain","query-allocation-observation")
+        value=self.drains[-1];core=value["allocation"]
+        require(core is not None and not value["destructorSeen"] and self.session.emu.memory.register_arm9.r0==core["pointer"]
+            and self._word(value["runtime"]+RUNTIME_QUERY)==0 and self._owner()==value["ownerBefore"],
+            "Query lifecycle destructor lost its cleared current full owner","query-allocation-observation")
+        require(workspace_allocation(self._read,core["pointer"],self.bodies["destroy"][0]|1)==value["prefix"],
+            "Query lifecycle destructor prefix changed","query-allocation-observation")
+        value["destructorSeen"]=True;self.destroys.append(value);return value
+
+    def _destroy_after(self,value):
+        require(self.destroys and self.destroys.pop() is value
+            and value["allocation"]["freeCount"]==value["auxiliary"]["freeCount"]==1,
+            "Query lifecycle destructor did not free auxiliary then core","query-allocation-observation")
+        value["destructorReturned"]=True
 
     def _unload_before(self):
         from tools.overworld.devtools_query_observer import RUNTIME_QUERY
@@ -559,56 +612,79 @@ class QueryAllocationLifecycleObserver:
                 "Query lifecycle Unload did not free/clear once", "query-allocation-observation")
         value["allocation"].update(unloaded=True, unloadReturned=self._clock())
         self.current = None
-        if self.dynamic_token is not None:
-            self.session.party_getter_hooks.remove(self.dynamic_token)
-            self.dynamic_token = None
+        for name in ("dynamic_token","destroy_token"):
+            token=getattr(self,name)
+            if token is not None:
+                self.session.party_getter_hooks.remove(token)
+                if token in self.tokens:self.tokens.remove(token)
+                setattr(self,name,None)
 
     def _free_before(self):
-        regs = self.session.emu.memory.register_arm9
-        candidates = [context["allocation"] for context in (*self.drains, *self.unloads)
-                      if context["allocation"] is not None and context["allocation"]["pointer"] == regs.r0]
+        from tools.overworld.devtools_query_observer import RUNTIME_QUERY
+        regs=self.session.emu.memory.register_arm9
+        candidates=[r for r in self.allocations if r["pointer"]==regs.r0 and r["freeCount"]==0]
         if not candidates:
+            require(not any(r["pointer"]==regs.r0 for r in self.allocations),
+                "Query lifecycle owned allocation was freed twice","query-allocation-observation")
             return None
-        require(len(candidates) == 1 and candidates[0]["freeCount"] == 0,
-                "Query lifecycle owned allocation was freed twice", "query-allocation-observation")
-        allocation = candidates[0]
-        owner = self._owner()
-        require(owner["rawHex"] == bytes(28).hex() if allocation["kind"] == "package"
-                else owner["phase"] in (2, 3) and owner["blob"] == self.current["allocation"]["pointer"],
-                "Query lifecycle free/owner-clear order differs", "query-allocation-observation")
-        binding = self.bodies["drain" if allocation["kind"] == "workspace" else "unload"]
-        require(regs.lr & 1 and binding[0] <= (regs.lr & ~1) < binding[0] + len(binding[1])
-                and self._read(regs.r0 - 16, 16)[12] == 4,
-                "Query lifecycle free caller/header differs", "query-allocation-observation")
-        heap = self._heap("native-Heap_Free-entry")
-        require(heap["handle"] == allocation["heapAfterAllocation"]["handle"],
-                "Query lifecycle free heap owner changed", "query-allocation-observation")
-        return {"allocation": allocation, "callerReturn": regs.lr,
-                "heapBeforeFree": heap, **self._clock()}
+        require(len(candidates)==1 and candidates[0]["freeCount"]==0,
+            "Query lifecycle owned allocation was freed twice","query-allocation-observation")
+        allocation=candidates[0];owner=self._owner()
+        if allocation["kind"]=="package":
+            require(self.unloads and owner["rawHex"]==bytes(28).hex()
+                and all(r["freeCount"]==1 for r in self.allocations if r["kind"]!="package"),
+                "Query lifecycle free/owner-clear order differs","query-allocation-observation")
+            binding=self.bodies["unload"]
+        elif self.destroys:
+            value=self.destroys[-1];core,aux=value["allocation"],value["auxiliary"]
+            require(allocation in (core,aux) and owner==value["ownerBefore"] and owner["phase"] in (2,3)
+                and owner["blob"]==self.current["allocation"]["pointer"]
+                and self._word(value["runtime"]+RUNTIME_QUERY)==0 and self._read(core["pointer"],12)==bytes(12)
+                and (core["freeCount"]==0 if allocation is aux else aux["freeCount"]==1),
+                "Query lifecycle nested free/prefix/auxiliary-first order differs","query-allocation-observation")
+            binding=self.bodies["destroy"]
+        else:
+            value=self.acquires[-1] if self.acquires else None
+            require(value is not None and allocation is value["allocation"] and value["failedAuxiliary"]
+                and value["auxiliary"] is None and owner==value["ownerBefore"] and owner["phase"]==1
+                and self._word(value["runtime"]+RUNTIME_QUERY)==0,
+                "Query lifecycle free is outside owned destructor/rollback","query-allocation-observation")
+            binding=self.bodies["acquire"]
+        require(regs.lr&1 and binding[0]<=(regs.lr&~1)<binding[0]+len(binding[1])
+            and self._read(regs.r0-16,16)[12]==allocation["heapId"],
+            "Query lifecycle free caller/header differs","query-allocation-observation")
+        heap=self._heap("native-Heap_Free-entry",allocation["heapId"])
+        require(heap["handle"]==allocation["heapAfterAllocation"]["handle"],
+            "Query lifecycle free heap owner changed","query-allocation-observation")
+        return dict(allocation=allocation,callerReturn=regs.lr,heapBeforeFree=heap,**self._clock())
 
     def _free_after(self, value):
         allocation = value["allocation"]
-        heap = self._heap("native-Heap_Free-return")
+        heap = self._heap("native-Heap_Free-return", allocation["heapId"])
         before = value["heapBeforeFree"]
         require(allocation["freeCount"] == 0 and heap["handle"] == before["handle"]
                 and heap["allocationCount"] == before["allocationCount"] - 1
                 and heap["totalFreeBytes"] >= before["totalFreeBytes"] + allocation["bytes"],
-                "Query lifecycle exact free was not returned to heap4", "query-allocation-observation")
+                f"Query lifecycle exact free was not returned to heap{allocation['heapId']}",
+                "query-allocation-observation")
         allocation.update(freeCount=1, freeEntry={key: item for key, item in value.items() if key != "allocation"},
                           heapAfterFree=heap, freeReturned=self._clock())
 
     def result(self):
-        complete = bool(self.allocations) and any(row["kind"] == "workspace" for row in self.allocations) \
-            and all(row["freeCount"] == 1 and row.get("unloaded" if row["kind"] == "package" else "drained")
-                    for row in self.allocations) and self.pending is None and self.current is None
-        return {"schemaVersion": 1, "diagnosticOnly": True, "acceptedProof": False,
-                "known": self.installed and self.failure is None, "complete": bool(complete and self.failure is None),
-                "reason": self.failure, "attachedBeforeBoot": self.installed,
-                "packageBytes": self.PACKAGE_BYTES, "workspaceBytes": self.WORKSPACE_BYTES,
-                "reserveBytes": self.RESERVE_BYTES, "maximumAllocations": self.MAX_ALLOCATIONS,
-                "allocations": deepcopy(self.allocations),
-                "rejectedAllocationRequest": deepcopy(self.rejected_allocation_request), "closed": self.closed,
-                "scope": "exact cold Query loads, heap4 allocations and matching native drain/free returns"}
+        complete=any(r["kind"]=="workspace-core" and r.get("published") for r in self.allocations)
+        complete=complete and all(r["freeCount"]==1 and (r.get("unloaded") if r["kind"]=="package" else
+            r.get("drained") or r.get("rolledBack")) for r in self.allocations)
+        complete=complete and self.pending is None and self.current is None and not self.destroys and not self.acquires
+        return dict(schemaVersion=2,diagnosticOnly=True,acceptedProof=False,
+            known=self.installed and self.failure is None,complete=bool(complete and self.failure is None),
+            reason=self.failure,attachedBeforeBoot=self.installed,packageBytes=self.PACKAGE_BYTES,
+            workspaceBytes=self.WORKSPACE_BYTES,workspaceCoreBytes=self.CORE_BYTES,workspaceAuxiliaryBytes=self.AUXILIARY_BYTES,
+            packageHeapId=self.PACKAGE_HEAP_ID,workspaceCoreHeapId=self.CORE_HEAP_ID,workspaceHeapId=self.WORKSPACE_HEAP_ID,
+            reserveBytes=self.RESERVE_BYTES,workspaceCoreReserveBytes=self.CORE_RESERVE_BYTES,
+            workspaceAuxiliaryReserveBytes=self.AUXILIARY_RESERVE_BYTES,allocationMargin=self.ALLOCATION_MARGIN,
+            maximumAllocations=self.MAX_ALLOCATIONS,allocations=deepcopy(self.allocations),
+            failedAllocations=deepcopy(self.allocation_failures),rejectedAllocationRequest=deepcopy(self.rejected_allocation_request),closed=self.closed,
+            scope="exact cold Query package on heap11; versioned core on heap11 plus auxiliary on heap4; rollback and nested destructor before code unload")
 
     def close(self):
         self.closed = True

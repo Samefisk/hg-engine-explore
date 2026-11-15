@@ -1,4 +1,8 @@
 #include "overworld_pickup_route.h"
+#include "overworld_pickup_route_native.h"
+#ifdef OVERWORLD_ACTOR_SYSTEM_HOST
+#include <string.h>
+#endif
 #define NONE OVERWORLD_PICKUP_ROUTE_NONE
 enum { ROOT_LOOKUP, NODE_GOALS, SCAN_INIT, SCAN_EDGE, FIND_EDGE, SCORE_EDGE,
     TRY_EDGE, DEST_LOOKUP, PROBE_GOAL, PROBE_LOOKUP, PROOF };
@@ -103,13 +107,13 @@ const OverworldPickupRouteCachedEdge *OverworldPickupRoute_ReadMemo(const Overwo
 OverworldPickupRouteStatus OverworldPickupRoute_Begin(OverworldPickupRouteState *s,
     const OverworldPickupRouteQuery *q,OverworldPickupRouteWorkspace *w)
 { if(!s) return OVERWORLD_PICKUP_ROUTE_INVALID;
-  if(!Valid(q) || !w || !w->nodes || !w->edges || !w->visited || !w->nodeCapacity || !w->edgeCapacity
+  if(!Valid(q) || !w || !w->nodes || !w->edges || !w->visited || !w->visitedValid || !w->nodeCapacity || !w->edgeCapacity
     || w->visitedCapacity>131072u || w->visitedCapacity<(u32)w->nodeCapacity*2u
     || (w->visitedCapacity&(w->visitedCapacity-1u))) {
     *s=(OverworldPickupRouteState){0};s->status=OVERWORLD_PICKUP_ROUTE_INVALID;return OVERWORLD_PICKUP_ROUTE_INVALID; }
   { OverworldPickupRouteQuery copy=*q;*s=(OverworldPickupRouteState){0};s->query=copy;s->workspace=w; }
   if(w->generation==0xFFFFFFFFu) s->status=OVERWORLD_PICKUP_ROUTE_RESOURCE_LIMIT;
-  else { ++w->generation;Restart(s); }
+  else { ++w->generation;memset(w->visitedValid,0,(w->visitedCapacity+7u)/8u);Restart(s); }
   return (OverworldPickupRouteStatus)s->status;
 }
 OverworldPickupRouteStatus OverworldPickupRoute_Resume(OverworldPickupRouteState *s,
@@ -151,10 +155,11 @@ OverworldPickupRouteStatus OverworldPickupRoute_Resume(OverworldPickupRouteState
     switch(s->phase) {
     case ROOT_LOOKUP: case DEST_LOOKUP: {
       OverworldPickupRouteVisited *v=&w->visited[s->hashIndex];u16 node;
-      if(v->stamp!=w->generation) {
+      u8 bit=1u<<(s->hashIndex&7);
+      if(!(w->visitedValid[s->hashIndex>>3]&bit)) {
         if(s->nodeCount==w->nodeCapacity) { s->status=OVERWORLD_PICKUP_ROUTE_RESOURCE_LIMIT;break; }
         node=s->nodeCount++;w->nodes[node]=(OverworldPickupRouteNode){s->candidate,0,NONE,NONE,NONE,0};
-        *v=(OverworldPickupRouteVisited){w->generation,node,0};
+        v->node=node;w->visitedValid[s->hashIndex>>3]|=bit;
       } else {
         node=v->node;if(node>=s->nodeCount) { s->status=OVERWORLD_PICKUP_ROUTE_INVALID;break; }
         if(!Pos(&w->nodes[node].position,&s->candidate)) { s->hashIndex=(s->hashIndex+1)&(w->visitedCapacity-1u);break; }
@@ -188,7 +193,7 @@ OverworldPickupRouteStatus OverworldPickupRoute_Resume(OverworldPickupRouteState
       Lookup(s,&current->goals[s->goalIndex],PROBE_LOOKUP);break;
     case PROBE_LOOKUP: {
       OverworldPickupRouteVisited *v=&w->visited[s->hashIndex];
-      if(v->stamp!=w->generation) { ++s->goalIndex;s->phase=PROBE_GOAL;break; }
+      if(!(w->visitedValid[s->hashIndex>>3]&(1u<<(s->hashIndex&7)))) { ++s->goalIndex;s->phase=PROBE_GOAL;break; }
       if(v->node>=s->nodeCount) { s->status=OVERWORLD_PICKUP_ROUTE_INVALID;break; }
       if(Pos(&w->nodes[v->node].position,&s->candidate)) {
         if(w->nodes[v->node].searchStamp==s->searchStamp) BeginProof(s,v->node);
@@ -315,8 +320,40 @@ done:
   return (OverworldPickupRouteStatus)s->status;
 }
 
-u16 OverworldPickupRoute_CopyForwardWitness(const OverworldPickupRouteState *s,
-    u16 *edgeTags,OverworldPickupRoutePosition *poses,u16 capacity)
+u8 OverworldPickupRoute_CommandEdge(u16 command,OverworldPickupRouteEdge *out)
+{
+  static const signed char vectors[8][2]={{0,-1},{0,1},{-1,0},{1,0},{-1,-1},{1,-1},{-1,1},{1,1}};
+  u16 distance=(command>>3)&255u,tag=command&0xE007u;
+  u8 kind=tag>>OVERWORLD_PICKUP_ROUTE_NATIVE_KIND_SHIFT,direction=tag&7;
+  if(!out || !distance || (command&0x1800u)) return 0;
+  if(tag&OVERWORLD_PICKUP_ROUTE_NATIVE_ENTRY_TELEPORT) {
+    if(kind || distance>6) return 0;
+  } else if(kind>OVERWORLD_PICKUP_ROUTE_NATIVE_LEDGE
+      || (kind==OVERWORLD_PICKUP_ROUTE_NATIVE_WALK && distance!=1)
+      || (kind==OVERWORLD_PICKUP_ROUTE_NATIVE_LEDGE && (distance!=2 || direction>=4))) return 0;
+  *out=(OverworldPickupRouteEdge){vectors[direction][0]*distance,vectors[direction][1]*distance,tag};
+  return 1;
+}
+static u16 ForwardCommand(const OverworldPickupRouteState *s,u16 node)
+{
+  const OverworldPickupRouteNode *n=&s->workspace->nodes[node];
+  const OverworldPickupRoutePosition *from=&s->workspace->nodes[n->parent].position,*to=&n->position;
+  u16 tag=s->query.edges[s->workspace->edges[n->parentEdge].candidate].tag;
+  if(s->query.extension->flags&OVERWORLD_PICKUP_ROUTE_EXTENSION_REVERSE) {
+    static const u8 opposite[8]={1,0,3,2,7,6,5,4};
+    const OverworldPickupRoutePosition *swap=from;from=to;to=swap;
+    tag=(tag&~7u)|opposite[tag&7];
+  }
+  s32 dx=(s32)to->x-from->x,dy=(s32)to->y-from->y;
+  u32 ax=dx<0?-dx:dx,ay=dy<0?-dy:dy,distance=ax>ay?ax:ay;
+  OverworldPickupRouteEdge edge;
+  if(distance>255 || (tag&~0xE007u)) return NONE;
+  u16 command=tag|(distance<<3);
+  if(!OverworldPickupRoute_CommandEdge(command,&edge) || edge.dx!=dx || edge.dy!=dy) return NONE;
+  return command;
+}
+static u16 CopyForward(const OverworldPickupRouteState *s,
+    u16 *edgeTags,OverworldPickupRoutePosition *poses,u16 capacity,u8 commands)
 { u16 node,count=0;
   if(!s || !edgeTags || s->status!=OVERWORLD_PICKUP_ROUTE_REACHABLE
     || !s->query.extension || !Valid(&s->query) || !s->workspace
@@ -334,12 +371,17 @@ u16 OverworldPickupRoute_CopyForwardWitness(const OverworldPickupRouteState *s,
       || e->decision!=OVERWORLD_PICKUP_ROUTE_EDGE_LEGAL
       || e->dynamicRevision>s->query.dynamicRevision
       || e->usedSearchStamp!=s->searchStamp) return NONE;
+    if(commands && ForwardCommand(s,node)==NONE) return NONE;
     ++count;node=n->parent;
   }
   node=s->goalNode;
   for(u16 i=0;i<count;i++) {
     const OverworldPickupRouteNode *n=&s->workspace->nodes[node];
     u16 tag=s->query.edges[s->workspace->edges[n->parentEdge].candidate].tag;
+    if(commands) {
+      edgeTags[s->query.extension->flags&OVERWORLD_PICKUP_ROUTE_EXTENSION_REVERSE?i:count-1-i]=ForwardCommand(s,node);
+      node=n->parent;continue;
+    }
     if(s->query.extension->flags&OVERWORLD_PICKUP_ROUTE_EXTENSION_REVERSE) {
       /* Preserve typed native kind/escape bits, invert direction only. */
       static const u8 opposite[8]={1,0,3,2,7,6,5,4};
@@ -350,3 +392,8 @@ u16 OverworldPickupRoute_CopyForwardWitness(const OverworldPickupRouteState *s,
   }
   return count;
 }
+u16 OverworldPickupRoute_CopyForwardWitness(const OverworldPickupRouteState *s,
+    u16 *tags,OverworldPickupRoutePosition *poses,u16 capacity)
+{ return CopyForward(s,tags,poses,capacity,0); }
+u16 OverworldPickupRoute_CopyForwardCommands(const OverworldPickupRouteState *s,u16 *commands,u16 capacity)
+{ return CopyForward(s,commands,NULL,capacity,1); }

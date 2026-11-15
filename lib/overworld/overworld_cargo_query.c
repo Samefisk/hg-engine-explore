@@ -1,4 +1,7 @@
 #include "overworld_cargo_query.h"
+#ifdef OVERWORLD_ACTOR_SYSTEM_HOST
+#include <string.h>
+#endif
 #define PENDING OVERWORLD_PICKUP_ROUTE_PENDING
 #define INVALID OVERWORLD_PICKUP_ROUTE_INVALID
 #define LIMIT OVERWORLD_PICKUP_ROUTE_RESOURCE_LIMIT
@@ -27,13 +30,17 @@ static u8 ValidHandle(const OverworldActorHandle *a)
 void OverworldCargoQuery_Clear(OverworldCargoQueryState *s)
 { if(s) { OverworldCargoQueryStorage *storage=s->storage;*s=(OverworldCargoQueryState){0};
     s->storage=storage;s->version=OVERWORLD_CARGO_QUERY_VERSION;s->size=sizeof(*s);
-    if(storage && storage->changeGeneration!=0xFFFFFFFFu) storage->changeGeneration++; } }
+    if(storage && storage->changeGeneration!=0xFFFFFFFFu) {
+      storage->changeGeneration++;
+      if(storage->changesValid) memset(storage->changesValid,0,OVERWORLD_CARGO_QUERY_CHANGES/8);
+    } } }
 void OverworldCargoQuery_Init(OverworldCargoQueryState *s,OverworldCargoQueryStorage *storage)
 { if(s) { s->storage=storage;OverworldCargoQuery_Clear(s); } }
 static u32 TileHash(s16 x,s16 y)
 { return ((u16)x*31u+(u16)y*71u)&(OVERWORLD_CARGO_QUERY_CHANGES-1); }
 u8 OverworldCargoQuery_ObserveChanges(OverworldCargoQueryState *s,const OverworldCargoQueryInput *i)
 {
+    if(!s->storage || !s->storage->changes || !s->storage->changesValid) return 0;
     u32 now=s->query.dynamicRevision,generation=s->storage->changeGeneration;
     if(s->observedRevision && (now<s->observedRevision
         || (now==s->observedRevision && i->changedTileCount))) return 0;
@@ -51,13 +58,16 @@ u8 OverworldCargoQuery_ObserveChanges(OverworldCargoQueryState *s,const Overworl
             OverworldCargoQueryTileStamp *entry=&s->storage->changes[hash];
             s->lastWork.changeProbes++;
             selected=hash;
-            if(entry->generation!=generation || (entry->x==tile->x && entry->y==tile->y)) break;
+            if(!(s->storage->changesValid[hash>>3]&(1u<<(hash&7)))
+                || (entry->x==tile->x && entry->y==tile->y)) break;
             hash=(hash+1)&(OVERWORLD_CARGO_QUERY_CHANGES-1);
         }
         OverworldCargoQueryTileStamp *entry=&s->storage->changes[selected];
-        if(entry->generation==generation && (entry->x!=tile->x || entry->y!=tile->y)
+        if((s->storage->changesValid[selected>>3]&(1u<<(selected&7)))
+            && (entry->x!=tile->x || entry->y!=tile->y)
             && entry->revision>s->evictionFloor) s->evictionFloor=entry->revision;
-        *entry=(OverworldCargoQueryTileStamp){tile->x,tile->y,now,generation};s->lastWork.changedTiles++;
+        *entry=(OverworldCargoQueryTileStamp){tile->x,tile->y,now};
+        s->storage->changesValid[selected>>3]|=1u<<(selected&7);s->lastWork.changedTiles++;
     }
     return 1;
 }
@@ -77,7 +87,7 @@ u8 OverworldCargoQuery_Unchanged(OverworldCargoQueryState *s,const OverworldPick
     for(u16 n=0;n<OVERWORLD_CARGO_QUERY_CHANGES;n++) {
         const OverworldCargoQueryTileStamp *tile=&s->storage->changes[n];
         s->lastWork.witnessProbes++;
-        if(tile->generation==s->storage->changeGeneration && tile->revision>revision
+        if((s->storage->changesValid[n>>3]&(1u<<(n&7))) && tile->revision>revision
             && Touches(tile->x,tile->y,from,to)) return 0;
     }
     return 1;
@@ -93,7 +103,7 @@ __attribute__((noinline)) u8 OverworldCargoQuery_ProofUnchanged(OverworldCargoQu
         const OverworldCargoQueryTileStamp *tile=&s->storage->changes[n];
         if(s->lastWork.witnessProbes==limit) return 0;
         s->lastWork.witnessProbes++;
-        if(tile->generation!=s->storage->changeGeneration || tile->revision<=revision) continue;
+        if(!(s->storage->changesValid[n>>3]&(1u<<(n&7))) || tile->revision<=revision) continue;
         u16 node=r->goalNode,count=0;
         while(node!=r->proofNode) {
             if(node>=r->nodeCount || ++count>r->nodeCount

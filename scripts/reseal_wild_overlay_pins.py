@@ -132,10 +132,31 @@ for symbol in ('OverworldWildSpawns_AbortThrow', 'OverworldWildSpawns_QueryPicku
 capsule_text = re.sub(r'(NOTICE_CLEAR_RELATIONS_ADDR, NOTICE_CLEAR_RELATIONS_SIZE = )0x[0-9A-F]{8}, \d+',
     lambda m: '%s0x%08X, %d' % (m.group(1), table['OverworldWildSpawns_ClearThrowRelations'][0] & ~1,
                                table['OverworldWildSpawns_ClearThrowRelations'][1]), capsule_text)
-notice = sha(elf_bytes_at(wild, capsule.NOTICE_CALLERS, capsule.NOTICE_PHYSICAL_SIZE))
+# These contiguous callers can move when the catalog getter is compacted.
+# Bind both the physical extent and the tail to their current named owners;
+# imported capsule constants still describe the old link in this process.
+for prefix, symbol in (('CLEAR_PENDING', capsule.NOTICE_CLEAR_PENDING),
+                       ('GET_BLOB', capsule.NOTICE_GET_BLOB),
+                       ('SAMPLE_MOVING', capsule.NOTICE_SAMPLE_MOVING),
+                       ('RETIRE_BINDINGS', capsule.NOTICE_RETIRE_BINDINGS),
+                       ('CLEAR_THROW', capsule.NOTICE_CLEAR_THROW)):
+    address, size = table[symbol]
+    capsule_text, count = re.subn(
+        r'(NOTICE_%s_ADDR, NOTICE_%s_SIZE = )0x[0-9A-F]{8}, \d+' % (prefix, prefix),
+        lambda m: '%s0x%08X, %d' % (m.group(1), address & ~1, size), capsule_text)
+    if count != 1: raise SystemExit('notice owner pin missing: ' + symbol)
+physical_size = (table[capsule.NOTICE_CLEAR_THROW][0] & ~1) - capsule.NOTICE_CALLERS
+capsule_text = re.sub(r'NOTICE_PHYSICAL_SIZE = 0x[0-9A-F]+',
+    'NOTICE_PHYSICAL_SIZE = 0x%X' % physical_size, capsule_text)
+notice = sha(elf_bytes_at(wild, capsule.NOTICE_CALLERS, physical_size))
 capsule_text = re.sub(r'NOTICE_PHYSICAL_SHA256 = "[0-9a-f]{64}"', 'NOTICE_PHYSICAL_SHA256 = "%s"' % notice, capsule_text)
-tail = sha(elf_bytes_at(wild, capsule.NOTICE_CLEAR_THROW_ADDR, capsule.NOTICE_CLEAR_THROW_SIZE))
+tail_address, tail_size = table[capsule.NOTICE_CLEAR_THROW]
+tail = sha(elf_bytes_at(wild, tail_address & ~1, tail_size))
 capsule_text = re.sub(r'(hashlib\.sha256\(tail\)\.hexdigest\(\)\n\s*== ")[0-9a-f]{64}', lambda m: m.group(1) + tail, capsule_text)
+filler_zeros = capsule.NOTICE_CALLERS_SIZE - physical_size - tail_size - 2
+assert filler_zeros >= 0 and filler_zeros % 2 == 0
+capsule_text = re.sub(r'(== bytes\.fromhex\("c046"\) \+ bytes\()\d+(\),\n\s*"Wild notice clear wrapper)',
+    lambda m: m.group(1) + str(filler_zeros) + m.group(2), capsule_text)
 capsule_path.write_text(capsule_text)
 
 # 6. Observer pins for the helper position scanner and its callback table

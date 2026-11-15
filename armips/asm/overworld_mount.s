@@ -55,6 +55,29 @@ PlayerHealthContact_StockCollisionEntry equ 0x01FFC160
 
 .close
 
+/* Friendship only tests whether the held item has effect53. The authored
+ * and packaged item guard proves that this is exactly SOOTHE_BELL218.
+ * Retain the u16 held ID instead of reading its item record. */
+.open "base/arm9.bin", 0x02000000
+.org 0x0206FED0
+.area 4
+    nop
+    nop
+.endarea
+.org 0x0206FED4
+.area 2
+    lsl r0, r0, 16
+.endarea
+.org 0x0206FED8
+.area 2
+    lsr r7, r0, 16
+.endarea
+.org 0x0206FF40
+.area 2
+    cmp r7, 218
+.endarea
+.close
+
 /* The field input host already requires overlay131 for this normal field
  * loop. Only walking friendship uses the lock-once wrapper; other callers
  * retain the stock routine and all friendship rules stay there. */

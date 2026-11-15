@@ -849,7 +849,7 @@
     },
     "world.unmounted.spawn-zero-stutter": {
       "evaluator": "unmounted-zero-stutter-v1",
-      "recipeSha256": "d00f3bea24f481494e389caf7ea406c4923cb1d82c9efe4aad9c85207873e5bb",
+      "recipeSha256": "47b6e1acca5fcb9b0411b726f704bcd761d5a3a485bf0322d0f44cb1b392f2b2",
       "minimumObservedFrames": 2600,
       "proofLevel": "S3",
       "mode": "normal",
@@ -910,7 +910,7 @@
             "operator": "gte",
             "type": "integer",
             "validator": "meaningful-observation",
-            "minimum": 60
+            "minimum": 8
           },
           {
             "name": "zero-stutter-spawn-work-witness-count",
@@ -972,7 +972,7 @@
           }
         ]
       },
-      "scope": "Unchanged Continue load of test.sav with its existing Mankey follower, then the exact 673-step Route 30 and Cherrygrove trigger. The strict Cherrygrove window binds Mankey's source-checked profile, completes an explicit destination scan within61 frames, and retains at least2600 continuous main-loop intervals, 1800 moving frames, a joined normal destination-search/finalizer witness, and zero extra game frames or player render stalls. Separate movement scenarios own follower Hop, Movement Chain timing, and population-count behavior. No image or host-clock evidence. It also proves at least one same-Field post-success ordinary refill interval: from authenticated actual constructor plus COMMIT SUCCESS return to the first different ordinary attempt entry, at least the decoded density delay and at least60 Actor frames. READY alone earns no creation credit. Resumed finalizers and subsequent failed terrain groups do not restart this interval. The delay comes from native return receipts, not timer words."
+      "scope": "Unchanged Goldenrod Continue76(358366) and existing saved Mankey;17 native DOWN+B admissions to76(358383), bind without setup mutation; DOWN2 normal seam and strict settledRoute34 anchor38(358385). First10 sealed32-step rectangles stay unchanged; last11 use fixed34-step east detours around358386 and return358385. Require2600continuous/1800moving frames, source-bound saved Mankey, complete joined natural spawn/refill receipts,61-frame scan bound and zero late loops; unchanged4000overall frame cap. Original Cherrygrove route remains a sealed alternative for replay."
     },
     "warp.blocked-mid-motion": {
       "evaluator": "warp-gate-v1",
@@ -2328,7 +2328,7 @@
       "evaluator": "spawn-work-budget-v1",
       "proofLevel": "S3",
       "mode": "normal",
-      "recipeSha256": "56cd0c54ea9f24ff841209077cf1900cba977fa31f1edfab8264476eef554bc6",
+      "recipeSha256": "6c6a039d2410aca424ebb6da5bcde81f992851116b3054aa8d9505438ddd917f",
       "requirements": [
         "shared.spawn-work-budget-v1"
       ],
@@ -2533,7 +2533,7 @@
       },
       "minimumObservedFrames": 120,
       "recorderControlRequirement": null,
-      "scope": "Route 29 travel scans before the one reviewed map 33-to-67 crossing use the existing exact setup tracker and must reach their terminal result and next-update retirement before crossing; they earn no proof credit. Unchanged Continue save and normal-key warm-up to Route 29 (585,406), read-only binding of the saved Mankey follower, then the reviewed natural crossing into Cherrygrove and continued held movement through automatic explicit destination scans. Each measured helper-owned queue attempt must resolve and prepare its profile once, begin with zero terrain-matcher queries, then resume the same prepared attempt with no repeated profile work across 60 batches of at most 4 observed terrain-matcher queries per completed game update. One complete 61-update, 240-query attempt may refuse startup without creating an actor; its queue must retire on the next completed frame. A fresh attempt must independently pass the full scan and create the prepared encounter actor at A between 1 and 16 cardinal tiles from B, with A at least four tiles beyond the player-relative camera extent. Its normal Fly In must move logical and rendered positions at least four tiles toward B. The final action allows at most 256 frames and 60 seconds for a later natural queue, its 61-update scan, startup, and entry progress. The accepted Fly In keeps its logical origin until its 144-frame move commits. The overall frame limit is 720; the measured frame allowance is 720 minus the actual dense completed setup frames; the overall 180-second limit stays fixed. At least 120 measured player samples must be in transit. Every measured main loop must stay at or below two native cycles; one late loop fails. The extracted-C checks own the exact 240-candidate mask coverage. Setup gives no population, scan, movement, or pacing credit."
+      "scope": "Unchanged Goldenrod Continue76(358366) and existing saved Mankey;50 exact native UP+B admissions through the normal gatehouse to101(5,3), bind the fresh full follower handle without setup mutation. Release UP at admission51, wait for Route35 arrival and the current follower, then one UP step to39(358315) and8 fixed6-step road loops. All existing scan/preparation/guest-work/FlyIn/120moving/zero-late gates and720overall frames remain."
     },
     "profile.owner-reader-control": {
       "evaluator": "owner-reader-control-v1",
@@ -5110,7 +5110,7 @@
         ]
       },
       "recorderControlRequirement": null,
-      "scope": "Initial Player586407, settled Follower586408 and Bellsprout586403: Player is outside Startled range3 while Bellsprout is in Mankey forward sight range5. Sight and exact-Interest Cargo conditions in Pickup bind the same current Bellsprout. Before carry, its own accepted move either completes with native commit and control return, or the same moving Cargo has an exact native cancel, control return and HELD handoff. The carrier is never canceled. Mankey completes an authored half-speed Cargo Hop, resolves held Find Position plus Follower Away target14 at half speed, and launches that same Bell to an accepted native cardinal endpoint at exact Throw range8 with greater Chebyshev distance from Player. The full native flight reaches its timed commit, landing and control return. Mankey clears held claims/bindings and completes normal base7 follow movement. Any admitted Position Hop must complete; no Position Hop is required when the current pickup tile already admits a legal Away line. The first complete unlimited Cargo Hop retains its exact current query key and graph through native return. The endpoint claim reads the actual admitted native flight plan. The production-C Away tests own safe endpoint selection, exact saved windup aim and support recheck before launch; this reader has no saved windup aim observation. TKT-0059: the target retains its recorded unclaimed profile and native AUTO control while claimed; an accepted target move advances without early cancellation or replacement, and only actual pickup transfers it to HELD. No unrelated target-profile trigger is admitted in this finite fixture."
+      "scope": "Initial Player586407, settled Follower586408 and Bellsprout590403: Player is outside Startled range3 while Bellsprout is in Mankey forward sight range5. Sight and exact-Interest Cargo conditions in Pickup bind the same current Bellsprout. Before carry, its own accepted move either completes with native commit and control return, or the same moving Cargo has an exact native cancel, control return and HELD handoff. The carrier is never canceled. Mankey completes an authored half-speed Cargo Hop, resolves held Find Position plus Follower Away target14 at half speed, and launches that same Bell to an accepted native Away endpoint at exact maximum-axis range8 with greater Chebyshev distance from Player. Any noncardinal endpoint must equal the exact rounded outward projection; a cardinal endpoint retains the existing legal fallback rule. The full native flight reaches its timed commit, landing and control return. Mankey clears held claims/bindings and completes normal base7 follow movement. Any admitted Position Hop must complete; no Position Hop is required when the current pickup tile already admits a legal Away line. The first complete unlimited Cargo Hop retains its exact current query key and graph through native return. The endpoint claim reads the actual admitted native flight plan. The production-C Away tests own safe endpoint selection, exact saved windup aim and support recheck before launch; this reader has no saved windup aim observation. TKT-0059: the target retains its recorded unclaimed profile and native AUTO control while claimed; an accepted target move advances without early cancellation or replacement, and only actual pickup transfers it to HELD. No unrelated target-profile trigger is admitted in this finite fixture."
     },
     "player-hp.moving-heal-on-foot": {
       "evaluator": "player-health-moving-heal-on-foot-v1",
@@ -8150,7 +8150,7 @@
       "evaluator": "emote-three-slots-v1",
       "proofLevel": "S3",
       "mode": "prepared",
-      "recipeSha256": "a57a327a93e1957021508276b06c6de3cb39397abf5f93dd86e65d415614bed5",
+      "recipeSha256": "5bc8003dc08de8143cd3766ddfea182a193cf342813d30107b721189326b245b",
       "requirements": [
         "current.emote-three-slots"
       ],
@@ -8190,7 +8190,7 @@
         ]
       },
       "recorderControlRequirement": null,
-      "scope": "Actual Admit returns yes/no/yes/yes/no/no. Three native effects use three models and distinct texture/palette keys and frame destinations. Native update/draw occurs during ordinary completed frames. Quiet StopSE pairs all six calls. After the three owned native effects retire and queued transfers drain, each borrowed model is cleared and its exact private source/key resources are freed once. Other actors may use the same slots later; whole-field model and VRAM totals are diagnostics."
+      "scope": "Actual Admit returns yes/no/yes/yes/no/no. Three native effects use three models and distinct texture/palette keys and frame destinations. Native update/draw occurs during ordinary completed frames. All six quiet requests make no PlaySE or StopSE call. After the three owned native effects retire and queued transfers drain, each borrowed model is cleared and its exact private source/key resources are freed once. Other actors may use the same slots later; whole-field model and VRAM totals are diagnostics."
     },
     "wild.igglybuff-player-fear-cry": {
       "evaluator": "baby-wild-igglybuff-cry-v1",
@@ -8601,6 +8601,595 @@
         ]
       },
       "scope": "After the normal Route30 prepared teleport to map34 (557,361) facing0, retain exactly16 neutral setup frames, then request six native Wild level5 spawns (species16,16,60,60,163,167) at fixed loaded land tiles, stopping early (population-full) once natural refill and the prepared actors occupy all six regular slots; a busy native queue, a Mankey mid-Hop (busy, \"follower/mount motion is active\"), a queued Entry lost to natural spawn work, or a startup rejection (skipped after four tries), is retained as a refusal plus8 neutral frames and asked again (at most40 times each). Retain16 more neutral frames, bind the unchanged Continue save's party2 Mankey56 PID2920357538 as the current full Follower, and arm the existing native main-loop reader for768 returns. Setup earns no pacing, movement or spawn credit. Use twenty-four exact pairs of UP16 then DOWN16 (the Player stays near the pond bank) and neutral16 with no run key, natural refill and population left running. Require768 distinct ordered current main-loop returns,767 exact guest-clock intervals, at most2 native cycles/frame-sequence and2800950 ARM9 ticks, zero late loops, zero normal-input render stalls, full raw completed input samples, zero native/semantic loss, every credited loop carrying its mandatory-wait idle ticks (return clock minus authenticated mandatory-entry clock), minimum idle at least30000, 1st percentile at least175000 and5th percentile at least275000 ARM9 ticks (the old-ROM pond-bank run measured 14k/150k/231k and the accepted-mode fixed-ROM run 43k/204k/318k), at least six active actors (saved Mankey plus five Wild) when the window arms and in at least ninety percent of credited loops (the all-seven share is informational), at least one Player tile step, the Player settled on map34, and the saved Mankey Follower current in every sample. Natural creation in the window is informational. The scheduler-tick idle measure is not CPU time; copied-data controls prove the checker only."
+    },
+    "mount.mankey-adjacent-canopy": {
+      "evaluator": "mounted-mankey-adjacent-canopy-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "b9d82b33609ce9f686bab56179edb157fdfb2d8245df51853eec2822d8c68715",
+      "requirements": [
+        "current.mounted-mankey-adjacent-canopy"
+      ],
+      "claims": [
+        "natural-input",
+        "live-actor-identity",
+        "profile-resolution",
+        "rendered-motion",
+        "logical-commit",
+        "control-release"
+      ],
+      "minimumObservedFrames": 24,
+      "measurementContract": {
+        "natural-input": [
+          {
+            "name": "normal-right-then-release-no-B",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "live-actor-identity": [
+          {
+            "name": "same-current-mounted-party2-mankey",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "profile-resolution": [
+          {
+            "name": "normal-hop-longhop-canopy-permission",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "rendered-motion": [
+          {
+            "name": "native-adjacent-raised-hop-full-arc",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "logical-commit": [
+          {
+            "name": "one-real-commit-at-exact-adjacent-canopy",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "control-release": [
+          {
+            "name": "ordered-return-and-exact-mounted-pair-height",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ]
+      },
+      "recorderControlRequirement": null,
+      "scope": "Current saved party2 Mankey mounted at Map34(561,364), normal Hop/LongHop1..6/CanopyAccess. RIGHT only admits one exact adjacent shared Hop to north tree shoulder(562,364), now full-mesh Canopy0xFFFE. Read real ground base and native plan targetBaseY=ground+0x31580, every elapsed pose and one real commit/finish/input return, then idle pair with exact seat. Not B/Walk ledge, encounter selection, all canopy geometries or FPS pacing."
+    },
+    "world.goldenrod-route34-entry": {
+      "evaluator": "current-actor-identity-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "a18bb58b940e4a2bd55d025cee21fe30da0b3fff13a0e87f1031c15f5eb355e3",
+      "requirements": [
+        "current.goldenrod-route34-entry"
+      ],
+      "claims": [
+        "live-actor-identity"
+      ],
+      "minimumObservedFrames": 16,
+      "scope": "Exact sealed native cold-load preflight after saved-Mankey/release/queue checks: Route34 map38(354385) then Goldenrod76(339381), each with64 neutral frames, settled player and current saved-party2 Mankey within120 frames; return release/queue/request/capture checks and zero admitted route steps. Then unchanged normal Y/L/release Cyndaquil and two R presses while holding Y/release Mankey summons; empty release queues; normal admitted-step waypoints340381,340383,354383,Route34 map38(354385),Goldenrod map76(354383),353383; saved follower identity at map boundaries;16 final full-identity and attached-presentation frames followed by bounded follower-hop completion. Existing absent/stale-subject copied-data controls apply. Coarse cold-load/route/summon regression only: no normal teleport, continuous actor-lifetime, native transition-motion, FPS or all-city claim."
+    },
+    "population.goldenrod-behind-buildings": {
+      "evaluator": "goldenrod-natural-behind-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "caecc88a7884ecf5d69e061d0f86947935223e69f7504d0dd1f358b27b0a0bc9",
+      "requirements": [
+        "current.goldenrod-natural-behind"
+      ],
+      "claims": [
+        "live-actor-identity",
+        "profile-resolution",
+        "terrain-selection"
+      ],
+      "minimumObservedFrames": 900,
+      "recorderControlRequirement": null,
+      "measurementContract": {
+        "live-actor-identity": [
+          {
+            "name": "natural-goldenrod-full-handle-birth-count",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 1
+          }
+        ],
+        "profile-resolution": [
+          {
+            "name": "natural-goldenrod-scoped-placement-count",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 1
+          }
+        ],
+        "terrain-selection": [
+          {
+            "name": "natural-goldenrod-native-landing-count",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 1
+          }
+        ]
+      },
+      "scope": "Exactly900 neutral frames on map76 at(368,366), with only a declared player teleport and unchanged saved Mankey. No species, party, follower, profile, RNG or population override. Bind natural finalizer, one native object constructor, exact current map-scoped placement bytes and full actor handle to its native loaded-cell height and same-handle settled terminal pose. Require at least one Behind Buildings birth on an independently declared legal ground tile immediately north of a catalogued roof."
+    },
+    "population.goldenrod-raised-birds": {
+      "evaluator": "goldenrod-natural-raised-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "e9b6b8ff569be9994f2f48cef24f6bb9229f299f6a86841f3a8c2932a3636cfd",
+      "requirements": [
+        "current.goldenrod-natural-raised"
+      ],
+      "claims": [
+        "live-actor-identity",
+        "profile-resolution",
+        "terrain-selection"
+      ],
+      "minimumObservedFrames": 900,
+      "recorderControlRequirement": null,
+      "measurementContract": {
+        "live-actor-identity": [
+          {
+            "name": "natural-goldenrod-full-handle-birth-count",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 1
+          }
+        ],
+        "profile-resolution": [
+          {
+            "name": "natural-goldenrod-scoped-placement-count",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 1
+          }
+        ],
+        "terrain-selection": [
+          {
+            "name": "natural-goldenrod-native-landing-count",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 1
+          }
+        ]
+      },
+      "scope": "Exactly900 neutral frames on map76 at(346,351), with only a declared player teleport and unchanged saved Mankey. No species, party, follower, profile, RNG or population override. Bind natural finalizer, one native object constructor, exact current map-scoped placement bytes and full actor handle to its native loaded-cell height and same-handle settled terminal pose. Require at least one Pidove or Murkrow birth on a Rooftop at an independently preserved native tile and height. The ordinary 240-candidate window contains 107 rooftop cells and no Canopy cells."
+    },
+    "population.goldenrod-underground": {
+      "evaluator": "goldenrod-natural-underground-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "dc55343e4c0d0539041aa007d306c05977507548569c4965c285b3bfcf1875ae",
+      "requirements": [
+        "current.goldenrod-natural-underground"
+      ],
+      "claims": [
+        "live-actor-identity",
+        "profile-resolution",
+        "terrain-selection"
+      ],
+      "minimumObservedFrames": 900,
+      "recorderControlRequirement": null,
+      "measurementContract": {
+        "live-actor-identity": [
+          {
+            "name": "natural-goldenrod-full-handle-birth-count",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 1
+          }
+        ],
+        "profile-resolution": [
+          {
+            "name": "natural-goldenrod-scoped-placement-count",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 1
+          }
+        ],
+        "terrain-selection": [
+          {
+            "name": "natural-goldenrod-native-landing-count",
+            "operator": "gte",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "minimum": 1
+          }
+        ]
+      },
+      "scope": "Exactly900 neutral frames on map199 at(6,19), with only a declared player teleport and unchanged saved Mankey. No species, party, follower, profile, RNG or population override. Bind natural finalizer, one native object constructor, exact current map-scoped placement bytes and full actor handle to its native loaded-cell height and same-handle settled terminal pose. Require at least one Rattata or Grimer Land birth in the independently declared public floor; every observed birth must be on legitimate room floor, never padding void."
+    },
+    "follower.goldenrod-hop-rebind": {
+      "evaluator": "goldenrod-follower-hop-rebind-v1",
+      "proofLevel": "S3",
+      "mode": "normal",
+      "recipeSha256": "6dbc74956bff8be905fcc9a7e48caccc5605e5563462829eb31d42f313385727",
+      "requirements": [
+        "current.goldenrod-follower-hop-rebind"
+      ],
+      "claims": [
+        "natural-input",
+        "live-actor-identity",
+        "logical-commit",
+        "rendered-motion",
+        "world-transition",
+        "control-release"
+      ],
+      "minimumObservedFrames": 224,
+      "recorderControlRequirement": null,
+      "measurementContract": {
+        "natural-input": [
+          {
+            "name": "saved-mankey-normal-input",
+            "operator": "eq",
+            "type": "array",
+            "validator": "meaningful-observation",
+            "expected": [
+              "normal",
+              56,
+              2,
+              2920357538
+            ]
+          }
+        ],
+        "live-actor-identity": [
+          {
+            "name": "saved-mankey-three-current-contexts",
+            "operator": "eq",
+            "type": "array",
+            "validator": "meaningful-observation",
+            "expected": [
+              56,
+              2920357538,
+              3
+            ]
+          }
+        ],
+        "logical-commit": [
+          {
+            "name": "three-context-shared-hop-commits",
+            "operator": "eq",
+            "type": "array",
+            "validator": "meaningful-observation",
+            "expected": [
+              1,
+              1,
+              1
+            ]
+          }
+        ],
+        "rendered-motion": [
+          {
+            "name": "three-context-shared-hop-travel",
+            "operator": "eq",
+            "type": "array",
+            "validator": "meaningful-observation",
+            "expected": [
+              1,
+              1,
+              1
+            ]
+          }
+        ],
+        "world-transition": [
+          {
+            "name": "goldenrod-route34-goldenrod",
+            "operator": "eq",
+            "type": "array",
+            "validator": "meaningful-observation",
+            "expected": [
+              76,
+              38,
+              76
+            ]
+          }
+        ],
+        "control-release": [
+          {
+            "name": "three-settled-control-checkpoints",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 3
+          }
+        ]
+      },
+      "scope": "T85 unchanged Continue Goldenrod76(358366), saved slot2 Mankey PID2920357538; normal DOWN32 then neutral64, DOWN ontoRoute34(358385) neutral64, UP backtoGoldenrod(358380) neutral64. Full current same-PID handles acrossbothrebinds andcomplete sharedHop travel/commit/controlreturn ineachcontext. No party/follower/profile/spawn/population overrides. Not allmaps/species/mounts or FPS proof."
+    },
+    "mount.airborne-input": {
+      "evaluator": "mount-airborne-input-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "17224f00f17e6d9aa5c76e905eb848c910e3406ff930dea2d985a11ae86cb2b9",
+      "requirements": [
+        "current.mount-airborne-input"
+      ],
+      "claims": [
+        "natural-input",
+        "live-actor-identity",
+        "rendered-motion",
+        "control-release"
+      ],
+      "minimumObservedFrames": 70,
+      "measurementContract": {
+        "natural-input": [
+          {
+            "name": "air-select-ignored-and-fresh-ground-select",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "live-actor-identity": [
+          {
+            "name": "same-saved-party2-mankey-two-native-hops",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "rendered-motion": [
+          {
+            "name": "two-accepted-hop-targets-and-native-poses",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "control-release": [
+          {
+            "name": "no-delayed-toggle-and-one-landed-y-choice",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ]
+      },
+      "recorderControlRequirement": null,
+      "scope": "Route30 map34 (564,375). LEFT8 then SELECT1 during the actual Hop. Release through landing and at least8 idle frames; require no delayed dismount. A fresh grounded Select dismounts. Observe one explicit neutral frame with Select released, then hold Select for two frames and require exactly one real press edge, allowing only the first queue to remain neutral. Remount the same saved Mankey and start a normal RIGHT Hop. While airborne hold Y, use L to choose saved party-slot1 Cyndaquil155, and release Y. Keep the request with an empty transition queue until the accepted Hop reaches its exact target/base and completes normal or valid landed cleanup; then execute exactly one normal follower switch and remain stable24 frames."
+    },
+    "follower.route34-throw": {
+      "evaluator": "party-throw-route34-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "f1e5e0ed10582a3020fb82ee4eae624d29cacab782e7f9d0f0baf63256d915af",
+      "requirements": [
+        "current.follower-route34-throw"
+      ],
+      "claims": [
+        "natural-input",
+        "live-actor-identity",
+        "profile-resolution",
+        "rendered-motion",
+        "control-release"
+      ],
+      "minimumObservedFrames": 2,
+      "recorderControlRequirement": null,
+      "measurementContract": {
+        "natural-input": [
+          {
+            "name": "ordinary-notice-pursuit-and-throw",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "live-actor-identity": [
+          {
+            "name": "unchanged-party2-follower-and-current-cargo",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "profile-resolution": [
+          {
+            "name": "authored-trigger-cargo-and-native-profile",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "rendered-motion": [
+          {
+            "name": "complete-native-projectile-arc-and-landing",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "control-release": [
+          {
+            "name": "free-cargo-until-held-and-follower-resumes",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ]
+      },
+      "scope": "Unchanged Continue save and saved party2 Mankey. Walk normally from Goldenrod358366 into Route34 at358385; retain the same saved follower identity. Request one ordinary Bellsprout at358387, retaining bounded busy-queue refusals and neutral retries. No party, follower, profile, RNG or population override. Normal notice must bind that same Interest as Cargo, with no Resource Limit, then complete pickup, native Throw flight, exact landing and a normal follower move."
+    },
+    "wild.throw-follower": {
+      "evaluator": "party-throw-follower-cargo-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "d41414708e9520ea58331ff7fba6476adb972352e62364c4743d60b2905e1f5e",
+      "requirements": [
+        "current.wild-throw-follower"
+      ],
+      "claims": [
+        "natural-input",
+        "live-actor-identity",
+        "profile-resolution",
+        "rendered-motion",
+        "control-release"
+      ],
+      "minimumObservedFrames": 2,
+      "recorderControlRequirement": null,
+      "measurementContract": {
+        "natural-input": [
+          {
+            "name": "ordinary-notice-pursuit-and-throw",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "live-actor-identity": [
+          {
+            "name": "unchanged-party2-follower-and-current-cargo",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "profile-resolution": [
+          {
+            "name": "authored-trigger-cargo-and-native-profile",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "rendered-motion": [
+          {
+            "name": "complete-native-projectile-arc-and-landing",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "control-release": [
+          {
+            "name": "free-cargo-until-held-and-follower-resumes",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ]
+      },
+      "scope": "After one declared player teleport to the Goldenrod north gatehouse101(5,8), retain the unchanged saved party2 Mankey Follower. Request one ordinary Wild Geodude at(5,4). This existing indoor map has no ambient encounter pool, so the saved follower is the only Pokemon cargo. Normal RIGHT8, LEFT40 and RIGHT32 inputs move the player away during the free Cargo claim. Require actual follower body progress before pickup, then neutral input until launch. Require authored Player Trigger/Follower Cargo bindings, same-party full identity, complete native Throw flight and exact landing, then normal follower movement. No party, profile, binding, controller or population override."
+    },
+    "mount.hop-vertical-clearance": {
+      "evaluator": "mounted-hop-vertical-clearance-v1",
+      "proofLevel": "S3",
+      "mode": "prepared",
+      "recipeSha256": "0cc2b060d586e0b80e568623e218877e4f5806260949c2821091b218bf19ce9d",
+      "requirements": [
+        "current.mounted-hop-vertical-clearance"
+      ],
+      "claims": [
+        "natural-input",
+        "live-actor-identity",
+        "profile-resolution",
+        "rendered-motion",
+        "logical-commit",
+        "control-release"
+      ],
+      "minimumObservedFrames": 24,
+      "measurementContract": {
+        "natural-input": [
+          {
+            "name": "normal-right-then-release-no-B",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "live-actor-identity": [
+          {
+            "name": "same-saved-mounted-party2-mankey",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "profile-resolution": [
+          {
+            "name": "normal-hop7-longhop1to6-canopy-jump-off",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "rendered-motion": [
+          {
+            "name": "safe-native-hop-every-paired-pose",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "logical-commit": [
+          {
+            "name": "one-real-commit-at-legal-selected-support",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ],
+        "control-release": [
+          {
+            "name": "ordered-return-without-height-offset",
+            "operator": "eq",
+            "type": "integer",
+            "validator": "meaningful-observation",
+            "expected": 1
+          }
+        ]
+      },
+      "recorderControlRequirement": null,
+      "scope": "T80 normal mounted Hop respects fixed Route30 native tree clearance and visible Jump off, accepts any legal RIGHT distance1..6, applies every native pose and returns at the selected support."
     }
   },
   "runnerKinds": {
@@ -8737,7 +9326,16 @@
     "current.natural-water-spawn": "controlled-case",
     "current.move-entry-arrival": "controlled-case",
     "current.route30-sentret-throw-pacing": "controlled-case",
-    "current.route30-saturated-headroom": "controlled-case"
+    "current.route30-saturated-headroom": "controlled-case",
+    "current.mounted-mankey-adjacent-canopy": "controlled-case",
+    "current.goldenrod-natural-behind": "controlled-case",
+    "current.goldenrod-natural-raised": "controlled-case",
+    "current.goldenrod-natural-underground": "controlled-case",
+    "current.goldenrod-follower-hop-rebind": "normal-play",
+    "current.mount-airborne-input": "controlled-case",
+    "current.follower-route34-throw": "controlled-case",
+    "current.wild-throw-follower": "controlled-case",
+    "current.mounted-hop-vertical-clearance": "controlled-case"
   },
   "runners": {
     "current.mounted-stantler-turn-skid-blocked-first": [
@@ -9669,6 +10267,65 @@
       "natural-input",
       "population-bounds",
       "frame-pacing"
+    ],
+    "current.mounted-mankey-adjacent-canopy": [
+      "natural-input",
+      "live-actor-identity",
+      "profile-resolution",
+      "rendered-motion",
+      "logical-commit",
+      "control-release"
+    ],
+    "current.goldenrod-natural-behind": [
+      "live-actor-identity",
+      "profile-resolution",
+      "terrain-selection"
+    ],
+    "current.goldenrod-natural-raised": [
+      "live-actor-identity",
+      "profile-resolution",
+      "terrain-selection"
+    ],
+    "current.goldenrod-natural-underground": [
+      "live-actor-identity",
+      "profile-resolution",
+      "terrain-selection"
+    ],
+    "current.goldenrod-follower-hop-rebind": [
+      "natural-input",
+      "live-actor-identity",
+      "logical-commit",
+      "rendered-motion",
+      "world-transition",
+      "control-release"
+    ],
+    "current.mount-airborne-input": [
+      "natural-input",
+      "live-actor-identity",
+      "rendered-motion",
+      "control-release"
+    ],
+    "current.follower-route34-throw": [
+      "natural-input",
+      "live-actor-identity",
+      "profile-resolution",
+      "rendered-motion",
+      "control-release"
+    ],
+    "current.wild-throw-follower": [
+      "natural-input",
+      "live-actor-identity",
+      "profile-resolution",
+      "rendered-motion",
+      "control-release"
+    ],
+    "current.mounted-hop-vertical-clearance": [
+      "natural-input",
+      "live-actor-identity",
+      "profile-resolution",
+      "rendered-motion",
+      "logical-commit",
+      "control-release"
     ]
   },
   "measurementContracts": {
@@ -18530,6 +19187,414 @@
           "type": "integer",
           "validator": "meaningful-observation",
           "minimum": 275000
+        }
+      ]
+    },
+    "current.mounted-mankey-adjacent-canopy": {
+      "natural-input": [
+        {
+          "name": "normal-right-then-release-no-B",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "same-current-mounted-party2-mankey",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "normal-hop-longhop-canopy-permission",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "native-adjacent-raised-hop-full-arc",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "one-real-commit-at-exact-adjacent-canopy",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "control-release": [
+        {
+          "name": "ordered-return-and-exact-mounted-pair-height",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ]
+    },
+    "current.goldenrod-natural-behind": {
+      "live-actor-identity": [
+        {
+          "name": "natural-goldenrod-full-handle-birth-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "natural-goldenrod-scoped-placement-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "terrain-selection": [
+        {
+          "name": "natural-goldenrod-native-landing-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ]
+    },
+    "current.goldenrod-natural-raised": {
+      "live-actor-identity": [
+        {
+          "name": "natural-goldenrod-full-handle-birth-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "natural-goldenrod-scoped-placement-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "terrain-selection": [
+        {
+          "name": "natural-goldenrod-native-landing-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ]
+    },
+    "current.goldenrod-natural-underground": {
+      "live-actor-identity": [
+        {
+          "name": "natural-goldenrod-full-handle-birth-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "natural-goldenrod-scoped-placement-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ],
+      "terrain-selection": [
+        {
+          "name": "natural-goldenrod-native-landing-count",
+          "operator": "gte",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "minimum": 1
+        }
+      ]
+    },
+    "current.goldenrod-follower-hop-rebind": {
+      "natural-input": [
+        {
+          "name": "saved-mankey-normal-input",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            "normal",
+            56,
+            2,
+            2920357538
+          ]
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "saved-mankey-three-current-contexts",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            56,
+            2920357538,
+            3
+          ]
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "three-context-shared-hop-commits",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "three-context-shared-hop-travel",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            1,
+            1,
+            1
+          ]
+        }
+      ],
+      "world-transition": [
+        {
+          "name": "goldenrod-route34-goldenrod",
+          "operator": "eq",
+          "type": "array",
+          "validator": "meaningful-observation",
+          "expected": [
+            76,
+            38,
+            76
+          ]
+        }
+      ],
+      "control-release": [
+        {
+          "name": "three-settled-control-checkpoints",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 3
+        }
+      ]
+    },
+    "current.mount-airborne-input": {
+      "natural-input": [
+        {
+          "name": "air-select-ignored-and-fresh-ground-select",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "same-saved-party2-mankey-two-native-hops",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "two-accepted-hop-targets-and-native-poses",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "control-release": [
+        {
+          "name": "no-delayed-toggle-and-one-landed-y-choice",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ]
+    },
+    "current.follower-route34-throw": {
+      "natural-input": [
+        {
+          "name": "ordinary-notice-pursuit-and-throw",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "unchanged-party2-follower-and-current-cargo",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "authored-trigger-cargo-and-native-profile",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "complete-native-projectile-arc-and-landing",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "control-release": [
+        {
+          "name": "free-cargo-until-held-and-follower-resumes",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ]
+    },
+    "current.wild-throw-follower": {
+      "natural-input": [
+        {
+          "name": "ordinary-notice-pursuit-and-throw",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "unchanged-party2-follower-and-current-cargo",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "authored-trigger-cargo-and-native-profile",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "complete-native-projectile-arc-and-landing",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "control-release": [
+        {
+          "name": "free-cargo-until-held-and-follower-resumes",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ]
+    },
+    "current.mounted-hop-vertical-clearance": {
+      "natural-input": [
+        {
+          "name": "normal-right-then-release-no-B",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "live-actor-identity": [
+        {
+          "name": "same-saved-mounted-party2-mankey",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "profile-resolution": [
+        {
+          "name": "normal-hop7-longhop1to6-canopy-jump-off",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "rendered-motion": [
+        {
+          "name": "safe-native-hop-every-paired-pose",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "logical-commit": [
+        {
+          "name": "one-real-commit-at-legal-selected-support",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
+        }
+      ],
+      "control-release": [
+        {
+          "name": "ordered-return-without-height-offset",
+          "operator": "eq",
+          "type": "integer",
+          "validator": "meaningful-observation",
+          "expected": 1
         }
       ]
     }

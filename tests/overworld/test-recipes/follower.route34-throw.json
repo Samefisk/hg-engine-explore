@@ -1,0 +1,229 @@
+{
+  "schemaVersion": 1,
+  "id": "follower.route34-throw",
+  "title": "Saved follower Throw flow on Route34",
+  "mode": "prepared",
+  "fixture": {
+    "rom": "test.nds",
+    "save": "test.sav"
+  },
+  "expectationSource": "TICKETS.md",
+  "requirements": [
+    "current.follower-route34-throw"
+  ],
+  "budgets": {
+    "maxSeconds": 600,
+    "maxFrames": 1800,
+    "noProgressFrames": 360,
+    "minObservedFrames": 2
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquire": "existing"
+    },
+    {
+      "id": "bellsprout",
+      "species": 69,
+      "role": "WILD",
+      "acquire": "spawn"
+    }
+  ],
+  "measurements": [
+    {
+      "kind": "party-throw-route34-v1",
+      "subjects": [
+        "mankey",
+        "bellsprout"
+      ]
+    }
+  ],
+  "setup": [
+    {
+      "id": "saved-goldenrod-start",
+      "op": "wait",
+      "args": {
+        "predicate": {
+          "kind": "player-settled-at",
+          "map": 76,
+          "x": 358,
+          "z": 366,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "walk-goldenrod",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "DOWN"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "release-goldenrod",
+      "op": "step",
+      "args": {
+        "frames": 64,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "enter-route34",
+      "op": "step",
+      "args": {
+        "frames": 120,
+        "keys": [
+          "DOWN"
+        ],
+        "until": {
+          "kind": "player-field",
+          "path": "y",
+          "operator": "eq",
+          "value": 385,
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 120,
+        "noProgressFrames": 120
+      }
+    },
+    {
+      "id": "settle-route34",
+      "op": "step",
+      "args": {
+        "frames": 64,
+        "keys": []
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 64,
+        "noProgressFrames": 64
+      }
+    },
+    {
+      "id": "bind-mankey",
+      "op": "bind",
+      "args": {
+        "subject": "mankey"
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    },
+    {
+      "id": "spawn-bellsprout",
+      "op": "spawn",
+      "args": {
+        "species": 69,
+        "form": 0,
+        "role": "wild",
+        "level": 5,
+        "x": 358,
+        "z": 387
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 360,
+        "noProgressFrames": 360
+      }
+    },
+    {
+      "id": "bind-bellsprout",
+      "op": "bind",
+      "args": {
+        "subject": "bellsprout"
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 1,
+        "noProgressFrames": 1
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "natural-pickup-and-launch",
+      "op": "step",
+      "args": {
+        "frames": 600,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "party-throw-route34-v1",
+          "stage": "launched",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 180,
+        "maxFrames": 600,
+        "noProgressFrames": 600
+      }
+    },
+    {
+      "id": "walk-player-right",
+      "op": "step",
+      "args": {
+        "frames": 32,
+        "keys": [
+          "RIGHT"
+        ]
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 32,
+        "noProgressFrames": 32
+      }
+    },
+    {
+      "id": "follow-after-throw",
+      "op": "step",
+      "args": {
+        "frames": 300,
+        "keys": [],
+        "until": {
+          "kind": "measurement-stage",
+          "measurement": "party-throw-route34-v1",
+          "stage": "resumed",
+          "when": "final"
+        }
+      },
+      "budget": {
+        "maxSeconds": 90,
+        "maxFrames": 300,
+        "noProgressFrames": 300
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "kind": "measurement-complete",
+      "measurement": "party-throw-route34-v1",
+      "when": "final"
+    }
+  ]
+}

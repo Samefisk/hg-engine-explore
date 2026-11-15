@@ -66,7 +66,16 @@ class EmoteSlotOwnerTests(unittest.TestCase):
             "current": (source, None),
             "missing-same-actor": (source.replace(
                 "if (owner->slots[i].state && owner->slots[i].object == object) return NULL;",
-                "(void)object; if (FALSE) return NULL;"), "plays==1&&stops==2&&owner->count==1"),
+                "(void)object; if (FALSE) return NULL;"), "plays==0&&stops==0&&owner->count==1"),
+            "quiet-sound-played": (source.replace(
+                "if (!(sub_02068D90(effect) & OVERWORLD_EMOTE_MODE_QUIET)) PlaySE(1501);",
+                "PlaySE(1501);"), "plays==0&&stops==0"),
+            "quiet-mode-stop": (source, "plays==0&&stops==0"),
+            "quiet-id-not-normalized": (source.replace(
+                "(u32)emote & ~OVERWORLD_EMOTE_MODE_QUIET)) goto reject;",
+                "emote)) goto reject;"), "member==icon+2"),
+            "wrong-4x4-key": (source.replace(
+                "model.texture4x4Key=0;", "model.texture4x4Key=1;"), "!t->texture4x4Key"),
             "shared-destination": (source.replace(
                 "data->frames.destination=(slot->textureKey & 0xFFFF) << 3;",
                 "data->frames.destination=1024;"), "a->data.frames.destination!=b->data.frames.destination"),
@@ -81,13 +90,19 @@ class EmoteSlotOwnerTests(unittest.TestCase):
             folder = Path(folder)
             for name, (body, reason) in variants.items():
                 with self.subTest(name=name):
-                    if reason is not None:
+                    if reason is not None and name != "quiet-mode-stop":
                         self.assertNotEqual(body, source, "copied control must change the owner")
                     unit = folder / name
                     unit.mkdir()
                     (unit / "overworld_emote_slots.c").write_text(body)
                     (unit / "overworld_emote_slots_internal.h").write_text(header)
-                    (unit / "emote_slots_host.c").write_text(fixture)
+                    fixture_body = fixture
+                    if name == "quiet-mode-stop":
+                        fixture_body = fixture.replace(
+                            "ov01_02203A48(object, bubbleId | 0x80);",
+                            "ov01_02203A48(object, bubbleId | 0x80); StopSE(SEQ_SE_DP_DECIDE);")
+                        self.assertNotEqual(fixture_body, fixture)
+                    (unit / "emote_slots_host.c").write_text(fixture_body)
                     build = subprocess.run([compiler, "-std=gnu11", "-O2", "-Wall", "-Wextra", "-Werror",
                         "-I" + str(root / "include"), "-I" + str(unit),
                         str(unit / "emote_slots_host.c"), "-o", str(unit / "owner-check")],

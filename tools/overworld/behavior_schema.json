@@ -1403,7 +1403,7 @@
       "unit": "flags",
       "bounds": {
         "min": 0,
-        "max": 1023
+        "max": 3071
       },
       "lane": "profile",
       "operators": [
@@ -1428,7 +1428,7 @@
       "unit": "flags",
       "bounds": {
         "min": 0,
-        "max": 1023
+        "max": 3071
       },
       "lane": "profile",
       "operators": [

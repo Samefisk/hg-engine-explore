@@ -23,7 +23,7 @@ from .devtools_test_contract import (
     RAM_BRIEF_NOTICE,
 )
 
-RAW_BOUNDARY_READERS = RAW_BOUNDARY_MEASUREMENTS | {"route30-sentret-throw-pacing-v1", "population-headroom-v1", "emote-three-slots-v1", ACCELERATION, "follower-throw-approach-cargo-v1", "follower-throw-query-priority-v1", "wild-throw-ground-lock-soak-v1"}
+RAW_BOUNDARY_READERS = RAW_BOUNDARY_MEASUREMENTS | {"party-throw-route34-v1", "party-throw-follower-cargo-v1", "route30-sentret-throw-pacing-v1", "population-headroom-v1", "emote-three-slots-v1", ACCELERATION, "follower-throw-approach-cargo-v1", "follower-throw-query-priority-v1", "wild-throw-ground-lock-soak-v1"}
 
 
 def _valid_completed_frame_batch(requested, completed, samples, allow_extra=False):
@@ -460,7 +460,7 @@ class TestJobs:
                         record_args["appearancePalette"] = True
                     if any(item["kind"] == "actor-binding-context-v1" for item in test.get("measurements", [])):
                         record_args["bindingContext"] = True
-                    if any(item["kind"] in ("route30-sentret-throw-pacing-v1", UNMOUNTED_ZERO_STUTTER, "natural-refill-retry-v1", "natural-water-spawn-v1", "held-throw-search-v1", "follower-throw-moving-cargo-v1", "follower-throw-away-non45-v1", "follower-throw-approach-cargo-v1", "follower-throw-player-damage-v1", "follower-throw-query-priority-v1", "wild-throw-ground-lock-soak-v1", "throw-cargo-competition-v1", "throw-cargo-retarget-v1", "throw-mutual-pickup-v1", "follower-ram-pokemon-v1", "basic-attack-v1", "wild-throw-moving-candidate-v1", "throw-notice-walk-commit-v1", "follower-throw-hit-abort-v1", "player-health-throw-contact-v1", "throw-cargo-flee-v1", "follower-throw-target-above-v1", "follower-throw-target-below-v1", "follower-target-access-signpost-v1", "follower-target-access-ground-v1", "player-health-mounted-throw-v1", *DISTANCE_KINDS) for item in test.get("measurements", [])):
+                    if any(item["kind"] in ("route30-sentret-throw-pacing-v1", "party-throw-route34-v1", "party-throw-follower-cargo-v1", UNMOUNTED_ZERO_STUTTER, "natural-refill-retry-v1", "natural-water-spawn-v1", "goldenrod-natural-behind-v1", "goldenrod-natural-raised-v1", "goldenrod-natural-underground-v1", "held-throw-search-v1", "follower-throw-moving-cargo-v1", "follower-throw-away-non45-v1", "follower-throw-approach-cargo-v1", "follower-throw-player-damage-v1", "follower-throw-query-priority-v1", "wild-throw-ground-lock-soak-v1", "throw-cargo-competition-v1", "throw-cargo-retarget-v1", "throw-mutual-pickup-v1", "follower-ram-pokemon-v1", "basic-attack-v1", "wild-throw-moving-candidate-v1", "throw-notice-walk-commit-v1", "follower-throw-hit-abort-v1", "player-health-throw-contact-v1", "throw-cargo-flee-v1", "follower-throw-target-above-v1", "follower-throw-target-below-v1", "follower-target-access-signpost-v1", "follower-target-access-ground-v1", "player-health-mounted-throw-v1", *DISTANCE_KINDS) for item in test.get("measurements", [])):
                         record_args["throwInteractions"] = True
                     if test["id"] == "spawn.move-entry.arrival":
                         record_args["throwInteractions"] = True
@@ -692,7 +692,8 @@ class TestJobs:
                                     receipt = self._command("walk-policy.reset", reset_args)
                                 elif op == "acceleration.end":
                                     receipt = evaluator.acceleration_end_receipt(args["subject"], snapshot)
-                                elif op == "spawn" and "population-headroom-v1" in evaluator.measurements:
+                                elif op == "spawn" and ({"population-headroom-v1", "party-throw-route34-v1",
+                                        "party-throw-follower-cargo-v1"} & evaluator.measurements.keys()):
                                     receipt = self._spawn_after_busy_queue(
                                         op, args, phase, action, test, started, action_start, stream, evaluator)
                                 elif op == "walk-intent.arm":
@@ -808,7 +809,7 @@ class TestJobs:
                                     or (test["id"] in ("player-hp.moving-heal-on-foot", "player-hp.moving-heal-mounted")
                                         and action["id"] == "wait-contact")
                                     or (test["id"] in ("pokemon-hp.collision-knockback",
-                                                       "pokemon-hp.skid-hit-crash-knockback", "follower.ram-pokemon", "profile.basic-attack", "pokemon-appearance.damage-palette", "wild.throw-cargo-flee", "wild.baby-player-fear", "wild.igglybuff-player-fear-cry", "wild.baby-pokemon-fear", "follower.baby-seek-safety", "profile.playful.in-place-hop", "follower.baby-damage-seek-safety", "wild.damage-flee", "profile.stomp-slam.player-contact", "profile.stomp-slam.mounted-player-contact", "mount.rattata-walking-ledge")
+                                                       "pokemon-hp.skid-hit-crash-knockback", "follower.ram-pokemon", "profile.basic-attack", "pokemon-appearance.damage-palette", "wild.throw-cargo-flee", "wild.baby-player-fear", "wild.igglybuff-player-fear-cry", "wild.baby-pokemon-fear", "follower.baby-seek-safety", "profile.playful.in-place-hop", "follower.baby-damage-seek-safety", "wild.damage-flee", "profile.stomp-slam.player-contact", "profile.stomp-slam.mounted-player-contact", "mount.rattata-walking-ledge", "mount.mankey-adjacent-canopy", "mount.hop-vertical-clearance")
                                         and phase == "observe")):
                                 endpoint = chunk["snapshot"]
                                 raw_record["profileCache"] = {

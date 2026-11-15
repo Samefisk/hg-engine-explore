@@ -42,12 +42,11 @@ struct OverworldHopClearanceNativeOps;
  * retaining the existing 32KiB free-heap reserve; no static RAM is added. */
 /* Current target-access and mounted landing code use the bounded tail. The
  * Cargo Tick prefix and its read budget do not grow. */
-/* Exact complete ARM image and package. Compared with published3573,
- * compact witnesses and removal of the unused follower Entry path save5264
- * workspace bytes; this package adds1976. Combined payload is3288 bytes
- * smaller. The32KiB reserve stays. Bounds match the full measured package. */
-#define OVERWORLD_QUERY_CODE_ADDON_MAX_IMAGE 0x10C38
-#define OVERWORLD_QUERY_CODE_ADDON_MAX_BLOB 0x11200
+/* Exact complete ARM image/package. Against3709, workspace43516 becomes
+ * 27868 and package70124 becomes70840: combined payload saves14932 bytes.
+ * Cold32KiB admission and lazy Field1/Field2 reserves remain unchanged. */
+#define OVERWORLD_QUERY_CODE_ADDON_MAX_IMAGE 0x10EC0
+#define OVERWORLD_QUERY_CODE_ADDON_MAX_BLOB 0x114B8
 #define OVERWORLD_QUERY_CODE_ADDON_MAX_RELOCATIONS 256
 
 /* Serialized little-endian file. Image begins at byte64. Only local ABS32

@@ -1,5 +1,6 @@
 """Fail-closed whole-game pacing check during steady unmounted spawn work."""
 from copy import deepcopy
+from tools.overworld.devtools_d1_routes import descriptor, selected_route
 
 from tools.overworld.devtools_main_loop_probe import (
     MAX_ZERO_STUTTER_ARM9_TICKS,
@@ -19,6 +20,8 @@ MANKEY_PROFILE_HOP_PAUSE_FRAMES = 5
 MANKEY_PROFILE_HOP_MAX_DISTANCE = 6
 MAX_DESTINATION_SCAN_FRAME_SPAN = 61
 BASE_REFILL_INTERVAL_FRAMES = 60
+SPARSE_REFILL_INTERVAL_FRAMES = 8
+FULL_DENSITY_COUNT = 4
 
 
 def require(value, reason):
@@ -26,8 +29,16 @@ def require(value, reason):
         raise ValueError(reason)
 
 
+def effective_refill_interval(raw_delay):
+    # COMMIT keeps the native density payload. The resident caller caps waits
+    # below four Land/Surf actors; full-density waits remain unchanged.
+    require(type(raw_delay) is int and raw_delay in (60, 120, 180, 240, 300, 360),
+            "zero-stutter refill anchor lacks a native density delay")
+    return SPARSE_REFILL_INTERVAL_FRAMES if raw_delay in (60, 120, 180) else raw_delay
+
+
 class UnmountedZeroStutterMeasurement:
-    """Measure every steady-state game loop after the fixed Cherrygrove anchor."""
+    """Measure every steady-state game loop after the sealed route anchor."""
 
     def __init__(self, test, source, *, max_frames):
         require(test.get("mode") == "normal"
@@ -45,6 +56,8 @@ class UnmountedZeroStutterMeasurement:
                 and isinstance(source["sourceSha256"], str)
                 and len(source["sourceSha256"]) == 64,
                 "zero-stutter measurement requires the current behavior source")
+        self.route_key = selected_route(test, KIND)
+        self.route = descriptor(self.route_key)
         self.max_frames = max_frames
         self.schema = deepcopy(source["schema"])
         self.source_sha256 = source["sourceSha256"]
@@ -87,13 +100,12 @@ class UnmountedZeroStutterMeasurement:
         if not self.failures:
             self.failures.append(str(reason))
 
-    @staticmethod
-    def _is_anchor(snapshot):
+    def _is_anchor(self, snapshot):
         player = snapshot.get("player", {})
         return (snapshot.get("fieldAvailable") is True
-                and snapshot.get("context", {}).get("mapId") == START["mapId"]
-                and player.get("x") == player.get("x_prev") == START["x"]
-                and player.get("y") == player.get("y_prev") == START["y"]
+                and snapshot.get("context", {}).get("mapId") == self.route["anchor"][0]
+                and player.get("x") == player.get("x_prev") == self.route["anchor"][1]
+                and player.get("y") == player.get("y_prev") == self.route["anchor"][2]
                 and snapshot.get("fieldControl", {}).get("taskPointer") == 0)
 
     @staticmethod
@@ -106,14 +118,14 @@ class UnmountedZeroStutterMeasurement:
         require(self.initial is None
                 and snapshot.get("observationBoundary") == "main-task-queue-completion"
                 and snapshot.get("fieldAvailable") is True
-                and snapshot.get("context", {}).get("mapId") == 33
-                and snapshot.get("player", {}).get("x") == 585
-                and snapshot.get("player", {}).get("y") == 406
+                and snapshot.get("context", {}).get("mapId") == self.route["arm"][0]
+                and snapshot.get("player", {}).get("x") == self.route["arm"][1]
+                and snapshot.get("player", {}).get("y") == self.route["arm"][2]
                 and subject.get("species") == 56
                 and subject.get("role") == "FOLLOWER"
                 and subject.get("identityVerified") is True
                 and subject.get("handle", {}).get("value"),
-                "zero-stutter measurement requires the reviewed Route 30 start")
+                "zero-stutter measurement requires the reviewed D1 arm boundary")
         self.initial = {
             "frame": snapshot["frame"],
             "context": deepcopy(snapshot["context"]),
@@ -236,7 +248,8 @@ class UnmountedZeroStutterMeasurement:
             if self.refill_success is not None:
                 previous = self.refill_success
                 gap = data["entryActorFrame"] - previous["returnActorFrame"]
-                require(gap >= max(BASE_REFILL_INTERVAL_FRAMES, previous["refillDelay"]),
+                interval = effective_refill_interval(previous["refillDelay"])
+                require(gap >= interval,
                         "zero-stutter new refill batch bypassed its base interval")
                 self.refill_intervals.append({
                     "previousAttemptId": previous["spawnAttemptId"],
@@ -245,6 +258,8 @@ class UnmountedZeroStutterMeasurement:
                     "constructorSequence": previous["constructorSequence"],
                     "handle": deepcopy(previous["handle"]),
                     "querySerial": previous["querySerial"],
+                    "rawRefillDelay": previous["refillDelay"],
+                    "requiredActorFrames": interval,
                     "nextEntryActorFrame": data["entryActorFrame"],
                     "actorFrames": gap, "worldContext": deepcopy(owner),
                 })
@@ -273,7 +288,7 @@ class UnmountedZeroStutterMeasurement:
                     and type(data.get("slot")) is int
                     and 0 <= data["slot"] < 10
                     and isinstance(context, dict)
-                    and context.get("mapId") == START["mapId"]
+                    and context.get("mapId") == self.route["anchor"][0]
                     and context.get("fieldEpoch") == snapshot["context"]["fieldEpoch"]
                     and context.get("mapGeneration") == snapshot["context"]["mapGeneration"]
                     and type(context.get("fieldPointer")) is int
@@ -458,15 +473,15 @@ class UnmountedZeroStutterMeasurement:
                             "zero-stutter anchor lacks its main-loop pacing sample")
                     self.started = {
                         "frame": snapshot["frame"],
-                        "mapId": START["mapId"],
-                        "player": [START["x"], START["y"]],
+                        "mapId": self.route["anchor"][0],
+                        "player": [self.route["anchor"][1], self.route["anchor"][2]],
                     }
                     self.last_pacing_after_frame = rows[0].get("afterQueueFrame")
                     self.last_player_pose = [snapshot["player"]["pos_x"], snapshot["player"]["pos_z"]]
                 return self.result()
             require(snapshot.get("fieldAvailable") is True
-                    and snapshot.get("context", {}).get("mapId") == START["mapId"],
-                    "zero-stutter steady-state route left Cherrygrove")
+                    and snapshot.get("context", {}).get("mapId") == self.route["anchor"][0],
+                    "zero-stutter steady-state route left its sealed field")
             self._check_subject(snapshot)
             self._observe_refill_interval(snapshot, events)
             self._observe_spawn_work(snapshot, events)
@@ -511,6 +526,7 @@ class UnmountedZeroStutterMeasurement:
     def result(self):
         return {
             "kind": KIND,
+            "route": self.route_key,
             "requirements": [REQUIREMENT],
             "passed": self.closed and self.ready,
             "ready": self.ready,
@@ -529,9 +545,11 @@ class UnmountedZeroStutterMeasurement:
                 "maximumAttemptFrameSpan": self.maximum_spawn_attempt_frame_span,
             },
             "refillIntervals": {
-                "scope": "successful ordinary enqueue to first next distinct ordinary attempt",
+                "scope": "successful ordinary constructor to first next distinct ordinary attempt",
                 "clock": "Actor frame; no timer-word claim",
                 "baseFrames": BASE_REFILL_INTERVAL_FRAMES,
+                "sparseFrames": SPARSE_REFILL_INTERVAL_FRAMES,
+                "fullDensityCount": FULL_DENSITY_COUNT,
                 "count": len(self.refill_intervals),
                 "minimumActorFrames": min((row["actorFrames"] for row in self.refill_intervals), default=0),
                 "witnesses": deepcopy(self.refill_intervals),

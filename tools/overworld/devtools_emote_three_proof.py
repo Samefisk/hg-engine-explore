@@ -68,7 +68,15 @@ class EmoteThreeNegative:
         elif f=='wrong-frame-destination':
             b=v['draws'][0]['last']['binding'];raw=bytearray.fromhex(b['dataHex']);struct.pack_into('<I',raw,92,b['textureDestination']+512);b['dataHex']=raw.hex()
         elif f in ('missing-native-draw','missing-native-update'):v['draws' if f.endswith('draw') else 'updates'].pop()
-        elif f=='rejected-playse':v['events'].append(deepcopy(next(e for e in v['events'] if e['kind']=='play')))
+        elif f=='rejected-playse':
+            init=next(e for e in v['events'] if e['kind']=='init')
+            sequence=init['sequence']+1
+            for event in v['events']+v['requests']:
+                for key in ('sequence','returnSequence'):
+                    if event[key]>=sequence:event[key]+=2
+            v['events'].append(dict(kind='play',sequence=sequence,returnSequence=sequence+1,
+                args=[1501,0,0,0],entry=deepcopy(init['entry']),returnClock=deepcopy(init['entry']),
+                result=1,parent='init',request=init['request']))
         elif f=='missing-cleanup':v['final']['bubble']=deepcopy(v['activeOwner'])
         elif f=='early-retirement':next(e for e in v['events'] if e['kind']=='release')['queue']['count']=1
         elif f=='missing-task':owner_word(v['activeOwner'],5,0)

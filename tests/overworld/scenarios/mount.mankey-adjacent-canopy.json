@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "id": "mount.mankey-adjacent-canopy",
+  "title": "Mounted Mankey hops onto the exact adjacent tree top",
+  "status": "active",
+  "capabilities": [
+    "terrain",
+    "mount.lifecycle"
+  ],
+  "proofLevel": "S3",
+  "costTier": 2,
+  "verification": {
+    "kind": "controlled-case",
+    "expectationSource": "TICKETS.md",
+    "actor": "Current saved party2 Mankey56 mounted through the native lifecycle, bound by its actual full handle/PID, at Map34(561,364), ground base0x20000, ordinary Hop/LongHop1..6/CanopyAccess profile.",
+    "trigger": "RIGHT only for at most32 complete frames, stop at first real Hop, then release64 frames. B is never pressed.",
+    "observable": "One shared native Hop from561,364 onto the exact adjacent562,364 full tree-mesh footprint. Current terrain must identify Canopy0xFFFE/native-ground-offset0x31580. Native plan startBaseY must match real mounted ground, targetBaseY must add that current offset. Observe every actual elapsed frame, paired native XYZ/arc, one ordered commit/finish/input return and final stationary mount+rider seat.",
+    "setupAudit": "complete",
+    "setupMutations": [
+      {
+        "phase": "before-observation",
+        "target": "fixture",
+        "change": "Disposable Continue save copy, checked teleport to the exact Route30 tree, neutral24, native Mounted selection of the existing party2 Mankey, then bind. No party/profile/terrain/HP/motion/timer or collision writes."
+      }
+    ],
+    "limits": [
+      "This is directional Hop from the exact reported north tree-shoulder approach. It is not B Jump, a Walk ledge or the earlier unrelated overshoot path.",
+      "The catalog offset is not final world height. Require actual shared native plan bytes and actual native mount/rider positions.",
+      "Copied controls reject wrong full owner/profile/support/height, missing Hop/commit/return, dropped completed data and B input. Product actual-C controls separately prove forbidden/occupied/unloaded destinations remain blocked; the prepared positive case does not claim those in-game negatives.",
+      "The setup does not rely on the Continue map or a fixed save hash. It requires the real saved party2 Mankey to be alive; no substitute Pok\u00e9mon is created."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "MOUNTED",
+      "acquisition": "mount",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Native mount of existing party2 Mankey at Route30(561,364)."
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "Normal RIGHT until first real Hop; neutral64 through terminal."
+    }
+  ],
+  "stop": {
+    "frameBudget": 480,
+    "condition": "Require all elapsed native Hop poses, exact adjacent tree landing, one normal commit/finish/input return and stable final pair height; no Hop or a farther target fails."
+  },
+  "expect": {
+    "requiredEvents": [
+      "MOTION_STARTED",
+      "LOGICAL_COMMIT",
+      "MOTION_FINISHED",
+      "CONTROL_RETURNED"
+    ],
+    "forbiddenEvents": [
+      "MOTION_CANCELED",
+      "CONTEXT_CHANGED",
+      "ACTOR_REBOUND",
+      "CONTROL_REBOUND"
+    ],
+    "invariants": [
+      "Same current full Mankey and rider binding",
+      "Normal Hop/LongHop/CanopyAccess profile; no B",
+      "Exact adjacent support0xFFFE and actual native ground-plus-offset target",
+      "Every shared Hop elapsed pose, one real commit/finish/input return",
+      "No lasting mount or rider height offset"
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "mount.mankey-adjacent-canopy",
+    "claims": [
+      "natural-input",
+      "live-actor-identity",
+      "profile-resolution",
+      "rendered-motion",
+      "logical-commit",
+      "control-release"
+    ],
+    "minimumFrames": 24
+  }
+}

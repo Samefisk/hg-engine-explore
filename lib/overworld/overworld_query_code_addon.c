@@ -25,7 +25,8 @@ static u32 Addon_Checksum(const u8 *bytes, u32 size)
     return hash;
 }
 static BOOL Addon_Offset(u32 offset,u32 size)
-{ return !(offset&3) && offset<=size-4; }
+/* Prepare has already required a nonempty, four-byte-aligned image. */
+{ return !(offset&3) && offset<size; }
 /* Existing Wild notice capsule tail padding owns this private Thumb leaf. */
 static BOOL
 #if !defined(OVERWORLD_BEHAVIOR_HOST)
@@ -85,13 +86,13 @@ static BOOL Addon_Prepare(void *blob,u32 bytes,u8 **imageOut,u32 *sizeOut)
     entry16=(u16 *)image; entry32=(u32 *)image;
     if(entry32[0]!=OVERWORLD_QUERY_CODE_ADDON_MAGIC
         || entry32[1]!=(OVERWORLD_QUERY_CODE_ADDON_VERSION | (OVERWORLD_QUERY_CODE_ADDON_ENTRY_BYTES<<16))
-        || entry16[4]!=60 || entry16[5]!=sizeof(OverworldPickupRouteState) || entry16[6]!=24 || entry16[7]!=108
+        || entry16[4]!=60 || entry16[5]!=sizeof(OverworldPickupRouteState) || entry16[6]!=sizeof(OverworldPickupRouteWorkspace) || entry16[7]!=108
         || entry16[8]!=36 || entry16[9]!=OVERWORLD_PICKUP_ROUTE_NATIVE_VERSION
         || entry16[38]!=OVERWORLD_BEHAVIOR_CONDITION_RUNTIME_VERSION
         || entry16[39]!=OVERWORLD_QUERY_CODE_ADDON_CONDITION_WORLD_BYTES
         || entry16[40]!=88 || entry16[41]!=540
         || entry16[50]!=OVERWORLD_CARGO_QUERY_VERSION || entry16[51]!=sizeof(OverworldCargoQueryState)
-        || entry16[52]!=40 || entry16[53]!=140 || entry16[54]!=24604 || entry16[55]) return FALSE;
+        || entry16[52]!=40 || entry16[53]!=140 || entry16[54]!=sizeof(OverworldCargoQueryStorage) || entry16[55]) return FALSE;
     for(i=0;i<h->relocationCount;++i) {
         u32 offset=relocations[i], value;
         if(!Addon_Offset(offset,h->imageSize) || (i && offset<=relocations[i-1])) return FALSE;
@@ -107,8 +108,8 @@ static BOOL Addon_Prepare(void *blob,u32 bytes,u8 **imageOut,u32 *sizeOut)
         for(k=0;k<9 && fixed!=allowed[k];++k) {}
         if(!Addon_Offset(offset,h->imageSize) || (i && offset<=imports[i-1].offset)
             /* The nine-word resident table fills its fixed36-byte slot. */
-            || (k==9 && !Addon_StockCoordinateImport(fixed))
-            || *(u32 *)(image+offset)!=fixed) return FALSE;
+            || *(u32 *)(image+offset)!=fixed
+            || (k==9 && !Addon_StockCoordinateImport(fixed) && fixed!=0x0201AB0D)) return FALSE;
     }
     j=0;
     /* Walk the three callback spans, skipping their immutable ABI metadata. */

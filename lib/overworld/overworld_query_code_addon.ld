@@ -37,7 +37,7 @@ SECTIONS {
         __query_entry_code_end = ABSOLUTE(.);
         /* Root replaces this heap image guard only after the full ARM size,
          * package cost and current Field free-heap admission are measured. */
-        ASSERT(SIZEOF(.text) <= 0x10C38, "query addon image exceeds its cap");
+        ASSERT(SIZEOF(.text) <= 0x10EC0, "query addon image exceeds its cap");
     }
     .data : { *(.data*) }
     .bss : { *(.bss*) *(COMMON) }

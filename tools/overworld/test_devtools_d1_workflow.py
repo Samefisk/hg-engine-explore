@@ -119,6 +119,7 @@ class D1WorkflowTests(unittest.TestCase):
         native.observer.completed_frame(42)
         session = DevtoolsSession.__new__(DevtoolsSession)
         session.sample_error = None
+        session.boot_recovery = None
         session.latest_frame = {"frame": 42, "nativeObservation": native.observer.snapshot()}
         session.native_observation, session.party_getter_hooks = native.observer, native.hooks
         session.latest_party_frame, session.latest_party = 42, []

@@ -84,8 +84,10 @@ Preconditions:
   and native flight. Its accepted Walk must commit and return control before
   carry. Mankey must complete a half-speed pursuit Hop (Long Hop7→3), resolve
   held Find Position and Follower Away target14 at half speed, then launch the
-  same Bell to an admitted cardinal endpoint exactly8 tiles away with greater
-  Chebyshev separation from Player. Require complete dense native flight,
+  same Bell to an admitted endpoint at exact maximum-axis range8 with greater
+  Chebyshev separation from Player. Any noncardinal endpoint must equal the
+  exact rounded outward projection; keep the existing cardinal fallback rule.
+  Require complete dense native flight,
   timed commit, landing and control return; normal follow then uses base7 again.
   A legal Away line at pickup needs no Position Hop. If a Position Hop is
   admitted, its complete timing/commit/return still applies. Keep all original

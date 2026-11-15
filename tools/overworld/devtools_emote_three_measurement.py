@@ -3,7 +3,7 @@ from copy import deepcopy
 import struct
 
 from tools.overworld.devtools_emote_vram_diagnostics import STOCK_SEALS, decode_emote_owner
-from tools.overworld.devtools_emote_three_probe import QUIET, EXTRA_SEALS, ORDER, need
+from tools.overworld.devtools_emote_three_probe import QUIET, QUIET_MODE, EXTRA_SEALS, ORDER, need
 from tools.overworld.devtools_records import select_current_actor
 from tools.overworld.devtools_actor_inspect_probe import ENGINE_OWNER_KEYS, GENERATION_KEYS
 from tools.overworld.devtools_raw_chunk import validate_raw_chunk
@@ -11,7 +11,8 @@ from tools.overworld.devtools_raw_chunk import validate_raw_chunk
 KIND = 'emote-three-slots-v1'
 REQUIREMENT = 'current.emote-three-slots'
 SUBJECTS = [dict(id=name,species=155,role='WILD',acquire='spawn') for name in 'abcd']
-SETUP = [('emote-tile', 'teleport', dict(map=33,x=585,z=407,facing=0))]
+SETUP = [('emote-tile', 'teleport', dict(map=33,x=585,z=407,facing=0)),
+         ('emote-owner-ready', 'step', dict(frames=8,keys=[]))]
 for name,(x,z) in zip('abcd',((584,402),(586,402),(584,405),(586,405))):
     SETUP.extend([('spawn-'+name,'spawn',dict(species=155,form=0,level=50,role='wild',x=x,z=z)),
                   ('bind-'+name,'bind',dict(subject=name))])
@@ -50,6 +51,9 @@ def binding(value, subjects, expected_owner):
     words=struct.unpack('<26I',raw);subject=value['subject']
     need(subject in 'abc' and value['handle']==subjects[subject]['handle']
          and value['object']==subjects[subject]['engineIdentity']['pointer'],'full effect identity differs')
+    need(type(value.get('mode')) is int
+         and value['mode']==(next(icon for name,icon in ORDER if name==subject)|QUIET_MODE),
+         'native effect quiet mode differs')
     slot=next((s for s in expected_owner['slots'] if s['object']==value['object']),None)
     need(slot is not None and slot['state']==2 and value['slot']==slot['pointer']
          and value['effect']==slot['effect'] and value['model']==slot['model']
@@ -118,7 +122,7 @@ def checked_burst(value, subjects, *, start=None, end=None):
     for i,(row,(name,icon)) in enumerate(zip(requests,ORDER)):
         need(row['kind']=='admit' and row['request']==i and row['subject']==name
              and row['handle']==subjects[name]['handle'] and row['args'][:3]==
-                 [context,subjects[name]['engineIdentity']['pointer'],icon],'fixed native admission arguments differ')
+                 [context,subjects[name]['engineIdentity']['pointer'],icon|QUIET_MODE],'fixed native admission arguments differ')
         accepted=i in (0,2,3)
         need((row['result']!=0)==accepted,'duplicate/fourth admission rule differs')
         if accepted:
@@ -136,13 +140,11 @@ def checked_burst(value, subjects, *, start=None, end=None):
     kinds={k:[e for e in scoped if e['kind']==k] for k in ('init','play','stop','transfer','release','freeTexture','freePalette','freeSource','destroy')}
     need(len(kinds['init'])==3 and {r['request'] for r in kinds['init']}=={0,2,3}
          and all(r['result']==1 for r in kinds['init']),'accepted native initialization missing')
-    for row in kinds['init']:binding(row['binding'],subjects,active)
-    need(len(kinds['play'])==3 and all(e['args'][0]==1501 and e['parent']=='init' for e in kinds['play'])
-         and len(kinds['stop'])==6 and {e['request'] for e in kinds['stop']}==set(range(6))
-         and all(e['args'][0]==1501 for e in kinds['stop']),
-         'quiet sound sequence/rejected PlaySE differs')
-    need(all(sum(inside(p,init) for init in kinds['init'])==1 for p in kinds['play']),
-         'PlaySE not nested in one accepted init')
+    for row in kinds['init']:
+        binding(row['binding'],subjects,active)
+        need(type(row.get('mode')) is int and row['mode']==requests[row['request']]['args'][2]
+             and row['mode']==row['binding']['mode'], 'native constructor quiet mode differs')
+    need(not kinds['play'] and not kinds['stop'], 'quiet admission made a PlaySE/StopSE call')
     transfers=kinds['transfer'];need(len(transfers)>=6 and all(e['result']==1 for e in transfers),'native transfer failed/missing')
     tex_destinations={(s['textureKey']&0xFFFF)<<3 for s in active['slots']}
     pal_destinations={(s['paletteKey']&0xFFFF)<<3 for s in active['slots']}
@@ -244,6 +246,7 @@ class EmoteThreeMeasurement:
     def __init__(self,test=None,**_):
         self.test=test;self.subjects={};self.before=None;self.latest=None;self.receipt=None
         self.failures=[];self.frames=0;self.closed=False;self.setup_count=0;self.action_count=0
+        self.setup_wait_frames=0
 
     def observe_record(self,row,*,on_sample=None,full_report=True):
         if self.failures:return self.result()
@@ -282,6 +285,33 @@ class EmoteThreeMeasurement:
                 measured=checked_burst(value,self.subjects,start=self.before['emotes']['normalStart'],
                     end=dict(frame=self.latest['frame'],nativeCycle=self.latest['nativeCycle']))
                 need(measured==self.frames==240,'native normal frame count differs')
+            elif row.get('phase')=='setup' and row.get('action')=='emote-owner-ready':
+                need(row.get('command') is None and self.setup_count==1 and not self.subjects
+                     and self.before is None and self.setup_wait_frames<8,
+                     'fixed pre-bind neutral setup order differs')
+                requested=row.get('requestedInput',{})
+                count=requested.get('frames')
+                need(type(count) is int and 1<=count<=8-self.setup_wait_frames
+                     and requested==dict(frames=count,keys=[],releaseAtEnd=False,diagnosticDetails=False)
+                     and all(type(row.get(k)) is int for k in
+                             ('requestedGameFrames','completedGameFrames'))
+                     # No pressed keys means no input-poll fence. The native
+                     # step producer reports its consumed-key count as null.
+                     and 'inputConsumedGameFrames' in row and row['inputConsumedGameFrames'] is None
+                     and row.get('requestedGameFrames')==row.get('completedGameFrames')==count,
+                     'fixed neutral setup input/frame count differs')
+                context=self.latest['context']
+                for sample,_events,_costs in validate_raw_chunk(row,self.latest):
+                    player=sample.get('player',{})
+                    need(sample.get('observationBoundary')=='main-task-queue-completion'
+                         and sample.get('fieldAvailable') is True and sample.get('context')==context
+                         and context.get('mapId')==33 and sample.get('fieldControl',{}).get('taskPointer')==0
+                         and player.get('x')==player.get('x_prev')==585
+                         and player.get('y')==player.get('y_prev')==407,
+                         'neutral setup changed the settled field/pose')
+                    self.setup_wait_frames+=1
+                    self.latest=deepcopy(sample)
+                if self.setup_wait_frames==8:self.setup_count+=1
             elif row.get('phase')=='setup':
                 need(self.before is None and row.get('command') in ('teleport','spawn'), 'foreign setup action')
                 self.latest=deepcopy(row['snapshot'])

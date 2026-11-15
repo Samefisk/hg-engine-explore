@@ -20,6 +20,33 @@ def measurement_inputs(test, root):
         source = measurement_inputs(template, root)["follower-throw-moving-cargo-v1"]
         source["sourceSaveSha256"] = hashlib.sha256((root / test["fixture"]["save"]).read_bytes()).hexdigest()
         return {"route30-sentret-throw-pacing-v1": source}
+    if len(test["measurements"]) == 1 and test["measurements"][0]["kind"] in (
+            "party-throw-route34-v1", "party-throw-follower-cargo-v1"):
+        from tools.overworld.devtools_party_throw_flow_measurement import source_inputs
+        return {test["measurements"][0]["kind"]: source_inputs(root)}
+    if test["measurements"] == [{"kind": "mounted-hop-vertical-clearance-v1", "subject": "mankey"}]:
+        descriptor = json.loads((root / "build/player-health.debug.json").read_text())
+        if descriptor.get("formatVersion") != 1 or descriptor.get("overlay", {}).get("id") != 161:
+            raise ValueError("Hop clearance Motion owner descriptor differs")
+        source = dict(contractVersion=1, overlaySha256=descriptor["overlay"]["sha256"],
+            romSha256=hashlib.sha256((root / test["fixture"]["rom"]).read_bytes()).hexdigest(),
+            profileSha256=hashlib.sha256((root / "data/overworld_behavior_profiles.json").read_bytes()).hexdigest())
+        return {"mounted-hop-vertical-clearance-v1": source}
+    if test["measurements"] == [{"kind": "mount-airborne-input-v1", "subject": "mankey"}]:
+        descriptor = json.loads((root / "build/player-health.debug.json").read_text())
+        if descriptor.get("formatVersion") != 1 or descriptor.get("overlay", {}).get("id") != 161:
+            raise ValueError("airborne mount Motion owner descriptor differs")
+        source = dict(contractVersion=1, overlaySha256=descriptor["overlay"]["sha256"],
+            romSha256=hashlib.sha256((root / test["fixture"]["rom"]).read_bytes()).hexdigest(),
+            profileSha256=hashlib.sha256((root / "data/overworld_behavior_profiles.json").read_bytes()).hexdigest())
+        return {"mount-airborne-input-v1": source}
+    if test["measurements"] == [{"kind": "goldenrod-follower-hop-rebind-v1", "subject": "mankey"}]:
+        from tools.overworld.devtools_goldenrod_follower_measurement import source_inputs
+        return {"goldenrod-follower-hop-rebind-v1": source_inputs(root)}
+    if len(test["measurements"]) == 1 and test["measurements"][0]["kind"] in (
+            "goldenrod-natural-behind-v1", "goldenrod-natural-raised-v1", "goldenrod-natural-underground-v1"):
+        from tools.overworld.devtools_goldenrod_spawn_measurement import source_inputs
+        return {test["measurements"][0]["kind"]: source_inputs(root)}
     if test["measurements"] == [{"kind": "population-headroom-v1", "subject": "mankey"}]:
         # Product spawn, population and profile sources reach the ROM; name the
         # authored profile bytes as well so a profile edit cannot reuse the run.
@@ -101,6 +128,7 @@ def measurement_inputs(test, root):
                                  [{"kind": "stomp-slam-player-contact-v1", "subject": "snorlax"}],
                                  [{"kind": "stomp-slam-mounted-player-contact-v1", "subject": "snorlax"}],
                                  [{"kind": "mounted-rattata-walking-ledge-v1", "subject": "rattata"}],
+                                 [{"kind": "mounted-mankey-adjacent-canopy-v1", "subject": "mankey"}],
                                  [{"kind": "held-throw-search-v1", "subject": "geodude"}],
                                  [{"kind": "player-health-moving-heal-on-foot-v1", "subject": "weepinbell"}],
                                  [{"kind": "player-health-moving-heal-mounted-v1", "subject": "weepinbell"}],
@@ -127,7 +155,7 @@ def measurement_inputs(test, root):
         }
         if test["measurements"][0]["kind"] in ("player-health-hop-contact-v1", "player-health-ambush-jump-v1", "player-health-running-hit-v1",
                                                  "player-health-mounted-ambush-height-v1", "pokemon-combat-v1", "pokemon-skid-hit-v1", "follower-ram-pokemon-v1", "basic-attack-v1",
-                                                 "player-health-moving-heal-on-foot-v1", "player-health-moving-heal-mounted-v1", "throw-cargo-flee-v1", "held-throw-search-v1", "baby-wild-player-fear-v1", "baby-wild-igglybuff-cry-v1", "baby-wild-pokemon-fear-v1", "baby-follower-safety-v1", "baby-follower-damaged-v1", "wild-damaged-flee-v1", "playful-in-place-hop-v1", "stomp-slam-player-contact-v1", "stomp-slam-mounted-player-contact-v1", "mounted-rattata-walking-ledge-v1",
+                                                 "player-health-moving-heal-on-foot-v1", "player-health-moving-heal-mounted-v1", "throw-cargo-flee-v1", "held-throw-search-v1", "baby-wild-player-fear-v1", "baby-wild-igglybuff-cry-v1", "baby-wild-pokemon-fear-v1", "baby-follower-safety-v1", "baby-follower-damaged-v1", "wild-damaged-flee-v1", "playful-in-place-hop-v1", "stomp-slam-player-contact-v1", "stomp-slam-mounted-player-contact-v1", "mounted-rattata-walking-ledge-v1", "mounted-mankey-adjacent-canopy-v1",
                                                  "follower-throw-target-above-v1", "follower-throw-target-below-v1", "follower-throw-moving-cargo-v1", "follower-throw-away-non45-v1", "follower-throw-approach-cargo-v1", "follower-throw-player-damage-v1", "follower-throw-query-priority-v1", "wild-throw-ground-lock-soak-v1", "throw-cargo-competition-v1", "throw-cargo-retarget-v1", "throw-mutual-pickup-v1", "follower-target-access-signpost-v1", "follower-target-access-ground-v1"):
             source["profileSha256"] = hashlib.sha256(
                 (root / "data/overworld_behavior_profiles.json").read_bytes()).hexdigest()

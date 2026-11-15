@@ -31,7 +31,7 @@ def decode_application_bank(blob: bytes, repo: Path) -> dict:
     source = json.loads((repo / "data/overworld_behavior_profiles.json").read_text())
     catalog = _runtime_source_behavior_catalog(source)
     expected = compile_bank(catalog, repo / "include/constants/species.h")
-    if len(blob) < 84 or struct.unpack_from("<IHHI", blob) != (0x4F574244, 95, 84, len(blob)):
+    if len(blob) < 84 or struct.unpack_from("<IHHI", blob) != (0x4F574244, _constant(header, "OVERWORLD_WILD_BEHAVIOR_DATA_VERSION"), 84, len(blob)):
         raise ValueError("behavior bank Blob header differs")
     class_count = struct.unpack_from("<H", blob, 16)[0]
     override_count = struct.unpack_from("<H", blob, 40)[0]

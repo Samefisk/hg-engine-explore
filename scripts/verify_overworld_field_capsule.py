@@ -53,37 +53,37 @@ CARGO_OBSERVATION_SIZE = 184
 CARGO_OBSERVATION_CAPACITY = 0xD0
 CARGO_OBSERVER = "OverworldWildSpawns_GetInteractionObservation"
 NOTICE_CALLERS, NOTICE_CALLERS_SIZE = 0x023C2C1C, 0x164
-NOTICE_PHYSICAL_SIZE = 0x14C
+NOTICE_PHYSICAL_SIZE = 0x144
 NOTICE_CLEAR_PENDING = "OverworldWildSpawns_ClearPendingNotices"
 NOTICE_CLEAR_PENDING_ADDR, NOTICE_CLEAR_PENDING_SIZE = 0x023C2C1C, 60
 NOTICE_GET_BLOB = "OverworldWildSpawns_GetBehaviorDataBlob"
-NOTICE_GET_BLOB_ADDR, NOTICE_GET_BLOB_SIZE = 0x023C2C58, 128
+NOTICE_GET_BLOB_ADDR, NOTICE_GET_BLOB_SIZE = 0x023C2C58, 120
 NOTICE_SAMPLE_MOVING = "OverworldWildSpawns_SampleMovingNoticeForSlot"
-NOTICE_SAMPLE_MOVING_ADDR, NOTICE_SAMPLE_MOVING_SIZE = 0x023C2CD8, 18
+NOTICE_SAMPLE_MOVING_ADDR, NOTICE_SAMPLE_MOVING_SIZE = 0x023C2CD0, 18
 NOTICE_RETIRE_BINDINGS = "OverworldWildSpawns_RetireClearedThrowBindings"
-NOTICE_RETIRE_BINDINGS_ADDR, NOTICE_RETIRE_BINDINGS_SIZE = 0x023C2CEC, 124
+NOTICE_RETIRE_BINDINGS_ADDR, NOTICE_RETIRE_BINDINGS_SIZE = 0x023C2CE4, 124
 NOTICE_CLEAR_THROW = "OverworldWildSpawns_ClearThrowStateForSlot"
-NOTICE_CLEAR_THROW_ADDR, NOTICE_CLEAR_THROW_SIZE = 0x023C2D68, 10
+NOTICE_CLEAR_THROW_ADDR, NOTICE_CLEAR_THROW_SIZE = 0x023C2D60, 10
 NOTICE_CLEAR_RELATIONS = "OverworldWildSpawns_ClearThrowRelations"
-NOTICE_CLEAR_RELATIONS_ADDR, NOTICE_CLEAR_RELATIONS_SIZE = 0x023D0340, 228
+NOTICE_CLEAR_RELATIONS_ADDR, NOTICE_CLEAR_RELATIONS_SIZE = 0x023D033C, 228
 # Large catalogs use Prepared88, u16 catalog indexes and Blob95/options18.
 # Retirement's indexed halfword load adds four bytes within the same reserve;
 # capture/uses-binding bytes use reviewed offsets0xB6D1/0xB6D6.
-NOTICE_PHYSICAL_SHA256 = "eb67ccab15bccd4d164dc3f2def9d86dfa7161d837252400420544bd48bee65d"
+NOTICE_PHYSICAL_SHA256 = "038f14e5d14c7f2dc69ed4729af9e449e7e22c476d3639cf9cb2214d00f456ed"
 # T65 adds two borrowed World pointers (76 -> 84 bytes). Getter locals
 # move eight bytes on the stack; its guards, callbacks and extent stay exact.
 # The fitted Getter borrows Adapter's validated current Frame. Seal its exact
 # native body, the moving/valid guards, and the fixed padding before Bubble.
 # Capacity adds 360 bytes to condition runtime offsets. The four named
 # Wild targets retain their typed owners and exact reviewed call topology.
-CARGO_OBSERVATION_SHA256 = "ca4c93db435ab26d2cbf9edb2ccdd82eb14ce4fbfb20c6663cbdf9b0c8e95d50"
+CARGO_OBSERVATION_SHA256 = "d1547e4632af947c3663eb25b38667145e1f751a0637cc88029ea41e2757f2a9"
 CARGO_OBSERVATION_CODE = bytes.fromhex(
     'f0b5a9b005000391049205930300f8331888084101210e00084204d1214c2e9e'
-    '365d731e9e4100f023fa002803d10024200029b0f0bd2f00e0370021386801f0'
-    'cdf9071ef3d0039b1806010e07ac009413ab049a280032f44ffc059a2592002e'
+    '365d731e9e4100f01ffa002803d10024200029b0f0bd2f00e0370021386801f0'
+    'c9f9071ef3d0039b1806010e07ac009413ab049a280032f44ffc059a2592002e'
     '04d011492e9b585c0028e0d03a0098321168a1602e9b23620c4860620c4aa262'
-    '0c49e162ff6f06a92000b8470400069b002bcdd0002ecbd10399280003f0defa'
-    'c6e7c046b30700005708000080c1ff013ddc3c02e9fb3c02'
+    '0c49e162ff6f06a92000b8470400069b002bcdd0002ecbd10399280003f0dcfa'
+    'c6e7c046b30700005708000080c1ff0141dc3c02e5fb3c02'
 )
 ACTOR_EVALUATE = "OverworldBehaviorConditionAdapter_EvaluateActor"
 ACTOR_EVALUATE_ADDR, ACTOR_EVALUATE_SIZE = 0x023B65C0, 880
@@ -101,9 +101,7 @@ SHOW_BUBBLE_CALLEE = "OverworldWildBubble_ShowQuiet"
 SHOW_BUBBLE_IMPORT = (0x01FFF3B1, 0, "FUNC", "ABS")
 SHOW_BUBBLE_CODE = bytes.fromhex("10 b5 ff 29 01 d0 01 4b 98 47 10 bd") + struct.pack("<I", 0x01FFF3B1)
 QUIET_BUBBLE = 0x01FFF3B0
-QUIET_BUBBLE_CODE = bytes.fromhex(
-    "10 b5 04 4b 00 f0 0c f8 03 48 04 4b 00 f0 08 f8 10 bd c0 46"
-) + struct.pack("<III", 0x02203A49, 1501, 0x02006155) + bytes.fromhex("18 47")
+QUIET_BUBBLE_CODE = bytes.fromhex("802310b51943024b00f004f810bdc046493a20021847")
 WALK_OUTPUT = 0x02208400
 WALK_TUNING = 0x02208500
 POLICY_INIT = 0x022085D0
@@ -274,10 +272,10 @@ def verify_cargo_observation(build, overlays):
     cargo_observation_contract(symbols.get(CARGO_OBSERVER), symbols.get(frame),
                                private, field_body, symbols.get(SHOW_BUBBLE),
                                symbols.get(SHOW_BUBBLE_CALLEE))
-    for name, address, size in ((abort, 0x023D0424, 86),
-                               (query_target, 0x023CFBE8, 64),
-                               (query, 0x023CE1A4, 120),
-                               (identity, 0x023CDC3C, 72)):
+    for name, address, size in ((abort, 0x023D0420, 86),
+                               (query_target, 0x023CFBE4, 64),
+                               (query, 0x023CE19C, 120),
+                               (identity, 0x023CDC40, 72)):
         target = symbols.get(name)
         checked(target is not None and target[:3] == (address | 1, size, "FUNC")
                 and target[3] not in ("ABS", "UND"),
@@ -414,9 +412,9 @@ def notice_tail_contract(wrapper, target, private, linked_wrapper):
     tail = private[NOTICE_PHYSICAL_SIZE:NOTICE_PHYSICAL_SIZE + NOTICE_CLEAR_THROW_SIZE]
     checked(tail == linked_wrapper
             and hashlib.sha256(tail).hexdigest()
-                == "2020073599c2aed75b3bf517217d2c6e0de4636ff6f4cfd2ed99d066d7462ab3"
+                == "ba853755631da00e22af20eec2261eca1e31989e53b4737f125ecf851502a439"
             and private[NOTICE_PHYSICAL_SIZE + NOTICE_CLEAR_THROW_SIZE:]
-                == bytes.fromhex("c046") + bytes(12),
+                == bytes.fromhex("c046") + bytes(20),
             "Wild notice clear wrapper or bounded filler differs")
     checked((NOTICE_CLEAR_THROW_ADDR + 4, "bl", NOTICE_CLEAR_RELATIONS_ADDR)
             in packaged_thumb_calls(tail, NOTICE_CLEAR_THROW_ADDR,
@@ -510,20 +508,20 @@ def query_packed_caller_contract(bindings, linked, packaged):
     checked(bindings.get(PROFILE_PACKED) == (PROFILE_PACKED_ADDR | 1, 0, "FUNC", "ABS"),
             "resolver lacks the exact private packed Thumb import")
     caller = bindings.get("BehaviorResolver_ApplyRecorded")
-    checked(caller is not None and caller[:3] == (0x2089fe1, 380, "FUNC")
+    checked(caller is not None and caller[:3] == (0x208a155, 380, "FUNC")
             and caller[3] not in ("ABS", "UND"), "profile merge Query owner differs")
     body_contract(linked, packaged)
     checked(len(linked) == 380 and hashlib.sha256(linked).hexdigest()
-            == "a433fbfc55d90f5c317374d236c51187ddfc7d98218f95c034939503b56a06ba"
-            and linked[0xCA:0xCE] == bytes.fromhex("2a4b9847")
+            == "dd526923ae2e81bb490e734f50195eda331c6d21a3a5893586a493f040745b23"
+            and linked[0xCC:0xD0] == bytes.fromhex("294b9847")
             and struct.unpack_from("<I", linked, 0x174)[0] == PROFILE_PACKED_ADDR | 1
-            and packaged_thumb_calls(linked, 0x2089fe0, 0x2089fe0, 380) == [
-                (0x208a03e, "bl", 0x2089810),
-                (0x208a04c, "bl", 0x2089810),
-                (0x208a076, "bl", 0x2089810),
-                (0x208a0ac, "blx_reg", 3),
-                (0x208a124, "bl", 0x2089ec0),
-                (0x208a136, "bl", 0x20897c8)],
+            and packaged_thumb_calls(linked, 0x208a154, 0x208a154, 380) == [
+                (0x208a1b2, "bl", 0x208999c),
+                (0x208a1c0, "bl", 0x208999c),
+                (0x208a1ec, "bl", 0x208999c),
+                (0x208a222, "blx_reg", 3),
+                (0x208a29a, "bl", 0x208a038),
+                (0x208a2ac, "bl", 0x2089954)],
             "profile merge exact Query body/packed dispatch differs")
 
 
@@ -603,8 +601,8 @@ def verify_profile_skid_helpers(build, overlays, rom):
             == (build / "a028/9_21").read_bytes(),
             "profile merge complete Query member differs from linked/generated/staged bytes")
     bindings = elf_helper_bindings(query, (PROFILE_PACKED, "BehaviorResolver_ApplyRecorded"))
-    code = elf_bytes_at(query, 0x2089fe0, 380)
-    offset = 0x2089fe0 - 0x02080000
+    code = elf_bytes_at(query, 0x208a154, 380)
+    offset = 0x208a154 - 0x02080000
     checked(offset + len(code) <= receipt["imageBytes"],
             "profile merge exceeds its Query image")
     query_packed_caller_contract(bindings, code, members[21][64 + offset:64 + offset + len(code)])
@@ -731,7 +729,7 @@ def appearance_rest_copy_controls(source, caller, code):
                  (REST_APPLICABLE_ADDRESS | 1, REST_APPLICABLE_SIZE, "FUNC", "ABS")):
         rejected(lambda: rest_policy_contract(hosted, leaf, source))
     for bad in (source[:-2], bytes([source[0] ^ 1]) + source[1:],
-                source[:0x106] + bytes(4) + source[0x10A:]):
+                source[:0x108] + bytes(4) + source[0x10C:]):
         rejected(lambda: rest_policy_contract(hosted, applicable, bad))
         rejected(lambda: appearance_rest_copy_contract(copied, source, bad,
             source, caller, code, code))
@@ -1271,7 +1269,7 @@ def verify_hop_private_homes(build, linked, overlays):
         (mount, "OverworldMount_InspectPolicy", 0x01FFA4E0, 12, 159,
          "10b501000520bff3fbfd10bd"),
         (mount, "OverworldMount_TerrainStreamIsIdle", 0x01FF9770, 16, 160,
-         "10b50220c1f372fa01384342584110bd"),
+         "10b50220c1f382fa01384342584110bd"),
         (mount, "OverworldMount_ReduceRole", 0x023BAB00, 48, 157,
          "30b50400084b87b00093084b03ad01900291684629001b6a9847240a"
          "05342406240e285d07b030bd01000c0000c83b02"),
@@ -1294,12 +1292,12 @@ def verify_hop_private_homes(build, linked, overlays):
     chain = build / "overworld_mount_chain_overlay_linked.o"
     imported = elf_helper_bindings(chain, (name,)).get(name)
     # B Jump/ledge chain Hops pass their exact distance and stream live when
-    # cardinal; a Hop walking-style mount tries hopMaxDistance down to
-    # hopMinDistance (914 bytes).
-    binding_contract(hosted, imported, 0x023BB20C, 914)
-    checked(hosted[1] == 914, "private Chain motion owner extent differs")
-    body_contract(elf_bytes_at(mount, 0x023BB20C, 914),
-                  overlay_span(overlays, 157, 0x023BB20C, 914))
+    # cardinal. Ordinary Hop first tries a legal adjacent raised support,
+    # then tries hopMaxDistance down to hopMinDistance (860 bytes).
+    binding_contract(hosted, imported, 0x023BB24C, 860)
+    checked(hosted[1] == 860, "private Chain motion owner extent differs")
+    body_contract(elf_bytes_at(mount, 0x023BB24C, 860),
+                  overlay_span(overlays, 157, 0x023BB24C, 860))
 
 
 def verify_wild_policy_init(build, linked, overlays):
@@ -1530,6 +1528,64 @@ def verify_throw_binding_refresh(build, linked, overlays):
 WATER_SINK_FRAME_PASS = 0x02250001
 
 
+def verify_temporary_model_allocation(build, overlays):
+    capsule = build / "overworld_field_capsule_linked.o"
+    name = "OverworldFieldModel_AllocTemporary"
+    owner = elf_helper_bindings(capsule, (name,)).get(name)
+    checked(owner is not None and owner[0] == 0x022081A1
+            and 0 < owner[1] <= 64 and owner[2] == "FUNC"
+            and owner[3] not in ("ABS", "UND"),
+            "temporary model allocator lacks its bounded Field owner")
+    body_contract(elf_bytes_at(capsule, 0x022081A0, owner[1]),
+                  overlay_span(overlays, 1, 0x022081A0, owner[1]))
+    loader = overlay_span(overlays, 1, 0x021F9374, 56)
+    calls = packaged_thumb_calls(loader, 0x021F9374, 0x021F9374, 56)
+    checked(loader[24:26] == bytes.fromhex("0420")
+            and loader[32:34] == bytes.fromhex("0420")
+            and (0x021F938E, "bl", 0x0201AA8C) in calls
+            and (0x021F9396, "bl", 0x022081A0) in calls
+            and (0x021F93A2, "bl", 0x0200778C) in calls,
+            "stock model loader lost its resident allocation, temporary fallback or read")
+    # The patched constructor still stores count, limit and the three queue
+    # arrays at their stock offsets. Both native admission paths read this
+    # same limit, so pending sources can upload and retire between batches.
+    checked(overlay_span(overlays, 1, 0x021FA88C, 28) == bytes.fromhex(
+        "012026806080201c2830a060c1190198e16008182061012000022c50"),
+        "stock texture queue lost its paced limit or neighboring layout")
+    # Same native window/layout, FIELD2 for its pixels only. Preserve the
+    # aligned saved-register frame and the BG heap restore after AddWindow.
+    window = overlay_span(overlays, 1, 0x021EF7BC, 44)
+    checked(window == bytes.fromhex(
+        "70b5011cc46925680b2222602031201c044a2df693fe256070bd0000"
+        "03000020050b9701d8f71e0200000000")
+            and overlay_span(overlays, 1, 0x021EF7E8, 8)
+                == bytes.fromhex("f0b583b0051c0193")
+            and packaged_thumb_calls(window, 0x021EF7BC, 0x021EF7BC, 26)
+                == [(0x021EF7CE, "bl", 0x0201D4F8)]
+            and packaged_thumb_calls(overlay_span(overlays, 1, 0x021EFA02, 4),
+                0x021EFA02, 0x021EFA02, 4)
+                == [(0x021EFA02, "bl", 0x021EF7BC)],
+            "map-name window lost its heap restore, template or native caller")
+    # Keep the catalog's direct native heap read typed as Thumb and in BL
+    # range. This removes a long-call literal within the fixed Wild slot.
+    wild = build / "overworld_wild_spawns_overlay_linked.o"
+    symbols = elf_helper_bindings(wild, (
+        "OverworldWildSpawns_FreeHeapBytes", "OverworldWildSpawns_LoadCodeAddonBlob"))
+    checked(symbols.get("OverworldWildSpawns_FreeHeapBytes")
+            == (0x0201ABED, 0, "FUNC", "ABS"),
+            "catalog heap reader lost its native Thumb binding")
+    loader = symbols.get("OverworldWildSpawns_LoadCodeAddonBlob")
+    checked(loader is not None and loader[0] & 1 and loader[1] > 0
+            and loader[2] == "FUNC" and loader[3] not in ("ABS", "UND"),
+            "catalog loader has no hosted native owner")
+    address, size = loader[0] & ~1, loader[1]
+    code = elf_bytes_at(wild, address, size)
+    body_contract(code, overlay_span(overlays, 149, address, size))
+    checked(any(kind == "bl" and target == 0x0201ABEC
+                for _, kind, target in packaged_thumb_calls(code, address, address, size)),
+            "catalog loader does not call the native heap reader directly")
+
+
 def verify_package(rom_path):
     build = ROOT / "build"
     capsule = build / "overworld_field_capsule_linked.o"
@@ -1548,6 +1604,7 @@ def verify_package(rom_path):
                               0x02209810, 0x02209814, 1, 0),
             "stock Field file/BSS/init/loader metadata changed")
     verify_stock_field_exit(overlays)
+    verify_temporary_model_allocation(build, overlays)
     land_model_task_contract(overlay_span(overlays, 1, LAND_MODEL_TASK, LAND_MODEL_TASK_SIZE))
     linked = elf_bytes_at(capsule, BASE, LIMIT - BASE)
     body_contract(linked, (build / "output_overworld_field_capsule.bin").read_bytes())

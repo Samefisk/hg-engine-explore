@@ -76,6 +76,8 @@ def configure_library(lib):
         "md_set_phase_timing": (I,[H,U]), "md_read_phase_timing": (I,[H,H,U]),
         "md_read_guest_clock": (I,[H,H,U]),
         "md_profile_enable": (I,[H,U]), "md_profile_read": (I,[H,H,U]),
+        "md_cart_rom_size": (U,[H]), "md_read_cart_rom": (I,[H,U,H,U]),
+        "md_write_cart_rom": (I,[H,U,H,U]),
     }
     for name,(result,args) in specs.items():
         fn=getattr(lib,name);fn.restype=result;fn.argtypes=args
@@ -167,6 +169,21 @@ class MelonDS:
             message=self.lib.md_last_error(self.handle)
             raise RuntimeError(message.decode(errors="replace") if message else "melonDS native operation failed")
     def open(self,path):self.call("md_open_rom",str(path).encode())
+    def cart_rom_size(self):
+        """Opened cartridge image length (melonDS pads it to a power of two)."""
+        self.require_open()
+        size=self.lib.md_cart_rom_size(self.handle)
+        if size==0:raise RuntimeError("melonDS cartridge image is unavailable")
+        return size
+    def read_cart_rom(self,offset,length):
+        bounded(offset);bounded(length,0x1000000)
+        data=C.create_string_buffer(length)
+        self.call("md_read_cart_rom",offset,data,length)
+        return data.raw
+    def write_cart_rom(self,offset,data):
+        """Paused-core edit of the cartridge image later card reads return."""
+        data=bytes(data);bounded(offset);bounded(len(data),0x1000000)
+        self.call("md_write_cart_rom",offset,C.create_string_buffer(data,len(data)),len(data))
     def import_save(self,path,force_size=0):
         if force_size!=0:raise ValueError("melonDS save size is derived from the cartridge")
         self.call("md_import_save",str(path).encode())

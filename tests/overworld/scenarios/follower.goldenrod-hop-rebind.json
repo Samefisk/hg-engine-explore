@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "id": "follower.goldenrod-hop-rebind",
+  "title": "Saved Mankey follows through Goldenrod and Route 34",
+  "status": "active",
+  "capabilities": [
+    "hop",
+    "world.transition"
+  ],
+  "proofLevel": "S3",
+  "costTier": 3,
+  "verification": {
+    "kind": "normal-play",
+    "expectationSource": "TICKETS.md#tkt-0085--follower-no-longer-moves-in-goldenrod",
+    "actor": "The unchanged saved party-slot2 Mankey, PID2920357538, as the current FOLLOWER.",
+    "trigger": "Normal Goldenrod DOWN32 plus neutral64; walk to Route34 y385, rest64; return to Goldenrod y380, rest64.",
+    "observable": "A complete shared Hop with dense render progress, logical commit and control return in each of the three current contexts; the same PID and current full handle through both native field rebinds.",
+    "setupAudit": "complete",
+    "setupMutations": [],
+    "limits": [
+      "Only this saved Mankey and the sealed Goldenrod/Route34 axis.",
+      "Normal Continue and key input only. No party, follower, profile, spawn, population or save preparation.",
+      "Not mounted movement, all terrain, or FPS proof."
+    ]
+  },
+  "fixture": {
+    "rom": "test.nds",
+    "save": {
+      "path": "test.sav",
+      "kind": "sav"
+    },
+    "seed": 0
+  },
+  "subjects": [
+    {
+      "id": "mankey",
+      "species": 56,
+      "role": "FOLLOWER",
+      "acquisition": "follower",
+      "minimum": 1,
+      "maximum": 1,
+      "motionActor": true,
+      "requirePresentation": true
+    }
+  ],
+  "events": [
+    {
+      "at": 0,
+      "kind": "setup",
+      "value": "Bind the existing saved Mankey at Goldenrod358366."
+    },
+    {
+      "at": 1,
+      "kind": "input",
+      "value": "DOWN32 and neutral64 must produce an actual shared follower Hop."
+    },
+    {
+      "at": 2,
+      "kind": "input",
+      "value": "Walk normally onto Route34 and back into Goldenrod; complete a current-handle Hop after each rebind."
+    }
+  ],
+  "stop": {
+    "frameBudget": 600,
+    "condition": "Three Hop and settled control witnesses, both current same-PID rebinds, or the first invalid identity, movement, coverage or command."
+  },
+  "expect": {
+    "requiredEvents": [],
+    "forbiddenEvents": [],
+    "invariants": [
+      "Saved party-slot2 Mankey PID remains2920357538.",
+      "The three contexts are Goldenrod76,Route34 map38,Goldenrod76.",
+      "Every context has complete sharedHop travel with real commit and idle control return.",
+      "Completed frames, native motion and current actor handles remain valid."
+    ]
+  },
+  "capture": "none",
+  "adapter": {
+    "kind": "devtools-test",
+    "test": "follower.goldenrod-hop-rebind",
+    "claims": [
+      "natural-input",
+      "live-actor-identity",
+      "logical-commit",
+      "rendered-motion",
+      "world-transition",
+      "control-release"
+    ],
+    "minimumFrames": 224
+  }
+}

@@ -26,7 +26,8 @@ static OverworldPickupRoutePosition goals[3];
 static OverworldPickupRouteNode nodes[256];
 static OverworldPickupRouteCachedEdge cache[512];
 static OverworldPickupRouteVisited table[512];
-static OverworldPickupRouteWorkspace workspace={nodes,cache,table,256,512,512,0};
+static u8 tableValid[64];
+static OverworldPickupRouteWorkspace workspace={nodes,cache,table,256,512,512,0,tableValid};
 static OverworldPickupRouteState state;
 static OverworldPickupRouteResult result;
 static OverworldPickupRouteEdgeResult Legal(void *context,const OverworldPickupRoutePosition *from,
@@ -163,8 +164,8 @@ int main(void)
  world.deferred=0;CHECK(!Finish(&q,16,OVERWORLD_PICKUP_ROUTE_REACHABLE,0));
  /* Capacities and generation wrap remain resource failures, never no-route. */
  OverworldPickupRouteNode tinyNodes[2];OverworldPickupRouteCachedEdge tinyEdges[4];
- OverworldPickupRouteVisited tinyTable[4]={{0}};
- OverworldPickupRouteWorkspace tiny={tinyNodes,tinyEdges,tinyTable,2,4,4,0};
+ OverworldPickupRouteVisited tinyTable[4]={{0}};u8 tinyValid[1]={0};
+ OverworldPickupRouteWorkspace tiny={tinyNodes,tinyEdges,tinyTable,2,4,4,0,tinyValid};
  q=Query(&world,5,1);CHECK(OverworldPickupRoute_Begin(&state,&q,&tiny)==OVERWORLD_PICKUP_ROUTE_PENDING);
  CHECK(!Finish(&q,16,OVERWORLD_PICKUP_ROUTE_RESOURCE_LIMIT,0));
  tiny.generation=0xFFFFFFFFu;
@@ -202,12 +203,12 @@ int main(void)
 '''
 ARM_LAYOUT = r'''
 #include "overworld_pickup_route.h"
-_Static_assert(sizeof(OverworldPickupRouteQuery)==96,"ARM query");
-_Static_assert(sizeof(OverworldPickupRouteState)==184,"ARM state");
-_Static_assert(sizeof(OverworldPickupRouteWorkspace)==24,"ARM workspace");
+_Static_assert(sizeof(OverworldPickupRouteQuery)==100,"ARM query");
+_Static_assert(sizeof(OverworldPickupRouteState)==188,"ARM state");
+_Static_assert(sizeof(OverworldPickupRouteWorkspace)==28,"ARM workspace");
 _Static_assert(sizeof(OverworldPickupRouteNode)==24,"ARM node");
 _Static_assert(sizeof(OverworldPickupRouteCachedEdge)==16,"ARM cached edge");
-_Static_assert(sizeof(OverworldPickupRouteVisited)==8,"ARM visited slot");
+_Static_assert(sizeof(OverworldPickupRouteVisited)==2,"ARM visited slot");
 _Static_assert(sizeof(OverworldPickupRouteResult)==108,"ARM result");
 '''
 
@@ -222,6 +223,7 @@ def main():
         source=SOURCE.read_text()
         mutants={
             "work budget":("used<budget","used<=budget"),
+            "stale visited validity":("memset(w->visitedValid,0,(w->visitedCapacity+7u)/8u);", ""),
             "directed current-origin proof":("if(node->parent==NONE) { Restart(s);break; }","if(node->parent==NONE) { s->status=OVERWORLD_PICKUP_ROUTE_REACHABLE;break; }"),
             "current dynamic edge proof":("if(e->dynamicRevision!=current->dynamicRevision || e->decision!=OVERWORLD_PICKUP_ROUTE_EDGE_LEGAL)","if(e->decision!=OVERWORLD_PICKUP_ROUTE_EDGE_LEGAL)"),
         }
@@ -236,7 +238,7 @@ def main():
         if not clang:raise SystemExit("clang unavailable for exact ARM layout control")
         layout=directory/"layout.c";layout.write_text(ARM_LAYOUT)
         subprocess.run([clang,"-target","arm-none-eabi","-ffreestanding","-fsyntax-only","-std=c11","-DOVERWORLD_ACTOR_SYSTEM_HOST","-I",str(ROOT/"include"),str(layout)],check=True)
-        print("ARM layout: State184 + Workspace24 + 24N + 16M + 8H; Result108; N256/M512/H512=18640 bytes")
+        print("ARM layout: State188 + Workspace28 + 24N + 16M + 2H + ceil(H/8); Result108; capacities unchanged")
     for filename in (SOURCE,HEADER,Path(__file__)):
         print(filename.relative_to(ROOT),hashlib.sha256(filename.read_bytes()).hexdigest())
 if __name__=="__main__":main()

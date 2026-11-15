@@ -5,13 +5,12 @@
 #include "../../include/sound.h"
 #include "../../include/constants/sndseq.h"
 
-/* The stock effect initializer plays the menu-confirm sound synchronously.
- * Keep its visual effect, then cancel that sequence before the sound update. */
+/* Keep the same visual through the native int emote parameter. The shared
+ * initializer skips its confirm sound before any sound work starts. */
 void __attribute__((noinline, used, section(".overworld_wild_quiet_bubble")))
 OverworldWildBubble_ShowQuiet(LocalMapObject *object, u8 bubbleId)
 {
-    ov01_02203A48(object, bubbleId);
-    StopSE(SEQ_SE_DP_DECIDE);
+    ov01_02203A48(object, bubbleId | 0x80);
 }
 
 typedef struct WildMovementRuntimePrefix {

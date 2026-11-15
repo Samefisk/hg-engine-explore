@@ -51,7 +51,7 @@ WILD_CAPTURE_MASK_READ_OFFSET = 0x3A4
 WILD_CONTROL_READ_OFFSET = 0x3AC
 RUNTIME_THROW_OFFSET = 0x220
 RUNTIME_CONDITIONS_OFFSET = 0x514
-CATALOG_BLOB_VERSION = 95
+CATALOG_BLOB_VERSION = 96
 CONDITIONS_SIZE = 3100
 CONDITIONS_BINDINGS_OFFSET = 0x998
 PREPARED_ACTOR_SIZE = 88
@@ -73,13 +73,13 @@ def _interaction_layout(session):
     build = Path(session.rt.REPO) / "build"
     wild_image = (build / "overworld_wild_spawns_overlay_linked.o").read_bytes()
     getter = symbol(wild_image, "OverworldWildSpawns_GetConditionRuntime", 2, expected_size=24)
-    blob_getter = symbol(wild_image, "OverworldWildSpawns_GetBehaviorDataBlob", 2, expected_size=128)
+    blob_getter = symbol(wild_image, "OverworldWildSpawns_GetBehaviorDataBlob", 2, expected_size=120)
     blob_owner = symbol(wild_image, "sOverworldWildBehaviorDataBlob", 1, ".bss", 4)
     # This exact native getter loads its pointer from the flags base + 16.
     # Keep the private owner read bound to the complete current compiled body.
     require(hashlib.sha256(blob_getter[2]).hexdigest() ==
-            "bcb36b19130d455b4d3654f372ebe6db62b6cd0f78da7c9579a4678411e49923"
-            and struct.unpack_from("<I", blob_getter[2], 108)[0] + 16 == blob_owner[0],
+            "3295586e7947527dc93be30ff9d1ebacc72b367b3b75761c192cf3afbb4db9a8"
+            and struct.unpack_from("<I", blob_getter[2], 100)[0] + 16 == blob_owner[0],
             "Pokémon condition catalog owner getter differs", "combat-interaction-identity")
     # Native Thumb getter: state+E4 -> runtime, then literal+514 -> conditions.
     # Reject a different compiled layout before following either private pointer.
@@ -172,7 +172,7 @@ def _interaction_catalog(session, layout, field, native_cycle, *, context, read=
     offset, count, stride, size = struct.unpack_from("<IHHI", blob, 52)
     require(struct.unpack_from("<IHH", blob) == (0x4F574244, CATALOG_BLOB_VERSION, 84)
             and struct.unpack_from("<I", blob, 8)[0] == len(blob)
-            and stride == 48 and count <= 65535 and offset >= 84
+            and stride == 52 and count <= 65535 and offset >= 84
             and offset + count * stride <= size <= len(blob),
             "Pokémon condition catalog layout differs", "combat-interaction-identity")
     digest = hashlib.sha256(blob).hexdigest()
@@ -401,11 +401,11 @@ def _interactions(session, snapshot, field):
                 require(len(set(indexes)) == count and all(i < catalog["count"] for i in indexes),
                         "Pokémon prepared condition catalog index is invalid", "combat-interaction-state")
                 for index, source in enumerate(indexes):
-                    start = catalog["offset"] + source * 48
-                    entry = catalog["blob"][start:start + 48]
+                    start = catalog["offset"] + source * 52
+                    entry = catalog["blob"][start:start + 52]
                     # Existing UntilCrash captures and transient while-true
                     # actor targets use the same authenticated prepared state.
-                    if entry[38] != 2 and not (entry[38] == 0 and entry[39] == 2):
+                    if entry[42] != 2 and not (entry[42] == 0 and entry[43] == 2):
                         continue
                     application = catalog["bank"]["conditionOwners"][source]
                     application_local = local_application(catalog["bank"], actor["species"], application)
@@ -430,10 +430,10 @@ def _interactions(session, snapshot, field):
                     # previous target IDs. They never grant a target handle.
                     matches = [a for a in actors if a.get("handle") == target_handle] if kind == 2 else []
                     row["conditionCaptures"].append(dict(preparedIndex=index, catalogIndex=source,
-                        conditionId=struct.unpack_from("<H", entry, 32)[0], application=application,
+                        conditionId=struct.unpack_from("<H", entry, 36)[0], application=application,
                         applicationLocal=application_local,
-                        activationMode=entry[38], durationFrames=struct.unpack_from("<H", entry, 20)[0],
-                        cooldownFrames=struct.unpack_from("<H", entry, 22)[0],
+                        activationMode=entry[42], durationFrames=struct.unpack_from("<H", entry, 24)[0],
+                        cooldownFrames=struct.unpack_from("<H", entry, 26)[0],
                         activeUntil=active, cooldownUntil=cooldown, flags=flags,
                         target=dict(kind=("NONE", "PLAYER", "ACTOR")[kind], actor=target_handle),
                         targetCurrent=(len(matches) == 1 if kind == 2 else kind == 1),

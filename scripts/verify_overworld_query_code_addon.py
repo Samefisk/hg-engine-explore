@@ -102,7 +102,7 @@ WILD_CALLBACK_TABLES = {
 }
 # Exact private Entry native table; RouteOps retains its separate v3/84 ABI.
 WILD_ENTRY_NATIVE_TABLE = "sOverworldWildEntryNativeOps"
-WILD_ENTRY_NATIVE_TABLE_OWNER = (37584708, 72, 'OBJECT')
+WILD_ENTRY_NATIVE_TABLE_OWNER = (37584716, 72, 'OBJECT')
 WILD_ENTRY_NATIVE_CALLBACKS = ('OverworldWildSpawns_RouteActorState',
  'OverworldWildSpawns_InitRouteWorld',
  'OverworldWildSpawns_GetAllowedTileForSpotState',
@@ -120,70 +120,70 @@ WILD_ENTRY_NATIVE_CALLBACKS = ('OverworldWildSpawns_RouteActorState',
  'OverworldWildSpawns_EntryPlacementBlocked',
  'OverworldWildSpawns_SpawnPreparedEncounter')
 # (odd hosted address, full extent, packaged overlay owner, full body SHA256)
-WILD_ENTRY_NATIVE_OWNERS = {'OverworldWildSpawns_EntryGuard': (37550767,
+WILD_ENTRY_NATIVE_OWNERS = {'OverworldWildSpawns_EntryGuard': (37550763,
                                     22,
                                     149,
-                                    'a23885c9067794d449fb1bb9597564fa6abf4ffe44c345ab28209158af855fa2'),
- 'OverworldWildSpawns_EntryPlacementBlocked': (37575429,
+                                    '585b2b7029016dd7a85693f42fb25419022f798d03c918edfb3666b78960cc23'),
+ 'OverworldWildSpawns_EntryPlacementBlocked': (37575433,
                                                74,
                                                149,
-                                               '001a7672b33f606ddfca212f463b736e8546de208e53d6a1462d24b2cef10120'),
- 'OverworldWildSpawns_FinalizeEntryPersonality': (37550789,
+                                               '19b8a35770cd38932803e91eb6ede0c5c27adf3ead5c76fb88832fabef55754a'),
+ 'OverworldWildSpawns_FinalizeEntryPersonality': (37550785,
                                                   44,
                                                   149,
                                                   'bb57c3009cee7194ed954d33cfdcb2fd9d45fa5be0b2fa0ee373d5f042c0525f'),
- 'OverworldWildSpawns_FinishEntryArrival': (37554553,
+ 'OverworldWildSpawns_FinishEntryArrival': (37554549,
                                             92,
                                             149,
-                                            'f870d356fe46e934c0efb68788e483a696eb9782281056de728c45f0bda4b706'),
- 'OverworldWildSpawns_GetAllowedTileForSpotState': (37540645,
+                                            '69b8ccd80ca10c022f41bcc8ab1ba4d6de2e2b40fcb0805549a20e6f425b5c87'),
+ 'OverworldWildSpawns_GetAllowedTileForSpotState': (37540637,
                                                     10,
                                                     149,
-                                                    '487fbafdb57b788af601ca9f4283420d76102a5b0699a0bf3a6a4808062d3582'),
- 'OverworldWildSpawns_GetObjectGroundBaseYAt': (37545551,
+                                                    '6ae8a91b3ab4b8baf3b893347815b6071c27276875d8af555896e54b178060ee'),
+ 'OverworldWildSpawns_GetObjectGroundBaseYAt': (37545547,
                                                 54,
                                                 149,
-                                                '0f6d6f5cac778058251bc1bf71fb9d90866151b60d73441f6d69dd143a9cecec'),
- 'OverworldWildSpawns_InitRouteWorld': (37545005,
+                                                '1932aed2d340ed6e94d594811e0582cfda11ab06cb343791acdd6e4137306174'),
+ 'OverworldWildSpawns_InitRouteWorld': (37545001,
                                         88,
                                         149,
-                                        'ab5abde234cf1f0de912427432658a087d589cd2f0acb2b31045dcfbb5d54623'),
- 'OverworldWildSpawns_IsBehaviorLimitKeyAtOverworldLimit': (37542287,
+                                        '31284178f020eb6042046948009e65e8add85641a17fe785288dfc4bd50f5ae9'),
+ 'OverworldWildSpawns_IsBehaviorLimitKeyAtOverworldLimit': (37542291,
                                                             26,
                                                             149,
                                                             'fda3f50e12035567186578fc98cd9f2f37aa44a4274d746ab11690cc8d5f5951'),
- 'OverworldWildSpawns_IsTileOccupiedByObject': (37545919,
+ 'OverworldWildSpawns_IsTileOccupiedByObject': (37545915,
                                                 30,
                                                 149,
-                                                'de8f50ca92a5e24519fec15bbd014a46c870d4a3c96e577b28042e3957c7d9e5'),
- 'OverworldWildSpawns_RemoveEncounter': (37560689,
+                                                '5e344633c9cf399c2784017ff2fd6e306aebc03b015507bd9d59bf32b00fb096'),
+ 'OverworldWildSpawns_RemoveEncounter': (37560685,
                                          52,
                                          149,
-                                         'd6f2f1f7d670b79aa49e26f72b2c02a5b63d9a3a5c2c769f6daa89965e81019a'),
- 'OverworldWildSpawns_ResolveSpawnBehaviorProfile': (37551553,
-                                                     160,
+                                         '7dc425b6dbba51d1e550fd462ed46d3a0d1bd37c5570f9299ac589f7cc07f38c'),
+ 'OverworldWildSpawns_ResolveSpawnBehaviorProfile': (37551549,
+                                                     172,
                                                      149,
-                                                     '1920f54af1d3f6ff4c3f52c8411539fe5bc279b11334c5336bf1dc2218e328ba'),
+                                                     '606bfc011513c3cf788f8e35cfdaeb834b8e020efdcf0ef8c16df7aebe080dfc'),
  'OverworldWildSpawns_RouteActorState': (35685583,
                                          46,
                                          1,
-                                         '5d1ca4d9d8adc7cb3415f72a64677b5b930f2de08023c7d6804cb1a36145dc85'),
- 'OverworldWildSpawns_SpawnPreparedEncounter': (37566041,
+                                         '1332e67c241846e432d7519bcb0c7722caec990b031c5a11eb7faaf48651ca87'),
+ 'OverworldWildSpawns_SpawnPreparedEncounter': (37566037,
                                                 1204,
                                                 149,
-                                                'b18d2a881d1c8e2eda67ea16de97009b32b3d24a1e208b1d2fe04e69b593e10c'),
- 'OverworldWildSpawns_StartEntryEdge': (37584289,
+                                                '8a0ce24d203e6f65330bf8487236db61b0cbdd71886acdc3117cbe96461ab934'),
+ 'OverworldWildSpawns_StartEntryEdge': (37584297,
                                         250,
                                         149,
-                                        '1957b75b832f3c7a8f6d590c477dc45cd7cae98269fbdbf415f0cf4ed4d1d9eb'),
- 'OverworldWildSpawns_TryApplySpawnDestination': (37557721,
+                                        '6dc93677df6909e327f17e42fd5b52b95030bbe5ff1f7acbe757c25dc0272d1f'),
+ 'OverworldWildSpawns_TryApplySpawnDestination': (37557717,
                                                   904,
                                                   149,
-                                                  '47682804e907b0abb44dbffd54d03762ad563575c3ed201f0ff261c055be7ad6'),
- 'OverworldWildSpawns_TryPrepareSpawnWithHelper': (37542789,
+                                                  'd5bd020228160899dcd2731d799c91043fde180b611bbbe2dcf6a1b199315991'),
+ 'OverworldWildSpawns_TryPrepareSpawnWithHelper': (37542793,
                                                    116,
                                                    149,
-                                                   'ae51b8f4edc89442e30e4e383bff831ed4d7e7136e3f8c12a1d4a69585e6c7e3')}
+                                                   'a0d3e4db3350dc3368416eeaeb6632e6333f8d1243cfad81f0733c1cf8785809')}
 
 MOUNT_ABSOLUTE_CALLBACKS = {
     "PlayCry": 0x02006219,
@@ -482,7 +482,7 @@ def verify_selector(selector, packaged):
         hosted(symbols.get(name))
     hosted(symbols.get("OverworldQueryCodeAddonField_AcquireCurrent"), 0x023C2A80, 96)
     hosted(symbols.get("OverworldQueryCodeAddon_Rebind"), 0x023C2EB0, 194)
-    # The package byte count (70096) is a literal-pool word.
+    # The exact package byte count (70840) is a literal-pool word.
     hosted(symbols.get("OverworldQueryCodeAddonField_Acquire"), 0x023C2B00, 92)
     hosted(symbols.get("OverworldQueryCodeAddonField_Unload"), 0x023C2B70, 28)
     hosted(symbols.get("OverworldThrowObservation_Observe"), 0x023C2BA0, 124)
@@ -536,6 +536,14 @@ CONDITION_IMPORT_OWNERS = {
 # Named vanilla PlayerAvatar_GetXCoord/GetZCoord. These Thumb wrappers read
 # the current Player map object, then its current X/Z coordinate.
 CONDITION_STOCK_IMPORTS = {
+    # Vanilla Heap_Free, src/heap.c:238. It releases each owned T82 chunk.
+    "sys_FreeMemoryEz":
+        (0x0201AB0D, bytes.fromhex(
+            "f8b5061c301f00680006040e1848818a8c4229d201680069005d80000f58002f"
+            "01d10af0f5fc12486500c068405b002802d1201c00f0a0f80d48c068405b0028"
+            "01d10af0e5fc0a48c168485b401e4853b8f06cef103e041c381c311c9af0e2ec"
+            "201cb8f06eeff8bd0af0d2fcf8bdc04684151d02"
+)),
     "OverworldConditionVisibility_PlayerX":
         (0x0205C67D, bytes.fromhex("08b500f02df803f047f908bd")),
     "OverworldConditionVisibility_PlayerY":
@@ -626,101 +634,98 @@ def verify_publication_imports(build, overlays):
 
 # Entry196/39 keeps one heap image. Condition runtime now lives in its
 # authenticated tail; only callbacks60/64/72 cross from the entry to this owner.
-CONDITION_NATIVE_OWNERS = {'Native_HandleEquals': (34113304, 26),
- 'Native_AccessObject': (34113330, 196),
- 'Native_AccessPose': (34113526, 346),
- 'OverworldBehaviorConditionAdapter_MovingAllowed': (34113872, 276),
- 'OverworldBehaviorConditionAdapter_CollectWinningEntries': (34114148, 484),
- 'Native_Visibility': (34114632, 224),
- 'OverworldBehaviorConditionAdapter_EvaluateMovingNotice.constprop.0': (34114856, 440),
- 'OverworldHopPresentation_Run': (34115296, 540),
- 'OverworldConditionNative_Run': (34115836, 1580)}
+CONDITION_NATIVE_OWNERS = {'Native_AccessObject': (34113718, 196),
+ 'Native_AccessPose': (34113914, 346),
+ 'Native_HandleEquals': (34113692, 26),
+ 'Native_Visibility': (34115016, 224),
+ 'OverworldBehaviorConditionAdapter_CollectWinningEntries': (34114536, 480),
+ 'OverworldBehaviorConditionAdapter_EvaluateMovingNotice.constprop.0': (34115240, 440),
+ 'OverworldBehaviorConditionAdapter_MovingAllowed': (34114260, 276),
+ 'OverworldConditionNative_Run': (34116220, 1580),
+ 'OverworldHopPresentation_Run': (34115680, 540)}
 
-CONDITION_NATIVE_SHA256 = {'Native_HandleEquals': '3fbada859dd3942e7716cbf087e3789c05b87ddd19b8a11b2127c956a7b07f59',
- 'Native_AccessObject': '1e619897fe38cbe57bc2e7593dad2f947135c4117576d1a9b2e4359089a0bb7b',
+CONDITION_NATIVE_SHA256 = {'Native_AccessObject': '1e619897fe38cbe57bc2e7593dad2f947135c4117576d1a9b2e4359089a0bb7b',
  'Native_AccessPose': '90f18605bf261e380506bdb7e6852e91f01b503fe172a93a36fd390a581eb3a7',
- 'OverworldBehaviorConditionAdapter_MovingAllowed': '642990625f53e0943a1f62e6cd70f020e7b7290547aeaf289087a8536089df9c',
- 'OverworldBehaviorConditionAdapter_CollectWinningEntries': 'efdd617fa1dd4544c32a142d4a4b936b0e9be663e56f944fc69cb25b016e0ccb',
+ 'Native_HandleEquals': '3fbada859dd3942e7716cbf087e3789c05b87ddd19b8a11b2127c956a7b07f59',
  'Native_Visibility': '19981bdfd6d32693509874c015ed1eeca296339c05e2c5a11765db483f8be583',
- 'OverworldBehaviorConditionAdapter_EvaluateMovingNotice.constprop.0': '78c9b9be04d94658a80214e90a4495dfe0eea7a251a3811db6ebd344e3401d87',
- 'OverworldHopPresentation_Run': '48a85b4fb68dfcdac84adbe7e1f3c7a969b4db13a9dbd5baad27ce3deb10a717',
- 'OverworldConditionNative_Run': 'b917228445052ec3fe2b26f7befd00f2aaada86e3ff4e436d1d7c4bf3d9c712b'}
+ 'OverworldBehaviorConditionAdapter_CollectWinningEntries': 'edb2b46a226ae064e67ba1ca5ea4257bb39fbfd25d14a8b03ca619a5a25aa57e',
+ 'OverworldBehaviorConditionAdapter_EvaluateMovingNotice.constprop.0': '647745f6d82dd5e0cc098405cacd6e5d6f5637a30740547b0091a87a84ad0bfa',
+ 'OverworldBehaviorConditionAdapter_MovingAllowed': '642990625f53e0943a1f62e6cd70f020e7b7290547aeaf289087a8536089df9c',
+ 'OverworldConditionNative_Run': 'b559e186a17f72b1739183210282886069f683629d1eaebfb3ecc108f15b7fce',
+ 'OverworldHopPresentation_Run': '48a85b4fb68dfcdac84adbe7e1f3c7a969b4db13a9dbd5baad27ce3deb10a717'}
 
-RESOLVER_NATIVE_OWNERS = {'BehaviorResolver_ReadFieldValue': (34117416, 58),
- 'BehaviorResolver_MatchApplies': (34117474, 102),
- 'BehaviorResolver_LegacySpawnDestinationMask': (34117576, 72),
- 'BehaviorResolver_ApplyMask': (34117648, 592),
- 'BehaviorResolver_NormalizeLane': (34118240, 414),
- 'BehaviorResolver_BlobValid': (34118654, 66),
- 'BehaviorResolver_RequestValid': (34118720, 584),
- 'BehaviorResolver_FingerprintBytes': (34119304, 28),
- 'BehaviorResolver_FingerprintU32': (34119332, 28),
- 'BehaviorResolver_Trace': (34119360, 96),
- 'BehaviorResolver_SelectClassInternal': (34119456, 192),
- 'BehaviorResolver_ApplyRecorded': (34119648, 380),
- 'OverworldBehaviorResolver_ValidateRequest': (34120028, 64),
- 'BehaviorResolver_InspectClass': (34120092, 136),
- 'BehaviorResolver_Resolve': (34120228, 1708),
- 'OverworldBehaviorResolver_QueryCall': (34122116, 128)}
+RESOLVER_NATIVE_OWNERS = {'BehaviorResolver_ApplyMask': (34118044, 592),
+ 'BehaviorResolver_ApplyRecorded': (34120020, 380),
+ 'BehaviorResolver_BlobValid': (34119050, 66),
+ 'BehaviorResolver_FingerprintBytes': (34119680, 28),
+ 'BehaviorResolver_FingerprintU32': (34119708, 28),
+ 'BehaviorResolver_InspectClass': (34120464, 136),
+ 'BehaviorResolver_LegacySpawnDestinationMask': (34117972, 72),
+ 'BehaviorResolver_MatchApplies': (34117858, 114),
+ 'BehaviorResolver_NormalizeLane': (34118636, 414),
+ 'BehaviorResolver_ReadFieldValue': (34117800, 58),
+ 'BehaviorResolver_RequestValid': (34119116, 564),
+ 'BehaviorResolver_Resolve': (34120600, 1688),
+ 'BehaviorResolver_SelectClassInternal': (34119832, 188),
+ 'BehaviorResolver_Trace': (34119736, 96),
+ 'OverworldBehaviorResolver_QueryCall': (34122468, 128),
+ 'OverworldBehaviorResolver_ValidateRequest': (34120400, 64)}
 
-RESOLVER_NATIVE_SHA256 = {'BehaviorResolver_ReadFieldValue': 'c7388af36e377181844b83c82b3a6614cda0997d2600f704dc2780bd50f9460d',
- 'BehaviorResolver_MatchApplies': '5d57a4efc86f716c7135df4def91ff36a1a4da9eb89697c65161f33bd7c84bf7',
- 'BehaviorResolver_LegacySpawnDestinationMask': '0555dcc19ffc042cc0b7e9bef54857cd2a7ec8e8aa8cf042419fd13824b86565',
- 'BehaviorResolver_ApplyMask': 'eb7ab788f1cc4fb9c0f5293ae2c3f8954513cfcdcd7ff569b52f68a5d9f14ff3',
- 'BehaviorResolver_NormalizeLane': '9241b19a09c5ed1a81c3133004902e0c484c68e9fc6779d63921e1a12f846ef0',
- 'BehaviorResolver_BlobValid': 'bba49407aff239dc196fecfddddd0a08d600c130614862161be4fdb931192aac',
- 'BehaviorResolver_RequestValid': 'a8040865f2f30bcaa8e1191edbea631a1383afabb766531deb32cbf975dffc85',
+RESOLVER_NATIVE_SHA256 = {'BehaviorResolver_ApplyMask': '51d1c35982bbdfde593328f9a606be6ca6fdbb40a12d134c2f651639857399bb',
+ 'BehaviorResolver_ApplyRecorded': 'dd526923ae2e81bb490e734f50195eda331c6d21a3a5893586a493f040745b23',
+ 'BehaviorResolver_BlobValid': 'f9d6fd48e25bc7bf7cb27d81c2e758b49fcbedc2399f51804ecb90ffc0269dd9',
  'BehaviorResolver_FingerprintBytes': '9f1aca64ade144669d6a8d71c27d5e436768fe2ecd9b33d448505ebf325c1133',
  'BehaviorResolver_FingerprintU32': '2633b90c9217749d305c93500d8ae8e3ca3255828982a73032c94cf5288b3c17',
+ 'BehaviorResolver_InspectClass': '23ce68ce4388d8c0fbf75c72fbc8840521ac49e27af9dd4bced92bf6f8d7017b',
+ 'BehaviorResolver_LegacySpawnDestinationMask': 'a17627b13e1e915b90d6e8175614f0fb6584adcd56ca9743ab85386d3efd6a46',
+ 'BehaviorResolver_MatchApplies': 'dcd3a22ada037b7b33c87b8039aef93b82446b504430d359b15ec7772e748949',
+ 'BehaviorResolver_NormalizeLane': '9241b19a09c5ed1a81c3133004902e0c484c68e9fc6779d63921e1a12f846ef0',
+ 'BehaviorResolver_ReadFieldValue': 'c7388af36e377181844b83c82b3a6614cda0997d2600f704dc2780bd50f9460d',
+ 'BehaviorResolver_RequestValid': '8ac1fcfff5c3dece2e42e6d3dd2c6facb53c55767775f9175d7506252019d5bb',
+ 'BehaviorResolver_Resolve': '999a05c317f05efe323880fad47201ddba565816103181ea7b8f1045e1357e53',
+ 'BehaviorResolver_SelectClassInternal': '0df0cac9dad318f597c4b11ea7c5f7d00becc0079d9027524e993d5c28236252',
  'BehaviorResolver_Trace': '0170ba10aba959692e6b5187067ebb58ac3fea488ed81f742911f325045a161a',
- 'BehaviorResolver_SelectClassInternal': 'a3ffb6e34959f203bac75b1c0177795bd36e0f40bf24afcd12e7afbca85105bc',
- 'BehaviorResolver_ApplyRecorded': 'a433fbfc55d90f5c317374d236c51187ddfc7d98218f95c034939503b56a06ba',
- 'OverworldBehaviorResolver_ValidateRequest': '3a2c25ed0c421cb7170b6ad07c47c4724759947a376f59b9e6da23dc5ec7c5e4',
- 'BehaviorResolver_InspectClass': '1f18a48bf30b0a4cee10e45ed9c586f19570e11b574a7859b050e22b80e11d83',
- 'BehaviorResolver_Resolve': 'c4a2be5265eac11ac1d9eba2d03afe12caa7af878847595728d0f9119c763ee9',
- 'OverworldBehaviorResolver_QueryCall': 'cd23f16bce460322ae6ad33ef9f6441b41fa87b2636b7a94aad14f6ade2c65c3'}
+ 'OverworldBehaviorResolver_QueryCall': 'c10d468a17f3a8ef48b9eed5e4eaaeb83eb7089ede64b8ec438463fedc90e4a4',
+ 'OverworldBehaviorResolver_ValidateRequest': '5462d8dd3f6e9d7c61da14dc1831ffb0591e54a9134e2abde78fffcbfd78c552'}
 
-CONDITION_RUNTIME_CALLBACK_OWNERS = {'OverworldBehaviorCondition_PrepareActor': (34110956, 256),
- 'OverworldBehaviorCondition_EvaluatePrepared': (34111212, 2092),
- 'OverworldBehaviorCondition_NotifyWorldEffect': (34110528, 102)}
-CONDITION_RUNTIME_CALLBACK_SHA256 = {'OverworldBehaviorCondition_PrepareActor': '52ce8405fc51a1017b9c002f41892c7dd1dd4149c581f166a45b73d910be1b85',
- 'OverworldBehaviorCondition_EvaluatePrepared': '67779369b1413902fdb03d5d0f90752fd61cf5f5b00aefd5e535d35e7af4c2ae',
- 'OverworldBehaviorCondition_NotifyWorldEffect': 'c71c7ee42b7e7f8c29d35766640974ffa56026923a89460bcbf3463aad844c16'}
+CONDITION_RUNTIME_CALLBACK_OWNERS = {'OverworldBehaviorCondition_EvaluatePrepared': (34111600, 2092),
+ 'OverworldBehaviorCondition_NotifyWorldEffect': (34110916, 102),
+ 'OverworldBehaviorCondition_PrepareActor': (34111344, 256)}
+CONDITION_RUNTIME_CALLBACK_SHA256 = {'OverworldBehaviorCondition_EvaluatePrepared': '477eedfff87cc9f66ad2a804f704980b6b4b273be6ecbdef0e7d072dd4d626e0',
+ 'OverworldBehaviorCondition_NotifyWorldEffect': '368f8fd29bb864b4bf31d843dc8f80eb7d170330f30aaefce77e68c0f4deea7f',
+ 'OverworldBehaviorCondition_PrepareActor': '20f66d15cccae96f64a9be09d6590aa622f1ae1df998e553b69b797913d2b9fc'}
 CONDITION_NATIVE_OWNERS.update(CONDITION_RUNTIME_CALLBACK_OWNERS)
 CONDITION_NATIVE_SHA256.update(CONDITION_RUNTIME_CALLBACK_SHA256)
 CONDITION_NATIVE_OWNERS.update(RESOLVER_NATIVE_OWNERS)
 CONDITION_NATIVE_SHA256.update(RESOLVER_NATIVE_SHA256)
-RESOLVER_CODE_START, RESOLVER_CODE_END = 0x2089728, 0x208aa04
-RESOLVER_CODE_SHA256 = "b6352e0034f3c958ff0b2afa29276bf9f4316f5a8902b9aa00e18975e0c03c64"
+RESOLVER_CODE_START, RESOLVER_CODE_END = 0x20898a8, 0x208ab64
+RESOLVER_CODE_SHA256 = '03e402ac2a3b6d0f9ad668674baf8d63d275d63d041f1741fe0b0e2e2f6039b0'
 
-CONDITION_NATIVE_DIRECT_CALLS = {'Native_AccessObject': ((74, 34113304), (140, 34113304)),
- 'OverworldBehaviorConditionAdapter_EvaluateMovingNotice.constprop.0': ((72,
-                                                                         34113872),
-                                                                        (172,
-                                                                         34114632),
-                                                                        (340,
-                                                                         34114632)),
- 'OverworldBehaviorConditionAdapter_MovingAllowed': ((146, 34113304),),
- 'OverworldConditionNative_Run': ((172, 34113304),
-                                  (378, 34115296),
-                                  (926, 34113330),
-                                  (994, 34113526),
-                                  (1048, 34113330),
-                                  (1112, 34113526),
-                                  (1418, 34114856),
-                                  (1506, 34114148))}
+CONDITION_NATIVE_DIRECT_CALLS = {'Native_AccessObject': ((74, 34113692), (140, 34113692)),
+ 'OverworldBehaviorConditionAdapter_EvaluateMovingNotice.constprop.0': ((72, 34114260),
+                                                                        (172, 34115016),
+                                                                        (340, 34115016)),
+ 'OverworldBehaviorConditionAdapter_MovingAllowed': ((146, 34113692),),
+ 'OverworldConditionNative_Run': ((172, 34113692),
+                                  (378, 34115680),
+                                  (926, 34113718),
+                                  (994, 34113914),
+                                  (1048, 34113718),
+                                  (1112, 34113914),
+                                  (1418, 34115240),
+                                  (1506, 34114536))}
 
 # The sole CargoWild Entry branch borrows this native reducer synchronously.
 # Its original NULL-control Entry path and all ordinary Cargo work stay guarded.
-ENTRY_NATIVE_QUERY_OWNERS = {'OverworldCargoQueryWild_Tick': (34128500, 5552),
- 'OverworldEntryRoute_NativeControl': (34141536, 2692)}
-ENTRY_NATIVE_QUERY_SHA256 = {'OverworldCargoQueryWild_Tick': 'b1e682e34fe4500290d1c4e39584e9701f54ece07232e3890567b1f7341806eb',
- 'OverworldEntryRoute_NativeControl': 'aecd248fb30949a3c5da0012e0a3b5bf4098ea2231c4d143fd9784aa87ee8454'}
+ENTRY_NATIVE_QUERY_OWNERS = {'OverworldCargoQueryWild_Tick': (34129020, 5528),
+ 'OverworldEntryRoute_NativeControl': (34142186, 2690)}
+ENTRY_NATIVE_QUERY_SHA256 = {'OverworldCargoQueryWild_Tick': '34aba466ff336a39e6df44b7673f442f57f2772a99239bcd676cd3880766ccfa',
+ 'OverworldEntryRoute_NativeControl': '19c291eb9078a578147d2dea6afa9ebe5d781bffd59d50104cb7e1bc5081b117'}
 
 def entry_native_query_contract(native, read):
     low = native.get("__query_return_code_end", (0,))[0]
     high = native.get("__query_entry_code_end", (0,))[0]
-    checked((low, high) == (0x208b0d8, 0x2090c08),
+    checked((low, high) == (0x208b238, 0x2090ea4),
             "Entry native code boundaries differ")
     for name, (address, size) in ENTRY_NATIVE_QUERY_OWNERS.items():
         hosted(native.get(name), address, size, low=low, high=high)
@@ -728,12 +733,12 @@ def entry_native_query_contract(native, read):
         checked(len(body) == size and hashlib.sha256(body).hexdigest()
                 == ENTRY_NATIVE_QUERY_SHA256[name],
                 "Entry native full guarded body differs: " + name)
-    cargo = read(0x208c274, 5552)
-    checked(read(0x02080000 + 112, 4) == struct.pack("<I", 0x208c275)
+    cargo = read(0x208c47c, 5528)
+    checked(read(0x02080000 + 112, 4) == struct.pack("<I", 0x208c47d)
             and cargo[0x2A:0x46] == bytes.fromhex(
-                "5b7f1393012b01d000f0b3fe0d9b9e68002e09d0736d1793002b10d0")
+                "5b7f1393012b01d000f0a9fe0d9b9e68002e09d0736d1793002b10d0")
             and cargo[0x4A:0x4E] == bytes.fromhex("8c4b9847")
-            and cargo[0x27C:0x280] == struct.pack("<I", 0x208f561),
+            and cargo[0x27C:0x280] == struct.pack("<I", 0x208f7eb),
             "Entry native route1/NULL-control gate or typed long-call differs")
 
 
@@ -741,7 +746,7 @@ def condition_native_contract(native, read):
     """Seal the typed bank/Arc dispatcher and every current physical leaf."""
     low = native.get("__query_cargo_code_end", (0,))[0]
     high = native.get("__query_return_code_end", (0,))[0]
-    checked((low, high) == (0x2085e5c, 0x208b0d8),
+    checked((low, high) == (0x2085fd4, 0x208b238),
             "native Condition code boundaries differ")
     for name, (address, size) in CONDITION_NATIVE_OWNERS.items():
         hosted(native.get(name), address, size, low=low, high=high)
@@ -758,34 +763,34 @@ def condition_native_contract(native, read):
         checked(read(0x02080000 + offset, 4)
                 == struct.pack("<I", CONDITION_RUNTIME_CALLBACK_OWNERS[name][0] | 1),
                 "native Condition runtime callback differs: " + name)
-    checked(read(0x02080000 + 152, 4) == struct.pack("<I", 0x20890fd),
+    checked(read(0x02080000 + 152, 4) == struct.pack("<I", 0x208927d),
             "native Condition dispatcher is not the exact callback152")
     # Real Resolver runs after the Cargo boundary. Only its named callback68
     # enters this borrowed32B dispatch; packed merge remains one typed import.
-    checked(read(0x02080000 + 68, 4) == struct.pack("<I", 0x208a985),
+    checked(read(0x02080000 + 68, 4) == struct.pack("<I", 0x208aae5),
             "native Resolver is not its exact typed callback68")
     checked(native.get("OverworldBehaviorPackedOptions_Apply")
             == (0x01FFD2CD, 0, "FUNC", "ABS"),
             "native Resolver packed merge import lost exact odd Thumb metadata")
-    checked(read(0x208a154, 4) == struct.pack("<I", 0x01FFD2CD)
-            and read(0x208a0ac, 2) == bytes.fromhex("9847"),
+    checked(read(0x208a2c8, 4) == struct.pack("<I", 0x01FFD2CD)
+            and read(0x208a222, 2) == bytes.fromhex("9847"),
             "native Resolver packed merge is not its exact odd BLX import")
     checked(hashlib.sha256(read(RESOLVER_CODE_START,
                 RESOLVER_CODE_END-RESOLVER_CODE_START)).hexdigest() == RESOLVER_CODE_SHA256,
             "full Resolver guarded code/constants differ")
-    dispatch = read(0x208a984, 128)
+    dispatch = read(0x208aae4, 128)
     checked(dispatch[0x6C:0x80] == struct.pack("<5I", 0x00200001,
-                0x00FFFF00, 0x208a15d, 0x208a225, 0x208a19d),
+                0x00FFFF00, 0x208a2d1, 0x208a399, 0x208a311),
             "Resolver32B packet/reserved/three typed operation targets differ")
-    moving = read(0x2088d28, 440)
+    moving = read(0x2088ea8, 440)
     checked(moving[0x94:0x9E] == bytes.fromhex("404f019300960a9bb847")
             and moving[0x198:0x19C] == struct.pack("<I", 0x02208201),
             "native moving Condition lacks its exact Subject population borrow")
-    visibility = read(0x2088c48, 224)
+    visibility = read(0x2088dc8, 224)
     checked(visibility[0xD4:0xE0]
             == struct.pack("<3I", 0x0205C67D, 0x0205C689, 0x023C7EA9),
             "native moving visibility lacks its exact coordinate/solid trace imports")
-    run = read(0x20890fc, 1580)
+    run = read(0x208927c, 1580)
     # The real common packet gate dispatches op7 before the ordinary op0..2
     # arm. Arc validates its borrowed local map and full current subject;
     # it cannot call the resolver, publish metadata, or replace motion.
@@ -850,8 +855,8 @@ def verify_condition_imports(build, overlays, arm9, arm9_address):
     checked(calls.count(0x023C2D80) == 1,
             "loader lacks its one exact stock coordinate import check")
     checked(set(packer().IMPORTS.values()) == set(FIXED_TABLE_IMPORTS) | set(extra)
-            and len(packer().IMPORTS) == 12,
-            "exact twelve-target Query import inventory differs")
+            and len(packer().IMPORTS) == 13,
+            "exact thirteen-target Query import inventory differs")
 
 
 def verify_package(build, rom, member):
@@ -860,7 +865,7 @@ def verify_package(build, rom, member):
     header = (ROOT / "include/overworld_query_code_addon.h").read_text()
     for key, value in {
         "VERSION": 9, "ENTRY_BYTES": 196, "CALLBACKS": 39,
-        "MAX_IMAGE": 0x10C38, "MAX_BLOB": 0x11200,
+        "MAX_IMAGE": 0x10EC0, "MAX_BLOB": 0x114B8,
         "MAX_RELOCATIONS": 256,
     }.items():
         match = re.search(r"^#define OVERWORLD_QUERY_CODE_ADDON_" + key + r"\s+(0x[0-9A-Fa-f]+|[0-9]+)\b", header, re.M)

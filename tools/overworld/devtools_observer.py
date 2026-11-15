@@ -52,25 +52,23 @@ MOTION_DECISIONS = ("ACCEPTED", "RETRY_WORLD_BUSY", "BLOCKED", "SIDE_TILE", "TER
                     "STALE_FIELD", "CONTEXT_LOST", "NO_CANDIDATE")
 CHAIN_OUTCOMES = ("RETRY", "STARTED", "COMPLETE", "ABORT")
 
-# Actual native owners and ARM ABI in the published T74 build. NativeSpawn
+# Actual native owners and ARM ABI in the current sealed build. NativeSpawn
 # owns each real enqueue attempt, including the selected ordinary refill slot.
 QUERY_SPAWN_READ_CAP = 8192  # Each leaf entry/return; separate from Cargo Tick.
-QUERY_SPAWN_OWNERS = {'NativeSpawn': (34136452, 188, 'c22586382a702612439824cd3e6aa22b0f58c63a1c6e31dd5bf77e1237444376'),
- 'OverworldEntryRoute_NativeControl': (34141536, 2692, 'aecd248fb30949a3c5da0012e0a3b5bf4098ea2231c4d143fd9784aa87ee8454'),
- 'NativeFinalize': (34135844, 608, 'f219ee01435cbd6fdcb289865cfbadda53b6e157d7d4b99dfdfb4b9a16f73309')}
+QUERY_SPAWN_OWNERS = {'NativeFinalize': (34136456, 608, '8e37b4fedded5608b11f3679544c807d5c7f0ae1f4606097d5580db116fad234'),
+ 'NativeSpawn': (34137064, 188, 'c22586382a702612439824cd3e6aa22b0f58c63a1c6e31dd5bf77e1237444376'),
+ 'OverworldEntryRoute_NativeControl': (34142186, 2690, '19c291eb9078a578147d2dea6afa9ebe5d781bffd59d50104cb7e1bc5081b117')}
 
 # Exact BL return sites in the full named owners above. Keep caller identity
 # separate from the relocated owner address; test these against the real ELF.
-QUERY_SPAWN_CALLERS = {
-    "finalizer_from_spawn": 0x208e1fc,
-    "finalizer_from_commit": 0x208f8ce,
-    "spawn_from_refill": 0x208fe44,
-    "spawn_from_single": 0x208ff6c,
-}
+QUERY_SPAWN_CALLERS = {'finalizer_from_commit': 0x0208FB56,
+ 'finalizer_from_spawn': 0x0208E460,
+ 'spawn_from_refill': 0x02090092,
+ 'spawn_from_single': 0x020901EE}
 
 # Current native ordinary helper selector; diagnostic-only in Baseline mode.
-HELPER_SCAN_OWNERS = {'helper': ('helper', 'OverworldWildHelper_TryPrepareSpawn', 37516732, 692, '8756f89f0704c3f12d8b577e6d3b5fe41e8138cb661393b684260340c3948233'), 'scanner': ('helper', 'OverworldWildHelper_TryPickSpawnPositionForTerrain.constprop.0', 37516060, 540, '5d8c95f8405ad8f53ea50a756626ccd46bf21930a68f058a0582ad598c80ff55'), 'terrain': ('wild', 'OverworldWildSpawns_HelperTryGetSpawnTerrain', 37545908, 10, '0418f1a8c1e513ebba2acf6978689ef2ba5563e663e43c15063aa9989fa9c074'), 'occupied': ('wild', 'OverworldWildSpawns_HelperIsTileOccupied', 37545948, 10, 'c2ee4357f3042a1f799140c82aa656f96b2a366979185d75ad5a316e9a81c5e4'), 'near': ('wild', 'OverworldWildSpawns_HelperIsNearActiveSpawn', 37549664, 10, '2b02ea49b9d4fca1944459ecb5e564e73f9ffd7a3cf8871f933a80daeec05476')}
-HELPER_SCAN_TABLE_SHA = '62dc705d13fb68cd2c32215d2ce1fda4a0644183d0fa1ee93bfb87c3549debbb'
+HELPER_SCAN_OWNERS = {'helper': ('helper', 'OverworldWildHelper_TryPrepareSpawn', 37516732, 684, '1fbcdf3d2e073caec50c806ce3c12b7263950f7187736a97c9401846a0acb264'), 'scanner': ('helper', 'OverworldWildHelper_TryPickSpawnPositionForTerrain.constprop.0', 37516060, 540, 'b9148e710e7d76f3676c420fbc5c0cc7b78cae1968b215f9034e479c5b855d77'), 'terrain': ('wild', 'OverworldWildSpawns_HelperTryGetSpawnTerrain', 37545904, 10, '0418f1a8c1e513ebba2acf6978689ef2ba5563e663e43c15063aa9989fa9c074'), 'occupied': ('wild', 'OverworldWildSpawns_HelperIsTileOccupied', 37545944, 10, 'c2ee4357f3042a1f799140c82aa656f96b2a366979185d75ad5a316e9a81c5e4'), 'near': ('wild', 'OverworldWildSpawns_HelperIsNearActiveSpawn', 37549660, 10, '889239a6fe2f481fe8aef368a9a3e948e101051d4071079b141101e774f0fdc3')}
+HELPER_SCAN_TABLE_SHA = 'dd84ebb1317f377556a453c2c609780bfd72adb9347e02ddc30ed69800f13177'
 # Exact BLX sites in the sealed ordinary scanner; its terrain local is u32.
 HELPER_SCAN_CALL_SITES = {'terrain': 0x023C74B2, 'occupied': 0x023C74C8, 'near': 0x023C74D8}
 HELPER_SCAN_TERRAIN_STACK_OFFSET = 0x28
@@ -156,6 +154,7 @@ class NativeObservation:
         self.null_model_getter = None
         self.null_model_visibility = None
         self.null_model_position = None
+        self.allocation_failures = deque(maxlen=8)
         self.source_hash = hashlib.sha256(
             (session.rt.REPO / "data/overworld_behavior_profiles.json").read_bytes()).hexdigest()
 
@@ -250,7 +249,7 @@ class NativeObservation:
             if data is None:
                 return
             registers = self.session.emu.memory.register_arm9
-            context = {"entry": self._clock(), "setupMode": "prepared" if self.session.prepared else "normal",
+            context = {"label": label, "entry": self._clock(), "setupMode": "prepared" if self.session.prepared else "normal",
                        "data": data, "sp": registers.sp & 0xFFFFFFFF}
             if timed or label in self.TIMED_CALLS or (label == "behavior-resolved"
                     and (self.finalization_contexts or self.spawn_contexts)):
@@ -541,6 +540,12 @@ class NativeObservation:
         # public policy call owns the draw. Never call or alter the RNG.
         address = 0x0201FD44
         stock = (rt.REPO / "base/arm9.bin").read_bytes()
+        for label, address in (("heap-alloc-diagnostic", 0x0201AA8C),
+                               ("heap-alloc-end-diagnostic", 0x0201AACC)):
+            self._tap(label, address,
+                      stock[address - 0x02000000:address - 0x02000000 + 32],
+                      self._allocation_before, self._allocation_after,
+                      scope=cost_scope, resident=True)
         # Named retail filesystem.c entries, checked against this packaged ROM.
         # Observe all callers: map-object assets can load after SpawnOne returns.
         # Arguments are raw API registers; do not guess a NARC id from a handle.
@@ -1473,7 +1478,7 @@ class NativeObservation:
         body = _elf_code(paths["wild"], table[0], table[1])
         # The fixed helper linker folds this source BSS object into .text.
         cursor_initial = _elf_code(paths["helper"], cursor[0], cursor[1])
-        if (cursor[:2] != (0x023C7D2A, 4) or table[:2] != (0x023CCFD8, 36)
+        if (cursor[:2] != (0x023C7D22, 4) or table[:2] != (0x023CCFD8, 36)
                 or cursor_initial != bytes(4)
                 or hashlib.sha256(body).hexdigest() != HELPER_SCAN_TABLE_SHA
                 or struct.unpack_from("<3I", body, 4) != tuple(
@@ -1652,6 +1657,25 @@ class NativeObservation:
     def _archive_cost_after(self, value, context):
         return {**value, "scope": "read-only inclusive archive call; raw API arguments",
                 "acceptedProof": False}
+
+    def _allocation_before(self):
+        value = self._archive_cost_before()
+        value["archiveChain"] = [
+            {"label": parent["label"], **deepcopy(parent["data"])}
+            for parent in self.contexts
+            if parent.get("label", "").startswith("archive-")]
+        return value
+
+    def _allocation_after(self, value, context):
+        if context["returnValue"] == 0:
+            # Retain at the return boundary: a failed stock archive read can
+            # abort before the next completed main queue flushes events.
+            self.allocation_failures.append({
+                **value, "allocator": context["label"],
+                "entry": deepcopy(context["entry"]),
+                "returned": deepcopy(context["returned"]), "returnValue": 0,
+                "acceptedProof": False})
+        return None
 
     def _refill_cost_after(self, value, context):
         if self._world_context() != value["worldContext"]:
@@ -1956,17 +1980,45 @@ class NativeObservation:
             ("finalizer_from_spawn" if operation == 8 else "finalizer_from_commit")
             if finalizer else ("spawn_from_refill" if query_operation == 1 else "spawn_from_single")]
         caller = (regs.lr & ~1) - owner["entry"] + 0x02080000
+        register_owners = (regs.r2 & 0xFFFFFFFF, regs.r3 & 0xFFFFFFFF)
         if struct.unpack_from("<HH", control) != (1, 52) or control[48:] != bytes(4)\
                 or slot >= 10 or slot == 7 or control_slot >= 10 or control_slot == 7 or ops != self.query_spawn_identity["ops"][0]\
                 or state != current["statePointer"] or field != current["fieldPointer"]\
-                or (regs.r2 & 0xFFFFFFFF, regs.r3 & 0xFFFFFFFF) != (state, field)\
+                or register_owners != (state, field)\
                 or caller != expected_caller\
                 or struct.unpack_from("<HH", world) != (3, 84) or world[52] != control_slot\
                 or struct.unpack_from("<II", world, 4) != (field, state)\
                 or call[29:] != bytes((1, 0, 0))\
                 or command[:84] != bytes(84) or struct.unpack_from("<I", command, 84)[0] != pointer\
                 or struct.unpack_from("<I", control, 16)[0] != struct.unpack_from("<I", call, 4)[0]:
-            raise NativeObservationError("automatic spawn typed transaction/caller differs")
+            # Diagnostic values come only from this guard's already-read
+            # buffers/arguments. Keep the same predicate and guest-read cap.
+            checks = dict(
+                controlHeader=struct.unpack_from("<HH", control) == (1, 52),
+                controlReserved=control[48:] == bytes(4),
+                selectedSlot=slot < 10 and slot != 7,
+                controlSlot=control_slot < 10 and control_slot != 7,
+                ops=ops == self.query_spawn_identity["ops"][0],
+                state=state == current["statePointer"], field=field == current["fieldPointer"],
+                registerOwners=register_owners == (state, field), caller=caller == expected_caller,
+                worldHeader=struct.unpack_from("<HH", world) == (3, 84),
+                worldSlot=world[52] == control_slot,
+                worldOwners=struct.unpack_from("<II", world, 4) == (field, state),
+                callReserved=call[29:] == bytes((1, 0, 0)),
+                commandZero=command[:84] == bytes(84),
+                commandControl=struct.unpack_from("<I", command, 84)[0] == pointer,
+                profile=struct.unpack_from("<I", control, 16)[0] == struct.unpack_from("<I", call, 4)[0])
+            details = dict(failed=[name for name, valid in checks.items() if not valid],
+                finalizer=finalizer, operation=operation, queryOperation=query_operation,
+                caller=caller, expectedCaller=expected_caller, slot=slot, terrain=terrain,
+                controlSlot=control_slot, controlTerrain=control_terrain,
+                registerOwners=register_owners, expectedRegisterOwners=(state, field),
+                ops=ops, expectedOps=self.query_spawn_identity["ops"][0],
+                state=state, expectedState=current["statePointer"],
+                field=field, expectedField=current["fieldPointer"],
+                controlPointer=pointer, controlHex=control.hex(), worldHex=world.hex(),
+                callHex=call.hex(), commandHex=command.hex())
+            raise NativeObservationError("automatic spawn typed transaction/caller differs: " + repr(details))
         world_ops = struct.unpack_from("<I", world, 28)[0]
         if self._query_spawn_public( world_ops, 4) != struct.pack("<HH", 3, 84):
             raise NativeObservationError("automatic spawn typed World Ops differs")
@@ -3054,6 +3106,15 @@ class NativeObservation:
             value['nullModelVisibility'] = deepcopy(self.null_model_visibility)
         if self.null_model_position is not None:
             value['nullModelPosition'] = deepcopy(self.null_model_position)
+        if self.allocation_failures:
+            value['heapAllocationFailures'] = deepcopy(list(self.allocation_failures))
+        pending_archives = [{"label": parent["label"],
+                             "entry": deepcopy(parent["entry"]),
+                             **deepcopy(parent["data"])}
+                            for parent in self.contexts
+                            if parent.get("label", "").startswith("archive-")]
+        if pending_archives:
+            value['pendingArchiveCalls'] = pending_archives
         return value
 
     def close(self):

@@ -249,8 +249,8 @@ static BOOL BehaviorResolver_MatchApplies(
         && match != NULL
         && (match->species == RESOLVER_MATCH_ANY_SPECIES
             || match->species == context->species)
-        && (match->groupMask == RESOLVER_GROUP_NONE
-            || (context->groupFlags & match->groupMask) != 0)
+        && (match->mapId == OW_WILD_BEHAVIOR_MATCH_ANY_MAP
+            || match->mapId == context->mapId)
         && (match->terrain == RESOLVER_MATCH_ANY_U8
             || match->terrain == context->terrain)
         && (match->minLevel == RESOLVER_MATCH_LEVEL_ANY
@@ -260,7 +260,9 @@ static BOOL BehaviorResolver_MatchApplies(
         && (match->shiny == RESOLVER_MATCH_ANY_U8
             || match->shiny == context->shiny)
         && (match->behaviorClass == RESOLVER_MATCH_ANY_U8
-            || match->behaviorClass == context->behaviorClass);
+            || match->behaviorClass == context->behaviorClass)
+        && (match->groupMask == RESOLVER_GROUP_NONE
+            || (context->groupFlags & match->groupMask) != 0);
 }
 
 static BOOL BehaviorResolver_OverrideTargetsContext(
@@ -332,7 +334,7 @@ static void BehaviorResolver_ResolveInheritedPolicies(
     u16 terrainOverride = profile->chillAllowedTerrainOverrideMask
         & OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_POLICY_ALL;
     u16 destinationOverride = profile->spawnDestinationOverrideMask
-        & OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL;
+        & OW_WILD_SPAWN_DESTINATION_MASK_ALL;
     u16 legacyDestination = BehaviorResolver_LegacySpawnDestinationMask(
         profile->spawnDestination);
 
@@ -534,7 +536,7 @@ static void BehaviorResolver_ApplyOverride(
     if (mask3 & OW_WILD_BEHAVIOR_OVERRIDE3_SPAWN_DESTINATION_OVERRIDE_MASK) {
         explicitDestinationMask =
             overrideProfile->profile.spawnDestinationOverrideMask
-            & OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL;
+            & OW_WILD_SPAWN_DESTINATION_MASK_ALL;
         profile->spawnDestinationMask =
             (profile->spawnDestinationMask & ~explicitDestinationMask)
             | (overrideProfile->profile.spawnDestinationMask
@@ -548,7 +550,7 @@ static void BehaviorResolver_ApplyOverride(
         profile->spawnDestinationOverrideMask =
             profile->spawnDestination == OW_WILD_SPAWN_DESTINATION_POOL
                 ? 0
-                : OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL;
+                : OW_WILD_SPAWN_DESTINATION_MASK_ALL;
     }
 }
 
@@ -766,9 +768,9 @@ static void BehaviorResolver_NormalizeProfile(
     if (profile->spawnDestination > OW_WILD_SPAWN_DESTINATION_FLOWERBED) {
         profile->spawnDestination = OW_WILD_SPAWN_DESTINATION_POOL;
     }
-    profile->spawnDestinationMask &= OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL;
+    profile->spawnDestinationMask &= OW_WILD_SPAWN_DESTINATION_MASK_ALL;
     profile->spawnDestinationOverrideMask &=
-        OW_WILD_BEHAVIOR_ALLOWED_TERRAIN_ALL;
+        OW_WILD_SPAWN_DESTINATION_MASK_ALL;
     if (profile->spawnDestinationMinDistance
         < RESOLVER_MIN_PLAYER_RELATIVE_DISTANCE) {
         profile->spawnDestinationMinDistance =
@@ -926,7 +928,8 @@ static u8 BehaviorResolver_SelectClassInternal(
     BehaviorResolutionTrace *trace)
 {
     u8 behaviorClass = OW_WILD_BEHAVIOR_CLASS_DEFAULT;
-    u16 i;
+    /* Counts are u16; use a native-width cursor without per-step narrowing. */
+    u32 i;
 
     selection->speciesClassRuleIndex = BEHAVIOR_RESOLVER_NO_SOURCE;
     if (requestedClass != BEHAVIOR_RESOLVER_CLASS_AUTO) {
@@ -989,7 +992,7 @@ static BOOL BehaviorResolver_ConditionMatches(
 {
     const OverworldWildBehaviorOverrideProfile *profile;
     u16 end;
-    u16 i;
+    u32 i;
 
     if (application >= blob->header.overrideProfileCount
         || conditionId == BEHAVIOR_RESOLVER_NO_CONDITION) {
@@ -1019,7 +1022,7 @@ static BOOL BehaviorResolver_RequestValid(
     u8 winningApplication = BEHAVIOR_RESOLVER_NO_APPLICATION;
     OverworldApplicationBank selectedBank;
     const OverworldApplicationBank *bank = &selectedBank;
-    u16 i;
+    u32 i;
 
     if (request == NULL || validatedBank == NULL) {
         return FALSE;
@@ -1243,7 +1246,7 @@ BehaviorResolveStatus BehaviorResolver_Resolve(
     u32 conditionalMask = 0;
     u8 behaviorClass;
     u16 tiredIndex;
-    u16 i;
+    u32 i;
     u32 hash;
 
     if (request == NULL || result == NULL) {

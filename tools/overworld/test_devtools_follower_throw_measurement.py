@@ -285,19 +285,19 @@ def evaluate(rows,negative=None,feature=KIND):
     return dict(passed=result['passed'],failures=result['failures'],observedFrames=result['observedFrames'],measurements={feature:result})
 
 
-def non45_stream():
+def projected_stream(player=(583,406), delta=(8,5)):
     """Copied unit data only; the registered fixture still needs a real run."""
     rows = stream()
     cargo_value = rows[0]["samples"][0]["actors"][1]["handle"]["value"]
     for row in rows:
         for sample in row["samples"]:
             frame = sample["frame"]
-            sample["player"] = dict(x=583 + min(4,max(0,frame-37)//8), y=406)
+            sample["player"] = dict(x=player[0] + min(4,max(0,frame-37)//8), y=player[1])
             if frame < 37:
                 continue
             cargo = sample["actors"][1]
             elapsed = min(24,frame-37)
-            origin, target = (586,408),(594,413)
+            origin = (586,408); target = tuple(a+b for a,b in zip(origin,delta))
             cargo.update(origin=dict(zip(("x","y"),origin)), target=dict(zip(("x","y"),target)),
                 logical=dict(zip(("x","y"),origin if frame<61 else target)),
                 motionKind="HOP" if frame<66 else "NONE",
@@ -305,8 +305,8 @@ def non45_stream():
                 motionElapsed=elapsed,motionDuration=24,reservationId=55 if frame<61 else 0,
                 commitSequence=1 if frame<61 else 2)
             cargo["engineObject"].update(x=cargo["logical"]["x"],y=cargo["logical"]["y"],
-                pos_x=(586<<16)+32768+8*65536*elapsed//24,
-                pos_z=(408<<16)+32768+5*65536*elapsed//24,
+                pos_x=(origin[0]<<16)+32768+delta[0]*65536*elapsed//24,
+                pos_z=(origin[1]<<16)+32768+delta[1]*65536*elapsed//24,
                 unk88_y=16384 if 0<elapsed<24 else 0)
             target_row=next(r for r in sample["pokemonCombat"]["targets"] if r["handle"]==cargo["handle"])
             native=bytearray.fromhex(target_row["motion"]["rawHex"])
@@ -337,6 +337,10 @@ def non45_stream():
     return rows
 
 
+def non45_stream():
+    return projected_stream()
+
+
 class FollowerThrowMeasurementTests(unittest.TestCase):
     def test_non45_variant_keeps_full_lifecycle_and_exact_radius_support(self):
         result=evaluate(non45_stream(),feature=NON45_KIND)
@@ -352,7 +356,28 @@ class FollowerThrowMeasurementTests(unittest.TestCase):
         changed=deepcopy(result);changed["measurements"][NON45_KIND]["flightWitness"]["poses"][-1]["supportY"]+=4096
         with self.assertRaisesRegex(ValueError,"landing support"):
             measurements(NON45_KIND,changed,record)
-        self.assertFalse(evaluate(non45_stream())["passed"],"cardinal case must remain cardinal")
+
+
+    def test_general_case_requires_exact_current_outward_projection(self):
+        record=dict(sessionId="owned",sessionCleanup=dict(sessionId="owned",closed=True,errors=[]))
+        # Current3713 outward(+4,-5) scales to(+6,-8) at exact radius8.
+        # Translation keeps the existing complete native-shaped carrier path.
+        for player,delta in (((582,413),(6,-8)),((582,404),(8,8))):
+            result=evaluate(projected_stream(player,delta))
+            with self.subTest(player=player,delta=delta):
+                self.assertTrue(result["passed"],result["failures"])
+                self.assertEqual(result['measurements'][KIND]['launchEndpoint']['plan']['distance'],8)
+                self.assertEqual(len(measurements(result,record)),sum(map(len,contract().values())))
+                changed=deepcopy(result)
+                changed['measurements'][KIND]['launchEndpoint']['player'][0]+=1
+                with self.assertRaisesRegex(ValueError,'exact-range Away endpoint away'):
+                    measurements(changed,record)
+        for player,delta in (((582,413),(7,-8)),((582,404),(8,7)),
+                             ((582,413),(6,-7)),((582,413),(-6,8))):
+            bad=evaluate(projected_stream(player,delta))
+            with self.subTest(wrong_delta=delta):
+                self.assertFalse(bad['passed'])
+                self.assertIn('exact-range Away endpoint away',str(bad['failures']))
 
     def test_non45_variant_all_original_and_angle_controls_reject(self):
         from tools.overworld.proof_adapters import get_adapter
@@ -553,6 +578,59 @@ class FollowerThrowMeasurementTests(unittest.TestCase):
         rows=stream();last=rows[-1]['samples'][-1];set_trigger(last,last['actors'][1],False)
         stale=evaluate(rows)
         self.assertFalse(stale['passed']);self.assertIn('not a current authored binding',stale['failures'][0])
+
+    def test_admitted_follow_completes_when_new_trigger_changes_current_profile(self):
+        def noticed_during_follow():
+            rows=stream()
+            for row in rows:
+                for sample in row['samples']:
+                    if sample['frame']<88:continue
+                    # Notice changes the next intent's profile. The accepted
+                    # normal Hop retains its original plan, speed and lease.
+                    mankey=sample['actors'][0]
+                    mankey.update(matchedLayerMask=FOLLOWER|FIND_CARGO,behaviorFingerprint=1001)
+                    target=actor(74,3,703,407)
+                    sample['actors'].append(target)
+                    carrier=sample['pokemonCombat']['interactions']['carriers'][0]
+                    fresh=binding(target,TRIGGER_CONDITION,APPLICATION_LOCAL)
+                    carrier['bindings']['trigger']=fresh
+                    native=bytearray.fromhex(carrier['rawBindingsHex'])
+                    native[12:36]=bytes.fromhex(fresh['rawHex'])
+                    carrier['rawBindingsHex']=native.hex()
+                row['events']=[e for sample in row['samples'] for e in events(sample)]
+            return rows
+
+        rows=noticed_during_follow()
+        result=evaluate(rows)
+        self.assertTrue(result['passed'],result['failures'])
+        measured=result['measurements'][KIND]
+        self.assertEqual((measured['frames']['followStart'],measured['frames']['followReturn']),(83,101))
+        normal=measured['speedWitnesses']['normal']
+        self.assertEqual(normal['profile']['appliedOverrides'],FOLLOWER)
+        self.assertEqual((normal['duration'],normal['returnFrame']),(13,101))
+        self.assertEqual(rows[-1]['samples'][-1]['actors'][0]['matchedLayerMask'],FOLLOWER|FIND_CARGO)
+        record=dict(sessionId='owned',sessionCleanup=dict(sessionId='owned',closed=True,errors=[]))
+        self.assertEqual(len(measurements(result,record)),sum(map(len,contract().values())))
+
+        for fault,reason in (('missing-finish','complete carrier speed witness'),
+                             ('missing-return','normal follow return'),
+                             ('wrong-return','normal follow return'),
+                             ('stale-trigger','not a current authored binding')):
+            changed=deepcopy(rows)
+            if fault=='stale-trigger':
+                changed[-1]['samples'][-1]['pokemonCombat']['interactions']['carriers'][0]['bindings']['trigger']['targetCurrent']=False
+            else:
+                terminal=[e for e in changed[-1]['events'] if e.get('frame')==101
+                          and e.get('kind')=='native' and e.get('data',{}).get('actorHandle')
+                          ==changed[-1]['samples'][-1]['actors'][0]['handle']['value']]
+                name='MOTION_FINISHED' if fault=='missing-finish' else 'CONTROL_RETURNED'
+                event=next(e for e in terminal if e['data']['event']==name)
+                if fault=='wrong-return':event['data']['valueB']+=1
+                else:changed[-1]['events'].remove(event)
+            with self.subTest(fault=fault):
+                bad=evaluate(changed)
+                self.assertFalse(bad['passed'])
+                self.assertIn(reason,str(bad['failures']))
 
     def test_current_tile_away_aim_needs_resolved_position_phase_but_no_position_hop(self):
         result=evaluate(stream(position_motion=False))

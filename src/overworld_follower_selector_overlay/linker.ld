@@ -44,6 +44,9 @@ SECTIONS {
                     "overworld follower selector core overlaps spatial tail");
         _end = __bss_end__ ;
         __end__ = __bss_end__ ;
+                /* Keep the packed image contiguous up to the fixed spatial
+                 * slot when the core is smaller than its reservation. */
+                . = ORIGIN(rom) + 0x1E00;
         } >rom = 0xff
 
         .overworld_spawn_spatial ORIGIN(rom) + 0x1E00 : {

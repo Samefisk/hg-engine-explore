@@ -64,9 +64,10 @@ typedef struct OverworldEntryRouteReceipt {
  * dynamic ledger that excludes every physical cell in that edge. */
 #define OVERWORLD_ENTRY_ROUTE_MEMO_READS 40
 typedef struct OverworldEntryRouteMemoRead {
-    OverworldPickupRouteNativeTile tile;
-    OverworldWildSurfaceHit hit;
-    s32 height;
+    union {
+        struct { OverworldPickupRouteNativeTile tile; OverworldWildSurfaceHit hit; };
+        s32 height; /* Support and terrain are distinct replay operations. */
+    };
     u8 operation, result, hitValid, reserved;
 } OverworldEntryRouteMemoRead;
 typedef struct OverworldEntryRouteTerrainCursor {
@@ -81,10 +82,12 @@ typedef struct OverworldEntryRouteMemo {
     OverworldPickupRouteEdge edge;
     OverworldEntryRouteMemoRead reads[OVERWORLD_ENTRY_ROUTE_MEMO_READS];
     OverworldEntryRouteTerrainCursor terrain;
-    OverworldActorHopPlanCall hopInput;
-    OverworldActorHopClearanceCursor hop;
-    OverworldPreparedMovementInput movementInput;
-    OverworldPreparedMovementCursor movement;
+    /* Native edge policy finishes before Hop clearance begins. Its saved
+     * completed read is replayed thereafter; a new edge resets both flags. */
+    union {
+        struct { OverworldActorHopPlanCall hopInput; OverworldActorHopClearanceCursor hop; };
+        struct { OverworldPreparedMovementInput movementInput; OverworldPreparedMovementCursor movement; };
+    };
     const OverworldPickupRouteNativeSeams *native;
     u32 scope, policy, dynamic;
     u16 physicalPlayerMask;
@@ -94,9 +97,10 @@ typedef struct OverworldEntryRouteMemo {
 typedef struct OverworldEntryRoutePath {
     OverworldActorHandle actor;
     OverworldPickupRoutePosition origin, target, expected;
-    /* Full endpoints own displacement; retain every native forward tag. */
-    u16 edgeTags[OVERWORLD_ENTRY_ROUTE_MAX_STEPS];
-    OverworldPickupRoutePosition endpoints[OVERWORLD_ENTRY_ROUTE_MAX_STEPS];
+    /* Native kind/direction plus exact distance. Future support is admitted
+     * by the sole native classifier, then frozen here before real START. */
+    u16 commands[OVERWORLD_ENTRY_ROUTE_MAX_STEPS];
+    OverworldPickupRoutePosition nextStep;
     u32 serial, policy, scope, acceptedSequence, lastIdleFrame;
     u16 count, next, noProgress;
     u8 valid, accepted;
@@ -135,7 +139,7 @@ OverworldPickupRouteStatus OverworldEntryRoute_Resume(
     u16 changeCount, u8 changesComplete,
     OverworldEntryRoutePath *, OverworldEntryRouteReceipt *);
 OverworldPickupRouteStatus OverworldEntryRoute_ValidateStep(
-    OverworldEntryRouteSearch *, const OverworldEntryRoutePath *, u32 dynamic,
+    OverworldEntryRouteSearch *, OverworldEntryRoutePath *, u32 dynamic,
     const OverworldCargoQueryChangedTile *, u16, u8, OverworldEntryRouteReceipt *);
 /* Guide never advances on REQUEST. Confirm advances only after actual END at
  * the proved endpoint; chains and blocked starts must re-root the same core. */
