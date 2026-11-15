@@ -431,7 +431,7 @@ its own graph can never satisfy.
 | Mount lifecycle (`mount.lifecycle`) | Mounted role adapter | Follower, Mounted | S2, S3, S4 |
 | Mounted presentation (`mount.presentation`) | Mounted presentation adapter | Mounted | S3, S4 |
 | Terrain streaming (`world.streaming`) | World adapter | Mounted | S3 |
-| Field transition (`world.transition`) | World lifecycle | Wild, Follower, Mounted | S3, S5 |
+| Field transition (`world.transition`) | World lifecycle | Wild, Follower, Mounted | S3, S4 |
 | Warp gating (`world.warp-gating`) | World reactions | Mounted | S3 |
 | Wild population (`population`) | Population module | Wild | S1, S3, S5 |
 | Conditional profile activation (`condition.evaluation`) | Behavior Condition Evaluator | Wild, Follower | S0, S1, S3 |
@@ -837,6 +837,21 @@ timing; a valid profile pause does not fail the spawn-stutter gate. The gate
 also rejects an explicit destination scan over61 frames. Population-count
 behavior stays in the separate population scenarios. One loop above two frame
 times is a red result, even if candidate and preparation budgets pass.
+
+Both D1 checkers also support the sealed `goldenrod-route34-v1` route in
+`tools/overworld/devtools_d1_routes.py`. The canonical recipes use the unchanged
+Goldenrod Continue at map76(358,366), retain its existing Mankey, and require
+all17 native DOWN+B admissions before binding at(358,383). Normal DOWN2
+crosses into Route34; the first seam tile is map38(358,384), and the long
+strict window begins only when the player settles at(358,385). The rectangle
+is DOWN14, LEFT2, UP14, RIGHT2. The short checker takes36 neutral frames before
+the seam and two rectangles afterward; the long checker takes21 rectangles
+and keeps the2600continuous/1800moving-frame minimum. No party, follower,
+spawn, population, teleport or save preparation is allowed. The720/4000 total
+frame caps, every preparation/constructor/refill receipt, native clock limits,
+and zero-late rule are unchanged. Route choice is explicit and sealed before
+execution; observations cannot choose coordinates or budgets. The historical
+Cherrygrove route remains supported when the route selector is omitted.
 
 Changes to spawn search, population refill, behavior profiles, destination
 masks, generated behavior data, or the live observation/capture path stale the

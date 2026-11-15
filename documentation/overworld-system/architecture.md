@@ -395,11 +395,16 @@ reflection (field effect 1, the "mirror" model, task init `ov01_021FDAC0` or
 `ov01_021FDFD4`, render record at work+0x24) gets its own private quad too:
 the near edge samples the last visible row and the far edge comes in by the
 same fraction, so it mirrors only the part above the waterline. Both stock tall-grass
-rustle calls (`sub_020601BC`, `sub_02060274`) go through the gate at
-`0x022500B0`: a Wild body rustles once per tile entered and never while
-airborne. Before that gate, a fly-in kept its logical tile on the take-off
-grass and stacked one rustle per frame until the pool ran out and the game
-crashed.
+rustle calls (`sub_020601BC`, `sub_02060274`) and both very-tall-grass calls
+(`sub_02060698`, `sub_020606CC`, effect 12 `ov01_021FF8F0`) go through the
+gate at `0x022500B0`: a Wild body rustles once per tile entered and never
+while airborne. The very-tall-grass call sites pass `mode | 2` so the gate
+calls the matching stock function; both kinds share one 16-bit tile key per
+slot (`x + (y << 10)`). Before that gate, a fly-in kept its logical tile on the
+take-off grass and stacked one rustle per frame until the pool ran out and the
+game crashed. Very tall grass (National Park) kept the stock calls until
+test3699: hopping Wild bodies filled the 48-record pool and the effect init
+wrote through a NULL sprite (ARM9 data abort at `0x02023F2C`).
 
 Rooftop Access is a normal Placement profile selected as the base for Mankey,
 Primeape, and Annihilape. It inherits Default and enables Land plus Rooftop in
@@ -536,7 +541,7 @@ proved replacement. HELD stops target switching, and Follower target choice
 remains the exact Object of Interest.
 
 The single route workspace gives competing current carriers turns after a
-completed reachable search. A waiting request does not erase the current
+completed reachable search. A queued request does not erase the current
 frame's observation-to-START receipt or preempt an unfinished graph. On a later
 frame, the owner yields to the next valid waiter in circular slot order. The
 handoff preserves native work already spent that frame, full Cargo bindings,
@@ -644,14 +649,18 @@ require the exact hosted Thumb source, Actor copy and ROM bytes to agree.
 Actor158 is loaded before gameplay and is retained when Wild149 unloads;
 this cancel call cannot continue after its Wild caller returns.
 
-The route workspace has one current owner. A current Follower search for its
-exact Object of interest can replace an unfinished Wild search only while
+The route workspace has one current owner. A new, unqueued Follower search for
+its exact Object of interest can replace an unfinished Wild search only while
 that Wild actor is idle, has no bound Cargo, throw relation, reservation,
 carrier/target/capture claim, or owned pickup. The same full Subject and target
 identities still pass native validation. This handoff clears route work while
 retaining the current frame's used query allowance; it cannot run a second
 native search in that frame. Reserved or held Cargo keeps its owner. The
-handoff changes no authored notice, windup, or recovery pause.
+handoff changes no authored notice, windup, or recovery pause. Each replaced
+owner joins the existing wait queue. A queued Follower cannot repeatedly
+preempt the Wild search after yielding to it. A granted turn clears that
+request's waiting bit. Invalid or ineligible calls retire their request before
+arbitration, so stale waiters cannot stop a reachable owner.
 
 Before waiting for that workspace, every search checks its current eligible
 Cargo mask against the current Frame. An unavailable bound Cargo or exact
@@ -731,12 +740,16 @@ profile can start its route on the next actor frame. The full prepared batch
 still validates before any timer or binding change.
 
 The fixed Field loader publishes typed callbacks only for the current Field
-epoch and map generation. Code, its temporary archive handle, and the sole lazy
-route workspace use stock Field resource heap4. Code admission leaves 32 KiB
-free; the 25 KB lazy route workspace leaves 16 KiB
-(`OVERWORLD_FIELD_PICKUP_QUERY_HEAP_RESERVE`). FIELD1 also holds the behavior
-catalog and sits near 63 KB free on a populated route, so the 32 KiB rule
-refused every pickup and entry route.
+epoch and map generation. Query code uses World heap11; its cold admission
+keeps32KiB free. The sole lazy query uses two owned blocks:16600 bytes on
+heap11 and11268 bytes on heap4. The transient changed-tile list lives in the
+auxiliary block so the core fits beside the stock script reserve. Admission retains20KiB for scripts on11 and
+16KiB for stock Field work on4, plus64 bytes per allocation for heap overhead.
+Both allocations must succeed before publication; failure of the second frees
+the first. A versioned prefix holds the auxiliary owner and the current
+addon-local destructor. Wild clears the runtime pointer before calling it,
+while Query code is still loaded. The destructor frees auxiliary then core.
+A repeated drain is a no-op; an invalid prefix blocks release.
 Stock script contexts and message banks retain World heap11. Before stock
 parent Field exit destroys heap4, the existing Wild owner drains the query,
 bindings and owned data while Field and Selector are still loaded. A private
@@ -1698,8 +1711,9 @@ reports the ordinary Crash.
   existing forward-Hop path: chain-hop end state, the current Walk time per
   tile, the exact distance in the lane's Hop range and the forward landing
   check, so a clean landing keeps Walk momentum. If the full reach cannot
-  start, the longest shorter Jump that clears lands and then crashes. With
-  none, the pair crashes in place. Only a crash after a Jump that landed four
+  start, a Jump one or two tiles longer that clears lands like a full-reach
+  Jump, with no crash. Otherwise the longest shorter Jump that clears lands
+  and then crashes. With none, the pair crashes in place. Only a crash after a Jump that landed four
   or more tiles (`OVERWORLD_MOUNT_JUMP_CRASH_MIN_DISTANCE`) hurts: a shorter
   landing, or a crash in place, just ends the Walk momentum with no damage or
   knockback. A hurting crash applies the fixed 20 damage to the
@@ -1736,10 +1750,19 @@ reports the ordinary Crash.
   that clears every crossed obstacle, so a Wild or Follower Jump never
   crashes; a rejected Jump leaves the step to the Walk planner.
 
-**Jump clearance.** The shared Hop clearance applies the Jump model to a
-`TRAJECTORY` Hop whose lane has the Jump bit and one exact Hop distance
-(min equals max). Canopy Hop and other ranged lanes keep the ordinary
-open-cell rule. Each crossed native cell has a height above the start
+**Jump clearance.** Ordinary ranged Hop samples the physical height of every
+crossed cell, including native Canopy (`0xFFFE`) and native Ground (`0xFFFF`).
+The shared reducer raises the arc only when the visible Jump flag allows it;
+otherwise it rejects insufficient clearance. Unknown strict support defers
+planning, and an arc above the255-unit representation limit is rejected.
+Destination support still belongs to the landing classifier, so an exact
+adjacent treetop landing remains separate from crossed-cell clearance.
+
+The exact-distance Jump model applies only to a `TRAJECTORY` Hop whose lane
+has the Jump bit and min equals max. It keeps the capped native obstacle
+model, as do its existing B Jump and ledge callers. Flat motion and Slam
+retain their existing native-cell rule. For exact Jump, each crossed native
+cell has a height above the start
 ground: a ledge tile is open downhill and 20 units against its downhill side
 (or diagonally) unless the lane jumps Both; a ledge is classified before its
 stock collision. A blocked tile with no native ground (a cliff face; stock
@@ -2096,7 +2119,16 @@ fourth concurrent bubble returns zero before allocation or sound. Each slot
 owns a borrowed native model and separate 512-byte texture and 32-byte palette
 keys, so different icons cannot overwrite each other. The normal stock script,
 draw and animation owners stay in place. The quiet resident entry stays at
-`0x01FFF3B0` and stops the admission sound for accepted and rejected requests.
+`0x01FFF3B0` and passes private mode bit `0x80` in the existing emote integer.
+Admission strips that bit for resource selection; initialization uses it to
+skip the menu-confirm sound. Quiet requests never start or stop that sequence.
+Normal script IDs0..13 still play it once. Other mode bits and invalid IDs
+are rejected before allocation.
+
+CreateOwner and Release fully clear every FREE slot. Admission assigns only
+that cleared slot's owner, object and reserved state. The model template's
+scalar fields are assigned explicitly; the native animation initializer fills
+all four animation-state words before the model constructor reads them.
 
 Retirement destroys the model immediately, but keeps its source buffers and
 VRAM keys until the native transfer queue drains. The existing VWait task then
@@ -2146,12 +2178,55 @@ predicate for land encounters and WATER predicate for Surf and Fishing.
 Catalogued surfaces keep priority over the underlying tile. This gate reuses
 the validated tile byte and does not reroll a site or consume RNG.
 
+Behind Buildings is a spawn-only restriction, not a physical surface or a
+movement permission. Its independent destination bit is11; traversal masks
+exclude it. When enabled it restricts the destination search to ordinary Land
+immediately north of a catalogued rooftop: the candidate `(x, y)` must pass
+the unchanged shared Land landing checks, and `(x, y + 1)` must be playable
+and have a Rooftop catalog hit. Other inherited destination choices cannot
+bypass this restriction. Headbutt's required canopy source is incompatible
+and rejects it. Disabling the restriction restores the other destination
+choices. The existing roof catalog supplies the rule across maps and block
+seams without new data or per-frame model parsing. Uncatalogued buildings
+provide no qualifying row until their reusable roof template is added.
+
+Rooftop registration comes from
+`data/overworld_wild_roof_catalog_manifest.json` and
+`tools/generate_overworld_wild_roof_catalog.py`. Common building names must
+have a template; an explicit template also discovers every real placement of
+its model, including named buildings and reused house variants. The generator
+checks the native model name before accepting it. It does not infer a roof
+from a prop's collision tile or add geometry to the map.
+
+The `mesh_faces` template mode handles curved, stepped and concave roofs.
+Its reviewed native face indices, total face count and material names must
+match the model. Vertical or excluded shadow faces are invalid selections.
+At each actual placement tile centre, the generator samples the selected
+faces and all native non-shadow faces. A missing roof sample, or a higher
+sign, antenna or ornament, omits that node. No nearby-height fill is allowed
+in this mode. Equal-height nodes are packed into the existing catalog
+rectangles, with the existing cross-block identity and paged Q4 height.
+The other template modes retain their existing sampling rules. Registration
+does not grant a species a new terrain permission.
+
+The Goldenrod native roof fixtures are
+`tools/overworld/fixtures/goldenrod_native_roofs.json`. They preserve an
+independent plane-normal and triangle-edge survey of eleven missing models,
+including nearby facade/concave/occluded negatives and a cross-block house.
+`python3 -B tools/overworld/test_rooftop_catalog.py` checks those masks and
+heights against both generation and packed rows. The natural rooftop bird
+case uses player centre `(346,351)` and the separate native window oracle
+`tools/overworld/fixtures/goldenrod_roof_window.json`: its ordinary 240-cell
+spawn ring has 107 Rooftop cells and no Canopy cells. A completed bird birth
+must use one of those roof tiles at its independently expected height.
+
 Canopy is a shared physical-surface type, like Rooftop and Signpost. The build
 generator reads the flat `tree01_un` family of land-mesh materials. Each UV
-repeat is one two-by-two tree footprint. Only its south/bottom row is a crown
-support: that row aligns with the high edge of the paired `tree01` or
-`tree01_re` billboard. The north row is the visible tree shoulder. The
-generator removes overlap with authored surfaces and compresses the supports
+repeat is one two-by-two tree footprint. All four tiles support tree-top
+landing. The former south-row-only mask left adjacent north tree tiles
+unusable, so a mounted Hop could remain still when the rider pushed toward
+the tree. Collision alone never supplies a Canopy surface. The generator
+removes overlap with authored surfaces and compresses the supports
 into catalog rectangles. It scans all 287 real map matrices. The generic
 one-block `single` matrix is excluded because its reused edge has no stable
 neighboring model. Reused land blocks must produce the same local Canopy mask
@@ -2195,15 +2270,23 @@ The host spawn-search fixture checks selection parity and these work bounds.
 Move From Off Screen keeps the selected spawn tile as its immutable target.
 It may start at any loaded, safely off-screen origin A with a proved route to
 selected spawn tile B. The shared route witness holds at most96 directed
-movement steps; this is a step cap, not a cardinal distance limit. Each step
-keeps its full height and surface endpoint plus its native forward
-direction and movement kind. Each of the nine admitted Wild slots keeps its
-own full path. Entry rejects follower slot7 before storage access; slots8/9
-map to records7/8 without changing their full Actor handles. The sole Field
-workspace is43516 bytes; no Cargo or96-step path capacity is reduced. The
-next displacement is derived from the exact expected and next endpoints,
-checked in 32 bits before narrowing, and checked again by the native planner.
-Saved paths do not duplicate endpoint displacement in a second edge array.
+movement commands for each of the nine admitted Wild slots. This is a step
+cap, not a cardinal distance limit. Each16-bit command keeps exact native
+kind, direction and distance1..255; unknown bits or unsupported commands
+fail closed. Entry rejects follower slot7 before storage access; slots8/9 map
+to records7/8 without changing full Actor handles. All nine paths remain live
+while Cargo uses the shared graph. The two workspace blocks total27868 bytes.
+Before START, the existing complete native ValidateStep admits that next
+landing and freezes its full height/surface endpoint. It may re-admit changed
+intermediate terrain, but the final destination must equal the immutable full
+target. No unknown or different final landing grants READY. Confirm advances
+only on actual accepted END at the frozen endpoint. Decoded XY is checked in
+32 bits before narrowing. There is no extra classifier or movement executor.
+The512 visited IDs and512 change cells retain full capacities. Owner validity
+bitmaps replace repeated generation words; Begin/Clear reset only64 bytes
+for each map. Global32-bit wrap still fails and all revision/probe/read budgets
+remain. Finished native edge-policy input and later Hop clearance share one
+memo union; the completed edge-policy receipt is replayed after Hop begins.
 The proof uses the spawn attempt's one prepared profile and the same Walk, Hop or
 Teleport planner that will run each segment. A is prepared at least five tiles
 beyond the player-relative inclusive8-by6 camera extent, which reserves one
@@ -2376,7 +2459,11 @@ queued spawn's destination is only placed at commit, so a failed commit still
 runs the alternate terrain for its slot, and a successful commit clears it.
 Before this, a shore with no Land destination (for example Cherrygrove's beach)
 retried slot 0 on Land after every backoff and never placed a water spawn.
-Full slots need no attempt. A logical Land/Surf attempt keeps the
+Full slots need no attempt.
+A Follower created by a refill pass spends that pass, so it queues one more
+maintenance pass. A population reset (two map changes with no update between)
+leaves no refill wait armed; without that pass a standing player kept only the
+Follower until they walked. The extra pass still obeys an armed wait. A logical Land/Surf attempt keeps the
 legacy16-candidate limit and cursor order. All16 checks fit in one bounded
 terrain-attempt update; the attempt count remains one, so the change does not
 expand the old search to256 candidates. Help-child position searches use the
@@ -2741,10 +2828,14 @@ engine adapters.
   callback defers that Exit; later states forward to the unchanged stock body.
 - ARM/Thumb interworking and `LONG_CALL` requirements remain explicit adapter
   contracts.
-- Normal field walking friendship uses a 34-byte wrapper at `0x023CCF90`.
-  It takes one native party-data lock, calls the unchanged stock friendship
-  routine, and releases the original lock token. RNG order, update frequency
-  and friendship rules remain stock; no work is deferred. This entry relies
+- Normal field walking friendship uses a 68-byte wrapper at `0x023CCF90`.
+  It makes the stock walking random draw before taking a party-data lock.
+  An unselected member returns without decrypting or encrypting its data.
+  A selected member takes one native lock. A local bridge recreates the stock
+  entry's register save and eight-byte local frame, then enters the native
+  post-draw body at `0x0206FEA8`. The original lock token is released on return.
+  Non-walking calls make no draw, as before. RNG order, update frequency and
+  friendship rules remain stock; no work is deferred. This entry relies
   on the normal field input path's prior `CountAlivePokemon` validation of
   every party member, not on daycare (which does not validate every step).
   Only the walking call at `0x021E793E` redirects here. Field131 is already
@@ -2752,8 +2843,19 @@ engine adapters.
   Existing Field BSS addresses stay fixed. Objcopy now includes their zero
   bytes before the executable tail, so overlay131's loader BSS size is zero:
   clearing the old BSS length after the larger file would erase adjacent Wild
-  data. Shared package metadata checks the zero gap, fixed bounds, three native
-  Thumb calls and packaged walking caller. No new persistent state is added.
+  data. Shared package metadata checks the zero gap, fixed bounds, complete
+  authored Thumb body, exact native continuation body and packaged walking
+  caller. The wrapper ends at `0x023CCFD4`, with four bytes left before Wild.
+  No new persistent state is added.
+- Native friendship tests the full 16-bit held-item ID against Soothe Bell218
+  instead of loading an entire item record only to compare its effect with53.
+  The package gate compiles the complete authored item array, requires exact
+  equality with the ROM's `a/0/1/7` records, and requires effect53 to occur only
+  at218. A new or changed friendship item stops admission until that predicate
+  is updated. Both original eight-bit truncations become 16-bit truncations,
+  so items above255 cannot alias Soothe Bell. All other species, event, tier,
+  ball, location, multiplier and clamp instructions remain stock. The item
+  getter and caller-owned allocation API remain unchanged.
 - The private Cargo observation callback and the Wild bubble leaf
   use Field131's existing gap at `0x023CCDC8..0x023CCE98`. The 192-byte
   observer reserve holds an184-byte body; the 16-byte bubble leaf starts at
@@ -2767,10 +2869,11 @@ engine adapters.
   and valid-Frame gates, its typed native target-access callback, and the bubble leaf's register call through the
   resident quiet helper at `0x01FFF3B0`, in the unused gap after Actor
   acknowledgements and before mounted Walk save. That helper keeps the stock
-  bubble visual, then synchronously stops its menu-confirm sequence1501 before
-  the sound update. It adds no state. Package checks compare the helper and
-  the whole 208-byte Field slice through the final ROM. Native Throw proof
-  pairs each bubble's sound call with its stop in the same guest loop.
+  bubble visual and requests quiet initialization through the existing emote
+  integer, so sequence1501 is neither started nor stopped. It adds no state.
+  Package checks compare the helper and the whole 208-byte Field slice through
+  the final ROM. Native three-slot proof requires silent quiet admissions;
+  normal script admissions retain their sound through the same initializer.
 - Item parameter reads for `ITEM_NONE` return a fresh, zeroed 36-byte
   `ITEMDATA` allocation on the caller's heap. This matches the authored and
   packaged no-item record and retains the caller's normal free operation,
@@ -2866,14 +2969,24 @@ Cancel is idempotent. It leaves authority on a complete tile, releases reservati
   every normal spawn. Allocation uses the actual blob size. Failed loading
   retains explicit fallback behavior and teardown frees only owned memory.
   Unmounted cadence tests reject an observed base-form metadata cache miss.
-- The persistent behavior catalog (53.3 KB) belongs to the field session and
+- The persistent behavior catalog (sized from the generated blob) belongs to the field session and
   uses FIELD1 (heap 4). The Query add-on (69.6 KB) uses `HEAPID_WORLD`
   (FIELD2). The smaller persistent spawn-metadata cache uses
   `HEAPID_DEFAULT`. Each blob loads only while its heap keeps its size plus
-  the 32 KB `OVERWORLD_FIELD_QUERY_HEAP_RESERVE` free. A map that cannot spare
-  that runs without Wild; Goldenrod is one. Temporary archive handles use the
+  the 28 KB `OVERWORLD_FIELD_QUERY_HEAP_RESERVE` free. A map that cannot spare
+  that runs without Wild. On FIELD1 the reserve is the measured need after the
+  catalog: the lazy 11,268-byte Cargo array plus its own 16 KB reserve and
+  margin, checked at compile time in `overworld_cargo_query_wild.c`. The old
+  32 KB value kept Olivine, Cianwood and Routes 38/39 (area 7, 70.9-71.8 KB
+  FIELD1 free) without Wild or the Follower. Temporary archive handles use the
   blob's heap and close immediately after loading. Teardown frees each blob
   through its recorded allocation.
+- A behavior-catalog load refused by the heap reserve, archive-handle
+  allocation or file-buffer allocation remains retryable. Native texture
+  uploads can hold that memory during field startup. Invalid archive count,
+  member size or decoded catalog data stays rejected for the field session;
+  a valid loaded catalog remains cached. The existing refill warmup and the
+  next ordinary follower/spawn request own retries.
 - FIELD2 also holds every stock script context. An item ball needs about
   19.3 KB there: its environment, script and message banks, the 9-string
   MessageFormat, two 1024-character string buffers, and a second context for
@@ -2886,6 +2999,39 @@ Cancel is idempotent. It leaves authority on a complete tile, releases reservati
   Goldenrod's FIELD1 has 71.9 KB free. A wild battle leaves 150 KB of
   HEAP_ID_3 free. A new FIELD2 allocation must keep at least 20 KB free for
   scripts on a spawning route.
+- Temporary map-object model, sequence and texture-file loads keep FIELD1
+  first and fall back to FIELD2 only on allocation failure. The
+  `atStart == FALSE` branch of `ReadMModelFromNarcInternal` calls the shared
+  `OverworldFieldModel_AllocTemporary` leaf at`0x022081A0`; resident
+  `atStart == TRUE` loads still use the stock FIELD1 allocation. The
+  texture upload owner frees its source after VBlank transfer; sprite-change
+  work frees its three source files when the new billboard is ready or its
+  object is gone. These paths use the allocation header's heap when freeing.
+  This lets transient NPC loads use spare work space when FIELD1's
+  map/catalog storage is fragmented. The measured Goldenrod-to-Route34 failure requested6760 bytes with
+  only2588 contiguous bytes in FIELD1, then the stock unchecked archive read
+  copied texture bytes toNULL. Heap totals and the Query/script reserve are
+  unchanged. Always using FIELD2 failed a separate13352-byte load while
+  FIELD1 still had22348 contiguous bytes, so neither heap can be the sole
+  temporary owner. A fallback retains the exact requested size and the stock
+  upload/cleanup path. Before borrowing FIELD2, it keeps20KB for scripts plus
+  64 bytes for the engine/SDK headers, alignment and a small unsplittable tail.
+  It never skips a NULL read or invents graphics data.
+- The stock map-object texture queue admits one load per batch instead of
+  ten (five in Union). Both immediate and queued loads use its existing
+  `loadsPerFrame` field. VBlank uploads each source and VWait releases it;
+  later requests stay in the normal pending-billboard queue. The main task
+  resets the counter, so a later immediate request can start another batch
+  in that update; this is a peak-memory reduction, not a strict one-source
+  bound. No heap budget, queue order or cancellation owner changes.
+- The map-name popup's 5120-byte window buffer uses FIELD2, with its lazy
+  message handle. Its stock setup body calls `AddWindow` with the unchanged
+  MAIN3/32x5/palette11/baseTile0x197 template, temporarily choosing FIELD2 and
+  restoring `BgConfig.heapId` before returning. The existing `RemoveWindow`
+  frees the buffer by its own allocation header. On cold Route34 startup,
+  FIELD1 otherwise has69388 free bytes,1020 below the37640-byte catalog plus
+  its32KB reserve, so a saved follower cannot rebind. The buffer move keeps
+  both heap sizes and that reserve unchanged.
 - Wild cleanup for a battle or menu frees the condition workspace, but a
   same-map return keeps live actors without a REBIND transition.
   `EvaluateConditionsForSlot` prepares a live actor whose record is missing

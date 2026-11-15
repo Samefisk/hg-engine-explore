@@ -31,6 +31,49 @@ spawn and distance removal, doors and stairs, control after events, raised
 landings and clear door access. The new ROM has not earned agent game or pacing
 proof; those checks are left to the user.
 
+## Goldenrod encounter plan — October 2026
+
+Goldenrod City (map76, encounter142) uses the mix below. Morning and day
+share one table. These two new encounter pools use the current clock table
+only; all older pools keep their existing80/20 current/random table mix.
+
+| Pokémon | Morning/day | Night | City levels | Placement |
+| --- | ---: | ---: | --- | --- |
+| Meowth |30%|30%|12–13| Behind Buildings; no rooftop |
+| Rattata |20%|40%|12–15| Behind Buildings |
+| Snubbull |10%|10%|14| Land |
+| Pidove |30%|0%|12,14| Land and Rooftop |
+| Murkrow |0%|10%|14| Rooftop and Canopy |
+| Trubbish |9%|8%|15–16| Behind Buildings |
+| Grimer |1%|1%|16| Behind Buildings |
+| Rotom |0%|1%|16| Behind Buildings |
+
+The main public Underground corridor (map199, encounter143) uses95% Rattata
+and5% Grimer at all times, on existing Land. Rattata is level12–16; Grimer is
+level15–16. Other Underground rooms and the department-store basement keep
+their existing encounter settings.
+
+The twelve native slot weights are20,20,10,10,10,10,5,5,4,4,1,1.
+City morning/day slots are Meowth,Pidove,Meowth,Rattata,Pidove,Snubbull,
+Rattata,Rattata,Trubbish,Trubbish,Trubbish,Grimer. Night slots are Rattata,
+Meowth,Rattata,Meowth,Snubbull,Murkrow,Rattata,Rattata,Trubbish,Trubbish,
+Grimer,Rotom. Underground slots are Rattata except Grimer in slots9 and11.
+Both pools use levels12,12,13,13,14,14,14,15,15,15,16,16 in slot order.
+Walking battles, Surf, rods, sound replacements, and swarm slots remain off
+for these two new pools. The overworld uses the authored land tables.
+
+Four visible Placement profiles supply these sites: Behind Buildings, Land
+Placement, Land and Rooftop, and Rooftop and Canopy. Their applications match
+the map and listed species. They keep the normal movement, speed, pauses,
+attacks, and reactions. Birds gain only their listed raised-surface permissions.
+Rotom uses the same building rule as the other listed ground Pokémon; it has
+no Radio Tower or other landmark rule. The location must still pass the shared
+Land check, so a blocked or water tile cannot become a valid spawn site.
+
+These are raw encounter-roll shares. A lack of a permitted nearby destination
+can reject a rolled Pokémon. Host data, clock, and resolver checks do not prove
+natural game births or frame pacing; those need current-ROM acceptance.
+
 ## What This Rebalance Does
 
 - Johto Pokémon appear earlier and more often.
