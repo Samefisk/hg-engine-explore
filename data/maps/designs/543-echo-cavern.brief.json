@@ -1,4 +1,0 @@
-{"name": "Echo Cavern", "map": 543, "template": 107, "kind": "cave", "chunks": [1, 2], "seed": 3,
- "exits": [{"side": "south", "at": 16, "width": 2, "arrival": [16, 60]}, {"side": "north", "at": 12, "width": 2}],
- "wander": 0.6, "width": [2, 3], "clearings": 3, "grass": 0, "pond": 0, "rocks": 4,
- "clumps": 0, "ledge": 1, "path": "none", "trainers": 1, "items": 2}
