@@ -16,9 +16,10 @@ Use `origin/main` as the stable base; `origin` is the real repo and push target.
 - Questions and read-only reviews do not authorize product edits. Use inspection and relevant non-mutating checks; do not start a broad game run for a wording-only change.
 - Choose the smallest useful check, then expand at a stable integration point. Use `hg-engine-delta-build` for ROM builds and the project skills below for overworld work. Preserve the saved open-after-build preference and the user's ROM/save files.
 - If a build stops before Make or an overlay does not fit, read [build diagnosis](documentation/agent-workflows/build-diagnosis.md) for the source-hash gate and exact compiler/link inputs.
+- Write a test only if it would fail when the code breaks in a way that matters. Do not add tests that cannot catch a meaningful defect, such as tests that restate the implementation, check constants, or pass regardless of behavior.
 - Select tests for a current requirement or regression risk. Reuse sufficient evidence; do not add coverage or repeat a suite by default. Keep relevant regressions, and record why obsolete or duplicate tests are retired. A failure alone is not a reason to remove a test.
 - State the build/tests that actually ran, their scope, and any exact remaining proof gap. Source inspection and documentation checks do not prove game behavior.
-- Screenshot/video capture requires an explicit user request or manual Capture click. Never capture or inspect images as an agent test step, except the map-look review in [Maps](#maps). Use [memory-backed proof](documentation/overworld-system/verification.md#memory-backed-proof) for game observations.
+- Screenshot/video capture requires an explicit user request or manual Capture click. Never capture or inspect images as an agent test step. Use [memory-backed proof](documentation/overworld-system/verification.md#memory-backed-proof) for game observations.
 
 ## Papercut Log
 
@@ -95,21 +96,6 @@ close a still-reported player-visible hitch. Run
 unchanged Continue save with the existing Mankey. Do not prepare party,
 follower, spawn, or population state. Zero late loops is the only pass. Keep D1
 open if this test is red or the user still reports a hitch on the same ROM.
-
-## Maps
-
-Map edits go through the override tree `data/maps/` and `tools/maps`; read
-[the map-system guide](documentation/map-system/README.md) first. For new or
-reshaped terrain that must look like vanilla, use
-[design-map-look](.agents/skills/design-map-look/SKILL.md): write an ASCII
-layout, generate from vanilla cells, pass the score gates, then prove in game.
-Do not hand-author map geometry. The user asked agents to review map looks
-themselves: after a generated map passes its gates and in-game proof, capture
-the sheets (`python3 -B -m tools.maps.showcase shots`), inspect them, and
-turn every visual problem into a lab defect and a fix before handing off.
-Walk/warp behavior is still proven with memory reads, not images. To improve the generator itself, use
-[improve-map-generator](.agents/skills/improve-map-generator/SKILL.md): one
-measured hypothesis per iteration, recorded in the lab ledger.
 
 ## Helper agents
 
